@@ -22,8 +22,8 @@ Unlike embedded agent systems where the AI loop runs as part of the application'
 ## 2. Architecture & Layering
 
 ```
-apps/TaskPilot/
-├── TaskPilot.sln                       # Solution file
+apps/runtime/TaskPilot/
+├── TaskPilot.slnx                      # Solution file
 ├── src/
 │   ├── TaskPilot.Core/                 # Domain models, enums, interfaces, state validation
 │   ├── TaskPilot.Infrastructure/       # JsonTaskRepository (async lock, atomic file writes)
@@ -41,36 +41,57 @@ apps/TaskPilot/
 
 ---
 
-## 3. Quickstart & Usage
+## 3. AI Tooling Instructions (GitHub Copilot & Antigravity)
+
+### GitHub Copilot
+- **Domain State Invariants**: When adding features to `TaskPilot.Core`, instruct Copilot:
+  `"Implement state machine transition validation in TaskItem.cs ensuring invalid enum jumps throw DomainValidationException."`
+- **Thread-Safety & Repository**: When modifying `JsonTaskRepository.cs`, instruct Copilot:
+  `"Ensure atomic file writes and async lock synchronization with SemaphoreSlim to prevent corrupted task state."`
+
+### Antigravity
+- See workspace rule: [.agents/rules/runtime-inference.md](file:///.agents/rules/runtime-inference.md).
+- To run tests:
+  ```bash
+  dotnet test apps/runtime/TaskPilot/tests/TaskPilot.Tests
+  ```
+- To run workflow commands:
+  ```bash
+  dotnet run --project apps/runtime/TaskPilot/src/TaskPilot.Cli -- summary
+  ```
+
+---
+
+## 4. Quickstart & Usage
 
 ### 1. Run Unit Tests
 ```bash
-cd ai-powered-engineering/apps/TaskPilot
-dotnet test
+dotnet test apps/runtime/TaskPilot/tests/TaskPilot.Tests
 ```
-**Output**: `Passed! - Failed: 0, Passed: 13, Skipped: 0, Total: 13, Duration: 82 ms`
+**Output**: `Passed! - Failed: 0, Passed: 13, Skipped: 0, Total: 13`
 
 ### 2. Run CLI Commands
 
 ```bash
 # Seed initial sample tasks
-dotnet run --project src/TaskPilot.Cli -- seed
+dotnet run --project apps/runtime/TaskPilot/src/TaskPilot.Cli -- seed
 
 # List all tasks
-dotnet run --project src/TaskPilot.Cli -- list
+dotnet run --project apps/runtime/TaskPilot/src/TaskPilot.Cli -- list
 
 # Filter tasks by priority, status, or tag
-dotnet run --project src/TaskPilot.Cli -- list --priority Critical
-dotnet run --project src/TaskPilot.Cli -- list --tag backend
-dotnet run --project src/TaskPilot.Cli -- list --overdue
+dotnet run --project apps/runtime/TaskPilot/src/TaskPilot.Cli -- list --priority Critical
+dotnet run --project apps/runtime/TaskPilot/src/TaskPilot.Cli -- list --tag backend
+dotnet run --project apps/runtime/TaskPilot/src/TaskPilot.Cli -- list --overdue
 
 # Add a new task
-dotnet run --project src/TaskPilot.Cli -- add "Refactor Billing Service" --priority High --due 2026-09-30 --tags fintech,billing
+dotnet run --project apps/runtime/TaskPilot/src/TaskPilot.Cli -- add "Refactor Billing Service" --priority High --due 2026-09-30 --tags fintech,billing
 
 # Transition workflow state
-dotnet run --project src/TaskPilot.Cli -- move <task-id> InProgress
-dotnet run --project src/TaskPilot.Cli -- move <task-id> Done
+dotnet run --project apps/runtime/TaskPilot/src/TaskPilot.Cli -- move <task-id> InProgress
+dotnet run --project apps/runtime/TaskPilot/src/TaskPilot.Cli -- move <task-id> Done
 
 # View workflow summary metrics
-dotnet run --project src/TaskPilot.Cli -- summary
+dotnet run --project apps/runtime/TaskPilot/src/TaskPilot.Cli -- summary
 ```
+

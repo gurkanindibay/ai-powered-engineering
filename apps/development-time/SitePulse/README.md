@@ -56,40 +56,61 @@
 
 ---
 
-## 2. Running the Harness
+## 2. AI Tooling Instructions (GitHub Copilot & Antigravity)
+
+### GitHub Copilot
+- **Spec-Grounded Code Generation**: When creating Kotlin use cases or Spring Boot services, prompt Copilot with the spec context:
+  `"Read apps/development-time/SitePulse/.specify/constitution.md and implement the domain logic ensuring BigDecimal is used for all monetary calculations and KMK delay interest is 5% monthly."`
+- **Checker Test Generation**: Use Copilot to write tests before implementation:
+  `"Generate JUnit tests for CalculateDuesUseCase checking boundary conditions: zero days delay, partial payments, and multiple overdue months."`
+
+### Antigravity
+- See workspace rule: [.agents/rules/development-time-inference.md](file:///.agents/rules/development-time-inference.md).
+- To inspect task status:
+  ```bash
+  python3 apps/development-time/SitePulse/harness/harness_cli.py status
+  ```
+- To verify a completed task:
+  ```bash
+  python3 apps/development-time/SitePulse/harness/harness_cli.py verify --task <task-id>
+  ```
+
+---
+
+## 3. Running the Harness
 
 ### View Task DAG & Progress
 ```bash
-python3 harness/harness_cli.py status
+python3 apps/development-time/SitePulse/harness/harness_cli.py status
 ```
 
 ### Find Next Runnable Tasks
 ```bash
-python3 harness/harness_cli.py next
+python3 apps/development-time/SitePulse/harness/harness_cli.py next
 ```
 
 ### Verify a Task in the Closed Loop
 ```bash
-python3 harness/harness_cli.py verify --task task-01
+python3 apps/development-time/SitePulse/harness/harness_cli.py verify --task task-01
 ```
 
 ### Run Harness Self-Tests
 ```bash
-python3 -m unittest discover -s harness/tests
+python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests
 ```
 
 ---
 
-## 3. Backend & Database Development Environment (Docker)
+## 4. Backend & Database Development Environment (Docker)
 
 To run the PostgreSQL 16 database and Adminer web GUI locally:
 
 ```bash
 # Start PostgreSQL & Adminer with pre-seeded test data
-./scripts/dev-db-up.sh
+./apps/development-time/SitePulse/scripts/dev-db-up.sh
 
 # Or directly via Docker Compose in backend/
-cd backend && docker compose up -d postgres adminer
+cd apps/development-time/SitePulse/backend && docker compose up -d postgres adminer
 ```
 
 | Service | Host / Port | Credentials / Purpose |
@@ -100,12 +121,13 @@ cd backend && docker compose up -d postgres adminer
 
 To tear down the containers:
 ```bash
-./scripts/dev-db-down.sh
+./apps/development-time/SitePulse/scripts/dev-db-down.sh
 ```
 
 ---
 
-## 4. Interactive UI/UX Visual Prototype
+## 5. Interactive UI/UX Visual Prototype
 To preview the Android mobile interface in your browser before running on a device:
 - Open [prototype.html](.specify/specs/001-resident-dashboard/assets/prototype.html) in any web browser.
 - Supports interactive state toggling between **Borçlu (Gecikmeli)** and **Borçsuz (Ödenmiş)** states.
+

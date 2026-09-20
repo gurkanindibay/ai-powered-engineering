@@ -86,13 +86,13 @@ flowchart TD
 ## 3. Project Structure
 
 ```
-apps/AuditGuard/
+apps/runtime/AuditGuard/
 ├── AuditGuard.slnx                     # Solution file
 ├── src/
 │   ├── AuditGuard.Core/                # Models, enums, interfaces
 │   ├── AuditGuard.Harness/             # Policy catalogs, compactor
 │   ├── AuditGuard.Loop/                # MathVerifyGate, PolicyAuditGate, Controller
-│   ├── AuditGuard.Agents/               # HeuristicExtractorAgent, ComplianceCheckerAgent
+│   ├── AuditGuard.Agents/              # HeuristicExtractorAgent, ComplianceCheckerAgent
 │   ├── AuditGuard.Graph/               # AuditGraphEngine, StepTrace
 │   └── AuditGuard.Cli/                 # Interactive CLI console app
 ├── benchmarks/
@@ -103,16 +103,37 @@ apps/AuditGuard/
 
 ---
 
-## 4. Quickstart & Verification
+## 4. AI Tooling Instructions (GitHub Copilot & Antigravity)
+
+### GitHub Copilot
+- **Adding Policy Rules**: Prompt Copilot:
+  `"Add a new corporate policy rule to PolicyRules.cs and PolicyCatalog.cs for [Policy], then update PolicyAuditGate.cs with matching tests."`
+- **Tuning Self-Healing Prompts**: In `ContextCompactor.cs`, prompt Copilot to produce minimal JSON delta payloads for model loops rather than free-form text.
+- **Verification Gates**: Always instruct Copilot to use `decimal` precision and return structured `GateResult` objects.
+
+### Antigravity
+- See workspace rule: [.agents/rules/runtime-inference.md](file:///.agents/rules/runtime-inference.md).
+- To run tests:
+  ```bash
+  dotnet test apps/runtime/AuditGuard/tests/AuditGuard.Tests
+  ```
+- To run benchmarks:
+  ```bash
+  dotnet run --project apps/runtime/AuditGuard/benchmarks/AuditGuard.Benchmarks
+  ```
+
+---
+
+## 5. Quickstart & Verification
 
 ### Run Unit Tests
 ```bash
-dotnet test
+dotnet test apps/runtime/AuditGuard/tests/AuditGuard.Tests
 ```
 
 ### Run Benchmarks & Evaluation Suite
 ```bash
-dotnet run --project benchmarks/AuditGuard.Benchmarks
+dotnet run --project apps/runtime/AuditGuard/benchmarks/AuditGuard.Benchmarks
 ```
 
 Output:
@@ -146,8 +167,9 @@ BENCHMARK EVALUATION SUMMARY:
 ### Run Single Receipt Audit via CLI
 ```bash
 # Built-in sample
-dotnet run --project src/AuditGuard.Cli -- --sample
+dotnet run --project apps/runtime/AuditGuard/src/AuditGuard.Cli -- --sample
 
 # Specific receipt
-dotnet run --project src/AuditGuard.Cli -- --receipt benchmarks/AuditGuard.Benchmarks/Fixtures/claim_03_alcohol_violation.txt
+dotnet run --project apps/runtime/AuditGuard/src/AuditGuard.Cli -- --receipt apps/runtime/AuditGuard/benchmarks/AuditGuard.Benchmarks/Fixtures/claim_03_alcohol_violation.txt
 ```
+

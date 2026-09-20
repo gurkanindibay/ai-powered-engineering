@@ -1,0 +1,31 @@
+# .NET build artifacts
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Python artifacts
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+env/
+venv/
+
+# Gradle / Android artifacts
+**/.gradle/
+**/build/
+local.properties
+
+# Maven / Java artifacts
+**/target/
+*.class
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
