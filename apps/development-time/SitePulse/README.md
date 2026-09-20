@@ -77,7 +77,12 @@
 
 ---
 
-## 3. Running the Harness
+## 3. Running the Tests & Harness
+
+### Run Complete Test & Verification Suite
+```bash
+./apps/development-time/SitePulse/scripts/run-tests.sh
+```
 
 ### View Task DAG & Progress
 ```bash
@@ -94,10 +99,11 @@ python3 apps/development-time/SitePulse/harness/harness_cli.py next
 python3 apps/development-time/SitePulse/harness/harness_cli.py verify --task task-01
 ```
 
-### Run Harness Self-Tests
+### Run Harness Self-Tests Directly
 ```bash
 python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests
 ```
+
 
 ---
 

@@ -198,18 +198,19 @@ dotnet run --project apps/runtime/TaskPilot/src/TaskPilot.Cli -- summary
 
 #### SitePulse (AI-Manufactured Platform Harness)
 ```bash
-# 1. Inspect Task DAG Status
+# 1. Run Complete Test & Verification Suite (Harness + Gates + Backend Tests)
+./apps/development-time/SitePulse/scripts/run-tests.sh
+
+# 2. Inspect Task DAG Status
 python3 apps/development-time/SitePulse/harness/harness_cli.py status
 
-# 2. View Next Runnable Tasks
+# 3. View Next Runnable Tasks
 python3 apps/development-time/SitePulse/harness/harness_cli.py next
-
-# 3. Run SitePulse Harness Unit Tests
-python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests
 
 # 4. Run closed-loop verification on a task
 python3 apps/development-time/SitePulse/harness/harness_cli.py verify --task task-01
 ```
+
 
 #### DevFactory (Autonomous Software Manufacturing Plant)
 ```bash

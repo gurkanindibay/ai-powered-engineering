@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "project": "SitePulse (Full-Stack Android + Spring Boot + PostgreSQL)",
+  "project": "SitePulse Mobile (Android)",
   "tasks": [
     {
       "id": "task-01",
@@ -16,7 +16,9 @@
       "name": "KMK Statutory Delay Fee Calculation Engine",
       "module": "android-domain",
       "status": "COMPLETED",
-      "depends_on": ["task-01"],
+      "depends_on": [
+        "task-01"
+      ],
       "spec_ref": "SPEC-001",
       "description": "Calculate 5% monthly delay penalty pro-rated per day per Article 20 of KMK with unit tests."
     },
@@ -25,7 +27,10 @@
       "name": "Dashboard State Management & ViewModel",
       "module": "android-ui",
       "status": "COMPLETED",
-      "depends_on": ["task-01", "task-02"],
+      "depends_on": [
+        "task-01",
+        "task-02"
+      ],
       "spec_ref": "SPEC-001",
       "description": "Implement DashboardUiState and DashboardViewModel with reactive StateFlow."
     },
@@ -34,7 +39,9 @@
       "name": "Material 3 Dashboard Compose Screens",
       "module": "android-ui",
       "status": "COMPLETED",
-      "depends_on": ["task-03"],
+      "depends_on": [
+        "task-03"
+      ],
       "spec_ref": "SPEC-001",
       "description": "Build Hero Balance Card, Quick Action Grid, and TopBar matching prototype.html."
     },
@@ -52,7 +59,9 @@
       "name": "Spring Boot 3 JPA Entities & Repositories",
       "module": "backend-service",
       "status": "COMPLETED",
-      "depends_on": ["task-05"],
+      "depends_on": [
+        "task-05"
+      ],
       "spec_ref": "SPEC-001",
       "description": "Map PostgreSQL tables to Java 21 Spring Data JPA entities with optimistic locking (@Version)."
     },
@@ -61,7 +70,9 @@
       "name": "Spring Boot REST API for Resident Dashboard",
       "module": "backend-api",
       "status": "COMPLETED",
-      "depends_on": ["task-06"],
+      "depends_on": [
+        "task-06"
+      ],
       "spec_ref": "SPEC-001",
       "description": "Expose GET /api/v1/residents/{unitId}/dashboard endpoint calculating real-time KMK interest."
     },
@@ -70,7 +81,10 @@
       "name": "Offline Room Cache & Repository Layer",
       "module": "android-data",
       "status": "PENDING",
-      "depends_on": ["task-01", "task-07"],
+      "depends_on": [
+        "task-01",
+        "task-07"
+      ],
       "spec_ref": "SPEC-001",
       "description": "Local SQLite/Room database caching for resident dashboard data synchronized with Spring REST API."
     }

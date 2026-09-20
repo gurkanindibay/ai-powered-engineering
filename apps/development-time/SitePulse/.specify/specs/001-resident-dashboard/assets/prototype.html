@@ -486,10 +486,16 @@
   </div>
 
   <script>
-    function toggleState(hasDebt) {
+    function toggleState(hasDebt, btnElement) {
       const toggles = document.querySelectorAll('.state-toggle');
       toggles.forEach(t => t.classList.remove('active'));
-      event.target.classList.add('active');
+      if (btnElement) {
+        btnElement.classList.add('active');
+      } else if (typeof event !== 'undefined' && event && event.target) {
+        event.target.classList.add('active');
+      } else {
+        toggles[hasDebt ? 0 : 1]?.classList.add('active');
+      }
 
       const card = document.getElementById('balanceCard');
       const cardTitle = document.getElementById('cardTitle');
@@ -517,6 +523,14 @@
         payBtn.style.display = "none";
       }
     }
+
+    // Auto-init state from URL if provided (e.g. ?state=paid)
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('state') === 'paid') {
+        toggleState(false);
+      }
+    });
   </script>
 </body>
 </html>
