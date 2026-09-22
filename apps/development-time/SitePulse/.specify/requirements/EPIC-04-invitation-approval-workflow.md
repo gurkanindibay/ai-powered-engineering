@@ -2,7 +2,7 @@
 
 > **Epic ID:** EPIC-04  
 > **Module:** Invitation & Registration Flow (`backend-api`, `android-ui`, `android-domain`)  
-> **Status:** COMPLETED (6 / 6 Stories Completed - 100%)  
+> **Status:** COMPLETED (7 / 7 Stories Completed - 100%)  
 > **Target Audience:** Site Admin (Yönetici) and prospective Residents (Kat Maliki / Kiracı)  
 > **Business Value:** Eliminates manual data entry bottlenecks by allowing home owners to self-register via a secure link while retaining administrative gatekeeping and verification.
 
@@ -130,3 +130,33 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
   - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardViewModel.kt`
 - **Verification & Tests:**
   - Unit test in `RegistrationApprovalServiceTest`
+
+---
+
+### STORY-04-07: Unit-Scoped Co-Resident Invitation Link & Home Permissions
+- **Status:** `COMPLETED`
+- **Description:** Allow verified Home Owners (Kat Maliki) to generate an invitation link bound strictly to their specific unit (`Bağımsız Bölüm`). Persons who register via this link are granted `HOME_RESIDENT` role with permissions and data access restricted exclusively to that specific home.
+- **Acceptance Criteria (Gherkin):**
+  ```gherkin
+  Scenario: Home owner generates unit-scoped invitation link
+    Given authenticated home owner Ahmet Yılmaz for unit "A Blok D:14" (unitId: "d-14")
+    When generating a resident invite link
+    Then produce a tokenized URL "https://sitepulse.app/join/begonya-sitesi/units/d-14?token=SP-HANE-XXXX"
+    And state security constraint "Bu link sadece A Blok D:14 yetkisi tanımlar. Başka daire bilgilerine erişemez."
+
+  Scenario: Co-resident registers with unit-scoped permissions
+    Given a valid unit invite token for "A Blok D:14"
+    When Zeynep Yılmaz registers with relationship "SPOUSE"
+    Then account is created with role "HOME_RESIDENT" and assigned unitId "d-14"
+    And Zeynep can view dues and submit maintenance tickets only for A Blok D:14
+    And Zeynep is added to the household member list
+  ```
+- **Implementation Artifacts:**
+  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/service/HomeResidentInvitationService.java`
+  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/controller/HomeResidentInvitationController.java`
+  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt` (`HomeResidentInviteBottomSheet`)
+- **Verification & Tests:**
+  - `whenGeneratingUnitInviteLink_thenReturnsUnitScopedUrl`
+  - `whenRegisteringHomeResident_thenAssignsHomeResidentRoleAndUnitScope`
+  - Live Android emulator screencap verification
+

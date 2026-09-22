@@ -10,6 +10,7 @@ import java.util.Optional;
 @Repository
 public interface UserRepository extends JpaRepository<UserEntity, String> {
     Optional<UserEntity> findByEposta(String eposta);
+    Optional<UserEntity> findByGoogleSub(String googleSub);
     boolean existsByEposta(String eposta);
     List<UserEntity> findBySiteIdAndRol(String siteId, String rol);
     List<UserEntity> findBySiteId(String siteId);

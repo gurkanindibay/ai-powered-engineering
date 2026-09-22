@@ -13,10 +13,10 @@
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                              OVERALL COMPLETION METRICS                                │
 │                                                                                        │
-│   Total Epics: 5              Total User Stories: 28         Verification Gates: 7/7   │
-│   Stories Completed: 27       Stories Pending: 1             Automated Tests: 21/21    │
+│   Total Epics: 6              Total User Stories: 34         Verification Gates: 7/7   │
+│   Stories Completed: 33       Stories Pending: 1             Automated Tests: 28/28    │
 │                                                                                        │
-│   ██████████████████████████████████████████████████████████████░░  96.4% COMPLETE     │
+│   ██████████████████████████████████████████████████████████████░░  97.1% COMPLETE     │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -27,8 +27,9 @@
 | **EPIC-01** | Resident Dues Management & Financial Transparency | `android-domain`, `android-ui`, `backend-api` | 6 | 5 | 🟨 `83.3%` | 100% Tests Green | [.specify/requirements/EPIC-01-resident-dues-financial-management.md](.specify/requirements/EPIC-01-resident-dues-financial-management.md) |
 | **EPIC-02** | Site Manager Financial Oversight & Community Operations | `android-ui`, `android-domain` | 5 | 5 | 🟩 `100.0%` | Verified Live | [.specify/requirements/EPIC-02-site-manager-operations.md](.specify/requirements/EPIC-02-site-manager-operations.md) |
 | **EPIC-03** | SaaS Multi-Tenancy & Autonomous Site Onboarding | `backend-api`, `backend-service`, `android-ui` | 5 | 5 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-03-saas-multi-tenancy-onboarding.md](.specify/requirements/EPIC-03-saas-multi-tenancy-onboarding.md) |
-| **EPIC-04** | Digital Resident Self-Registration & Approval Queue | `backend-api`, `android-ui`, `android-domain` | 6 | 6 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-04-invitation-approval-workflow.md](.specify/requirements/EPIC-04-invitation-approval-workflow.md) |
+| **EPIC-04** | Digital Resident Self-Registration & Approval Queue | `backend-api`, `android-ui`, `android-domain` | 7 | 7 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-04-invitation-approval-workflow.md](.specify/requirements/EPIC-04-invitation-approval-workflow.md) |
 | **EPIC-05** | Backend Persistence, REST APIs & Verification Harness | `backend-db`, `backend-service`, `harness` | 6 | 6 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-05-backend-persistence-verification-harness.md](.specify/requirements/EPIC-05-backend-persistence-verification-harness.md) |
+| **EPIC-06** | Identity, Authentication & Scoped Permission Model | `backend-auth`, `backend-api`, `android-ui` | 5 | 5 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-06-identity-access-auth.md](.specify/requirements/EPIC-06-identity-access-auth.md) |
 
 ---
 
@@ -58,12 +59,18 @@
 | **STORY-04-04** | EPIC-04 | Site Manager Real-Time Approval Queue | Site Manager | **COMPLETED** | `DashboardScreen.kt` (`PendingRegistrationCard`) | Android UI queue screencap | Visual Audit |
 | **STORY-04-05** | EPIC-04 | One-Tap Approval & Password Generation | Site Manager | **COMPLETED** | `RegistrationApprovalService.java`, `RegistrationApprovedDialog` | `whenApprovingPendingRegistration_thenProvisionsUserAndReturnsCredentials` | Unit Test Gate |
 | **STORY-04-06** | EPIC-04 | Registration Rejection with Audit Reason | Site Manager | **COMPLETED** | `RegistrationApprovalService.java`, `DashboardViewModel.kt` | Unit test assertions | Unit Test Gate |
+| **STORY-04-07** | EPIC-04 | Unit-Scoped Co-Resident Invite & Home Permissions | Home Owner | **COMPLETED** | `HomeResidentInvitationService.java`, `DashboardScreen.kt` | `whenGeneratingUnitInviteLink_thenReturnsUnitScopedUrl` | Unit Test Gate |
 | **STORY-05-01** | EPIC-05 | PostgreSQL Relational Schema & Flyway | System | **COMPLETED** | `V1__init_schema.sql` | `SqlSchemaGate.verify_numeric_precision` | `SqlSchemaGate` |
 | **STORY-05-02** | EPIC-05 | Spring Boot 3 JPA Entities & Optimistic Lock | System | **COMPLETED** | `backend/src/.../entity/` | `JpaEntityGate.verify_version_attribute` | `JpaEntityGate` |
 | **STORY-05-03** | EPIC-05 | Spring Boot REST API Controllers | System | **COMPLETED** | `ResidentDashboardController.java`, `SiteOnboardingController.java` | `RestEndpointGate` | `RestEndpointGate` |
 | **STORY-05-04** | EPIC-05 | Closed-Loop Verification Harness Gates | System | **COMPLETED** | `harness/loop/verification_gates/` | `test_financial_integrity_gate_kmk_calculation` | Harness Gate |
 | **STORY-05-05** | EPIC-05 | Unified Automated Test Runner (`run-tests.sh`)| System | **COMPLETED** | `scripts/run-tests.sh` | 100% passing across 21 test assertions | CLI Automation |
 | **STORY-05-06** | EPIC-05 | CMMI Bidirectional RTM Validator | System | **COMPLETED** | `harness/rtm_validator.py`, `traceability-matrix.md` | `test_rtm_validator_bidirectional_consistency` | CMMI Level 5 Gate |
+| **STORY-06-01** | EPIC-06 | Multi-Role Scoped Permission Matrix | System | **COMPLETED** | `Role.java`, `Permission.java`, `RolePermissions.java` | `whenResidentRole_thenHasUnitRestrictedPermissions` | Security Gate |
+| **STORY-06-02** | EPIC-06 | Password Registration & Secure Authentication | All Roles | **COMPLETED** | `AuthDtos.java`, `AuthService.java` | `whenValidPasswordRegistration_thenCanAuthenticate` | Unit Test Gate |
+| **STORY-06-03** | EPIC-06 | Google OAuth2 / ID Token Authentication | All Roles | **COMPLETED** | `AuthDtos.java`, `AuthService.java` | `whenValidGoogleIdToken_thenAuthenticatesAndLinksAccount` | Unit Test Gate |
+| **STORY-06-04** | EPIC-06 | JWT Token Minting & Permission Scoping | Mobile/Web | **COMPLETED** | `AuthDtos.java`, `AuthController.java` | `whenCallingMeEndpoint_thenReturnsClaimsAndPermissions` | Unit Test Gate |
+| **STORY-06-05** | EPIC-06 | Android Multi-Method Login & Registration UI | Mobile User | **COMPLETED** | `AuthModels.kt`, `DashboardScreen.kt` | Android UI screencap verification | Visual Audit |
 
 ---
 

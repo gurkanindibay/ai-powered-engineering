@@ -48,16 +48,24 @@ fun DashboardScreen(
     val provisionedHomeOwner by viewModel.provisionedHomeOwner.collectAsState()
     val pendingRegistrations by viewModel.pendingRegistrations.collectAsState()
     val approvalSuccess by viewModel.approvalSuccessInfo.collectAsState()
+    val unitResidents by viewModel.unitResidents.collectAsState()
+    val unitInviteInfo by viewModel.unitInviteInfo.collectAsState()
+    val userSession by viewModel.userSession.collectAsState()
+    val authMessage by viewModel.authMessage.collectAsState()
 
     var selectedTab by remember { mutableStateOf(0) }
     var showProfileSheet by remember { mutableStateOf(false) }
+    var showPasswordAuthDialog by remember { mutableStateOf(false) }
     var showAnnouncementSheet by remember { mutableStateOf(false) }
     var showDirectMessageSheet by remember { mutableStateOf(false) }
     var showRegisterSiteSheet by remember { mutableStateOf(false) }
     var showAddHomeOwnerSheet by remember { mutableStateOf(false) }
     var showInviteLinkSheet by remember { mutableStateOf(false) }
+    var showUnitInviteSheet by remember { mutableStateOf(false) }
+    var showAddHouseholdMemberDialog by remember { mutableStateOf(false) }
     var directMessageTarget by remember { mutableStateOf("A Blok D:14 - Ahmet Yılmaz") }
     var directMessageAmount by remember { mutableStateOf("₺1.423,33") }
+
 
 
     Scaffold(
@@ -103,11 +111,20 @@ fun DashboardScreen(
                 }
                 is DashboardUiState.Success -> {
                     when (userRole) {
-                        UserRole.RESIDENT -> {
+                        UserRole.RESIDENT, UserRole.HOME_OWNER, UserRole.HOME_RESIDENT -> {
                             ResidentDashboardContent(
                                 state = s,
+                                userSession = userSession,
+                                unitResidents = unitResidents,
                                 onPayClick = onPayClick,
                                 onActionClick = onActionClick,
+                                onOpenUnitInviteLink = {
+                                    viewModel.generateUnitInviteLink()
+                                    showUnitInviteSheet = true
+                                },
+                                onOpenAddHouseholdMember = {
+                                    showAddHouseholdMemberDialog = true
+                                },
                                 onProfileClick = { showProfileSheet = true },
                                 onMessagesClick = { onActionClick("Mesajlaşma") }
                             )
@@ -145,26 +162,38 @@ fun DashboardScreen(
 
                     // Modals
                     if (showProfileSheet) {
-                        val profileName = when (userRole) {
-                            UserRole.SAAS_ADMIN -> "SaaS Platform Admin"
-                            UserRole.SITE_MANAGER -> "Mehmet Demir (Yönetici)"
-                            else -> s.aktifDaire.malikAdi
-                        }
-                        val apartmentInfo = when (userRole) {
-                            UserRole.SAAS_ADMIN -> "SitePulse Cloud • SaaS Süper Yönetici"
-                            UserRole.SITE_MANAGER -> "Begonya Sitesi Yönetim Kurulu Başkanı"
-                            else -> "${s.aktifDaire.siteAdi} • ${s.aktifDaire.blok} Blok D:${s.aktifDaire.daireNo}"
-                        }
                         ProfileModalBottomSheet(
-                            residentName = profileName,
-                            apartmentInfo = apartmentInfo,
+                            userSession = userSession,
                             currentRole = userRole,
-                            onRoleChange = { viewModel.switchRole(it) },
+                            onRoleChange = { viewModel.switchSessionRole(it) },
+                            onLoginWithGoogle = {
+                                viewModel.loginWithGoogle()
+                                showProfileSheet = false
+                            },
+                            onOpenPasswordAuth = {
+                                showProfileSheet = false
+                                showPasswordAuthDialog = true
+                            },
                             isDarkTheme = isDarkTheme,
                             onThemeToggle = onThemeToggle,
                             onDismiss = { showProfileSheet = false }
                         )
                     }
+
+                    if (showPasswordAuthDialog) {
+                        PasswordAuthDialog(
+                            onLogin = { email, pass ->
+                                viewModel.loginWithPassword(email, pass)
+                                showPasswordAuthDialog = false
+                            },
+                            onRegister = { name, email, phone, pass ->
+                                viewModel.registerWithPassword(name, email, phone, pass)
+                                showPasswordAuthDialog = false
+                            },
+                            onDismiss = { showPasswordAuthDialog = false }
+                        )
+                    }
+
 
                     if (showRegisterSiteSheet) {
                         RegisterSiteModalBottomSheet(
@@ -213,6 +242,33 @@ fun DashboardScreen(
                         )
                     }
 
+                    if (showUnitInviteSheet) {
+                        HomeResidentInviteBottomSheet(
+                            inviteInfo = unitInviteInfo ?: UnitInviteInfo(
+                                inviteUrl = "https://sitepulse.app/join/begonya-sitesi/units/d-14?token=SP-HANE-4821",
+                                token = "SP-HANE-4821",
+                                unitLabel = "A Blok D:14"
+                            ),
+                            onDismiss = { showUnitInviteSheet = false },
+                            onOpenAddMemberDemo = {
+                                showUnitInviteSheet = false
+                                showAddHouseholdMemberDialog = true
+                            }
+                        )
+                    }
+
+                    if (showAddHouseholdMemberDialog) {
+                        AddHouseholdMemberDialog(
+                            unitLabel = "A Blok D:14",
+                            onDismiss = { showAddHouseholdMemberDialog = false },
+                            onSubmit = { fullName, phone, email, relationship ->
+                                viewModel.addHomeResidentMember(fullName, phone, email, relationship)
+                                showAddHouseholdMemberDialog = false
+                            }
+                        )
+                    }
+
+
 
 
                     if (showAnnouncementSheet) {
@@ -244,17 +300,20 @@ fun DashboardScreen(
     }
 }
 
-/**
- * Resident Dashboard Content (Release 1: 4 Core Actions, Single Currency Aidat Tracking)
- */
 @Composable
 private fun ResidentDashboardContent(
     state: DashboardUiState.Success,
+    userSession: UserSession,
+    unitResidents: List<UnitResidentMember>,
     onPayClick: () -> Unit,
     onActionClick: (String) -> Unit,
+    onOpenUnitInviteLink: () -> Unit,
+    onOpenAddHouseholdMember: () -> Unit,
     onProfileClick: () -> Unit,
     onMessagesClick: () -> Unit
 ) {
+    val canInvite = userSession.role == UserRole.HOME_OWNER || userSession.role == UserRole.RESIDENT
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -263,17 +322,31 @@ private fun ResidentDashboardContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 1. Top Bar
+        val initials = if (userSession.fullName.contains(" ")) {
+            userSession.fullName.split(" ").mapNotNull { it.firstOrNull()?.toString() }.take(2).joinToString("")
+        } else "AY"
+
         PaparaTopBar(
-            name = state.aktifDaire.malikAdi,
-            subInfo = "${state.aktifDaire.siteAdi} • ${state.aktifDaire.blok} Blok D:${state.aktifDaire.daireNo}",
-            initials = "AY",
+            name = userSession.fullName,
+            subInfo = "${state.aktifDaire.siteAdi} • ${userSession.unitName} (${userSession.authProvider.iconLabel} ${userSession.authProvider.label})",
+            initials = initials,
             onMenuClick = { onActionClick("Menü") },
             onMessagesClick = onMessagesClick,
             onProfileClick = onProfileClick
         )
 
-        // 2. Release 1 Stories Row (Aidat Öde, Dekontlar, Arıza Bildir, Yönetim)
-        ResidentActionsRow(onActionClick = onActionClick, onPayClick = onPayClick)
+        // 2. Release 1 Stories Row (Aidat Öde, Sakin Davet, Dekontlar, Arıza Bildir, Yönetim)
+        ResidentActionsRow(
+            onActionClick = onActionClick,
+            onPayClick = onPayClick,
+            onOpenUnitInviteLink = {
+                if (canInvite) {
+                    onOpenUnitInviteLink()
+                } else {
+                    onActionClick("Yetki Kısıtlaması: Sadece Kat Maliki davet linki üretebilir.")
+                }
+            }
+        )
 
         // 3. Hero Balance Card (Single Currency: Turkish Lira Only)
         PaparaHeroBalanceCard(
@@ -282,7 +355,55 @@ private fun ResidentDashboardContent(
             onDetailClick = { onActionClick("Aidat Detayı") }
         )
 
-        // 4. Section: Duyurular
+
+        // 4. Section: Hane Sakinleri (Daire İçi İzinler & Aile Sakinleri)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "HANE SAKİNLERİ",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SitePulseTheme.colors.textSecondary,
+                    letterSpacing = 0.5.sp
+                )
+                Surface(
+                    color = Color(0xFF0284C7).copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "${unitResidents.size} Sakin",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0284C7),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            TextButton(
+                onClick = onOpenUnitInviteLink,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+            ) {
+                Text(
+                    text = "🔗 Davet Linki",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0284C7)
+                )
+            }
+        }
+
+        HouseholdMembersCard(
+            unitLabel = "${state.aktifDaire.blok} Blok D:${state.aktifDaire.daireNo}",
+            members = unitResidents,
+            onInviteClick = onOpenUnitInviteLink,
+            onAddMemberDemoClick = onOpenAddHouseholdMember
+        )
+
+        // 5. Section: Duyurular
         SectionHeader(title = "DUYURULAR", onMoreClick = { onActionClick("Tüm Duyurular") })
         AnnouncementCard(
             title = state.duyuruBasligi,
@@ -291,7 +412,7 @@ private fun ResidentDashboardContent(
             onClick = { onActionClick("Duyuru Detayı") }
         )
 
-        // 5. Section: Hesap Hareketleri
+        // 6. Section: Hesap Hareketleri
         SectionHeader(title = "HESAP HAREKETLERİ", onMoreClick = { onActionClick("Tüm Hareketler") })
         RecentTransactionsFeed(onActionClick = onActionClick)
 
@@ -620,15 +741,22 @@ private fun BadgedIconButton(icon: ImageVector, badgeCount: Int, onClick: () -> 
 }
 
 /**
- * Resident Quick Actions (Release 1: No meter, no reservation. 4 Core Actions)
+ * Resident Quick Actions (Release 1: 5 Actions with Sakin Davet)
  */
 @Composable
-private fun ResidentActionsRow(onActionClick: (String) -> Unit, onPayClick: () -> Unit) {
+private fun ResidentActionsRow(
+    onActionClick: (String) -> Unit,
+    onPayClick: () -> Unit,
+    onOpenUnitInviteLink: () -> Unit
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         CircularActionItem(Icons.Outlined.CreditCard, "Aidat Öde", onPayClick)
+        CircularActionItem(Icons.Outlined.GroupAdd, "Sakin Davet", onOpenUnitInviteLink)
         CircularActionItem(Icons.AutoMirrored.Outlined.ReceiptLong, "Dekontlar") { onActionClick("Dekontlar") }
         CircularActionItem(Icons.Outlined.Build, "Arıza Bildir") { onActionClick("Arıza Bildir") }
         CircularActionItem(Icons.Outlined.SupportAgent, "Yönetim") { onActionClick("Yönetim") }
@@ -1484,15 +1612,16 @@ private fun BottomNavItem(
 }
 
 /**
- * Profile Bottom Sheet Modal with Role Switcher & Theme Selector
+ * Profile, Authentication & Scoped Permission Bottom Sheet
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProfileModalBottomSheet(
-    residentName: String,
-    apartmentInfo: String,
+    userSession: UserSession,
     currentRole: UserRole,
     onRoleChange: (UserRole) -> Unit,
+    onLoginWithGoogle: () -> Unit,
+    onOpenPasswordAuth: () -> Unit,
     isDarkTheme: Boolean,
     onThemeToggle: (Boolean) -> Unit,
     onDismiss: () -> Unit
@@ -1506,23 +1635,26 @@ private fun ProfileModalBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 36.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // 1. User Header & Provider Badge
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(52.dp)
                         .clip(CircleShape)
                         .background(
                             when (currentRole) {
                                 UserRole.SAAS_ADMIN -> Color(0xFF6366F1)
                                 UserRole.SITE_MANAGER -> Color(0xFF0284C7)
-                                else -> SitePulseTheme.colors.avatarBg
+                                UserRole.HOME_RESIDENT -> Color(0xFF16A34A)
+                                else -> Color(0xFF0D9488)
                             }
                         )
                         .border(1.5.dp, SitePulseTheme.colors.avatarBorder, CircleShape),
@@ -1532,34 +1664,204 @@ private fun ProfileModalBottomSheet(
                         text = when (currentRole) {
                             UserRole.SAAS_ADMIN -> "SA"
                             UserRole.SITE_MANAGER -> "MD"
+                            UserRole.HOME_RESIDENT -> "ZY"
                             else -> "AY"
                         },
-                        fontSize = 16.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (currentRole != UserRole.RESIDENT) Color.White else SitePulseTheme.colors.textPrimary
+                        color = Color.White
                     )
                 }
 
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = residentName,
+                        text = userSession.fullName,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = SitePulseTheme.colors.textPrimary
                     )
                     Text(
-                        text = apartmentInfo,
+                        text = "${userSession.siteName} • ${userSession.unitName}",
                         fontSize = 12.sp,
                         color = SitePulseTheme.colors.textSecondary
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (userSession.authProvider == AuthProvider.GOOGLE) Color(0xFFE8F0FE) else SitePulseTheme.colors.surfaceMuted,
+                        border = BorderStroke(1.dp, if (userSession.authProvider == AuthProvider.GOOGLE) Color(0xFF4285F4) else SitePulseTheme.colors.surfaceBorder)
+                    ) {
+                        Text(
+                            text = "${userSession.authProvider.iconLabel} ${userSession.authProvider.label} (${userSession.email})",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (userSession.authProvider == AuthProvider.GOOGLE) Color(0xFF1A73E8) else SitePulseTheme.colors.textSecondary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 
             HorizontalDivider(color = SitePulseTheme.colors.surfaceBorder, thickness = 0.8.dp)
 
-            // Section: Role Switcher
+            // 2. Section: Dual Login Methods
             Text(
-                text = "KULLANICI ROLÜ & GİRİŞ TÜRÜ",
+                text = "GİRİŞ METODLARI (ŞİFRE & GOOGLE CREDENTIALS)",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = SitePulseTheme.colors.textMuted,
+                letterSpacing = 0.6.sp
+            )
+
+            // Google Sign-In Button
+            Surface(
+                onClick = onLoginWithGoogle,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = SitePulseTheme.colors.surfaceMuted,
+                border = BorderStroke(1.dp, Color(0xFF4285F4).copy(alpha = 0.6f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color.White),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🌐", fontSize = 20.sp)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Google ile Giriş Yap",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SitePulseTheme.colors.textPrimary
+                        )
+                        Text(
+                            text = "Tek tıkla Google hesabı ile şifresiz giriş & hesap eşleme",
+                            fontSize = 11.sp,
+                            color = SitePulseTheme.colors.textSecondary
+                        )
+                    }
+                    Text("→", fontSize = 16.sp, color = Color(0xFF4285F4), fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // Password Login Button
+            Surface(
+                onClick = onOpenPasswordAuth,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = SitePulseTheme.colors.surfaceMuted,
+                border = BorderStroke(1.dp, SitePulseTheme.colors.surfaceBorder)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(SitePulseTheme.colors.avatarBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🔑", fontSize = 18.sp)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Şifre ile Giriş & Yeni Kayıt",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SitePulseTheme.colors.textPrimary
+                        )
+                        Text(
+                            text = "E-posta ve şifrenizle giriş yapın veya yeni hesap oluşturun",
+                            fontSize = 11.sp,
+                            color = SitePulseTheme.colors.textSecondary
+                        )
+                    }
+                    Text("→", fontSize = 16.sp, color = SitePulseTheme.colors.textMuted, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // 3. Section: Scoped Permissions Breakdown (RBAC + Scoped ABAC)
+            Text(
+                text = "AKTİF YETKİLER & İZİN KAPSAMI (RBAC + SCOPED ABAC)",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = SitePulseTheme.colors.textMuted,
+                letterSpacing = 0.6.sp
+            )
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = SitePulseTheme.colors.surfaceMuted,
+                border = BorderStroke(1.dp, SitePulseTheme.colors.surfaceBorder)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("🛡️", fontSize = 16.sp)
+                        Text(
+                            text = "Rol: ${userSession.role.displayName}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SitePulseTheme.colors.textPrimary
+                        )
+                    }
+                    HorizontalDivider(color = SitePulseTheme.colors.surfaceBorder, thickness = 0.5.dp)
+
+                    userSession.permissions.forEach { perm ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = if (perm.isGranted) "✓" else "🔒",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (perm.isGranted) Color(0xFF16A34A) else Color(0xFFDC2626)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = perm.title,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (perm.isGranted) SitePulseTheme.colors.textPrimary else SitePulseTheme.colors.textMuted
+                                )
+                                Text(
+                                    text = perm.isolationNote,
+                                    fontSize = 10.sp,
+                                    color = if (perm.isGranted) SitePulseTheme.colors.textSecondary else Color(0xFFDC2626).copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Section: Demo Role Switcher
+            Text(
+                text = "KULLANICI ROLÜ GEÇİŞİ (DEMO / TEST)",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SitePulseTheme.colors.textMuted,
@@ -1568,16 +1870,24 @@ private fun ProfileModalBottomSheet(
 
             ThemeOptionItem(
                 icon = "👤",
-                title = "Site Sakini",
-                subtitle = "Ahmet Yılmaz • A Blok D:14 (Aidat Ödeme & Bildirim)",
-                isSelected = currentRole == UserRole.RESIDENT,
-                onClick = { onRoleChange(UserRole.RESIDENT) }
+                title = "Kat Maliki (Ev Sahibi)",
+                subtitle = "Ahmet Yılmaz • A Blok D:14 (Tam Daire Yetkisi & Sakin Davet)",
+                isSelected = currentRole == UserRole.HOME_OWNER || currentRole == UserRole.RESIDENT,
+                onClick = { onRoleChange(UserRole.HOME_OWNER) }
+            )
+
+            ThemeOptionItem(
+                icon = "🏠",
+                title = "Ev Sakini (Aile / Kiracı)",
+                subtitle = "Zeynep Yılmaz • A Blok D:14 (Sadece Dairesine Yetkili, Davet Edemez)",
+                isSelected = currentRole == UserRole.HOME_RESIDENT,
+                onClick = { onRoleChange(UserRole.HOME_RESIDENT) }
             )
 
             ThemeOptionItem(
                 icon = "🏢",
                 title = "Site Yöneticisi",
-                subtitle = "Mehmet Demir • Yönetim (Aidat Takip & Duyuru)",
+                subtitle = "Mehmet Demir • Begonya Sitesi (Tüm Kompleks & Onay Kuyruğu)",
                 isSelected = currentRole == UserRole.SITE_MANAGER,
                 onClick = { onRoleChange(UserRole.SITE_MANAGER) }
             )
@@ -1585,12 +1895,12 @@ private fun ProfileModalBottomSheet(
             ThemeOptionItem(
                 icon = "⚡",
                 title = "SaaS Süper Yönetici",
-                subtitle = "SaaS Platform Admin (Yeni Site & Yönetici Kaydı)",
+                subtitle = "SaaS Platform Admin (Tüm Siteler & Altyapı Yönetimi)",
                 isSelected = currentRole == UserRole.SAAS_ADMIN,
                 onClick = { onRoleChange(UserRole.SAAS_ADMIN) }
             )
 
-            // Section: Theme Toggle
+            // 5. Section: Theme Toggle
             Text(
                 text = "GÖRÜNÜM & PARAMETRİK TEMA",
                 fontSize = 11.sp,
@@ -1615,44 +1925,6 @@ private fun ProfileModalBottomSheet(
                 onClick = { onThemeToggle(true) }
             )
 
-            // Section: Currency Note
-            Text(
-                text = "PARA BİRİMİ TANIMI",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = SitePulseTheme.colors.textMuted,
-                letterSpacing = 0.6.sp
-            )
-
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = SitePulseTheme.colors.surfaceMuted,
-                border = BorderStroke(1.dp, SitePulseTheme.colors.surfaceBorder)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("🇹🇷", fontSize = 22.sp)
-                    Column {
-                        Text(
-                            text = "Türk Lirası (₺)",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SitePulseTheme.colors.textPrimary
-                        )
-                        Text(
-                            text = "Tüm aidat ve yasal KMK gecikme hesaplamaları yalnızca TL cinsindendir.",
-                            fontSize = 11.sp,
-                            color = SitePulseTheme.colors.textSecondary
-                        )
-                    }
-                }
-            }
-
             Button(
                 onClick = onDismiss,
                 modifier = Modifier
@@ -1669,6 +1941,143 @@ private fun ProfileModalBottomSheet(
         }
     }
 }
+
+/**
+ * Password-Based Authentication Dialog (Login & Register)
+ */
+@Composable
+private fun PasswordAuthDialog(
+    onLogin: (String, String) -> Unit,
+    onRegister: (String, String, String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var isRegisterMode by remember { mutableStateOf(false) }
+    var fullName by remember { mutableStateOf("Ahmet Yılmaz") }
+    var email by remember { mutableStateOf("ahmet.yilmaz@gmail.com") }
+    var phone by remember { mutableStateOf("0532 111 22 33") }
+    var password by remember { mutableStateOf("GucluSifre2026!") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(
+                    text = if (isRegisterMode) "Yeni Hesap Oluştur" else "Şifre ile Giriş Yap",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+                Text(
+                    text = if (isRegisterMode) "SitePulse hesabı oluşturun" else "Kayıtlı e-posta ve şifrenizle oturum açın",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Segmented Toggle: Giriş vs Kayıt
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (!isRegisterMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { isRegisterMode = false }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Giriş Yap",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = if (!isRegisterMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isRegisterMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { isRegisterMode = true }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Hesap Oluştur",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = if (isRegisterMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (isRegisterMode) {
+                    OutlinedTextField(
+                        value = fullName,
+                        onValueChange = { fullName = it },
+                        label = { Text("Ad Soyad", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = { phone = it },
+                        label = { Text("Telefon", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("E-Posta", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Şifre", fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (isRegisterMode) {
+                        onRegister(fullName, email, phone, password)
+                    } else {
+                        onLogin(email, password)
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text(if (isRegisterMode) "Kaydet & Oturum Aç" else "Giriş Yap")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Vazgeç")
+            }
+        }
+    )
+}
+
 
 /**
  * Announcement Modal Bottom Sheet for Manager
@@ -3291,6 +3700,469 @@ private fun RegistrationApprovedDialog(
         shape = RoundedCornerShape(20.dp)
     )
 }
+
+/**
+ * Household members living in this specific flat with unit-scoped access.
+ */
+@Composable
+private fun HouseholdMembersCard(
+    unitLabel: String,
+    members: List<UnitResidentMember>,
+    onInviteClick: () -> Unit,
+    onAddMemberDemoClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SitePulseTheme.colors.surface),
+        border = BorderStroke(1.dp, SitePulseTheme.colors.surfaceBorder)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Security badge
+            Surface(
+                color = Color(0xFF0284C7).copy(alpha = 0.08f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(0.8.dp, Color(0xFF0284C7).copy(alpha = 0.25f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Lock,
+                        contentDescription = "Yetki Kapsamı",
+                        tint = Color(0xFF0284C7),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Yetki Sınırı: Sadece $unitLabel (İzole Daire Erişimi)",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF0284C7)
+                    )
+                }
+            }
+
+            // Member list
+            members.forEach { member ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (member.isOwner) Color(0xFF3B82F6).copy(alpha = 0.15f)
+                                else Color(0xFF10B981).copy(alpha = 0.15f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = member.fullName.split(" ").mapNotNull { it.firstOrNull()?.toString() }.take(2).joinToString(""),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (member.isOwner) Color(0xFF2563EB) else Color(0xFF059669)
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = member.fullName,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SitePulseTheme.colors.textPrimary
+                            )
+                            Surface(
+                                color = if (member.isOwner) Color(0xFF2563EB).copy(alpha = 0.1f) else Color(0xFF10B981).copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = member.relationship,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (member.isOwner) Color(0xFF2563EB) else Color(0xFF059669),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Yetki: ${member.permissionScope} • ${member.phone}",
+                            fontSize = 11.sp,
+                            color = SitePulseTheme.colors.textSecondary
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(color = SitePulseTheme.colors.surfaceBorder, thickness = 0.8.dp)
+
+            // Action row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = onInviteClick,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "Davet Linki", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = onAddMemberDemoClick,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, Color(0xFF0284C7)),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.PersonAdd,
+                        contentDescription = null,
+                        tint = Color(0xFF0284C7),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "Hızlı Ekle", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0284C7))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Modal bottom sheet for home owner unit-scoped invitation link.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeResidentInviteBottomSheet(
+    inviteInfo: UnitInviteInfo,
+    onDismiss: () -> Unit,
+    onOpenAddMemberDemo: () -> Unit
+) {
+    var copied by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = SitePulseTheme.colors.surface,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF0284C7).copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.GroupAdd,
+                        contentDescription = "Davet Linki",
+                        tint = Color(0xFF0284C7),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Column {
+                    Text(
+                        text = "Ev Sakini Davet Linki",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = SitePulseTheme.colors.textPrimary
+                    )
+                    Text(
+                        text = "${inviteInfo.unitLabel} için aile veya sakin davet bağlantısı",
+                        fontSize = 12.sp,
+                        color = SitePulseTheme.colors.textSecondary
+                    )
+                }
+            }
+
+            // Security isolation notice
+            Surface(
+                color = Color(0xFF0284C7).copy(alpha = 0.08f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Color(0xFF0284C7).copy(alpha = 0.3f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = "Güvenlik İzolasyonu",
+                            tint = Color(0xFF0284C7),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "İZOLASYON & YETKİ KAPSAMI",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF0284C7)
+                        )
+                    }
+                    Text(
+                        text = "Bu link sadece ${inviteInfo.unitLabel} bağımsız bölümüne erişim yetkisi verir. Kaydolan kişi yalnızca bu dairenin aidatlarını görebilir ve talep açabilir. Diğer daire veya yönetim yetkileri kapalıdır.",
+                        fontSize = 12.sp,
+                        color = SitePulseTheme.colors.textPrimary,
+                        lineHeight = 17.sp
+                    )
+                }
+            }
+
+            // Invite link box
+            Surface(
+                color = SitePulseTheme.colors.background,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, SitePulseTheme.colors.surfaceBorder)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "DAİREYE ÖZEL KAYIT BAĞLANTISI",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0284C7),
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = inviteInfo.inviteUrl,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SitePulseTheme.colors.textPrimary,
+                        maxLines = 2
+                    )
+                    Text(
+                        text = "⌛ ${inviteInfo.expiresAtStr} (Daire Tokeni: ${inviteInfo.token})",
+                        fontSize = 11.sp,
+                        color = SitePulseTheme.colors.textSecondary
+                    )
+                }
+            }
+
+            // Copy & WhatsApp buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { copied = true },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, if (copied) Color(0xFF10B981) else Color(0xFF0284C7))
+                ) {
+                    Icon(
+                        imageVector = if (copied) Icons.Default.Check else Icons.Outlined.ContentCopy,
+                        contentDescription = null,
+                        tint = if (copied) Color(0xFF10B981) else Color(0xFF0284C7),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (copied) "Kopyalandı!" else "Linki Kopyala",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (copied) Color(0xFF10B981) else Color(0xFF0284C7)
+                    )
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "WhatsApp Paylaş", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            }
+
+            // Quick add member demo button
+            OutlinedButton(
+                onClick = onOpenAddMemberDemo,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, SitePulseTheme.colors.surfaceBorder)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.PersonAdd,
+                    contentDescription = null,
+                    tint = SitePulseTheme.colors.textPrimary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Hızlı Sakin Ekle (Test Formu)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SitePulseTheme.colors.textPrimary
+                )
+            }
+
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = SitePulseTheme.colors.surfaceBorder),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(text = "Kapat", color = SitePulseTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
+
+/**
+ * Dialog to simulate adding a household resident for this unit.
+ */
+@Composable
+private fun AddHouseholdMemberDialog(
+    unitLabel: String,
+    onDismiss: () -> Unit,
+    onSubmit: (String, String, String, String) -> Unit
+) {
+    var name by remember { mutableStateOf("Zeynep Yılmaz") }
+    var phone by remember { mutableStateOf("0532 999 88 77") }
+    var email by remember { mutableStateOf("zeynep.yilmaz@gmail.com") }
+    var relationship by remember { mutableStateOf("Eş / Sakin") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(text = "👨‍👩‍👧", fontSize = 22.sp)
+                Column {
+                    Text(
+                        text = "Yeni Ev Sakini Tanımla",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SitePulseTheme.colors.textPrimary
+                    )
+                    Text(
+                        text = "$unitLabel Hanesine Bağlanıyor",
+                        fontSize = 11.sp,
+                        color = Color(0xFF0284C7)
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "🔒 Yetki Kapsamı: Bu kullanıcı sadece $unitLabel dairesinin aidat ve duyurularına erişebilir.",
+                    fontSize = 11.sp,
+                    color = Color(0xFF0284C7)
+                )
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Ad Soyad") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = relationship,
+                    onValueChange = { relationship = it },
+                    label = { Text("Yakınlık (Eş, Çocuk, Kiracı vb.)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text("Telefon") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("E-Posta") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmit(name, phone, email, relationship) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Kaydet & Daireye Bağla", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Vazgeç", color = SitePulseTheme.colors.textSecondary)
+            }
+        },
+        containerColor = SitePulseTheme.colors.surface,
+        shape = RoundedCornerShape(18.dp)
+    )
+}
+
 
 
 

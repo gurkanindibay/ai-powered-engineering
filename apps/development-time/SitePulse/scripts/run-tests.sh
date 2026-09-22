@@ -36,9 +36,28 @@ m2_repo = Path.home() / ".m2" / "repository"
 junit_api = m2_repo / "org" / "junit" / "jupiter" / "junit-jupiter-api" / "5.10.3" / "junit-jupiter-api-5.10.3.jar"
 opentest4j = m2_repo / "org" / "opentest4j" / "opentest4j" / "1.3.0" / "opentest4j-1.3.0.jar"
 
-if not target_test_classes.exists() or not junit_api.exists():
-    print("  [SKIP] Backend compiled classes or m2 dependencies not found.")
+if not junit_api.exists():
+    print("  [SKIP] Backend m2 dependencies not found.")
     exit(0)
+
+all_jars = ":".join(str(p) for p in m2_repo.rglob("*.jar"))
+target_classes.mkdir(parents=True, exist_ok=True)
+target_test_classes.mkdir(parents=True, exist_ok=True)
+
+main_srcs = [str(p) for p in (sitepulse_root / "backend" / "src" / "main" / "java").rglob("*.java")]
+test_srcs = [str(p) for p in (sitepulse_root / "backend" / "src" / "test" / "java").rglob("*.java")]
+
+if main_srcs:
+    res_main = subprocess.run(["javac", "-cp", f"{target_classes}:{all_jars}", "-d", str(target_classes)] + main_srcs, capture_output=True, text=True)
+    if res_main.returncode != 0:
+        print("Compile Main Error:", res_main.stderr)
+        exit(res_main.returncode)
+
+if test_srcs:
+    res_test = subprocess.run(["javac", "-cp", f"{target_classes}:{target_test_classes}:{all_jars}", "-d", str(target_test_classes)] + test_srcs, capture_output=True, text=True)
+    if res_test.returncode != 0:
+        print("Compile Test Error:", res_test.stderr)
+        exit(res_test.returncode)
 
 runner_code = """
 public class BackendTestRunner {
@@ -127,9 +146,76 @@ public class BackendTestRunner {
         regSetUp.invoke(regObj);
         rm3.invoke(regObj);
         System.out.println("  [PASS] whenApprovingPendingRegistration_thenProvisionsUserAndReturnsCredentials (Approval Queue)");
+
+        // 5. Unit-Scoped Co-Resident Invitation & Permissions Tests
+        Class<?> homeClazz = Class.forName("com.sitepulse.backend.service.HomeResidentInvitationServiceTest");
+        var homeCtor = homeClazz.getDeclaredConstructor();
+        homeCtor.setAccessible(true);
+        Object homeObj = homeCtor.newInstance();
+
+        var homeSetUp = homeClazz.getDeclaredMethod("setUp");
+        homeSetUp.setAccessible(true);
+
+        var hm1 = homeClazz.getDeclaredMethod("whenGeneratingUnitInviteLink_thenReturnsUnitScopedUrlAndToken");
+        hm1.setAccessible(true);
+        homeSetUp.invoke(homeObj);
+        hm1.invoke(homeObj);
+        System.out.println("  [PASS] whenGeneratingUnitInviteLink_thenReturnsUnitScopedUrlAndToken (Unit Invite Link)");
+
+        var hm2 = homeClazz.getDeclaredMethod("whenRegisteringHomeResident_thenAssignsHomeResidentRoleAndUnitScope");
+        hm2.setAccessible(true);
+        homeSetUp.invoke(homeObj);
+        hm2.invoke(homeObj);
+        System.out.println("  [PASS] whenRegisteringHomeResident_thenAssignsHomeResidentRoleAndUnitScope (Unit-Scoped Permissions)");
+
+        var hm3 = homeClazz.getDeclaredMethod("whenDuplicateEmailForHomeResident_thenThrowsException");
+        hm3.setAccessible(true);
+        homeSetUp.invoke(homeObj);
+        hm3.invoke(homeObj);
+        System.out.println("  [PASS] whenDuplicateEmailForHomeResident_thenThrowsException (Unit Member Validation)");
+
+        // 6. Dual Auth (Password & Google OAuth2) & Permission Model Tests
+        Class<?> authClazz = Class.forName("com.sitepulse.backend.service.AuthServiceTest");
+        var authCtor = authClazz.getDeclaredConstructor();
+        authCtor.setAccessible(true);
+        Object authObj = authCtor.newInstance();
+
+        var authSetUp = authClazz.getDeclaredMethod("setUp");
+        authSetUp.setAccessible(true);
+
+        var am1 = authClazz.getDeclaredMethod("whenValidPasswordRegistration_thenCanAuthenticate");
+        am1.setAccessible(true);
+        authSetUp.invoke(authObj);
+        am1.invoke(authObj);
+        System.out.println("  [PASS] whenValidPasswordRegistration_thenCanAuthenticate (Password Auth & Hashing)");
+
+        var am2 = authClazz.getDeclaredMethod("whenWrongPassword_thenThrowsException");
+        am2.setAccessible(true);
+        authSetUp.invoke(authObj);
+        am2.invoke(authObj);
+        System.out.println("  [PASS] whenWrongPassword_thenThrowsException (Invalid Password Rejection)");
+
+        var am3 = authClazz.getDeclaredMethod("whenValidGoogleIdToken_thenAuthenticatesAndLinksAccount");
+        am3.setAccessible(true);
+        authSetUp.invoke(authObj);
+        am3.invoke(authObj);
+        System.out.println("  [PASS] whenValidGoogleIdToken_thenAuthenticatesAndLinksAccount (Google OAuth2 ID Token)");
+
+        var am4 = authClazz.getDeclaredMethod("whenResidentRole_thenHasUnitRestrictedPermissions");
+        am4.setAccessible(true);
+        authSetUp.invoke(authObj);
+        am4.invoke(authObj);
+        System.out.println("  [PASS] whenResidentRole_thenHasUnitRestrictedPermissions (Unit Scope Security Gate)");
+
+        var am5 = authClazz.getDeclaredMethod("whenHomeOwnerRole_thenHasInviteAndHouseholdPermissions");
+        am5.setAccessible(true);
+        authSetUp.invoke(authObj);
+        am5.invoke(authObj);
+        System.out.println("  [PASS] whenHomeOwnerRole_thenHasInviteAndHouseholdPermissions (Home Owner Permissions)");
     }
 }
 """
+
 temp_runner = Path("/tmp/BackendTestRunner.java")
 temp_runner.write_text(runner_code, encoding="utf-8")
 

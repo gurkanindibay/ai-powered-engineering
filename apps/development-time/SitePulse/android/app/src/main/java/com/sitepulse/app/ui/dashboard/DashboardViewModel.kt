@@ -63,11 +63,27 @@ class DashboardViewModel(
 
     val invitationUrl: String = "https://sitepulse.app/join/begonya-sitesi?token=SP-INV-8912"
 
+    // Home Owner: Unit-Scoped Household Residents & Invite Link
+    private val _unitResidents = MutableStateFlow<List<UnitResidentMember>>(emptyList())
+    val unitResidents: StateFlow<List<UnitResidentMember>> = _unitResidents.asStateFlow()
+
+    private val _unitInviteInfo = MutableStateFlow<UnitInviteInfo?>(null)
+    val unitInviteInfo: StateFlow<UnitInviteInfo?> = _unitInviteInfo.asStateFlow()
+
+    // Authentication & Scoped Permission Model State
+    private val _userSession = MutableStateFlow(createSession(UserRole.HOME_OWNER, AuthProvider.LOCAL))
+    val userSession: StateFlow<UserSession> = _userSession.asStateFlow()
+
+    private val _authMessage = MutableStateFlow<String?>(null)
+    val authMessage: StateFlow<String?> = _authMessage.asStateFlow()
+
     init {
         loadDashboard()
         loadManagerData()
         loadSaasData()
+        loadUnitResidentData()
     }
+
 
     fun registerNewSite(
         name: String,
@@ -353,4 +369,183 @@ class DashboardViewModel(
         )
     }
 
+    private fun loadUnitResidentData() {
+        _unitResidents.value = listOf(
+            UnitResidentMember(
+                id = "res-ahmet-14",
+                fullName = "Ahmet Yılmaz",
+                relationship = "Kat Maliki (Ev Sahibi)",
+                phone = "0532 111 22 33",
+                email = "ahmet.yilmaz@begonya.com",
+                isOwner = true,
+                permissionScope = "Sadece A Blok D:14"
+            )
+        )
+    }
+
+    fun generateUnitInviteLink(relationship: String = "Aile Üyesi / Sakin") {
+        val token = "SP-HANE-" + UUID.randomUUID().toString().substring(0, 4).uppercase()
+        val url = "https://sitepulse.app/join/begonya-sitesi/units/d-14?token=$token"
+        _unitInviteInfo.value = UnitInviteInfo(
+            inviteUrl = url,
+            token = token,
+            unitLabel = "A Blok D:14",
+            expiresAtStr = "7 gün geçerli",
+            securityNotice = "Bu link sadece A Blok D:14 için sakin kaydı açar. Başka daire veya yönetim yetkisi vermez."
+        )
+    }
+
+    fun clearUnitInviteInfo() {
+        _unitInviteInfo.value = null
+    }
+
+    fun addHomeResidentMember(
+        fullName: String,
+        phone: String,
+        email: String,
+        relationship: String
+    ) {
+        val newMember = UnitResidentMember(
+            id = "res-" + UUID.randomUUID().toString().substring(0, 8),
+            fullName = fullName,
+            relationship = relationship,
+            phone = phone,
+            email = email,
+            isOwner = false,
+            permissionScope = "Sadece A Blok D:14"
+        )
+        _unitResidents.value = _unitResidents.value + newMember
+    }
+
+    fun loginWithPassword(email: String, pass: String) {
+        if (email.isBlank() || pass.isBlank()) {
+            _authMessage.value = "E-posta ve şifre zorunludur."
+            return
+        }
+
+        // Determine user based on email or role
+        val role = when {
+            email.contains("admin") -> UserRole.SAAS_ADMIN
+            email.contains("yonetim") || email.contains("mehmet") -> UserRole.SITE_MANAGER
+            email.contains("zeynep") -> UserRole.HOME_RESIDENT
+            else -> UserRole.HOME_OWNER
+        }
+
+        _userRole.value = role
+        _userSession.value = createSession(
+            role = role,
+            provider = AuthProvider.LOCAL,
+            customEmail = email
+        )
+        _authMessage.value = "Şifre ile başarıyla giriş yapıldı (${role.displayName})."
+    }
+
+    fun loginWithGoogle() {
+        val role = UserRole.HOME_OWNER
+        _userRole.value = role
+        _userSession.value = createSession(
+            role = role,
+            provider = AuthProvider.GOOGLE,
+            customName = "Ahmet Yılmaz (Google)",
+            customEmail = "ahmet.yilmaz@gmail.com",
+            avatarUrl = "https://lh3.googleusercontent.com/a/google-user-icon"
+        )
+        _authMessage.value = "Google hesabı ile tek tıkla giriş sağlandı."
+    }
+
+    fun registerWithPassword(fullName: String, email: String, phone: String, pass: String) {
+        if (fullName.isBlank() || email.isBlank() || pass.isBlank()) {
+            _authMessage.value = "Lütfen tüm zorunlu alanları doldurunuz."
+            return
+        }
+        val role = UserRole.HOME_OWNER
+        _userRole.value = role
+        _userSession.value = createSession(
+            role = role,
+            provider = AuthProvider.LOCAL,
+            customName = fullName,
+            customEmail = email,
+            customPhone = phone
+        )
+        _authMessage.value = "Hesabınız başarıyla oluşturuldu ve oturum açıldı."
+    }
+
+    fun switchSessionRole(role: UserRole) {
+        _userRole.value = role
+        _userSession.value = createSession(role, _userSession.value.authProvider)
+    }
+
+    fun clearAuthMessage() {
+        _authMessage.value = null
+    }
+
+    private fun createSession(
+        role: UserRole,
+        provider: AuthProvider,
+        customName: String? = null,
+        customEmail: String? = null,
+        customPhone: String? = null,
+        avatarUrl: String? = null
+    ): UserSession {
+        val permissions = when (role) {
+            UserRole.SAAS_ADMIN -> listOf(
+                PermissionScope("TENANT_MANAGE", "Site & Abonelik Yönetimi", true, "Platform geneli tüm kiracılar"),
+                PermissionScope("SITE_MANAGE", "Site Altyapı Denetimi", true, "Tüm siteleri yapılandırma"),
+                PermissionScope("ANNOUNCEMENT_BROADCAST", "Global Duyuru", true, "Tüm platform duyuruları")
+            )
+            UserRole.SITE_MANAGER -> listOf(
+                PermissionScope("SITE_MANAGE", "Begonya Sitesi Yönetimi", true, "Blok, daire ve personel yönetimi"),
+                PermissionScope("RESIDENT_INVITE_SITE", "Site Kayıt Linki Üretme", true, "Site geneli self-registration"),
+                PermissionScope("RESIDENT_APPROVE", "Sakin Başvuru Onayı", true, "Onay kuyruğu ve şifre üretimi"),
+                PermissionScope("LEDGER_MANAGE_ALL", "Aidat & Finans Yönetimi", true, "Tüm dairelerin borç ve faiz takibi"),
+                PermissionScope("ANNOUNCEMENT_BROADCAST", "Site Geneli Duyuru", true, "Tüm dairelere SMS/bildirim")
+            )
+            UserRole.HOME_OWNER, UserRole.RESIDENT -> listOf(
+                PermissionScope("UNIT_READ", "Daire Aidat & Makbuz Görüntüleme", true, "Sadece A Blok D:14"),
+                PermissionScope("UNIT_PAY", "Online Aidat Ödeme (Kredi Kartı)", true, "Sadece A Blok D:14"),
+                PermissionScope("UNIT_TICKET_SUBMIT", "Arıza / Talep Bildirimi", true, "Sadece A Blok D:14"),
+                PermissionScope("UNIT_INVITE_CO_RESIDENT", "Hane Sakini Davet Linki Üretme", true, "Sadece A Blok D:14"),
+                PermissionScope("UNIT_MANAGE_HOUSEHOLD", "Hane Sakinlerini Listeleme/Ekleme", true, "Sadece A Blok D:14"),
+                PermissionScope("LEDGER_MANAGE_ALL", "Site Finansını Yönetme", false, "Engelli: Kat malikleri diğer daireleri göremez")
+            )
+            UserRole.HOME_RESIDENT -> listOf(
+                PermissionScope("UNIT_READ", "Daire Aidat & Makbuz Görüntüleme", true, "Sadece A Blok D:14"),
+                PermissionScope("UNIT_PAY", "Online Aidat Ödeme", true, "Sadece A Blok D:14"),
+                PermissionScope("UNIT_TICKET_SUBMIT", "Arıza / Talep Bildirimi", true, "Sadece A Blok D:14"),
+                PermissionScope("UNIT_INVITE_CO_RESIDENT", "Hane Sakini Davet Linki", false, "Engelli: Sadece Kat Maliki davet linki üretebilir"),
+                PermissionScope("UNIT_MANAGE_HOUSEHOLD", "Hane Sakinlerini Yönetme", false, "Engelli: Aile sakinleri üye ekleyemez"),
+                PermissionScope("LEDGER_MANAGE_ALL", "Site Finansını Yönetme", false, "Engelli: Site yönetimi yetkisi yok")
+            )
+        }
+
+        val name = customName ?: when (role) {
+            UserRole.SAAS_ADMIN -> "SaaS Platform Admin"
+            UserRole.SITE_MANAGER -> "Mehmet Demir"
+            UserRole.HOME_OWNER, UserRole.RESIDENT -> "Ahmet Yılmaz"
+            UserRole.HOME_RESIDENT -> "Zeynep Yılmaz"
+        }
+
+        val email = customEmail ?: when (role) {
+            UserRole.SAAS_ADMIN -> "admin@sitepulse.io"
+            UserRole.SITE_MANAGER -> "mehmet.demir@begonya.com"
+            UserRole.HOME_OWNER, UserRole.RESIDENT -> "ahmet.yilmaz@gmail.com"
+            UserRole.HOME_RESIDENT -> "zeynep.yilmaz@gmail.com"
+        }
+
+        return UserSession(
+            id = "usr-" + UUID.randomUUID().toString().substring(0, 8),
+            fullName = name,
+            email = email,
+            phone = customPhone ?: "0532 111 22 33",
+            role = role,
+            siteName = "Begonya Sitesi",
+            unitName = if (role == UserRole.HOME_OWNER || role == UserRole.HOME_RESIDENT || role == UserRole.RESIDENT) "A Blok D:14" else "Tüm Kompleks",
+            authProvider = provider,
+            avatarUrl = avatarUrl,
+            permissions = permissions
+        )
+    }
+
 }
+
+
