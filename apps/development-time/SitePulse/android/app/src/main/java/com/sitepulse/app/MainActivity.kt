@@ -13,6 +13,10 @@ import androidx.compose.ui.Modifier
 import com.sitepulse.app.ui.dashboard.DashboardScreen
 import com.sitepulse.app.ui.dashboard.DashboardViewModel
 import com.sitepulse.app.ui.theme.SitePulseTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
     private val viewModel: DashboardViewModel by viewModels()
@@ -21,13 +25,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            SitePulseTheme {
+            var isDarkTheme by remember { mutableStateOf(false) }
+
+            SitePulseTheme(darkTheme = isDarkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = SitePulseTheme.colors.background
                 ) {
                     DashboardScreen(
                         viewModel = viewModel,
+                        isDarkTheme = isDarkTheme,
+                        onThemeToggle = { isDarkTheme = it },
                         onPayClick = {
                             Toast.makeText(
                                 this,

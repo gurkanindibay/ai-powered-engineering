@@ -3,31 +3,80 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SitePulse - Sakin Mobil Ana Sayfa Prototipi</title>
+  <title>SitePulse - Sakin Mobil Ana Sayfa (Papara Stili)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
+    /* =========================================================
+       PARAMETRIC DESIGN TOKENS (LIGHT & DARK THEMES)
+       ========================================================= */
     :root {
-      --primary: #00629E;
-      --primary-dark: #004B7A;
-      --primary-container: #CFE5FF;
-      --on-primary-container: #001D34;
+      /* Default: Papara Light Theme */
+      --bg: #F8F9FA;
       --surface: #FFFFFF;
-      --surface-variant: #F0F4F8;
-      --background: #F8F9FA;
-      --on-surface: #191C1E;
-      --on-surface-variant: #41474D;
-      --outline: #72777F;
-      --danger: #BA1A1A;
-      --danger-container: #FFDAD6;
-      --success: #1E824C;
-      --success-container: #D4EDDA;
-      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
-      --shadow-md: 0 8px 24px rgba(0, 98, 158, 0.12);
-      --radius-sm: 12px;
-      --radius-md: 20px;
-      --radius-lg: 28px;
+      --surface-border: #EBECEF;
+      --surface-muted: #F3F4F6;
+      --text-primary: #0F172A;
+      --text-secondary: #64748B;
+      --text-muted: #94A3B8;
+      --primary-dark: #111827;
+      
+      --btn-primary-bg: #111827;
+      --btn-primary-text: #FFFFFF;
+      --btn-secondary-bg: #F3F4F6;
+      --btn-secondary-text: #0F172A;
+
+      --accent-red: #FF3B30;
+      --accent-red-bg: #FEE2E2;
+      --success-green: #10B981;
+      --success-green-bg: #D1FAE5;
+      --amber-bg: #FEF3C7;
+      --amber-text: #D97706;
+
+      --nav-active: #111827;
+      --nav-inactive: #64748B;
+      --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+      --story-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+
+      --avatar-bg: #E2E8F0;
+      --avatar-border: #CBD5E1;
+      --avatar-text: #111827;
+      --modal-sheet-bg: #FFFFFF;
+    }
+
+    /* Parametric Dark Theme (Papara Midnight / Dark Mode) */
+    .device-frame[data-theme="dark"] {
+      --bg: #0B0F17;
+      --surface: #141A29;
+      --surface-border: #222D42;
+      --surface-muted: #1B2337;
+      --text-primary: #F8FAFC;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+      --primary-dark: #FFFFFF;
+      
+      --btn-primary-bg: #F8FAFC;
+      --btn-primary-text: #0B0F17;
+      --btn-secondary-bg: #1E283D;
+      --btn-secondary-text: #F8FAFC;
+
+      --accent-red: #FF453A;
+      --accent-red-bg: rgba(255, 69, 58, 0.18);
+      --success-green: #34D399;
+      --success-green-bg: rgba(52, 211, 153, 0.18);
+      --amber-bg: rgba(245, 158, 11, 0.18);
+      --amber-text: #FBBF24;
+
+      --nav-active: #38BDF8;
+      --nav-inactive: #64748B;
+      --card-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+      --story-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+      --avatar-bg: #1E293B;
+      --avatar-border: #334155;
+      --avatar-text: #F8FAFC;
+      --modal-sheet-bg: #141A29;
     }
 
     * {
@@ -39,37 +88,49 @@
     }
 
     body {
-      background: #0D1117;
+      background: #06080E;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 24px 16px;
-      color: #E6EDF3;
+      padding: 20px 16px;
+      color: #E2E8F0;
     }
 
+    /* Simulation Toolbar */
     .toolbar {
       display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
       align-items: center;
-      gap: 16px;
-      margin-bottom: 20px;
-      background: #161B22;
-      padding: 10px 20px;
+      gap: 10px;
+      margin-bottom: 18px;
+      background: #111726;
+      padding: 8px 16px;
       border-radius: 999px;
-      border: 1px solid #30363D;
+      border: 1px solid #1E293B;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      max-width: 95vw;
     }
 
     .toolbar label {
-      font-size: 13px;
-      color: #8B949E;
+      font-size: 12px;
+      font-weight: 600;
+      color: #94A3B8;
+    }
+
+    .toolbar-divider {
+      width: 1px;
+      height: 16px;
+      background: #25334D;
     }
 
     .state-toggle {
-      background: #21262D;
-      border: 1px solid #30363D;
-      color: #FFF;
-      padding: 6px 14px;
+      background: #0B0F17;
+      border: 1px solid #222D42;
+      color: #94A3B8;
+      padding: 5px 12px;
       border-radius: 999px;
       font-size: 12px;
       font-weight: 600;
@@ -77,460 +138,1738 @@
       transition: all 0.2s ease;
     }
 
+    .state-toggle:hover {
+      color: #F8FAFC;
+      border-color: #38BDF8;
+    }
+
     .state-toggle.active {
-      background: var(--primary);
-      border-color: var(--primary);
+      background: #0284C7;
+      border-color: #0284C7;
+      color: #FFF;
     }
 
     /* Mobile Device Frame */
     .device-frame {
       width: 390px;
       height: 844px;
-      background: var(--background);
+      background: var(--bg);
       border-radius: 48px;
-      box-shadow: 0 25px 60px -15px rgba(0,0,0,0.8), 0 0 0 10px #1E2229;
+      box-shadow: 0 25px 60px -15px rgba(0,0,0,0.8), 0 0 0 10px #1A202C;
       display: flex;
       flex-direction: column;
       overflow: hidden;
       position: relative;
+      transition: background 0.25s ease;
     }
 
     /* Android Status Bar */
     .status-bar {
       height: 44px;
-      background: transparent;
+      padding: 12px 24px 0;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0 24px;
       font-size: 13px;
-      font-weight: 600;
-      color: var(--on-surface);
+      font-weight: 700;
+      color: var(--text-primary);
       z-index: 10;
     }
 
-    .status-icons {
+    .status-bar-icons {
       display: flex;
       gap: 6px;
-      font-size: 11px;
+      font-size: 12px;
     }
 
-    /* Top App Bar */
-    .top-app-bar {
-      padding: 8px 20px 12px;
+    /* Main Scrollable Content */
+    .scroll-content {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 12px 16px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .scroll-content::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* 1. Papara Top Profile Bar */
+    .top-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      padding-top: 4px;
+      flex-shrink: 0;
     }
 
-    .site-selector {
+    .top-actions {
       display: flex;
-      flex-direction: column;
+      gap: 8px;
     }
 
-    .site-title {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-weight: 700;
-      color: var(--primary);
-    }
-
-    .unit-name {
-      font-size: 17px;
-      font-weight: 800;
-      color: var(--on-surface);
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
-    }
-
-    .badge-icon-btn {
+    .icon-btn {
       width: 40px;
       height: 40px;
-      border-radius: 50%;
+      border-radius: 12px;
       background: var(--surface);
-      border: 1px solid #E1E2EC;
+      border: 1px solid var(--surface-border);
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       position: relative;
-      font-size: 18px;
+      color: var(--text-primary);
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .icon-btn svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
     }
 
     .badge-dot {
       position: absolute;
-      top: 6px;
-      right: 6px;
-      width: 8px;
-      height: 8px;
-      background: var(--danger);
+      top: -3px;
+      right: -3px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
+      background: var(--accent-red);
+      color: #FFF;
+      font-size: 9px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid var(--surface);
     }
 
-    /* Content Area (Scrollable) */
-    .content-area {
-      flex: 1;
-      overflow-y: auto;
-      padding: 8px 20px 24px;
+    .profile-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-align: right;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .profile-text .user-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .profile-text .unit-name {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-decoration: underline;
+    }
+
+    .avatar-circle {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--avatar-bg);
+      border: 1.5px solid var(--avatar-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--avatar-text);
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    /* 2. Circular Stories Row (Vector Line-Art Icons) */
+    .stories-row {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 4px 2px 8px 2px;
+      flex-shrink: 0;
+      min-height: 94px;
+      align-items: flex-start;
+    }
+
+    .stories-row::-webkit-scrollbar { display: none; }
+
+    .story-item {
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      flex-shrink: 0;
+      width: 62px;
     }
 
-    /* Hero Balance Card */
-    .balance-card {
-      background: linear-gradient(135deg, #004B7A 0%, #00629E 100%);
-      color: #FFFFFF;
-      padding: 24px;
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-md);
-      position: relative;
-      overflow: hidden;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    .story-circle {
+      width: 56px;
+      height: 56px;
+      min-width: 56px;
+      min-height: 56px;
+      max-width: 56px;
+      max-height: 56px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1.5px solid var(--surface-border);
+      box-shadow: var(--story-shadow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-primary);
+      transition: transform 0.2s, background 0.2s;
+      flex-shrink: 0;
+      box-sizing: border-box;
     }
 
-    .balance-card.paid {
-      background: linear-gradient(135deg, #166534 0%, #15803D 100%);
+    .story-circle svg {
+      width: 24px;
+      height: 24px;
+      min-width: 24px;
+      min-height: 24px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      flex-shrink: 0;
     }
 
-    .card-label-row {
+    .story-circle:hover {
+      transform: translateY(-2px);
+    }
+
+    .story-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-align: center;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* 3. Papara Hero Balance Card (Sole Currency: Turkish Lira ₺) */
+    .hero-card {
+      background: var(--surface);
+      border-radius: 22px;
+      border: 1px solid var(--surface-border);
+      box-shadow: var(--card-shadow);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: all 0.25s ease;
+      flex-shrink: 0;
+    }
+
+    .card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
     }
 
-    .card-label {
+    .account-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       font-size: 12px;
-      font-weight: 600;
-      opacity: 0.85;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-weight: 700;
+      color: var(--text-secondary);
     }
 
-    .overdue-badge {
-      background: rgba(255, 218, 214, 0.2);
-      border: 1px solid rgba(255, 218, 214, 0.4);
-      color: #FFDAD6;
-      font-size: 11px;
+    .status-tag {
       padding: 3px 8px;
       border-radius: 999px;
+      font-size: 11px;
       font-weight: 700;
+      background: var(--accent-red-bg);
+      color: var(--accent-red);
+    }
+
+    .status-tag.paid {
+      background: var(--success-green-bg);
+      color: var(--success-green);
     }
 
     .balance-amount {
-      font-size: 36px;
+      font-size: 32px;
       font-weight: 800;
+      color: var(--text-primary);
       letter-spacing: -0.5px;
-      margin-bottom: 6px;
-      font-family: 'JetBrains Mono', monospace;
     }
 
     .due-date-note {
       font-size: 12px;
-      opacity: 0.85;
-      margin-bottom: 20px;
+      color: var(--text-muted);
     }
 
-    .pay-btn {
-      width: 100%;
-      background: #FFFFFF;
-      color: var(--primary-dark);
+    /* Dual Action Buttons inside Hero Card */
+    .card-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .card-btn {
+      flex: 1;
+      height: 46px;
+      border-radius: 14px;
       border: none;
-      padding: 14px;
-      border-radius: 999px;
-      font-size: 15px;
-      font-weight: 800;
-      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      transition: transform 0.1s ease;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
     }
 
-    .pay-btn:active {
-      transform: scale(0.98);
+    .card-btn svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
     }
 
-    /* Quick Action Grid */
-    .section-title {
-      font-size: 15px;
+    .card-btn.primary {
+      background: var(--btn-primary-bg);
+      color: var(--btn-primary-text);
+    }
+
+    .card-btn.primary:hover {
+      opacity: 0.92;
+    }
+
+    .card-btn.secondary {
+      background: var(--btn-secondary-bg);
+      color: var(--btn-secondary-text);
+    }
+
+    .card-btn.secondary:hover {
+      opacity: 0.92;
+    }
+
+    /* 4. Section Headers */
+    .section-header {
+      font-size: 12px;
       font-weight: 700;
-      color: var(--on-surface);
-      margin-bottom: 12px;
+      color: var(--text-secondary);
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      cursor: pointer;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+
+    /* Announcement Card */
+    .announcement-card {
+      background: var(--surface);
+      border-radius: 18px;
+      border: 1px solid var(--surface-border);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: var(--card-shadow);
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .announcement-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--amber-bg);
+      color: var(--amber-text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .announcement-icon svg {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    .announcement-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .announcement-meta {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .announcement-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .announcement-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .dot-unread {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-red);
+      flex-shrink: 0;
+    }
+
+    /* Transactions Card */
+    .transactions-card {
+      background: var(--surface);
+      border-radius: 18px;
+      border: 1px solid var(--surface-border);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: var(--card-shadow);
+      flex-shrink: 0;
+    }
+
+    .tx-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
-    .quick-actions-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-    }
-
-    .action-item {
+    .tx-left {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      gap: 8px;
-      cursor: pointer;
+      gap: 10px;
     }
 
-    .action-icon-circle {
-      width: 58px;
-      height: 58px;
-      border-radius: 18px;
-      background: var(--surface);
-      border: 1px solid #E1E2EC;
+    .tx-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--surface-muted);
+      color: var(--text-primary);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
-      box-shadow: var(--shadow-sm);
-      transition: all 0.2s ease;
     }
 
-    .action-item:active .action-icon-circle {
-      transform: scale(0.92);
-      background: var(--primary-container);
+    .tx-icon svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
     }
 
-    .action-label {
+    .tx-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .tx-sub {
       font-size: 11px;
-      font-weight: 600;
-      color: var(--on-surface-variant);
-      text-align: center;
+      color: var(--text-secondary);
     }
 
-    /* Announcement Banner */
-    .announcement-card {
-      background: var(--surface);
-      border-radius: var(--radius-md);
-      padding: 16px;
-      border-left: 4px solid #F59E0B;
-      box-shadow: var(--shadow-sm);
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .announcement-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
+    .tx-amount {
+      font-size: 13px;
       font-weight: 700;
-      color: #B45309;
+      color: var(--text-primary);
     }
 
-    .announcement-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--on-surface);
+    .tx-amount.neg {
+      color: var(--accent-red);
     }
 
-    .announcement-body {
-      font-size: 12px;
-      color: var(--on-surface-variant);
-      line-height: 1.5;
+    .tx-divider {
+      height: 1px;
+      background: var(--surface-border);
     }
 
-    /* Bottom Navigation Bar */
+    /* Bottom Navigation Bar (5 Balanced Equal-Weight Tabs) */
     .bottom-nav {
-      height: 72px;
+      height: 66px;
       background: var(--surface);
-      border-top: 1px solid #E1E2EC;
+      border-top: 1px solid var(--surface-border);
       display: flex;
-      justify-content: space-around;
+      justify-content: space-between;
       align-items: center;
-      padding: 0 8px;
+      padding: 4px 4px 10px 4px;
+      z-index: 10;
+      transition: background 0.25s;
     }
 
     .nav-item {
+      flex: 1;
+      height: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4px;
-      cursor: pointer;
-      color: var(--on-surface-variant);
+      justify-content: center;
+      gap: 3px;
       font-size: 11px;
-      font-weight: 600;
+      font-weight: 500;
+      color: var(--nav-inactive);
+      cursor: pointer;
+      border-radius: 12px;
+      transition: all 0.15s ease;
+      position: relative;
     }
 
     .nav-item.active {
-      color: var(--primary);
+      color: var(--nav-active);
+      font-weight: 700;
     }
 
-    .nav-item-icon {
+    .nav-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+    }
+
+    .nav-icon svg {
+      width: 24px;
+      height: 24px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    .nav-item.active .nav-icon svg {
+      stroke: var(--nav-active);
+    }
+
+    .nav-badge-dot {
+      position: absolute;
+      top: 4px;
+      right: calc(50% - 14px);
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-red);
+    }
+
+    /* Profile & Theme Bottom Sheet Modal */
+    .modal-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+      z-index: 99;
+      display: flex;
+      align-items: flex-end;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .profile-sheet {
+      width: 100%;
+      background: var(--modal-sheet-bg);
+      border-radius: 28px 28px 0 0;
+      border-top: 1px solid var(--surface-border);
+      padding: 16px 20px 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transform: translateY(100%);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-overlay.open .profile-sheet {
+      transform: translateY(0);
+    }
+
+    .sheet-handle {
+      width: 40px;
+      height: 4px;
+      background: var(--text-muted);
+      opacity: 0.3;
+      border-radius: 999px;
+      align-self: center;
+    }
+
+    .sheet-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--surface-border);
+    }
+
+    .sheet-user-name {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .sheet-unit-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .sheet-section-title {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+    }
+
+    /* Parametric Theme Selector Options */
+    .theme-options {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .theme-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: var(--surface-muted);
+      border-radius: 14px;
+      border: 1.5px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .theme-option.active {
+      border-color: var(--nav-active);
+      background: var(--surface);
+    }
+
+    .theme-option-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .theme-icon {
       font-size: 20px;
+    }
+
+    .theme-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .theme-sub {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .theme-check {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .theme-option.active .theme-check {
+      border-color: var(--nav-active);
+      background: var(--nav-active);
+    }
+
+    .theme-option.active .theme-check::after {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #FFF;
+    }
+
+    .currency-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--surface-muted);
+      border-radius: 14px;
+      border: 1px solid var(--surface-border);
+    }
+
+    .sheet-close-btn {
+      width: 100%;
+      height: 46px;
+      border-radius: 14px;
+      border: none;
+      background: var(--btn-primary-bg);
+      color: var(--btn-primary-text);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    /* Form & Input Elements for Modals */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .form-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      background: var(--surface-muted);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      border-color: var(--nav-active);
+    }
+
+    .form-textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    /* Manager Progress Bar */
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--surface-muted);
+      overflow: hidden;
+      margin: 8px 0;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10B981, #0284C7);
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+
+    /* Manager Stats Grid */
+    .manager-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .manager-stat-box {
+      background: var(--surface-muted);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .manager-stat-num {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .manager-stat-lbl {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* Filter Chips */
+    .filter-pills-row {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      flex-shrink: 0;
+    }
+
+    .filter-pills-row::-webkit-scrollbar { display: none; }
+
+    .filter-chip {
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .filter-chip.active {
+      background: var(--primary-dark);
+      color: var(--bg);
+      border-color: var(--primary-dark);
+    }
+
+    /* Flat Tracking Card Item */
+    .flat-card {
+      background: var(--surface);
+      border-radius: 16px;
+      border: 1px solid var(--surface-border);
+      padding: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: var(--card-shadow);
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+
+    .flat-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .flat-badge-circle {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--surface-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-primary);
+      flex-shrink: 0;
+    }
+
+    .flat-info-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .flat-info-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .flat-right {
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+
+    .flat-amount {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .flat-action-btn {
+      padding: 4px 10px;
+      border-radius: 8px;
+      border: none;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+
+    .flat-action-btn.warn {
+      background: var(--accent-red-bg);
+      color: var(--accent-red);
+    }
+
+    .flat-action-btn.warn:hover {
+      background: var(--accent-red);
+      color: #FFF;
+    }
+
+    .flat-action-btn.success {
+      background: var(--success-green-bg);
+      color: var(--success-green);
+      cursor: default;
     }
   </style>
 </head>
 <body>
 
+  <!-- Dev Simulation Mode Toolbar -->
   <div class="toolbar">
-    <label>Simülasyon Durumu:</label>
-    <button class="state-toggle active" onclick="toggleState(true)">Borçlu (Gecikmeli)</button>
-    <button class="state-toggle" onclick="toggleState(false)">Borçsuz (Ödenmiş)</button>
+    <label>Kullanıcı Rolü:</label>
+    <button id="roleResidentBtn" class="state-toggle active" onclick="setRole('resident')">👤 Site Sakini</button>
+    <button id="roleManagerBtn" class="state-toggle" onclick="setRole('manager')">🏢 Site Yöneticisi</button>
+
+    <div class="toolbar-divider"></div>
+
+    <span id="residentToolbarControls" style="display: inline-flex; align-items: center; gap: 10px;">
+      <label>Sakin Borç Durumu:</label>
+      <button class="state-toggle active" onclick="toggleState(true, this)">Borçlu (Gecikmeli)</button>
+      <button class="state-toggle" onclick="toggleState(false, this)">Borçsuz (Ödenmiş)</button>
+      <div class="toolbar-divider"></div>
+    </span>
+
+    <label>Parametrik Tema:</label>
+    <button id="toolbarLightBtn" class="state-toggle active" onclick="setTheme('light')">☀️ Açık</button>
+    <button id="toolbarDarkBtn" class="state-toggle" onclick="setTheme('dark')">🌙 Koyu</button>
   </div>
 
-  <div class="device-frame">
+  <!-- Mobile Device Frame -->
+  <div class="device-frame" id="deviceFrame" data-theme="light">
     <!-- Status Bar -->
     <div class="status-bar">
       <span>09:41</span>
-      <div class="status-icons">
+      <div class="status-bar-icons">
         <span>5G</span>
         <span>100%</span>
       </div>
     </div>
 
-    <!-- Top App Bar -->
-    <div class="top-app-bar">
-      <div class="site-selector">
-        <span class="site-title">SitePulse Evim</span>
-        <span class="unit-name">Begonya Sitesi • A Blok D:14 ▾</span>
-      </div>
-      <div class="badge-icon-btn">
-        <span>🔔</span>
-        <div class="badge-dot"></div>
-      </div>
-    </div>
-
-    <!-- Scrollable Content -->
-    <div class="content-area">
-
-      <!-- Balance Card -->
-      <div class="balance-card" id="balanceCard">
-        <div class="card-label-row">
-          <span class="card-label" id="cardTitle">Güncel Aidat Borcu</span>
-          <span class="overdue-badge" id="overdueBadge">10 Gün Gecikme</span>
+    <!-- Scrollable Main Content -->
+    <div class="scroll-content">
+      <!-- 1. Top Profile Bar -->
+      <div class="top-bar">
+        <div class="top-actions">
+          <div class="icon-btn" onclick="alert('Menü açılıyor...')">
+            <svg viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            <div class="badge-dot" id="topBadge1">1</div>
+          </div>
+          <div class="icon-btn" onclick="openMessages()">
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <div class="badge-dot" id="topBadge2">2</div>
+          </div>
         </div>
-        <div class="balance-amount" id="balanceAmount">₺1.423,33</div>
-        <div class="due-date-note" id="dueDateNote">Son Ödeme: 15 Eylül 2026 (5% yasal gecikme dahil)</div>
-        <button class="pay-btn" id="payBtn" onclick="alert('Kredi kartı 3D Secure ödeme akışı başlatılıyor...')">
-          <span>💳</span>
-          <span id="payBtnText">Hemen Güvenle Öde</span>
-        </button>
-      </div>
 
-      <!-- Quick Actions Grid -->
-      <div>
-        <div class="section-title">
-          <span>Hızlı İşlemler</span>
-        </div>
-        <div class="quick-actions-grid">
-          <div class="action-item" onclick="alert('Arıza Bildir: Kamera ve arıza formu açılıyor')">
-            <div class="action-icon-circle">🔧</div>
-            <span class="action-label">Arıza Bildir</span>
+        <div class="profile-info" onclick="openProfile()">
+          <div class="profile-text">
+            <div class="user-name" id="topUserName">Ahmet Yılmaz</div>
+            <div class="unit-name" id="topUnitName">Begonya Sitesi • A Blok D:14</div>
           </div>
-          <div class="action-item" onclick="alert('Sayaç Pay Ölçer: Kalorimetre ve su endeksi giriş ekranı')">
-            <div class="action-icon-circle">⚡</div>
-            <span class="action-label">Sayaç Gir</span>
-          </div>
-          <div class="action-item" onclick="alert('Tesis Rezervasyonu: Tenis kortu ve havuz randevu takvimi')">
-            <div class="action-icon-circle">🎾</div>
-            <span class="action-label">Rezervasyon</span>
-          </div>
-          <div class="action-item" onclick="alert('Site İletişim: Yönetim ve güvenlik arama/mesaj')">
-            <div class="action-icon-circle">📞</div>
-            <span class="action-label">İletişim</span>
-          </div>
+          <div class="avatar-circle" id="topAvatar">AY</div>
         </div>
       </div>
 
-      <!-- Announcements -->
-      <div>
-        <div class="section-title">
-          <span>Önemli Duyurular</span>
-        </div>
-        <div class="announcement-card">
-          <div class="announcement-header">
-            <span>⚠️</span>
-            <span>Site Yönetim Kurulu</span>
+      <!-- ================= SAKİN GÖRÜNÜMÜ (RELEASE 1) ================= -->
+      <div id="residentView" style="display: flex; flex-direction: column; gap: 16px;">
+        <!-- Circular Stories Row (Release 1: No meter, no reservation. Only payment tracking & essential actions) -->
+        <div class="stories-row">
+          <div class="story-item" onclick="alert('Kredi kartı 3D Secure aidat ödeme akışı')">
+            <div class="story-circle">
+              <svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            </div>
+            <span class="story-label">Aidat Öde</span>
           </div>
+          <div class="story-item" onclick="alert('Geçmiş aidat dekontları ve mali döküm')">
+            <div class="story-circle">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </div>
+            <span class="story-label">Dekontlar</span>
+          </div>
+          <div class="story-item" onclick="alert('Arıza Bildir modülü')">
+            <div class="story-circle">
+              <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            </div>
+            <span class="story-label">Arıza Bildir</span>
+          </div>
+          <div class="story-item" onclick="alert('Site Yönetimi İletişim & Mesaj Hattı')">
+            <div class="story-circle">
+              <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 9h1M14 9h1M9 13h1M14 13h1M9 17h1M14 17h1"/></svg>
+            </div>
+            <span class="story-label">Yönetim</span>
+          </div>
+        </div>
+
+        <!-- Papara Hero Balance Card (Single Currency: Turkish Lira Only) -->
+        <div class="hero-card">
+          <div class="card-header">
+            <div class="account-chip">
+              <span>🇹🇷</span>
+              <span>Türk Lirası Aidat Hesabı</span>
+            </div>
+            <div id="statusTag" class="status-tag">10 Gün Gecikme</div>
+          </div>
+
+          <div id="balanceAmount" class="balance-amount">₺1.423,33</div>
+          <div id="dueDateNote" class="due-date-note">Son Ödeme: 15 Eylül 2026 (%5 yasal faiz dahil)</div>
+
+          <div class="card-actions">
+            <button class="card-btn primary" onclick="alert('Kredi kartı 3D Secure ödeme akışı başlatılıyor...')">
+              <span>Hemen Öde</span>
+              <svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            </button>
+            <button class="card-btn secondary" onclick="alert('Detaylı aidat ve KMK gecikme dökümü açılıyor...')">
+              <span>Detay Gör</span>
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </button>
+          </div>
+        </div>
+      <!-- 4. Duyurular Section -->
+      <div class="section-header" onclick="alert('Tüm duyurular')">
+        <span>DUYURULAR →</span>
+      </div>
+
+      <div class="announcement-card" onclick="alert('Duyuru detayı')">
+        <div class="announcement-icon">
+          <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <div class="announcement-body">
+          <div class="announcement-meta">Site Yönetim Kurulu • Bugün, 10:00</div>
           <div class="announcement-title">Planlı Su Kesintisi Hakkında</div>
-          <div class="announcement-body">
-            İSKİ ana vana revizyonu nedeniyle 18 Eylül Çarşamba 10:00 - 14:00 saatleri arasında A ve B blok hidroforları devre dışı kalacaktır.
+          <div class="announcement-text">İSKİ ana hat yenilemesi sebebiyle 18 Eylül 10:00 - 14:00 arası su kesilecektir.</div>
+        </div>
+        <div class="dot-unread"></div>
+      </div>
+
+      <!-- 5. Hesap Hareketleri Section -->
+      <div class="section-header" onclick="alert('Tüm hesap hareketleri')">
+        <span>HESAP HAREKETLERİ →</span>
+      </div>
+
+      <div class="transactions-card">
+        <div class="tx-row" onclick="alert('Eylül Aidatı Dekontu')">
+          <div class="tx-left">
+            <div class="tx-icon">
+              <svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="15" y2="10"/><line x1="9" y1="14" x2="15" y2="14"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
+            </div>
+            <div>
+              <div class="tx-title">Eylül 2026 Aidatı</div>
+              <div class="tx-sub">A Blok Ortak Alan • 15 Eyl</div>
+            </div>
+          </div>
+          <div class="tx-amount">₺1.400,00</div>
+        </div>
+
+        <div class="tx-divider"></div>
+
+        <div class="tx-row" onclick="alert('KMK Gecikme Detayı')">
+          <div class="tx-left">
+            <div class="tx-icon" style="color: var(--accent-red);">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div>
+              <div class="tx-title">KMK Gecikme Tazminatı</div>
+              <div class="tx-sub">10 Gün Pro-rata (%5/ay) • Bugün</div>
+            </div>
+          </div>
+          <div class="tx-amount neg">+₺23,33</div>
+        </div>
+
+        <div class="tx-divider"></div>
+
+        <div class="tx-row" onclick="alert('Ağustos Aidatı Dekontu')">
+          <div class="tx-left">
+            <div class="tx-icon" style="color: var(--success-green);">
+              <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <div>
+              <div class="tx-title">Ağustos 2026 Aidatı</div>
+              <div class="tx-sub">3D Secure ile Ödendi • 14 Ağu</div>
+            </div>
+          </div>
+          <div class="tx-amount">₺1.350,00</div>
+        </div>
+      </div>
+    </div>
+    <!-- END RESIDENT VIEW -->
+
+    <!-- ================= YÖNETİCİ GÖRÜNÜMÜ (SITE MANAGER) ================= -->
+    <div id="managerView" style="display: none; flex-direction: column; gap: 16px;">
+      <!-- Circular Stories Row for Manager -->
+      <div class="stories-row">
+        <div class="story-item" onclick="openAnnouncementModal()">
+          <div class="story-circle">
+            <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="2" y1="8" x2="4" y2="8"/><line x1="20" y1="8" x2="22" y2="8"/></svg>
+          </div>
+          <span class="story-label">Duyuru Yap</span>
+        </div>
+        <div class="story-item" onclick="openDirectMessageModal('A Blok D:14 - Ahmet Yılmaz', '₺1.423,33')">
+          <div class="story-circle">
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="9" y1="10" x2="15" y2="10"/></svg>
+          </div>
+          <span class="story-label">Mesaj Gönder</span>
+        </div>
+        <div class="story-item" onclick="scrollToLedger()">
+          <div class="story-circle">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          </div>
+          <span class="story-label">Aidat Takip</span>
+        </div>
+        <div class="story-item" onclick="alert('Begonya Sitesi İşletme Hesabı Kasası: ₺184.250,00')">
+          <div class="story-circle">
+            <svg viewBox="0 0 24 24"><path d="M3 21h18M3 10h18M5 10v11M19 10v11M9 10v11M15 10v11M12 2L2 7h20L12 2z"/></svg>
+          </div>
+          <span class="story-label">Kasa / Bütçe</span>
+        </div>
+      </div>
+
+      <!-- Manager Hero Collection Card -->
+      <div class="hero-card">
+        <div class="card-header">
+          <div class="account-chip">
+            <span>🇹🇷</span>
+            <span>Begonya Sitesi • Eylül 2026 Tahsilat Durumu</span>
+          </div>
+          <div class="status-tag" style="background: var(--success-green-bg); color: var(--success-green);">%80 Tahsilat</div>
+        </div>
+
+        <div class="balance-amount">₺96.000,00 <span style="font-size: 16px; font-weight: 600; color: var(--text-secondary);">/ ₺120.000</span></div>
+        
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" style="width: 80%;"></div>
+        </div>
+
+        <div class="manager-stats-grid">
+          <div class="manager-stat-box">
+            <span class="manager-stat-num" style="color: var(--success-green);">18 Daire</span>
+            <span class="manager-stat-lbl">Tam Ödendi (₺96.000)</span>
+          </div>
+          <div class="manager-stat-box">
+            <span class="manager-stat-num" style="color: var(--accent-red);">6 Daire</span>
+            <span class="manager-stat-lbl">Gecikmede (₺24.000 + Faiz)</span>
+          </div>
+        </div>
+
+        <div class="card-actions" style="margin-top: 6px;">
+          <button class="card-btn primary" onclick="alert('Gecikmedeki 6 kat malikine SMS ve Mobil Bildirim hatırlatması iletildi!')">
+            <span>Toplu Hatırlat</span>
+            <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </button>
+          <button class="card-btn secondary" onclick="alert('Eylül 2026 Tahsilat ve Kasa Raporu PDF olarak hazırlanıyor...')">
+            <span>Rapor Al</span>
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Flat-by-Flat Payment Tracking Section -->
+      <div id="flatLedgerSection" class="section-header">
+        <span>DAİRE AİDAT TAKİBİ</span>
+        <span style="font-size: 11px; font-weight: 600; color: var(--nav-active);">24 Daire</span>
+      </div>
+
+      <!-- Status Filter Pills -->
+      <div class="filter-pills-row">
+        <div class="filter-chip active" id="filterAll" onclick="filterFlats('all', this)">Tümü (24)</div>
+        <div class="filter-chip" id="filterOverdue" onclick="filterFlats('overdue', this)">Gecikmede (6)</div>
+        <div class="filter-chip" id="filterPaid" onclick="filterFlats('paid', this)">Ödeyenler (18)</div>
+      </div>
+
+      <!-- Flats List -->
+      <div id="flatsListContainer" style="display: flex; flex-direction: column; gap: 10px;">
+        <!-- Flat 1 (Overdue) -->
+        <div class="flat-card flat-item overdue">
+          <div class="flat-left">
+            <div class="flat-badge-circle" style="color: var(--accent-red); background: var(--accent-red-bg);">14</div>
+            <div>
+              <div class="flat-info-title">Ahmet Yılmaz</div>
+              <div class="flat-info-sub">A Blok D:14 • 10 Gün Gecikme</div>
+            </div>
+          </div>
+          <div class="flat-right">
+            <div class="flat-amount" style="color: var(--accent-red);">₺1.423,33</div>
+            <button class="flat-action-btn warn" onclick="openDirectMessageModal('A Blok D:14 - Ahmet Yılmaz', '₺1.423,33')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <span>Hatırlat</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Flat 2 (Overdue) -->
+        <div class="flat-card flat-item overdue">
+          <div class="flat-left">
+            <div class="flat-badge-circle" style="color: var(--accent-red); background: var(--accent-red-bg);">15</div>
+            <div>
+              <div class="flat-info-title">Fatma Kaya</div>
+              <div class="flat-info-sub">A Blok D:15 • 5 Gün Gecikme</div>
+            </div>
+          </div>
+          <div class="flat-right">
+            <div class="flat-amount" style="color: var(--accent-red);">₺1.411,67</div>
+            <button class="flat-action-btn warn" onclick="openDirectMessageModal('A Blok D:15 - Fatma Kaya', '₺1.411,67')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <span>Hatırlat</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Flat 3 (Overdue) -->
+        <div class="flat-card flat-item overdue">
+          <div class="flat-left">
+            <div class="flat-badge-circle" style="color: var(--accent-red); background: var(--accent-red-bg);">03</div>
+            <div>
+              <div class="flat-info-title">Mehmet Öz</div>
+              <div class="flat-info-sub">B Blok D:3 • 2 Gün Gecikme</div>
+            </div>
+          </div>
+          <div class="flat-right">
+            <div class="flat-amount" style="color: var(--accent-red);">₺1.404,67</div>
+            <button class="flat-action-btn warn" onclick="openDirectMessageModal('B Blok D:3 - Mehmet Öz', '₺1.404,67')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <span>Hatırlat</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Flat 4 (Paid) -->
+        <div class="flat-card flat-item paid">
+          <div class="flat-left">
+            <div class="flat-badge-circle" style="color: var(--success-green); background: var(--success-green-bg);">01</div>
+            <div>
+              <div class="flat-info-title">Selim Ak</div>
+              <div class="flat-info-sub">A Blok D:1 • 12 Eyl Ödendi</div>
+            </div>
+          </div>
+          <div class="flat-right">
+            <div class="flat-amount" style="color: var(--text-primary);">₺1.400,00</div>
+            <div class="flat-action-btn success">
+              <span>✔ Ödendi</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flat 5 (Paid) -->
+        <div class="flat-card flat-item paid">
+          <div class="flat-left">
+            <div class="flat-badge-circle" style="color: var(--success-green); background: var(--success-green-bg);">07</div>
+            <div>
+              <div class="flat-info-title">Canan Ece</div>
+              <div class="flat-info-sub">B Blok D:7 • 14 Eyl Ödendi</div>
+            </div>
+          </div>
+          <div class="flat-right">
+            <div class="flat-amount" style="color: var(--text-primary);">₺1.400,00</div>
+            <div class="flat-action-btn success">
+              <span>✔ Ödendi</span>
+            </div>
           </div>
         </div>
       </div>
 
-    </div>
+      <!-- Latest Management Notice Log -->
+      <div class="section-header">
+        <span>YAYINLANAN SON DUYURU</span>
+      </div>
 
-    <!-- Bottom Navigation Bar -->
+      <div class="announcement-card" onclick="openAnnouncementModal()">
+        <div class="announcement-icon" style="background: rgba(2, 132, 199, 0.15); color: #0284C7;">
+          <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <div class="announcement-body">
+          <div class="announcement-meta">Yönetim Kurulu • Bugün, 10:00 • 24 Sakine İletildi</div>
+          <div class="announcement-title">Planlı Su Kesintisi Hakkında</div>
+          <div class="announcement-text">İSKİ ana hat yenilemesi sebebiyle 18 Eylül 10:00 - 14:00 arası su kesilecektir.</div>
+        </div>
+      </div>
+    </div>
+    <!-- END MANAGER VIEW -->
+
+    <!-- Bottom Navigation Bar (5 Balanced Equal-Weight Tabs) -->
     <div class="bottom-nav">
-      <div class="nav-item active">
-        <span class="nav-item-icon">🏠</span>
+      <div class="nav-item active" onclick="selectNav(this, 'home')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </span>
         <span>Ana Sayfa</span>
       </div>
-      <div class="nav-item">
-        <span class="nav-item-icon">📋</span>
+      <div class="nav-item" onclick="selectNav(this, 'dues')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 15h0M2 10h20"/></svg>
+        </span>
         <span>Aidatlar</span>
       </div>
-      <div class="nav-item">
-        <span class="nav-item-icon">🛠</span>
+      <div class="nav-item" onclick="selectNav(this, 'requests')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        </span>
         <span>Talepler</span>
       </div>
-      <div class="nav-item">
-        <span class="nav-item-icon">👤</span>
+      <div class="nav-item" onclick="selectNav(this, 'notices')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </span>
+        <div class="nav-badge-dot"></div>
+        <span>Duyurular</span>
+      </div>
+      <div class="nav-item" onclick="selectNav(this, 'profile')">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </span>
         <span>Profil</span>
+      </div>
+    </div>
+
+    <!-- Profile & Parametric Theme Sheet Modal -->
+    <div id="profileModal" class="modal-overlay" onclick="closeProfile(event)">
+      <div class="profile-sheet" onclick="event.stopPropagation()">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div class="avatar-circle" id="sheetAvatar" style="width: 46px; height: 46px; font-size: 16px;">AY</div>
+          <div>
+            <div class="sheet-user-name" id="sheetUserName">Ahmet Yılmaz</div>
+            <div class="sheet-unit-name" id="sheetUnitName">Begonya Sitesi • A Blok D:14 (Kat Malik)</div>
+          </div>
+        </div>
+
+        <div class="sheet-section-title">KULLANICI ROLÜ & GİRİŞ TÜRÜ</div>
+        <div class="theme-options">
+          <div class="theme-option active" id="roleOptResident" onclick="setRole('resident');">
+            <div class="theme-option-left">
+              <span class="theme-icon">👤</span>
+              <div>
+                <div class="theme-name">Site Sakini</div>
+                <div class="theme-sub">Ahmet Yılmaz • A Blok D:14 (Aidat Ödeme & Bildirim)</div>
+              </div>
+            </div>
+            <div class="theme-check"></div>
+          </div>
+
+          <div class="theme-option" id="roleOptManager" onclick="setRole('manager');">
+            <div class="theme-option-left">
+              <span class="theme-icon">🏢</span>
+              <div>
+                <div class="theme-name">Site Yöneticisi</div>
+                <div class="theme-sub">Mehmet Demir • Yönetim (Aidat Takip & Duyuru)</div>
+              </div>
+            </div>
+            <div class="theme-check"></div>
+          </div>
+        </div>
+
+        <div class="sheet-section-title" style="margin-top: 4px;">GÖRÜNÜM & PARAMETRİK TEMA</div>
+        <div class="theme-options">
+          <div class="theme-option active" id="themeOptLight" onclick="setTheme('light')">
+            <div class="theme-option-left">
+              <span class="theme-icon">☀️</span>
+              <div>
+                <div class="theme-name">Açık Tema</div>
+                <div class="theme-sub">Papara Aydınlık Klasik Tasarım</div>
+              </div>
+            </div>
+            <div class="theme-check"></div>
+          </div>
+
+          <div class="theme-option" id="themeOptDark" onclick="setTheme('dark')">
+            <div class="theme-option-left">
+              <span class="theme-icon">🌙</span>
+              <div>
+                <div class="theme-name">Koyu Tema</div>
+                <div class="theme-sub">Papara Gece / Midnight Mat Siyah</div>
+              </div>
+            </div>
+            <div class="theme-check"></div>
+          </div>
+        </div>
+
+        <div class="sheet-section-title" style="margin-top: 4px;">PARA BİRİMİ TANIMI</div>
+        <div class="currency-box">
+          <span style="font-size: 22px;">🇹🇷</span>
+          <div>
+            <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Türk Lirası (₺)</div>
+            <div style="font-size: 11px; color: var(--text-secondary);">Tüm aidat ve yasal KMK gecikme hesaplamaları yalnızca TL cinsindendir. Yabancı para birimi bulunmamaktadır.</div>
+          </div>
+        </div>
+
+        <button class="sheet-close-btn" onclick="closeProfile()">Kapat</button>
+      </div>
+    </div>
+
+    <!-- Announcement Broadcast Modal (Manager) -->
+    <div id="announcementModal" class="modal-overlay" onclick="closeAnnouncementModal(event)">
+      <div class="profile-sheet" onclick="event.stopPropagation()" style="max-height: 85vh; overflow-y: auto;">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div class="avatar-circle" style="width: 44px; height: 44px; font-size: 16px; background: rgba(2, 132, 199, 0.15); color: #0284C7;">📢</div>
+          <div>
+            <div class="sheet-user-name">Yeni Duyuru Yayınla</div>
+            <div class="sheet-unit-name">Tüm Begonya Sitesi sakinlerine anlık mobil bildirim</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Duyuru Başlığı</label>
+          <input type="text" id="ancTitle" class="form-input" placeholder="Örn: Asansör Bakımı ve Kesinti">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Kategori / Öncelik</label>
+          <select id="ancCategory" class="form-select">
+            <option value="urgent">🚨 Acil (Su / Elektrik / Asansör)</option>
+            <option value="general" selected>ℹ️ Genel Bilgilendirme</option>
+            <option value="dues">💳 Aidat ve Mali Duyuru</option>
+            <option value="assembly">🏛️ Site Genel Kurulu</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Duyuru Metni</label>
+          <textarea id="ancBody" class="form-textarea" rows="3" placeholder="Sakinlere iletilecek duyuru detaylarını yazınız..."></textarea>
+        </div>
+
+        <div style="background: var(--surface-muted); border-radius: 12px; padding: 10px 12px; font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+          <span>📲</span>
+          <span>Bu duyuru 24 dairenin tüm sakinlerine anlık push bildirimi olarak iletilecektir.</span>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 6px;">
+          <button class="sheet-close-btn" style="background: var(--surface-muted); color: var(--text-primary); flex: 1;" onclick="closeAnnouncementModal()">Vazgeç</button>
+          <button class="sheet-close-btn" style="background: #0284C7; color: #FFF; flex: 2;" onclick="publishAnnouncement()">Tüm Sakinlere Yayınla</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Direct Message / Overdue Reminder Modal (Manager) -->
+    <div id="directMessageModal" class="modal-overlay" onclick="closeDirectMessageModal(event)">
+      <div class="profile-sheet" onclick="event.stopPropagation()" style="max-height: 85vh; overflow-y: auto;">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div class="avatar-circle" style="width: 44px; height: 44px; font-size: 16px; background: var(--accent-red-bg); color: var(--accent-red);">✉️</div>
+          <div>
+            <div class="sheet-user-name">Daireye Özel Bildirim / Hatırlatma</div>
+            <div class="sheet-unit-name">Kat malikine doğrudan mesaj ve SMS gönderin</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Hedef Daire ve Malik</label>
+          <select id="dmTargetFlat" class="form-select">
+            <option value="14">A Blok D:14 - Ahmet Yılmaz (Borç: ₺1.423,33)</option>
+            <option value="15">A Blok D:15 - Fatma Kaya (Borç: ₺1.411,67)</option>
+            <option value="3">B Blok D:3 - Mehmet Öz (Borç: ₺1.404,67)</option>
+            <option value="1">A Blok D:1 - Selim Ak (Borçsuz)</option>
+            <option value="7">B Blok D:7 - Canan Ece (Borçsuz)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Bildirim Türü</label>
+          <select id="dmType" class="form-select" onchange="onDmTypeChange(this.value)">
+            <option value="overdue">Aidat Gecikme Hatırlatması (Otomatik Metin)</option>
+            <option value="direct">Özel Yönetim Mesajı</option>
+            <option value="warning">Ortak Alan & Düzen Uyarısı</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Mesaj İçeriği</label>
+          <textarea id="dmBody" class="form-textarea" rows="3">Sayın Ahmet Yılmaz, Eylül 2026 dönemi aidat bakiyeniz (₺1.423,33) 10 gün gecikmededir. KMK gereğince gecikme faizi işlemekte olup, ödemenizi mobil uygulamamızdan 3D Secure ile gerçekleştirebilirsiniz.</textarea>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 6px;">
+          <button class="sheet-close-btn" style="background: var(--surface-muted); color: var(--text-primary); flex: 1;" onclick="closeDirectMessageModal()">Vazgeç</button>
+          <button class="sheet-close-btn" style="background: var(--btn-primary-bg); color: var(--btn-primary-text); flex: 2;" onclick="sendDirectMessage()">Bildirimi Gönder</button>
+        </div>
       </div>
     </div>
 
   </div>
 
   <script>
-    function toggleState(hasDebt, btnElement) {
-      const toggles = document.querySelectorAll('.state-toggle');
-      toggles.forEach(t => t.classList.remove('active'));
-      if (btnElement) {
-        btnElement.classList.add('active');
-      } else if (typeof event !== 'undefined' && event && event.target) {
-        event.target.classList.add('active');
-      } else {
-        toggles[hasDebt ? 0 : 1]?.classList.add('active');
-      }
+    let currentRole = 'resident';
 
-      const card = document.getElementById('balanceCard');
-      const cardTitle = document.getElementById('cardTitle');
-      const overdueBadge = document.getElementById('overdueBadge');
-      const balanceAmount = document.getElementById('balanceAmount');
-      const dueDateNote = document.getElementById('dueDateNote');
-      const payBtn = document.getElementById('payBtn');
-      const payBtnText = document.getElementById('payBtnText');
+    function setRole(role) {
+      currentRole = role;
+      const resView = document.getElementById('residentView');
+      const mgrView = document.getElementById('managerView');
+      const btnRes = document.getElementById('roleResidentBtn');
+      const btnMgr = document.getElementById('roleManagerBtn');
+      const optRes = document.getElementById('roleOptResident');
+      const optMgr = document.getElementById('roleOptManager');
+      const topUserName = document.getElementById('topUserName');
+      const topUnitName = document.getElementById('topUnitName');
+      const topAvatar = document.getElementById('topAvatar');
+      const sheetUserName = document.getElementById('sheetUserName');
+      const sheetUnitName = document.getElementById('sheetUnitName');
+      const sheetAvatar = document.getElementById('sheetAvatar');
+      const resControls = document.getElementById('residentToolbarControls');
 
-      if (hasDebt) {
-        card.classList.remove('paid');
-        cardTitle.textContent = "Güncel Aidat Borcu";
-        overdueBadge.style.display = "inline-block";
-        overdueBadge.textContent = "10 Gün Gecikme";
-        balanceAmount.textContent = "₺1.423,33";
-        dueDateNote.textContent = "Son Ödeme: 15 Eylül 2026 (5% yasal gecikme dahil)";
-        payBtn.style.display = "flex";
-        payBtnText.textContent = "Hemen Güvenle Öde";
+      if (role === 'manager') {
+        resView.style.display = 'none';
+        mgrView.style.display = 'flex';
+        btnRes.classList.remove('active');
+        btnMgr.classList.add('active');
+        if (optRes && optMgr) {
+          optRes.classList.remove('active');
+          optMgr.classList.add('active');
+        }
+        topUserName.textContent = "Mehmet Demir (Yönetici)";
+        topUnitName.textContent = "Begonya Sitesi Yönetim Kurulu";
+        topAvatar.textContent = "MD";
+        topAvatar.style.background = "#0284C7";
+        topAvatar.style.color = "#FFF";
+
+        if (sheetUserName) sheetUserName.textContent = "Mehmet Demir (Yönetici)";
+        if (sheetUnitName) sheetUnitName.textContent = "Begonya Sitesi Yönetim Kurulu Başkanı";
+        if (sheetAvatar) {
+          sheetAvatar.textContent = "MD";
+          sheetAvatar.style.background = "#0284C7";
+          sheetAvatar.style.color = "#FFF";
+        }
+        if (resControls) resControls.style.display = 'none';
       } else {
-        card.classList.add('paid');
-        cardTitle.textContent = "Hesap Bakiyesi";
-        overdueBadge.style.display = "none";
-        balanceAmount.textContent = "₺0,00";
-        dueDateNote.textContent = "Tüm aidatlarınız ödenmiştir. Sonraki aidat: 1 Ekim 2026";
-        payBtn.style.display = "none";
+        resView.style.display = 'flex';
+        mgrView.style.display = 'none';
+        btnRes.classList.add('active');
+        btnMgr.classList.remove('active');
+        if (optRes && optMgr) {
+          optRes.classList.add('active');
+          optMgr.classList.remove('active');
+        }
+        topUserName.textContent = "Ahmet Yılmaz";
+        topUnitName.textContent = "Begonya Sitesi • A Blok D:14";
+        topAvatar.textContent = "AY";
+        topAvatar.style.background = "";
+        topAvatar.style.color = "";
+
+        if (sheetUserName) sheetUserName.textContent = "Ahmet Yılmaz";
+        if (sheetUnitName) sheetUnitName.textContent = "Begonya Sitesi • A Blok D:14 (Kat Malik)";
+        if (sheetAvatar) {
+          sheetAvatar.textContent = "AY";
+          sheetAvatar.style.background = "";
+          sheetAvatar.style.color = "";
+        }
+        if (resControls) resControls.style.display = 'inline-flex';
       }
     }
 
-    // Auto-init state from URL if provided (e.g. ?state=paid)
-    window.addEventListener('DOMContentLoaded', () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('state') === 'paid') {
-        toggleState(false);
+    function filterFlats(status, btn) {
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+
+      const items = document.querySelectorAll('.flat-item');
+      items.forEach(item => {
+        if (status === 'all') {
+          item.style.display = 'flex';
+        } else if (status === 'overdue') {
+          item.style.display = item.classList.contains('overdue') ? 'flex' : 'none';
+        } else if (status === 'paid') {
+          item.style.display = item.classList.contains('paid') ? 'flex' : 'none';
+        }
+      });
+    }
+
+    function scrollToLedger() {
+      const el = document.getElementById('flatLedgerSection');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function openAnnouncementModal() {
+      document.getElementById('announcementModal').classList.add('open');
+    }
+
+    function closeAnnouncementModal(event) {
+      if (event) event.stopPropagation();
+      document.getElementById('announcementModal').classList.remove('open');
+    }
+
+    function publishAnnouncement() {
+      const title = document.getElementById('ancTitle').value.trim() || "Planlı Duyuru";
+      alert("✅ Duyuru Başarıyla Yayınlandı!\n\nBaşlık: " + title + "\nBegonya Sitesi'nin tüm 24 dairesine anlık push bildirimi ve SMS iletildi.");
+      closeAnnouncementModal();
+    }
+
+    function openDirectMessageModal(flatDesc, amount) {
+      const modal = document.getElementById('directMessageModal');
+      const targetSelect = document.getElementById('dmTargetFlat');
+      const body = document.getElementById('dmBody');
+
+      if (flatDesc) {
+        for (let i = 0; i < targetSelect.options.length; i++) {
+          if (targetSelect.options[i].text.includes(flatDesc.split(' - ')[0])) {
+            targetSelect.selectedIndex = i;
+            break;
+          }
+        }
+        body.value = `Sayın ${flatDesc}, Eylül 2026 dönemi aidat bakiyeniz (${amount}) için son ödeme tarihi geçmiştir. KMK gecikme tazminatı işlememesi adına mobil uygulamamızdan 3D Secure ile ödemenizi yapabilirsiniz.`;
       }
-    });
+      modal.classList.add('open');
+    }
+
+    function closeDirectMessageModal(event) {
+      if (event) event.stopPropagation();
+      document.getElementById('directMessageModal').classList.remove('open');
+    }
+
+    function onDmTypeChange(type) {
+      const body = document.getElementById('dmBody');
+      const targetText = document.getElementById('dmTargetFlat').selectedOptions[0].text;
+      if (type === 'overdue') {
+        body.value = `Sayın Kat Maliki (${targetText}), vadesi geçen aidat bakiyeniz bulunmaktadır. Lütfen mobil uygulamadan ödemenizi gerçekleştiriniz.`;
+      } else if (type === 'direct') {
+        body.value = `Sayın Kat Maliki (${targetText}), site yönetimi olarak sizinle iletişime geçmek istedik...`;
+      } else if (type === 'warning') {
+        body.value = `Sayın Kat Maliki (${targetText}), ortak alan kullanım kuralları ve kat mülkiyeti kanunu gereği dikkat edilmesi rica olunur.`;
+      }
+    }
+
+    function sendDirectMessage() {
+      const target = document.getElementById('dmTargetFlat').selectedOptions[0].text;
+      alert("✉️ Bildirim İletildi!\n\nHedef: " + target + "\nKullanıcının SitePulse mobil uygulamasına ve kayıtlı telefonuna anlık bildirim iletildi.");
+      closeDirectMessageModal();
+    }
+
+    function openMessages() {
+      if (currentRole === 'manager') {
+        openDirectMessageModal('A Blok D:14 - Ahmet Yılmaz', '₺1.423,33');
+      } else {
+        alert('Site Yönetimi Mesajlaşma Hattı (Sohbet)');
+      }
+    }
+
+    function toggleState(hasDebt, btnElement) {
+      document.querySelectorAll('.state-toggle').forEach(b => {
+        if (b.textContent.includes('Borç')) b.classList.remove('active');
+      });
+      btnElement.classList.add('active');
+
+      const statusTag = document.getElementById('statusTag');
+      const balanceAmount = document.getElementById('balanceAmount');
+      const dueDateNote = document.getElementById('dueDateNote');
+
+      if (hasDebt) {
+        statusTag.className = "status-tag";
+        statusTag.textContent = "10 Gün Gecikme";
+        balanceAmount.textContent = "₺1.423,33";
+        dueDateNote.textContent = "Son Ödeme: 15 Eylül 2026 (%5 yasal faiz dahil)";
+      } else {
+        statusTag.className = "status-tag paid";
+        statusTag.textContent = "Borçsuz";
+        balanceAmount.textContent = "₺0,00";
+        dueDateNote.textContent = "Tüm aidatlarınız ödenmiştir. Sonraki aidat: 1 Ekim 2026";
+      }
+    }
+
+    function setTheme(theme) {
+      const frame = document.getElementById('deviceFrame');
+      frame.setAttribute('data-theme', theme);
+
+      // Update Toolbar Buttons
+      const lightBtn = document.getElementById('toolbarLightBtn');
+      const darkBtn = document.getElementById('toolbarDarkBtn');
+      if (theme === 'light') {
+        lightBtn.classList.add('active');
+        darkBtn.classList.remove('active');
+      } else {
+        darkBtn.classList.add('active');
+        lightBtn.classList.remove('active');
+      }
+
+      // Update Sheet Options
+      const optLight = document.getElementById('themeOptLight');
+      const optDark = document.getElementById('themeOptDark');
+      if (optLight && optDark) {
+        if (theme === 'light') {
+          optLight.classList.add('active');
+          optDark.classList.remove('active');
+        } else {
+          optDark.classList.add('active');
+          optLight.classList.remove('active');
+        }
+      }
+    }
+
+    function selectNav(element, tabKey) {
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      element.classList.add('active');
+
+      if (tabKey === 'profile') {
+        openProfile();
+      } else if (tabKey === 'notices') {
+        if (currentRole === 'manager') {
+          openAnnouncementModal();
+        } else {
+          alert('Site Duyuruları Listesi');
+        }
+      }
+    }
+
+    function openProfile() {
+      document.getElementById('profileModal').classList.add('open');
+    }
+
+    function closeProfile(event) {
+      if (event) event.stopPropagation();
+      document.getElementById('profileModal').classList.remove('open');
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('theme') === 'dark' || window.location.hash === '#dark') {
+      setTheme('dark');
+    }
+    if (urlParams.get('role') === 'manager' || window.location.hash === '#manager') {
+      setRole('manager');
+    }
+    if (urlParams.get('modal') === 'announcement') {
+      openAnnouncementModal();
+    } else if (urlParams.get('modal') === 'direct') {
+      openDirectMessageModal('A Blok D:14 - Ahmet Yılmaz', '₺1.423,33');
+    } else if (urlParams.get('modal') === 'profile') {
+      openProfile();
+    }
   </script>
 </body>
 </html>

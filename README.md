@@ -94,7 +94,10 @@ flowchart TD
 | **Runtime Inference** | [`apps/runtime/`](apps/runtime/README.md) | Solves business problems in production | Executing live in the request/response pipeline | Deterministic verification gates (`MathVerifyGate`, `PolicyAuditGate`), context compactor, bounded loop budget, state graph |
 | **Development-Time Inference** | [`apps/development-time/`](apps/development-time/README.md), [`factory/`](factory/DevFactory/README.md) | Solves software engineering problems during development | Specifying, architecting, coding, and testing software | Spec Kit (`.specify`), Task DAG dependency scheduler, Maker-Checker closed loop, AST syntax gates |
 
-> **AI Tooling Instructions**:
+> **AI Tooling Instructions & Frameworks**:
+> - [Agentic CMMI Pipeline Specification](docs/cmmi-pipeline/pipeline-specification.md)
+> - [Bidirectional Traceability Matrix (RTM)](docs/cmmi-pipeline/traceability-matrix.md)
+> - [A-CMMI Agent Roles & Personas](docs/cmmi-pipeline/agent-roles.md)
 > - [GitHub Copilot Custom Instructions](.github/copilot-instructions.md)
 > - [Antigravity Workspace Directives](AGENTS.md)
 > - [Antigravity Runtime Rules](.agents/rules/runtime-inference.md)

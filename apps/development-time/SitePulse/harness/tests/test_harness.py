@@ -46,6 +46,15 @@ class TestSitePulseHarness(unittest.TestCase):
             self.assertFalse(res.passed)
             self.assertIn("Mismatched curly braces", res.diagnostics[0])
 
+    def test_rtm_validator_bidirectional_consistency(self):
+        from harness.rtm_validator import RtmValidator
+        validator = RtmValidator()
+        report = validator.validate()
+        self.assertTrue(report["passed"], f"RTM Validation failed with issues: {report['issues']}")
+        self.assertEqual(report["total_requirements"], 8)
+        self.assertGreaterEqual(report["verified_requirements"], 7)
+
 
 if __name__ == "__main__":
     unittest.main()
+
