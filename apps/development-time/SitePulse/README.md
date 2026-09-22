@@ -137,3 +137,24 @@ To preview the Android mobile interface in your browser before running on a devi
 - Open [prototype.html](.specify/specs/001-resident-dashboard/assets/prototype.html) in any web browser.
 - Supports interactive state toggling between **Borçlu (Gecikmeli)** and **Borçsuz (Ödenmiş)** states.
 
+---
+
+## 6. Running the Android Application
+
+To build, install, and execute the native Jetpack Compose Android app on an emulator or connected device:
+
+```bash
+# Standard run (compiles, boots emulator if needed, installs APK, and launches MainActivity)
+./apps/development-time/SitePulse/scripts/run-android.sh
+
+# Skip recompilation and run the existing APK
+./apps/development-time/SitePulse/scripts/run-android.sh --skip-build
+
+# Run and automatically launch the interactive Web Live Viewer (http://localhost:9090)
+./apps/development-time/SitePulse/scripts/run-android.sh --viewer
+
+# Capture a screenshot right after launching
+./apps/development-time/SitePulse/scripts/run-android.sh --screenshot
+```
+
+
