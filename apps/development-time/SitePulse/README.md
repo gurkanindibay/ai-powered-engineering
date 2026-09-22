@@ -6,6 +6,18 @@
 
 ---
 
+## 📋 Requirements Hierarchy & Completion Status
+
+- **[Full Application Completion Status (96.4% Complete)](COMPLETION_STATUS.md)**: Live traceability dashboard tracking all 28 User Stories, automated verification gates, test coverage, and role matrices.
+- **[Requirements Repository (.specify/requirements/)](.specify/requirements/README.md)**:
+  - [EPIC-01: Resident Dues Management & Financial Transparency](.specify/requirements/EPIC-01-resident-dues-financial-management.md)
+  - [EPIC-02: Site Manager Financial Oversight & Operations](.specify/requirements/EPIC-02-site-manager-operations.md)
+  - [EPIC-03: SaaS Multi-Tenancy & Autonomous Site Onboarding](.specify/requirements/EPIC-03-saas-multi-tenancy-onboarding.md)
+  - [EPIC-04: Digital Resident Self-Registration & Approval Queue](.specify/requirements/EPIC-04-invitation-approval-workflow.md)
+  - [EPIC-05: Backend Persistence, REST APIs & Verification Harness](.specify/requirements/EPIC-05-backend-persistence-verification-harness.md)
+
+---
+
 ## 1. Multi-Agent Team & System Architecture
 
 ```
@@ -156,5 +168,25 @@ To build, install, and execute the native Jetpack Compose Android app on an emul
 # Capture a screenshot right after launching
 ./apps/development-time/SitePulse/scripts/run-android.sh --screenshot
 ```
+
+---
+
+## 7. SaaS Multi-Tenancy & Site Admin Auto-Provisioning
+
+SitePulse supports multi-tenant operations where multiple residential sites operate under an isolated SaaS architecture.
+
+### SaaS Super Admin Workflow:
+1. **New Site Sale & Registration**:
+   - The SaaS Administrator accesses the `SaaS Süper Yönetici` view from the profile bottom sheet.
+   - Taps **"+ Yeni Site Kaydet & Yönetici Tanımla"**.
+   - Inputs Site Name, City, Unit Count, Plan Type, and Primary Site Admin details (Full Name & Email).
+2. **Automated Site Admin Credential Provisioning**:
+   - The backend service creates the tenant record and auto-generates a secure temporary password (`SP-XXXX-YYYY`).
+   - The credentials dialog is presented to the SaaS Admin with a one-click copyable format to transmit to the customer.
+3. **Backend Endpoints**:
+   - `POST /api/v1/saas/sites`: Registers a new tenant and provisions site admin credentials.
+   - `GET /api/v1/saas/sites`: Fetches all registered tenant sites, metrics, and primary contact details.
+
+
 
 

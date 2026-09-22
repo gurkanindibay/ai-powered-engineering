@@ -59,3 +59,49 @@ data class FlatDirectMessage(
     val content: String,
     val timestamp: String = "Bugün"
 )
+
+/**
+ * Credentials provisioned for a newly registered home owner / unit.
+ */
+data class ProvisionedHomeOwnerCredentials(
+    val block: String,
+    val unitNo: Int,
+    val ownerName: String,
+    val email: String,
+    val phone: String,
+    val temporaryPassword: String,
+    val isResident: Boolean,
+    val duesAmount: BigDecimal
+)
+
+/**
+ * Self-registration request awaiting Site Manager review and approval.
+ */
+data class RegistrationRequestItem(
+    val id: String,
+    val block: String,
+    val unitNo: Int,
+    val floor: Int,
+    val fullName: String,
+    val email: String,
+    val phone: String,
+    val isResident: Boolean,
+    val duesAmount: BigDecimal = BigDecimal("1400.00"),
+    val status: String = "PENDING", // PENDING, APPROVED, REJECTED
+    val timeAgoStr: String = "15 dk önce"
+) {
+    val flatDesc: String
+        get() = "$block D:$unitNo"
+}
+
+/**
+ * Summary dialog data for an approved home owner.
+ */
+data class ApprovalSuccessInfo(
+    val fullName: String,
+    val flatDesc: String,
+    val email: String,
+    val temporaryPassword: String
+)
+
+
