@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SitePulse - UX & Requirements Design Review Showcase</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --surface-dark: #111827;
+      --card-dark: #1a2234;
+      --border-dark: #26334d;
+      --primary: #2563eb;
+      --primary-light: #60a5fa;
+      --emerald: #10b981;
+      --emerald-dark: #059669;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --radius-lg: 20px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: radial-gradient(circle at top center, #172554 0%, var(--bg-dark) 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 32px 20px;
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .badge-top {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: rgba(37, 99, 235, 0.15);
+      border: 1px solid rgba(96, 165, 250, 0.3);
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--primary-light);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #ffffff 0%, #93c5fd 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 15px;
+      max-width: 680px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+
+    /* Navigation Tabs */
+    .persona-tabs {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      background: var(--surface-dark);
+      border: 1px solid var(--border-dark);
+      color: var(--text-muted);
+      padding: 10px 18px;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tab-btn:hover {
+      border-color: var(--primary-light);
+      color: var(--text-main);
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      border-color: var(--primary-light);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+    }
+
+    /* Layout Split */
+    .showcase-grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 32px;
+      align-items: start;
+    }
+
+    @media (max-width: 960px) {
+      .showcase-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Phone Shell Mockup */
+    .phone-wrapper {
+      background: #000;
+      border: 12px solid #1e293b;
+      border-radius: 44px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+      min-height: 720px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .phone-notch {
+      height: 24px;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding-top: 4px;
+    }
+    .camera-lens {
+      width: 10px;
+      height: 10px;
+      background: #1e293b;
+      border-radius: 50%;
+    }
+
+    .phone-screen {
+      flex: 1;
+      background: #0b1120;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* Screen Elements */
+    .hero-card {
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      color: #fff;
+      box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.3);
+    }
+
+    .hero-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .hero-title { font-size: 13px; color: #93c5fd; font-weight: 600; }
+    .hero-pill {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      background: rgba(239, 68, 68, 0.25);
+      border: 1px solid rgba(248, 113, 113, 0.4);
+      color: #fecaca;
+    }
+
+    .hero-amount {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin: 4px 0 10px 0;
+    }
+
+    .kmk-box {
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      margin-bottom: 14px;
+    }
+    .kmk-val { color: #fca5a5; font-weight: 700; }
+
+    .hero-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .btn-pay {
+      background: var(--emerald);
+      color: #fff;
+      border: none;
+      padding: 10px;
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .btn-receipt {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+      border: none;
+      padding: 10px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* Offline Alert */
+    .offline-box {
+      background: #fef3c7;
+      color: #92400e;
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+    }
+
+    /* Section Cards */
+    .section-card {
+      background: var(--card-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: var(--radius-md);
+      padding: 14px;
+    }
+    .section-header {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Action Grid */
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      text-align: center;
+    }
+    .grid-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius-sm);
+      padding: 10px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text-main);
+    }
+    .grid-icon { font-size: 18px; margin-bottom: 4px; display: block; }
+
+    /* Feed item */
+    .feed-item {
+      border-left: 3px solid var(--primary-light);
+      padding-left: 10px;
+      margin-top: 8px;
+    }
+    .feed-title { font-size: 12px; font-weight: 700; color: #fff; }
+    .feed-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Side Panel with Specs */
+    .spec-panel {
+      background: var(--surface-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+    }
+
+    .spec-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 13px;
+    }
+    .spec-table th, .spec-table td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-dark);
+    }
+    .spec-table th {
+      color: var(--text-muted);
+      font-weight: 600;
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .code-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--primary-light);
+    }
+
+    .status-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 10px;
+    }
+    .tag-green { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .tag-blue { background: rgba(37, 99, 235, 0.2); color: #93c5fd; }
+
+    .gherkin-box {
+      background: #090e17;
+      border: 1px solid #1e293b;
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-top: 14px;
+      line-height: 1.6;
+    }
+    .gherkin-kw { color: #f472b6; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="badge-top">CMMI® V2.0 Spec-Driven Review</div>
+    <h1>SitePulse: UX & Requirements Review Showcase</h1>
+    <p>Interactive verification and visual review environment for residential site management personas, legal KMK invariants, and Material 3 design mappings.</p>
+  </header>
+
+  <!-- Persona Switcher -->
+  <div class="persona-tabs">
+    <button class="tab-btn active" onclick="switchPersona('resident', this)">🏠 Site Sakini (EPIC-01)</button>
+    <button class="tab-btn" onclick="switchPersona('manager', this)">🏢 Site Yöneticisi (EPIC-02)</button>
+    <button class="tab-btn" onclick="switchPersona('saas', this)">☁️ SaaS Süper Yönetici (EPIC-03)</button>
+    <button class="tab-btn" onclick="switchPersona('approval', this)">🔗 Davet & Kayıt Onayı (EPIC-04)</button>
+    <button class="tab-btn" onclick="switchPersona('persistence', this)">🛠️ Backend & Doğrulama (EPIC-05)</button>
+    <button class="tab-btn" onclick="switchPersona('auth', this)">🔐 Kimlik, Giriş & Yetkiler (EPIC-06)</button>
+  </div>
+
+  <div class="showcase-grid">
+    <!-- Mobile Phone UI Mockup -->
+    <div class="phone-wrapper">
+      <div class="phone-notch"><div class="camera-lens"></div></div>
+      <div class="phone-screen" id="phoneScreen">
+        <!-- Rendered dynamically via JS -->
+      </div>
+    </div>
+
+    <!-- Requirements & Architecture Side Panel -->
+    <div class="spec-panel" id="specPanel">
+      <!-- Rendered dynamically via JS -->
+    </div>
+  </div>
+</div>
+
+<script>
+const personas = {
+  resident: {
+    title: "EPIC-01: Resident Dues Management & Financial Transparency",
+    role: "Site Sakini (Kat Maliki / Kiracı)",
+    gherkin: `Scenario: KMK Article 20 statutory daily interest calculation
+  Given an unpaid aidat of ₺1.400,00 that is 10 days past due
+  When the delay compensation calculator executes
+  Then the calculated delay penalty is exactly ₺23,33
+  And total liability displayed is ₺1.423,33 without kuruş rounding drift`,
+    table: [
+      { id: "STORY-01-01", name: "High-Precision Money Value Object", artifact: "Money.kt (BigDecimal)", gate: "FinancialIntegrityGate", status: "VERIFIED" },
+      { id: "STORY-01-02", name: "KMK 5% Statutory Delay Penalty", artifact: "AidatCalculationService.java", gate: "FinancialIntegrityGate", status: "VERIFIED" },
+      { id: "STORY-01-04", name: "Material 3 Hero Balance Card", artifact: "HeroBalanceCard.kt", gate: "AccessibilityGate (>=48dp)", status: "VERIFIED" },
+      { id: "STORY-01-06", name: "Offline Room Cache & Fallback", artifact: "SitePulseDatabase.kt, ResidentDao.kt", gate: "RoomCacheTests", status: "VERIFIED" }
+    ],
+    screenHtml: `
+      <div class="offline-box">
+        <span>⚡</span>
+        <div><strong>Çevrimdışı Mod Destekli</strong> - Son eşitleme: Az önce</div>
+      </div>
+      <div class="hero-card">
+        <div class="hero-header">
+          <span class="hero-title">Begonya Sitesi • A Blok D:14</span>
+          <span class="hero-pill">10 GÜN GECİKMEDE</span>
+        </div>
+        <div style="font-size:12px; color:#bfdbfe;">Toplam Ödenecek Tutar</div>
+        <div class="hero-amount">₺1.423,33</div>
+        <div class="kmk-box">
+          <span>KMK Md. 20 Gecikme Zammı (%5):</span>
+          <span class="kmk-val">+₺23,33</span>
+        </div>
+        <div class="hero-actions">
+          <button class="btn-pay" onclick="alert('Aidat Ödeme Modal BottomSheet Açıldı')">💳 Aidat Öde</button>
+          <button class="btn-receipt" onclick="alert('Dekont & Makbuz Listesi')">📄 Dekontlar</button>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">Hızlı İşlemler</div>
+        <div class="quick-grid">
+          <div class="grid-item"><span class="grid-icon">🔧</span>Arıza Bildir</div>
+          <div class="grid-item"><span class="grid-icon">👥</span>Birlikte Yaşayan</div>
+          <div class="grid-item"><span class="grid-icon">📋</span>Duyurular</div>
+          <div class="grid-item"><span class="grid-icon">⚙️</span>Yönetim</div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">Site Yönetim Duyurusu</div>
+        <div class="feed-item">
+          <div class="feed-title">Planlı Su Kesintisi Hakkında</div>
+          <div class="feed-desc">İSKİ ana hat yenilemesi sebebiyle yarın 10:00 - 14:00 arası su kesilecektir.</div>
+        </div>
+      </div>
+    `
+  },
+  manager: {
+    title: "EPIC-02: Site Manager Financial Oversight & Community Operations",
+    role: "Site Yöneticisi (Site Manager)",
+    gherkin: `Scenario: Complex collection monitoring & targeted reminder
+  Given complex expected collection of ₺90.000,00 across 24 units
+  When 18 units have completed payment (₺72.000,00)
+  Then collection rate gauge displays 80% with 6 overdue units
+  And manager can send instant SMS payment reminder`,
+    table: [
+      { id: "STORY-02-01", name: "Complex-Wide Dues Collection Gauge", artifact: "CollectionRateGauge.kt", gate: "Visual Audit", status: "VERIFIED" },
+      { id: "STORY-02-02", name: "Flat-by-Flat Ledger & Filter Pills", artifact: "FlatLedgerItem.kt", gate: "Visual Audit", status: "VERIFIED" },
+      { id: "STORY-02-03", name: "Manual Home Owner Provisioning", artifact: "HomeOwnerRegistrationService.java", gate: "Unit Test Gate", status: "VERIFIED" },
+      { id: "STORY-02-04", name: "Targeted Payment Reminder SMS/Msg", artifact: "DirectMessageSheet.kt", gate: "Visual Audit", status: "VERIFIED" }
+    ],
+    screenHtml: `
+      <div style="background:#1e293b; border-radius:14px; padding:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span style="font-size:13px; font-weight:700; color:#94a3b8;">Eylül 2026 Tahsilatı</span>
+          <span style="font-size:20px; font-weight:800; color:#10b981;">%80,0</span>
+        </div>
+        <div style="height:8px; background:#334155; border-radius:4px; overflow:hidden;">
+          <div style="width:80%; height:100%; background:#10b981;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:11px; margin-top:8px; color:#cbd5e1;">
+          <span>18 / 24 Daire Ödedi</span>
+          <span style="color:#f87171; font-weight:700;">Kalan: ₺18.000,00</span>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <button class="btn-pay" style="background:#2563eb;" onclick="alert('Yeni Malik Kayıt Formu')">+ Yeni Malik Ekle</button>
+        <button class="btn-pay" style="background:#059669;" onclick="alert('Davet Linki Paylaş (WhatsApp)')">🔗 Davet Linki</button>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">Daire Durum Listesi</div>
+        <div style="display:flex; gap:6px; margin-bottom:12px;">
+          <span style="background:#2563eb; color:#fff; font-size:10px; font-weight:700; padding:4px 8px; border-radius:6px;">Tümü (24)</span>
+          <span style="background:#1e293b; color:#94a3b8; font-size:10px; font-weight:700; padding:4px 8px; border-radius:6px;">Gecikenler (6)</span>
+          <span style="background:#1e293b; color:#94a3b8; font-size:10px; font-weight:700; padding:4px 8px; border-radius:6px;">Ödenenler (18)</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #26334d;">
+          <div>
+            <div style="font-size:12px; font-weight:700;">A Blok D:14 • Ahmet Yılmaz</div>
+            <div style="font-size:10px; color:#f87171;">10 Gün Gecikme • ₺1.423,33</div>
+          </div>
+          <button style="background:#dc2626; border:none; color:#fff; font-size:10px; font-weight:700; padding:5px 8px; border-radius:6px; cursor:pointer;" onclick="alert('Ahmet Yılmaz kullanıcısına gecikme hatırlatması iletildi')">Uyar</button>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0;">
+          <div>
+            <div style="font-size:12px; font-weight:700;">A Blok D:15 • Fatma Demir</div>
+            <div style="font-size:10px; color:#34d399;">Zamanında Ödendi • ₺1.400,00</div>
+          </div>
+          <span style="color:#34d399; font-size:12px; font-weight:700;">✔</span>
+        </div>
+      </div>
+    `
+  },
+  saas: {
+    title: "EPIC-03: SaaS Multi-Tenancy & Autonomous Site Onboarding",
+    role: "SaaS Süper Yönetici (SaaS Admin)",
+    gherkin: `Scenario: Autonomous site registration & manager temp credential generation
+  Given a new residential site 'Begonya Sitesi' with 20 units
+  When the SaaS admin submits the registration form
+  Then a new tenant partition is created in PostgreSQL
+  And secure temporary credentials (SP-XXXX-YYYY) are generated for the site manager`,
+    table: [
+      { id: "STORY-03-01", name: "Multi-Tenant Schema Partitioning", artifact: "V1__init_schema.sql", gate: "SqlSchemaGate", status: "VERIFIED" },
+      { id: "STORY-03-02", name: "SaaS Portfolio Dashboard (MRR)", artifact: "SaasAdminController.java", gate: "Visual Audit", status: "VERIFIED" },
+      { id: "STORY-03-03", name: "Autonomous Site Provisioning", artifact: "SiteOnboardingService.java", gate: "Unit Test Gate", status: "VERIFIED" },
+      { id: "STORY-03-04", name: "Site Manager Credential Generation", artifact: "SiteOnboardingDtos.java", gate: "Unit Test Gate", status: "VERIFIED" }
+    ],
+    screenHtml: `
+      <div style="background:#1e1b4b; border:1px solid #4338ca; border-radius:14px; padding:16px;">
+        <div style="font-size:11px; font-weight:700; color:#a5b4fc; text-transform:uppercase;">SaaS Portföy Özeti</div>
+        <div style="font-size:24px; font-weight:800; color:#fff; margin:6px 0;">₺285.000 <span style="font-size:13px; color:#a5b4fc;">/ Aylık MRR</span></div>
+        <div style="display:flex; justify-content:space-between; font-size:11px; color:#cbd5e1;">
+          <span>12 Aktif Site</span>
+          <span>480 Bağımsız Bölüm</span>
+        </div>
+      </div>
+
+      <button class="btn-pay" style="background:#4f46e5;" onclick="alert('Site Kurulum Sihirbazı Modal Açıldı')">+ Yeni Site Kurulumu Başlat</button>
+
+      <div class="section-card">
+        <div class="section-header">Yönetilen Siteler</div>
+        <div style="padding:10px 0; border-bottom:1px solid #26334d;">
+          <div style="font-size:13px; font-weight:700;">Begonya Sitesi</div>
+          <div style="font-size:11px; color:#94a3b8;">İstanbul • 24 Daire • Standart Paket</div>
+          <div style="font-size:10px; color:#34d399; font-weight:700; margin-top:4px;">Yönetici: Caner Demir (SP-9821-4412)</div>
+        </div>
+        <div style="padding:10px 0;">
+          <div style="font-size:13px; font-weight:700;">Zümrüt Konakları</div>
+          <div style="font-size:11px; color:#94a3b8;">Ankara • 40 Daire • Kurumsal Paket</div>
+          <div style="font-size:10px; color:#34d399; font-weight:700; margin-top:4px;">Yönetici: Selin Vural (SP-3190-8812)</div>
+        </div>
+      </div>
+    `
+  },
+  approval: {
+    title: "EPIC-04: Digital Resident Self-Registration & Approval Queue",
+    role: "Site Yöneticisi & Sakin İşbirliği",
+    gherkin: `Scenario: One-tap approval of resident self-registration
+  Given a resident registered using the site tokenized link
+  When the manager opens 'Onay Bekleyenler' queue
+  And taps 'Onayla'
+  Then user is provisioned with role RESIDENT
+  And SMS credentials (SP-SAKIN-XXXX) are automatically dispatched`,
+    table: [
+      { id: "STORY-04-01", name: "Tokenized Invitation Link Engine", artifact: "RegistrationApprovalService.java", gate: "Unit Test Gate", status: "VERIFIED" },
+      { id: "STORY-04-02", name: "WhatsApp & Clipboard Sharing Sheet", artifact: "InviteLinkModalBottomSheet", gate: "Visual Audit", status: "VERIFIED" },
+      { id: "STORY-04-04", name: "Manager Real-Time Approval Queue", artifact: "PendingRegistrationCard", gate: "Visual Audit", status: "VERIFIED" },
+      { id: "STORY-04-05", name: "One-Tap Approval & Password Issuance", artifact: "RegistrationApprovalController.java", gate: "Unit Test Gate", status: "VERIFIED" }
+    ],
+    screenHtml: `
+      <div style="background:#064e3b; border:1px solid #059669; border-radius:14px; padding:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:12px; font-weight:700; color:#a7f3d0;">Davet Linki Aktif</span>
+          <span style="font-size:10px; background:#047857; color:#fff; padding:2px 6px; border-radius:4px;">Token: SP-INV-8912</span>
+        </div>
+        <div style="font-size:11px; color:#d1fae5; margin:6px 0;">sitepulse.app/join/begonya-sitesi</div>
+        <button style="width:100%; background:#10b981; border:none; color:#fff; font-size:11px; font-weight:700; padding:6px; border-radius:6px; cursor:pointer;" onclick="alert('Davet linki panoya kopyalandı!')">WhatsApp ile Paylaş</button>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">Onay Bekleyen Başvurular (1)</div>
+        <div style="background:#1e293b; border-radius:8px; padding:10px;">
+          <div style="display:flex; justify-content:space-between;">
+            <span style="font-size:12px; font-weight:700;">Zeynep Kaya</span>
+            <span style="font-size:10px; background:#3b82f6; color:#fff; padding:2px 6px; border-radius:4px;">Kiracı</span>
+          </div>
+          <div style="font-size:11px; color:#94a3b8; margin:4px 0;">A Blok Daire 14 • 0532 999 88 77</div>
+          <div style="display:flex; gap:6px; margin-top:8px;">
+            <button style="flex:1; background:#10b981; border:none; color:#fff; font-size:11px; font-weight:700; padding:6px; border-radius:6px; cursor:pointer;" onclick="alert('Zeynep Kaya onaylandı! Geçici şifresi SP-SAKIN-9012 oluşturuldu.')">Onayla</button>
+            <button style="flex:1; background:#ef4444; border:none; color:#fff; font-size:11px; font-weight:700; padding:6px; border-radius:6px; cursor:pointer;" onclick="alert('Başvuru reddedildi.')">Reddet</button>
+          </div>
+        </div>
+      </div>
+    `
+  },
+  persistence: {
+    title: "EPIC-05: Backend Persistence, REST APIs & Verification Harness",
+    role: "Sistem & Doğrulama Mimarisi (Spring Boot 3, PostgreSQL, Harness)",
+    gherkin: `Scenario: Verification gates prevent decimal rounding drift and syntax faults
+  Given PostgreSQL tables with NUMERIC(15,2) decimal precision
+  And Spring Data JPA entities with @Version optimistic concurrency locks
+  When verification harness runs AST, financial integrity, and test gates
+  Then all 8 DAG task nodes pass verification
+  And 29/29 automated unit and regression tests pass with zero warnings`,
+    table: [
+      { id: "STORY-05-01", name: "PostgreSQL Relational Schema & Flyway", artifact: "V1__init_schema.sql (NUMERIC 15,2)", gate: "SqlSchemaGate", status: "VERIFIED" },
+      { id: "STORY-05-02", name: "Spring Boot 3 JPA Entities & Optimistic Lock", artifact: "UnitEntity.java (@Version)", gate: "JpaEntityGate", status: "VERIFIED" },
+      { id: "STORY-05-03", name: "Resident Dashboard REST API Endpoints", artifact: "ResidentDashboardController.java", gate: "RestEndpointGate", status: "VERIFIED" },
+      { id: "STORY-05-04", name: "Closed-Loop Verification Harness Gates", artifact: "harness/loop/verification_gates/", gate: "Harness Gate", status: "VERIFIED" },
+      { id: "STORY-05-05", name: "Unified Automated Test Runner (run-tests.sh)", artifact: "scripts/run-tests.sh (29 Tests)", gate: "CLI Test Runner", status: "VERIFIED" },
+      { id: "STORY-05-06", name: "CMMI Bidirectional RTM Validator", artifact: "harness/rtm_validator.py", gate: "CMMI Level 5 Gate", status: "VERIFIED" }
+    ],
+    screenHtml: `
+      <div style="background:#0f172a; border:1px solid #334155; border-radius:14px; padding:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:12px; font-weight:700; color:#38bdf8;">Doğrulama Motoru</span>
+          <span style="font-size:10px; background:#0284c7; color:#fff; padding:2px 6px; border-radius:4px;">CMMI Level 5</span>
+        </div>
+        <div style="font-size:18px; font-weight:800; color:#fff; margin:6px 0;">8/8 Görev Doğrulandı</div>
+        <div style="font-size:11px; color:#94a3b8;">SyntaxGate, FinancialIntegrityGate, RtmValidator</div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">PostgreSQL 16 Şema İnceleyici</div>
+        <div style="font-size:11px; color:#cbd5e1; line-height:1.6;">
+          <div>• <code>siteler</code> (UUID PK, multi-tenant partition)</div>
+          <div>• <code>bloklar</code> (site_id FK)</div>
+          <div>• <code>bagimsiz_bolumler</code> (arsa_payi, version)</div>
+          <div>• <code>aidat_borclari</code> (<span style="color:#34d399; font-weight:700;">NUMERIC(15,2)</span>)</div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">Spring Boot 3 REST Testi</div>
+        <button style="width:100%; background:#2563eb; border:none; color:#fff; font-size:11px; font-weight:700; padding:8px; border-radius:6px; cursor:pointer; margin-bottom:6px;" onclick="alert('GET /api/v1/residents/d-14/dashboard\\n\\n{\\n  status: 200,\\n  unitId: \"d-14\",\\n  totalDues: 1423.33,\\n  principalAmount: 1400.00,\\n  delayPenalty: 23.33,\\n  overdueDays: 10\\n}')">GET /api/v1/residents/d-14/dashboard</button>
+        <button style="width:100%; background:#475569; border:none; color:#fff; font-size:11px; font-weight:700; padding:8px; border-radius:6px; cursor:pointer;" onclick="alert('POST /api/v1/saas/sites\\n\\n{\\n  status: 201 Created,\\n  siteId: \"site-8912\",\\n  adminUser: \"caner@begonya.com\",\\n  tempPassword: \"SP-9821-4412\"\\n}')">POST /api/v1/saas/sites</button>
+      </div>
+
+      <div class="section-card">
+        <div class="section-header">@Version İyimser Kilit Koruması</div>
+        <div style="font-size:11px; color:#94a3b8;">Eşzamanlı aidat ödeme çakışmalarında <code>OptimisticLockException</code> fırlatarak çift tahsilatı engeller.</div>
+      </div>
+    `
+  },
+  auth: {
+    title: "EPIC-06: Identity, Authentication & Scoped Permission Model",
+    role: "Tüm Kullanıcılar & Oturum Yönetimi (Multi-Role Auth)",
+    gherkin: `Scenario: Multi-method authentication & scoped permission enforcement
+  Given an unauthenticated mobile user
+  When user signs in via Password or Google OAuth2 One-Tap
+  Then backend mints a signed JWT with scoped claims (e.g. ROLE_RESIDENT, unit_id: d-14)
+  And Android UI renders role-specific permissions while restricting admin features`,
+    table: [
+      { id: "STORY-06-01", name: "Multi-Role Scoped Permission Matrix", artifact: "Role.java, Permission.java", gate: "Security Gate", status: "VERIFIED" },
+      { id: "STORY-06-02", name: "Password Registration & Hashing", artifact: "AuthService.java", gate: "Unit Test Gate", status: "VERIFIED" },
+      { id: "STORY-06-03", name: "Google OAuth2 / ID Token Authentication", artifact: "AuthService.java", gate: "Unit Test Gate", status: "VERIFIED" },
+      { id: "STORY-06-04", name: "JWT Token Minting & Scoped Claims", artifact: "AuthController.java", gate: "Unit Test Gate", status: "VERIFIED" },
+      { id: "STORY-06-05", name: "Android Multi-Method Login & Session UI", artifact: "LoginScreen.kt, AuthDialog", gate: "Visual Audit", status: "VERIFIED" }
+    ],
+    screenHtml: `
+      <div style="text-align:center; padding:10px 0;">
+        <div style="font-size:20px; font-weight:800; color:#fff;">SitePulse</div>
+        <div style="font-size:12px; color:#94a3b8;">Güvenli Site & Apartman Girişi</div>
+      </div>
+
+      <div class="section-card">
+        <div style="margin-bottom:10px;">
+          <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">E-Posta Adresi</div>
+          <input type="text" value="ahmet@sitepulse.app" style="width:100%; background:#0f172a; border:1px solid #334155; border-radius:6px; padding:8px; color:#fff; font-size:12px;" readonly />
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:11px; color:#94a3b8; margin-bottom:4px;">Şifre</div>
+          <input type="password" value="••••••••••••" style="width:100%; background:#0f172a; border:1px solid #334155; border-radius:6px; padding:8px; color:#fff; font-size:12px;" readonly />
+        </div>
+        <button style="width:100%; background:#2563eb; border:none; color:#fff; font-size:12px; font-weight:700; padding:10px; border-radius:8px; cursor:pointer;" onclick="alert('Şifreli giriş başarılı! JWT Bearer Token üretildi.')">Giriş Yap</button>
+      </div>
+
+      <div style="text-align:center; font-size:11px; color:#64748b; margin:4px 0;">veya</div>
+
+      <button style="width:100%; background:#fff; border:none; color:#1e293b; font-size:12px; font-weight:700; padding:10px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="alert('Google One-Tap ID Token doğrulandı! Hesap eşleştirildi.')">
+        <span>🌐</span> Google ile Giriş Yap
+      </button>
+
+      <div class="section-card" style="margin-top:8px;">
+        <div class="section-header">Aktif Oturum & Yetki Kapsamı</div>
+        <div style="font-size:11px; color:#cbd5e1;">
+          <div>Rol: <strong style="color:#60a5fa;">SITE_RESIDENT</strong></div>
+          <div style="margin-top:4px;">Yetkiler:</div>
+          <div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">
+            <span style="background:#1e3a8a; color:#bfdbfe; font-size:9px; padding:2px 6px; border-radius:4px;">DUES_READ</span>
+            <span style="background:#1e3a8a; color:#bfdbfe; font-size:9px; padding:2px 6px; border-radius:4px;">PAYMENT_WRITE</span>
+            <span style="background:#1e3a8a; color:#bfdbfe; font-size:9px; padding:2px 6px; border-radius:4px;">HOUSEHOLD_INVITE</span>
+          </div>
+        </div>
+      </div>
+    `
+  }
+};
+
+function switchPersona(key, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) {
+    btn.classList.add('active');
+  } else {
+    const el = document.querySelector(`.tab-btn[onclick*="'${key}'"]`);
+    if (el) el.classList.add('active');
+  }
+
+  const p = personas[key];
+  document.getElementById('phoneScreen').innerHTML = p.screenHtml;
+
+  const rows = p.table.map(r => `
+    <tr>
+      <td><strong>${r.id}</strong></td>
+      <td>${r.name}</td>
+      <td><span class="code-badge">${r.artifact}</span></td>
+      <td><span class="status-tag tag-blue">${r.gate}</span></td>
+      <td><span class="status-tag tag-green">${r.status}</span></td>
+    </tr>
+  `).join('');
+
+  document.getElementById('specPanel').innerHTML = `
+    <div class="spec-title">
+      <span>📋</span> ${p.title}
+    </div>
+    <div style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">Hedef Rol: <strong style="color:var(--text-main);">${p.role}</strong></div>
+
+    <div class="gherkin-box">
+      ${p.gherkin.replace(/(Scenario:|Given|When|Then|And)/g, '<span class="gherkin-kw">$1</span>')}
+    </div>
+
+    <table class="spec-table">
+      <thead>
+        <tr>
+          <th>Story ID</th>
+          <th>Requirement</th>
+          <th>Implementation Artifact</th>
+          <th>Harness Gate</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  `;
+}
+
+// Initial render
+switchPersona('resident');
+</script>
+</body>
+</html>

@@ -17,7 +17,7 @@ echo ""
 
 # 2. Closed-Loop Task DAG Verification Gates
 echo "▶ [2/3] Running Closed-Loop Verification Gates on Task DAG..."
-for task in task-01 task-02 task-03 task-04 task-05 task-06 task-07; do
+for task in task-01 task-02 task-03 task-04 task-05 task-06 task-07 task-08; do
     python3 "$SITEPULSE_ROOT/harness/harness_cli.py" verify --task "$task"
 done
 echo ""

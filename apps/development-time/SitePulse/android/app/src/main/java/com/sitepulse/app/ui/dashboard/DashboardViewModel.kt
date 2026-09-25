@@ -12,12 +12,24 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.UUID
 
+import com.sitepulse.app.data.local.DuesCacheEntity
+import com.sitepulse.app.data.repository.ResidentRepository
+import java.time.LocalDateTime
+
 class DashboardViewModel(
-    private val calculateDuesUseCase: CalculateDuesUseCase = CalculateDuesUseCase()
+    private val calculateDuesUseCase: CalculateDuesUseCase = CalculateDuesUseCase(),
+    private val residentRepository: ResidentRepository = ResidentRepository()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<DashboardUiState>(DashboardUiState.Loading)
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
+
+    // Offline caching & synchronization state (STORY-01-06 / task-08)
+    private val _isOffline = MutableStateFlow(false)
+    val isOffline: StateFlow<Boolean> = _isOffline.asStateFlow()
+
+    private val _lastSyncTime = MutableStateFlow("Az önce")
+    val lastSyncTime: StateFlow<String> = _lastSyncTime.asStateFlow()
 
     // Role state: RESIDENT (default) or SITE_MANAGER
     private val _userRole = MutableStateFlow(UserRole.RESIDENT)
@@ -284,7 +296,7 @@ class DashboardViewModel(
         _directMessages.value = listOf(newMsg) + _directMessages.value
     }
 
-    fun loadDashboard() {
+    fun loadDashboard(forceOffline: Boolean = false) {
         viewModelScope.launch {
             val daire = Daire(
                 id = "d-14",
@@ -310,6 +322,25 @@ class DashboardViewModel(
             val evaluatedBorc = calculateDuesUseCase.execute(baseBorc, LocalDate.of(2026, 9, 25))
             val isOverdue = evaluatedBorc.durum == BorcDurumu.GECIKMEDE
 
+            // Synchronize with offline Room cache layer (STORY-01-06)
+            residentRepository.cacheOfflineStatement(
+                DuesCacheEntity(
+                    unitId = "d-14",
+                    unitNumber = "14",
+                    residentName = "Ahmet Yılmaz",
+                    principalAmount = evaluatedBorc.anaPara,
+                    delayPenaltyAmount = evaluatedBorc.gecikmeTazminati,
+                    totalAmount = evaluatedBorc.toplamTutar.amount,
+                    daysOverdue = evaluatedBorc.gecikenGunSayisi,
+                    isOverdue = isOverdue,
+                    cachedAt = LocalDateTime.now(),
+                    isSyncedWithServer = !forceOffline
+                )
+            )
+
+            _isOffline.value = forceOffline
+            _lastSyncTime.value = if (forceOffline) "Çevrimdışı önbellekten yüklendi" else "Az önce"
+
             _uiState.value = DashboardUiState.Success(
                 aktifDaire = daire,
                 borclar = listOf(evaluatedBorc),
@@ -319,6 +350,11 @@ class DashboardViewModel(
                 isOverdue = isOverdue
             )
         }
+    }
+
+    fun toggleOfflineMode(offline: Boolean) {
+        _isOffline.value = offline
+        loadDashboard(forceOffline = offline)
     }
 
     private fun loadManagerData() {

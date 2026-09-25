@@ -8,7 +8,7 @@ Each Epic represents a core business domain and contains atomic User Stories wit
 
 | Epic ID | Epic Title | Story Count | Completed | Pending | Status | Specification File |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **EPIC-01** | Resident Dues Management & Financial Transparency | 6 | 5 | 1 | **IN_PROGRESS** | [EPIC-01-resident-dues-financial-management.md](EPIC-01-resident-dues-financial-management.md) |
+| **EPIC-01** | Resident Dues Management & Financial Transparency | 6 | 6 | 0 | **COMPLETED** | [EPIC-01-resident-dues-financial-management.md](EPIC-01-resident-dues-financial-management.md) |
 | **EPIC-02** | Site Manager Financial Oversight & Operations | 5 | 5 | 0 | **COMPLETED** | [EPIC-02-site-manager-operations.md](EPIC-02-site-manager-operations.md) |
 | **EPIC-03** | SaaS Multi-Tenancy & Autonomous Site Onboarding | 5 | 5 | 0 | **COMPLETED** | [EPIC-03-saas-multi-tenancy-onboarding.md](EPIC-03-saas-multi-tenancy-onboarding.md) |
 | **EPIC-04** | Digital Resident Self-Registration & Approval Queue | 7 | 7 | 0 | **COMPLETED** | [EPIC-04-invitation-approval-workflow.md](EPIC-04-invitation-approval-workflow.md) |

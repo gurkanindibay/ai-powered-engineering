@@ -2,7 +2,7 @@
 
 > **Epic ID:** EPIC-01  
 > **Module:** Resident Domain & UI (`android-domain`, `android-ui`, `backend-api`)  
-> **Status:** IN_PROGRESS (5 / 6 Stories Completed - 83.3%)  
+> **Status:** COMPLETED (6 / 6 Stories Completed - 100.0%)  
 > **Target Audience:** Site Residents (Kat Maliki / Kiracı)  
 > **Governing Law:** Kat Mülkiyeti Kanunu (KMK - 634 Sayılı Kanun, Article 20)  
 
@@ -117,7 +117,7 @@ Provides residents of managed complexes with full transparency into their financ
 ---
 
 ### STORY-01-06: Offline Room Cache & Synchronization Layer
-- **Status:** `PENDING`
+- **Status:** `COMPLETED`
 - **Task Ref:** `task-08`
 - **Description:** Implement local SQLite/Room database caching for resident dashboard statements and balance records, gracefully degrading to cached state when offline.
 - **Acceptance Criteria (Gherkin):**
@@ -128,6 +128,7 @@ Provides residents of managed complexes with full transparency into their financ
     Then show last synchronized financial statement with "Çevrimdışı Mod" banner
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/data/` (Planned)
+  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/data/local/`
+  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/data/repository/ResidentRepository.kt`
 - **Verification & Tests:**
   - `RoomCacheTests.Should_Return_Cached_Statement_On_Network_Timeout`

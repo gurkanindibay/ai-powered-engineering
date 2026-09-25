@@ -80,7 +80,7 @@
       "id": "task-08",
       "name": "Offline Room Cache & Repository Layer",
       "module": "android-data",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "depends_on": [
         "task-01",
         "task-07"
