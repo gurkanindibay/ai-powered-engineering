@@ -59,14 +59,16 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
 ### STORY-03-03: New Site Onboarding & Tenant Provisioning Workflow
 - **Status:** `COMPLETED`
 - **Spec Ref:** `SPEC-002`
-- **Description:** Implement the onboarding workflow for freshly signed residential sites, capturing Site Name, City, Unit Count, Plan Tier (Standard / Enterprise), and Primary Site Admin details.
+- **Description:** Implement the onboarding workflow for freshly signed residential sites, capturing both Site parameters (Name, City, Unit Count, Plan Tier) and the Primary Site Admin details (Name, Email, Phone) in a unified registration flow.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
-  Scenario: Onboard new residential site after sales close
-    Given SaaS Admin fills onboarding form for "Palmiye Evleri Sitesi" (Kadıköy, İstanbul)
+  Scenario: SaaS Admin creates new site and provisions first Site Admin
+    Given SaaS Admin fills onboarding form for "Palmiye Evleri Sitesi" (Kadıköy, İstanbul, 40 Daire, Pro Paket)
+    And provides Primary Site Admin details ("Murat Yıldırım", "murat@palmiyesitesi.com", "0532 444 55 66")
     When submitting the registration
     Then a new site record is created with active status and unique slug "palmiye-evleri-sitesi"
-    And the new site card appears in the SaaS admin list
+    And a new user is created with role "SITE_MANAGER" bound to this site_id
+    And the new site card appears in the SaaS admin portfolio list
   ```
 - **Implementation Artifacts:**
   - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt` (`RegisterSiteModalBottomSheet`)
@@ -80,14 +82,15 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
 ### STORY-03-04: Automated Site Manager Account Creation & Credential Provisioning
 - **Status:** `COMPLETED`
 - **Spec Ref:** `SPEC-002`
-- **Description:** Automatically provision the primary Site Manager user account during site onboarding and generate a cryptographically strong temporary password (`SP-XXXX-YYYY`) with a single-tap copy dialog.
+- **Description:** Automatically provision the primary Site Manager user account during site onboarding and generate a cryptographically strong temporary password (`SP-XXXX-YYYY`) with a single-tap copy dialog and automated dispatch.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Generate temporary password for newly registered Site Admin
-    When a new site is registered with admin email "mehmet@palmiyeevleri.com"
+    When a new site is registered with admin email "murat@palmiyesitesi.com"
     Then generate a 12-character temporary password in format "SP-XXXX-YYYY"
     And return response with mustChangePassword = true
     And display a modal with instant copy-to-clipboard functionality
+    And trigger SMS credential alert to the manager's mobile number
   ```
 - **Implementation Artifacts:**
   - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/service/SiteOnboardingService.java`

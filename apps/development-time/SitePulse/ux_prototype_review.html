@@ -513,41 +513,140 @@ const personas = {
   saas: {
     title: "EPIC-03: SaaS Multi-Tenancy & Autonomous Site Onboarding",
     role: "SaaS Süper Yönetici (SaaS Admin)",
-    gherkin: `Scenario: Autonomous site registration & manager temp credential generation
-  Given a new residential site 'Begonya Sitesi' with 20 units
-  When the SaaS admin submits the registration form
-  Then a new tenant partition is created in PostgreSQL
-  And secure temporary credentials (SP-XXXX-YYYY) are generated for the site manager`,
+    gherkin: `Scenario: SaaS Admin creates new residential site and provisions first Site Admin
+  Given SaaS Super Admin is logged in to SaaS Management Console
+  When admin submits new site "Palmiye Evleri Sitesi" (İstanbul/Kadıköy, 40 Daire, Pro Paket)
+  And provides Primary Site Admin details (Name: "Murat Yıldırım", Email: "murat@palmiyesitesi.com", Phone: "0532 444 55 66")
+  Then system provisions a new PostgreSQL tenant partition with slug "palmiye-evleri-sitesi"
+  And creates user with role SITE_MANAGER and temporary password in format "SP-XXXX-YYYY"
+  And returns mustChangePassword=true with one-tap copy dialog and automated SMS dispatch`,
     table: [
       { id: "STORY-03-01", name: "Multi-Tenant Schema Partitioning", artifact: "V1__init_schema.sql", gate: "SqlSchemaGate", status: "VERIFIED" },
       { id: "STORY-03-02", name: "SaaS Portfolio Dashboard (MRR)", artifact: "SaasAdminController.java", gate: "Visual Audit", status: "VERIFIED" },
-      { id: "STORY-03-03", name: "Autonomous Site Provisioning", artifact: "SiteOnboardingService.java", gate: "Unit Test Gate", status: "VERIFIED" },
-      { id: "STORY-03-04", name: "Site Manager Credential Generation", artifact: "SiteOnboardingDtos.java", gate: "Unit Test Gate", status: "VERIFIED" }
+      { id: "STORY-03-03", name: "Site & Admin Joint Registration Form", artifact: "RegisterSiteModalBottomSheet.kt", gate: "Unit Test Gate", status: "VERIFIED" },
+      { id: "STORY-03-04", name: "Automated Site Manager Password Generation", artifact: "AdminCredentialsProvisionedDialog.kt", gate: "Unit Test Gate", status: "VERIFIED" }
     ],
     screenHtml: `
-      <div style="background:#1e1b4b; border:1px solid #4338ca; border-radius:14px; padding:16px;">
-        <div style="font-size:11px; font-weight:700; color:#a5b4fc; text-transform:uppercase;">SaaS Portföy Özeti</div>
-        <div style="font-size:24px; font-weight:800; color:#fff; margin:6px 0;">₺285.000 <span style="font-size:13px; color:#a5b4fc;">/ Aylık MRR</span></div>
-        <div style="display:flex; justify-content:space-between; font-size:11px; color:#cbd5e1;">
-          <span>12 Aktif Site</span>
-          <span>480 Bağımsız Bölüm</span>
+      <!-- Sub-Screen State Switcher for SaaS Admin -->
+      <div style="display:flex; gap:4px; margin-bottom:10px; background:#0f172a; padding:4px; border-radius:8px;">
+        <button id="saasBtn1" style="flex:1; background:#3b82f6; border:none; color:#fff; font-size:10px; font-weight:700; padding:6px; border-radius:6px; cursor:pointer;" onclick="showSaasSubView('list')">1. Portföy</button>
+        <button id="saasBtn2" style="flex:1; background:#1e293b; border:none; color:#94a3b8; font-size:10px; font-weight:700; padding:6px; border-radius:6px; cursor:pointer;" onclick="showSaasSubView('form')">2. Kayıt Formu</button>
+        <button id="saasBtn3" style="flex:1; background:#1e293b; border:none; color:#94a3b8; font-size:10px; font-weight:700; padding:6px; border-radius:6px; cursor:pointer;" onclick="showSaasSubView('modal')">3. Şifre Dialogu</button>
+      </div>
+
+      <!-- State 1: Portfolio Dashboard -->
+      <div id="saasViewList">
+        <div style="background:#1e1b4b; border:1px solid #4338ca; border-radius:14px; padding:16px; margin-bottom:10px;">
+          <div style="font-size:11px; font-weight:700; color:#a5b4fc; text-transform:uppercase;">SaaS Portföy Özeti</div>
+          <div style="font-size:24px; font-weight:800; color:#fff; margin:6px 0;">₺285.000 <span style="font-size:13px; color:#a5b4fc;">/ Aylık MRR</span></div>
+          <div style="display:flex; justify-content:space-between; font-size:11px; color:#cbd5e1;">
+            <span>12 Aktif Site</span>
+            <span>480 Bağımsız Bölüm</span>
+          </div>
+        </div>
+
+        <button class="btn-pay" style="background:#4f46e5; margin-bottom:10px;" onclick="showSaasSubView('form')">+ Yeni Site ve Yönetici Ekle</button>
+
+        <div class="section-card">
+          <div class="section-header">Yönetilen Siteler & Yöneticiler</div>
+          <div style="padding:10px 0; border-bottom:1px solid #26334d;">
+            <div style="font-size:13px; font-weight:700;">Begonya Sitesi</div>
+            <div style="font-size:11px; color:#94a3b8;">İstanbul • 24 Daire • Standart Paket</div>
+            <div style="font-size:10px; color:#34d399; font-weight:700; margin-top:4px;">Yönetici: Caner Demir (SP-9821-4412)</div>
+          </div>
+          <div style="padding:10px 0;">
+            <div style="font-size:13px; font-weight:700;">Zümrüt Konakları</div>
+            <div style="font-size:11px; color:#94a3b8;">Ankara • 40 Daire • Kurumsal Paket</div>
+            <div style="font-size:10px; color:#34d399; font-weight:700; margin-top:4px;">Yönetici: Selin Vural (SP-3190-8812)</div>
+          </div>
         </div>
       </div>
 
-      <button class="btn-pay" style="background:#4f46e5;" onclick="alert('Site Kurulum Sihirbazı Modal Açıldı')">+ Yeni Site Kurulumu Başlat</button>
+      <!-- State 2: Site & Site Admin Joint Registration Form Screen -->
+      <div id="saasViewForm" style="display:none;">
+        <div style="background:#1e293b; border-radius:12px; padding:12px; margin-bottom:10px;">
+          <div style="font-size:14px; font-weight:800; color:#fff;">🏢 Yeni Site & Yönetici Kayıt Formu</div>
+          <div style="font-size:11px; color:#94a3b8;">SaaS Admin tarafından yeni site ve ilk yöneticisi tanımlanır.</div>
+        </div>
 
-      <div class="section-card">
-        <div class="section-header">Yönetilen Siteler</div>
-        <div style="padding:10px 0; border-bottom:1px solid #26334d;">
-          <div style="font-size:13px; font-weight:700;">Begonya Sitesi</div>
-          <div style="font-size:11px; color:#94a3b8;">İstanbul • 24 Daire • Standart Paket</div>
-          <div style="font-size:10px; color:#34d399; font-weight:700; margin-top:4px;">Yönetici: Caner Demir (SP-9821-4412)</div>
+        <!-- Section A: Site Information -->
+        <div class="section-card" style="margin-bottom:8px;">
+          <div style="font-size:11px; font-weight:700; color:#60a5fa; margin-bottom:8px;">BÖLÜM 1: SİTE BİLGİLERİ</div>
+          <div style="margin-bottom:6px;">
+            <div style="font-size:10px; color:#94a3b8;">Site Adı</div>
+            <input type="text" id="siteNameInput" value="Palmiye Evleri Sitesi" style="width:100%; background:#0f172a; border:1px solid #334155; border-radius:6px; padding:6px; color:#fff; font-size:11px;" />
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
+            <div>
+              <div style="font-size:10px; color:#94a3b8;">Şehir</div>
+              <input type="text" value="İstanbul / Kadıköy" style="width:100%; background:#0f172a; border:1px solid #334155; border-radius:6px; padding:6px; color:#fff; font-size:11px;" />
+            </div>
+            <div>
+              <div style="font-size:10px; color:#94a3b8;">Daire Sayısı</div>
+              <input type="text" value="40 Daire (2 Blok)" style="width:100%; background:#0f172a; border:1px solid #334155; border-radius:6px; padding:6px; color:#fff; font-size:11px;" />
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px; color:#94a3b8;">Abonelik Planı</div>
+            <div style="display:flex; gap:4px; margin-top:4px;">
+              <span style="background:#1e293b; color:#94a3b8; font-size:9px; padding:3px 6px; border-radius:4px;">Standart</span>
+              <span style="background:#2563eb; color:#fff; font-size:9px; font-weight:700; padding:3px 6px; border-radius:4px;">PRO (Seçili)</span>
+              <span style="background:#1e293b; color:#94a3b8; font-size:9px; padding:3px 6px; border-radius:4px;">Kurumsal</span>
+            </div>
+          </div>
         </div>
-        <div style="padding:10px 0;">
-          <div style="font-size:13px; font-weight:700;">Zümrüt Konakları</div>
-          <div style="font-size:11px; color:#94a3b8;">Ankara • 40 Daire • Kurumsal Paket</div>
-          <div style="font-size:10px; color:#34d399; font-weight:700; margin-top:4px;">Yönetici: Selin Vural (SP-3190-8812)</div>
+
+        <!-- Section B: Primary Site Manager Information -->
+        <div class="section-card" style="margin-bottom:8px;">
+          <div style="font-size:11px; font-weight:700; color:#34d399; margin-bottom:8px;">BÖLÜM 2: İLK SİTE YÖNETİCİSİ (SITE_MANAGER)</div>
+          <div style="margin-bottom:6px;">
+            <div style="font-size:10px; color:#94a3b8;">Yönetici Adı Soyadı</div>
+            <input type="text" id="adminNameInput" value="Murat Yıldırım" style="width:100%; background:#0f172a; border:1px solid #334155; border-radius:6px; padding:6px; color:#fff; font-size:11px;" />
+          </div>
+          <div style="margin-bottom:6px;">
+            <div style="font-size:10px; color:#94a3b8;">Yönetici E-Posta (Giriş için)</div>
+            <input type="email" id="adminEmailInput" value="murat@palmiyesitesi.com" style="width:100%; background:#0f172a; border:1px solid #334155; border-radius:6px; padding:6px; color:#fff; font-size:11px;" />
+          </div>
+          <div>
+            <div style="font-size:10px; color:#94a3b8;">Telefon (SMS Şifresi için)</div>
+            <input type="tel" value="0532 444 55 66" style="width:100%; background:#0f172a; border:1px solid #334155; border-radius:6px; padding:6px; color:#fff; font-size:11px;" />
+          </div>
         </div>
+
+        <button class="btn-pay" style="background:#10b981; width:100%;" onclick="submitSiteAndAdminForm()">🚀 Siteyi ve Yöneticiyi Oluştur</button>
+      </div>
+
+      <!-- State 3: Admin Credentials Provisioned Dialog Screen -->
+      <div id="saasViewModal" style="display:none;">
+        <div style="background:linear-gradient(135deg, #064e3b 0%, #065f46 100%); border:1px solid #10b981; border-radius:14px; padding:16px; text-align:center; margin-bottom:10px;">
+          <div style="font-size:28px; margin-bottom:4px;">🎉</div>
+          <div style="font-size:15px; font-weight:800; color:#fff;">Site & Yönetici Başarıyla Oluşturuldu!</div>
+          <div style="font-size:11px; color:#a7f3d0; margin-top:2px;">PostgreSQL tenant izolasyonu ve SITE_MANAGER kullanıcısı açıldı.</div>
+        </div>
+
+        <div class="section-card" style="margin-bottom:8px;">
+          <div class="section-header">Tanımlanan Yönetici Bilgileri</div>
+          <div style="font-size:11px; color:#cbd5e1; line-height:1.7;">
+            <div>• Site: <strong style="color:#fff;">Palmiye Evleri Sitesi</strong></div>
+            <div>• Rol: <span style="background:#1e3a8a; color:#93c5fd; padding:1px 5px; border-radius:4px; font-size:9px; font-weight:700;">SITE_MANAGER</span></div>
+            <div>• Yönetici: <strong style="color:#fff;">Murat Yıldırım</strong></div>
+            <div>• E-Posta: <code>murat@palmiyesitesi.com</code></div>
+          </div>
+
+          <div style="margin-top:12px; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:10px;">
+            <div style="font-size:10px; color:#94a3b8; margin-bottom:4px;">Üretilen Geçici Yönetici Şifresi:</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-family:'JetBrains Mono', monospace; font-size:16px; font-weight:800; color:#34d399;">SP-7712-4091</span>
+              <button style="background:#2563eb; border:none; color:#fff; font-size:10px; font-weight:700; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="alert('Geçici şifre panoya kopyalandı: SP-7712-4091')">📋 Kopyala</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fef3c7; color:#92400e; border-radius:8px; padding:8px 10px; font-size:10px; margin-bottom:10px; line-height:1.4;">
+          ⚠️ <strong>Güvenlik Notu:</strong> Yönetici ilk giriş yaptığında zorunlu şifre değiştirme ekranına (mustChangePassword=true) yönlendirilecektir. Şifre ve giriş linki 0532 444 55 66 numarasına SMS ile iletilmiştir.
+        </div>
+
+        <button class="btn-pay" style="background:#2563eb; width:100%;" onclick="showSaasSubView('list')">Portföy Listesine Dön</button>
       </div>
     `
   },
@@ -695,6 +794,44 @@ const personas = {
     `
   }
 };
+
+function showSaasSubView(view) {
+  const vList = document.getElementById('saasViewList');
+  const vForm = document.getElementById('saasViewForm');
+  const vModal = document.getElementById('saasViewModal');
+  const b1 = document.getElementById('saasBtn1');
+  const b2 = document.getElementById('saasBtn2');
+  const b3 = document.getElementById('saasBtn3');
+
+  if (!vList || !vForm || !vModal) return;
+
+  vList.style.display = 'none';
+  vForm.style.display = 'none';
+  vModal.style.display = 'none';
+
+  if (b1) { b1.style.background = '#1e293b'; b1.style.color = '#94a3b8'; }
+  if (b2) { b2.style.background = '#1e293b'; b2.style.color = '#94a3b8'; }
+  if (b3) { b3.style.background = '#1e293b'; b3.style.color = '#94a3b8'; }
+
+  if (view === 'list') {
+    vList.style.display = 'block';
+    if (b1) { b1.style.background = '#3b82f6'; b1.style.color = '#fff'; }
+  } else if (view === 'form') {
+    vForm.style.display = 'block';
+    if (b2) { b2.style.background = '#3b82f6'; b2.style.color = '#fff'; }
+  } else if (view === 'modal') {
+    vModal.style.display = 'block';
+    if (b3) { b3.style.background = '#3b82f6'; b3.style.color = '#fff'; }
+  }
+}
+
+function submitSiteAndAdminForm() {
+  const siteName = document.getElementById('siteNameInput') ? document.getElementById('siteNameInput').value : 'Palmiye Evleri Sitesi';
+  const adminName = document.getElementById('adminNameInput') ? document.getElementById('adminNameInput').value : 'Murat Yıldırım';
+  const adminEmail = document.getElementById('adminEmailInput') ? document.getElementById('adminEmailInput').value : 'murat@palmiyesitesi.com';
+
+  showSaasSubView('modal');
+}
 
 function switchPersona(key, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
