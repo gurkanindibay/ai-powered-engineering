@@ -16,9 +16,12 @@ env/
 venv/
 
 # Gradle / Android artifacts
+.gradle/
 **/.gradle/
+build/
 **/build/
 local.properties
+*.lock
 
 # Maven / Java artifacts
 **/target/
