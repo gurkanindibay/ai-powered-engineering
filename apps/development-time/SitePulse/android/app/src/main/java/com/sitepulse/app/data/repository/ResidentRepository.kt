@@ -3,8 +3,6 @@ package com.sitepulse.app.data.repository
 import com.sitepulse.app.data.local.DuesCacheEntity
 import com.sitepulse.app.data.local.ResidentDao
 import com.sitepulse.app.data.local.SitePulseDatabase
-import com.sitepulse.app.domain.model.Daire
-import com.sitepulse.app.domain.model.DashboardUiState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.math.BigDecimal

@@ -20,7 +20,8 @@ data class AidatBorcu(
     val anaPara: BigDecimal,
     val sonOdemeTarihi: LocalDate,
     val durum: BorcDurumu,
-    val gecikmeTazminati: BigDecimal = BigDecimal.ZERO
+    val gecikmeTazminati: BigDecimal = BigDecimal.ZERO,
+    val gecikenGunSayisi: Int = 0
 ) {
     val toplamTutar: BigDecimal
         get() = anaPara.add(gecikmeTazminati)

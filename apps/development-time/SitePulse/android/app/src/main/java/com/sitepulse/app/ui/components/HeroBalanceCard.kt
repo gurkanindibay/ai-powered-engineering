@@ -56,7 +56,7 @@ fun HeroBalanceCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${unit.blok.ad} - Daire ${unit.kapiNo}",
+                        text = "${unit.blok} Blok - Daire ${unit.daireNo}",
                         color = Color(0xFF93C5FD),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium

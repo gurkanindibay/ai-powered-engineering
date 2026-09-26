@@ -29,7 +29,7 @@ class CalculateDuesUseCase {
 
         val daysOverdue = ChronoUnit.DAYS.between(borc.sonOdemeTarihi, today)
         if (daysOverdue <= 0) {
-            return borc.copy(durum = BorcDurumu.BEKLIYOR, gecikmeTazminati = BigDecimal.ZERO)
+            return borc.copy(durum = BorcDurumu.BEKLIYOR, gecikmeTazminati = BigDecimal.ZERO, gecikenGunSayisi = 0)
         }
 
         // Delay = Principal * 0.05 * (daysOverdue / 30)
@@ -41,7 +41,8 @@ class CalculateDuesUseCase {
 
         return borc.copy(
             durum = BorcDurumu.GECIKMEDE,
-            gecikmeTazminati = penalty
+            gecikmeTazminati = penalty,
+            gecikenGunSayisi = daysOverdue.toInt()
         )
     }
 }

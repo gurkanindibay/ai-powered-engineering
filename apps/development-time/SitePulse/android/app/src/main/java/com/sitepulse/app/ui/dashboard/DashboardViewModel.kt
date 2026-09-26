@@ -330,7 +330,7 @@ class DashboardViewModel(
                     residentName = "Ahmet Yılmaz",
                     principalAmount = evaluatedBorc.anaPara,
                     delayPenaltyAmount = evaluatedBorc.gecikmeTazminati,
-                    totalAmount = evaluatedBorc.toplamTutar.amount,
+                    totalAmount = evaluatedBorc.toplamTutar,
                     daysOverdue = evaluatedBorc.gecikenGunSayisi,
                     isOverdue = isOverdue,
                     cachedAt = LocalDateTime.now(),
