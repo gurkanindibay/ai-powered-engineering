@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sitepulse.app.domain.model.*
+import com.sitepulse.app.ui.components.VirtualIbanCard
 import com.sitepulse.app.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,11 +73,12 @@ fun DashboardScreen(
         containerColor = SitePulseTheme.colors.background,
         bottomBar = {
             PaparaBottomNav(
+                userRole = userRole,
                 selectedTab = selectedTab,
                 onTabSelect = { tabIndex, tabName ->
                     selectedTab = tabIndex
                     when (tabName) {
-                        "Profil" -> showProfileSheet = true
+                        "Profil", "Dairem / Profil", "Altyapı" -> showProfileSheet = true
                         "Duyurular" -> {
                             if (userRole == UserRole.SITE_MANAGER) {
                                 showAnnouncementSheet = true
@@ -353,6 +355,15 @@ private fun ResidentDashboardContent(
             state = state,
             onPayClick = onPayClick,
             onDetailClick = { onActionClick("Aidat Detayı") }
+        )
+
+        // EPIC-07: Daireye Özel Sanal IBAN Kartı (Havale / FAST ile Otomatik Eşleşme)
+        VirtualIbanCard(
+            iban = "TR12 0006 2000 0000 0000 0014",
+            bankName = "Garanti BBVA Kurumsal",
+            recipient = "Begonya Sitesi Yönetimi",
+            unitLabel = "${state.aktifDaire.blok} Blok D:${state.aktifDaire.daireNo}",
+            onCopied = { onActionClick("Daireye özel Sanal IBAN panoya kopyalandı!") }
         )
 
 
@@ -756,10 +767,9 @@ private fun ResidentActionsRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         CircularActionItem(Icons.Outlined.CreditCard, "Aidat Öde", onPayClick)
-        CircularActionItem(Icons.Outlined.GroupAdd, "Sakin Davet", onOpenUnitInviteLink)
+        CircularActionItem(Icons.Outlined.AccountBalance, "Sanal IBAN") { onActionClick("Sanal IBAN") }
         CircularActionItem(Icons.AutoMirrored.Outlined.ReceiptLong, "Dekontlar") { onActionClick("Dekontlar") }
-        CircularActionItem(Icons.Outlined.Build, "Arıza Bildir") { onActionClick("Arıza Bildir") }
-        CircularActionItem(Icons.Outlined.SupportAgent, "Yönetim") { onActionClick("Yönetim") }
+        CircularActionItem(Icons.Outlined.GroupAdd, "Sakin Davet", onOpenUnitInviteLink)
     }
 }
 
@@ -1509,6 +1519,7 @@ private fun TransactionItem(
 
 @Composable
 private fun PaparaBottomNav(
+    userRole: UserRole,
     selectedTab: Int,
     onTabSelect: (Int, String) -> Unit
 ) {
@@ -1527,41 +1538,74 @@ private fun PaparaBottomNav(
                 .padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BottomNavItem(
-                icon = if (selectedTab == 0) Icons.Filled.Home else Icons.Outlined.Home,
-                label = "Ana Sayfa",
-                isSelected = selectedTab == 0,
-                modifier = Modifier.weight(1f)
-            ) { onTabSelect(0, "Ana Sayfa") }
+            when (userRole) {
+                UserRole.SITE_MANAGER -> {
+                    BottomNavItem(
+                        icon = if (selectedTab == 0) Icons.Filled.Dashboard else Icons.Outlined.Dashboard,
+                        label = "Kokpit",
+                        isSelected = selectedTab == 0,
+                        modifier = Modifier.weight(1f)
+                    ) { onTabSelect(0, "Kokpit") }
 
-            BottomNavItem(
-                icon = if (selectedTab == 1) Icons.Filled.AccountBalanceWallet else Icons.Outlined.AccountBalanceWallet,
-                label = "Aidatlar",
-                isSelected = selectedTab == 1,
-                modifier = Modifier.weight(1f)
-            ) { onTabSelect(1, "Aidatlar") }
+                    BottomNavItem(
+                        icon = if (selectedTab == 1) Icons.Filled.People else Icons.Outlined.People,
+                        label = "Borçlular",
+                        isSelected = selectedTab == 1,
+                        modifier = Modifier.weight(1f)
+                    ) { onTabSelect(1, "Borçlular") }
 
-            BottomNavItem(
-                icon = if (selectedTab == 2) Icons.Filled.Handyman else Icons.Outlined.Handyman,
-                label = "Talepler",
-                isSelected = selectedTab == 2,
-                modifier = Modifier.weight(1f)
-            ) { onTabSelect(2, "Talepler") }
+                    BottomNavItem(
+                        icon = if (selectedTab == 2) Icons.Filled.AccountBalance else Icons.Outlined.AccountBalance,
+                        label = "Banka & Mutabakat",
+                        isSelected = selectedTab == 2,
+                        modifier = Modifier.weight(1f)
+                    ) { onTabSelect(2, "Banka & Mutabakat") }
+                }
+                UserRole.SAAS_ADMIN -> {
+                    BottomNavItem(
+                        icon = if (selectedTab == 0) Icons.Filled.Public else Icons.Outlined.Public,
+                        label = "Platform",
+                        isSelected = selectedTab == 0,
+                        modifier = Modifier.weight(1f)
+                    ) { onTabSelect(0, "Platform") }
 
-            BottomNavItem(
-                icon = if (selectedTab == 3) Icons.Filled.Notifications else Icons.Outlined.NotificationsNone,
-                label = "Duyurular",
-                isSelected = selectedTab == 3,
-                badgeCount = 1,
-                modifier = Modifier.weight(1f)
-            ) { onTabSelect(3, "Duyurular") }
+                    BottomNavItem(
+                        icon = if (selectedTab == 1) Icons.Filled.Apartment else Icons.Outlined.Apartment,
+                        label = "Siteler",
+                        isSelected = selectedTab == 1,
+                        modifier = Modifier.weight(1f)
+                    ) { onTabSelect(1, "Siteler") }
 
-            BottomNavItem(
-                icon = if (selectedTab == 4) Icons.Filled.Person else Icons.Outlined.PersonOutline,
-                label = "Profil",
-                isSelected = selectedTab == 4,
-                modifier = Modifier.weight(1f)
-            ) { onTabSelect(4, "Profil") }
+                    BottomNavItem(
+                        icon = if (selectedTab == 2) Icons.Filled.Dns else Icons.Outlined.Dns,
+                        label = "Altyapı",
+                        isSelected = selectedTab == 2,
+                        modifier = Modifier.weight(1f)
+                    ) { onTabSelect(2, "Altyapı") }
+                }
+                else -> {
+                    BottomNavItem(
+                        icon = if (selectedTab == 0) Icons.Filled.Home else Icons.Outlined.Home,
+                        label = "Ana Sayfa",
+                        isSelected = selectedTab == 0,
+                        modifier = Modifier.weight(1f)
+                    ) { onTabSelect(0, "Ana Sayfa") }
+
+                    BottomNavItem(
+                        icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                        label = "Dekontlar",
+                        isSelected = selectedTab == 1,
+                        modifier = Modifier.weight(1f)
+                    ) { onTabSelect(1, "Dekontlar") }
+
+                    BottomNavItem(
+                        icon = if (selectedTab == 2) Icons.Filled.Person else Icons.Outlined.PersonOutline,
+                        label = "Dairem / Profil",
+                        isSelected = selectedTab == 2,
+                        modifier = Modifier.weight(1f)
+                    ) { onTabSelect(2, "Dairem / Profil") }
+                }
+            }
         }
     }
 }
