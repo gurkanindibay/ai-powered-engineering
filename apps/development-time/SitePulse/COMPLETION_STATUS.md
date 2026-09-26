@@ -149,9 +149,10 @@ Execution command:
 
 ## 6. Backlog Roadmap & Future Horizons
 
-1. **STORY-01-06 (Offline Room Cache):**
-   - Implement local SQLite cache with Room database to persist recent statements offline.
-2. **Version 2.0 Feature Horizons (Explicit Non-Goals for V1):**
+1. **EPIC-07: Bank Account Integration, Virtual IBAN & Automated Dues Reconciliation:**
+   - Formal specification defined in [.specify/requirements/EPIC-07-bank-integration-and-automated-reconciliation.md](.specify/requirements/EPIC-07-bank-integration-and-automated-reconciliation.md).
+   - Covers flat-specific Sanal IBAN provisioning, zero-approval Excel/MT940 parser, real-time webhook listeners, and dynamic FAST TR-Karekod.
+2. **Version 2.0 Feature Horizons:**
    - Sub-meter heating and water consumption cost allocation (*"Sayaç Gir / Pay Ölçer"*).
    - Common facility and amenity reservation calendar (*"Rezervasyon"*).
-   - Automated open-banking virtual IBAN / payment gateway reconciliation.
+   - Maintenance and repair work order ticketing engine (*"Arıza Bildir"*).

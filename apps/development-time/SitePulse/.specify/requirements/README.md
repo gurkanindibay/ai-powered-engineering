@@ -14,6 +14,7 @@ Each Epic represents a core business domain and contains atomic User Stories wit
 | **EPIC-04** | Digital Resident Self-Registration & Approval Queue | 7 | 7 | 0 | **COMPLETED** | [EPIC-04-invitation-approval-workflow.md](EPIC-04-invitation-approval-workflow.md) |
 | **EPIC-05** | Backend Persistence, REST APIs & Verification Harness | 6 | 6 | 0 | **COMPLETED** | [EPIC-05-backend-persistence-verification-harness.md](EPIC-05-backend-persistence-verification-harness.md) |
 | **EPIC-06** | Identity, Authentication & Scoped Permission Model | 5 | 5 | 0 | **COMPLETED** | [EPIC-06-identity-access-auth.md](EPIC-06-identity-access-auth.md) |
+| **EPIC-07** | Bank Account Integration, Virtual IBAN & Automated Reconciliation | 6 | 0 | 6 | **PLANNED** | [EPIC-07-bank-integration-and-automated-reconciliation.md](EPIC-07-bank-integration-and-automated-reconciliation.md) |
 
 ---
 
