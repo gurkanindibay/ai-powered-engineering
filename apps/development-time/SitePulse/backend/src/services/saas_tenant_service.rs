@@ -163,6 +163,56 @@ impl SaasTenantService {
             monthly_collection_volume: volume,
         }
     }
+
+    pub async fn delete_site(&self, site_id: &str) -> Result<(), String> {
+        let mut inner = self.state.inner.write().await;
+        let site_idx = inner
+            .sites
+            .iter()
+            .position(|s| s.id == site_id)
+            .ok_or_else(|| format!("Site with id '{}' not found", site_id))?;
+
+        // Invariant Guard 1: Check if any independent units exist for this site
+        let has_units = inner.units.iter().any(|u| u.site_id == site_id);
+        if has_units {
+            return Err(format!(
+                "Cannot delete site '{}': active units exist in complex (işlem kaydı mevcut)",
+                site_id
+            ));
+        }
+
+        // Invariant Guard 2: Check if any pending registrations exist for this site
+        let has_pending = inner.pending_registrations.iter().any(|r| r.site_id == site_id);
+        if has_pending {
+            return Err(format!(
+                "Cannot delete site '{}': pending registration requests exist",
+                site_id
+            ));
+        }
+
+        // Invariant Guard 3: Check if any dues liabilities exist for units belonging to this site
+        let unit_ids: Vec<String> = inner
+            .units
+            .iter()
+            .filter(|u| u.site_id == site_id)
+            .map(|u| u.id.clone())
+            .collect();
+        let has_dues = inner.dues.iter().any(|d| unit_ids.contains(&d.unit_id));
+        if has_dues {
+            return Err(format!(
+                "Cannot delete site '{}': financial dues liabilities exist",
+                site_id
+            ));
+        }
+
+        // Invariant passed: purge site
+        inner.sites.remove(site_idx);
+
+        // Purge unactivated tenant admin user(s) created for this site
+        inner.users.retain(|u| u.site_id != site_id || u.role == Role::SaasAdmin);
+
+        Ok(())
+    }
 }
 
 fn to_slug(input: &str) -> String {

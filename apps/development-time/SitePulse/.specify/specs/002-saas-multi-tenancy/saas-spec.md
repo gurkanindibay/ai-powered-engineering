@@ -86,3 +86,33 @@ During this registration:
   }
 ]
 ```
+
+### 3.3 Delete Action-Free Site (Invariant Guard)
+- **Endpoint:** `DELETE /api/v1/saas/sites/{siteId}`
+- **Pre-condition:** Calling actor must have `SAAS_ADMIN` role.
+- **Domain Invariant & Guard Rule:**
+  - A site can **ONLY** be deleted if there are **NO operational or financial actions** associated with it.
+  - "No action" is defined as:
+    1. Zero registered units/apartments (`totalUnits == 0`).
+    2. Zero financial transactions or dues collection volume (`monthlyCollectionVolume == 0.00` and no `DuesLiability` records).
+    3. Zero pending resident registrations or active tenant activity (`pendingRegistrations == 0`).
+  - If any action, unit, or financial movement exists for the site, the deletion **MUST BE REJECTED** with an invariant violation error (`409 Conflict` in REST API, friendly explanation in UI).
+  - If no action exists, the site and its associated unactivated tenant admin account are permanently purged from the system.
+
+- **Acceptance Scenarios (Gherkin):**
+```gherkin
+Scenario: Successfully delete an action-free site
+  Given a registered site "Zambak Konutları" with 0 units, 0 dues, and 0 resident registrations
+  When SaaS Admin requests to delete the site
+  Then the system prompts for confirmation
+  When confirmation is granted
+  Then the site is deleted and removed from the active tenant portfolio
+  And a success notification is presented
+
+Scenario: Attempting to delete a site with existing actions is strictly rejected
+  Given a registered site "Begonya Sitesi" with active units (24) and dues volume (₺96,000.00)
+  When SaaS Admin attempts to delete the site
+  Then the deletion is rejected with an invariant error
+  And "Begonya Sitesi" remains intact and protected in the system
+```
+

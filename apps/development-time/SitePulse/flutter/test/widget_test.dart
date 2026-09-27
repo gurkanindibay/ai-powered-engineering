@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/main.dart';
@@ -73,4 +74,86 @@ void main() {
 
     expect(controller.isDarkMode, isTrue);
   });
+
+  testWidgets('SitePulseApp opens Yeni Site dialog, submits and closes popup cleanly', (WidgetTester tester) async {
+    final controller = DashboardController();
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Switch to SaaS Admin
+    controller.switchSessionRole(UserRole.saasAdmin);
+    await tester.pumpAndSettle();
+
+    // Tap "Yeni Site Kaydet" button
+    final addSiteBtn = find.text('Yeni Site Kaydet');
+    expect(addSiteBtn, findsOneWidget);
+    await tester.tap(addSiteBtn);
+    await tester.pumpAndSettle();
+
+    // Verify Add Site Dialog is opened
+    expect(find.text('Yeni Site / Kompleks Kaydet'), findsOneWidget);
+
+    // Fill in required fields
+    final textFields = find.byType(TextField);
+    expect(textFields, findsNWidgets(6));
+    await tester.enterText(textFields.at(0), 'Nilüfer Sitesi');
+    await tester.enterText(textFields.at(3), 'Fatma Demir');
+
+    // Tap "Siteyi Kaydet & Yetkilendir"
+    final submitBtn = find.text('Siteyi Kaydet & Yetkilendir');
+    expect(submitBtn, findsOneWidget);
+    await tester.tap(submitBtn);
+    await tester.pumpAndSettle();
+
+    // Verify the input popup is closed
+    expect(find.text('Yeni Site / Kompleks Kaydet'), findsNothing);
+
+    // Verify the provisioned credentials dialog appears
+    expect(find.text('Yeni Site & Yönetici Hazır!'), findsOneWidget);
+    expect(find.textContaining('Nilüfer Sitesi başarıyla platforma kaydedildi.'), findsOneWidget);
+
+    // Tap "Tamam" to dismiss credentials dialog
+    await tester.tap(find.text('Tamam'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Yeni Site & Yönetici Hazır!'), findsNothing);
+    expect(find.text('Nilüfer Sitesi'), findsOneWidget);
+  });
+
+  testWidgets('SitePulseApp allows deleting an action-free site with confirmation dialog', (WidgetTester tester) async {
+    final controller = DashboardController();
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Switch to SaaS Admin
+    controller.switchSessionRole(UserRole.saasAdmin);
+    await tester.pumpAndSettle();
+
+    // Verify Zambak Konutları exists and has "Sil" button
+    expect(find.text('Zambak Konutları'), findsOneWidget);
+    final deleteButtons = find.text('Sil');
+    expect(deleteButtons, findsOneWidget);
+
+    // Scroll until visible and tap "Sil"
+    await tester.ensureVisible(deleteButtons);
+    await tester.pumpAndSettle();
+    await tester.tap(deleteButtons);
+    await tester.pumpAndSettle();
+
+    // Verify confirmation dialog
+    expect(find.text('Siteyi Sil'), findsOneWidget);
+    expect(find.textContaining('Zambak Konutları sitesini platformdan tamamen silmek istediğinize emin misiniz?'), findsOneWidget);
+
+    // Tap "Evet, Sil"
+    final confirmBtn = find.text('Evet, Sil');
+    expect(confirmBtn, findsOneWidget);
+    await tester.tap(confirmBtn);
+    await tester.pumpAndSettle();
+
+    // Verify dialog closed and site is removed
+    expect(find.text('Siteyi Sil'), findsNothing);
+    expect(find.text('Zambak Konutları'), findsNothing);
+    expect(find.textContaining('başarıyla silindi.'), findsOneWidget);
+  });
 }
+

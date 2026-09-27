@@ -87,6 +87,18 @@
       ],
       "spec_ref": "SPEC-001",
       "description": "Local database caching for resident dashboard data synchronized with Rust REST API."
+    },
+    {
+      "id": "task-09",
+      "name": "Action-Free Site Deletion Guard & Multi-Tenant Cleanup",
+      "module": "full-stack",
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-03",
+        "task-07"
+      ],
+      "spec_ref": "SPEC-002",
+      "description": "Implement deletion of sites that have no associated actions, units, dues, or requests across Rust backend and Flutter UI with strict invariant guards."
     }
   ]
 }

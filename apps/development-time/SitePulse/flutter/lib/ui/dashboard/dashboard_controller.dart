@@ -170,6 +170,20 @@ class DashboardController extends ChangeNotifier {
         adminEmail: 'selin@kardelenrezidans.com',
         adminPhone: '+90 533 222 4050',
       ),
+      TenantSiteItem(
+        id: 'site-3',
+        name: 'Zambak Konutları',
+        city: 'İzmir',
+        address: 'Bornova, Zambak Sok. No:5',
+        status: 'ACTIVE',
+        planType: 'STANDARD',
+        totalUnits: 0,
+        monthlyCollectionVolume: Decimal.zero,
+        adminName: 'Kemal Aksoy',
+        adminEmail: 'kemal@zambakkonutlari.com',
+        adminPhone: '+90 535 777 88 99',
+        actionCount: 0,
+      ),
     ];
 
     _unitResidents = [
@@ -258,11 +272,12 @@ class DashboardController extends ChangeNotifier {
       address: address,
       status: 'ACTIVE',
       planType: planType,
-      totalUnits: 20,
-      monthlyCollectionVolume: Decimal.parse('80000.00'),
+      totalUnits: 0,
+      monthlyCollectionVolume: Decimal.zero,
       adminName: adminName,
       adminEmail: adminEmail,
       adminPhone: adminPhone,
+      actionCount: 0,
     );
 
     _saasSites = [newSite, ..._saasSites];
@@ -275,6 +290,32 @@ class DashboardController extends ChangeNotifier {
       planType: planType,
     );
     notifyListeners();
+  }
+
+  /// Invariant Guard: Check if a site can be deleted.
+  /// Allowed if and only if hasActions is false.
+  bool canDeleteSite(String siteId) {
+    for (final s in _saasSites) {
+      if (s.id == siteId) return !s.hasActions;
+    }
+    return false;
+  }
+
+  /// Deletes a site if there are no related actions (units, dues, transactions).
+  /// Strictly rejects deletion if site has active entities or records.
+  bool deleteSite(String siteId) {
+    final index = _saasSites.indexWhere((s) => s.id == siteId);
+    if (index == -1) return false;
+    final site = _saasSites[index];
+    if (site.hasActions) {
+      _authMessage = '${site.name} sitesine ait aktif hareketler bulunduğundan silinemez.';
+      notifyListeners();
+      return false;
+    }
+    _saasSites.removeAt(index);
+    _authMessage = '${site.name} başarıyla silindi.';
+    notifyListeners();
+    return true;
   }
 
   void clearProvisionedCredentials() {

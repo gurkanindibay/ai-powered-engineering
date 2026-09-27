@@ -204,6 +204,7 @@ class TenantSiteItem {
   final String adminName;
   final String adminEmail;
   final String adminPhone;
+  final int actionCount;
 
   const TenantSiteItem({
     required this.id,
@@ -217,7 +218,12 @@ class TenantSiteItem {
     required this.adminName,
     required this.adminEmail,
     required this.adminPhone,
+    this.actionCount = 0,
   });
+
+  /// Invariant: A site has actions if it has registered units, financial collection volume,
+  /// or logged operational actions. Sites with hasActions == false are eligible for deletion.
+  bool get hasActions => actionCount > 0 || totalUnits > 0 || monthlyCollectionVolume > Decimal.zero;
 }
 
 class UnitResidentMember {

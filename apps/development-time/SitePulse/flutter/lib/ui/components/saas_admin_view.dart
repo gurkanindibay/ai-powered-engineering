@@ -6,11 +6,13 @@ import '../dashboard/dashboard_controller.dart';
 class SaasAdminView extends StatelessWidget {
   final DashboardController controller;
   final VoidCallback onAddSiteTap;
+  final void Function(TenantSiteItem site)? onDeleteSiteTap;
 
   const SaasAdminView({
     super.key,
     required this.controller,
     required this.onAddSiteTap,
+    this.onDeleteSiteTap,
   });
 
   @override
@@ -217,20 +219,69 @@ class SaasAdminView extends StatelessWidget {
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.accentGreen.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  site.planType,
-                  style: const TextStyle(
-                    color: AppColors.accentGreen,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentGreen.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      site.planType,
+                      style: const TextStyle(
+                        color: AppColors.accentGreen,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                ),
+                  if (onDeleteSiteTap != null) ...[
+                    const SizedBox(width: 8),
+                    if (!site.hasActions)
+                      InkWell(
+                        onTap: () => onDeleteSiteTap!(site),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red.withOpacity(0.3)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.delete_outline, size: 13, color: Colors.redAccent),
+                              SizedBox(width: 3),
+                              Text('Sil', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      Tooltip(
+                        message: 'Bu siteye ait aktif daire veya işlem kaydı bulunduğundan silinemez.',
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.card(context),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.border(context)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.lock_outline, size: 11, color: AppColors.textSecondary(context)),
+                              const SizedBox(width: 3),
+                              Text('İşlemli', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 9)),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ],
               ),
             ],
           ),

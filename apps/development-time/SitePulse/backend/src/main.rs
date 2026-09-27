@@ -5,7 +5,7 @@ mod state;
 
 use std::net::SocketAddr;
 use axum::{
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use tower_http::cors::{Any, CorsLayer};
@@ -39,6 +39,7 @@ async fn main() {
         .route("/api/v1/auth/me", get(handlers::get_profile))
         // SaaS Multi-Tenancy
         .route("/api/v1/saas/sites", get(handlers::get_all_sites).post(handlers::register_site))
+        .route("/api/v1/saas/sites/:id", delete(handlers::delete_site))
         .route("/api/v1/saas/stats", get(handlers::get_saas_stats))
         // Site Admin & Flats
         .route(

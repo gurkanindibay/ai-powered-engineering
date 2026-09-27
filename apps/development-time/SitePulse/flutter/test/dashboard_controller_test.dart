@@ -141,5 +141,24 @@ void main() {
       controller.setFlatFilter('ALL');
       expect(controller.flatsList.length, greaterThanOrEqualTo(6));
     });
+
+    test('when delete action-free site, then removes site successfully', () {
+      // site-3 (Zambak Konutları) has 0 units and 0 collection volume
+      expect(controller.canDeleteSite('site-3'), isTrue);
+
+      final success = controller.deleteSite('site-3');
+      expect(success, isTrue);
+      expect(controller.saasSites.any((s) => s.id == 'site-3'), isFalse);
+    });
+
+    test('when delete site with active units or dues, then rejects deletion and preserves site', () {
+      // site-1 (Begonya Sitesi) has active units and collection volume
+      expect(controller.canDeleteSite('site-1'), isFalse);
+
+      final success = controller.deleteSite('site-1');
+      expect(success, isFalse);
+      expect(controller.saasSites.any((s) => s.id == 'site-1'), isTrue);
+      expect(controller.authMessage, contains('silinemez'));
+    });
   });
 }

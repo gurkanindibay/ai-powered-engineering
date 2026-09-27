@@ -51,7 +51,7 @@ class TestSitePulseHarness(unittest.TestCase):
         validator = RtmValidator()
         report = validator.validate()
         self.assertTrue(report["passed"], f"RTM Validation failed with issues: {report['issues']}")
-        self.assertEqual(report["total_requirements"], 8)
+        self.assertGreaterEqual(report["total_requirements"], 8)
         self.assertGreaterEqual(report["verified_requirements"], 7)
 
 

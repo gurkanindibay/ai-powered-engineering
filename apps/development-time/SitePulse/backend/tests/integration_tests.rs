@@ -306,3 +306,42 @@ fn when_home_owner_role_then_has_invite_and_household_permissions() {
     assert!(permissions.contains(&Permission::UnitManageHousehold));
     assert!(!permissions.contains(&Permission::SiteManage));
 }
+
+#[tokio::test]
+async fn when_deleting_action_free_site_then_succeeds_and_removes_site() {
+    let state = AppState::new();
+    let service = SaasTenantService::new(state.clone());
+
+    // Register a new action-free site
+    let reg_req = RegisterSiteRequest {
+        site_name: "Nilüfer Konutları".to_string(),
+        address: "Nilüfer, Bursa".to_string(),
+        plan_type: Some("STANDARD".to_string()),
+        site_admin_full_name: "Deniz Yılmaz".to_string(),
+        site_admin_email: "deniz@nilufer.com".to_string(),
+        site_admin_phone: "+90 532 999 1122".to_string(),
+    };
+
+    let reg_res = service.register_site(reg_req).await.expect("Site registration failed");
+    let site_id = reg_res.site_id;
+
+    // Delete the action-free site
+    let del_res = service.delete_site(&site_id).await;
+    assert!(del_res.is_ok());
+
+    // Verify it is no longer in the site list
+    let all_sites = service.get_all_sites().await;
+    assert!(!all_sites.iter().any(|s| s.site_id == site_id));
+}
+
+#[tokio::test]
+async fn when_deleting_site_with_active_units_or_actions_then_strictly_rejected() {
+    let state = AppState::new();
+    let service = SaasTenantService::new(state);
+
+    // "site-1" (Begonya Sitesi) has active units (d-14), dues (b-101), and pending registrations
+    let del_res = service.delete_site("site-1").await;
+    assert!(del_res.is_err());
+    let err_msg = del_res.unwrap_err();
+    assert!(err_msg.contains("active units exist") || err_msg.contains("işlem kaydı"));
+}

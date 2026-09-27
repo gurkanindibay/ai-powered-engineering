@@ -2,7 +2,7 @@
 
 > **Epic ID:** EPIC-03  
 > **Module:** SaaS Platform Architecture (`backend-rust`, `flutter-ui`)  
-> **Status:** COMPLETED (5 / 5 Stories Completed - 100%)  
+> **Status:** COMPLETED (6 / 6 Stories Completed - 100%)  
 > **Target Audience:** SaaS Super Administrator, Sales & Operations Team  
 > **Business Value:** Enables SitePulse to scale commercially as a cloud SaaS across hundreds of independent residential complexes.
 
@@ -116,3 +116,35 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
   - `apps/development-time/SitePulse/backend/src/handlers/mod.rs`
 - **Verification & Tests:**
   - Rust Axum integration tests in `tests/integration_tests.rs`
+
+---
+
+### STORY-03-06: Deletion of Inactive / Action-Free Sites
+- **Status:** `COMPLETED`
+- **Spec Ref:** `SPEC-002 (Section 3.3)`
+- **Description:** Allow SaaS Admins to delete a site if and only if no actions (units, dues liabilities, resident registrations) exist for that site. Attempting to delete a site with existing records is strictly blocked.
+- **Acceptance Criteria (Gherkin):**
+  ```gherkin
+  Scenario: Delete site without any related actions
+    Given a site has zero units, zero dues collection, and zero registration requests
+    When SaaS Admin confirms deletion of the site
+    Then the site is permanently removed from the system
+    And the tenant portfolio is updated
+
+  Scenario: Invariant prevents deletion of active site with transactions
+    Given a site has active units or dues records
+    When SaaS Admin attempts to delete the site
+    Then the deletion request is blocked
+    And an explanatory invariant violation error is returned
+  ```
+- **Implementation Artifacts:**
+  - `apps/development-time/SitePulse/backend/src/services/saas_tenant_service.rs`
+  - `apps/development-time/SitePulse/backend/src/handlers/mod.rs`
+  - `apps/development-time/SitePulse/flutter/lib/ui/dashboard/dashboard_controller.dart`
+  - `apps/development-time/SitePulse/flutter/lib/ui/components/saas_admin_view.dart`
+  - `apps/development-time/SitePulse/flutter/lib/ui/dashboard/dashboard_screen.dart`
+- **Verification & Tests:**
+  - `flutter/test/dashboard_controller_test.dart`
+  - `flutter/test/widget_test.dart`
+  - `backend/tests/saas_tenant_tests.rs`
+

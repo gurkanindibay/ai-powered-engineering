@@ -161,6 +161,26 @@ pub async fn get_saas_stats(State(state): State<AppState>) -> Json<SaasGlobalSta
     Json(service.get_global_stats().await)
 }
 
+pub async fn delete_site(
+    Path(site_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let service = SaasTenantService::new(state);
+    service
+        .delete_site(&site_id)
+        .await
+        .map(|_| {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "success": true,
+                    "message": format!("Site '{}' successfully deleted", site_id)
+                })),
+            )
+        })
+        .map_err(|e| (StatusCode::CONFLICT, e))
+}
+
 // 4. Site Admin Handlers
 #[derive(Deserialize)]
 pub struct SiteIdParam {

@@ -57,26 +57,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Check for approval success info
     if (widget.controller.approvalSuccessInfo != null) {
-      _showApprovalSuccessDialog(widget.controller.approvalSuccessInfo!);
+      final info = widget.controller.approvalSuccessInfo!;
       widget.controller.clearApprovalSuccess();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showApprovalSuccessDialog(info);
+      });
     }
 
     // Check for provisioned SaaS site credentials
     if (widget.controller.provisionedCredentials != null) {
-      _showSiteProvisionedDialog(widget.controller.provisionedCredentials!);
+      final creds = widget.controller.provisionedCredentials!;
       widget.controller.clearProvisionedCredentials();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showSiteProvisionedDialog(creds);
+      });
     }
 
     // Check for provisioned Home Owner credentials
     if (widget.controller.provisionedHomeOwner != null) {
-      _showHomeOwnerProvisionedDialog(widget.controller.provisionedHomeOwner!);
+      final homeOwner = widget.controller.provisionedHomeOwner!;
       widget.controller.clearProvisionedHomeOwner();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showHomeOwnerProvisionedDialog(homeOwner);
+      });
     }
 
     // Check for unit invite info
     if (widget.controller.unitInviteInfo != null) {
-      _showInviteDialog(widget.controller.unitInviteInfo!);
+      final invite = widget.controller.unitInviteInfo!;
       widget.controller.clearUnitInviteInfo();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showInviteDialog(invite);
+      });
     }
   }
 
@@ -275,6 +287,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return SaasAdminView(
           controller: widget.controller,
           onAddSiteTap: _showAddSiteDialog,
+          onDeleteSiteTap: _confirmDeleteSite,
         );
     }
   }
@@ -305,6 +318,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return SaasAdminView(
         controller: widget.controller,
         onAddSiteTap: _showAddSiteDialog,
+        onDeleteSiteTap: _confirmDeleteSite,
       );
     }
   }
@@ -1088,16 +1102,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              if (nameCtrl.text.trim().isEmpty || unitCtrl.text.trim().isEmpty) return;
-              widget.controller.registerHomeOwner(
-                block: blockCtrl.text,
-                unitNo: int.tryParse(unitCtrl.text) ?? 1,
-                ownerName: nameCtrl.text,
-                email: emailCtrl.text,
-                phone: phoneCtrl.text,
-                duesAmount: Decimal.tryParse(duesCtrl.text) ?? Decimal.parse('1400.00'),
-              );
+              final ownerName = nameCtrl.text.trim();
+              final unitText = unitCtrl.text.trim();
+              if (ownerName.isEmpty || unitText.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Lütfen Sakin Ad Soyad ve Daire No alanlarını doldurunuz.'),
+                    backgroundColor: Colors.redAccent,
+                  ),
+                );
+                return;
+              }
               Navigator.pop(ctx);
+              widget.controller.registerHomeOwner(
+                block: blockCtrl.text.trim(),
+                unitNo: int.tryParse(unitText) ?? 1,
+                ownerName: ownerName,
+                email: emailCtrl.text.trim(),
+                phone: phoneCtrl.text.trim(),
+                duesAmount: Decimal.tryParse(duesCtrl.text.trim()) ?? Decimal.parse('1400.00'),
+              );
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentGreen, foregroundColor: Colors.white),
             child: const Text('Kaydet & Şifre Üret'),
@@ -1208,19 +1232,100 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              if (nameCtrl.text.trim().isEmpty || adminNameCtrl.text.trim().isEmpty) return;
-              widget.controller.registerNewSite(
-                name: nameCtrl.text,
-                city: cityCtrl.text,
-                address: addressCtrl.text,
-                adminName: adminNameCtrl.text,
-                adminEmail: adminEmailCtrl.text,
-                adminPhone: adminPhoneCtrl.text,
-              );
+              final siteName = nameCtrl.text.trim();
+              final adminName = adminNameCtrl.text.trim();
+              if (siteName.isEmpty || adminName.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Lütfen Site Adı ve Yönetici Ad Soyad alanlarını doldurunuz.'),
+                    backgroundColor: Colors.redAccent,
+                  ),
+                );
+                return;
+              }
               Navigator.pop(ctx);
+              widget.controller.registerNewSite(
+                name: siteName,
+                city: cityCtrl.text.trim().isEmpty ? 'İstanbul' : cityCtrl.text.trim(),
+                address: addressCtrl.text.trim(),
+                adminName: adminName,
+                adminEmail: adminEmailCtrl.text.trim().isEmpty ? 'yonetici@sitepulse.internal' : adminEmailCtrl.text.trim(),
+                adminPhone: adminPhoneCtrl.text.trim().isEmpty ? '+90 532 000 00 00' : adminPhoneCtrl.text.trim(),
+              );
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.white),
             child: const Text('Siteyi Kaydet & Yetkilendir'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteSite(TenantSiteItem site) {
+    if (site.hasActions) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surface(context),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
+              const SizedBox(width: 8),
+              Text('Site Silinemez', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
+            ],
+          ),
+          content: Text(
+            '${site.name} sitesine ait aktif daireler (${site.totalUnits}) veya finansal tahsilat hareketleri bulunmaktadır. KMK mevzuatı ve veri bütünlüğü gereği işlem kaydı bulunan siteler silinemez.',
+            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.white),
+              child: const Text('Anladım'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface(context),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.delete_forever, color: Colors.redAccent),
+            const SizedBox(width: 8),
+            Text('Siteyi Sil', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          '${site.name} sitesini platformdan tamamen silmek istediğinize emin misiniz?\n\nBu sitede henüz herhangi bir daire veya finansal hareket bulunmamaktadır. Bu işlem geri alınamaz.',
+          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary(context))),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              widget.controller.deleteSite(site.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${site.name} başarıyla silindi.'),
+                  backgroundColor: AppColors.accentGreen,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            child: const Text('Evet, Sil'),
           ),
         ],
       ),
