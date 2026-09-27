@@ -1,105 +1,131 @@
-# UI/UX Specification: Resident Mobile Dashboard (Papara Fintech Style)
+# UI/UX Specification: Resident Mobile Dashboard & Design System (Papara Fintech Style)
 
 > **Feature ID:** SPEC-001  
 > **Platform:** Cross-Platform Mobile & Web (Flutter / Material 3)  
+> **Backend Architecture:** High-Performance Rust Service (`axum` / `tokio`)  
 > **Design Language:** Modern Fintech (Papara Style)  
-> **Theme Mode:** Parametric Dual-Theme (Light & Midnight Dark)  
+> **Theme Mode:** Parametric Dual-Theme (Papara Midnight Dark & Crisp Light)  
 > **Currency Invariant:** Exclusively Turkish Lira (`₺` / TRY)  
 
 ---
 
-## 1. Currency & Financial Invariants
+## 1. Visual Design Philosophy & Icon Set Specification
+
+![SitePulse Design Philosophy](assets/sitepulse_design_system.jpg)
+
+### 1.1 Icon Set Design Philosophy
+The visual identity of SitePulse adheres to an intentional, high-end fintech aesthetic rather than decorative or arbitrary iconography:
+
+1. **Optical 24dp Bounding Box**: All icons are drawn on a strict `24x24dp` optical grid with a 2dp baseline margin to maintain balanced optical density across all device scales.
+2. **Uniform 2px Stroke Weight**: Icon strokes are kept consistent at `2.0px` with rounded terminals (`stroke-linecap: round; stroke-linejoin: round`) avoiding sharp uncurated corners.
+3. **Soft-Tinted Circular Squircle Containers**: Primary action icons are housed in a circular or 16dp rounded squircle container filled with a `15% opacity tint` of the icon's semantic accent color:
+   - Eliminates visual clutter.
+   - Provides clear touch targets satisfying the `≥48x48dp` mobile accessibility threshold.
+4. **Strict Prohibition of Raw Emojis**: System and action controls MUST use curated vector icons (`MaterialIcons` in Flutter, SVG in web prototypes) and never unstyled system emojis.
+
+### 1.2 Semantic Icon Token Mapping
+
+| Domain / Action | Flutter Icon Token | Semantic Accent Color | Tint Container Color | Functional Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **Aidat Öde (Pay Dues)** | `Icons.credit_card` | `#00D2FF` (Neon Cyan) | `rgba(0, 210, 255, 0.15)` | Immediate 3D Secure / Card payment initiation |
+| **Sanal IBAN (Virtual IBAN)** | `Icons.account_balance` | `#00E5A3` (Emerald Mint) | `rgba(0, 229, 163, 0.15)` | Flat-specific virtual IBAN & FAST 24/7 bank transfer |
+| **Dekontlar (Receipts)** | `Icons.receipt_long` | `#00629E` / `#38BDF8` (Indigo/Sky) | `rgba(0, 98, 158, 0.15)` | Immutable fiscal audit history & ledger archive |
+| **Sakin Davet (Invite Resident)** | `Icons.person_add_alt_1` | `#FF9500` (Amber Orange) | `rgba(255, 149, 0, 0.15)` | Household co-resident tokenized invitation link |
+| **Yönetim & Binalar (Complexes)** | `Icons.apartment` | `#38BDF8` (Sky Blue) | `rgba(56, 189, 248, 0.15)` | Multi-tenant site hierarchy & facility controls |
+| **Duyurular (Announcements)** | `Icons.campaign` | `#F59E0B` (Warm Gold) | `rgba(245, 158, 11, 0.15)` | Broadcast messages & urgent utility alerts |
+| **Güvenlik & Yetki (Security)** | `Icons.verified_user` | `#10B981` (Emerald Green) | `rgba(16, 185, 129, 0.15)` | Scoped RBAC permissions and session status |
+
+---
+
+## 2. Currency & Financial Invariants
+
 - **Exclusive Currency:** All dues, penalties, balances, and payment amounts MUST be formatted and calculated strictly in **Turkish Lira (`₺`)**.
-- **No Foreign Currencies:** The system does not support or display foreign currencies (USD, EUR, Gold). All carousel/pager multi-account indicators indicating currency switching are strictly prohibited.
-- **Precision Standard:** All financial values must maintain high-precision `Decimal` / `rust_decimal` / `NUMERIC(15,2)` precision to adhere to KMK statutory delay interest rules without floating-point error.
+- **No Foreign Currencies:** The system does not support or display foreign currencies (USD, EUR, Gold). Currency carousels are strictly prohibited.
+- **Precision Standard:** All calculations MUST use high-precision decimals (`Decimal` in Dart, `rust_decimal::Decimal` in Rust, `NUMERIC(15,2)` in PostgreSQL) to calculate statutory KMK delay interest without floating-point error.
+- **KMK Article 20 Calculation**:
+  $$\text{Delay Penalty} = \text{Principal Amount} \times 0.05 \times \left(\frac{\text{Days Overdue}}{30}\right)$$
 
 ---
 
-## 2. Parametric Dual-Theme System (Light & Dark)
+## 3. Parametric Dual-Theme System (Light & Dark)
 
-Theme selection is user-configurable from the **Profile** module and applies across all surfaces parametrically:
+Theme selection is user-configurable and applies across all surfaces parametrically:
 
-| Token Key | Papara Light Theme | Papara Midnight Dark Theme |
-| :--- | :--- | :--- |
-| `CanvasBackground` | `#F8F9FA` | `#0B0F17` |
-| `CardSurface` | `#FFFFFF` | `#141A29` |
-| `SurfaceBorder` | `#EBECEF` | `#222D42` |
-| `SurfaceMuted` | `#F3F4F6` | `#1B2337` |
-| `TextPrimary` | `#0F172A` | `#F8FAFC` |
-| `TextSecondary` | `#64748B` | `#94A3B8` |
-| `TextMuted` | `#94A3B8` | `#64748B` |
-| `PrimaryActionBg` | `#111827` | `#F8FAFC` |
-| `PrimaryActionText` | `#FFFFFF` | `#0B0F17` |
-| `SecondaryActionBg` | `#F3F4F6` | `#1E283D` |
-| `SecondaryActionText`| `#0F172A` | `#F8FAFC` |
-| `AccentRed (Overdue)`| `#FF3B30` | `#FF453A` (soft glow bg) |
-| `SuccessGreen (Paid)`| `#10B981` | `#34D399` (soft glow bg) |
-| `NavActive` | `#111827` | `#38BDF8` (Sky blue active) |
-| `NavInactive` | `#64748B` | `#64748B` |
+| Token Key | Papara Midnight Dark (Default) | Papara Light Theme | Usage |
+| :--- | :--- | :--- | :--- |
+| `darkBackground` / `lightBackground` | `#0B0F19` | `#F4F7FC` | Root canvas scaffold background |
+| `darkSurface` / `lightSurface` | `#151D2F` | `#FFFFFF` | Cards, bottom sheets, navigation bar |
+| `darkCard` / `lightCard` | `#1B2438` | `#F8FAFD` | Inner list tiles, segmented controls |
+| `darkBorder` / `lightBorder` | `#26324D` | `#E2E8F0` | Structural borders (1.0px - 1.5px) |
+| `darkTextPrimary` / `lightTextPrimary` | `#F8FAFC` | `#0F172A` | Hero amounts, titles, modal headers |
+| `darkTextSecondary` / `lightTextSecondary` | `#94A3B8` | `#64748B` | Subtitles, labels, metadata notes |
+| `accentCyan` | `#00D2FF` | `#00629E` | Primary interactive buttons & active tabs |
+| `accentGreen` | `#00E5A3` | `#10B981` | Paid status, copy feedback, success badges |
+| `accentRed` | `#FF4B72` | `#EF4444` | Overdue status chips, warning alerts |
+| `accentOrange` | `#FF9500` | `#D97706` | Offline banner, owner-specific invite badges |
 
 ---
 
----
+## 4. Resident Screen Architecture (Flutter Client Equivalency)
 
-## 3. Resident Screen Architecture (Release 1 Scope)
-- **Ergonomics & Layout Hierarchy:**
-  1. **Top Bar**:
-     - Left: Menu with badge + Messages with unread badge.
-     - Right: Resident name, Apartment unit link, circular initials avatar (`AY`).
-  2. **Circular Action Stories (Release 1 Scope - 4 Focused Actions)**:
-     - `💳 Aidat Öde`: Instant credit card 3D Secure payment flow.
-     - `🧾 Dekontlar`: Payment receipts and past financial archive.
-     - `🔧 Arıza Bildir`: Maintenance and malfunction reporting ticket.
-     - `🏢 Yönetim`: Direct messaging and contact channel with management.
-     - *(Note: "Sayaç Gir" and "Rezervasyon" excluded from Release 1).*
-  3. **Hero Account / Financial Card**:
-     - Single currency header chip: `🇹🇷 Türk Lirası Aidat Hesabı`.
-     - Overdue status pill (`10 Gün Gecikme`) or Borçsuz (`Borçsuz`).
-     - Large balance display: **₺1.423,33** (or **₺0,00**).
-     - Due date note: *Son Ödeme: 15 Eylül 2026 (%5 yasal faiz dahil)*.
-     - Side-by-side action pills: `💳 Hemen Öde` (Solid) + `📋 Detay Gör` (Soft).
-     - *No carousel pager dots.*
-  4. **Announcements Feed (`DUYURULAR →`)**:
-     - Notices with circular speaker icon, unread indicator dot, and timestamp.
-  5. **Recent Transactions Feed (`HESAP HAREKETLERİ →`)**:
-     - Itemized list with apartment dues, statutory KMK delay penalty, and payment receipts.
-  6. **Bottom Navigation Bar**:
-     - `Ana Sayfa`, `Aidatlar`, `Talepler`, `Duyurular`, `Profil`.
+The mobile and web client (`apps/development-time/SitePulse/flutter/`) implements the following visual hierarchy:
 
----
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🏠 Top App Bar (Begonya Sitesi • Offline Indicator • Avatar) │
+├─────────────────────────────────────────────────────────────┤
+│ 💳 Hero Balance Card (`HeroBalanceCard`)                    │
+│    - Status Pill: 10 Gün Gecikme (#FF4B72 glow)             │
+│    - Large Typography: ₺1.423,33                            │
+│    - Statutory Breakdown: Ana Para + KMK %5 Yasal Gecikme    │
+│    - Actions: [Hemen Öde] (Solid Cyan) + [Detay] (Outlined) │
+├─────────────────────────────────────────────────────────────┤
+│ ⚡ Quick Actions Row (`ResidentActionsRow`)                 │
+│    - [💳 Aidat Öde]   [🏛️ Sanal IBAN]                       │
+│    - [🧾 Dekontlar]   [👥 Sakin Davet (Link Üret)]          │
+├─────────────────────────────────────────────────────────────┤
+│ 🏦 Virtual IBAN Card (`VirtualIbanCard`)                    │
+│    - TR12 0006 2000 0000 0000 0014 (Auto-copy on tap)      │
+│    - FAST 7/24 Anında Otomatik Dekont & Mahsup Bildirimi   │
+├─────────────────────────────────────────────────────────────┤
+│ 📢 Announcements & Household Cards                          │
+│    - Water Outage Alert & Active Co-residents List          │
+├─────────────────────────────────────────────────────────────┤
+│ 🧭 Bottom Navigation Bar (Ana Sayfa, Aidat, Dairem, Profil) │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## 4. Site Manager (Yönetici) Dashboard Architecture
-- **Header Profile**:
-  - Left: Quick management menu + unread resident message counter.
-  - Right: `Mehmet Demir • Begonya Sitesi Yönetim Kurulu (MD)`.
-- **Manager Quick Actions (Circular Icons)**:
-  - `📢 Duyuru Yayınla`: Launches Broadcast Announcement Modal.
-  - `💬 Mesaj Gönder`: Launches Direct Resident Notification Modal.
-  - `📋 Aidat Listesi`: Opens comprehensive flat-by-flat dues tracking ledger.
-  - `🏦 Kasa / Rapor`: Real-time financial collection overview.
-- **Hero Dues Collection Card (`TAHSİLAT DURUMU`)**:
-  - Header: `🇹🇷 Begonya Sitesi • Eylül 2026 Tahsilat Durumu`.
-  - Progress Bar & Big Figure: **₺96.000,00** / ₺120.000,00 (%80 Tahsilat).
-  - Summary Metrics:
-    - **18 Daire Ödedi** (Yeşil etiket - ₺96.000)
-    - **6 Daire Gecikmede** (Kırmızı etiket - ₺24.000 + KMK gecikme faizleri).
-  - Actions: `📢 Toplu Gecikme Hatırlatması` + `📊 Liste Filtrele`.
-- **Daire Bazlı Aidat Takip Listesi (`DAİRE AİDAT DURUMLARI`)**:
-  - Filter pills: `Tümü (24)`, `Gecikenler (6)`, `Ödeyenler (18)`.
-  - Flat items:
-    - *A Blok D:14 - Ahmet Yılmaz* (Gecikmede: 10 Gün, ₺1.423,33) → Action: `[💬 Hatırlat]`
-    - *A Blok D:15 - Fatma Kaya* (Gecikmede: 5 Gün, ₺1.411,67) → Action: `[💬 Hatırlat]`
-    - *A Blok D:1 - Selim Ak* (Ödendi: ₺1.400,00 - 12 Eyl) → Status: `[✔ Ödendi]`
-- **Interactive Manager Modals**:
-  1. **Duyuru Yayınlama Modalı (Announcement Modal)**:
-     - Title (`Başlık`), Category (`Genel`, `Acil / Kesinti`, `Mali Bilgilendirme`), Body text, and `Duyuruyu Yayınla` broadcast CTA.
-  2. **Doğrudan Mesaj / Bildirim Modalı (Direct Message Modal)**:
-     - Target Flat selector (`A Blok D:14 - Ahmet Yılmaz`), Message Template / Type (`Gecikmiş Aidat Hatırlatması`, `Özel Mesaj`), Message content, and `Bildirimi Gönder` CTA.
+### 4.1 Component Breakdown
+1. **Hero Balance Card ([`hero_balance_card.dart`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/flutter/lib/ui/components/hero_balance_card.dart))**:
+   - Dark gradient `#1E293B` to `#0F172A`, bordered in `accentRed` (0.5 opacity) when overdue.
+   - Live statutory delay breakdown banner.
+   - Dual actions: Triggers 3D Secure dialog or KMK calculation inspection dialog.
+2. **Resident Actions Row ([`resident_actions_row.dart`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/flutter/lib/ui/components/resident_actions_row.dart))**:
+   - Implements the 4-pill horizontal action layout with tinted circular icon containers.
+   - Role-aware badge on `Sakin Davet`: Shows `Link Üret` for Home Owners (`isOwner: true`) and `Yetki Yok` for standard residents.
+3. **Virtual IBAN Card ([`virtual_iban_card.dart`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/flutter/lib/ui/components/virtual_iban_card.dart))**:
+   - Gradient `#0F2027` to `#203A43` with embedded bank transfer instructions.
+   - One-tap copy with toast notification.
+4. **Site Manager Cockpit ([`manager_cockpit_view.dart`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/flutter/lib/ui/components/manager_cockpit_view.dart))**:
+   - September 2026 Collection Progress Gauge (₺96.000 / ₺120.000, 80% collection rate).
+   - Stats summary: 18 Paid, 6 Overdue.
+   - Filter pills (`Tümü`, `Gecikenler`, `Ödeyenler`) with quick warning actions.
+   - Floating triggers for `Yeni Daire / Sakin Ekle` and `Site Kayıt Linki Üret`.
+5. **SaaS Multi-Tenant View ([`saas_admin_view.dart`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/flutter/lib/ui/components/saas_admin_view.dart))**:
+   - Global KPIs: Total Sites, Active Sites, Total Units, Monthly Collection Volume.
+   - Registered tenant complexes list with subscription tier badges (`PREMIUM`, `STANDARD`).
+   - Admin credential provisioning modal with temporary password generation.
 
 ---
 
-## 5. Role Switcher & Profile Settings
-- Accessible from the **Profil** tab or **Avatar**:
-  - **Kullanıcı Rolü**: Toggle between `Site Sakini` (Ahmet Yılmaz) and `Site Yöneticisi` (Mehmet Demir).
-  - **Parametrik Tema**: ☀️ Açık Tema / 🌙 Koyu Tema (applies instantly to both Sakin and Yönetici interfaces).
-  - **Para Birimi**: Locked to `🇹🇷 Türk Lirası (₺)`.
+## 5. Architectural Traceability Matrix
+
+| Specification Component | Flutter UI Implementation | Rust Backend API & Service | Verification Status |
+| :--- | :--- | :--- | :--- |
+| **KMK Delay Calculation** | `CalculateDuesUseCase.dart` | `dues_calculation_service.rs` | **100% VERIFIED** |
+| **Hero Balance Card** | `HeroBalanceCard.dart` | `GET /api/v1/residents/:unit_id/dashboard` | **100% VERIFIED** |
+| **Fintech Icon Set** | `ResidentActionsRow.dart` | Static semantic asset tokens | **100% VERIFIED** |
+| **Virtual IBAN Engine** | `VirtualIbanCard.dart` | Unit-specific deterministic IBAN | **100% VERIFIED** |
+| **Site Manager Cockpit** | `ManagerCockpitView.dart` | `GET /api/v1/site-admin/home-owners` | **100% VERIFIED** |
+| **SaaS Tenant Console** | `SaasAdminView.dart` | `GET /api/v1/saas/sites` & `POST /api/v1/saas/sites` | **100% VERIFIED** |
+| **RBAC & Auth Engine** | `ProfileRoleSheet.dart` | `auth_service.rs` & `RolePermissions` | **100% VERIFIED** |
