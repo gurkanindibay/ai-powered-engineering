@@ -323,10 +323,11 @@
 
     .floating-balance-row {
       display: flex;
-      justify-content: space-around;
+      justify-content: space-between;
       align-items: center;
       width: 100%;
-      margin-bottom: 14px;
+      margin-bottom: 6px;
+      gap: 4px;
     }
 
     .circular-action-col {
@@ -335,11 +336,13 @@
       align-items: center;
       gap: 6px;
       cursor: pointer;
+      flex-shrink: 0;
+      width: 52px;
     }
 
     .circular-btn-withdraw {
-      width: 52px;
-      height: 52px;
+      width: 38px;
+      height: 38px;
       border-radius: 50%;
       background: var(--surface-dark);
       border: 2px solid var(--accent-red);
@@ -347,17 +350,19 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+      box-shadow: 0 3px 8px rgba(239, 68, 68, 0.18);
       transition: transform 0.15s;
     }
+
+    .circular-btn-withdraw .material-symbols-outlined { font-size: 18px; }
 
     .circular-btn-withdraw:hover {
       transform: scale(1.05);
     }
 
     .circular-btn-deposit {
-      width: 52px;
-      height: 52px;
+      width: 38px;
+      height: 38px;
       border-radius: 50%;
       background: var(--surface-dark);
       border: 2px solid var(--accent-green);
@@ -365,32 +370,40 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+      box-shadow: 0 3px 8px rgba(16, 185, 129, 0.18);
       transition: transform 0.15s;
     }
+
+    .circular-btn-deposit .material-symbols-outlined { font-size: 18px; }
 
     .circular-btn-deposit:hover {
       transform: scale(1.05);
     }
 
     .circular-btn-label {
-      font-size: 12px;
+      font-size: 10px;
       font-weight: 600;
       color: var(--text-secondary);
+      white-space: nowrap;
+      text-align: center;
     }
 
     .balance-center-col {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4px;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
     }
 
     .balance-center-col .amount-val {
-      font-size: 34px;
+      font-size: 24px;
       font-weight: 800;
       color: var(--text-primary);
       letter-spacing: -0.5px;
+      white-space: nowrap;
+      max-width: 100%;
     }
 
     .iban-subline {
@@ -1249,31 +1262,27 @@
                 <span class="material-symbols-outlined" style="font-size: 15px;">expand_more</span>
               </div>
 
+              <!-- Amount: full width, centered, no side competition -->
               <div class="amount-label">Ödenecek Toplam Tutar</div>
+              <div style="text-align: center; margin-bottom: 6px;">
+                <div class="amount-val" id="amountDisplay" style="font-size: 32px; font-weight: 800; letter-spacing: -1px; color: var(--text-primary); white-space: nowrap;">₺1.423,33</div>
+              </div>
 
-              <!-- Floating Balance Row with [-] and [+] -->
-              <div class="floating-balance-row">
-                <!-- Left: [-] Hemen Öde -->
-                <div class="circular-action-col" onclick="openPaymentModal()">
-                  <div class="circular-btn-withdraw">
-                    <span class="material-symbols-outlined">remove</span>
-                  </div>
-                  <span class="circular-btn-label">Hemen Öde</span>
-                </div>
+              <!-- Status pill: centered tight under amount -->
+              <div style="display: flex; justify-content: center; margin-bottom: 14px;">
+                <div class="status-pill penalty" id="dueStatusPill">10 Gün Gecikme (%5 KMK)</div>
+              </div>
 
-                <!-- Center: Balance -->
-                <div class="balance-center-col">
-                  <div class="amount-val" id="amountDisplay">₺1.423,33</div>
-                  <div class="status-pill penalty" id="dueStatusPill">10 Gün Gecikme (%5 KMK)</div>
-                </div>
-
-                <!-- Right: [+] Detay -->
-                <div class="circular-action-col" onclick="openDuesDetailModal()">
-                  <div class="circular-btn-deposit">
-                    <span class="material-symbols-outlined">add</span>
-                  </div>
-                  <span class="circular-btn-label">Detay</span>
-                </div>
+              <!-- Action buttons row: two pill buttons full width -->
+              <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                <button onclick="openPaymentModal()" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--accent-red); color: #fff; border: none; border-radius: 12px; padding: 11px 14px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: opacity 0.15s;" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">
+                  <span class="material-symbols-outlined" style="font-size: 17px;">payments</span>
+                  Hemen Öde
+                </button>
+                <button onclick="openDuesDetailModal()" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; background: transparent; color: var(--text-primary); border: 1px solid var(--border-dark); border-radius: 12px; padding: 11px 14px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: border-color 0.15s;" onmouseover="this.style.borderColor='var(--accent-cyan)'" onmouseout="this.style.borderColor='var(--border-dark)'">
+                  <span class="material-symbols-outlined" style="font-size: 17px;">receipt_long</span>
+                  Detay
+                </button>
               </div>
 
               <!-- Monospace IBAN line -->
