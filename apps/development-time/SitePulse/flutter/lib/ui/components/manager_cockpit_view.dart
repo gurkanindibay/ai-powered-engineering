@@ -18,6 +18,7 @@ class ManagerCockpitView extends StatelessWidget {
     final summary = controller.collectionSummary;
     final pendingList = controller.pendingRegistrations;
     final flats = controller.flatsList;
+    final isDark = AppColors.isDark(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -25,18 +26,24 @@ class ManagerCockpitView extends StatelessWidget {
         // 1. Tahsilat Özeti Card
         Container(
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            gradient: isDark
+                ? const LinearGradient(
+                    colors: [Color(0xFF1E293B), Color(0xFF121317)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.darkBorder, width: 1.5),
+            border: Border.all(
+              color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+              width: 1.5,
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
                 blurRadius: 16,
-                offset: const Offset(0, 8),
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -47,10 +54,10 @@ class ManagerCockpitView extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Eylül 2026 Tahsilat Durumu',
                     style: TextStyle(
-                      color: AppColors.darkTextSecondary,
+                      color: AppColors.textSecondary(context),
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -79,8 +86,8 @@ class ManagerCockpitView extends StatelessWidget {
                 children: [
                   Text(
                     '₺${summary.totalCollected.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      color: AppColors.darkTextPrimary,
+                    style: TextStyle(
+                      color: AppColors.textPrimary(context),
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                     ),
@@ -88,8 +95,8 @@ class ManagerCockpitView extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     '/ ₺${summary.totalExpected.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      color: AppColors.darkTextSecondary,
+                    style: TextStyle(
+                      color: AppColors.textSecondary(context),
                       fontSize: 18,
                     ),
                   ),
@@ -100,7 +107,7 @@ class ManagerCockpitView extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 child: LinearProgressIndicator(
                   value: summary.collectionPercentage / 100.0,
-                  backgroundColor: AppColors.darkBackground,
+                  backgroundColor: AppColors.card(context),
                   valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accentGreen),
                   minHeight: 8,
                 ),
@@ -109,10 +116,10 @@ class ManagerCockpitView extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildMetricTile('Toplam Daire', '${summary.totalUnitsCount}'),
-                  _buildMetricTile('Ödeyen', '${summary.paidUnitsCount}', color: AppColors.accentGreen),
-                  _buildMetricTile('Geciken', '${summary.overdueUnitsCount}', color: AppColors.accentRed),
-                  _buildMetricTile('Kalan Borç', '₺${summary.totalOverdueAmount.toStringAsFixed(0)}', color: AppColors.accentOrange),
+                  _buildMetricTile(context, 'Toplam Daire', '${summary.totalUnitsCount}'),
+                  _buildMetricTile(context, 'Ödeyen', '${summary.paidUnitsCount}', color: AppColors.accentGreen),
+                  _buildMetricTile(context, 'Geciken', '${summary.overdueUnitsCount}', color: AppColors.accentRed),
+                  _buildMetricTile(context, 'Kalan Borç', '₺${summary.totalOverdueAmount.toStringAsFixed(0)}', color: AppColors.accentOrange),
                 ],
               ),
             ],
@@ -127,10 +134,10 @@ class ManagerCockpitView extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text(
+                Text(
                   'Onay Bekleyen Başvurular',
                   style: TextStyle(
-                    color: AppColors.darkTextPrimary,
+                    color: AppColors.textPrimary(context),
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -139,7 +146,7 @@ class ManagerCockpitView extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: pendingList.isNotEmpty ? AppColors.accentOrange : AppColors.darkBorder,
+                    color: pendingList.isNotEmpty ? AppColors.accentOrange : AppColors.border(context),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -166,14 +173,14 @@ class ManagerCockpitView extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.darkSurface,
+              color: AppColors.surface(context),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.darkBorder),
+              border: Border.all(color: AppColors.border(context)),
             ),
-            child: const Center(
+            child: Center(
               child: Text(
                 'Onay bekleyen başvuru bulunmuyor.',
-                style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 13),
+                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
               ),
             ),
           )
@@ -186,21 +193,21 @@ class ManagerCockpitView extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
+            Text(
               'Daire Aidat Takibi',
               style: TextStyle(
-                color: AppColors.darkTextPrimary,
+                color: AppColors.textPrimary(context),
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
             ),
             Row(
               children: [
-                _buildFilterChip('Tümü', 'ALL'),
+                _buildFilterChip(context, 'Tümü', 'ALL'),
                 const SizedBox(width: 6),
-                _buildFilterChip('Geciken', 'OVERDUE'),
+                _buildFilterChip(context, 'Geciken', 'OVERDUE'),
                 const SizedBox(width: 6),
-                _buildFilterChip('Ödeyen', 'PAID'),
+                _buildFilterChip(context, 'Ödeyen', 'PAID'),
               ],
             ),
           ],
@@ -208,24 +215,24 @@ class ManagerCockpitView extends StatelessWidget {
 
         const SizedBox(height: 12),
 
-        ...flats.map((flat) => _buildFlatStatusCard(flat)),
+        ...flats.map((flat) => _buildFlatStatusCard(context, flat)),
       ],
     );
   }
 
-  Widget _buildMetricTile(String label, String value, {Color? color}) {
+  Widget _buildMetricTile(BuildContext context, String label, String value, {Color? color}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 10),
+          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
         ),
         const SizedBox(height: 2),
         Text(
           value,
           style: TextStyle(
-            color: color ?? AppColors.darkTextPrimary,
+            color: color ?? AppColors.textPrimary(context),
             fontSize: 14,
             fontWeight: FontWeight.bold,
           ),
@@ -234,7 +241,7 @@ class ManagerCockpitView extends StatelessWidget {
     );
   }
 
-  Widget _buildFilterChip(String label, String code) {
+  Widget _buildFilterChip(BuildContext context, String label, String code) {
     final isSelected = controller.flatFilter == code;
     return InkWell(
       onTap: () => controller.setFlatFilter(code),
@@ -242,16 +249,16 @@ class ManagerCockpitView extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.accentCyan : AppColors.darkSurface,
+          color: isSelected ? AppColors.accentCyan : AppColors.surface(context),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppColors.accentCyan : AppColors.darkBorder,
+            color: isSelected ? AppColors.accentCyan : AppColors.border(context),
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? const Color(0xFF0F172A) : AppColors.darkTextSecondary,
+            color: isSelected ? Colors.white : AppColors.textSecondary(context),
             fontSize: 11,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
@@ -265,9 +272,9 @@ class ManagerCockpitView extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.darkSurface,
+        color: AppColors.surface(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.darkBorder),
+        border: Border.all(color: AppColors.border(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,15 +292,15 @@ class ManagerCockpitView extends StatelessWidget {
               ),
               Text(
                 req.timeAgoStr,
-                style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11),
+                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
               ),
             ],
           ),
           const SizedBox(height: 6),
           Text(
             req.fullName,
-            style: const TextStyle(
-              color: AppColors.darkTextPrimary,
+            style: TextStyle(
+              color: AppColors.textPrimary(context),
               fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
@@ -301,7 +308,7 @@ class ManagerCockpitView extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             '${req.phone} • ${req.email}',
-            style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 12),
+            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
           ),
           const SizedBox(height: 12),
           Row(
@@ -315,7 +322,7 @@ class ManagerCockpitView extends StatelessWidget {
                   label: const Text('Onayla & Şifre Üret', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentGreen,
-                    foregroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
@@ -339,14 +346,14 @@ class ManagerCockpitView extends StatelessWidget {
     );
   }
 
-  Widget _buildFlatStatusCard(FlatPaymentStatus flat) {
+  Widget _buildFlatStatusCard(BuildContext context, FlatPaymentStatus flat) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.darkSurface,
+        color: AppColors.surface(context),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.darkBorder),
+        border: Border.all(color: AppColors.border(context)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -379,16 +386,16 @@ class ManagerCockpitView extends StatelessWidget {
                 children: [
                   Text(
                     flat.residentName,
-                    style: const TextStyle(
-                      color: AppColors.darkTextPrimary,
+                    style: TextStyle(
+                      color: AppColors.textPrimary(context),
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   Text(
                     '${flat.block} Blok D:${flat.unitNo}',
-                    style: const TextStyle(
-                      color: AppColors.darkTextSecondary,
+                    style: TextStyle(
+                      color: AppColors.textSecondary(context),
                       fontSize: 11,
                     ),
                   ),
@@ -401,8 +408,8 @@ class ManagerCockpitView extends StatelessWidget {
             children: [
               Text(
                 '₺${flat.amountDue.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  color: AppColors.darkTextPrimary,
+                style: TextStyle(
+                  color: AppColors.textPrimary(context),
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),

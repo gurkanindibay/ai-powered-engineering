@@ -284,45 +284,131 @@
     .app-scroll-content::-webkit-scrollbar-thumb { background: var(--border-dark); border-radius: 4px; }
 
     /* =========================================================================
-       HERO BALANCE CARD (Exact Flutter HeroBalanceCard component)
+       HERO BALANCE CARD (Exact Papara Dark Mode Floating Balance Style)
        ========================================================================= */
     .hero-balance-card {
-      background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-      border: 1.5px solid var(--border-dark);
-      border-radius: var(--radius-xl);
-      padding: 22px;
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
-      position: relative;
-    }
-
-    .hero-balance-card.overdue {
-      border-color: rgba(255, 75, 114, 0.5);
-    }
-
-    .hero-card-header {
+      background: var(--surface-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: var(--radius-lg);
+      padding: 20px;
       display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 18px;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      transition: background 0.2s, border-color 0.2s;
     }
 
-    .site-title {
-      color: var(--accent-cyan);
-      font-size: 14px;
+    .top-unit-capsule {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: var(--radius-pill);
+      background: var(--card-dark);
+      border: 1px solid var(--border-dark);
+      font-size: 12px;
       font-weight: 600;
-      letter-spacing: 0.5px;
-      margin-bottom: 2px;
+      color: var(--text-primary);
+      margin-bottom: 12px;
     }
 
-    .unit-subtitle {
+    .amount-label {
       color: var(--text-secondary);
       font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 12px;
+      letter-spacing: 0.2px;
+    }
+
+    .floating-balance-row {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      width: 100%;
+      margin-bottom: 14px;
+    }
+
+    .circular-action-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .circular-btn-withdraw {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: var(--surface-dark);
+      border: 2px solid var(--accent-red);
+      color: var(--accent-red);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+      transition: transform 0.15s;
+    }
+
+    .circular-btn-withdraw:hover {
+      transform: scale(1.05);
+    }
+
+    .circular-btn-deposit {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: var(--surface-dark);
+      border: 2px solid var(--accent-green);
+      color: var(--accent-green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+      transition: transform 0.15s;
+    }
+
+    .circular-btn-deposit:hover {
+      transform: scale(1.05);
+    }
+
+    .circular-btn-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .balance-center-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .balance-center-col .amount-val {
+      font-size: 34px;
+      font-weight: 800;
+      color: var(--text-primary);
+      letter-spacing: -0.5px;
+    }
+
+    .iban-subline {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      margin-top: 4px;
     }
 
     .status-pill {
       padding: 4px 10px;
       border-radius: 12px;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 600;
       display: inline-flex;
       align-items: center;
@@ -330,12 +416,12 @@
     }
 
     .status-pill.penalty {
-      background: rgba(239, 68, 68, 0.2);
+      background: rgba(239, 68, 68, 0.15);
       color: var(--accent-red);
     }
 
     .status-pill.ontime {
-      background: rgba(16, 185, 129, 0.2);
+      background: rgba(16, 185, 129, 0.15);
       color: var(--accent-green);
     }
 
@@ -345,39 +431,210 @@
       color: var(--accent-orange);
     }
 
-    .amount-label {
-      color: var(--text-secondary);
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 4px;
-    }
-
-    .amount-val-row {
+    /* Hesap Hareketleri Activity Feed */
+    .hesap-hareketleri-wrapper {
       display: flex;
-      align-items: baseline;
-      gap: 4px;
+      flex-direction: column;
+      gap: 10px;
     }
 
-    .amount-val {
-      color: var(--text-primary);
-      font-size: 34px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      font-feature-settings: "tnum";
+    .section-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 4px;
     }
 
-    /* KMK Statutory Delay Penalty Box */
-    .kmk-penalty-box {
-      margin-top: 10px;
-      padding: 8px 12px;
-      border-radius: 8px;
-      background: rgba(239, 68, 68, 0.12);
+    .section-title-papara {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      color: var(--text-secondary);
+    }
+
+    .section-action-papara {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .papara-activity-list {
+      background: var(--surface-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .activity-item {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 12px;
+      padding: 12px 14px;
+    }
+
+    .activity-icon-squircle {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .activity-icon-squircle.green {
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--accent-green);
+    }
+
+    .activity-icon-squircle.red {
+      background: rgba(239, 68, 68, 0.12);
       color: var(--accent-red);
+    }
+
+    .activity-meta {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .activity-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .activity-sub {
       font-size: 11px;
-      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .activity-values {
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .activity-amount {
+      font-size: 13.5px;
+      font-weight: 700;
+    }
+
+    .activity-amount.positive {
+      color: var(--accent-green);
+    }
+
+    .activity-amount.negative {
+      color: var(--accent-red);
+    }
+
+    .activity-date {
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    .activity-divider {
+      height: 1px;
+      background: var(--border-dark);
+      margin: 0 14px;
+    }
+
+    /* =========================================================================
+       LIGHT THEME — Complete Papara Light Canvas Override
+       All tokens rebound on .phone-screen.theme-light so every descendant
+       automatically picks up the light palette via CSS custom property inheritance.
+       ========================================================================= */
+    .phone-screen.theme-light {
+      --bg-dark:      #F8F9FA;   /* Papara Light Canvas */
+      --surface-dark: #FFFFFF;   /* Pure White Card Surface */
+      --card-dark:    #F1F3F5;   /* Inset Well / Pressed State */
+      --border-dark:  #E5E7EB;   /* Hairline Divider */
+      --text-primary: #0B0F19;   /* Near-Black Primary Text */
+      --text-secondary:#6B7280;  /* Slate Muted Text */
+      background: #F8F9FA;
+    }
+
+    /* AppBar — light border */
+    .phone-screen.theme-light .flutter-appbar {
+      background: #FFFFFF;
+      border-bottom: 1px solid #E5E7EB;
+    }
+
+    /* Status bar — white background in light mode */
+    .phone-screen.theme-light .status-bar {
+      background: #FFFFFF;
+      color: #0B0F19;
+    }
+
+    /* Brand wordmark color */
+    .phone-screen.theme-light .brand-text { color: #0B0F19; }
+
+    /* Action icon buttons */
+    .phone-screen.theme-light .action-icon-btn { color: #6B7280; }
+    .phone-screen.theme-light .action-icon-btn:hover { background: rgba(0,0,0,0.04); }
+
+    /* Circular action buttons — white fill in light */
+    .phone-screen.theme-light .circular-btn-withdraw,
+    .phone-screen.theme-light .circular-btn-deposit {
+      background: #FFFFFF;
+    }
+
+    /* Activity dividers */
+    .phone-screen.theme-light .activity-divider { background: #E5E7EB; }
+
+    /* Role chip */
+    .phone-screen.theme-light .role-chip {
+      background: #F1F3F5;
+      border-color: #E5E7EB;
+      color: #6B7280;
+    }
+
+    /* Card elevation in light */
+    .phone-screen.theme-light .hero-balance-card,
+    .phone-screen.theme-light .virtual-iban-card,
+    .phone-screen.theme-light .household-card,
+    .phone-screen.theme-light .action-tile,
+    .phone-screen.theme-light .papara-activity-list,
+    .phone-screen.theme-light .cashback-strip,
+    .phone-screen.theme-light .modal-dialog-card {
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+    }
+
+    /* Collection progress bar track — light-visible */
+    .phone-screen.theme-light .progress-track {
+      background: #E5E7EB;
+    }
+
+    /* Bottom navigation */
+    .phone-screen.theme-light .flutter-bottom-nav {
+      background: #FFFFFF;
+      border-top: 1px solid #E5E7EB;
+    }
+
+    /* Modal dialog */
+    .phone-screen.theme-light .modal-dialog-card {
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+
+    /* Resident rows */
+    .phone-screen.theme-light .resident-row {
+      background: #F8F9FA;
+      border-color: #E5E7EB;
+    }
+
+    /* IBAN display box */
+    .phone-screen.theme-light .iban-display-box {
+      background: #F1F3F5;
+      border-color: #E5E7EB;
+    }
+
+    /* Social message bubble */
+    .phone-screen.theme-light .social-msg-bubble {
+      background: #F1F3F5;
+      color: #0B0F19;
     }
 
     .hero-btn-row {
@@ -968,6 +1225,9 @@
             <button class="action-icon-btn" onclick="toggleOfflineMode()" title="Çevrimdışı / Çevrimiçi Simülasyonu">
               <span class="material-symbols-outlined" id="appbarWifiIcon" style="color: var(--accent-green);">wifi</span>
             </button>
+            <button class="action-icon-btn" onclick="toggleThemeMode()" title="Tema Değiştir (Açık / Koyu)">
+              <span class="material-symbols-outlined" id="appbarThemeIcon" style="color: var(--text-secondary);">light_mode</span>
+            </button>
             <button class="action-icon-btn" onclick="openProfileSheet()" title="Profil & Yetki Menüsü">
               <div class="user-avatar-circle" id="userAvatar">A</div>
             </button>
@@ -980,38 +1240,46 @@
           <!-- ================= VIEW 0: KAT MALİKİ (RESIDENT) ================= -->
           <div id="viewResident" style="display: flex; flex-direction: column; gap: 16px;">
             
-            <!-- 1. Hero Balance Card -->
-            <div class="hero-balance-card overdue" id="heroCard">
-              <div class="hero-card-header">
-                <div>
-                  <div class="site-title">Begonya Sitesi</div>
-                  <div class="unit-subtitle">A Blok D:14 &bull; Eylül 2026</div>
-                </div>
-                <div class="status-pill penalty" id="dueStatusPill">
-                  10 Gün Gecikme
-                </div>
+            <!-- 1. Hero Balance Card (Papara Dark Mode Floating Style) -->
+            <div class="hero-balance-card" id="heroCard">
+              <div class="top-unit-capsule">
+                <span class="site-title-capsule">Begonya Sitesi</span>
+                <span>🇹🇷</span>
+                <span class="unit-capsule-text">A Blok D:14</span>
+                <span class="material-symbols-outlined" style="font-size: 15px;">expand_more</span>
               </div>
 
               <div class="amount-label">Ödenecek Toplam Tutar</div>
-              <div class="amount-val-row">
-                <span class="amount-val" id="amountDisplay">₺1.423,33</span>
+
+              <!-- Floating Balance Row with [-] and [+] -->
+              <div class="floating-balance-row">
+                <!-- Left: [-] Hemen Öde -->
+                <div class="circular-action-col" onclick="openPaymentModal()">
+                  <div class="circular-btn-withdraw">
+                    <span class="material-symbols-outlined">remove</span>
+                  </div>
+                  <span class="circular-btn-label">Hemen Öde</span>
+                </div>
+
+                <!-- Center: Balance -->
+                <div class="balance-center-col">
+                  <div class="amount-val" id="amountDisplay">₺1.423,33</div>
+                  <div class="status-pill penalty" id="dueStatusPill">10 Gün Gecikme (%5 KMK)</div>
+                </div>
+
+                <!-- Right: [+] Detay -->
+                <div class="circular-action-col" onclick="openDuesDetailModal()">
+                  <div class="circular-btn-deposit">
+                    <span class="material-symbols-outlined">add</span>
+                  </div>
+                  <span class="circular-btn-label">Detay</span>
+                </div>
               </div>
 
-              <!-- KMK %5 Delay Penalty -->
-              <div class="kmk-penalty-box" id="kmkBox">
-                <span class="material-symbols-outlined" style="font-size: 16px;">info</span>
-                <span>Ana Para: ₺1.400,00 + KMK %5 Kanuni Gecikme: ₺23,33</span>
-              </div>
-
-              <!-- Hero Actions -->
-              <div class="hero-btn-row">
-                <button class="btn-papara-cta" onclick="openPaymentModal()">
-                  <span class="material-symbols-outlined" style="font-size: 18px;">credit_card</span>
-                  <span>Hemen Öde</span>
-                </button>
-                <button class="btn-papara-outlined" onclick="openDuesDetailModal()">
-                  Detay
-                </button>
+              <!-- Monospace IBAN line -->
+              <div class="iban-subline" onclick="copyIbanString()">
+                <span>Daire IBAN: TR12 0006 2000 0000 0000 0014</span>
+                <span class="material-symbols-outlined" style="font-size: 13px;">content_copy</span>
               </div>
             </div>
 
@@ -1048,6 +1316,82 @@
                   <span class="material-symbols-outlined">person_add</span>
                 </div>
                 <div class="action-label">Sakin Davet</div>
+              </div>
+            </div>
+
+            <!-- Hesap Hareketleri Feed (Papara Screen Activity List) -->
+            <div class="hesap-hareketleri-wrapper">
+              <div class="section-header-row">
+                <span class="section-title-papara">HESAP HAREKETLERİ →</span>
+                <span class="section-action-papara" onclick="openReceiptsModal()">Tümü</span>
+              </div>
+              <div class="papara-activity-list">
+                <div class="activity-item">
+                  <div class="activity-icon-squircle red">
+                    <span class="material-symbols-outlined">apartment</span>
+                  </div>
+                  <div class="activity-meta">
+                    <div class="activity-title">Eylül 2026 Aidatı</div>
+                    <div class="activity-sub">Sanal IBAN ile FAST</div>
+                  </div>
+                  <div class="activity-values">
+                    <div class="activity-amount negative">₺1.423,33</div>
+                    <div class="activity-date">Bugün 14:15</div>
+                  </div>
+                </div>
+                <div class="activity-divider"></div>
+                <!-- Social transfer with message bubble (Papara P2P pattern) -->
+                <div class="activity-item" style="flex-direction: column; align-items: stretch; gap: 6px;">
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="activity-icon-squircle green">
+                      <span class="material-symbols-outlined">check_circle</span>
+                    </div>
+                    <div class="activity-meta">
+                      <div class="activity-title">Ağustos 2026 Aidatı</div>
+                      <div class="activity-sub">Kredi Kartı ile Ödendi</div>
+                    </div>
+                    <div class="activity-values">
+                      <div class="activity-amount positive">₺1.400,00</div>
+                      <div class="activity-date">15.08.2026 10:20</div>
+                    </div>
+                  </div>
+                  <!-- Social message bubble (Papara P2P note pattern) -->
+                  <div style="display: flex; align-items: center; gap: 6px; padding-left: 50px;">
+                    <span class="material-symbols-outlined" style="font-size: 13px; color: var(--text-secondary);">chat_bubble_outline</span>
+                    <span class="social-msg-bubble" style="font-size: 11px; color: var(--text-secondary); background: var(--card-dark); padding: 4px 8px; border-radius: 8px;">Teşekkür ederim, zamanında!</span>
+                  </div>
+                </div>
+                <div class="activity-divider"></div>
+                <div class="activity-item">
+                  <div class="activity-icon-squircle green">
+                    <span class="material-symbols-outlined">handyman</span>
+                  </div>
+                  <div class="activity-meta">
+                    <div class="activity-title">Demirbas Katılım Payı</div>
+                    <div class="activity-sub">Yönetim Hesabına Transfer</div>
+                  </div>
+                  <div class="activity-values">
+                    <div class="activity-amount positive">₺500,00</div>
+                    <div class="activity-date">02.08.2026 16:45</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cashback Strip (Papara Cashback Section Pattern) -->
+            <div class="cashback-strip" style="background: var(--surface-dark); border: 1px solid var(--border-dark); border-radius: var(--radius-md); overflow: hidden;">
+              <div class="section-header-row" style="padding: 12px 14px 10px;">
+                <span class="section-title-papara">CASHBACK →</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px 14px; background: var(--bg-dark); margin: 0 10px 10px; border-radius: 12px; border: 1px solid var(--border-dark);">
+                <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(16, 185, 129, 0.15); color: var(--accent-green); display: flex; align-items: center; justify-content: center;">
+                  <span class="material-symbols-outlined" style="font-size: 18px;">local_offer</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 2px; flex: 1;">
+                  <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Alışveriş Geri Ödeme</div>
+                  <div style="font-size: 11px; color: var(--text-secondary);">Her ay ₺15 kazan • Site ödemeleri dahil</div>
+                </div>
+                <div style="font-size: 11px; font-weight: 700; color: var(--accent-green); background: rgba(16,185,129,0.12); padding: 4px 8px; border-radius: 8px;">%5</div>
               </div>
             </div>
 
@@ -1133,7 +1477,7 @@
                   <span style="color: var(--accent-green); font-weight: 700;">%76 Tahsil Edildi (₺143.640)</span>
                   <span style="color: var(--accent-red); font-weight: 700;">₺45.360 Kalan</span>
                 </div>
-                <div style="width: 100%; height: 8px; background: rgba(0,0,0,0.4); border-radius: 4px; overflow: hidden;">
+                <div class="progress-track" style="width: 100%; height: 8px; background: var(--card-dark); border-radius: 4px; overflow: hidden;">
                   <div style="width: 76%; height: 100%; background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan)); border-radius: 4px;"></div>
                 </div>
               </div>
@@ -1446,6 +1790,10 @@
             <span class="material-symbols-outlined" style="font-size: 16px;">wifi_off</span>
             <span>Çevrimdışı / Çevrimiçi</span>
           </button>
+          <button class="btn-sim-control" id="ctrlBtnTheme" onclick="toggleThemeMode()">
+            <span class="material-symbols-outlined" id="ctrlThemeIcon" style="font-size: 16px;">light_mode</span>
+            <span>Açık / Koyu Tema</span>
+          </button>
         </div>
       </div>
 
@@ -1457,6 +1805,30 @@
   <script>
     let currentRole = 'resident';
     let isOffline = false;
+    let isDarkMode = true;
+
+    function toggleThemeMode() {
+      isDarkMode = !isDarkMode;
+      const phoneScreen = document.getElementById('phoneScreen');
+      const appbarThemeIcon = document.getElementById('appbarThemeIcon');
+      const ctrlThemeIcon = document.getElementById('ctrlThemeIcon');
+
+      if (isDarkMode) {
+        phoneScreen.classList.remove('theme-light');
+        if (appbarThemeIcon) {
+          appbarThemeIcon.innerText = 'light_mode';
+          appbarThemeIcon.style.color = 'var(--text-secondary)';
+        }
+        if (ctrlThemeIcon) ctrlThemeIcon.innerText = 'light_mode';
+      } else {
+        phoneScreen.classList.add('theme-light');
+        if (appbarThemeIcon) {
+          appbarThemeIcon.innerText = 'dark_mode';
+          appbarThemeIcon.style.color = '#0B0F19';
+        }
+        if (ctrlThemeIcon) ctrlThemeIcon.innerText = 'dark_mode';
+      }
+    }
 
     function switchRole(role) {
       currentRole = role;

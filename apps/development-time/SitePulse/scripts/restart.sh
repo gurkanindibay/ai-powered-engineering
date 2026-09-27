@@ -55,7 +55,7 @@ echo "  ✔ Prototype Server online (PID: $PROTO_PID)"
 # 4. Launch Flutter Native Web App (Port 9090)
 echo "▶ [4/4] Starting Flutter Web Client on port 9090..."
 cd "$SITEPULSE_ROOT/flutter"
-nohup "$FLUTTER_BIN" run -d web-server --web-port 9090 --web-hostname 0.0.0.0 > /tmp/sitepulse-flutter.log 2>&1 &
+nohup "$FLUTTER_BIN" run -d web-server --web-port 9090 --web-hostname 0.0.0.0 < /dev/null > /tmp/sitepulse-flutter.log 2>&1 &
 FLUTTER_PID=$!
 
 echo -n "  Waiting for Flutter Web server..."

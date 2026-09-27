@@ -18,9 +18,9 @@ class VirtualIbanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.darkSurface,
+        color: AppColors.surface(context),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.darkBorder, width: 1),
+        border: Border.all(color: AppColors.border(context), width: 1),
       ),
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -44,13 +44,13 @@ class VirtualIbanCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Daireye Özel Sanal IBAN',
                         style: TextStyle(
-                          color: AppColors.darkTextPrimary,
+                          color: AppColors.textPrimary(context),
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
@@ -58,7 +58,7 @@ class VirtualIbanCard extends StatelessWidget {
                       Text(
                         'FAST / EFT ile 7/24 Kesintisiz',
                         style: TextStyle(
-                          color: AppColors.darkTextSecondary,
+                          color: AppColors.textSecondary(context),
                           fontSize: 11,
                         ),
                       ),
@@ -87,9 +87,9 @@ class VirtualIbanCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: AppColors.darkBackground,
+              color: AppColors.card(context),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.darkBorder),
+              border: Border.all(color: AppColors.border(context)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -97,9 +97,9 @@ class VirtualIbanCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     iban,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'monospace',
-                      color: AppColors.darkTextPrimary,
+                      color: AppColors.textPrimary(context),
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.1,
@@ -148,8 +148,8 @@ class VirtualIbanCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             'Bu IBAN sadece $unitDesc için tanımlanmıştır. Açıklamaya hiçbir şey yazmasanız dahi ödemeniz anında sistemde onaylanır.',
-            style: const TextStyle(
-              color: AppColors.darkTextSecondary,
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
               fontSize: 11,
               height: 1.4,
             ),

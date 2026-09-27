@@ -24,10 +24,8 @@
    - High legibility is prioritized over decorative backgrounds: zero heavy neon glows, zero harsh drop shadows, zero chromatic aberration.
 
 2. **Black & White Dominance with Intentional Semantic Color**:
-   - **Solid Jet Black (`#0B0F19` / `#111827`)** is the primary brand and action anchor. Used for primary CTA buttons, active tabs, active filter capsules, and active navigation indicators.
-   - Colors are strictly functional and reserved for financial states:
-     - **Emerald Green (`#10B981`)**: Income, cashback, positive balances, successful transaction verification.
-     - **Coral Crimson (`#EF4444`)**: Unread notification badges, overdue debt alerts, negative balances.
+     - **Emerald Green (`#10B981`)**: Income, positive balances, successful verification, and `[+] Yatır` action.
+     - **Coral Crimson (`#EF4444`)**: Unread notification badges, overdue debt alerts, negative balances, and `[-] Çek` action.
      - **Muted Bank/Brand Accents (`#2563EB`, `#F59E0B`)**: Reserved strictly for quick-contact avatar badges and category chips.
 
 3. **Curved Geometry Scale**:
@@ -47,47 +45,49 @@
 | `paparaCanvas` | `#F8F9FA` | `#121317` (Matte Obsidian) | Root scaffold background canvas |
 | `paparaSurface` | `#FFFFFF` | `#1C1D24` (Dark Graphite) | Primary cards, modal dialogs, bottom sheets |
 | `paparaCardStacked` | `#F1F3F5` | `#181920` | Stacked card depth underneath notice cards |
-| `paparaBorder` | `#E5E7EB` | `#282A33` | 1.0px razor structural borders, card outlines |
-| `paparaTextPrimary` | `#0B0F19` | `#FFFFFF` | Hero balances, screen titles, primary headers |
-| `paparaTextSecondary`| `#6B7280` | `#8E9297` | Subtitles, account numbers, timestamps |
-| `paparaTextMuted` | `#9CA3AF` | `#63676E` | Micro captions, inactive labels, placeholders |
-| `paparaActionPrimary`| `#0B0F19` | `#FFFFFF` | Primary pill button fill or contrast text |
+| `paparaBorder` | `#E5E7EB` | `#282A33` | 1.0px hairline separator / outline |
+| `paparaActionPrimary` | `#0B0F19` | `#FFFFFF` | Primary pill button fill or contrast text |
 | `paparaWithdrawRed` | `#EF4444` | `#E53935` | Negative action: `[-] Çek` / `Aidat Öde` circular button |
 | `paparaDepositGreen` | `#10B981` | `#43A047` | Positive action: `[+] Yatır` circular button, `+₺` transfers |
 | `paparaBadgeRed` | `#EF4444` | `#E53935` | Notification counter badges (`1`, `2`), campaign pills |
 
 ### 2.2 Papara Black & White (Dark Mode) Architectural Patterns
 
+![Papara Ticari Dark Mode Official Reference](images/papara_dark_mode_reference.png)
+
+*Figure 2.1: Official Papara Ticari Dark Mode production interface illustrating the floating balance, circular action buttons, clean typography, transaction list, and bottom navigation bar.*
+
 ```
 ┌────────────────────────────────────────────────────────┐
-│  [ ☰ ]                    p                    (Avatar)│
-│                                                Hesabım │
+│  [ ☰ (2) ]               papara               (Store)  │
+│                          TİCARİ               Hesabım  │
 │                                                        │
-│     ( 🎁 ₺45 )          ( Türk Lirası 🇹🇷 TL ⌵ )        │
+│                  ( Türk Lirası 🇹🇷 TL ⌵ )               │
 │                                                        │
-│        (-)                 ₺1,38                 (+)   │
+│        (-)            ₺14.517,10                 (+)   │
 │        Çek                                      Yatır  │
-│                   Papara Numaran: 10147XXXXX           │
+│        IBAN'ın TR62 0006 2001 0160 6626 7106 22        │
 │                                                        │
+│  HESAP HAREKETLERİ →                                   │
 │  ┌──────────────────────────────────────────────────┐  │
-│  │ 08 Şubat 2023 11:04                              │  │
-│  │ Dayanışma zamanı 🤝                              │  │
-│  │ Deprem bölgesindeki sivil toplum kuruluşları...  │  │
+│  │ [🛍️]  Üye İş Yeri Ödeme                  ₺240,00  │  │
+│  │       Ticari Kart Ödemesi             Bugün 19:30│  │
+│  ├──────────────────────────────────────────────────┤  │
+│  │ [🛍️]  Üye İş Yeri Ödeme                   ₺30,00  │  │
+│  │       Ticari Kart Ödemesi             Bugün 15:20│  │
+│  ├──────────────────────────────────────────────────┤  │
+│  │ [🎁]  Sanal Hediye Kartı                   ₺50,00  │  │
+│  │       Ticari Kart Ödemesi        12.07.2024 12:45│  │
+│  ├──────────────────────────────────────────────────┤  │
+│  │ [💱]  Döviz İşlemi                       ₺560,28  │  │
+│  │       Ticari Kart Ödemesi        12.07.2024 11:02│  │
+│  ├──────────────────────────────────────────────────┤  │
+│  │ [💳]  POS Ödemesi                         ₺129,00  │  │
+│  │       Ticari Kart Ödemesi        11.07.2024 21:00│  │
 │  └──────────────────────────────────────────────────┘  │
-│  ════════════════════════════════════════════════════  │ (Stacked card)
 │                                                        │
-│  SON İŞLEMLER →                                        │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │ (Avatar)  Turgut Efe Küçük               +₺0,08  │  │
-│  │           Gelen Transfer       07 Şubat 08:49    │  │
-│  │           💬 Al hadi al yengemi yemeğe götür...  │  │
-│  └──────────────────────────────────────────────────┘  │
-│                                                        │
-│  CASHBACK →                                            │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │ [Dizi %50]  (N) Netflix                          │  │
-│  │                 Her ay ₺32 kazan                 │  │
-│  └──────────────────────────────────────────────────┘  │
+│  [ ⌂ ]      [ 🤲 ]       [ ➤ ]        [ 🕒 ]     [ 💳 ] │
+│Ana Sayfa   Ödeme Al   Para Gönder  Hareketler  Ticari Kart│
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -115,7 +115,204 @@
 5. **Chat / Transfer Message Snippets**:
    - Transaction list items include a preview note with speech bubble icon `💬` below the transaction type, rendering user remarks in `#8E9297`.
 
-### 2.3 Elevation & Shadows
+### 2.3 Papara Virtual Card & Settings Architecture
+
+![Papara Sanal Kart Settings](images/papara_virtual_card_settings.png)
+
+*Figure 2.2: Official Papara Virtual Card management screen showing top back navigation, embedded visual card mockup, iOS-style toggle switch, and hairline-divided settings rows with trailing chevrons.*
+
+```
+┌────────────────────────────────────────────────────────┐
+│  <                     Sanal Kart                      │
+│                                                        │
+│     ┌────────────────────────────────────────────┐     │
+│     │ [papara]                     [mastercard]  │     │
+│     │                                            │     │
+│     │               ( Card Artwork )             │     │
+│     └────────────────────────────────────────────┘     │
+│                          [ 💳 ]                        │
+│             Bu kart ile henüz harcama yapmadın.        │
+│ ────────────────────────────────────────────────────── │
+│  Kullanıma Açık                                 ( ● )  │
+│ ────────────────────────────────────────────────────── │
+│  Limit İşlemleri                                    >  │
+│  Papara Card'ının limiti, Papara bakiyen ile aynı...   │
+│ ────────────────────────────────────────────────────── │
+│  Abonelikler                                        >  │
+│ ────────────────────────────────────────────────────── │
+│  Masterpass İşlemleri                               >  │
+│  Kart bilgilerini girmeden kolayca alışveriş yap.      │
+│ ────────────────────────────────────────────────────── │
+│  Sanal Kart Adını Değiştir                          >  │
+│ ────────────────────────────────────────────────────── │
+│  Kartı İptal Et                                     >  │
+└────────────────────────────────────────────────────────┘
+```
+
+#### Key Virtual Card & Settings Principles:
+1. **Header**: Minimalist back chevron `<` left aligned, centered bold title (`20px Bold #FFFFFF`).
+2. **Card Visual**: High-fidelity embossed card preview centered with empty-state icon and hint below.
+3. **Toggle Switch**: iOS/Papara-standard pill switch (`#FFFFFF` thumb, `#1C1D24` track in off, `#10B981` in active) embedded seamlessly in full-width row.
+4. **List Rows**:
+   - Primary label: `15px SemiBold #FFFFFF`.
+   - Explanatory sublabel: `13px Regular #8E9297`.
+   - Hairline separator: `1.0px solid #282A33`.
+   - Trailing accessory: Right chevron `>` (`#8E9297`).
+
+---
+
+### 2.4 Papara Personal Home, Social Transfers & Privacy Masking
+
+<div style="display: flex; gap: 16px;">
+  <img src="images/papara_home_transactions_social.png" width="48%" alt="Papara Social Transactions" />
+  <img src="images/papara_home_bank_transfers.png" width="48%" alt="Papara Bank Transfers" />
+</div>
+
+*Figure 2.3: Official Papara Personal Dark Mode screens illustrating privacy masking (`₺ ****`), user avatar chat bubbles, bank logos, and cashback promotional banners.*
+
+```
+┌────────────────────────────────────────────────────────┐
+│  14:45                                          [74%]  │
+│  [ ☰ ]¹                    ( P )              (Avatar) │
+│                                                Hesabım │
+│                  ( Türk Lirası 🇹🇷 TL ⌵ )               │
+│                                                        │
+│        (-)                 ₺ ****                (+)   │
+│        Çek                                      Yatır  │
+│                   Papara Numaran: 8797261127           │
+│                                                        │
+│  SON İŞLEMLER →                                        │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ (Avatar)  Mustafa Kamilçelebi             ₺ **** │  │
+│  │           Giden Transfer                 Dün 23:49│ │
+│  │           💬 Teşekkür ederim kardeşim.           │  │
+│  ├──────────────────────────────────────────────────┤  │
+│  │ (Avatar)  Mustafa Kamilçelebi             ₺ **** │  │
+│  │           Gelen Transfer                 Dün 23:44│ │
+│  │           💬 Kralsın abi videolarını izliyom...  │  │
+│  ├──────────────────────────────────────────────────┤  │
+│  │ (QNB)     QNB Finansbank                  ₺ **** │  │
+│  │           Banka Transferi             Bugün 14:48│  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                        │
+│  CASHBACK →                                            │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ [Müzik %50]  (Spotify)  Spotify                  │  │
+│  │                         Her ay ₺15 kazan         │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                        │
+│  [ ⌂ ]      [ ▣ ]        [ ➤ ]        [ ☰ ]     [ 💳 ] │
+│Ana Sayfa  QR İşlem    Para Trans     Ödemeler  Papara Card│
+└────────────────────────────────────────────────────────┘
+```
+
+#### Key Social & Personal Home Principles:
+1. **Privacy Masking Mode (`₺ ****`)**:
+   - The user can mask their balance and transaction amounts with asterisks (`₺ ****`) for privacy in public environments.
+   - Account identifier (Papara No or Flat No) remains displayed in subtle `#8E9297`.
+2. **Transaction Item Variations**:
+   - **P2P Social Transfer**: 40x40dp circular avatar photo of contact, transfer direction (`Giden Transfer` in red / `Gelen Transfer` in green), and an embedded chat comment bubble (`💬`).
+   - **Bank Transfer**: Official circular bank brand logo (e.g. QNB Finansbank, Ziraat Bankası) with transaction description `Banka Transferi`.
+3. **Cashback Banner**:
+   - Squircle partner logo (`Spotify`, `Uber`, `Netflix`).
+   - Category incentive tag (`Müzik %50`, `Ulaşım %20`) in green accent.
+   - Reward summary (`Her ay ₺15 kazan`).
+
+---
+
+### 2.5 Papara Multi-Step Verification Wizard Architecture
+
+![Papara Verification Wizard Steps](images/papara_step_wizard_nfc.png)
+
+*Figure 2.4: Official Papara identity verification wizard featuring individual step cards, completion status badges, and clear action instructions.*
+
+```
+┌────────────────────────────────────────────────────────┐
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ [ ✔ ]   Kimlik Doğrulama                         │  │
+│  │         Kimlik bilgilerini kontrol et.           │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  (2)    NFC                                      │  │
+│  │         Kimlik kartını NFC ile okut.             │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  (3)    Kimlik Ön Yüz                            │  │
+│  │         Kimliğinin ön yüzünün fotoğrafını çek.   │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  (4)    Kimlik Arka Yüz                          │  │
+│  │         Kimliğinin arka yüzünün fotoğrafını çek. │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  (5)    Meslek                                   │  │
+│  │         Mesleğini seç.                           │  │
+│  └──────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────┘
+```
+
+#### Key Multi-Step Wizard Principles:
+1. **Individual Card Containers**:
+   - Each step is rendered in a discrete, elevated graphite container (`#1C1D24` background, `16px` border-radius, `1px solid #282A33`).
+2. **Step State Indicators**:
+   - **Completed Step**: Emerald green circle (`#10B981`) with pure white checkmark `[✔]`.
+   - **Active Current Step**: High-contrast white circle (`#FFFFFF`) with dark step number `[2]`.
+   - **Pending Inactive Step**: Subtle muted graphite circle (`#282A33`) with gray step number `[3]`, `[4]`, `[5]`.
+3. **Step Typography**:
+   - Step Title: `16px SemiBold #FFFFFF`.
+   - Step Action Instruction: `13px Regular #8E9297`.
+
+---
+
+### 2.6 Papara Fullscreen Alert & Error Architecture
+
+![Papara Error Modal Screen](images/papara_error_modal_dialog.png)
+
+*Figure 2.5: Official Papara error screen displaying centered error iconography, concise diagnostic explanation, and bottom full-width primary CTA pill button.*
+
+```
+┌────────────────────────────────────────────────────────┐
+│  16:50                                           [30%] │
+│                                                        │
+│                                                        │
+│                        ╭─────╮                         │
+│                        │  ✕  │  (Red Circle #EF4444)   │
+│                        ╰─────╯                         │
+│                                                        │
+│                         Hata                           │
+│                                                        │
+│          Bu kartın başvurusu başka bir kullanıcı        │
+│          tarafından yapılmış. Yalnızca kendi            │
+│          hesabından başvurduğun bir kartı aktive       │
+│          edebilirsin.                                  │
+│                                                        │
+│                                                        │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │                      Tamam                       │  │
+│  └──────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────┘
+```
+
+#### Key Alert & Error Dialog Principles:
+1. **Iconography**:
+   - Centered large circular glyph (`64px - 72px` diameter) with `2.5px` border in Coral Crimson (`#EF4444`) containing a bold `✕` symbol.
+2. **Headline**:
+   - `22px - 24px Bold #FFFFFF`, centered directly beneath the icon.
+3. **Body Explanation**:
+   - `14px Regular #8E9297` with `line-height: 1.5`, max-width `300dp`, centered text explaining the exact operational constraint without technical jargon.
+4. **Primary CTA Pill Button**:
+   - Full-width pill button (`height: 52px`, `border-radius: 14px - 16px`).
+   - Solid pure white fill (`#FFFFFF`), bold jet black text (`#000000`, `15px Bold`).
+   - Pinned to the bottom of the viewport with safe-area padding.
+
+---
+
+### 2.7 Elevation & Shadows
 - **Card Soft Elevation**: `box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);`
 - **Dropdown / Action Sheet Shadow**: `box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);`
 - **Floating Button Shadow**: `box-shadow: 0 4px 12px rgba(11, 15, 25, 0.12);`
@@ -328,3 +525,129 @@ How Papara's fintech patterns map directly to SitePulse's residential management
 - [x] Card corner radius: `20px`; Button radius: `12px - 16px`; Badges: `50%` circle.
 - [x] All typography must be English in code, cleanly formatted with Turkish Lira (`₺`) currency symbols.
 - [x] All financial calculations must use high-precision decimals (`Decimal` / `rust_decimal`).
+
+---
+
+## 7. Dual-Theme Implementation Specification
+
+*Sourced from official Papara Ticari "Dark Mode seçeneği geldi!" launch screens (dark & light side-by-side toggle).*
+
+### 7.1 Theme Toggle Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│               PAPARA TICARI DUAL-THEME SPECIFICATION                 │
+│                                                                      │
+│   DARK (Midnight)          │   LIGHT (Clean Canvas)                  │
+│   ───────────────────────  │   ─────────────────────────────────     │
+│   Canvas:    #121317       │   Canvas:    #F8F9FA                    │
+│   Surface:   #1C1D24       │   Surface:   #FFFFFF                    │
+│   Card Well: #181920       │   Card Well: #F1F3F5                    │
+│   Border:    #282A33       │   Border:    #E5E7EB                    │
+│   Text P:    #FFFFFF       │   Text P:    #0B0F19                    │
+│   Text S:    #8E9297       │   Text S:    #6B7280                    │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**Invariant Semantic Colors (Same in Both Themes):**
+
+| Color | Hex | Usage |
+| :--- | :--- | :--- |
+| Withdraw Red | `#EF4444` | [-] Cek circular button, overdue badge |
+| Deposit Green | `#10B981` | [+] Yatir circular button, income amounts |
+| Brand Blue | `#0284C7` | Active nav tab, primary CTA, IBAN copy button |
+| Alert Amber | `#F59E0B` | Offline mode, "Link Uret" badge |
+
+### 7.2 CSS Variable Inheritance Model
+
+Scope ALL color tokens as CSS custom properties on `.phone-screen`. Adding class `.theme-light` rebinds them for every descendant automatically — no per-component `if (isDark)` branching needed.
+
+**Critical Rule:** Never use hardcoded `rgba(0,0,0,N)` for track fills or inset wells — always use `var(--card-dark)`. The only permitted hardcoded black is the modal backdrop: `rgba(0,0,0,0.75)`.
+
+### 7.3 Component-Specific Light-Mode Overrides
+
+| Component | Dark Default | Light Override |
+| :--- | :--- | :--- |
+| `.status-bar` | `var(--bg-dark)` | `background: #FFFFFF; color: #0B0F19` |
+| `.flutter-appbar` | `var(--bg-dark)` | `background: #FFFFFF; border: 1px solid #E5E7EB` |
+| `.flutter-bottom-nav` | `var(--surface-dark)` | `background: #FFFFFF; border-top: 1px solid #E5E7EB` |
+| `.circular-btn-*` | `var(--surface-dark)` | `background: #FFFFFF` |
+| `.resident-row` | `var(--bg-dark)` | `background: #F8F9FA` |
+| `.iban-display-box` | `var(--bg-dark)` | `background: #F1F3F5` |
+| progress track | `rgba(0,0,0,0.4)` ❌ | `background: var(--card-dark)` ✅ |
+
+---
+
+## 8. Social P2P Transfer Message Bubble Pattern
+
+*Sourced from Papara "Son Islemler" feed with P2P social messaging.*
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  [Avatar] Mustafa Kamilcelebi        TL ****        Dun 23:49      │
+│           Giden Transfer                                            │
+│           [chat] Tesekkur ederim kardesim.   <- message bubble      │
+│                                                                     │
+│  [Avatar] Derin Sak                  TL ****        03 Nisan 19:48 │
+│           Gelen Transfer                                            │
+│           [chat] Abi fazla biseyy degil ama bir atayim dedim        │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Implementation Rules:**
+- Avatar: 40dp circle, real user photo or initials monogram.
+- Amount: `TL ****` privacy masking when balance-hiding is active.
+- Message bubble: `padding-left: 50px` indent below transaction row.
+  - Icon: `chat_bubble_outline` Material Symbol, `13px`, `var(--text-secondary)`.
+  - Text: `11px`, contained in `var(--card-dark)` pill (`border-radius: 8px; padding: 4px 8px`).
+- Positive (Gelen Transfer): `var(--accent-green)`.
+- Negative (Giden Transfer): `var(--accent-red)`.
+
+---
+
+## 9. Fullscreen Error & Confirmation State Pattern
+
+*Sourced from Papara "Hata" card activation error screen.*
+
+```
+┌──────────────────────────────────┐
+│                                  │
+│         [ X circle - 64dp ]      │
+│             Hata                 │
+│                                  │
+│  Bu kartin basvurusu baska bir   │
+│  kullanici tarafindan yapilmis.  │
+│                                  │
+│  ┌────────────────────────────┐  │
+│  │          Tamam             │  │  <- full-width white, 56dp
+│  └────────────────────────────┘  │
+└──────────────────────────────────┘
+```
+
+**Specifications:**
+- Background: Jet black `#0A0A0A`, pure fullscreen — no card container.
+- Icon Container: `64dp` circle, `background: rgba(239,68,68,0.15)`, `border: 2px solid #EF4444`.
+  - Icon: `close`, `32px`, `#EF4444`.
+- Title: `20px`, `font-weight: 700`, `#FFFFFF`, centered.
+- Body: `14px`, `#8E9297`, centered, `max-width: 280px`, `line-height: 1.5`.
+- CTA: Full-width white, `border-radius: 16px`, `height: 56dp`, fixed bottom with `16dp` margin.
+  - Text: `"Tamam"`, `16px`, `font-weight: 700`, `#0B0F19`.
+- **SitePulse Equivalent**: "Odeme Basarisiz" state, "Sistem Hatasi" modal.
+
+---
+
+## 10. Verification Wizard Step List Pattern
+
+*Sourced from Papara "Kimlik Dogrulama" step-based identity verification screen.*
+
+**Step State Indicators:**
+
+| State | Step Indicator | Border | Title Color |
+| :--- | :--- | :--- | :--- |
+| **Completed** | Green circle `check`, `32dp` | `1px solid var(--border-dark)` | Bold `var(--text-primary)` |
+| **Current** | White circle with step number | `2px solid var(--primary)` | Bold `var(--text-primary)` |
+| **Pending** | Grey circle with step number | `1px solid var(--border-dark)` | `var(--text-secondary)` |
+
+- Container: `border-radius: 16px`, full-width, `padding: 14px 16px`.
+- Gap between steps: `8dp`.
+- **SitePulse Equivalent**: Resident onboarding wizard (ID verify → IBAN link → Address confirm → Welcome).

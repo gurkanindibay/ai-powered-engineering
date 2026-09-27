@@ -24,6 +24,28 @@ class AppColors {
   static const lightBorder = Color(0xFFE2E8F0);
   static const lightTextPrimary = Color(0xFF0F172A);
   static const lightTextSecondary = Color(0xFF64748B);
+
+  // Dynamic Theme Helpers
+  static bool isDark(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark;
+
+  static Color surface(BuildContext context) =>
+      isDark(context) ? darkSurface : lightSurface;
+
+  static Color background(BuildContext context) =>
+      isDark(context) ? darkBackground : lightBackground;
+
+  static Color card(BuildContext context) =>
+      isDark(context) ? darkCard : lightCard;
+
+  static Color border(BuildContext context) =>
+      isDark(context) ? darkBorder : lightBorder;
+
+  static Color textPrimary(BuildContext context) =>
+      isDark(context) ? darkTextPrimary : lightTextPrimary;
+
+  static Color textSecondary(BuildContext context) =>
+      isDark(context) ? darkTextSecondary : lightTextSecondary;
 }
 
 class AppTheme {

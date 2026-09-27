@@ -51,4 +51,27 @@ void main() {
     expect(find.text('Begonya Sitesi'), findsOneWidget);
     expect(find.text('Kardelen Rezidans'), findsOneWidget);
   });
+
+  testWidgets('SitePulseApp toggles theme mode between Dark and Light correctly', (WidgetTester tester) async {
+    final controller = DashboardController();
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Default theme is dark
+    expect(controller.isDarkMode, isTrue);
+
+    // Toggle to Light mode
+    controller.toggleTheme();
+    await tester.pumpAndSettle();
+
+    expect(controller.isDarkMode, isFalse);
+    expect(find.text('SitePulse'), findsOneWidget);
+    expect(find.text('₺1423.33'), findsOneWidget);
+
+    // Toggle back to Dark mode
+    controller.toggleTheme();
+    await tester.pumpAndSettle();
+
+    expect(controller.isDarkMode, isTrue);
+  });
 }

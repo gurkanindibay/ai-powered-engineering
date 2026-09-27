@@ -32,9 +32,9 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
     final session = widget.controller.userSession;
 
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.darkSurface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.only(
         top: 16,
@@ -52,7 +52,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                 width: 44,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.darkBorder,
+                  color: AppColors.border(context),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -84,8 +84,8 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                           Flexible(
                             child: Text(
                               session.fullName,
-                              style: const TextStyle(
-                                color: AppColors.darkTextPrimary,
+                              style: TextStyle(
+                                color: AppColors.textPrimary(context),
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -113,8 +113,8 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                       const SizedBox(height: 2),
                       Text(
                         '${session.email} • ${session.unitName}',
-                        style: const TextStyle(
-                          color: AppColors.darkTextSecondary,
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
                           fontSize: 12,
                         ),
                       ),
@@ -125,14 +125,14 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
             ),
 
             const SizedBox(height: 20),
-            const Divider(color: AppColors.darkBorder),
+            Divider(color: AppColors.border(context)),
             const SizedBox(height: 12),
 
             // Role Switcher Chips
-            const Text(
+            Text(
               'Rol Simülasyonu (Hızlı Değiştir)',
               style: TextStyle(
-                color: AppColors.darkTextSecondary,
+                color: AppColors.textSecondary(context),
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -151,9 +151,9 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                     Navigator.pop(context);
                   },
                   selectedColor: AppColors.accentCyan,
-                  backgroundColor: AppColors.darkCard,
+                  backgroundColor: AppColors.card(context),
                   labelStyle: TextStyle(
-                    color: isSelected ? const Color(0xFF0F172A) : AppColors.darkTextPrimary,
+                    color: isSelected ? Colors.white : AppColors.textPrimary(context),
                     fontSize: 12,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                   ),
@@ -162,17 +162,17 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
             ),
 
             const SizedBox(height: 18),
-            const Divider(color: AppColors.darkBorder),
+            Divider(color: AppColors.border(context)),
             const SizedBox(height: 12),
 
             // Multi-Auth Section
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'Kimlik Doğrulama (Multi-Auth)',
                   style: TextStyle(
-                    color: AppColors.darkTextSecondary,
+                    color: AppColors.textSecondary(context),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -200,13 +200,13 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   widget.controller.loginWithGoogle();
                   Navigator.pop(context);
                 },
-                icon: const Icon(Icons.g_mobiledata, size: 24, color: Colors.white),
-                label: const Text(
+                icon: Icon(Icons.g_mobiledata, size: 24, color: AppColors.textPrimary(context)),
+                label: Text(
                   'Google Hesabı ile Giriş Yap',
-                  style: TextStyle(color: Colors.white, fontSize: 13),
+                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.darkBorder),
+                  side: BorderSide(color: AppColors.border(context)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
@@ -217,12 +217,12 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
               const SizedBox(height: 12),
               TextField(
                 controller: _emailController,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
                   labelText: 'E-posta',
-                  labelStyle: const TextStyle(color: AppColors.darkTextSecondary),
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
                   filled: true,
-                  fillColor: AppColors.darkBackground,
+                  fillColor: AppColors.background(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 ),
@@ -231,12 +231,12 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
               TextField(
                 controller: _passwordController,
                 obscureText: true,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
                   labelText: 'Şifre',
-                  labelStyle: const TextStyle(color: AppColors.darkTextSecondary),
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
                   filled: true,
-                  fillColor: AppColors.darkBackground,
+                  fillColor: AppColors.background(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 ),
@@ -254,7 +254,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentCyan,
-                    foregroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -264,14 +264,14 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
             ],
 
             const SizedBox(height: 20),
-            const Divider(color: AppColors.darkBorder),
+            Divider(color: AppColors.border(context)),
             const SizedBox(height: 12),
 
             // Tenant Isolation & Permission Scopes
-            const Text(
+            Text(
               'Aktif Yetki & İzolasyon Kapsamı',
               style: TextStyle(
-                color: AppColors.darkTextSecondary,
+                color: AppColors.textSecondary(context),
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -282,12 +282,12 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.darkBackground,
+                  color: AppColors.background(context),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: perm.isGranted
                         ? AppColors.accentGreen.withOpacity(0.3)
-                        : AppColors.darkBorder,
+                        : AppColors.border(context),
                   ),
                 ),
                 child: Row(
@@ -306,16 +306,16 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                             perm.title,
                             style: TextStyle(
                               color: perm.isGranted
-                                  ? AppColors.darkTextPrimary
-                                  : AppColors.darkTextSecondary,
+                                  ? AppColors.textPrimary(context)
+                                  : AppColors.textSecondary(context),
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           Text(
                             perm.isolationNote,
-                            style: const TextStyle(
-                              color: AppColors.darkTextSecondary,
+                            style: TextStyle(
+                              color: AppColors.textSecondary(context),
                               fontSize: 10,
                             ),
                           ),

@@ -99,21 +99,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: const Icon(Icons.flash_on, color: AppColors.accentCyan, size: 20),
             ),
             const SizedBox(width: 8),
-            const Text(
+            Text(
               'SitePulse',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: -0.5),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                letterSpacing: -0.5,
+                color: AppColors.textPrimary(context),
+              ),
             ),
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppColors.darkCard,
+                color: AppColors.card(context),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.darkBorder),
+                border: Border.all(color: AppColors.border(context)),
               ),
               child: Text(
                 session.role.displayName,
-                style: const TextStyle(fontSize: 10, color: AppColors.darkTextSecondary),
+                style: TextStyle(fontSize: 10, color: AppColors.textSecondary(context), fontWeight: FontWeight.w500),
               ),
             ),
           ],
@@ -134,7 +139,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             tooltip: 'Tema Değiştir',
             icon: Icon(
               widget.controller.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              color: AppColors.darkTextSecondary,
+              color: AppColors.textSecondary(context),
               size: 20,
             ),
             onPressed: () {
@@ -165,9 +170,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
       bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.darkSurface,
-          border: Border(top: BorderSide(color: AppColors.darkBorder, width: 1)),
+        decoration: BoxDecoration(
+          color: AppColors.surface(context),
+          border: Border(top: BorderSide(color: AppColors.border(context), width: 1)),
         ),
         child: BottomNavigationBar(
           currentIndex: _selectedTabIndex,
@@ -181,8 +186,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             }
           },
           backgroundColor: Colors.transparent,
-          selectedItemColor: AppColors.accentCyan,
-          unselectedItemColor: AppColors.darkTextSecondary,
+          selectedItemColor: AppColors.isDark(context) ? AppColors.accentCyan : AppColors.lightTextPrimary,
+          unselectedItemColor: AppColors.textSecondary(context),
           selectedFontSize: 11,
           unselectedFontSize: 11,
           type: BottomNavigationBarType.fixed,
@@ -251,7 +256,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 widget.controller.generateUnitInviteLink();
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
+            _buildHesapHareketleriSection(),
+            const SizedBox(height: 18),
             VirtualIbanCard(
               unitDesc: '${widget.controller.activeDaire.blok} Blok D:${widget.controller.activeDaire.daireNo}',
             ),
@@ -277,9 +284,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Dairem & Hane Bilgileri',
-            style: TextStyle(color: AppColors.darkTextPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           _buildDairemHouseholdCard(),
@@ -302,6 +309,164 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Widget _buildHesapHareketleriSection() {
+    final transactions = [
+      {
+        'title': 'Eylül 2026 Aidatı',
+        'subtitle': 'Sanal IBAN ile FAST',
+        'amount': '₺1.423,33',
+        'date': 'Bugün 14:15',
+        'isCredit': false,
+        'icon': Icons.apartment,
+        'color': const Color(0xFFEF4444),
+      },
+      {
+        'title': 'Ağustos 2026 Aidatı',
+        'subtitle': 'Kredi Kartı ile Ödendi',
+        'amount': '₺1.400,00',
+        'date': '15.08.2026 10:20',
+        'isCredit': true,
+        'icon': Icons.check_circle_outline,
+        'color': const Color(0xFF10B981),
+      },
+      {
+        'title': 'Demirbaş Katılım Payı',
+        'subtitle': 'Yönetim Hesabına Transfer',
+        'amount': '₺500,00',
+        'date': '02.08.2026 16:45',
+        'isCredit': true,
+        'icon': Icons.build_circle_outlined,
+        'color': const Color(0xFF10B981),
+      },
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'HESAP HAREKETLERİ →',
+              style: TextStyle(
+                color: AppColors.textSecondary(context),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+            InkWell(
+              onTap: _showReceiptsDialog,
+              child: Text(
+                'Tümü',
+                style: TextStyle(
+                  color: AppColors.textSecondary(context),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface(context),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.border(context), width: 1),
+          ),
+          child: Column(
+            children: transactions.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+              final color = item['color'] as Color;
+
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            item['icon'] as IconData,
+                            color: color,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item['title'] as String,
+                                style: TextStyle(
+                                  color: AppColors.textPrimary(context),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                item['subtitle'] as String,
+                                style: TextStyle(
+                                  color: AppColors.textSecondary(context),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              item['amount'] as String,
+                              style: TextStyle(
+                                color: (item['isCredit'] as bool)
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFFEF4444),
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              item['date'] as String,
+                              style: TextStyle(
+                                color: AppColors.textSecondary(context),
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (index < transactions.length - 1)
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      indent: 14,
+                      endIndent: 14,
+                      color: AppColors.border(context),
+                    ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildDairemHouseholdCard() {
     final residents = widget.controller.unitResidents;
     final isOwner = widget.controller.userRole == UserRole.homeOwner;
@@ -309,9 +474,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.darkSurface,
+        color: AppColors.surface(context),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.darkBorder),
+        border: Border.all(color: AppColors.border(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,14 +484,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.people_outline, color: AppColors.accentCyan, size: 20),
-                  SizedBox(width: 8),
+                  const Icon(Icons.people_outline, color: AppColors.accentCyan, size: 20),
+                  const SizedBox(width: 8),
                   Text(
                     'Hane Sakinleri (A Blok D:14)',
                     style: TextStyle(
-                      color: AppColors.darkTextPrimary,
+                      color: AppColors.textPrimary(context),
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                     ),
@@ -349,9 +514,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.darkBackground,
+                  color: AppColors.card(context),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.darkBorder),
+                  border: Border.all(color: AppColors.border(context)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -361,15 +526,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         Text(
                           r.fullName,
-                          style: const TextStyle(
-                            color: AppColors.darkTextPrimary,
+                          style: TextStyle(
+                            color: AppColors.textPrimary(context),
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
                           r.relationship,
-                          style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11),
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
                         ),
                       ],
                     ),
@@ -378,13 +543,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       decoration: BoxDecoration(
                         color: r.isOwner
                             ? AppColors.accentCyan.withOpacity(0.15)
-                            : AppColors.darkSurface,
+                            : AppColors.card(context),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         r.isOwner ? 'Malik' : 'Sakin',
                         style: TextStyle(
-                          color: r.isOwner ? AppColors.accentCyan : AppColors.darkTextSecondary,
+                          color: r.isOwner ? AppColors.accentCyan : AppColors.textSecondary(context),
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -415,13 +580,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.darkSurface,
+        backgroundColor: AppColors.surface(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.credit_card, color: AppColors.accentCyan),
-            SizedBox(width: 8),
-            Text('Online Aidat Ödeme', style: TextStyle(color: AppColors.darkTextPrimary, fontSize: 16)),
+            const Icon(Icons.credit_card, color: AppColors.accentCyan),
+            const SizedBox(width: 8),
+            Text('Online Aidat Ödeme', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
           ],
         ),
         content: Column(
@@ -431,17 +596,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.darkBackground,
+                color: AppColors.card(context),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.darkBorder),
+                border: Border.all(color: AppColors.border(context)),
               ),
               child: Column(
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Dönem Borcu (Ana Para)', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 12)),
-                      Text('₺${dues.anaPara.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 12)),
+                      Text('Dönem Borcu (Ana Para)', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                      Text('₺${dues.anaPara.toStringAsFixed(2)}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12)),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -452,11 +617,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Text('+₺${dues.gecikmeTazminati.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.accentRed, fontSize: 12, fontWeight: FontWeight.bold)),
                     ],
                   ),
-                  const Divider(color: AppColors.darkBorder, height: 16),
+                  Divider(color: AppColors.border(context), height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Toplam Tutar', style: TextStyle(color: AppColors.darkTextPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('Toplam Tutar', style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.bold, fontSize: 14)),
                       Text('₺${dues.toplamTutar.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 16)),
                     ],
                   ),
@@ -466,12 +631,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 14),
             TextField(
               controller: cardNumberCtrl,
-              style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
               decoration: InputDecoration(
                 labelText: 'Kart Numarası',
-                labelStyle: const TextStyle(color: AppColors.darkTextSecondary),
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
                 filled: true,
-                fillColor: AppColors.darkBackground,
+                fillColor: AppColors.card(context),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
@@ -482,12 +647,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Expanded(
                   child: TextField(
                     controller: expiryCtrl,
-                    style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
+                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                     decoration: InputDecoration(
                       labelText: 'SKT (AA/YY)',
-                      labelStyle: const TextStyle(color: AppColors.darkTextSecondary),
+                      labelStyle: TextStyle(color: AppColors.textSecondary(context)),
                       filled: true,
-                      fillColor: AppColors.darkBackground,
+                      fillColor: AppColors.card(context),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
@@ -498,12 +663,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: TextField(
                     controller: cvvCtrl,
                     obscureText: true,
-                    style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
+                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                     decoration: InputDecoration(
                       labelText: 'CVV',
-                      labelStyle: const TextStyle(color: AppColors.darkTextSecondary),
+                      labelStyle: TextStyle(color: AppColors.textSecondary(context)),
                       filled: true,
-                      fillColor: AppColors.darkBackground,
+                      fillColor: AppColors.card(context),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
@@ -516,7 +681,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('İptal', style: TextStyle(color: AppColors.darkTextSecondary)),
+            child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context))),
           ),
           ElevatedButton(
             onPressed: () {
@@ -544,19 +709,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.darkSurface,
+        backgroundColor: AppColors.surface(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Aidat Hesap Özeti', style: TextStyle(color: AppColors.darkTextPrimary)),
+        title: Text('Aidat Hesap Özeti', style: TextStyle(color: AppColors.textPrimary(context))),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Kat Mülkiyeti Kanunu (KMK) Madde 20 Uyarınca:', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 12)),
+            Text('Kat Mülkiyeti Kanunu (KMK) Madde 20 Uyarınca:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
             const SizedBox(height: 8),
-            Text('• Son Ödeme Tarihi: 15.09.2026', style: TextStyle(color: AppColors.darkTextPrimary)),
-            Text('• Hesaplama Tarihi: 25.09.2026 (10 Gün Gecikme)', style: TextStyle(color: AppColors.accentRed)),
-            Text('• Aylık Yasal Gecikme Oranı: %5', style: TextStyle(color: AppColors.darkTextPrimary)),
-            Text('• Gecikme Tazminatı: (1400 * 0.05 / 30) * 10 = 23,33 TL', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold)),
+            Text('• Son Ödeme Tarihi: 15.09.2026', style: TextStyle(color: AppColors.textPrimary(context))),
+            const Text('• Hesaplama Tarihi: 25.09.2026 (10 Gün Gecikme)', style: TextStyle(color: AppColors.accentRed)),
+            Text('• Aylık Yasal Gecikme Oranı: %5', style: TextStyle(color: AppColors.textPrimary(context))),
+            const Text('• Gecikme Tazminatı: (1400 * 0.05 / 30) * 10 = 23,33 TL', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
@@ -573,13 +738,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.darkSurface,
+        backgroundColor: AppColors.surface(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.receipt_long, color: AppColors.accentCyan),
-            SizedBox(width: 8),
-            Text('Ödeme Makbuzları', style: TextStyle(color: AppColors.darkTextPrimary, fontSize: 16)),
+            const Icon(Icons.receipt_long, color: AppColors.accentCyan),
+            const SizedBox(width: 8),
+            Text('Ödeme Makbuzları', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
           ],
         ),
         content: Column(
@@ -606,9 +771,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.darkBackground,
+        color: AppColors.card(context),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.darkBorder),
+        border: Border.all(color: AppColors.border(context)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -616,8 +781,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-              Text(meta, style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 10)),
+              Text(title, style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.w600)),
+              Text(meta, style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10)),
             ],
           ),
           Text(amount, style: const TextStyle(color: AppColors.accentGreen, fontSize: 13, fontWeight: FontWeight.bold)),
@@ -630,13 +795,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.darkSurface,
+        backgroundColor: AppColors.surface(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.share, color: AppColors.accentOrange),
-            SizedBox(width: 8),
-            Text('Hane Sakini Davet Linki', style: TextStyle(color: AppColors.darkTextPrimary, fontSize: 16)),
+            const Icon(Icons.share, color: AppColors.accentOrange),
+            const SizedBox(width: 8),
+            Text('Hane Sakini Davet Linki', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
           ],
         ),
         content: Column(
@@ -648,17 +813,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.darkBackground,
+                color: AppColors.card(context),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.darkBorder),
+                border: Border.all(color: AppColors.border(context)),
               ),
               child: SelectableText(
                 invite.inviteUrl,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 11, fontFamily: 'monospace'),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11, fontFamily: 'monospace'),
               ),
             ),
             const SizedBox(height: 10),
-            Text(invite.securityNotice, style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11)),
+            Text(invite.securityNotice, style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
           ],
         ),
         actions: [
@@ -685,27 +850,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.darkSurface,
+        backgroundColor: AppColors.surface(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.check_circle, color: AppColors.accentGreen),
-            SizedBox(width: 8),
-            Text('Başvuru Onaylandı!', style: TextStyle(color: AppColors.darkTextPrimary, fontSize: 16)),
+            const Icon(Icons.check_circle, color: AppColors.accentGreen),
+            const SizedBox(width: 8),
+            Text('Başvuru Onaylandı!', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${info.fullName} (${info.flatDesc}) başvurusu onaylandı.', style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13)),
+            Text('${info.fullName} (${info.flatDesc}) başvurusu onaylandı.', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
             const SizedBox(height: 12),
-            const Text('Üretilen Geçici Sakin Şifresi:', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 11)),
+            Text('Üretilen Geçici Sakin Şifresi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
             const SizedBox(height: 4),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.darkBackground,
+                color: AppColors.card(context),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.accentGreen),
               ),
@@ -715,7 +880,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text('Şifre ve giriş linki ${info.email} adresine SMS ve e-posta olarak iletildi.', style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11)),
+            Text('Şifre ve giriş linki ${info.email} adresine SMS ve e-posta olarak iletildi.', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
           ],
         ),
         actions: [
@@ -732,29 +897,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.darkSurface,
+        backgroundColor: AppColors.surface(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.apartment, color: AppColors.accentCyan),
-            SizedBox(width: 8),
-            Text('Yeni Site & Yönetici Hazır!', style: TextStyle(color: AppColors.darkTextPrimary, fontSize: 16)),
+            const Icon(Icons.apartment, color: AppColors.accentCyan),
+            const SizedBox(width: 8),
+            Text('Yeni Site & Yönetici Hazır!', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${creds.siteName} başarıyla platforma kaydedildi.', style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13)),
+            Text('${creds.siteName} başarıyla platforma kaydedildi.', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
             const SizedBox(height: 10),
-            Text('Yönetici: ${creds.adminName} (${creds.adminEmail})', style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 12)),
+            Text('Yönetici: ${creds.adminName} (${creds.adminEmail})', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
             const SizedBox(height: 8),
-            const Text('Geçici Yönetim Şifresi:', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 11)),
+            Text('Geçici Yönetim Şifresi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
             const SizedBox(height: 4),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.darkBackground,
+                color: AppColors.card(context),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.accentCyan),
               ),
@@ -779,27 +944,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.darkSurface,
+        backgroundColor: AppColors.surface(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.person_add, color: AppColors.accentGreen),
-            SizedBox(width: 8),
-            Text('Sakin Kaydedildi!', style: TextStyle(color: AppColors.darkTextPrimary, fontSize: 16)),
+            const Icon(Icons.person_add, color: AppColors.accentGreen),
+            const SizedBox(width: 8),
+            Text('Sakin Kaydedildi!', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${creds.ownerName} (${creds.block} D:${creds.unitNo}) başarıyla eklendi.', style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13)),
+            Text('${creds.ownerName} (${creds.block} D:${creds.unitNo}) başarıyla eklendi.', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
             const SizedBox(height: 10),
-            const Text('Üretilen Geçici Şifre:', style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 11)),
+            Text('Üretilen Geçici Şifre:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
             const SizedBox(height: 4),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.darkBackground,
+                color: AppColors.card(context),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.accentGreen),
               ),
@@ -831,51 +996,87 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.darkSurface,
+        backgroundColor: AppColors.surface(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Yeni Daire / Sakin Ekle', style: TextStyle(color: AppColors.darkTextPrimary, fontSize: 16)),
+        title: Text('Yeni Daire / Sakin Ekle', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: blockCtrl,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Blok (örn: A Blok)', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Blok (örn: A Blok)',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: unitCtrl,
                 keyboardType: TextInputType.number,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Daire No', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Daire No',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: nameCtrl,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Ad Soyad', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Ad Soyad',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: emailCtrl,
                 keyboardType: TextInputType.emailAddress,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'E-posta', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'E-posta',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: phoneCtrl,
                 keyboardType: TextInputType.phone,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Telefon', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Telefon',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: duesCtrl,
                 keyboardType: TextInputType.number,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Aylık Aidat Tutarı (TL)', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Aylık Aidat Tutarı (TL)',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             ],
           ),
@@ -883,7 +1084,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('İptal', style: TextStyle(color: AppColors.darkTextSecondary)),
+            child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context))),
           ),
           ElevatedButton(
             onPressed: () {
@@ -898,7 +1099,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               );
               Navigator.pop(ctx);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentGreen, foregroundColor: const Color(0xFF0F172A)),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentGreen, foregroundColor: Colors.white),
             child: const Text('Kaydet & Şifre Üret'),
           ),
         ],
@@ -917,49 +1118,85 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.darkSurface,
+        backgroundColor: AppColors.surface(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Yeni Site / Kompleks Kaydet', style: TextStyle(color: AppColors.darkTextPrimary, fontSize: 16)),
+        title: Text('Yeni Site / Kompleks Kaydet', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameCtrl,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Site / Proje Adı', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Site / Proje Adı',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: cityCtrl,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Şehir', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Şehir',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: addressCtrl,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Adres', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Adres',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: adminNameCtrl,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Yönetici Ad Soyad', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Yönetici Ad Soyad',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: adminEmailCtrl,
                 keyboardType: TextInputType.emailAddress,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Yönetici E-posta', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Yönetici E-posta',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: adminPhoneCtrl,
                 keyboardType: TextInputType.phone,
-                style: const TextStyle(color: AppColors.darkTextPrimary, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Yönetici Telefon', filled: true, fillColor: AppColors.darkBackground),
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Yönetici Telefon',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             ],
           ),
@@ -967,7 +1204,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('İptal', style: TextStyle(color: AppColors.darkTextSecondary)),
+            child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context))),
           ),
           ElevatedButton(
             onPressed: () {

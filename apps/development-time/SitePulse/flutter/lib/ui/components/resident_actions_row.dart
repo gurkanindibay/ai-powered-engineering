@@ -47,7 +47,7 @@ class ResidentActionsRow extends StatelessWidget {
           context,
           icon: Icons.person_add_alt_1,
           label: 'Sakin Davet',
-          color: isOwner ? AppColors.accentOrange : AppColors.darkTextSecondary,
+          color: isOwner ? AppColors.accentOrange : AppColors.textSecondary(context),
           onTap: () {
             if (isOwner) {
               onInviteTap();
@@ -83,9 +83,9 @@ class ResidentActionsRow extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: AppColors.darkSurface,
+              color: AppColors.surface(context),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.darkBorder),
+              border: Border.all(color: AppColors.border(context)),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -109,7 +109,7 @@ class ResidentActionsRow extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                           decoration: BoxDecoration(
-                            color: isOwner ? AppColors.accentOrange : AppColors.darkBorder,
+                            color: isOwner ? AppColors.accentOrange : AppColors.border(context),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -127,8 +127,8 @@ class ResidentActionsRow extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: AppColors.darkTextPrimary,
+                  style: TextStyle(
+                    color: AppColors.textPrimary(context),
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
