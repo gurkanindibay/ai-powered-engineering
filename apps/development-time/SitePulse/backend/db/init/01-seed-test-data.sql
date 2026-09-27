@@ -1,93 +1,93 @@
--- SitePulse Seed Test Data for Local Development & Testing
+-- SitePulse Seed Test Data for Local Development & Testing (English Schema Standard)
 
 -- 1. Create Tables (matches Flyway V1)
-CREATE TABLE IF NOT EXISTS siteler (
+CREATE TABLE IF NOT EXISTS sites (
     id VARCHAR(36) PRIMARY KEY,
-    ad VARCHAR(150) NOT NULL,
-    adres TEXT,
+    name VARCHAR(150) NOT NULL,
+    address TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS bloklar (
+CREATE TABLE IF NOT EXISTS blocks (
     id VARCHAR(36) PRIMARY KEY,
-    site_id VARCHAR(36) NOT NULL REFERENCES siteler(id) ON DELETE CASCADE,
-    blok_adi VARCHAR(50) NOT NULL,
-    toplam_kat INT NOT NULL DEFAULT 1,
+    site_id VARCHAR(36) NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    block_name VARCHAR(50) NOT NULL,
+    total_floors INT NOT NULL DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS kisiler (
+CREATE TABLE IF NOT EXISTS persons (
     id VARCHAR(36) PRIMARY KEY,
-    tc_kimlik VARCHAR(11) UNIQUE,
-    ad_soyad VARCHAR(120) NOT NULL,
-    telefon VARCHAR(20),
-    eposta VARCHAR(120),
-    kisi_tipi VARCHAR(20) NOT NULL
+    national_id VARCHAR(11) UNIQUE,
+    full_name VARCHAR(120) NOT NULL,
+    phone VARCHAR(20),
+    email VARCHAR(120),
+    person_type VARCHAR(20) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS bagimsiz_bolumler (
+CREATE TABLE IF NOT EXISTS units (
     id VARCHAR(36) PRIMARY KEY,
-    blok_id VARCHAR(36) NOT NULL REFERENCES bloklar(id) ON DELETE CASCADE,
-    daire_no INT NOT NULL,
-    kat INT NOT NULL,
-    arsa_payi INT NOT NULL DEFAULT 1,
-    malik_id VARCHAR(36) NOT NULL REFERENCES kisiler(id),
-    kiraci_id VARCHAR(36) REFERENCES kisiler(id),
+    block_id VARCHAR(36) NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
+    unit_number INT NOT NULL,
+    floor INT NOT NULL,
+    land_share INT NOT NULL DEFAULT 1,
+    owner_person_id VARCHAR(36) NOT NULL REFERENCES persons(id),
+    tenant_person_id VARCHAR(36) REFERENCES persons(id),
     version INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_blok_daire UNIQUE (blok_id, daire_no)
+    CONSTRAINT uq_block_unit UNIQUE (block_id, unit_number)
 );
 
-CREATE TABLE IF NOT EXISTS aidat_borclari (
+CREATE TABLE IF NOT EXISTS dues_liabilities (
     id VARCHAR(36) PRIMARY KEY,
-    bagimsiz_bolum_id VARCHAR(36) NOT NULL REFERENCES bagimsiz_bolumler(id) ON DELETE CASCADE,
-    donem VARCHAR(50) NOT NULL,
-    ana_para NUMERIC(15, 2) NOT NULL,
-    son_odeme_tarihi DATE NOT NULL,
-    durum VARCHAR(20) NOT NULL DEFAULT 'BEKLIYOR',
-    gecikme_tazminati NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
-    odenen_tutar NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
-    odeme_tarihi TIMESTAMP WITH TIME ZONE,
+    unit_id VARCHAR(36) NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+    period VARCHAR(50) NOT NULL,
+    principal_amount NUMERIC(15, 2) NOT NULL,
+    due_date DATE NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    delay_penalty NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+    paid_amount NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
+    payment_date TIMESTAMP WITH TIME ZONE,
     version INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS tahsilat_hareketleri (
+CREATE TABLE IF NOT EXISTS collection_transactions (
     id VARCHAR(36) PRIMARY KEY,
-    aidat_borcu_id VARCHAR(36) NOT NULL REFERENCES aidat_borclari(id),
-    islem_tipi VARCHAR(30) NOT NULL,
-    odenen_tutar NUMERIC(15, 2) NOT NULL,
-    referans_kodu VARCHAR(100),
-    islem_tarihi TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    dues_liability_id VARCHAR(36) NOT NULL REFERENCES dues_liabilities(id),
+    transaction_type VARCHAR(30) NOT NULL,
+    paid_amount NUMERIC(15, 2) NOT NULL,
+    reference_code VARCHAR(100),
+    transaction_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 2. Insert Seed Data
-INSERT INTO siteler (id, ad, adres) 
+INSERT INTO sites (id, name, address) 
 VALUES ('site-01', 'Begonya Sitesi', 'Ataşehir, İstanbul')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO bloklar (id, site_id, blok_adi, toplam_kat) 
+INSERT INTO blocks (id, site_id, block_name, total_floors) 
 VALUES 
   ('blok-A', 'site-01', 'A Blok', 12),
   ('blok-B', 'site-01', 'B Blok', 10)
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO kisiler (id, tc_kimlik, ad_soyad, telefon, eposta, kisi_tipi) 
+INSERT INTO persons (id, national_id, full_name, phone, email, person_type) 
 VALUES 
-  ('kisi-01', '12345678901', 'Ahmet Yılmaz', '05321112233', 'ahmet@example.com', 'KAT_MALIKI'),
-  ('kisi-02', '98765432109', 'Zeynep Kaya', '05423334455', 'zeynep@example.com', 'KIRACI'),
-  ('kisi-03', '55555555555', 'Mehmet Demir', '05559998877', 'mehmet@example.com', 'KAT_MALIKI')
+  ('kisi-01', '12345678901', 'Ahmet Yılmaz', '05321112233', 'ahmet@example.com', 'HOME_OWNER'),
+  ('kisi-02', '98765432109', 'Zeynep Kaya', '05423334455', 'zeynep@example.com', 'TENANT'),
+  ('kisi-03', '55555555555', 'Mehmet Demir', '05559998877', 'mehmet@example.com', 'HOME_OWNER')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO bagimsiz_bolumler (id, blok_id, daire_no, kat, arsa_payi, malik_id, kiraci_id) 
+INSERT INTO units (id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id) 
 VALUES 
   ('d-14', 'blok-A', 14, 4, 24, 'kisi-01', 'kisi-02'),
   ('d-03', 'blok-B', 3, 1, 18, 'kisi-03', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed Dues matching SPEC-001 (₺1400.00 base, 10 days overdue relative to mid-September)
-INSERT INTO aidat_borclari (id, bagimsiz_bolum_id, donem, ana_para, son_odeme_tarihi, durum, gecikme_tazminati) 
+INSERT INTO dues_liabilities (id, unit_id, period, principal_amount, due_date, status, delay_penalty) 
 VALUES 
-  ('borc-101', 'd-14', 'Eylül 2026', 1400.00, '2026-09-15', 'GECIKMEDE', 23.33),
-  ('borc-102', 'd-03', 'Eylül 2026', 1100.00, '2026-09-30', 'BEKLIYOR', 0.00)
+  ('borc-101', 'd-14', 'September 2026', 1400.00, '2026-09-15', 'OVERDUE', 23.33),
+  ('borc-102', 'd-03', 'September 2026', 1100.00, '2026-09-30', 'PENDING', 0.00)
 ON CONFLICT (id) DO NOTHING;

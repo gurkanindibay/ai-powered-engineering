@@ -142,12 +142,12 @@ ai-powered-engineering/
 │   └── development-time/              # === DEVELOPMENT-TIME INFERENCE SYSTEMS ===
 │       ├── README.md                  # Development-time guide & Copilot/Antigravity docs
 │       └── SitePulse/                 # AI-Manufactured Residential Management Platform
-│           ├── README.md              # Spec-Driven Platform (Android Native + Spring Boot + Postgres)
+│           ├── README.md              # Spec-Driven Platform (Flutter + Rust Axum + Postgres)
 │           ├── .specify/              # Constitution, agent roles, specs, and task-dag.json
 │           ├── harness/               # Graph DAG scheduler & Maker-Checker loop runner
-│           ├── android/               # Native Android app (Kotlin / Compose Material 3)
-│           ├── backend/               # Spring Boot 3 Java 21 REST backend & Flyway migrations
-│           └── scripts/               # Docker dev database scripts
+│           ├── flutter/               # Cross-Platform Flutter app (Dart / Material 3)
+│           ├── backend/               # High-Performance Rust Axum REST backend & SQL migrations
+│           └── scripts/               # Test runners & Docker dev database scripts
 └── factory/
     └── DevFactory/                    # Autonomous Software Development Factory Platform (.NET 8/10)
         ├── README.md                  # Factory Architecture & Assembly Line Guide

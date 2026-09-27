@@ -1,20 +1,22 @@
 # SitePulse: AI-Manufactured Residential Site Management Platform
 
 > **Domain:** Apsiyon-style Apartman & Site Yönetim Platformu (KMK Compliance, Financial Integrity)  
-> **Interface:** Android Native (Kotlin 2.x + Jetpack Compose Material 3)  
+> **Interface:** Cross-Platform Mobile & Web (Flutter / Dart Material 3)  
+> **Backend:** High-Performance Rust Service (Axum 0.7 + Tokio + rust_decimal)  
 > **Methodology:** Spec-Driven Development (Spec Kit) + Closed-Loop Harness (Loops & Graphs)  
 
 ---
 
 ## 📋 Requirements Hierarchy & Completion Status
 
-- **[Full Application Completion Status (96.4% Complete)](COMPLETION_STATUS.md)**: Live traceability dashboard tracking all 28 User Stories, automated verification gates, test coverage, and role matrices.
+- **[Full Application Completion Status (100% Complete)](COMPLETION_STATUS.md)**: Live traceability dashboard tracking all 34 User Stories, automated verification gates, test coverage, and role matrices.
 - **[Requirements Repository (.specify/requirements/)](.specify/requirements/README.md)**:
   - [EPIC-01: Resident Dues Management & Financial Transparency](.specify/requirements/EPIC-01-resident-dues-financial-management.md)
   - [EPIC-02: Site Manager Financial Oversight & Operations](.specify/requirements/EPIC-02-site-manager-operations.md)
   - [EPIC-03: SaaS Multi-Tenancy & Autonomous Site Onboarding](.specify/requirements/EPIC-03-saas-multi-tenancy-onboarding.md)
   - [EPIC-04: Digital Resident Self-Registration & Approval Queue](.specify/requirements/EPIC-04-invitation-approval-workflow.md)
   - [EPIC-05: Backend Persistence, REST APIs & Verification Harness](.specify/requirements/EPIC-05-backend-persistence-verification-harness.md)
+  - [EPIC-06: Identity, Authentication & Scoped Permission Model](.specify/requirements/EPIC-06-identity-access-auth.md)
 
 ---
 
@@ -24,7 +26,7 @@
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                    1. Discovery & Design Layer (Spec Kit)                       │
 │                                                                                 │
-│   .specify/constitution.md         <── Platform Rules (KMK, BigDecimal)         │
+│   .specify/constitution.md         <── Platform Rules (KMK, Decimal Invariants) │
 │   .specify/agents/pm-agent.md      <── PM Agent: User Stories & Acceptance Tests│
 │   .specify/agents/uiux-agent.md    <── UI/UX Agent: M3 Tokens & HTML Prototypes │
 └──────────────────────────────────────┬──────────────────────────────────────────┘
@@ -42,8 +44,8 @@
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                    3. Closed-Loop Execution Harness (Maker-Checker)             │
 │                                                                                 │
-│   .specify/agents/developer-agent.md <── Developer Agent (Maker: Kotlin/Compose)│
-│   .specify/agents/tester-agent.md    <── Tester Agent (Checker: xUnit/JUnit)    │
+│   .specify/agents/developer-agent.md <── Developer Agent (Maker: Flutter/Rust)  │
+│   .specify/agents/tester-agent.md    <── Tester Agent (Checker: cargo/flutter)  │
 │   harness/loop/verification_gates    <── Syntax, Financial & Test Gates         │
 │   harness/loop/loop_runner.py        <── 3-Iteration Closed Feedback Loop       │
 └──────────────────────────────────────┬──────────────────────────────────────────┘
@@ -52,17 +54,19 @@
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                    4. Verified Full-Stack Deliverables                          │
 │                                                                                 │
-│   A. Android Native Client (Kotlin / Jetpack Compose / M3)                      │
-│      - android/app/.../domain/     (Daire, AidatBorcu, CalculateDuesUseCase)    │
-│      - android/app/.../ui/         (DashboardScreen, ViewModel, M3 Theme)       │
+│   A. Cross-Platform Flutter Client (Dart / Material 3)                          │
+│      - flutter/lib/domain/         (CalculateDuesUseCase, Money)                │
+│      - flutter/lib/controllers/    (DashboardController with ChangeNotifier)    │
+│      - flutter/lib/screens/        (DashboardScreen, Modals, Dialogs)           │
+│      - flutter/lib/theme/          (SitePulse Parametric Dual-Theme)            │
 │                                                                                 │
-│   B. Backend Application (Java 21 / Spring Boot 3.3.4 / REST)                   │
-│      - backend/src/.../domain/     (JPA Entities with @Version optimistic lock) │
-│      - backend/src/.../service/    (AidatCalculationService - KMK Art. 20)      │
-│      - backend/src/.../controller/ (ResidentDashboardController REST API)       │
+│   B. High-Performance Backend Application (Rust / Axum 0.7 / Tokio / REST)      │
+│      - backend/src/models/         (Domain models with rust_decimal precision)  │
+│      - backend/src/services/       (KMK Art. 20 Engine, Auth, SaaS Tenant)      │
+│      - backend/src/handlers/       (Axum REST route handlers)                   │
 │                                                                                 │
-│   C. Database (PostgreSQL 16+ / Flyway Migrations)                              │
-│      - backend/src/.../migration/  (V1__init_schema.sql with NUMERIC(15,2))     │
+│   C. Database (PostgreSQL 16+ / SQL Migrations)                                 │
+│      - backend/migrations/         (V1__init_schema.sql with NUMERIC(15,2))     │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -71,10 +75,10 @@
 ## 2. AI Tooling Instructions (GitHub Copilot & Antigravity)
 
 ### GitHub Copilot
-- **Spec-Grounded Code Generation**: When creating Kotlin use cases or Spring Boot services, prompt Copilot with the spec context:
-  `"Read apps/development-time/SitePulse/.specify/constitution.md and implement the domain logic ensuring BigDecimal is used for all monetary calculations and KMK delay interest is 5% monthly."`
+- **Spec-Grounded Code Generation**: When creating Flutter use cases or Rust Axum services, prompt Copilot with the spec context:
+  `"Read apps/development-time/SitePulse/.specify/constitution.md and implement the domain logic ensuring rust_decimal is used for all monetary calculations and KMK delay interest is 5% monthly."`
 - **Checker Test Generation**: Use Copilot to write tests before implementation:
-  `"Generate JUnit tests for CalculateDuesUseCase checking boundary conditions: zero days delay, partial payments, and multiple overdue months."`
+  `"Generate tests for CalculateDuesUseCase checking boundary conditions: zero days delay, partial payments, and multiple overdue months."`
 
 ### Antigravity
 - See workspace rule: [.agents/rules/development-time-inference.md](file:///.agents/rules/development-time-inference.md).
@@ -116,10 +120,9 @@ python3 apps/development-time/SitePulse/harness/harness_cli.py verify --task tas
 python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests
 ```
 
-
 ---
 
-## 4. Backend & Database Development Environment (Docker)
+## 4. Backend & Database Development Environment
 
 To run the PostgreSQL 16 database and Adminer web GUI locally:
 
@@ -135,7 +138,7 @@ cd apps/development-time/SitePulse/backend && docker compose up -d postgres admi
 | :--- | :--- | :--- |
 | **PostgreSQL 16** | `localhost:5432` | DB: `sitepulse`, User: `sitepulse_user`, Pass: `sitepulse_secret` |
 | **Adminer Web GUI** | `http://localhost:8081` | Web database management client |
-| **Spring Boot App** | `localhost:8080` | `GET /api/v1/residents/d-14/dashboard` |
+| **Rust Axum Backend** | `localhost:8080` | `GET /api/v1/health`, `POST /api/v1/saas/tenants` |
 
 To tear down the containers:
 ```bash
@@ -144,29 +147,30 @@ To tear down the containers:
 
 ---
 
-## 5. Interactive UI/UX Visual Prototype
-To preview the Android mobile interface in your browser before running on a device:
-- Open [prototype.html](.specify/specs/001-resident-dashboard/assets/prototype.html) in any web browser.
-- Supports interactive state toggling between **Borçlu (Gecikmeli)** and **Borçsuz (Ödenmiş)** states.
+## 5. Running the Backend Service
+
+To run the high-performance Rust backend:
+
+```bash
+./apps/development-time/SitePulse/scripts/run-backend.sh
+```
+Listening on `0.0.0.0:8080` with CORS enabled.
 
 ---
 
-## 6. Running the Android Application
+## 6. Running the Flutter Application
 
-To build, install, and execute the native Jetpack Compose Android app on an emulator or connected device:
+To build and execute the cross-platform Flutter application:
 
 ```bash
-# Standard run (compiles, boots emulator if needed, installs APK, and launches MainActivity)
-./apps/development-time/SitePulse/scripts/run-android.sh
+# Run Flutter Web Server on port 9090
+./apps/development-time/SitePulse/scripts/run-flutter.sh web
 
-# Skip recompilation and run the existing APK
-./apps/development-time/SitePulse/scripts/run-android.sh --skip-build
+# Run on Google Chrome
+./apps/development-time/SitePulse/scripts/run-flutter.sh chrome
 
-# Run and automatically launch the interactive Web Live Viewer (http://localhost:9090)
-./apps/development-time/SitePulse/scripts/run-android.sh --viewer
-
-# Capture a screenshot right after launching
-./apps/development-time/SitePulse/scripts/run-android.sh --screenshot
+# Run on connected Android device or emulator
+./apps/development-time/SitePulse/scripts/run-flutter.sh android
 ```
 
 ---
@@ -184,9 +188,5 @@ SitePulse supports multi-tenant operations where multiple residential sites oper
    - The backend service creates the tenant record and auto-generates a secure temporary password (`SP-XXXX-YYYY`).
    - The credentials dialog is presented to the SaaS Admin with a one-click copyable format to transmit to the customer.
 3. **Backend Endpoints**:
-   - `POST /api/v1/saas/sites`: Registers a new tenant and provisions site admin credentials.
-   - `GET /api/v1/saas/sites`: Fetches all registered tenant sites, metrics, and primary contact details.
-
-
-
-
+   - `POST /api/v1/saas/tenants`: Registers a new tenant and provisions site admin credentials.
+   - `GET /api/v1/saas/tenants`: Fetches all registered tenant sites, metrics, and primary contact details.

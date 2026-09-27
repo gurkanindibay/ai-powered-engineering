@@ -24,3 +24,5 @@ Development-time inference uses AI models, agents, and spec harnesses *during th
      - Build & Unit Test Gate (100% assertions passing).
 4. **Isolated Ephemeral Sandboxing**:
    - In factory and autonomous generation settings, code must be compiled and tested in an isolated sandbox before being merged into the codebase.
+5. **English-Only Source Code Mandate**:
+   - All manufactured code, domain models, database schemas, tables, columns, variables, functions, and tests must be strictly written in English. Non-English code identifiers are strictly prohibited.

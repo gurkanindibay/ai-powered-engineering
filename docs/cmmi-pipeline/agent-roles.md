@@ -66,7 +66,7 @@ graph TD
 - **CMMI Process Areas:** Technical Solution (TS), Product Integration (PI).
 - **Core Responsibility:** Design UI wireframes, prototypes, design token systems (Material 3 tokens), and accessibility specs.
 - **Input Artifacts:** `spec.md`, user personas, design tokens.
-- **Output Artifacts:** Prototype HTML/CSS (`prototype.html`), Jetpack Compose UI component hierarchy, color token specs.
+- **Output Artifacts:** Prototype HTML/CSS (`prototype.html`), Flutter Material 3 UI component hierarchy, color token specs.
 - **Context Boundaries:** UI presentation layer only. Must enforce minimum 48dp touch targets and WCAG 2.1 AA contrast.
 - **Deterministic Gate:** `AccessibilityGate` (static audit of touch targets and accessibility labels).
 
@@ -82,7 +82,7 @@ graph TD
 - **CMMI Process Areas:** Technical Solution (TS), Product Integration (PI).
 - **Core Responsibility:** Implement task-scoped production code strictly matching the assigned contract.
 - **Input Artifacts:** Assigned task from `task-dag.json`, parent interface contracts, `constitution.md` rules.
-- **Output Artifacts:** Clean architecture source code (Kotlin / Java / C# / Python).
+- **Output Artifacts:** Clean architecture source code (Flutter / Dart / Rust / C# / Python).
 - **Context Boundaries:** Single-task context. Forbidden from modifying parent contracts or out-of-scope files without architect approval.
 - **Deterministic Gate:** `SyntaxGate` (AST brace matching, compile check) and `FinancialIntegrityGate` (no `float`/`double`).
 

@@ -9,7 +9,7 @@
       "status": "COMPLETED",
       "depends_on": [],
       "spec_ref": "SPEC-001",
-      "description": "Implement Daire, Kisi, AidatBorcu, and Money value object with strict BigDecimal precision."
+      "description": "Implement Daire, Kisi, AidatBorcu, and Money value object with strict Decimal precision."
     },
     {
       "id": "task-02",
@@ -32,11 +32,11 @@
         "task-02"
       ],
       "spec_ref": "SPEC-001",
-      "description": "Implement DashboardUiState and DashboardViewModel with reactive StateFlow."
+      "description": "Implement DashboardUiState and DashboardController with reactive ChangeNotifier."
     },
     {
       "id": "task-04",
-      "name": "Material 3 Dashboard Compose Screens",
+      "name": "Material 3 Dashboard Flutter Screens",
       "module": "flutter-ui",
       "status": "COMPLETED",
       "depends_on": [
@@ -47,7 +47,7 @@
     },
     {
       "id": "task-05",
-      "name": "PostgreSQL Schema & Flyway Migrations",
+      "name": "PostgreSQL Schema & SQL Migrations",
       "module": "backend-db",
       "status": "COMPLETED",
       "depends_on": [],
@@ -56,29 +56,29 @@
     },
     {
       "id": "task-06",
-      "name": "Spring Boot 3 JPA Entities & Repositories",
-      "module": "backend-service",
+      "name": "Rust High-Precision Domain Models & Decimal Invariants",
+      "module": "backend-rust",
       "status": "COMPLETED",
       "depends_on": [
         "task-05"
       ],
       "spec_ref": "SPEC-001",
-      "description": "Map PostgreSQL tables to Java 21 Spring Data JPA entities with optimistic locking (@Version)."
+      "description": "Implement Rust domain models (AidatBorcu, User, Site) with rust_decimal precision."
     },
     {
       "id": "task-07",
-      "name": "Spring Boot REST API for Resident Dashboard",
-      "module": "backend-api",
+      "name": "Axum Tokio REST API for Resident & Management Dashboard",
+      "module": "backend-rust",
       "status": "COMPLETED",
       "depends_on": [
         "task-06"
       ],
       "spec_ref": "SPEC-001",
-      "description": "Expose GET /api/v1/residents/{unitId}/dashboard endpoint calculating real-time KMK interest."
+      "description": "Expose GET /api/v1/residents/{unitId}/dashboard and management endpoints in Rust Axum calculating real-time KMK interest."
     },
     {
       "id": "task-08",
-      "name": "Offline Room Cache & Repository Layer",
+      "name": "Offline Cache & Repository Layer",
       "module": "flutter-data",
       "status": "COMPLETED",
       "depends_on": [
@@ -86,7 +86,7 @@
         "task-07"
       ],
       "spec_ref": "SPEC-001",
-      "description": "Local SQLite/Hive database caching for resident dashboard data synchronized with Spring REST API."
+      "description": "Local database caching for resident dashboard data synchronized with Rust REST API."
     }
   ]
 }

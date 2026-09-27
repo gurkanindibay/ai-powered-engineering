@@ -5,24 +5,24 @@ import '../models/dues_models.dart';
 /// Formula: DelayPenalty = Principal * 0.05 * (daysOverdue / 30)
 /// Invariant: High-precision Decimal arithmetic, preserving kuruş precision.
 class CalculateDuesUseCase {
-  AidatBorcu execute(AidatBorcu borc, DateTime calculationDate) {
-    if (calculationDate.isBefore(borc.sonOdemeTarihi) ||
-        calculationDate.isAtSameMomentAs(borc.sonOdemeTarihi)) {
-      return borc.copyWith(
-        durum: BorcDurumu.bekliyor,
-        gecikenGunSayisi: 0,
-        gecikmeTazminati: Decimal.zero,
-        toplamTutar: borc.anaPara,
+  DuesLiability execute(DuesLiability dues, DateTime calculationDate) {
+    if (calculationDate.isBefore(dues.dueDate) ||
+        calculationDate.isAtSameMomentAs(dues.dueDate)) {
+      return dues.copyWith(
+        status: DebtStatus.pending,
+        daysOverdue: 0,
+        delayPenalty: Decimal.zero,
+        totalAmount: dues.principalAmount,
       );
     }
 
-    final daysOverdue = calculationDate.difference(borc.sonOdemeTarihi).inDays;
+    final daysOverdue = calculationDate.difference(dues.dueDate).inDays;
     if (daysOverdue <= 0) {
-      return borc.copyWith(
-        durum: BorcDurumu.bekliyor,
-        gecikenGunSayisi: 0,
-        gecikmeTazminati: Decimal.zero,
-        toplamTutar: borc.anaPara,
+      return dues.copyWith(
+        status: DebtStatus.pending,
+        daysOverdue: 0,
+        delayPenalty: Decimal.zero,
+        totalAmount: dues.principalAmount,
       );
     }
 
@@ -33,18 +33,18 @@ class CalculateDuesUseCase {
     final monthDays = Decimal.fromInt(30);
 
     // Rational exact calculation then rounded to 2 decimal places
-    final rationalPenalty = (borc.anaPara * monthlyRate * daysDecimal) / monthDays;
+    final rationalPenalty = (dues.principalAmount * monthlyRate * daysDecimal) / monthDays;
     final penaltyDouble = rationalPenalty.toDouble();
     // Round half up to 2 decimal places
     final roundedPenaltyStr = (penaltyDouble).toStringAsFixed(2);
     final penalty = Decimal.parse(roundedPenaltyStr);
-    final total = borc.anaPara + penalty;
+    final total = dues.principalAmount + penalty;
 
-    return borc.copyWith(
-      durum: BorcDurumu.gecikmede,
-      gecikenGunSayisi: daysOverdue,
-      gecikmeTazminati: penalty,
-      toplamTutar: total,
+    return dues.copyWith(
+      status: DebtStatus.overdue,
+      daysOverdue: daysOverdue,
+      delayPenalty: penalty,
+      totalAmount: total,
     );
   }
 }

@@ -1,13 +1,13 @@
 # UI/UX Architect Agent Specification
 
-> **Agent Name:** Mobile Design & Ergonomics Specialist  
-> **Target Surface:** Android (Jetpack Compose, Material 3)  
+> **Agent Name:** Mobile & Web Design Specialist  
+> **Target Surface:** Cross-Platform (Flutter, Material 3)  
 > **Output Artifacts:** `ui-ux-spec.md`, Interactive HTML Previews (`prototype.html`), Design Tokens  
 
 ---
 
 ## 1. Role & Objectives
-The UI/UX Agent translates functional requirements into responsive, accessible, and delightful Android mobile experiences. It enforces Material 3 guidelines and produces living visual previews before Kotlin code is written.
+The UI/UX Agent translates functional requirements into responsive, accessible, and delightful cross-platform mobile & web experiences using Flutter. It enforces Material 3 guidelines and produces living visual previews before Flutter widget code is written.
 
 ## 2. Design System Tokens (SitePulse Theme)
 
@@ -28,11 +28,11 @@ The UI/UX Agent translates functional requirements into responsive, accessible, 
 - **Label Large:** 14sp / 20sp (Button text, badge indicators)
 
 ## 3. Required Outputs per Screen
-1. **Layout Hierarchy (Composables tree):**
-   - TopAppBar (Site/Daire Switcher + Notifications)
+1. **Layout Hierarchy (Flutter Widgets tree):**
+   - AppBar (Site/Daire Switcher + Notifications)
    - Hero Card (Outstanding dues + quick pay CTA)
    - Quick Action Grid (Arıza Bildir, Sayaç Gir, Rezervasyon, İletişim)
    - Recent Feed (Duyurular & Belgeler)
-   - BottomNavigationBar (Ana Sayfa, Aidat, Talepler, Profil)
+   - BottomNavigationBar / NavigationBar (Ana Sayfa, Aidat, Talepler, Profil)
 2. **Interactive HTML Prototype:**
    - Every feature spec must be accompanied by an interactive `prototype.html` rendered inside a 412x915dp mobile frame for browser-based visual inspection.

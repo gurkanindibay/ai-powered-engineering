@@ -19,9 +19,12 @@ The workspace is strictly partitioned into two paradigms:
    - When modifying files under `apps/development-time/` or `factory/`, apply the rules defined in [.agents/rules/development-time-inference.md](file:///.agents/rules/development-time-inference.md).
 
 2. **Invariants & Decimal Precision**:
-   - Monetary or calculation fields MUST use high-precision decimals (`decimal` in C#, `BigDecimal` in Java, `Decimal` in Python, `NUMERIC(15,2)` in SQL). Never introduce floating-point arithmetic in financial domains.
+   - Monetary or calculation fields MUST use high-precision decimals (`decimal` in C#, `rust_decimal::Decimal` in Rust, `Decimal` in Dart/Python, `BigDecimal` in Java, `NUMERIC(15,2)` in SQL). Never introduce floating-point arithmetic in financial domains.
 
 3. **Verification Before Delivery**:
    - Always run the relevant automated test suite before concluding any code modification:
      - Runtime tests: `dotnet test apps/runtime/AuditGuard/tests/AuditGuard.Tests` and `dotnet test apps/runtime/TaskPilot/tests/TaskPilot.Tests`
      - Dev-time tests: `python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests` and `dotnet test factory/DevFactory`
+
+4. **English-Only Development Language**:
+   - All source code, identifiers, types, schemas, tables, columns, variable names, function names, API route paths, tests, and code comments MUST be authored strictly in English. Non-English identifiers in source code are strictly prohibited.

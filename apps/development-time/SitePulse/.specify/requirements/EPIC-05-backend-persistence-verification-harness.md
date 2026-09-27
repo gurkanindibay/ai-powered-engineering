@@ -1,7 +1,7 @@
 # Epic: Backend Persistence, REST APIs & Verification Harness
 
 > **Epic ID:** EPIC-05  
-> **Module:** Core Infrastructure (`backend-db`, `backend-service`, `harness`)  
+> **Module:** Core Infrastructure (`backend-db`, `backend-rust`, `harness`)  
 > **Status:** COMPLETED (6 / 6 Stories Completed - 100%)  
 > **Target Audience:** Engineering Team, Autonomous Agents, CI/CD Pipeline  
 > **Business Value:** Guarantees strict financial correctness, zero rounding drift, automated verification gates, and full CMMI-compliant traceability.
@@ -10,54 +10,55 @@
 
 ## 1. Epic Overview
 
-Establishes the enterprise-grade foundation of the SitePulse platform: PostgreSQL relational persistence with Flyway migrations, Java 21 / Spring Boot 3 domain entities with optimistic locking, REST APIs, and the autonomous Closed-Loop Verification Harness (AST syntax, financial precision, and task DAG scheduling).
+Establishes the enterprise-grade foundation of the SitePulse platform: PostgreSQL relational persistence with SQL migrations, Rust 2021 / Axum 0.7 domain models and REST endpoints with strict `rust_decimal::Decimal` precision, and the autonomous Closed-Loop Verification Harness (AST syntax, financial precision, and task DAG scheduling).
 
 ---
 
 ## 2. User Stories & Acceptance Criteria
 
-### STORY-05-01: PostgreSQL Relational Schema & Flyway Migrations
+### STORY-05-01: PostgreSQL Relational Schema & SQL Migrations
 - **Status:** `COMPLETED`
 - **Task Ref:** `task-05`
-- **Description:** Implement PostgreSQL relational schema (`siteler`, `bloklar`, `bagimsiz_bolumler`, `aidat_borclari`, `tahsilat_hareketleri`) using Flyway migrations with strict `NUMERIC(15, 2)` monetary columns.
+- **Description:** Implement PostgreSQL relational schema (`siteler`, `bloklar`, `bagimsiz_bolumler`, `aidat_borclari`, `tahsilat_hareketleri`) using versioned SQL migrations with strict `NUMERIC(15, 2)` monetary columns.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
-  Scenario: Flyway migrations execute with strict NUMERIC types
+  Scenario: SQL migrations execute with strict NUMERIC types
     When database migrations execute
     Then tables siteler, bloklar, bagimsiz_bolumler, aidat_borclari are created
     And all monetary balance columns are defined as NUMERIC(15,2)
     And no FLOAT or DOUBLE PRECISION types exist in the schema
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/backend/src/main/resources/db/migration/V1__init_schema.sql`
+  - `apps/development-time/SitePulse/backend/migrations/V1__init_schema.sql`
 - **Verification & Tests:**
   - `SqlSchemaGate.verify_numeric_precision`
 
 ---
 
-### STORY-05-02: Spring Boot 3 JPA Entities with Optimistic Locking
+### STORY-05-02: Rust Domain Models with High-Precision Decimals
 - **Status:** `COMPLETED`
 - **Task Ref:** `task-06`
-- **Description:** Implement JPA domain entities using Spring Data JPA with `@Version` integer columns for optimistic concurrency control to prevent double-charging or race conditions.
+- **Description:** Implement Rust domain models using `rust_decimal::Decimal` with optimistic concurrency versioning to prevent double-charging or race conditions.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Prevent concurrent balance modification race conditions
     Given two concurrent requests attempting to update the same unit balance
     When both commit simultaneously
-    Then the second transaction fails with an OptimisticLockException
+    Then optimistic locking ensures sequence safety
     And no balance inconsistency or corruption occurs
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/domain/entity/`
+  - `apps/development-time/SitePulse/backend/src/models/mod.rs`
 - **Verification & Tests:**
-  - `JpaEntityGate.verify_version_attribute`
+  - `FinancialIntegrityGate.verify_due_rounding`
+  - `cargo test` integration suite
 
 ---
 
-### STORY-05-03: Spring Boot REST Controllers & Endpoints
+### STORY-05-03: Rust Axum REST API Handlers & Endpoints
 - **Status:** `COMPLETED`
 - **Task Ref:** `task-07`
-- **Description:** Expose standard REST API controllers for resident dues (`/api/v1/residents/{unitId}/dashboard`), SaaS onboarding (`/api/v1/saas/sites`), home owner provisioning (`/api/v1/site-admin/home-owners`), and invitation approvals (`/api/v1/site-admin/registrations/*`).
+- **Description:** Expose standard REST API handlers for resident dues (`/api/v1/residents/{unitId}/dashboard`), SaaS onboarding (`/api/v1/saas/tenants`), home owner provisioning (`/api/v1/site/home-owners`), and invitation approvals (`/api/v1/site/registration-requests/*`).
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: REST endpoint provides real-time calculated dues
@@ -65,19 +66,17 @@ Establishes the enterprise-grade foundation of the SitePulse platform: PostgreSQ
     Then return 200 OK with totalDue = 1423.33 and penalty = 23.33
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/controller/ResidentDashboardController.java`
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/controller/SiteOnboardingController.java`
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/controller/RegistrationApprovalController.java`
+  - `apps/development-time/SitePulse/backend/src/handlers/mod.rs`
 - **Verification & Tests:**
   - `RestEndpointGate`
-  - Spring Boot MockMvc unit tests
+  - `cargo test` Axum integration tests
 
 ---
 
 ### STORY-05-04: Closed-Loop Verification Harness & Gate Enforcement
 - **Status:** `COMPLETED`
 - **Task Ref:** `task-01`, `task-02`
-- **Description:** Implement an automated Maker-Checker verification harness that checks Kotlin/Java syntax AST correctness (`SyntaxGate`) and validates KMK statutory financial precision down to 0.0001% without rounding leaks (`FinancialIntegrityGate`).
+- **Description:** Implement an automated Maker-Checker verification harness that checks syntax AST correctness (`SyntaxGate`) and validates KMK statutory financial precision down to 0.0001% without rounding leaks (`FinancialIntegrityGate`).
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Verification gate rejects floating-point rounding leaks
@@ -87,7 +86,7 @@ Establishes the enterprise-grade foundation of the SitePulse platform: PostgreSQ
     And returns an actionable diagnostic feedback message to the maker agent
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/harness/loop/verification_gates/`
+  - `apps/development-time/SitePulse/harness/loop/verification_gates.py`
   - `apps/development-time/SitePulse/harness/loop/loop_runner.py`
 - **Verification & Tests:**
   - `test_financial_integrity_gate_detects_rounding_leak`
@@ -97,12 +96,12 @@ Establishes the enterprise-grade foundation of the SitePulse platform: PostgreSQ
 
 ### STORY-05-05: Unified Automated Test Runner (`run-tests.sh`)
 - **Status:** `COMPLETED`
-- **Description:** Provide a single-command executable script that runs Python harness self-tests, task DAG closed-loop verification gates, and all backend JUnit service tests with zero manual setup.
+- **Description:** Provide a single-command executable script that runs Python harness self-tests, task DAG closed-loop verification gates, Rust cargo unit/integration tests, and Flutter client tests with zero manual setup.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Run all system verification tests in one command
     When engineer or CI pipeline runs ./apps/development-time/SitePulse/scripts/run-tests.sh
-    Then execute 5 harness tests, 7 task DAG gates, and 9 backend unit tests
+    Then execute harness tests, task DAG gates, Rust cargo tests, and Flutter client tests
     And output green exit code 0 when all tests pass
   ```
 - **Implementation Artifacts:**

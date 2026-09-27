@@ -1,7 +1,7 @@
 # Epic: Identity, Authentication & Scoped Permission Model
 
 > **Epic ID:** EPIC-06  
-> **Module:** `backend-auth`, `backend-api`, `android-ui`, `android-domain`  
+> **Module:** `backend-auth`, `backend-rust`, `flutter-ui`, `flutter-domain`  
 > **Status:** COMPLETED (5 / 5 Stories Completed - 100%)  
 > **Target Audience:** All Users (`SAAS_ADMIN`, `SITE_MANAGER`, `HOME_OWNER`, `HOME_RESIDENT`)  
 > **Business Value:** Provides enterprise-grade authentication with dual login options (Password & Google OAuth2) and strict scoped permissions to safeguard tenant data and individual flat privacy.
@@ -36,15 +36,15 @@ This epic establishes the identity and security framework for the SitePulse plat
     And they are permitted only to view dues and open tickets for "A Blok D:14"
   ```
 - **Implementation Artifacts:**
-  - `Role.java`, `Permission.java`, `RolePermissions.java`
+  - `apps/development-time/SitePulse/backend/src/models/mod.rs` (`Role`, `Permission`)
 - **Verification & Tests:**
-  - `AuthServiceTest.whenResidentRole_thenHasUnitRestrictedPermissions`
+  - `when_resident_role_then_has_unit_restricted_permissions` (Rust)
 
 ---
 
 ### STORY-06-02: Email & Password Registration & Secure Authentication
 - **Status:** `COMPLETED`
-- **Target Role:** All Users
+- **Target Role:** All Roles
 - **Description:** Provide email/password user registration and authentication with cryptographic password hashing, validation rules (min 8 chars, 1 number, 1 uppercase), and mandatory password change enforcement for site-provisioned accounts.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
@@ -55,16 +55,17 @@ This epic establishes the identity and security framework for the SitePulse plat
     And logging in with matching credentials issues a valid JWT access token
   ```
 - **Implementation Artifacts:**
-  - `AuthDtos.java`, `AuthService.java`, `AuthController.java`
+  - `apps/development-time/SitePulse/backend/src/services/auth_service.rs`
+  - `apps/development-time/SitePulse/backend/src/handlers/mod.rs`
 - **Verification & Tests:**
-  - `AuthServiceTest.whenValidPasswordRegistration_thenCanAuthenticate`
-  - `AuthServiceTest.whenWrongPassword_thenThrowsException`
+  - `when_valid_password_registration_then_can_authenticate` (Rust)
+  - `when_wrong_password_then_throws_exception` (Rust)
 
 ---
 
 ### STORY-06-03: Google OAuth2 / ID Token Authentication & Account Linking
 - **Status:** `COMPLETED`
-- **Target Role:** All Users
+- **Target Role:** All Roles
 - **Description:** Enable "Sign in with Google" using Google ID tokens. Validate Google token claims (`sub`, `email`, `name`, `picture`), automatically link existing accounts by email, or provision a new user without requiring a password.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
@@ -75,41 +76,45 @@ This epic establishes the identity and security framework for the SitePulse plat
     And an authenticated session is returned with auth_provider "GOOGLE"
   ```
 - **Implementation Artifacts:**
-  - `AuthDtos.java`, `AuthService.java`, `AuthController.java`
+  - `apps/development-time/SitePulse/backend/src/services/auth_service.rs`
+  - `apps/development-time/SitePulse/backend/src/handlers/mod.rs`
 - **Verification & Tests:**
-  - `AuthServiceTest.whenValidGoogleIdToken_thenAuthenticatesAndLinksAccount`
+  - `when_valid_google_id_token_then_authenticates_and_links_account` (Rust)
 
 ---
 
 ### STORY-06-04: JWT Token Minting & Claim-Based Authorization
 - **Status:** `COMPLETED`
 - **Target Role:** Mobile & Web Clients
-- **Description:** Mint standard JWT access tokens containing user claims (`sub`, `email`, `role`, `siteId`, `unitId`, `permissions`) and provide `/api/v1/auth/me` profile inspection endpoint.
+- **Description:** Mint standard JWT access tokens containing user claims (`sub`, `email`, `role`, `siteId`, `unitId`, `permissions`) and provide profile inspection endpoints.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: User inspects their active profile and permissions
     Given an authenticated session for "Kat Maliki"
-    When calling GET /api/v1/auth/me
+    When inspecting authentication claims
     Then response returns role "HOME_OWNER", unitId "d-14", and permission set including "UNIT_INVITE_CO_RESIDENT"
   ```
 - **Implementation Artifacts:**
-  - `AuthDtos.java`, `AuthService.java`, `AuthController.java`
+  - `apps/development-time/SitePulse/backend/src/services/auth_service.rs`
+  - `apps/development-time/SitePulse/backend/src/models/mod.rs`
 
 ---
 
-### STORY-06-05: Android Multi-Method Login & Registration Experience
+### STORY-06-05: Cross-Platform Flutter Multi-Method Login & Registration Experience
 - **Status:** `COMPLETED`
-- **Target Role:** Mobile App User
-- **Description:** Build a Jetpack Compose authentication interface supporting Email/Password sign-in/registration and an official "Google ile Giriş Yap" button, with active profile inspection and permission display.
+- **Target Role:** Mobile & Web User
+- **Description:** Build a Flutter authentication interface supporting Email/Password sign-in/registration and an official "Google ile Giriş Yap" button, with active profile inspection and permission display.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
-  Scenario: Android user chooses Google Sign-In
+  Scenario: User chooses Google Sign-In in Flutter
     Given the user is on the SitePulse login screen
     When they tap "Google ile Giriş Yap"
     Then the Google authentication flow completes
     And the app dashboard updates to show their Google profile picture and permissions
   ```
 - **Implementation Artifacts:**
-  - `AuthModels.kt`, `DashboardViewModel.kt`, `DashboardScreen.kt`
+  - `apps/development-time/SitePulse/flutter/lib/models/manager_models.dart`
+  - `apps/development-time/SitePulse/flutter/lib/controllers/dashboard_controller.dart`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
-  - Android emulator visual verification and screencap
+  - Flutter client integration tests & live verification

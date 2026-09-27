@@ -25,11 +25,11 @@ class LoopRunner:
                 if not res.passed:
                     results.append(res)
 
-        # 2. Syntax check across Java Spring Boot backend files
-        backend_src = project_root / "backend" / "src" / "main" / "java" / "com" / "sitepulse" / "backend"
+        # 2. Syntax check across Rust backend files
+        backend_src = project_root / "backend" / "src"
         if backend_src.exists():
-            for java_file in backend_src.rglob("*.java"):
-                res = self.syntax_gate.verify(java_file)
+            for rs_file in backend_src.rglob("*.rs"):
+                res = self.syntax_gate.verify(rs_file)
                 if not res.passed:
                     results.append(res)
 

@@ -31,12 +31,13 @@ class DashboardController extends ChangeNotifier {
   String get lastSyncTime => _lastSyncTime;
 
   // Home Owner state
-  late Daire _activeDaire;
-  Daire get activeDaire => _activeDaire;
+  late ApartmentUnit _activeUnit;
+  ApartmentUnit get activeUnit => _activeUnit;
+  ApartmentUnit get activeDaire => _activeUnit;
 
-  List<AidatBorcu> _duesList = [];
-  List<AidatBorcu> get duesList => _duesList;
-  AidatBorcu? get primaryDues => _duesList.isNotEmpty ? _duesList.first : null;
+  List<DuesLiability> _duesList = [];
+  List<DuesLiability> get duesList => _duesList;
+  DuesLiability? get primaryDues => _duesList.isNotEmpty ? _duesList.first : null;
 
   List<UnitResidentMember> _unitResidents = [];
   List<UnitResidentMember> get unitResidents => _unitResidents;
@@ -80,29 +81,29 @@ class DashboardController extends ChangeNotifier {
   void _initData() {
     _userSession = _createSession(UserRole.homeOwner, AuthProvider.local);
 
-    _activeDaire = const Daire(
+    _activeUnit = const ApartmentUnit(
       id: 'd-14',
-      siteAdi: 'Begonya Sitesi',
-      blok: 'A',
-      daireNo: 14,
-      kat: 4,
-      arsaPayi: 24,
-      malikAdi: 'Ahmet Yılmaz',
-      kiraciAdi: 'Zeynep Kaya',
+      siteName: 'Begonya Sitesi',
+      block: 'A',
+      unitNo: 14,
+      floor: 4,
+      landShare: 24,
+      ownerName: 'Ahmet Yılmaz',
+      tenantName: 'Zeynep Kaya',
     );
 
     // Initial dues with 10 days overdue calculation (Spec-001)
-    final baseBorc = AidatBorcu(
+    final baseDues = DuesLiability(
       id: 'b-101',
-      daireId: 'd-14',
-      donem: 'Eylül 2026',
-      anaPara: Decimal.parse('1400.00'),
-      gecikmeTazminati: Decimal.zero,
-      toplamTutar: Decimal.parse('1400.00'),
-      sonOdemeTarihi: DateTime(2026, 9, 15),
-      durum: BorcDurumu.bekliyor,
+      unitId: 'd-14',
+      period: 'Eylül 2026',
+      principalAmount: Decimal.parse('1400.00'),
+      delayPenalty: Decimal.zero,
+      totalAmount: Decimal.parse('1400.00'),
+      dueDate: DateTime(2026, 9, 15),
+      status: DebtStatus.pending,
     );
-    _duesList = [_calculateDuesUseCase.execute(baseBorc, DateTime(2026, 9, 25))];
+    _duesList = [_calculateDuesUseCase.execute(baseDues, DateTime(2026, 9, 25))];
 
     _collectionSummary = ComplexCollectionSummary();
 

@@ -1,7 +1,7 @@
 # UI/UX Specification: Resident Mobile Dashboard (Papara Fintech Style)
 
 > **Feature ID:** SPEC-001  
-> **Platform:** Android (Jetpack Compose)  
+> **Platform:** Cross-Platform Mobile & Web (Flutter / Material 3)  
 > **Design Language:** Modern Fintech (Papara Style)  
 > **Theme Mode:** Parametric Dual-Theme (Light & Midnight Dark)  
 > **Currency Invariant:** Exclusively Turkish Lira (`₺` / TRY)  
@@ -11,7 +11,7 @@
 ## 1. Currency & Financial Invariants
 - **Exclusive Currency:** All dues, penalties, balances, and payment amounts MUST be formatted and calculated strictly in **Turkish Lira (`₺`)**.
 - **No Foreign Currencies:** The system does not support or display foreign currencies (USD, EUR, Gold). All carousel/pager multi-account indicators indicating currency switching are strictly prohibited.
-- **Precision Standard:** All financial values must maintain high-precision `BigDecimal` / `NUMERIC(15,2)` precision to adhere to KMK statutory delay interest rules without floating-point error.
+- **Precision Standard:** All financial values must maintain high-precision `Decimal` / `rust_decimal` / `NUMERIC(15,2)` precision to adhere to KMK statutory delay interest rules without floating-point error.
 
 ---
 

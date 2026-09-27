@@ -1,7 +1,7 @@
 # Epic: Bank Account Integration, Virtual IBAN & Automated Dues Reconciliation
 
 > **Epic ID:** EPIC-07  
-> **Module:** `backend-bank`, `backend-api`, `android-ui`, `android-domain`  
+> **Module:** `backend-rust`, `flutter-ui`, `flutter-domain`  
 > **Status:** SPECIFIED (0 / 6 Stories Completed - Backlog Ready)  
 > **Target Audience:** `SITE_MANAGER`, `HOME_RESIDENT`, `SAAS_ADMIN`  
 > **Governance:** Turkish Condominium Law (634 Sayılı KMK Madde 35), TCMB Açık Bankacılık & 6493 Sayılı Kanun  
@@ -45,9 +45,9 @@ This epic solves the operational bottleneck of manually matching bank transfers 
     And the resident sees their dedicated bank IBAN on their mobile dashboard
   ```
 - **Implementation Artifacts:**
-  - `VirtualIbanAllocationService.java`, `BagimsizBolumEntity.java`
+  - `virtual_iban_service.rs`, `models/mod.rs`
 - **Verification & Tests:**
-  - `VirtualIbanAllocationServiceTest.whenUnitCreated_thenGeneratesUniqueSanalIban`
+  - `when_unit_created_then_generates_unique_sanal_iban`
 
 ---
 
@@ -65,9 +65,9 @@ This epic solves the operational bottleneck of manually matching bank transfers 
     And marks the transaction as "ONAY_BEKLIYOR" in the reconciliation queue
   ```
 - **Implementation Artifacts:**
-  - `BankStatementParserService.java`, `Mt940IngestionEngine.java`
+  - `bank_statement_parser.rs`, `mt940_engine.rs`
 - **Verification & Tests:**
-  - `BankStatementParserServiceTest.whenParsingTurkishBankExcel_thenMatchesFlatAndAmount`
+  - `when_parsing_turkish_bank_excel_then_matches_flat_and_amount`
 
 ---
 
@@ -86,16 +86,16 @@ This epic solves the operational bottleneck of manually matching bank transfers 
     And response HTTP 200 is returned to the bank within 500ms
   ```
 - **Implementation Artifacts:**
-  - `BankWebhookController.java`, `PaymentReconciliationService.java`
+  - `bank_webhook_handler.rs`, `reconciliation_service.rs`
 - **Verification & Tests:**
-  - `BankWebhookControllerTest.whenValidSignature_thenProcessesPaymentAndUpdatesBalance`
+  - `when_valid_signature_then_processes_payment_and_updates_balance`
 
 ---
 
 ### STORY-07-04: Dynamic FAST TR-Karekod Generation for Mobile Banking Apps
 - **Status:** `PLANNED`
 - **Target Role:** Home Resident
-- **Description:** Generate TCMB / BKM standardized dynamic TR-Karekod strings in the Android application. Residents can scan or share the QR code using any Turkish mobile banking app (İşCep, Garanti BBVA, Akbank, Ziraat Mobil, etc.), which pre-fills the site IBAN, exact kuruş balance, and payment reference code.
+- **Description:** Generate TCMB / BKM standardized dynamic TR-Karekod strings in the Flutter application. Residents can scan or share the QR code using any Turkish mobile banking app (İşCep, Garanti BBVA, Akbank, Ziraat Mobil, etc.), which pre-fills the site IBAN, exact kuruş balance, and payment reference code.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Resident generates FAST QR code to pay dues
@@ -106,9 +106,9 @@ This epic solves the operational bottleneck of manually matching bank transfers 
     And scanning the QR in any banking app pre-populates all payment fields with zero manual entry
   ```
 - **Implementation Artifacts:**
-  - `FastQrGeneratorService.kt`, `QrPaymentBottomSheet.kt`
+  - `fast_qr_generator_service.dart`, `qr_payment_sheet.dart`
 - **Verification & Tests:**
-  - `FastQrGeneratorTest.whenGeneratingQr_thenEmbedsStandardTcmbFastFields`
+  - `when_generating_qr_then_embeds_standard_tcmb_fast_fields`
 
 ---
 
@@ -126,9 +126,9 @@ This epic solves the operational bottleneck of manually matching bank transfers 
     And resident receives push notification "Eylül 2026 aidatınız banka transferi ile ödendi"
   ```
 - **Implementation Artifacts:**
-  - `ReceiptGenerationService.java`, `TahsilatHareketEntity.java`
+  - `receipt_service.rs`, `models/mod.rs`
 - **Verification & Tests:**
-  - `PaymentReconciliationServiceTest.whenSettled_thenGeneratesImmutableReceipt`
+  - `when_settled_then_generates_immutable_receipt`
 
 ---
 
@@ -145,15 +145,15 @@ This epic solves the operational bottleneck of manually matching bank transfers 
     And a test connection probe validates API connectivity with the bank
   ```
 - **Implementation Artifacts:**
-  - `BankCredentialVaultService.java`, `SiteBankConfigEntity.java`
+  - `bank_vault_service.rs`, `models/mod.rs`
 - **Verification & Tests:**
-  - `BankCredentialVaultServiceTest.whenSavingCredentials_thenEncryptedWithAes256`
+  - `when_saving_credentials_then_encrypted_with_aes256`
 
 ---
 
 ## 3. Harness Verification Gates
 
 To ensure financial and security integrity, all code generated for EPIC-07 must pass:
-1. **Financial Precision Gate:** Exact `BigDecimal` reconciliation down to ₺0.01 (zero kuruş discrepancy).
+1. **Financial Precision Gate:** Exact `rust_decimal::Decimal` and `Decimal` reconciliation down to ₺0.01 (zero kuruş discrepancy).
 2. **Idempotency Gate:** Duplicate webhook deliveries for the same bank transaction ID must be rejected with HTTP 200 without double-crediting balances.
 3. **Security Gate:** Plaintext bank credentials must never be written to logs or transmitted unencrypted.

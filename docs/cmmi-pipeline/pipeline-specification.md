@@ -48,7 +48,7 @@ graph BT
 ### Level 3: Defined (Organization-Wide Spec-Driven Architecture)
 - **Characteristics:** Standardized, proactive development lifecycle across all modules and stacks.
 - **Core Practices:**
-  - **Constitutional Invariants:** Non-negotiable domain rules (`constitution.md`, e.g., KMK compliance, strict `BigDecimal`/`NUMERIC(15,2)` precision).
+  - **Constitutional Invariants:** Non-negotiable domain rules (`constitution.md`, e.g., KMK compliance, strict `rust_decimal::Decimal` / `Decimal` / `NUMERIC(15,2)` precision).
   - **Spec Kit Precedence:** Specifications (`spec.md`) with explicit Gherkin scenarios are the single source of truth.
   - **Topological Task Scheduling:** Decomposed into an acyclic directed graph (`task-dag.json`). No child task executes before prerequisites pass verification.
   - **Role Segregation:** Specialized agent personas (Requirements, Architect, Maker, Checker, Compliance).
@@ -146,7 +146,7 @@ flowchart LR
 - **Distinction between Verification and Validation:**
   - **Verification (VER - "Did we build it right?"):**
     - `SyntaxGate`: AST parsing (Roslyn for C#, `ast.parse` for Python).
-    - `FinancialIntegrityGate`: Decimal precision inspection (`BigDecimal` / `NUMERIC(15,2)`).
+    - `FinancialIntegrityGate`: Decimal precision inspection (`rust_decimal` / `Decimal` / `NUMERIC(15,2)`).
     - `UnitGate`: 100% test assertions pass in an isolated ephemeral sandbox.
   - **Validation (VAL - "Did we build the right thing?"):**
     - `GherkinAcceptanceGate`: Executes end-to-end user journeys defined in `spec.md`.

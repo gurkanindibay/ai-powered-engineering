@@ -1,7 +1,7 @@
 # Epic: Site Manager Financial Oversight & Community Operations
 
 > **Epic ID:** EPIC-02  
-> **Module:** Site Manager Dashboard (`android-ui`, `android-domain`)  
+> **Module:** Site Manager Dashboard (`flutter-ui`, `flutter-domain`, `backend-rust`)  
 > **Status:** COMPLETED (5 / 5 Stories Completed - 100%)  
 > **Target Audience:** Site Managers / Management Boards (Site Yöneticisi)  
 > **Business Value:** Real-time visibility into collection rates, cash flow, overdue follow-ups, and community notices.
@@ -28,10 +28,10 @@ Enables complex managers to monitor building-wide financial health, inspect indi
     And show overdue balance ₺24.000,00 with breakdown (18 Daire Ödendi, 6 Daire Gecikmede)
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt`
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/domain/model/ManagerModels.kt`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
+  - `apps/development-time/SitePulse/flutter/lib/models/manager_models.dart`
 - **Verification & Tests:**
-  - Live Android emulator screencap verification
+  - Flutter client integration tests & live verification
 
 ---
 
@@ -47,9 +47,9 @@ Enables complex managers to monitor building-wide financial health, inspect indi
     And show exact days overdue with red badge
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
-  - Live Android emulator screencap verification
+  - Flutter client integration tests & live verification
 
 ---
 
@@ -67,11 +67,11 @@ Enables complex managers to monitor building-wide financial health, inspect indi
     And the new resident appears in the site ledger
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt` (`AddHomeOwnerModalBottomSheet`, `HomeOwnerProvisionedDialog`)
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/service/HomeOwnerRegistrationService.java`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
+  - `apps/development-time/SitePulse/backend/src/services/site_admin_service.rs`
 - **Verification & Tests:**
-  - `whenRegisteringHomeOwner_thenProvisionsUserWithResidentPassword`
-  - Live Android emulator screencap verification
+  - `when_registering_home_owner_then_provisions_user_with_resident_password` (Rust)
+  - Flutter client unit tests
 
 ---
 
@@ -84,12 +84,12 @@ Enables complex managers to monitor building-wide financial health, inspect indi
     Given an overdue flat (A Blok D:14) in the manager ledger
     When tapping "Hatırlat" or "Mesaj Gönder"
     Then a prompt allows sending payment notice
-    And an in-app confirmation toast notifies the manager of successful dispatch
+    And an in-app confirmation notification notifies the manager of successful dispatch
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
-  - Verified via Android emulator UI action
+  - Verified via Flutter UI widget tests
 
 ---
 
@@ -105,6 +105,6 @@ Enables complex managers to monitor building-wide financial health, inspect indi
     Then the announcement appears on both manager and resident announcement feeds
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
-  - Verified via Android emulator UI action
+  - Verified via Flutter UI widget tests

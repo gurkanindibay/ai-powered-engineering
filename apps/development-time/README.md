@@ -34,7 +34,7 @@ flowchart TD
     end
 
     subgraph Delivery [4. Verified Deliverables]
-        Checker -- 100% Passed --> Artifacts[Native Android + Spring Boot REST + PostgreSQL]
+        Checker -- 100% Passed --> Artifacts[Cross-Platform Flutter + Rust Axum REST + PostgreSQL]
     end
 ```
 
@@ -50,7 +50,7 @@ flowchart TD
 
 | Application / System | Technologies | Methodology | Key Artifacts |
 | :--- | :--- | :--- | :--- |
-| [**SitePulse**](SitePulse/README.md) | Android Native (Kotlin, Jetpack Compose, M3) + Spring Boot 3.3.4 (Java 21) + PostgreSQL 16 | Spec-Driven Development + Task DAG + Loop Harness | `.specify/`, `harness/harness_cli.py`, `android/`, `backend/`, `scripts/` |
+| [**SitePulse**](SitePulse/README.md) | Cross-Platform Flutter (Dart, M3) + Rust (Axum, Tokio, rust_decimal) + PostgreSQL 16 | Spec-Driven Development + Task DAG + Loop Harness | `.specify/`, `harness/harness_cli.py`, `flutter/`, `backend/`, `scripts/` |
 | [**DevFactory**](../../factory/DevFactory/README.md) | .NET 8 / 10, Roslyn AST In-Memory Analysis, CLI | Multi-Stage Manufacturing Assembly Line | `src/DevFactory.Harness`, `DevFactory.Loop`, `DevFactory.Graph` |
 
 ---

@@ -1,7 +1,7 @@
 # Epic: Digital Resident Self-Registration & Approval Queue
 
 > **Epic ID:** EPIC-04  
-> **Module:** Invitation & Registration Flow (`backend-api`, `android-ui`, `android-domain`)  
+> **Module:** Invitation & Registration Flow (`backend-rust`, `flutter-ui`, `flutter-domain`)  
 > **Status:** COMPLETED (7 / 7 Stories Completed - 100%)  
 > **Target Audience:** Site Admin (Yönetici) and prospective Residents (Kat Maliki / Kiracı)  
 > **Business Value:** Eliminates manual data entry bottlenecks by allowing home owners to self-register via a secure link while retaining administrative gatekeeping and verification.
@@ -18,7 +18,7 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
 
 ### STORY-04-01: Tokenized Invitation Link Generation API
 - **Status:** `COMPLETED`
-- **Description:** Expose an API endpoint (`POST /api/v1/site-admin/sites/{siteId}/invite-link`) that generates a time-limited (7 days), URL-safe, cryptographically unique tokenized invitation link (`https://sitepulse.app/join/{slug}?token={token}`).
+- **Description:** Expose an API endpoint (`POST /api/v1/site/invitations/site`) that generates a time-limited (7 days), URL-safe, cryptographically unique tokenized invitation link (`https://sitepulse.app/join/{slug}?token={token}`).
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Generate 7-day secure invite link
@@ -28,10 +28,10 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
     And return URL formatted as "https://sitepulse.app/join/begonya-sitesi?token=SP-INV-XXXX"
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/service/RegistrationApprovalService.java`
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/controller/RegistrationApprovalController.java`
+  - `apps/development-time/SitePulse/backend/src/services/registration_approval_service.rs`
+  - `apps/development-time/SitePulse/backend/src/handlers/mod.rs`
 - **Verification & Tests:**
-  - `whenGeneratingInviteLink_thenReturnsValidUrlAndToken`
+  - `when_generating_invite_link_then_returns_valid_url_and_token` (Rust)
 
 ---
 
@@ -47,15 +47,15 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
     And tapping "Linki Kopyala" copies the URL to the clipboard with confirmation
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt` (`InviteLinkModalBottomSheet`)
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart` (`InviteLinkModalBottomSheet`)
 - **Verification & Tests:**
-  - Live Android emulator screencap verification
+  - Flutter client integration tests & live verification
 
 ---
 
 ### STORY-04-03: Resident Public Self-Registration Submission API
 - **Status:** `COMPLETED`
-- **Description:** Expose a public endpoint (`POST /api/v1/public/sites/{slug}/join`) accepting resident registration requests with applicant full name, email, phone number, block, flat number, floor, and occupancy type (`OWNER` / `TENANT`), placing the application into a `PENDING` review queue.
+- **Description:** Expose an endpoint accepting resident registration requests with applicant full name, email, phone number, block, flat number, floor, and occupancy type (`OWNER` / `TENANT`), placing the application into a `PENDING` review queue.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Home owner submits online registration
@@ -66,10 +66,10 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
     And assign a unique requestId (e.g. "req-101")
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/controller/RegistrationApprovalController.java`
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/dto/RegistrationRequestDtos.java`
+  - `apps/development-time/SitePulse/backend/src/services/registration_approval_service.rs`
+  - `apps/development-time/SitePulse/backend/src/models/mod.rs`
 - **Verification & Tests:**
-  - `whenSubmittingSelfRegistration_thenCreatesPendingRequest`
+  - `when_submitting_self_registration_then_creates_pending_request` (Rust)
 
 ---
 
@@ -85,10 +85,10 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
     And applicant cards display block, unit, contact info, and submission age
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt` (`PendingRegistrationCard`)
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/domain/model/ManagerModels.kt` (`RegistrationRequestItem`)
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart` (`PendingRegistrationCard`)
+  - `apps/development-time/SitePulse/flutter/lib/models/manager_models.dart` (`RegistrationRequestItem`)
 - **Verification & Tests:**
-  - Live Android emulator screencap verification
+  - Flutter client integration tests & live verification
 
 ---
 
@@ -106,11 +106,11 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
     And pending badge decrements from 2 to 1
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/service/RegistrationApprovalService.java`
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt` (`RegistrationApprovedDialog`)
+  - `apps/development-time/SitePulse/backend/src/services/registration_approval_service.rs`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart` (`RegistrationApprovedDialog`)
 - **Verification & Tests:**
-  - `whenApprovingPendingRegistration_thenProvisionsUserAndReturnsCredentials`
-  - Live Android emulator screencap verification
+  - `when_approving_pending_registration_then_provisions_user_and_returns_credentials` (Rust)
+  - Flutter client integration tests
 
 ---
 
@@ -126,10 +126,10 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
     And the item is removed from the active approval queue
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/service/RegistrationApprovalService.java`
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardViewModel.kt`
+  - `apps/development-time/SitePulse/backend/src/services/registration_approval_service.rs`
+  - `apps/development-time/SitePulse/flutter/lib/controllers/dashboard_controller.dart`
 - **Verification & Tests:**
-  - Unit test in `RegistrationApprovalServiceTest`
+  - Unit tests in `integration_tests.rs` (Rust) and Flutter tests
 
 ---
 
@@ -152,11 +152,10 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
     And Zeynep is added to the household member list
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/service/HomeResidentInvitationService.java`
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/controller/HomeResidentInvitationController.java`
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt` (`HomeResidentInviteBottomSheet`)
+  - `apps/development-time/SitePulse/backend/src/services/home_resident_invitation_service.rs`
+  - `apps/development-time/SitePulse/backend/src/handlers/mod.rs`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart` (`HomeResidentInviteBottomSheet`)
 - **Verification & Tests:**
-  - `whenGeneratingUnitInviteLink_thenReturnsUnitScopedUrl`
-  - `whenRegisteringHomeResident_thenAssignsHomeResidentRoleAndUnitScope`
-  - Live Android emulator screencap verification
-
+  - `when_generating_unit_invite_link_then_returns_unit_scoped_url_and_token` (Rust)
+  - `when_registering_home_resident_then_assigns_home_resident_role_and_unit_scope` (Rust)
+  - Flutter client integration tests

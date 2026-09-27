@@ -1,7 +1,7 @@
 # Epic: SaaS Multi-Tenancy & Autonomous Site Onboarding
 
 > **Epic ID:** EPIC-03  
-> **Module:** SaaS Platform Architecture (`backend-api`, `backend-service`, `android-ui`)  
+> **Module:** SaaS Platform Architecture (`backend-rust`, `flutter-ui`)  
 > **Status:** COMPLETED (5 / 5 Stories Completed - 100%)  
 > **Target Audience:** SaaS Super Administrator, Sales & Operations Team  
 > **Business Value:** Enables SitePulse to scale commercially as a cloud SaaS across hundreds of independent residential complexes.
@@ -29,8 +29,8 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
     And no cross-tenant data leakage is possible
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/backend/src/main/resources/db/migration/V1__init_schema.sql`
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/dto/SiteOnboardingDtos.java`
+  - `apps/development-time/SitePulse/backend/migrations/V1__init_schema.sql`
+  - `apps/development-time/SitePulse/backend/src/models/mod.rs`
 - **Verification & Tests:**
   - `SqlSchemaGate.verify_numeric_precision`
   - Integration entity tests
@@ -40,7 +40,7 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
 ### STORY-03-02: SaaS Super Admin Management Dashboard
 - **Status:** `COMPLETED`
 - **Spec Ref:** `SPEC-002`
-- **Description:** Provide a specialized mobile & web dashboard for SaaS Super Administrators to view total active sites, monthly MRR/ARR dues volume, managed unit count, and portfolio statistics.
+- **Description:** Provide a specialized cross-platform mobile & web dashboard for SaaS Super Administrators to view total active sites, monthly MRR/ARR dues volume, managed unit count, and portfolio statistics.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: SaaS Admin views portfolio overview
@@ -50,9 +50,9 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
     And show cumulative metrics: Total Sites, Total Units, and Monthly Dues volume
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt` (`SaasSuperAdminDashboardContent`)
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
-  - Live Android emulator screencap verification
+  - Flutter client integration tests & live verification
 
 ---
 
@@ -71,11 +71,11 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
     And the new site card appears in the SaaS admin portfolio list
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt` (`RegisterSiteModalBottomSheet`)
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/service/SiteOnboardingService.java`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
+  - `apps/development-time/SitePulse/backend/src/services/saas_tenant_service.rs`
 - **Verification & Tests:**
-  - `whenRegisteringNewSite_thenProvisionsSiteAndManagerWithTemporaryPassword`
-  - Live Android emulator screencap verification
+  - `when_registering_new_site_then_provisions_site_and_manager_with_temporary_password` (Rust)
+  - Flutter client unit tests
 
 ---
 
@@ -93,26 +93,26 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
     And trigger SMS credential alert to the manager's mobile number
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/service/SiteOnboardingService.java`
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt` (`AdminCredentialsProvisionedDialog`)
+  - `apps/development-time/SitePulse/backend/src/services/saas_tenant_service.rs`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
-  - `whenRegisteringNewSite_thenProvisionsSiteAndManagerWithTemporaryPassword`
-  - `whenDuplicateEmail_thenThrowsException`
+  - `when_registering_new_site_then_provisions_site_and_manager_with_temporary_password` (Rust)
+  - `when_duplicate_email_then_throws_exception` (Rust)
 
 ---
 
 ### STORY-03-05: Multi-Tenant REST API Endpoints
 - **Status:** `COMPLETED`
 - **Spec Ref:** `SPEC-002`
-- **Description:** Expose standard REST endpoints for registering new tenants and querying the portfolio: `POST /api/v1/saas/sites` and `GET /api/v1/saas/sites`.
+- **Description:** Expose standard REST endpoints for registering new tenants and querying the portfolio: `POST /api/v1/saas/tenants` and `GET /api/v1/saas/tenants`.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: REST endpoint returns 201 Created on valid site onboarding
-    When sending POST request to /api/v1/saas/sites with valid payload
+    When sending POST request to /api/v1/saas/tenants with valid payload
     Then the HTTP status code is 201 Created
     And response includes siteId, slug, siteAdminId, and temporaryPassword
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/controller/SiteOnboardingController.java`
+  - `apps/development-time/SitePulse/backend/src/handlers/mod.rs`
 - **Verification & Tests:**
-  - Unit & MockMvc tests in backend test runner
+  - Rust Axum integration tests in `tests/integration_tests.rs`

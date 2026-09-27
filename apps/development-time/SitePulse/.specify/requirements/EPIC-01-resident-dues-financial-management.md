@@ -1,7 +1,7 @@
 # Epic: Resident Dues Management & Financial Transparency
 
 > **Epic ID:** EPIC-01  
-> **Module:** Resident Domain & UI (`android-domain`, `android-ui`, `backend-api`)  
+> **Module:** Resident Domain & UI (`flutter-domain`, `flutter-ui`, `backend-rust`)  
 > **Status:** COMPLETED (6 / 6 Stories Completed - 100.0%)  
 > **Target Audience:** Site Residents (Kat Maliki / Kiracı)  
 > **Governing Law:** Kat Mülkiyeti Kanunu (KMK - 634 Sayılı Kanun, Article 20)  
@@ -19,7 +19,7 @@ Provides residents of managed complexes with full transparency into their financ
 ### STORY-01-01: High-Precision Domain Money & Dues Value Objects
 - **Status:** `COMPLETED`
 - **Task Ref:** `task-01`
-- **Description:** Implement immutable domain value objects (`Money`, `AidatBorcu`, `Daire`, `Kisi`) using arbitrary-precision arithmetic (`BigDecimal`). Floating-point types (`float`, `double`) are strictly prohibited to prevent financial rounding drift.
+- **Description:** Implement immutable domain value objects (`Money`, `AidatBorcu`, `Daire`, `Kisi`) using arbitrary-precision arithmetic (`Decimal` in Dart, `rust_decimal::Decimal` in Rust). Floating-point types (`float`, `double`, `f32`, `f64`) are strictly prohibited to prevent financial rounding drift.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Preserve kuruş-level precision in dues calculation
@@ -29,7 +29,9 @@ Provides residents of managed complexes with full transparency into their financ
     And zero floating-point drift occurs across successive operations
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/domain/model/ManagerModels.kt`
+  - `apps/development-time/SitePulse/flutter/lib/models/manager_models.dart`
+  - `apps/development-time/SitePulse/flutter/lib/domain/models/money.dart`
+  - `apps/development-time/SitePulse/backend/src/models/mod.rs`
 - **Verification & Tests:**
   - `FinancialIntegrityGate.verify_due_rounding`
   - `DuesCalculatorTests.Should_Preserve_Kurus_Precision`
@@ -49,8 +51,8 @@ Provides residents of managed complexes with full transparency into their financ
     And the total liability displayed is ₺1.423,33
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/domain/model/ManagerModels.kt`
-  - `apps/development-time/SitePulse/backend/src/main/java/com/sitepulse/backend/service/AidatCalculationService.java`
+  - `apps/development-time/SitePulse/flutter/lib/domain/usecases/calculate_dues_usecase.dart`
+  - `apps/development-time/SitePulse/backend/src/services/aidat_calculation_service.rs`
 - **Verification & Tests:**
   - `whenOverdueBy10Days_thenCalculatesExact5PercentProRatedPenalty`
   - `whenNotOverdue_thenPenaltyRemainsZero`
@@ -61,18 +63,18 @@ Provides residents of managed complexes with full transparency into their financ
 ### STORY-01-03: Reactive Resident Dashboard State Management
 - **Status:** `COMPLETED`
 - **Task Ref:** `task-03`
-- **Description:** Implement `DashboardViewModel` with unidirectional data flow (UDF) using Kotlin Coroutines and `StateFlow` to manage loading, loaded, and error states for resident balances.
+- **Description:** Implement `DashboardController` with unidirectional data flow (UDF) using Flutter `ChangeNotifier` to manage loading, loaded, and error states for resident balances.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Emit reactive state on dashboard launch
     Given a logged-in resident (Ahmet Yılmaz - A Blok D:14)
-    When DashboardViewModel initializes
-    Then it emits UiState with current balance (₺1.423,33), 10 days overdue badge, and announcements
+    When DashboardController initializes
+    Then it emits state with current balance (₺1.423,33), 10 days overdue badge, and announcements
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardViewModel.kt`
+  - `apps/development-time/SitePulse/flutter/lib/controllers/dashboard_controller.dart`
 - **Verification & Tests:**
-  - `DashboardViewModelTest.testStateFlowEmission`
+  - `dashboard_controller_test.dart`
   - `SyntaxGate`
 
 ---
@@ -80,7 +82,7 @@ Provides residents of managed complexes with full transparency into their financ
 ### STORY-01-04: Material 3 Resident Dashboard UI Screens
 - **Status:** `COMPLETED`
 - **Task Ref:** `task-04`
-- **Description:** Build native Jetpack Compose Material 3 screens including Hero Balance Card with overdue badge, quick action grid (`Aidat Öde`, `Dekontlar`, `Arıza Bildir`, `Yönetim`), and announcement banner.
+- **Description:** Build cross-platform Flutter Material 3 screens including Hero Balance Card with overdue badge, quick action grid (`Aidat Öde`, `Dekontlar`, `Arıza Bildir`, `Yönetim`), and announcement banner.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Render resident hero balance and actions
@@ -90,11 +92,11 @@ Provides residents of managed complexes with full transparency into their financ
     And unapproved sub-meter features ("Sayaç Gir", "Rezervasyon") are hidden
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt`
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/theme/Theme.kt`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
+  - `apps/development-time/SitePulse/flutter/lib/theme/sitepulse_theme.dart`
 - **Verification & Tests:**
   - `SyntaxGate.verify_curly_braces`
-  - Android emulator visual inspection screenshot
+  - Flutter client visual inspection
 
 ---
 
@@ -110,16 +112,16 @@ Provides residents of managed complexes with full transparency into their financ
     Then display "Eylül 2026 Aidatı (₺1.400,00)" and "KMK Gecikme Tazminatı (+₺23,33)"
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/ui/dashboard/DashboardScreen.kt`
+  - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
-  - Visual verification in Android screencap
+  - Visual verification in Flutter client
 
 ---
 
-### STORY-01-06: Offline Room Cache & Synchronization Layer
+### STORY-01-06: Offline Cache & Synchronization Layer
 - **Status:** `COMPLETED`
 - **Task Ref:** `task-08`
-- **Description:** Implement local SQLite/Room database caching for resident dashboard statements and balance records, gracefully degrading to cached state when offline.
+- **Description:** Implement local caching for resident dashboard statements and balance records, gracefully degrading to cached state when offline.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Display cached dues when network is offline
@@ -128,7 +130,6 @@ Provides residents of managed complexes with full transparency into their financ
     Then show last synchronized financial statement with "Çevrimdışı Mod" banner
   ```
 - **Implementation Artifacts:**
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/data/local/`
-  - `apps/development-time/SitePulse/android/app/src/main/java/com/sitepulse/app/data/repository/ResidentRepository.kt`
+  - `apps/development-time/SitePulse/flutter/lib/controllers/dashboard_controller.dart`
 - **Verification & Tests:**
   - `RoomCacheTests.Should_Return_Cached_Statement_On_Network_Timeout`

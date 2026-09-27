@@ -14,20 +14,26 @@ void main() {
       final dueDate = DateTime(2026, 9, 15);
       final today = DateTime(2026, 9, 25);
 
-      final borc = AidatBorcu(
+      final dues = DuesLiability(
         id: 'b-01',
-        daireId: 'd-14',
-        donem: 'Eylül 2026',
-        anaPara: Decimal.parse('1400.00'),
-        gecikmeTazminati: Decimal.zero,
-        toplamTutar: Decimal.parse('1400.00'),
-        sonOdemeTarihi: dueDate,
-        durum: BorcDurumu.bekliyor,
+        unitId: 'd-14',
+        period: 'Eylül 2026',
+        principalAmount: Decimal.parse('1400.00'),
+        delayPenalty: Decimal.zero,
+        totalAmount: Decimal.parse('1400.00'),
+        dueDate: dueDate,
+        status: DebtStatus.pending,
       );
 
-      final result = useCase.execute(borc, today);
+      final result = useCase.execute(dues, today);
 
-      expect(result.durum, BorcDurumu.gecikmede);
+      expect(result.status, DebtStatus.overdue);
+      expect(result.daysOverdue, 10);
+      expect(result.delayPenalty, Decimal.parse('23.33'));
+      expect(result.totalAmount, Decimal.parse('1423.33'));
+
+      // Also verify compatibility getters
+      expect(result.durum, DebtStatus.overdue);
       expect(result.gecikenGunSayisi, 10);
       expect(result.gecikmeTazminati, Decimal.parse('23.33'));
       expect(result.toplamTutar, Decimal.parse('1423.33'));
@@ -37,23 +43,23 @@ void main() {
       final dueDate = DateTime(2026, 9, 30);
       final today = DateTime(2026, 9, 25);
 
-      final borc = AidatBorcu(
+      final dues = DuesLiability(
         id: 'b-02',
-        daireId: 'd-14',
-        donem: 'Eylül 2026',
-        anaPara: Decimal.parse('1400.00'),
-        gecikmeTazminati: Decimal.zero,
-        toplamTutar: Decimal.parse('1400.00'),
-        sonOdemeTarihi: dueDate,
-        durum: BorcDurumu.bekliyor,
+        unitId: 'd-14',
+        period: 'Eylül 2026',
+        principalAmount: Decimal.parse('1400.00'),
+        delayPenalty: Decimal.zero,
+        totalAmount: Decimal.parse('1400.00'),
+        dueDate: dueDate,
+        status: DebtStatus.pending,
       );
 
-      final result = useCase.execute(borc, today);
+      final result = useCase.execute(dues, today);
 
-      expect(result.durum, BorcDurumu.bekliyor);
-      expect(result.gecikenGunSayisi, 0);
-      expect(result.gecikmeTazminati, Decimal.zero);
-      expect(result.toplamTutar, Decimal.parse('1400.00'));
+      expect(result.status, DebtStatus.pending);
+      expect(result.daysOverdue, 0);
+      expect(result.delayPenalty, Decimal.zero);
+      expect(result.totalAmount, Decimal.parse('1400.00'));
     });
   });
 }
