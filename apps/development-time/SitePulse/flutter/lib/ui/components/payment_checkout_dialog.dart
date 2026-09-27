@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 
+import 'app_fullscreen_page.dart';
+
 enum CheckoutPaymentMethod {
   card,
   virtualIban,
@@ -57,67 +59,17 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
   Widget build(BuildContext context) {
     final isOverdue = widget.dues.gecikmeTazminati > Decimal.zero;
 
-    return Dialog(
-      backgroundColor: AppColors.surface(context),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.accentCyan.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.payment, color: AppColors.accentCyan, size: 20),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Aidat Ödeme Adımı',
-                                style: TextStyle(
-                                  color: AppColors.textPrimary(context),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                '${widget.siteName} • ${widget.unitDesc}',
-                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    color: AppColors.textSecondary(context),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
+    return AppFullscreenPage(
+      title: 'Aidat Ödeme Adımı',
+      subtitle: '${widget.siteName} • ${widget.unitDesc}',
+      leading: IconButton(
+        icon: const Icon(Icons.close),
+        color: AppColors.textPrimary(context),
+        onPressed: () => Navigator.pop(context),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
 
               // Debt Breakdown Card
               Container(
@@ -159,7 +111,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                   decoration: BoxDecoration(
-                                    color: AppColors.accentRed.withOpacity(0.15),
+                                    color: AppColors.accentRed.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
@@ -243,8 +195,6 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                 _buildVirtualIbanPaymentView(),
             ],
           ),
-        ),
-      ),
     );
   }
 
@@ -265,7 +215,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.accentCyan.withOpacity(0.12) : AppColors.card(context),
+          color: isSelected ? AppColors.accentCyan.withValues(alpha: 0.12) : AppColors.card(context),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? AppColors.accentCyan : AppColors.border(context),
@@ -439,7 +389,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppColors.accentGreen.withOpacity(0.15),
+                      color: AppColors.accentGreen.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Text(
@@ -489,7 +439,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                         decoration: BoxDecoration(
-                          color: AppColors.accentCyan.withOpacity(0.15),
+                          color: AppColors.accentCyan.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Row(
@@ -555,9 +505,9 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: AppColors.accentCyan.withOpacity(0.08),
+            color: AppColors.accentCyan.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.accentCyan.withOpacity(0.2)),
+            border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.2)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,

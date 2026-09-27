@@ -28,4 +28,6 @@ Development-time inference uses AI models, agents, and spec harnesses *during th
    - All manufactured code, domain models, database schemas, tables, columns, variables, functions, and tests must be strictly written in English. Non-English code identifiers are strictly prohibited.
 6. **Automatic Stack Restart After Fixes**:
    - After completing any issue fix or code modification in SitePulse, proactively restart the full development stack by executing `apps/development-time/SitePulse/scripts/restart-all.sh` so the user can immediately test live changes across the backend (8080), Flutter web client (9090), and UX prototype (9091).
+7. **Mobile Modal Bottom Sheet Mandate**:
+   - In mobile client views (Flutter UI), never use floating center `AlertDialog` popups. All user interaction dialogs, forms, confirmations, and detail breakdowns must be rendered as bottom sheets (`AppModalSheet` / `showModalBottomSheet`) with a drag handle, rounded top corners (28dp), keyboard-insets padding (`MediaQuery.viewInsets.bottom`), and responsive constraints.
 

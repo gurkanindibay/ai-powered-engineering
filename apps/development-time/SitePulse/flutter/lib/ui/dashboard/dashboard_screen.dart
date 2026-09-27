@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
+import '../components/app_modal_sheet.dart';
 import '../components/hero_balance_card.dart';
 import '../components/manager_cockpit_view.dart';
 import '../components/payment_checkout_dialog.dart';
@@ -106,7 +107,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppColors.accentCyan.withOpacity(0.15),
+                color: AppColors.accentCyan.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(Icons.flash_on, color: AppColors.accentCyan, size: 20),
@@ -572,7 +573,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: color.withOpacity(0.12),
+                            color: color.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
@@ -725,7 +726,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: r.isOwner
-                            ? AppColors.accentCyan.withOpacity(0.15)
+                            ? AppColors.accentCyan.withValues(alpha: 0.15)
                             : AppColors.card(context),
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -756,8 +757,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showPaymentDialog(AidatBorcu dues, {CheckoutPaymentMethod initialMethod = CheckoutPaymentMethod.card}) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (ctx) => PaymentCheckoutDialog(
         dues: dues,
         siteName: widget.controller.activeUnit.siteAdi,
@@ -781,48 +784,96 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showDuesDetailDialog(AidatBorcu dues) {
-    showDialog(
+    AppModalSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Aidat Hesap Özeti', style: TextStyle(color: AppColors.textPrimary(context))),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Kat Mülkiyeti Kanunu (KMK) Madde 20 Uyarınca:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
-            const SizedBox(height: 8),
-            Text('• Son Ödeme Tarihi: 15.09.2026', style: TextStyle(color: AppColors.textPrimary(context))),
-            const Text('• Hesaplama Tarihi: 25.09.2026 (10 Gün Gecikme)', style: TextStyle(color: AppColors.accentRed)),
-            Text('• Aylık Yasal Gecikme Oranı: %5', style: TextStyle(color: AppColors.textPrimary(context))),
-            const Text('• Gecikme Tazminatı: (1400 * 0.05 / 30) * 10 = 23,33 TL', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold)),
-          ],
+      builder: (ctx) => AppModalSheet(
+        title: 'Aidat Hesap Özeti',
+        subtitle: 'KMK Madde 20 Yasal Gecikme Cetveli',
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.accentCyan.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.calculate_outlined, color: AppColors.accentCyan, size: 20),
         ),
         actions: [
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentCyan,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             child: const Text('Kapat'),
           ),
         ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.card(context),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border(context)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Kat Mülkiyeti Kanunu (KMK) Madde 20 Uyarınca:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 10),
+                  Text('• Son Ödeme Tarihi: 15.09.2026', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
+                  const SizedBox(height: 6),
+                  const Text('• Hesaplama Tarihi: 25.09.2026 (10 Gün Gecikme)', style: TextStyle(color: AppColors.accentRed, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  Text('• Aylık Yasal Gecikme Oranı: %5', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentRed.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text('• Gecikme Tazminatı: (1400 * 0.05 / 30) * 10 = 23,33 TL', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _showReceiptsDialog() {
-    showDialog(
+    AppModalSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.receipt_long, color: AppColors.accentCyan),
-            const SizedBox(width: 8),
-            Text('Ödeme Makbuzları', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
-          ],
+      builder: (ctx) => AppModalSheet(
+        title: 'Ödeme Makbuzları',
+        subtitle: 'Geçmiş aidat ve tahsilat belgeleri',
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.accentCyan.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.receipt_long, color: AppColors.accentCyan, size: 20),
         ),
-        content: Column(
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentCyan,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Tamam'),
+          ),
+        ],
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildReceiptItem('Ağustos 2026 Aidatı', '₺1.400,00', '14.08.2026 • FAST Onaylı'),
@@ -832,12 +883,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildReceiptItem('Haziran 2026 Aidatı', '₺1.400,00', '15.06.2026 • FAST Onaylı'),
           ],
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Tamam'),
-          ),
-        ],
       ),
     );
   }
@@ -870,103 +915,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String selectedCategory = 'Asansör';
     final descCtrl = TextEditingController();
 
-    showDialog(
+    AppModalSheet.show(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          backgroundColor: AppColors.surface(context),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: AppColors.accentCyan.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.build_circle_outlined, color: AppColors.accentCyan, size: 20),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'Yönetime Talep & Arıza',
-                style: TextStyle(
-                  color: AppColors.textPrimary(context),
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Arıza veya Talep Kategorisi',
-                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: ['Asansör', 'Tesisat / Su', 'Aydınlatma', 'Otopark', 'Diğer'].map((cat) {
-                      final isSelected = selectedCategory == cat;
-                      return ChoiceChip(
-                        label: Text(cat, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : AppColors.textPrimary(context))),
-                        selected: isSelected,
-                        selectedColor: AppColors.accentCyan,
-                        backgroundColor: AppColors.card(context),
-                        side: BorderSide(color: isSelected ? AppColors.accentCyan : AppColors.border(context)),
-                        onSelected: (_) => setDlgState(() => selectedCategory = cat),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Açıklama',
-                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: descCtrl,
-                    maxLines: 3,
-                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
-                    decoration: InputDecoration(
-                      hintText: 'Sorunun yerini ve detayını kısaca yazın...',
-                      hintStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                      filled: true,
-                      fillColor: AppColors.card(context),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.all(10),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.card(context),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.border(context)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.info_outline, size: 14, color: AppColors.accentCyan),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Acil teknik durumlar için site görevlisini (Dahili: 101) doğrudan arayabilirsiniz.',
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+        builder: (ctx, setDlgState) => AppModalSheet(
+          title: 'Yönetime Talep & Arıza',
+          subtitle: 'Teknik ve idari bildirim formu',
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.accentCyan.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
             ),
+            child: const Icon(Icons.build_circle_outlined, color: AppColors.accentCyan, size: 20),
           ),
           actions: [
             TextButton(
@@ -992,70 +953,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: const Text('Talebi Gönder'),
             ),
           ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Arıza veya Talep Kategorisi',
+                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: ['Asansör', 'Tesisat / Su', 'Aydınlatma', 'Otopark', 'Diğer'].map((cat) {
+                  final isSelected = selectedCategory == cat;
+                  return ChoiceChip(
+                    label: Text(cat, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : AppColors.textPrimary(context))),
+                    selected: isSelected,
+                    selectedColor: AppColors.accentCyan,
+                    backgroundColor: AppColors.card(context),
+                    side: BorderSide(color: isSelected ? AppColors.accentCyan : AppColors.border(context)),
+                    onSelected: (_) => setDlgState(() => selectedCategory = cat),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Açıklama',
+                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: descCtrl,
+                maxLines: 3,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
+                decoration: InputDecoration(
+                  hintText: 'Sorunun yerini ve detayını kısaca yazın...',
+                  hintStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.all(10),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.card(context),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border(context)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, size: 14, color: AppColors.accentCyan),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Acil teknik durumlar için site görevlisini (Dahili: 101) doğrudan arayabilirsiniz.',
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   void _showAnnouncementsDialog() {
-    showDialog(
+    AppModalSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.accentGreen.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.campaign_outlined, color: AppColors.accentGreen, size: 20),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              'Site Duyuruları',
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildAnnouncementItem(
-                  tag: 'Planlı Bakım',
-                  tagColor: AppColors.accentOrange,
-                  title: 'A ve B Blok Asansör Periyodik Muayenesi',
-                  date: '28 Eylül 2026 • 10:00 - 14:00',
-                  desc: 'TMMOB akredite muayene kuruluşu tarafından yıllık periyodik kontroller yapılacaktır. Bakım esnasında asansörler kısa süreli servis dışı kalacaktır.',
-                ),
-                const SizedBox(height: 10),
-                _buildAnnouncementItem(
-                  tag: 'Genel Kurul',
-                  tagColor: AppColors.accentCyan,
-                  title: 'Olağan Kat Malikleri Genel Kurul Toplantısı',
-                  date: '15 Ekim 2026 • 19:30',
-                  desc: 'Begonya Sitesi 2026-2027 dönemi tahmini işletme bütçesi, aidat artış oranı ve yönetim kurulu seçimi Sosyal Tesis toplantı salonunda gerçekleştirilecektir.',
-                ),
-                const SizedBox(height: 10),
-                _buildAnnouncementItem(
-                  tag: 'Bilgilendirme',
-                  tagColor: AppColors.accentGreen,
-                  title: 'Merkezi Isıtma & Boyler Kazanı Kış Bakımı Tamamlandı',
-                  date: '24 Eylül 2026',
-                  desc: 'Kazan dairesi brülör ve sirkülasyon pompaları kış sezonuna hazır hale getirilmiştir.',
-                ),
-              ],
-            ),
+      builder: (ctx) => AppModalSheet(
+        title: 'Site Duyuruları',
+        subtitle: 'Yönetim kurulu güncel bilgilendirmeleri',
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.accentGreen.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
           ),
+          child: const Icon(Icons.campaign_outlined, color: AppColors.accentGreen, size: 20),
         ),
         actions: [
           ElevatedButton(
@@ -1068,6 +1049,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: const Text('Kapat'),
           ),
         ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildAnnouncementItem(
+              tag: 'Planlı Bakım',
+              tagColor: AppColors.accentOrange,
+              title: 'A ve B Blok Asansör Periyodik Muayenesi',
+              date: '28 Eylül 2026 • 10:00 - 14:00',
+              desc: 'TMMOB akredite muayene kuruluşu tarafından yıllık periyodik kontroller yapılacaktır. Bakım esnasında asansörler kısa süreli servis dışı kalacaktır.',
+            ),
+            const SizedBox(height: 10),
+            _buildAnnouncementItem(
+              tag: 'Genel Kurul',
+              tagColor: AppColors.accentCyan,
+              title: 'Olağan Kat Malikleri Genel Kurul Toplantısı',
+              date: '15 Ekim 2026 • 19:30',
+              desc: 'Begonya Sitesi 2026-2027 dönemi tahmini işletme bütçesi, aidat artış oranı ve yönetim kurulu seçimi Sosyal Tesis toplantı salonunda gerçekleştirilecektir.',
+            ),
+            const SizedBox(height: 10),
+            _buildAnnouncementItem(
+              tag: 'Bilgilendirme',
+              tagColor: AppColors.accentGreen,
+              title: 'Merkezi Isıtma & Boyler Kazanı Kış Bakımı Tamamlandı',
+              date: '24 Eylül 2026',
+              desc: 'Kazan dairesi brülör ve sirkülasyon pompaları kış sezonuna hazır hale getirilmiştir.',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1131,39 +1140,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showInviteDialog(UnitInviteInfo invite) {
-    showDialog(
+    AppModalSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.share, color: AppColors.accentOrange),
-            const SizedBox(width: 8),
-            Text('Hane Sakini Davet Linki', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Kapsam: ${invite.unitLabel} • ${invite.expiresAtStr}', style: const TextStyle(color: AppColors.accentCyan, fontSize: 12, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.card(context),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.border(context)),
-              ),
-              child: SelectableText(
-                invite.inviteUrl,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11, fontFamily: 'monospace'),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(invite.securityNotice, style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
-          ],
+      builder: (ctx) => AppModalSheet(
+        title: 'Hane Sakini Davet Linki',
+        subtitle: 'Kapsam: ${invite.unitLabel} • ${invite.expiresAtStr}',
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.accentOrange.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.share, color: AppColors.accentOrange, size: 20),
         ),
         actions: [
           TextButton(
@@ -1178,36 +1166,95 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.card(context),
+              foregroundColor: AppColors.textPrimary(context),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             child: const Text('Kapat'),
           ),
         ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.card(context),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border(context)),
+              ),
+              child: SelectableText(
+                invite.inviteUrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontFamily: 'monospace'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.card(context),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border(context)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.shield_outlined, size: 16, color: AppColors.accentOrange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      invite.securityNotice,
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _showApprovalSuccessDialog(ApprovalSuccessInfo info) {
-    showDialog(
+    AppModalSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.check_circle, color: AppColors.accentGreen),
-            const SizedBox(width: 8),
-            Text('Başvuru Onaylandı!', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
-          ],
+      builder: (ctx) => AppModalSheet(
+        title: 'Başvuru Onaylandı!',
+        subtitle: '${info.fullName} (${info.flatDesc})',
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.accentGreen.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.check_circle, color: AppColors.accentGreen, size: 20),
         ),
-        content: Column(
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentGreen,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Tamam'),
+          ),
+        ],
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${info.fullName} (${info.flatDesc}) başvurusu onaylandı.', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
+            Text('Kullanıcının başvurusu onaylandı ve sisteme dahil edildi.', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
             const SizedBox(height: 12),
             Text('Üretilen Geçici Sakin Şifresi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
             const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.all(10),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppColors.card(context),
                 borderRadius: BorderRadius.circular(10),
@@ -1215,19 +1262,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               child: SelectableText(
                 info.temporaryPassword,
-                style: const TextStyle(color: AppColors.accentGreen, fontSize: 15, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                style: const TextStyle(color: AppColors.accentGreen, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
               ),
             ),
-            const SizedBox(height: 8),
-            Text('Şifre ve giriş linki ${info.email} adresine SMS ve e-posta olarak iletildi.', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
+            const SizedBox(height: 10),
+            Text('Şifre ve giriş linki ${info.email} adresine SMS ve e-posta olarak iletildi.', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, height: 1.3)),
           ],
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Tamam'),
-          ),
-        ],
       ),
     );
   }
@@ -1239,30 +1280,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
         : '${creds.siteName} başarıyla platforma kaydedildi.';
     final icon = creds.isRenewal ? Icons.key : Icons.apartment;
 
-    showDialog(
+    AppModalSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(icon, color: AppColors.accentCyan),
-            const SizedBox(width: 8),
-            Text(title, style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
-          ],
+      builder: (ctx) => AppModalSheet(
+        title: title,
+        subtitle: subtitle,
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.accentCyan.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: AppColors.accentCyan, size: 20),
         ),
-        content: Column(
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentCyan,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Tamam'),
+          ),
+        ],
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(subtitle, style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
-            const SizedBox(height: 10),
             Text('Yönetici: ${creds.adminName} (${creds.adminEmail})', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text('Geçici Yönetim Şifresi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
             const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.all(10),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppColors.card(context),
                 borderRadius: BorderRadius.circular(10),
@@ -1270,44 +1322,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               child: SelectableText(
                 creds.temporaryPassword,
-                style: const TextStyle(color: AppColors.accentCyan, fontSize: 15, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                style: const TextStyle(color: AppColors.accentCyan, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
               ),
             ),
           ],
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Tamam'),
-          ),
-        ],
       ),
     );
   }
 
   void _showHomeOwnerProvisionedDialog(ProvisionedHomeOwnerCredentials creds) {
-    showDialog(
+    AppModalSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.person_add, color: AppColors.accentGreen),
-            const SizedBox(width: 8),
-            Text('Sakin Kaydedildi!', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
-          ],
+      builder: (ctx) => AppModalSheet(
+        title: 'Sakin Kaydedildi!',
+        subtitle: '${creds.ownerName} (${creds.block} D:${creds.unitNo}) başarıyla eklendi.',
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.accentGreen.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.person_add, color: AppColors.accentGreen, size: 20),
         ),
-        content: Column(
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentGreen,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Tamam'),
+          ),
+        ],
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${creds.ownerName} (${creds.block} D:${creds.unitNo}) başarıyla eklendi.', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
-            const SizedBox(height: 10),
             Text('Üretilen Geçici Şifre:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
             const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.all(10),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppColors.card(context),
                 borderRadius: BorderRadius.circular(10),
@@ -1315,17 +1372,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               child: SelectableText(
                 creds.temporaryPassword,
-                style: const TextStyle(color: AppColors.accentGreen, fontSize: 15, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                style: const TextStyle(color: AppColors.accentGreen, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
               ),
             ),
           ],
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Tamam'),
-          ),
-        ],
       ),
     );
   }
@@ -1338,93 +1389,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final phoneCtrl = TextEditingController();
     final duesCtrl = TextEditingController(text: '1400.00');
 
-    showDialog(
+    AppModalSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Yeni Daire / Sakin Ekle', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: blockCtrl,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Blok (örn: A Blok)',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: unitCtrl,
-                keyboardType: TextInputType.number,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Daire No',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: nameCtrl,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Ad Soyad',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: emailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'E-posta',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: phoneCtrl,
-                keyboardType: TextInputType.phone,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Telefon',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: duesCtrl,
-                keyboardType: TextInputType.number,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Aylık Aidat Tutarı (TL)',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
+      builder: (ctx) => AppModalSheet(
+        title: 'Yeni Daire / Sakin Ekle',
+        subtitle: 'Siteye bağımsız bölüm ve malik/kiracı kaydı',
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.accentGreen.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
           ),
+          child: const Icon(Icons.person_add_alt_1, color: AppColors.accentGreen, size: 20),
         ),
         actions: [
           TextButton(
@@ -1458,6 +1434,86 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: const Text('Kaydet & Şifre Üret'),
           ),
         ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: blockCtrl,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Blok (örn: A Blok)',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: unitCtrl,
+              keyboardType: TextInputType.number,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Daire No',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: nameCtrl,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Ad Soyad',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'E-posta',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: phoneCtrl,
+              keyboardType: TextInputType.phone,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Telefon',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: duesCtrl,
+              keyboardType: TextInputType.number,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Aylık Aidat Tutarı (TL)',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1470,91 +1526,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final adminEmailCtrl = TextEditingController();
     final adminPhoneCtrl = TextEditingController();
 
-    showDialog(
+    AppModalSheet.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Yeni Site / Kompleks Kaydet', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Site / Proje Adı',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: cityCtrl,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Şehir',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: addressCtrl,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Adres',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: adminNameCtrl,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Yönetici Ad Soyad',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: adminEmailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Yönetici E-posta',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: adminPhoneCtrl,
-                keyboardType: TextInputType.phone,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'Yönetici Telefon',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
+      builder: (ctx) => AppModalSheet(
+        title: 'Yeni Site / Kompleks Kaydet',
+        subtitle: 'SaaS tenant kurulumu ve yetkili atama',
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.accentCyan.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
           ),
+          child: const Icon(Icons.apartment, color: AppColors.accentCyan, size: 20),
         ),
         actions: [
           TextButton(
@@ -1588,27 +1571,102 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: const Text('Siteyi Kaydet & Yetkilendir'),
           ),
         ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Site / Proje Adı',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: cityCtrl,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Şehir',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: addressCtrl,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Adres',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: adminNameCtrl,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Yönetici Ad Soyad',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: adminEmailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Yönetici E-posta',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: adminPhoneCtrl,
+              keyboardType: TextInputType.phone,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Yönetici Telefon',
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _confirmDeleteSite(TenantSiteItem site) {
     if (site.hasActions) {
-      showDialog(
+      AppModalSheet.show(
         context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.surface(context),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
-              const SizedBox(width: 8),
-              Text('Site Silinemez', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
-            ],
-          ),
-          content: Text(
-            '${site.name} sitesine ait aktif daireler (${site.totalUnits}) veya finansal tahsilat hareketleri bulunmaktadır. KMK mevzuatı ve veri bütünlüğü gereği işlem kaydı bulunan siteler silinemez.',
-            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
+        builder: (ctx) => AppModalSheet(
+          title: 'Site Silinemez',
+          subtitle: 'KMK mevzuatı ve veri bütünlüğü uyarısı',
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.orangeAccent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 20),
           ),
           actions: [
             ElevatedButton(
@@ -1617,84 +1675,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: const Text('Anladım'),
             ),
           ],
+          child: Text(
+            '${site.name} sitesine ait aktif daireler (${site.totalUnits}) veya finansal tahsilat hareketleri bulunmaktadır. KMK mevzuatı ve veri bütünlüğü gereği işlem kaydı bulunan siteler silinemez.',
+            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13, height: 1.4),
+          ),
         ),
       );
       return;
     }
 
-    showDialog(
+    AppModalSheet.showConfirmation(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.delete_forever, color: Colors.redAccent),
-            const SizedBox(width: 8),
-            Text('Siteyi Sil', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
-          ],
-        ),
-        content: Text(
-          '${site.name} sitesini platformdan tamamen silmek istediğinize emin misiniz?\n\nBu sitede henüz herhangi bir daire veya finansal hareket bulunmamaktadır. Bu işlem geri alınamaz.',
-          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary(context))),
+      title: 'Siteyi Sil',
+      message: '${site.name} sitesini platformdan tamamen silmek istediğinize emin misiniz?\n\nBu sitede henüz herhangi bir daire veya finansal hareket bulunmamaktadır. Bu işlem geri alınamaz.',
+      confirmLabel: 'Evet, Sil',
+      cancelLabel: 'Vazgeç',
+      confirmColor: Colors.redAccent,
+      icon: Icons.delete_forever,
+      iconColor: Colors.redAccent,
+    ).then((confirmed) {
+      if (confirmed == true && mounted) {
+        widget.controller.deleteSite(site.id);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${site.name} başarıyla silindi.'),
+            backgroundColor: AppColors.accentGreen,
+            duration: const Duration(seconds: 3),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              widget.controller.deleteSite(site.id);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${site.name} başarıyla silindi.'),
-                  backgroundColor: AppColors.accentGreen,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-            child: const Text('Evet, Sil'),
-          ),
-        ],
-      ),
-    );
+        );
+      }
+    });
   }
 
   void _confirmResetAdminPassword(TenantSiteItem site) {
-    showDialog(
+    AppModalSheet.showConfirmation(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.lock_reset, color: AppColors.accentCyan),
-            const SizedBox(width: 8),
-            Text('Geçici Şifre Yenile', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
-          ],
-        ),
-        content: Text(
-          '${site.name} yöneticisi ${site.adminName} (${site.adminEmail}) için yeni bir geçici yönetim şifresi üretilecektir.\n\nMevcut şifre geçersiz kılınır ve yönetici sisteme girdiğinde yeni şifre belirlemeye yönlendirilir.\n\nOnaylıyor musunuz?',
-          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary(context))),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              widget.controller.resetSiteManagerPassword(site.id);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.white),
-            child: const Text('Şifreyi Yenile'),
-          ),
-        ],
-      ),
-    );
+      title: 'Geçici Şifre Yenile',
+      message: '${site.name} yöneticisi ${site.adminName} (${site.adminEmail}) için yeni bir geçici yönetim şifresi üretilecektir.\n\nMevcut şifre geçersiz kılınır ve yönetici sisteme girdiğinde yeni şifre belirlemeye yönlendirilir.\n\nOnaylıyor musunuz?',
+      confirmLabel: 'Şifreyi Yenile',
+      cancelLabel: 'Vazgeç',
+      confirmColor: AppColors.accentCyan,
+      icon: Icons.lock_reset,
+      iconColor: AppColors.accentCyan,
+    ).then((confirmed) {
+      if (confirmed == true && mounted) {
+        widget.controller.resetSiteManagerPassword(site.id);
+      }
+    });
   }
 }
