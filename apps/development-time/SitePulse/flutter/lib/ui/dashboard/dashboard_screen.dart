@@ -531,7 +531,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accentCyan,
-              foregroundColor: const Color(0xFF0F172A),
+              foregroundColor: Colors.white,
             ),
             child: Text('3D Secure ile ₺${dues.toplamTutar.toStringAsFixed(2)} Öde'),
           ),
@@ -982,7 +982,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               );
               Navigator.pop(ctx);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: const Color(0xFF0F172A)),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.white),
             child: const Text('Siteyi Kaydet & Yetkilendir'),
           ),
         ],

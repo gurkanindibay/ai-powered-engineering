@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Brand & Accents
-  static const primary = Color(0xFF00629E);
-  static const accentCyan = Color(0xFF00D2FF);
-  static const accentGreen = Color(0xFF00E5A3);
-  static const accentRed = Color(0xFFFF4B72);
-  static const accentOrange = Color(0xFFFF9500);
+  // Brand & Accents (Calm, Non-Neon, Refined Fintech)
+  static const primary = Color(0xFF0284C7);
+  static const accentCyan = Color(0xFF0284C7);    // Refined Fintech Blue (Replaces neon cyan)
+  static const accentSky = Color(0xFF38BDF8);     // Soft Muted Sky
+  static const accentGreen = Color(0xFF10B981);   // Natural Emerald Green (Replaces neon green)
+  static const accentRed = Color(0xFFEF4444);     // Refined Crimson Red (Replaces neon hot pink)
+  static const accentOrange = Color(0xFFF59E0B);  // Warm Natural Amber (Replaces neon orange)
 
-  // Dark Theme (Papara Midnight)
+  // Dark Theme (Papara Matte Midnight)
   static const darkBackground = Color(0xFF0B0F19);
   static const darkSurface = Color(0xFF151D2F);
-  static const darkCard = Color(0xFF1B2438);
-  static const darkBorder = Color(0xFF26324D);
+  static const darkCard = Color(0xFF1E293B);
+  static const darkBorder = Color(0xFF2E3D5B);
   static const darkTextPrimary = Color(0xFFF8FAFC);
   static const darkTextSecondary = Color(0xFF94A3B8);
 

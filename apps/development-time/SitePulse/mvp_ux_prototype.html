@@ -3,68 +3,110 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SitePulse - MVP Lean UX Prototype (Aidat & Finansal Tahsilat Odaklı)</title>
+  <title>SitePulse - Papara Style Lean MVP Mobile Prototype</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <!-- Google Material Symbols Outlined (1:1 equivalent with Flutter Material Icons) -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  
   <style>
+    /* =========================================================================
+       PAPARA MIDNIGHT DESIGN TOKENS (Sourced directly from Flutter AppTheme)
+       ========================================================================= */
     :root {
-      --bg: #090d16;
-      --card-bg: #111827;
-      --border: #1f2937;
-      --primary: #00629e;
-      --accent: #00d2ff;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
-      --success: #10b981;
-      --danger: #ef4444;
-      --warning: #f59e0b;
+      /* Brand & Accents (Calm, Non-Neon, Refined Fintech) */
+      --primary: #0284C7;
+      --accent-cyan: #0284C7;      /* Refined Fintech Blue (Calm, Non-neon) */
+      --accent-green: #10B981;     /* Natural Emerald Green (Calm, Non-neon) */
+      --accent-red: #EF4444;       /* Refined Crimson Red (Calm, Non-neon) */
+      --accent-orange: #F59E0B;    /* Warm Natural Amber (Calm, Non-neon) */
+      --accent-sky: #38BDF8;       /* Soft Sky Blue */
+
+      /* Dark Theme (Papara Matte Midnight) */
+      --bg-dark: #0B0F19;          /* Deep Midnight Canvas */
+      --surface-dark: #151D2F;     /* Elevated Card Surface */
+      --card-dark: #1E293B;        /* Inset Well / Chip Background */
+      --border-dark: #2E3D5B;      /* Subtle Crisp Border */
+      --text-primary: #F8FAFC;     /* High Contrast Text */
+      --text-secondary: #94A3B8;   /* Slate Muted Text */
+
+      /* Radii */
+      --radius-xl: 24px;
+      --radius-lg: 20px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+      --radius-pill: 9999px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: 'Plus Jakarta Sans', sans-serif;
-      background: radial-gradient(circle at 50% 0%, #172554 0%, var(--bg) 100%);
-      color: var(--text);
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(180deg, #101726 0%, var(--bg-dark) 100%);
+      color: var(--text-primary);
       min-height: 100vh;
       padding: 32px 16px;
       display: flex;
       flex-direction: column;
       align-items: center;
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* Header */
+    /* Material Symbols Typography Utility */
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      user-select: none;
+    }
+
+    /* Header Section */
     .header-section {
       text-align: center;
-      max-width: 800px;
+      max-width: 900px;
       margin-bottom: 28px;
     }
-    .badge-mvp {
+
+    .badge-papara {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 5px 14px;
-      border-radius: 999px;
+      padding: 6px 16px;
+      border-radius: var(--radius-pill);
       font-size: 11px;
       font-weight: 800;
-      letter-spacing: 0.5px;
-      background: rgba(16, 185, 129, 0.15);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      letter-spacing: 0.6px;
+      background: rgba(2, 132, 199, 0.12);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(2, 132, 199, 0.3);
       margin-bottom: 12px;
+      text-transform: uppercase;
     }
+
     h1 {
-      font-size: 28px;
+      font-size: 32px;
       font-weight: 800;
-      letter-spacing: -0.5px;
-      background: linear-gradient(135deg, #ffffff 0%, #93c5fd 100%);
+      letter-spacing: -0.6px;
+      background: linear-gradient(135deg, #FFFFFF 0%, #CBD5E1 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       margin-bottom: 8px;
     }
+
     .subtitle {
       font-size: 14px;
-      color: var(--text-muted);
+      color: var(--text-secondary);
       line-height: 1.5;
     }
 
@@ -75,23 +117,26 @@
       gap: 36px;
       justify-content: center;
       align-items: flex-start;
-      max-width: 1200px;
+      max-width: 1280px;
       width: 100%;
     }
 
-    /* Mobile Phone Shell */
+    /* =========================================================================
+       PHONE CONTAINER (Pixel-Twin of Flutter Native App in Papara Style)
+       ========================================================================= */
     .phone-container {
       width: 390px;
-      height: 820px;
+      height: 844px;
       background: #000;
       border-radius: 50px;
       padding: 12px;
-      box-shadow: 0 25px 60px -15px rgba(0,0,0,0.9), 0 0 0 4px #1e293b, 0 0 35px rgba(0, 210, 255, 0.15);
+      box-shadow: 0 25px 60px -15px rgba(0,0,0,0.85), 0 0 0 2px var(--border-dark);
       position: relative;
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
     }
+
     .phone-notch {
       position: absolute;
       top: 18px;
@@ -107,6 +152,7 @@
       justify-content: center;
       gap: 8px;
     }
+
     .notch-camera {
       width: 10px;
       height: 10px;
@@ -114,88 +160,118 @@
       background: #111;
       border: 1px solid #333;
     }
+
     .phone-screen {
       width: 100%;
       height: 100%;
       border-radius: 40px;
       overflow: hidden;
       position: relative;
-      background: #0b0f19;
+      background: var(--bg-dark);
       display: flex;
       flex-direction: column;
-      color: #f8fafc;
-      transition: background 0.3s ease;
+      color: var(--text-primary);
     }
-
-    /* Light Theme Variation inside Phone */
-    .phone-screen.light-mode {
-      background: #f8fafc;
-      color: #0f172a;
-    }
-    .phone-screen.light-mode .card-surface {
-      background: #ffffff;
-      border-color: #e2e8f0;
-      color: #0f172a;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.04);
-    }
-    .phone-screen.light-mode .text-sub { color: #64748b; }
-    .phone-screen.light-mode .topbar { background: rgba(255,255,255,0.85); border-color: #e2e8f0; }
 
     /* Top Status Bar */
     .status-bar {
       height: 44px;
-      padding: 12px 24px 0;
+      padding: 14px 24px 0;
       display: flex;
       justify-content: space-between;
       align-items: center;
       font-size: 12px;
       font-weight: 600;
       z-index: 90;
+      background: var(--bg-dark);
     }
 
-    /* Top AppBar */
-    .topbar {
-      padding: 8px 18px 12px;
+    /* Flutter-Identical Top AppBar */
+    .flutter-appbar {
+      padding: 8px 16px 12px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      backdrop-filter: blur(12px);
-      position: sticky;
-      top: 0;
+      background: var(--bg-dark);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
       z-index: 80;
     }
-    .user-info { display: flex; align-items: center; gap: 10px; }
-    .avatar {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-      color: white;
-      font-weight: 700;
-      font-size: 13px;
+
+    .brand-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-logo-squircle {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: rgba(2, 132, 199, 0.15);
+      color: var(--accent-cyan);
       display: flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid rgba(255,255,255,0.2);
-    }
-    .user-text h3 { font-size: 14px; font-weight: 700; letter-spacing: -0.2px; }
-    .user-text p { font-size: 11px; color: #94a3b8; }
-    .sync-tag {
-      font-size: 10px;
-      padding: 3px 8px;
-      background: rgba(16, 185, 129, 0.12);
-      color: #34d399;
-      border-radius: 999px;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
     }
 
-    /* App Body Content - Dedicated Scroll Container */
-    .app-content {
-      padding: 16px;
+    .brand-text {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #fff;
+    }
+
+    .role-chip {
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--card-dark);
+      border: 1px solid var(--border-dark);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .appbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .action-icon-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border-radius: 8px;
+      transition: all 0.15s;
+    }
+
+    .action-icon-btn:hover {
+      color: var(--accent-cyan);
+      background: rgba(255,255,255,0.05);
+    }
+
+    .user-avatar-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    /* Scrollable App Body Container */
+    .app-scroll-content {
+      padding: 14px 16px 20px;
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -203,587 +279,665 @@
       overflow-y: auto;
       overflow-x: hidden;
     }
-    .app-content::-webkit-scrollbar { width: 4px; }
-    .app-content::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
 
-    /* Card Surface */
-    .card-surface {
-      background: #131b2e;
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 22px;
-      padding: 18px;
-    }
+    .app-scroll-content::-webkit-scrollbar { width: 4px; }
+    .app-scroll-content::-webkit-scrollbar-thumb { background: var(--border-dark); border-radius: 4px; }
 
-    /* Hero Balance Card */
-    .hero-card {
-      background: linear-gradient(145deg, #0f2757 0%, #0d1e3d 100%);
-      border: 1px solid rgba(59, 130, 246, 0.3);
+    /* =========================================================================
+       HERO BALANCE CARD (Exact Flutter HeroBalanceCard component)
+       ========================================================================= */
+    .hero-balance-card {
+      background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+      border: 1.5px solid var(--border-dark);
+      border-radius: var(--radius-xl);
+      padding: 22px;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
       position: relative;
-      overflow: hidden;
-      box-shadow: 0 12px 30px -10px rgba(37, 99, 235, 0.35);
     }
-    .hero-card::after {
-      content: "";
-      position: absolute;
-      top: -40px;
-      right: -40px;
-      width: 140px;
-      height: 140px;
-      background: radial-gradient(circle, rgba(0, 210, 255, 0.25) 0%, transparent 70%);
-      border-radius: 50%;
-      pointer-events: none;
+
+    .hero-balance-card.overdue {
+      border-color: rgba(255, 75, 114, 0.5);
     }
-    .hero-header {
+
+    .hero-card-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
+      align-items: flex-start;
+      margin-bottom: 18px;
     }
-    .account-label {
-      font-size: 12px;
+
+    .site-title {
+      color: var(--accent-cyan);
+      font-size: 14px;
       font-weight: 600;
-      color: #93c5fd;
-      display: flex;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .unit-subtitle {
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .status-pill {
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
     }
-    .overdue-pill {
-      font-size: 11px;
-      font-weight: 700;
-      color: #f87171;
-      background: rgba(239, 68, 68, 0.16);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      padding: 3px 10px;
-      border-radius: 999px;
+
+    .status-pill.penalty {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--accent-red);
     }
-    .paid-pill {
-      font-size: 11px;
-      font-weight: 700;
-      color: #34d399;
-      background: rgba(16, 185, 129, 0.16);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      padding: 3px 10px;
-      border-radius: 999px;
+
+    .status-pill.ontime {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--accent-green);
     }
-    .balance-amount {
-      font-size: 34px;
-      font-weight: 800;
-      letter-spacing: -1px;
-      color: #ffffff;
-      margin-bottom: 6px;
+
+    .status-pill.offline {
+      background: rgba(245, 158, 11, 0.2);
+      border: 1px solid var(--accent-orange);
+      color: var(--accent-orange);
+    }
+
+    .amount-label {
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .amount-val-row {
       display: flex;
       align-items: baseline;
       gap: 4px;
     }
-    .balance-currency { font-size: 22px; font-weight: 700; color: #60a5fa; }
-    .due-date {
-      font-size: 12px;
-      color: #94a3b8;
-      margin-bottom: 14px;
+
+    .amount-val {
+      color: var(--text-primary);
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      font-feature-settings: "tnum";
     }
 
-    /* KMK Statutory Breakdown Box */
-    .kmk-breakdown {
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 14px;
-      padding: 10px 14px;
-      margin-bottom: 16px;
+    /* KMK Statutory Delay Penalty Box */
+    .kmk-penalty-box {
+      margin-top: 10px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: rgba(239, 68, 68, 0.12);
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      font-size: 12px;
+      gap: 8px;
+      color: var(--accent-red);
+      font-size: 11px;
+      font-weight: 500;
     }
-    .kmk-title { color: #cbd5e1; }
-    .kmk-value { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #fca5a5; }
 
-    /* Action Buttons inside Hero */
-    .hero-actions {
+    .hero-btn-row {
       display: flex;
-      gap: 10px;
+      gap: 12px;
+      margin-top: 20px;
     }
-    .btn-pay-now {
-      flex: 1;
-      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-      color: white;
+
+    .btn-papara-cta {
+      flex: 3;
+      background: var(--accent-cyan);
+      color: #FFFFFF;
       border: none;
-      padding: 14px;
       border-radius: 14px;
+      padding: 14px;
       font-size: 14px;
-      font-weight: 700;
+      font-weight: 800;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      transition: transform 0.15s, box-shadow 0.15s;
+      transition: all 0.2s;
     }
-    .btn-pay-now:hover {
+
+    .btn-papara-cta:hover {
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
       transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.4);
     }
-    .btn-details {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: #cbd5e1;
-      padding: 14px 16px;
+
+    .btn-papara-outlined {
+      flex: 2;
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border-dark);
       border-radius: 14px;
+      padding: 14px;
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
-    }
-
-    /* Fast Action Section (MVP Only 2 Items: Sanal IBAN & Hızlı Öde) */
-    .section-title {
-      font-size: 13px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #94a3b8;
-      margin-bottom: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    /* Sanal IBAN Widget */
-    .iban-box {
-      background: #111a2e;
-      border: 1px dashed rgba(59, 130, 246, 0.4);
-      border-radius: 16px;
-      padding: 14px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-    }
-    .iban-details { display: flex; flex-direction: column; gap: 3px; }
-    .iban-title { font-size: 11px; font-weight: 600; color: #60a5fa; }
-    .iban-code {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
-      font-weight: 700;
-      color: #f8fafc;
-      letter-spacing: 0.5px;
-    }
-    .btn-copy-iban {
-      background: rgba(59, 130, 246, 0.15);
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      color: #93c5fd;
-      padding: 8px 12px;
-      border-radius: 10px;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 4px;
+      justify-content: center;
       transition: all 0.2s;
     }
-    .btn-copy-iban:hover {
-      background: #2563eb;
-      color: white;
+
+    .btn-papara-outlined:hover {
+      border-color: var(--accent-cyan);
+      color: #fff;
     }
 
-    /* Recent Receipts List */
-    .receipt-item {
+    /* =========================================================================
+       RESIDENT ACTIONS ROW (Exact Flutter ResidentActionsRow component)
+       4 Equal Tiles, 15% Tinted Circle Icons, Strict 24dp Geometry, No Emojis
+       ========================================================================= */
+    .actions-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .action-tile {
+      background: var(--surface-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: var(--radius-md);
+      padding: 12px 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.2s;
+    }
+
+    .action-tile:hover {
+      border-color: var(--accent-cyan);
+      transform: translateY(-2px);
+    }
+
+    .action-icon-circle {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 8px;
+    }
+
+    .action-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .action-badge-top {
+      position: absolute;
+      top: -4px;
+      right: 4px;
+      background: var(--accent-orange);
+      color: #fff;
+      font-size: 8px;
+      font-weight: 800;
+      padding: 2px 5px;
+      border-radius: 6px;
+    }
+
+    /* =========================================================================
+       VIRTUAL IBAN CARD (Exact Flutter VirtualIbanCard component)
+       ========================================================================= */
+    .virtual-iban-card {
+      background: var(--surface-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+    }
+
+    .iban-header-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
+      margin-bottom: 16px;
     }
-    .receipt-item:last-child { border-bottom: none; }
-    .receipt-left { display: flex; align-items: center; gap: 12px; }
-    .receipt-icon {
+
+    .iban-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .iban-icon-well {
       width: 36px;
       height: 36px;
       border-radius: 10px;
-      background: rgba(16, 185, 129, 0.12);
-      color: #10b981;
+      background: rgba(0, 98, 158, 0.2);
+      color: var(--accent-cyan);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
     }
-    .receipt-info h4 { font-size: 13px; font-weight: 600; }
-    .receipt-info p { font-size: 11px; color: #94a3b8; }
-    .receipt-amount {
-      text-align: right;
-    }
-    .receipt-amount .val { font-size: 14px; font-weight: 700; color: #f8fafc; }
-    .receipt-amount .status { font-size: 10px; font-weight: 700; color: #10b981; }
 
-    /* Bottom Navigation Bar (Minimal MVP 3 Tabs: Ana Sayfa, Dekontlar, Dairem) */
-    .bottom-nav {
+    .iban-title-text h4 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .iban-title-text p {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .badge-auto-match {
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-green);
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .iban-display-box {
+      background: var(--bg-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .iban-string {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 1.1px;
+    }
+
+    .btn-iban-copy {
+      background: rgba(2, 132, 199, 0.15);
+      border: none;
+      color: var(--accent-cyan);
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+
+    .btn-iban-copy:hover {
+      background: var(--accent-cyan);
+      color: #0F172A;
+    }
+
+    .iban-expl-text {
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* =========================================================================
+       HOUSEHOLD RESIDENTS CARD (Exact Flutter _buildDairemHouseholdCard)
+       ========================================================================= */
+    .household-card {
+      background: var(--surface-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+    }
+
+    .household-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .household-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .btn-text-invite {
+      background: transparent;
+      border: none;
+      color: var(--accent-orange);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .resident-row {
+      background: var(--bg-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .resident-row:last-child { margin-bottom: 0; }
+
+    .resident-info h5 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .resident-info p {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .role-badge-pill {
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .role-badge-pill.owner {
+      background: rgba(2, 132, 199, 0.15);
+      color: var(--accent-cyan);
+    }
+
+    .role-badge-pill.member {
+      background: var(--surface-dark);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-dark);
+    }
+
+    /* =========================================================================
+       BOTTOM NAVIGATION BAR (Exact Flutter 3-Tab Fixed Navigation)
+       ========================================================================= */
+    .flutter-bottom-nav {
       height: 64px;
-      background: rgba(15, 23, 42, 0.98);
-      backdrop-filter: blur(12px);
-      border-top: 1px solid rgba(255,255,255,0.08);
+      background: var(--surface-dark);
+      border-top: 1px solid var(--border-dark);
       display: flex;
       justify-content: space-around;
       align-items: center;
-      padding: 0 6px;
-      flex-shrink: 0;
       z-index: 80;
     }
-    .nav-item {
+
+    .nav-tab-btn {
       flex: 1;
       height: 100%;
+      background: transparent;
+      border: none;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
+      gap: 3px;
+      color: var(--text-secondary);
       font-size: 11px;
       font-weight: 600;
-      color: #64748b;
       cursor: pointer;
-      user-select: none;
-      transition: all 0.2s ease;
-      border-radius: 12px;
-      margin: 4px 2px;
+      transition: all 0.15s;
     }
-    .nav-item:hover {
-      background: rgba(255,255,255,0.04);
-      color: #94a3b8;
-    }
-    .nav-item.active {
-      color: #38bdf8;
-      background: rgba(56, 189, 248, 0.12);
-      font-weight: 700;
-    }
-    .nav-item svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; pointer-events: none; }
-    .nav-item span { pointer-events: none; }
 
-    /* Login & Onboarding Screen Styling */
-    .login-brand {
-      text-align: center;
-      padding: 10px 0 6px;
+    .nav-tab-btn.active {
+      color: var(--accent-cyan);
     }
-    .brand-icon {
-      width: 52px;
-      height: 52px;
-      border-radius: 16px;
-      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-      display: inline-flex;
+
+    .nav-tab-btn .material-symbols-outlined {
+      font-size: 22px;
+    }
+
+    /* =========================================================================
+       MODAL DIALOGS (Pixel-Accurate Papara Dialogs)
+       ========================================================================= */
+    .modal-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      display: none;
       align-items: center;
       justify-content: center;
-      font-size: 26px;
-      margin-bottom: 8px;
-      box-shadow: 0 10px 25px -5px rgba(2, 132, 199, 0.5);
+      padding: 16px;
     }
-    .brand-title {
-      font-size: 20px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      color: #f8fafc;
+
+    .modal-overlay.active { display: flex; }
+
+    .modal-dialog-card {
+      background: var(--surface-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: var(--radius-lg);
+      padding: 22px;
+      width: 100%;
+      max-width: 350px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    .brand-subtitle {
-      font-size: 12px;
-      color: #94a3b8;
-      margin-top: 3px;
+
+    @keyframes popIn {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
     }
-    .auth-tab-pill {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 4px;
-      background: rgba(0,0,0,0.3);
-      padding: 4px;
+
+    .modal-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 14px;
+    }
+
+    .modal-summary-box {
+      background: var(--bg-dark);
+      border: 1px solid var(--border-dark);
       border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+
+    .modal-summary-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      margin-bottom: 6px;
+      color: var(--text-secondary);
+    }
+
+    .modal-summary-row.total {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-dark);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .modal-input {
+      width: 100%;
+      background: var(--bg-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: var(--text-primary);
+      font-size: 13px;
+      margin-bottom: 10px;
+      font-family: inherit;
+    }
+
+    .modal-input:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+    }
+
+    .modal-actions-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    /* =========================================================================
+       SPEC & VERIFICATION SIDE PANEL
+       ========================================================================= */
+    .side-spec-panel {
+      flex: 1;
+      min-width: 340px;
+      max-width: 600px;
+      background: var(--surface-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: var(--radius-xl);
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    .spec-header-title {
+      font-size: 18px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #fff;
       margin-bottom: 12px;
     }
-    .auth-tab-btn {
-      padding: 8px;
-      border-radius: 8px;
-      font-size: 11px;
-      font-weight: 700;
-      color: #94a3b8;
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      transition: all 0.2s;
+
+    .standard-manifesto-box {
+      background: var(--bg-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-bottom: 20px;
     }
-    .auth-tab-btn.active {
-      background: #0284c7;
-      color: #ffffff;
-    }
-    .btn-google-auth {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      background: #ffffff;
-      color: #1e293b;
-      font-weight: 700;
+
+    .standard-manifesto-box h4 {
       font-size: 13px;
-      padding: 12px;
-      border-radius: 14px;
-      border: none;
-      cursor: pointer;
-      width: 100%;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-      transition: transform 0.15s;
-    }
-    .btn-google-auth:hover {
-      transform: translateY(-1px);
-    }
-    .login-divider {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 12px 0;
-      color: #64748b;
-      font-size: 11px;
+      color: var(--accent-cyan);
+      margin-bottom: 6px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-    .login-divider::before, .login-divider::after {
-      content: "";
-      flex: 1;
-      height: 1px;
-      background: rgba(255,255,255,0.08);
-    }
 
-    /* Interactive Modal Bottom Sheet */
-    .modal-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.75);
-      backdrop-filter: blur(6px);
-      z-index: 200;
-      display: none;
-      flex-direction: column;
-      justify-content: flex-end;
-    }
-    .modal-overlay.active { display: flex; }
-    .bottom-sheet {
-      background: #111827;
-      border-top: 1px solid rgba(255,255,255,0.12);
-      border-radius: 28px 28px 0 0;
-      padding: 20px 20px 32px;
-      max-height: 90%;
-      overflow-y: auto;
-      animation: slideUp 0.3s ease-out;
-    }
-    @keyframes slideUp {
-      from { transform: translateY(100%); }
-      to { transform: translateY(0); }
-    }
-    .sheet-handle {
-      width: 44px;
-      height: 4px;
-      background: #374151;
-      border-radius: 999px;
-      margin: 0 auto 16px;
-    }
-    .sheet-title {
-      font-size: 18px;
-      font-weight: 800;
-      margin-bottom: 4px;
-    }
-    .sheet-sub {
+    .standard-manifesto-box p {
       font-size: 12px;
-      color: #94a3b8;
-      margin-bottom: 18px;
+      color: var(--text-secondary);
+      line-height: 1.5;
     }
 
-    /* Tabs inside Payment Sheet */
-    .pay-tabs {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 6px;
-      background: #1f2937;
-      padding: 4px;
-      border-radius: 12px;
-      margin-bottom: 20px;
-    }
-    .pay-tab {
-      padding: 8px 4px;
-      border-radius: 8px;
+    .icon-token-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
       font-size: 12px;
-      font-weight: 700;
-      text-align: center;
-      color: #94a3b8;
-      cursor: pointer;
-      border: none;
-      background: transparent;
-      transition: all 0.2s;
-    }
-    .pay-tab.active {
-      background: #0284c7;
-      color: white;
     }
 
-    /* Tab Contents */
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-
-    /* QR Code Display Box */
-    .qr-container {
-      background: #ffffff;
-      padding: 16px;
-      border-radius: 18px;
-      width: 190px;
-      height: 190px;
-      margin: 0 auto 16px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-    }
-    .qr-container svg { width: 100%; height: 100%; }
-
-    /* Deep Link Direct Bank Select Button */
-    .btn-deep-link {
-      width: 100%;
-      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-      color: white;
-      border: none;
-      padding: 14px;
-      border-radius: 14px;
-      font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-    .btn-secondary-action {
-      width: 100%;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      color: #cbd5e1;
-      padding: 12px;
-      border-radius: 14px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
+    .icon-token-table th, .icon-token-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border-dark);
+      text-align: left;
     }
 
-    /* Card Input Form */
-    .form-group {
-      margin-bottom: 12px;
-    }
-    .form-label {
+    .icon-token-table th {
+      color: var(--text-secondary);
       font-size: 11px;
-      font-weight: 600;
-      color: #94a3b8;
-      margin-bottom: 4px;
-      display: block;
+      text-transform: uppercase;
     }
-    .form-input {
-      width: 100%;
-      background: #1f2937;
-      border: 1px solid #374151;
-      border-radius: 10px;
-      padding: 12px;
-      color: #ffffff;
-      font-size: 13px;
-      font-family: inherit;
-    }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-    /* Simulator Controls Panel */
-    .eval-panel {
-      flex: 1;
-      min-width: 320px;
-      max-width: 520px;
-      background: #111827;
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 24px;
-      padding: 24px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-    }
-    .eval-title {
-      font-size: 18px;
-      font-weight: 800;
-      margin-bottom: 14px;
+    .icon-preview-cell {
       display: flex;
       align-items: center;
       gap: 8px;
+      font-weight: 600;
     }
-    .audit-box {
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 20px;
-      font-size: 13px;
-      line-height: 1.6;
-      color: #94a3b8;
-    }
-    .audit-box strong { color: #f8fafc; }
-    .removed-list {
-      background: rgba(239, 68, 68, 0.08);
-      border: 1px solid rgba(239, 68, 68, 0.2);
-      border-radius: 12px;
-      padding: 12px 16px;
-      margin-bottom: 20px;
-      font-size: 12px;
-    }
-    .removed-list h4 { color: #f87171; font-weight: 700; margin-bottom: 6px; }
-    .removed-list ul { padding-left: 18px; color: #fca5a5; }
-    .retained-list {
-      background: rgba(16, 185, 129, 0.08);
-      border: 1px solid rgba(16, 185, 129, 0.2);
-      border-radius: 12px;
-      padding: 12px 16px;
-      margin-bottom: 20px;
-      font-size: 12px;
-    }
-    .retained-list h4 { color: #34d399; font-weight: 700; margin-bottom: 6px; }
-    .retained-list ul { padding-left: 18px; color: #86efac; }
 
-    .control-btn-grid {
+    .mini-icon-circle {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mini-icon-circle .material-symbols-outlined {
+      font-size: 16px;
+    }
+
+    /* Simulation Control Buttons */
+    .sim-controls-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
+      margin-top: 16px;
     }
-    .btn-ctrl {
-      background: #1f2937;
-      border: 1px solid #374151;
-      color: white;
+
+    .btn-sim-control {
+      background: var(--card-dark);
+      border: 1px solid var(--border-dark);
+      color: var(--text-primary);
       padding: 12px;
       border-radius: 12px;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 600;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
       transition: all 0.2s;
     }
-    .btn-ctrl:hover {
-      background: #374151;
-      border-color: #00d2ff;
+
+    .btn-sim-control:hover {
+      border-color: var(--accent-cyan);
+      color: #fff;
     }
-    .btn-ctrl.primary {
-      background: #0284c7;
-      border-color: #0284c7;
-      grid-column: span 2;
-      font-weight: 700;
-    }
-    .btn-ctrl.primary:hover {
-      background: #0369a1;
+
+    .btn-sim-control.active {
+      border-color: var(--accent-cyan);
+      background: rgba(2, 132, 199, 0.15);
+      color: var(--accent-cyan);
     }
   </style>
 </head>
 <body>
 
   <div class="header-section">
-    <div class="badge-mvp">✨ UX AGENT: LEAN MVP SPECIFICATION</div>
-    <h1>SitePulse Lean MVP Mobil Arayüz Tasarımı</h1>
+    <div class="badge-papara">
+      <span class="material-symbols-outlined" style="font-size: 14px;">verified</span>
+      PAPARA STYLE DESIGN STANDARD &bull; FLUTTER NATIVE EQUIVALENT
+    </div>
+    <h1>SitePulse Papara Arayüz & İkon Standartları</h1>
     <p class="subtitle">
-      Kapsam dışı tüm gereksiz özellikler (Arıza Bildir, Sayaç Gir, Rezervasyon, İletişim, Karmaşık Modüller) arayüzden temizlendi.<br>
-      Tasarım <strong>sadece temel aidat şeffaflığı, KMK gecikme hesabı ve 3 güvenli ödeme yöntemine</strong> odaklandı.
+      Mobil uygulama ve prototip arasındaki tasarım uyumsuzlukları giderildi.<br>
+      Tüm renk paleti, 24dp vektör ikon geometrisi, squircle bileşenleri ve katman hiyerarşisi <strong>Flutter AppTheme (Papara Midnight)</strong> standartlarına eşitlendi.
     </p>
   </div>
 
   <div class="workspace">
 
-    <!-- Interactive Phone Prototype -->
+    <!-- =========================================================================
+         INTERACTIVE PHONE PROTOTYPE (100% Papara Midnight Standard)
+         ========================================================================= -->
     <div class="phone-container">
       <div class="phone-notch">
         <div class="notch-camera"></div>
@@ -794,1469 +948,650 @@
         <!-- Top Status Bar -->
         <div class="status-bar">
           <span>09:41</span>
-          <span style="display: flex; gap: 4px; align-items: center;">
-            <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.28 19.64 10.59 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9z"/></svg>
-            <span>5G</span>
-            <span>100%</span>
+          <span style="display: flex; gap: 6px; align-items: center;">
+            <span class="material-symbols-outlined" style="font-size: 14px;">signal_cellular_alt</span>
+            <span class="material-symbols-outlined" id="statusWifiIcon" style="font-size: 14px; color: var(--accent-green);">wifi</span>
+            <span class="material-symbols-outlined" style="font-size: 14px;">battery_full</span>
           </span>
         </div>
 
-        <!-- App Header Bar -->
-        <div class="topbar" id="appTopBar">
-          <div class="user-info" onclick="switchMainTab('unit')" style="cursor: pointer;" title="Daire Bilgilerini Görüntüle">
-            <div class="avatar">AY</div>
-            <div class="user-text">
-              <h3 style="display: flex; align-items: center; gap: 4px;">
-                <span>Ahmet Yılmaz</span>
-                <span style="font-size: 9px; padding: 1px 5px; background: rgba(56, 189, 248, 0.2); color: #38bdf8; border-radius: 4px;">D:14</span>
-              </h3>
-              <p>Begonya Sitesi • A Blok D:14</p>
+        <!-- Top AppBar -->
+        <div class="flutter-appbar">
+          <div class="brand-left">
+            <div class="brand-logo-squircle">
+              <span class="material-symbols-outlined">bolt</span>
             </div>
+            <span class="brand-text">SitePulse</span>
+            <span class="role-chip" id="topRoleBadge">Kat Maliki</span>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <div class="sync-tag" id="syncStatus">
-              <span style="font-size: 8px;">●</span> Çevrimdışı Önbellek
-            </div>
-            <button onclick="handleLogout()" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 8px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: pointer;" title="Oturumu Kapat / Giriş Ekranı">
-              Çıkış 🚪
+          <div class="appbar-actions">
+            <button class="action-icon-btn" onclick="toggleOfflineMode()" title="Çevrimdışı / Çevrimiçi Simülasyonu">
+              <span class="material-symbols-outlined" id="appbarWifiIcon" style="color: var(--accent-green);">wifi</span>
+            </button>
+            <button class="action-icon-btn" onclick="openProfileSheet()" title="Profil & Yetki Menüsü">
+              <div class="user-avatar-circle" id="userAvatar">A</div>
             </button>
           </div>
         </div>
 
-        <!-- Main Body -->
-        <div class="app-content">
+        <!-- App Scroll Body -->
+        <div class="app-scroll-content" id="appScrollBody">
 
-          <!-- VIEW 0: GİRİŞ & SAKİN AKTİVASYON (LOGIN / REGISTER AUTH) -->
-          <div id="viewLogin" style="display: none; flex-direction: column; gap: 14px;">
-            <div class="login-brand">
-              <div class="brand-icon">🏢</div>
-              <div class="brand-title">SitePulse Mobil</div>
-              <div class="brand-subtitle">Begonya Sitesi Sakin & Aidat Portalı</div>
-            </div>
-
-            <div class="card-surface" style="padding: 18px;">
-            <!-- Persona / Role Selector on Login Screen -->
-            <div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 10px; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 4px;">
-              <div style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">Test Rolünü Seç:</div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
-                <button type="button" class="auth-tab-btn active" id="btnRoleHomeOwner" onclick="selectPersona('home_owner')">🏠 Kat Maliki</button>
-                <button type="button" class="auth-tab-btn" id="btnRoleSiteManager" onclick="selectPersona('site_manager')">👔 Yöneticisi</button>
-                <button type="button" class="auth-tab-btn" id="btnRoleSaasAdmin" onclick="selectPersona('saas_admin')">🌐 SaaS Admin</button>
-              </div>
-              <div id="personaHint" style="font-size: 11px; color: #38bdf8; margin-top: 6px;">
-                Ahmet Yılmaz • A Blok D:14 Kat Maliki (Bireysel aidat & sanal IBAN)
-              </div>
-            </div>
-
-              <div class="auth-tab-pill">
-                <button class="auth-tab-btn active" id="tabBtnLogin" onclick="switchAuthMode('login')">Şifre ile Giriş</button>
-                <button class="auth-tab-btn" id="tabBtnOtp" onclick="switchAuthMode('otp')">SMS Kodu (OTP)</button>
-              </div>
-
-              <div id="authModeLogin">
-                <div class="form-group">
-                  <label class="form-label">Kayıtlı Telefon veya E-posta</label>
-                  <input type="text" class="form-input" id="loginPhoneInput" value="0532 111 22 33" placeholder="05XX XXX XX XX">
-                </div>
-                <div class="form-group" style="margin-bottom: 14px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <label class="form-label" style="margin: 0;">Şifre</label>
-                    <span style="font-size: 11px; color: #38bdf8; cursor: pointer;" onclick="alert('SMS ile geçici şifre talebi iletildi.')">Şifremi Unuttum</span>
-                  </div>
-                  <input type="password" class="form-input" id="loginPassInput" value="••••••••">
-                </div>
-                <button class="btn-pay-now" id="btnSubmitLogin" style="width: 100%; justify-content: center;" onclick="handleLogin(selectedPersona)">
-                  <span>Giriş Yap (Ahmet Yılmaz)</span>
-                  <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                </button>
-              </div>
-
-              <div id="authModeOtp" style="display: none;">
-                <div class="form-group">
-                  <label class="form-label">Cep Telefon Numarası</label>
-                  <input type="text" class="form-input" value="0532 111 22 33">
-                </div>
-                <div class="form-group" style="margin-bottom: 14px;">
-                  <label class="form-label">SMS Doğrulama Kodu</label>
-                  <input type="text" class="form-input" value="849 201" style="font-family: monospace; letter-spacing: 2px;">
-                </div>
-                <button class="btn-pay-now" id="btnSubmitLogin" style="width: 100%; justify-content: center;" onclick="handleLogin(selectedPersona)">
-                  <span>SMS ile Doğrula & Giriş Yap</span>
-                </button>
-              </div>
-
-              <div class="login-divider">veya</div>
-
-              <button class="btn-google-auth" onclick="handleLogin('google')">
-                <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.02h3.86c2.26-2.09 3.56-5.17 3.56-9.12z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3.02c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.28v3.12C3.26 21.36 7.37 24 12 24z"/><path fill="#FBBC05" d="M5.27 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.61H1.28C.46 8.23 0 10.06 0 12s.46 3.77 1.28 5.39l3.99-3.12z"/><path fill="#EA4335" d="M12 4.77c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.64 1.28 6.61l3.99 3.12c.95-2.85 3.6-4.96 6.73-4.96z"/></svg>
-                <span>Google ile Hızlı Giriş Yap</span>
-              </button>
-            </div>
-
-            <!-- Davet Linki ile Yeni Sakin Aktivasyonu -->
-            <div class="card-surface" style="padding: 14px 16px; border: 1px dashed rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.05);">
-              <div style="display: flex; gap: 10px; align-items: flex-start;">
-                <span style="font-size: 20px;">🔗</span>
-                <div>
-                  <div style="font-size: 13px; font-weight: 700; color: #38bdf8; margin-bottom: 2px;">Daire Davet Linkiniz mi Var?</div>
-                  <p style="font-size: 11px; color: #94a3b8; line-height: 1.4; margin-bottom: 8px;">
-                    Ev sahibinizden aldığınız SMS/WhatsApp davet linkiyle anında A Blok D:14 dairesine sakin olarak kaydolabilirsiniz.
-                  </p>
-                  <button class="btn-copy-iban" style="width: 100%; justify-content: center; padding: 8px;" onclick="handleLogin('invite')">
-                    Davet Koduyla Daireme Bağlan →
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- KVKK Güvenlik Notu -->
-            <div style="font-size: 11px; color: #64748b; text-align: center; line-height: 1.4; padding: 0 8px;">
-              🔒 <strong>KMK & KVKK Güvenlik Standardı:</strong> Bireysel açık kayıt kapalıdır. Yalnızca site yönetimi tarafından ön tanımlaması yapılan sakinler ve davet linki sahipleri giriş yapabilir.
-            </div>
-          </div>
-
-          <!-- VIEW 1: ANA SAYFA (HOME) -->
-          <div id="viewHome" style="display: flex; flex-direction: column; gap: 16px;">
-
-            <!-- 1. Hero Balance Card (KMK Delay Fee Breakdown) -->
-            <div class="card-surface hero-card" id="heroCard">
-              <div class="hero-header">
-                <span class="account-label">
-                  <span>🇹🇷</span> Türk Lirası Aidat Hesabı
-                </span>
-                <span class="overdue-pill" id="overdueBadge">10 Gün Gecikme</span>
-              </div>
-
-              <div class="balance-amount" id="balanceText">
-                <span class="balance-currency">₺</span>1.423,33
-              </div>
-
-              <div class="due-date" id="dueDateText">
-                Son Ödeme: 15 Eylül 2026 (%5 yasal faiz dahil)
-              </div>
-
-              <!-- KMK Statutory Breakdown -->
-              <div class="kmk-breakdown" id="kmkBox">
-                <span class="kmk-title">KMK Yasal Gecikme Tazminatı:</span>
-                <span class="kmk-value" id="penaltyValue">+₺23,33</span>
-              </div>
-
-              <!-- Action Buttons -->
-              <div class="hero-actions">
-                <button class="btn-pay-now" id="btnOpenPay" onclick="openPaymentModal()">
-                  <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
-                  <span>Hemen Güvenle Öde</span>
-                </button>
-                <button class="btn-details" onclick="switchMainTab('receipts')">
-                  Dekontlar
-                </button>
-              </div>
-            </div>
-
-            <!-- 2. Daireye Özel Sanal IBAN Kartı (Havale / EFT İçin) -->
-            <div class="section-title">
-              <span>Daireye Özel Sanal IBAN</span>
-              <span style="font-size: 11px; color: #38bdf8;">%100 Otomatik Eşleşme</span>
-            </div>
-
-            <div class="iban-box">
-              <div class="iban-details">
-                <span class="iban-title">A BLOK D:14 RESMİ SANAL HESABI</span>
-                <span class="iban-code" id="ibanCode">TR12 0006 2000 0014</span>
-              </div>
-              <button class="btn-copy-iban" onclick="copyIban()">
-                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                <span>Kopyala</span>
-              </button>
-            </div>
-
-            <!-- 3. Son Ödeme & Dekont Geçmişi (MVP Scope) -->
-            <div class="section-title">
-              <span>Son Hareketler & Dekontlar</span>
-              <span style="font-size: 11px; color: #38bdf8; cursor: pointer;" onclick="switchMainTab('receipts')">Tümünü Gör →</span>
-            </div>
-
-            <div class="card-surface" style="padding: 10px 16px;">
-              <div class="receipt-item" onclick="openReceiptModal()">
-                <div class="receipt-left">
-                  <div class="receipt-icon">✓</div>
-                  <div class="receipt-info">
-                    <h4>Ağustos 2026 Aidatı</h4>
-                    <p>14 Ağustos 2026 • Kredi Kartı</p>
-                  </div>
-                </div>
-                <div class="receipt-amount">
-                  <div class="val">₺1.350,00</div>
-                  <div class="status">ÖDENDİ</div>
-                </div>
-              </div>
-
-              <div class="receipt-item" onclick="openReceiptModal()">
-                <div class="receipt-left">
-                  <div class="receipt-icon">✓</div>
-                  <div class="receipt-info">
-                    <h4>Temmuz 2026 Aidatı</h4>
-                    <p>12 Temmuz 2026 • FAST / QR</p>
-                  </div>
-                </div>
-                <div class="receipt-amount">
-                  <div class="val">₺1.350,00</div>
-                  <div class="status">ÖDENDİ</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 4. Site Yönetiminden Duyuru (Sadece Tek Kart) -->
-            <div class="card-surface" style="padding: 14px 16px; border-left: 4px solid #0284c7;">
-              <div style="font-size: 11px; font-weight: 700; color: #38bdf8; margin-bottom: 4px;">SİTE YÖNETİM DUYURUSU</div>
-              <div style="font-size: 13px; font-weight: 600; margin-bottom: 2px;">Planlı Su Kesintisi Hakkında</div>
-              <div style="font-size: 11px; color: #94a3b8;">İSKİ ana hat çalışması sebebiyle yarın 10:00-14:00 arası su verilemeyecektir.</div>
-            </div>
-
-          </div>
-
-          <!-- VIEW 2: DEKONTLAR (FULL RECEIPTS LEDGER) -->
-          <div id="viewReceipts" style="display: none; flex-direction: column; gap: 16px;">
-            <div class="card-surface">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-                <div>
-                  <h3 style="font-size: 16px; font-weight: 800;">Tahsilat Dekontları</h3>
-                  <p style="font-size: 11px; color: #94a3b8;">KMK Uyarınca Resmi Mali Kayıtlar</p>
-                </div>
-                <span class="sync-tag">E-İmzalı</span>
-              </div>
-
-              <div class="receipt-item" onclick="openReceiptModal()" style="cursor: pointer;">
-                <div class="receipt-left">
-                  <div class="receipt-icon">✓</div>
-                  <div class="receipt-info">
-                    <h4>Ağustos 2026 Aidatı</h4>
-                    <p>14 Ağustos 2026 • #DKN-2026-0814</p>
-                  </div>
-                </div>
-                <div class="receipt-amount">
-                  <div class="val">₺1.350,00</div>
-                  <div class="status" style="color: #38bdf8;">GÖRÜNTÜLE 📄</div>
-                </div>
-              </div>
-
-              <div class="receipt-item" onclick="openReceiptModal()" style="cursor: pointer;">
-                <div class="receipt-left">
-                  <div class="receipt-icon">✓</div>
-                  <div class="receipt-info">
-                    <h4>Temmuz 2026 Aidatı</h4>
-                    <p>12 Temmuz 2026 • #DKN-2026-0712</p>
-                  </div>
-                </div>
-                <div class="receipt-amount">
-                  <div class="val">₺1.350,00</div>
-                  <div class="status" style="color: #38bdf8;">GÖRÜNTÜLE 📄</div>
-                </div>
-              </div>
-
-              <div class="receipt-item" onclick="openReceiptModal()" style="cursor: pointer;">
-                <div class="receipt-left">
-                  <div class="receipt-icon">✓</div>
-                  <div class="receipt-info">
-                    <h4>Haziran 2026 Aidatı</h4>
-                    <p>10 Haziran 2026 • #DKN-2026-0610</p>
-                  </div>
-                </div>
-                <div class="receipt-amount">
-                  <div class="val">₺1.350,00</div>
-                  <div class="status" style="color: #38bdf8;">GÖRÜNTÜLE 📄</div>
-                </div>
-              </div>
-            </div>
-
-            <div style="background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); border-radius: 14px; padding: 12px; font-size: 12px; color: #94a3b8; text-align: center;">
-              🔒 Tüm dekontlar 634 Sayılı KMK Madde 36 uyarınca denetime hazır elektronik imza taşır.
-            </div>
-          </div>
-
-          <!-- VIEW 3: DAİREM (MY UNIT DETAILS) -->
-          <div id="viewUnit" style="display: none; flex-direction: column; gap: 16px;">
+          <!-- ================= VIEW 0: KAT MALİKİ (RESIDENT) ================= -->
+          <div id="viewResident" style="display: flex; flex-direction: column; gap: 16px;">
             
-            <!-- Daire Künyesi Kartı -->
-            <div class="card-surface">
-              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <!-- 1. Hero Balance Card -->
+            <div class="hero-balance-card overdue" id="heroCard">
+              <div class="hero-card-header">
                 <div>
-                  <div style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase;">Bağımsız Bölüm Künyesi</div>
-                  <h3 style="font-size: 18px; font-weight: 800; margin-top: 2px;">A Blok Daire 14</h3>
-                  <p style="font-size: 12px; color: #94a3b8;">Begonya Sitesi • 4. Kat • 3+1 (135 m²)</p>
+                  <div class="site-title">Begonya Sitesi</div>
+                  <div class="unit-subtitle">A Blok D:14 &bull; Eylül 2026</div>
                 </div>
-                <span class="paid-pill" style="font-size: 10px;">Kat Maliki</span>
+                <div class="status-pill penalty" id="dueStatusPill">
+                  10 Gün Gecikme
+                </div>
               </div>
 
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 12px; font-size: 12px;">
-                <div>
-                  <span style="color: #94a3b8;">Arsa Payı Oranı:</span>
-                  <div style="font-weight: 700; color: #f8fafc; font-family: 'JetBrains Mono', monospace;">24 / 1000</div>
-                </div>
-                <div>
-                  <span style="color: #94a3b8;">Aylık Sabit Aidat:</span>
-                  <div style="font-weight: 700; color: #60a5fa;">₺1.400,00</div>
-                </div>
-                <div>
-                  <span style="color: #94a3b8;">Son Ödeme Günü:</span>
-                  <div style="font-weight: 700; color: #f8fafc;">Her Ayın 15'i</div>
-                </div>
-                <div>
-                  <span style="color: #94a3b8;">Otopark Tahsisi:</span>
-                  <div style="font-weight: 700; color: #f8fafc;">Kapalı - No: 14</div>
-                </div>
+              <div class="amount-label">Ödenecek Toplam Tutar</div>
+              <div class="amount-val-row">
+                <span class="amount-val" id="amountDisplay">₺1.423,33</span>
+              </div>
+
+              <!-- KMK %5 Delay Penalty -->
+              <div class="kmk-penalty-box" id="kmkBox">
+                <span class="material-symbols-outlined" style="font-size: 16px;">info</span>
+                <span>Ana Para: ₺1.400,00 + KMK %5 Kanuni Gecikme: ₺23,33</span>
+              </div>
+
+              <!-- Hero Actions -->
+              <div class="hero-btn-row">
+                <button class="btn-papara-cta" onclick="openPaymentModal()">
+                  <span class="material-symbols-outlined" style="font-size: 18px;">credit_card</span>
+                  <span>Hemen Öde</span>
+                </button>
+                <button class="btn-papara-outlined" onclick="openDuesDetailModal()">
+                  Detay
+                </button>
               </div>
             </div>
 
-            <!-- Daireye Özel Sanal IBAN -->
-            <div class="section-title">
-              <span>Daireye Tanımlı Sanal IBAN</span>
-              <span style="font-size: 11px; color: #38bdf8;">Kişiye Özel Alt Hesap</span>
-            </div>
-
-            <div class="iban-box">
-              <div class="iban-details">
-                <span class="iban-title">A BLOK D:14 RESMİ SANAL HESABI</span>
-                <span class="iban-code">TR12 0006 2000 0014</span>
-                <span style="font-size: 10px; color: #94a3b8; margin-top: 2px;">Garanti BBVA • Alıcı: Begonya Sitesi Yönetimi</span>
-              </div>
-              <button class="btn-copy-iban" onclick="copyIban()">
-                <span>Kopyala</span>
-              </button>
-            </div>
-
-            <!-- Hane Sakinleri & İzin Sınırı -->
-            <div class="card-surface">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: #94a3b8;">Hane Sakinleri (1 Kişi)</span>
-                <span style="font-size: 10px; padding: 2px 8px; border-radius: 6px; background: rgba(59,130,246,0.15); color: #60a5fa; font-weight: 600;">İzole Daire Erişimi</span>
+            <!-- 2. Resident Actions Row (Papara 4-Action Squircle Row) -->
+            <div class="actions-grid">
+              <!-- Tile 1: Pay Dues -->
+              <div class="action-tile" onclick="openPaymentModal()">
+                <div class="action-icon-circle" style="background: rgba(2, 132, 199, 0.15); color: var(--accent-cyan);">
+                  <span class="material-symbols-outlined">credit_card</span>
+                </div>
+                <div class="action-label">Aidat Öde</div>
               </div>
 
-              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <div class="avatar" style="width: 32px; height: 32px; font-size: 11px;">AY</div>
-                  <div>
-                    <div style="font-size: 13px; font-weight: 700;">Ahmet Yılmaz</div>
-                    <div style="font-size: 11px; color: #94a3b8;">Kat Maliki (Ev Sahibi) • 0532 111 22 33</div>
+              <!-- Tile 2: Virtual IBAN -->
+              <div class="action-tile" onclick="scrollToIban()">
+                <div class="action-icon-circle" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green);">
+                  <span class="material-symbols-outlined">account_balance</span>
+                </div>
+                <div class="action-label">Sanal IBAN</div>
+              </div>
+
+              <!-- Tile 3: Receipts -->
+              <div class="action-tile" onclick="openReceiptsModal()">
+                <div class="action-icon-circle" style="background: rgba(56, 189, 248, 0.15); color: var(--accent-sky);">
+                  <span class="material-symbols-outlined">receipt_long</span>
+                </div>
+                <div class="action-label">Dekontlar</div>
+              </div>
+
+              <!-- Tile 4: Invite Resident -->
+              <div class="action-tile" onclick="openInviteModal()">
+                <span class="action-badge-top">Link Üret</span>
+                <div class="action-icon-circle" style="background: rgba(245, 158, 11, 0.15); color: var(--accent-orange);">
+                  <span class="material-symbols-outlined">person_add</span>
+                </div>
+                <div class="action-label">Sakin Davet</div>
+              </div>
+            </div>
+
+            <!-- 3. Virtual IBAN Card -->
+            <div class="virtual-iban-card" id="virtualIbanWidget">
+              <div class="iban-header-row">
+                <div class="iban-header-left">
+                  <div class="iban-icon-well">
+                    <span class="material-symbols-outlined">account_balance</span>
+                  </div>
+                  <div class="iban-title-text">
+                    <h4>Daireye Özel Sanal IBAN</h4>
+                    <p>FAST / EFT ile 7/24 Kesintisiz</p>
                   </div>
                 </div>
-                <span style="font-size: 11px; font-weight: 700; color: #38bdf8;">Tam Yetki</span>
+                <span class="badge-auto-match">%100 Otomatik Eşleşme</span>
               </div>
 
-              <!-- Davet Linki Üretici -->
-              <div style="margin-top: 14px; background: rgba(59,130,246,0.08); border: 1px dashed rgba(59,130,246,0.3); border-radius: 12px; padding: 12px; text-align: center;">
-                <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px;">Aile Bireyi / Kiracı Davet Et</div>
-                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 10px;">Bu link sadece A Blok D:14 dairesi için sakin kaydı açar. Başka daire veya site yönetimi yetkisi vermez.</div>
-                <button class="btn-copy-iban" style="width: 100%; justify-content: center; padding: 10px;" onclick="copyInviteLink()">
-                  <span>🔗 Güvenli Daire Davet Linki Kopyala</span>
+              <div class="iban-display-box">
+                <span class="iban-string" id="ibanText">TR12 0006 2000 0000 0000 0014</span>
+                <button class="btn-iban-copy" onclick="copyIbanString()">
+                  <span class="material-symbols-outlined" style="font-size: 14px;">content_copy</span>
+                  <span>Kopyala</span>
                 </button>
               </div>
-            </div>
 
-          </div>
-
-        </div>
-
-        
-          <!-- ================= VIEW M1: SİTE YÖNETİCİSİ KOKPİTİ ================= -->
-          <div id="viewManagerHome" style="display: none; flex-direction: column; gap: 16px;">
-            <!-- Yönetim Finans Kartı -->
-            <div class="card-surface hero-card" style="background: linear-gradient(145deg, #0c2d48 0%, #145da0 100%); border-color: rgba(56, 189, 248, 0.4);">
-              <div class="hero-header">
-                <span class="account-label"><span>🏛️</span> Begonya Sitesi Resmi Kasa & Banka</span>
-                <span class="paid-pill" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">Canlı Bakiye</span>
-              </div>
-              <div class="balance-amount" style="font-size: 28px;">
-                <span class="balance-currency">₺</span>348.250,00
-              </div>
-              <div class="due-date">Garanti BBVA Kurumsal Şube • 135 Bağımsız Bölüm</div>
-
-              <!-- Tahsilat İlerleme Çubuğu -->
-              <div style="margin-top: 14px; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 12px;">
-                <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
-                  <span style="color: #94a3b8;">Eylül 2026 Tahsilat Oranı:</span>
-                  <strong style="color: #34d399;">%89 (120 / 135 Daire)</strong>
-                </div>
-                <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 999px; overflow: hidden;">
-                  <div style="width: 89%; height: 100%; background: linear-gradient(90deg, #38bdf8, #10b981); border-radius: 999px;"></div>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; margin-top: 6px;">
-                  <span>Tahsil Edilen: ₺168.000</span>
-                  <span style="color: #f87171;">Geciken: ₺21.000 (15 Daire)</span>
-                </div>
-              </div>
-
-              <!-- Hızlı Aksiyon Butonları -->
-              <div class="hero-actions" style="margin-top: 14px;">
-                <button class="btn-pay-now" style="background: #0284c7; flex: 1; justify-content: center;" onclick="sendBroadcastReminder()">
-                  <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3zm-8.27 4a2 2 0 0 1-3.46 0"/></svg>
-                  <span>📢 Gecikenlere SMS Hatırlat</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Banka Entegrasyonu & Otomasyon Kartı (EPIC-07) -->
-            <div class="card-surface" style="border-left: 4px solid #10b981;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 11px; font-weight: 700; color: #10b981; text-transform: uppercase;">BANKA ENTEGRASYONU (EPIC-07)</span>
-                <span class="paid-pill" style="font-size: 10px;">Garanti BBVA API</span>
-              </div>
-              <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">Sanal IBAN & FAST Otomatik Eşleşme</div>
-              <p style="font-size: 12px; color: #94a3b8; line-height: 1.4; margin-bottom: 10px;">
-                Bugün gelen <strong>12 adet FAST ve Sanal IBAN ödemesi</strong> açıklama aramaya gerek kalmadan %100 otomatik eşleştirildi ve e-dekontları kesildi.
+              <p class="iban-expl-text">
+                Bu IBAN sadece A Blok D:14 için tanımlanmıştır. Açıklamaya hiçbir şey yazmasanız dahi ödemeniz anında sistemde onaylanır.
               </p>
-              <button class="btn-secondary-action" style="margin: 0; width: 100%;" onclick="switchManagerTab('mgr_bank')">
-                Canlı Mutabakat Hareketlerini Gör →
-              </button>
             </div>
 
-            <!-- Gecikmedeki Daireler Özeti -->
-            <div class="section-title">
-              <span>Gecikmedeki Daireler (15 Daire)</span>
-              <span style="font-size: 11px; color: #38bdf8; cursor: pointer;" onclick="switchManagerTab('mgr_debtors')">Tümünü Gör →</span>
-            </div>
-
-            <div class="card-surface" style="padding: 10px 16px;">
-              <div class="receipt-item">
-                <div class="receipt-left">
-                  <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #ef4444;">A14</div>
-                  <div class="receipt-info">
-                    <h4>A Blok D:14 • Ahmet Yılmaz</h4>
-                    <p>10 Gün Gecikme • +₺23,33 KMK Faizi</p>
-                  </div>
+            <!-- 4. Household Residents Card -->
+            <div class="household-card">
+              <div class="household-header">
+                <div class="household-title">
+                  <span class="material-symbols-outlined" style="color: var(--accent-cyan);">group</span>
+                  <span>Hane Sakinleri (A Blok D:14)</span>
                 </div>
-                <div class="receipt-amount">
-                  <div class="val" style="color: #f87171;">₺1.423,33</div>
-                  <div class="status" style="color: #f87171;">ÖDENMEDİ</div>
-                </div>
+                <button class="btn-text-invite" onclick="openInviteModal()">
+                  <span class="material-symbols-outlined" style="font-size: 14px;">share</span>
+                  <span>Davet Linki</span>
+                </button>
               </div>
 
-              <div class="receipt-item">
-                <div class="receipt-left">
-                  <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #ef4444;">B3</div>
-                  <div class="receipt-info">
-                    <h4>B Blok D:3 • Kemal Kaya</h4>
-                    <p>45 Gün Gecikme • +₺213,75 KMK Faizi</p>
-                  </div>
+              <div class="resident-row">
+                <div class="resident-info">
+                  <h5>Ahmet Yılmaz</h5>
+                  <p>Kat Maliki &bull; +90 532 ••• •• 33</p>
                 </div>
-                <div class="receipt-amount">
-                  <div class="val" style="color: #f87171;">₺3.013,75</div>
-                  <div class="status" style="color: #f87171;">İHTARLIK</div>
+                <span class="role-badge-pill owner">Malik</span>
+              </div>
+
+              <div class="resident-row">
+                <div class="resident-info">
+                  <h5>Ayşe Yılmaz</h5>
+                  <p>Eş / Hane Sakini &bull; +90 533 ••• •• 44</p>
                 </div>
+                <span class="role-badge-pill member">Sakin</span>
               </div>
             </div>
+
           </div>
 
-          <!-- ================= VIEW M2: SİTE YÖNETİCİSİ BORÇLULAR LİSTESİ ================= -->
-          <div id="viewManagerDebtors" style="display: none; flex-direction: column; gap: 16px;">
-            <div class="card-surface">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <!-- ================= VIEW 1: YÖNETİCİ KOKPİTİ (MANAGER) ================= -->
+          <div id="viewManager" style="display: none; flex-direction: column; gap: 16px;">
+            <div class="hero-balance-card">
+              <div class="hero-card-header">
                 <div>
-                  <h3 style="font-size: 16px; font-weight: 800;">Borçlu & Geciken Daireler</h3>
-                  <p style="font-size: 11px; color: #94a3b8;">634 KMK Madde 20 Uyarınca %5 Aylık Yasal Faizli</p>
+                  <div class="site-title">Begonya Sitesi Yönetim Paneli</div>
+                  <div class="unit-subtitle">135 Bağımsız Bölüm &bull; Eylül 2026 Tahsilat Özeti</div>
                 </div>
-                <span class="overdue-pill" style="font-size: 10px;">15 Daire</span>
+                <span class="status-pill ontime">Garanti BBVA Entegre</span>
               </div>
 
-              <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); border-radius: 12px; padding: 12px; margin-bottom: 14px;">
-                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700;">
-                  <span>Toplam Gecikmiş Alacak:</span>
-                  <span style="color: #f87171;">₺21.350,00</span>
-                </div>
-                <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Tahakkuk eden toplam yasal gecikme tazminatı: ₺842,50</div>
+              <div class="amount-label">Toplam Tahakkuk & Tahsil Edilen</div>
+              <div class="amount-val-row">
+                <span class="amount-val">₺189.000,00</span>
               </div>
 
-              <!-- Daire Kartları -->
-              <div class="receipt-item">
-                <div class="receipt-left">
-                  <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #dc2626;">A14</div>
-                  <div class="receipt-info">
-                    <h4>A Blok D:14 (Ahmet Yılmaz)</h4>
-                    <p>Ana Para: ₺1.400 • KMK Faizi: ₺23,33 (10 gün)</p>
-                  </div>
+              <!-- Collection Progress Bar -->
+              <div style="margin-top: 14px;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px;">
+                  <span style="color: var(--accent-green); font-weight: 700;">%76 Tahsil Edildi (₺143.640)</span>
+                  <span style="color: var(--accent-red); font-weight: 700;">₺45.360 Kalan</span>
                 </div>
-                <button class="btn-copy-iban" style="padding: 6px 10px; font-size: 11px;" onclick="sendSingleReminder('A Blok D:14', 'Ahmet Yılmaz', '1423.33')">
-                  SMS Hatırlat
-                </button>
+                <div style="width: 100%; height: 8px; background: rgba(0,0,0,0.4); border-radius: 4px; overflow: hidden;">
+                  <div style="width: 76%; height: 100%; background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan)); border-radius: 4px;"></div>
+                </div>
               </div>
 
-              <div class="receipt-item">
-                <div class="receipt-left">
-                  <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #dc2626;">B3</div>
-                  <div class="receipt-info">
-                    <h4>B Blok D:3 (Kemal Kaya)</h4>
-                    <p>Ana Para: ₺2.800 • KMK Faizi: ₺213,75 (45 gün)</p>
-                  </div>
-                </div>
-                <button class="btn-copy-iban" style="padding: 6px 10px; font-size: 11px; background: #991b1b;" onclick="alert('B Blok D:3 Kemal Kaya için resmi noter ihtarnamesi taslağı PDF oluşturuldu.')">
-                  İhtarname
-                </button>
-              </div>
-
-              <div class="receipt-item">
-                <div class="receipt-left">
-                  <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #dc2626;">C8</div>
-                  <div class="receipt-info">
-                    <h4>C Blok D:8 (Merve Arslan)</h4>
-                    <p>Ana Para: ₺1.400 • KMK Faizi: ₺11,67 (5 gün)</p>
-                  </div>
-                </div>
-                <button class="btn-copy-iban" style="padding: 6px 10px; font-size: 11px;" onclick="sendSingleReminder('C Blok D:8', 'Merve Arslan', '1411.67')">
-                  SMS Hatırlat
+              <div class="hero-btn-row">
+                <button class="btn-papara-cta" onclick="openAddResidentModal()">
+                  <span class="material-symbols-outlined" style="font-size: 18px;">person_add</span>
+                  <span>Yeni Sakin Tanımla</span>
                 </button>
               </div>
             </div>
 
-            <button class="btn-pay-now" style="width: 100%; justify-content: center; background: #dc2626;" onclick="sendBroadcastReminder()">
-              <span>📢 15 Daireye Toplu SMS Hatırlatması Gönder</span>
-            </button>
+            <!-- Pending Registrations Queue -->
+            <div class="household-card">
+              <div class="household-header">
+                <div class="household-title">
+                  <span class="material-symbols-outlined" style="color: var(--accent-orange);">pending_actions</span>
+                  <span>Onay Bekleyen Başvurular (1)</span>
+                </div>
+              </div>
+
+              <div class="resident-row">
+                <div class="resident-info">
+                  <h5>Caner Erkin</h5>
+                  <p>B Blok D:18 &bull; caner@example.com</p>
+                </div>
+                <button class="btn-iban-copy" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green);" onclick="approvePendingRegistration()">
+                  <span class="material-symbols-outlined" style="font-size: 14px;">check_circle</span>
+                  <span>Onayla</span>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <!-- ================= VIEW M3: SİTE YÖNETİCİSİ BANKA & MUTABAKAT (EPIC-07) ================= -->
-          <div id="viewManagerBank" style="display: none; flex-direction: column; gap: 16px;">
-            <div class="card-surface">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <!-- ================= VIEW 2: SAAS SUPERADMIN (EPIC-03) ================= -->
+          <div id="viewSaas" style="display: none; flex-direction: column; gap: 16px;">
+            <div class="hero-balance-card">
+              <div class="hero-card-header">
                 <div>
-                  <h3 style="font-size: 16px; font-weight: 800;">Banka & Sanal IBAN Havuzu</h3>
-                  <p style="font-size: 11px; color: #94a3b8;">Garanti BBVA Kurumsal API Entegrasyonu</p>
+                  <div class="site-title">SitePulse SaaS Platformu</div>
+                  <div class="unit-subtitle">Multi-Tenant İzolasyon &bull; 12 Konut Sitesi</div>
                 </div>
-                <span class="paid-pill" style="font-size: 10px;">%100 Mutabık</span>
+                <span class="status-pill ontime">%99.99 Uptime</span>
               </div>
 
-              <div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 12px; font-size: 12px; margin-bottom: 14px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                  <span style="color: #94a3b8;">Site Potansiyel Vergi No:</span>
-                  <span style="font-family: monospace; font-weight: 700;">1234567890</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                  <span style="color: #94a3b8;">Ana Hesap IBAN:</span>
-                  <span style="font-family: monospace; font-weight: 700;">TR12 0006 2000 0000 0000 0001</span>
-                </div>
-                <div style="display: flex; justify-content: space-between;">
-                  <span style="color: #94a3b8;">Tahsisli Sanal IBAN Sayısı:</span>
-                  <span style="font-weight: 700; color: #38bdf8;">135 / 135 Daire</span>
-                </div>
+              <div class="amount-label">Aylık Tekrarlayan SaaS Geliri (MRR)</div>
+              <div class="amount-val-row">
+                <span class="amount-val">₺72.500,00</span>
               </div>
 
-              <div style="font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px;">
-                Bugünkü Otomatik Mutabakatlar (12 Adet):
-              </div>
-
-              <div class="receipt-item">
-                <div class="receipt-left">
-                  <div class="receipt-icon">⚡</div>
-                  <div class="receipt-info">
-                    <h4>Ahmet Yılmaz (A Blok D:14)</h4>
-                    <p>14:23 • FAST TR-Karekod (SP-A14-2609-8F92)</p>
-                  </div>
-                </div>
-                <div class="receipt-amount">
-                  <div class="val" style="color: #10b981;">+₺1.423,33</div>
-                  <div class="status" style="color: #38bdf8;">EŞLEŞTİ ✓</div>
-                </div>
-              </div>
-
-              <div class="receipt-item">
-                <div class="receipt-left">
-                  <div class="receipt-icon">🏦</div>
-                  <div class="receipt-info">
-                    <h4>Hüseyin Demir (B Blok D:1)</h4>
-                    <p>12:10 • Sanal IBAN (TR12...0001)</p>
-                  </div>
-                </div>
-                <div class="receipt-amount">
-                  <div class="val" style="color: #10b981;">+₺1.400,00</div>
-                  <div class="status" style="color: #38bdf8;">EŞLEŞTİ ✓</div>
-                </div>
-              </div>
-
-              <div class="receipt-item">
-                <div class="receipt-left">
-                  <div class="receipt-icon">💳</div>
-                  <div class="receipt-info">
-                    <h4>Ayşe Koç (C Blok D:12)</h4>
-                    <p>09:45 • Kredi Kartı 3D Secure</p>
-                  </div>
-                </div>
-                <div class="receipt-amount">
-                  <div class="val" style="color: #10b981;">+₺1.400,00</div>
-                  <div class="status" style="color: #38bdf8;">EŞLEŞTİ ✓</div>
-                </div>
+              <div class="hero-btn-row">
+                <button class="btn-papara-cta" onclick="openAddSiteModal()">
+                  <span class="material-symbols-outlined" style="font-size: 18px;">add_business</span>
+                  <span>Yeni Site Onboard Et</span>
+                </button>
               </div>
             </div>
 
-            <button class="btn-deep-link" onclick="alert('Garanti BBVA Kurumsal API ile canlı bağlantı kuruldu. 0 adet bekleyen işlem var.')">
-              <span>⚡ Banka Hareketlerini Şimdi Senkronize Et</span>
-            </button>
-          </div>
-
-          <!-- ================= VIEW S1: SAAS PLATFORM KOKPİTİ ================= -->
-          <div id="viewSaasHome" style="display: none; flex-direction: column; gap: 16px;">
-            <div class="card-surface hero-card" style="background: linear-gradient(145deg, #311042 0%, #6b21a8 100%); border-color: rgba(168, 85, 247, 0.4);">
-              <div class="hero-header">
-                <span class="account-label"><span>🌐</span> SitePulse Global SaaS Platform</span>
-                <span class="paid-pill" style="background: rgba(168, 85, 247, 0.2); color: #d8b4fe;">Multi-Tenant</span>
-              </div>
-              <div class="balance-amount" style="font-size: 28px;">
-                <span class="balance-currency">₺</span>72.500,00
-              </div>
-              <div class="due-date">Aylık Tekrarlayan SaaS Geliri (MRR) • 12 Konut Sitesi</div>
-
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px;">
-                <div style="background: rgba(0,0,0,0.3); border-radius: 10px; padding: 10px; text-align: center;">
-                  <div style="font-size: 18px; font-weight: 800; color: #f8fafc;">1.450</div>
-                  <div style="font-size: 10px; color: #94a3b8;">Bağımsız Bölüm</div>
-                </div>
-                <div style="background: rgba(0,0,0,0.3); border-radius: 10px; padding: 10px; text-align: center;">
-                  <div style="font-size: 18px; font-weight: 800; color: #34d399;">₺2.14M</div>
-                  <div style="font-size: 10px; color: #94a3b8;">Aylık Tahsilat Hacmi</div>
+            <div class="household-card">
+              <div class="household-header">
+                <div class="household-title">
+                  <span class="material-symbols-outlined" style="color: var(--accent-sky);">apartment</span>
+                  <span>Kayıtlı Siteler Portföyü</span>
                 </div>
               </div>
-            </div>
 
-            <!-- Yeni Site Onboarding Aksiyonu -->
-            <button class="btn-pay-now" style="width: 100%; justify-content: center; background: #7c3aed;" onclick="openNewSiteModal()">
-              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-              <span>+ Yeni Site Onboard Et (SaaS Kaydı)</span>
-            </button>
-
-            <!-- Siteler Portföyü Özeti -->
-            <div class="section-title">
-              <span>Kayıtlı Konut Siteleri (12 Site)</span>
-              <span style="font-size: 11px; color: #a855f7; cursor: pointer;" onclick="switchSaasTab('saas_sites')">Tümünü Gör →</span>
-            </div>
-
-            <div class="card-surface" style="padding: 10px 16px;">
-              <div class="receipt-item">
-                <div class="receipt-left">
-                  <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #0284c7;">BS</div>
-                  <div class="receipt-info">
-                    <h4>Begonya Sitesi</h4>
-                    <p>135 Daire • Yönetici: Mehmet Demir • Garanti BBVA</p>
-                  </div>
+              <div class="resident-row">
+                <div class="resident-info">
+                  <h5>Begonya Sitesi (Kadıköy)</h5>
+                  <p>135 Daire &bull; Yönetici: Mehmet Demir</p>
                 </div>
-                <span class="paid-pill" style="font-size: 10px;">AKTİF</span>
+                <span class="role-badge-pill owner">Aktif</span>
               </div>
 
-              <div class="receipt-item">
-                <div class="receipt-left">
-                  <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #059669;">PK</div>
-                  <div class="receipt-info">
-                    <h4>Palmiye Konutları</h4>
-                    <p>240 Daire • Yönetici: Murat Çelik • İş Bankası</p>
-                  </div>
+              <div class="resident-row">
+                <div class="resident-info">
+                  <h5>Palmiye Konutları (Çankaya)</h5>
+                  <p>240 Daire &bull; Yönetici: Murat Çelik</p>
                 </div>
-                <span class="paid-pill" style="font-size: 10px;">AKTİF</span>
-              </div>
-
-              <div class="receipt-item">
-                <div class="receipt-left">
-                  <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #d97706;">OP</div>
-                  <div class="receipt-info">
-                    <h4>Orkide Park Sitesi</h4>
-                    <p>95 Daire • Onboarding Tamamlanıyor</p>
-                  </div>
-                </div>
-                <span class="overdue-pill" style="font-size: 10px; background: rgba(245,158,11,0.2); color: #fbbf24;">BEKLEMEDE</span>
+                <span class="role-badge-pill owner">Aktif</span>
               </div>
             </div>
           </div>
 
-          <!-- ================= VIEW S2: SAAS SİTELER PORTFÖYÜ ================= -->
-          <div id="viewSaasSites" style="display: none; flex-direction: column; gap: 16px;">
-            <div class="card-surface">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <div>
-                  <h3 style="font-size: 16px; font-weight: 800;">Kiracı Siteler (Tenants)</h3>
-                  <p style="font-size: 11px; color: #94a3b8;">Multi-tenant İzolasyonlu Veritabanları</p>
-                </div>
-                <button class="btn-copy-iban" style="padding: 6px 12px; font-size: 11px;" onclick="openNewSiteModal()">+ Yeni Site</button>
-              </div>
+        </div>
 
-              <div id="saasSitesList">
-                <div class="receipt-item">
-                  <div class="receipt-left">
-                    <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #0284c7;">BS</div>
-                    <div class="receipt-info">
-                      <h4>Begonya Sitesi (Kadıköy, İstanbul)</h4>
-                      <p>135 Daire • Vergi No: 1234567890 • ₺6.750/ay</p>
-                    </div>
-                  </div>
-                  <span class="paid-pill" style="font-size: 10px;">YAYINDA</span>
-                </div>
-
-                <div class="receipt-item">
-                  <div class="receipt-left">
-                    <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #059669;">PK</div>
-                    <div class="receipt-info">
-                      <h4>Palmiye Konutları (Çankaya, Ankara)</h4>
-                      <p>240 Daire • Vergi No: 9876543210 • ₺12.000/ay</p>
-                    </div>
-                  </div>
-                  <span class="paid-pill" style="font-size: 10px;">YAYINDA</span>
-                </div>
-
-                <div class="receipt-item">
-                  <div class="receipt-left">
-                    <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #7c3aed;">KR</div>
-                    <div class="receipt-info">
-                      <h4>Kardelen Rezidans (Nilüfer, Bursa)</h4>
-                      <p>320 Daire • Vergi No: 4567891230 • ₺16.000/ay</p>
-                    </div>
-                  </div>
-                  <span class="paid-pill" style="font-size: 10px;">YAYINDA</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ================= VIEW S3: SAAS ALTYAPI & API SAĞLIĞI ================= -->
-          <div id="viewSaasInfra" style="display: none; flex-direction: column; gap: 16px;">
-            <div class="card-surface">
-              <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 4px;">Altyapı & Banka Ağ Geçidi</h3>
-              <p style="font-size: 11px; color: #94a3b8; margin-bottom: 14px;">Platform Geneli Entegrasyon Sağlığı</p>
-
-              <div style="display: flex; flex-direction: column; gap: 10px;">
-                <div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
-                  <div>
-                    <div style="font-size: 13px; font-weight: 700;">TCMB FAST & TR-Karekod Gateway</div>
-                    <div style="font-size: 11px; color: #94a3b8;">Ortalama Yanıt Süresi: 42ms</div>
-                  </div>
-                  <span class="paid-pill" style="font-size: 10px;">%99.99 UPTIME</span>
-                </div>
-
-                <div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
-                  <div>
-                    <div style="font-size: 13px; font-weight: 700;">Banka Webhook Dinleyicisi (Sanal IBAN)</div>
-                    <div style="font-size: 11px; color: #94a3b8;">Garanti, İş, Akbank Canlı Dinleme</div>
-                  </div>
-                  <span class="paid-pill" style="font-size: 10px;">AKTİF</span>
-                </div>
-
-                <div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
-                  <div>
-                    <div style="font-size: 13px; font-weight: 700;">SMS Servisi (NetGSM API)</div>
-                    <div style="font-size: 11px; color: #94a3b8;">Kalan Kredi: 14.250 SMS</div>
-                  </div>
-                  <span class="paid-pill" style="font-size: 10px;">BAĞLI</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        <!-- Minimal Bottom Navigation (3 Temel Sekme: Ana Sayfa, Dekontlar, Dairem) -->
-        <div class="bottom-nav" id="bottomNav">
-          <div class="nav-item active" id="navHome" onclick="switchMainTab('home')">
-            <svg viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <!-- Flutter Bottom Navigation Bar -->
+        <div class="flutter-bottom-nav">
+          <button class="nav-tab-btn active" id="tabNavHome" onclick="switchNavTab('home')">
+            <span class="material-symbols-outlined">dashboard</span>
             <span>Ana Sayfa</span>
-          </div>
-          <div class="nav-item" id="navReceipts" onclick="switchMainTab('receipts')">
-            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/></svg>
-            <span>Dekontlar</span>
-          </div>
-          <div class="nav-item" id="navUnit" onclick="switchMainTab('unit')">
-            <svg viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <span>Dairem</span>
-          </div>
+          </button>
+          <button class="nav-tab-btn" id="tabNavSecondary" onclick="switchNavTab('secondary')">
+            <span class="material-symbols-outlined" id="secondaryNavIcon">home</span>
+            <span id="secondaryNavLabel">Dairem</span>
+          </button>
+          <button class="nav-tab-btn" id="tabNavProfile" onclick="openProfileSheet()">
+            <span class="material-symbols-outlined">person</span>
+            <span>Profil & Yetki</span>
+          </button>
         </div>
 
-        <!-- Payment Bottom Sheet Modal -->
+        <!-- =====================================================================
+             INTERACTIVE MODAL DIALOGS (Inside Phone Screen)
+             ===================================================================== -->
+        
+        <!-- 1. Payment Modal -->
         <div class="modal-overlay" id="payModal">
-          <div class="bottom-sheet">
-            <div class="sheet-handle"></div>
-            <h2 class="sheet-title">Aidat Ödeme Yöntemi</h2>
-            <p class="sheet-sub">Begonya Sitesi A Blok D:14 • Toplam: <strong style="color: #60a5fa;">₺1.423,33</strong></p>
-
-            <!-- 3 Payment Method Tabs -->
-            <div class="pay-tabs">
-              <button class="pay-tab active" onclick="switchPayTab(0)">⚡ FAST / QR</button>
-              <button class="pay-tab" onclick="switchPayTab(1)">💳 Kredi Kartı</button>
-              <button class="pay-tab" onclick="switchPayTab(2)">🏦 Sanal IBAN</button>
+          <div class="modal-dialog-card">
+            <div class="modal-title-row">
+              <span class="material-symbols-outlined" style="color: var(--accent-cyan);">credit_card</span>
+              <span>Online Aidat Ödeme</span>
             </div>
 
-            <!-- Tab 0: FAST QR & Bank Deep Link -->
-            <div class="tab-content active" id="tab0">
-              <div class="qr-container">
-                <!-- SVG Vector QR Code -->
-                <svg viewBox="0 0 100 100" fill="#0b0f19">
-                  <path d="M0,0 h30 v30 h-30 z M5,5 v20 h20 v-20 z M10,10 h10 v10 h-10 z"/>
-                  <path d="M70,0 h30 v30 h-30 z M75,5 v20 h20 v-20 z M80,10 h10 v10 h-10 z"/>
-                  <path d="M0,70 h30 v30 h-30 z M5,75 v20 h20 v-20 z M10,80 h10 v10 h-10 z"/>
-                  <rect x="35" y="10" width="5" height="15"/>
-                  <rect x="45" y="5" width="10" height="5"/>
-                  <rect x="55" y="15" width="10" height="10"/>
-                  <rect x="35" y="35" width="30" height="30"/>
-                  <rect x="75" y="45" width="15" height="10"/>
-                  <rect x="45" y="75" width="20" height="15"/>
-                  <rect x="75" y="75" width="15" height="20"/>
-                </svg>
+            <div class="modal-summary-box">
+              <div class="modal-summary-row">
+                <span>Dönem Borcu (Ana Para)</span>
+                <span style="color: #fff;">₺1.400,00</span>
               </div>
-              <div style="text-align: center; font-size: 12px; color: #94a3b8; margin-bottom: 14px;">
-                TCMB TR-Karekod Referansı: <strong style="color: #f8fafc; font-family: monospace;">SP-A14-2609-8F92</strong>
+              <div class="modal-summary-row">
+                <span style="color: var(--accent-red);">KMK %5 Kanuni Gecikme</span>
+                <span style="color: var(--accent-red); font-weight: 700;">+₺23,33</span>
               </div>
-
-              <button class="btn-deep-link" onclick="simulatePaymentSuccess()">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
-                <span>Banka Uygulamam ile Aç (İşCep / Garanti)</span>
-              </button>
-              <button class="btn-secondary-action" onclick="copyIbanAndRef()">
-                Referanslı Bilgileri Kopyala
-              </button>
+              <div class="modal-summary-row total">
+                <span>Toplam Tutar</span>
+                <span style="color: var(--accent-cyan);">₺1.423,33</span>
+              </div>
             </div>
 
-            <!-- Tab 1: Kredi Kartı 3D Secure -->
-            <div class="tab-content" id="tab1">
-              <div class="form-group">
-                <label class="form-label">Kart Üzerindeki İsim</label>
-                <input type="text" class="form-input" value="AHMET YILMAZ">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Kart Numarası</label>
-                <input type="text" class="form-input" value="5422 •••• •••• 4210">
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">Son Kullanma</label>
-                  <input type="text" class="form-input" value="08/29">
-                </div>
-                <div class="form-group">
-                  <label class="form-label">CVV</label>
-                  <input type="password" class="form-input" value="382">
-                </div>
-              </div>
-              <button class="btn-deep-link" style="margin-top: 8px;" onclick="simulatePaymentSuccess()">
-                <span>3D Secure ile ₺1.423,33 Öde</span>
-              </button>
+            <input type="text" class="modal-input" value="5428 •••• •••• 9012" placeholder="Kart Numarası">
+            <div style="display: flex; gap: 8px;">
+              <input type="text" class="modal-input" value="12/28" placeholder="SKT">
+              <input type="password" class="modal-input" value="884" placeholder="CVV">
             </div>
 
-            <!-- Tab 2: Sanal IBAN Detayları -->
-            <div class="tab-content" id="tab2">
-              <div style="background: rgba(0,0,0,0.3); border-radius: 14px; padding: 14px; font-size: 12px; margin-bottom: 16px;">
-                <div style="color: #94a3b8; margin-bottom: 2px;">Alıcı Hesap Ünvanı:</div>
-                <div style="font-weight: 700; color: #f8fafc; margin-bottom: 10px;">BEGONYA SİTESİ YÖNETİMİ</div>
-
-                <div style="color: #94a3b8; margin-bottom: 2px;">Dairenize Özel Sanal IBAN:</div>
-                <div style="font-family: monospace; font-weight: 700; color: #60a5fa; margin-bottom: 10px;">TR12 0006 2000 0000 0000 0014</div>
-
-                <div style="color: #94a3b8; margin-bottom: 2px;">Banka:</div>
-                <div style="font-weight: 700; color: #f8fafc;">Garanti BBVA - Kurumsal Şube</div>
-              </div>
-              <button class="btn-deep-link" onclick="copyIban()">
-                <span>IBAN'ı Panoya Kopyala</span>
+            <div class="modal-actions-row">
+              <button class="btn-papara-outlined" style="flex: 1; padding: 10px;" onclick="closeModal('payModal')">İptal</button>
+              <button class="btn-papara-cta" style="flex: 2; padding: 10px; font-size: 13px;" onclick="executePayment()">
+                <span>3D Secure ile Öde</span>
               </button>
             </div>
-
-            <button class="btn-secondary-action" style="margin-top: 8px;" onclick="closeModal()">
-              Vazgeç
-            </button>
           </div>
         </div>
 
-        <!-- Receipt Modal -->
-        <div class="modal-overlay" id="receiptModal">
-          <div class="bottom-sheet">
-            <div class="sheet-handle"></div>
-            <div style="text-align: center; margin-bottom: 16px;">
-              <div style="width: 50px; height: 50px; background: rgba(16, 185, 129, 0.15); color: #10b981; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 8px;">✓</div>
-              <h2 class="sheet-title">Elektronik Tahsilat Dekontu</h2>
-              <p style="font-size: 11px; color: #94a3b8;">KMK Madde 20 & 35 Uyarınca Düzenlenmiştir</p>
+        <!-- 2. Unit Invite Modal -->
+        <div class="modal-overlay" id="inviteModal">
+          <div class="modal-dialog-card">
+            <div class="modal-title-row">
+              <span class="material-symbols-outlined" style="color: var(--accent-orange);">share</span>
+              <span>Hane Sakini Davet Linki</span>
             </div>
 
-            <div style="background: rgba(0,0,0,0.3); border-radius: 14px; padding: 14px; font-size: 12px; margin-bottom: 16px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="color: #94a3b8;">Dekont No:</span>
-                <span style="font-family: monospace; font-weight: 700;">#DKN-2026-0914</span>
+            <p style="font-size: 12px; color: var(--accent-cyan); font-weight: 700; margin-bottom: 8px;">
+              Kapsam: A Blok D:14 &bull; 48 Saat Geçerli
+            </p>
+
+            <div style="background: var(--bg-dark); border: 1px solid var(--border-dark); border-radius: 10px; padding: 10px; font-family: monospace; font-size: 11px; word-break: break-all; color: var(--text-primary); margin-bottom: 12px;">
+              https://sitepulse.app/invite/unit-a14-99824
+            </div>
+
+            <p style="font-size: 11px; color: var(--text-secondary); line-height: 1.4; margin-bottom: 14px;">
+              Bu link üzerinden kayıt olan kişiler doğrudan dairenize hane sakini olarak atanır.
+            </p>
+
+            <div class="modal-actions-row">
+              <button class="btn-papara-cta" style="flex: 1; padding: 10px;" onclick="copyInviteLink()">Linki Kopyala</button>
+              <button class="btn-papara-outlined" style="flex: 1; padding: 10px;" onclick="closeModal('inviteModal')">Kapat</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Receipts Modal -->
+        <div class="modal-overlay" id="receiptsModal">
+          <div class="modal-dialog-card">
+            <div class="modal-title-row">
+              <span class="material-symbols-outlined" style="color: var(--accent-sky);">receipt_long</span>
+              <span>Ödeme Makbuzları & Dekontlar</span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
+              <div style="background: var(--bg-dark); border: 1px solid var(--border-dark); border-radius: 10px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <div style="font-size: 12px; font-weight: 600; color: #fff;">Ağustos 2026 Aidatı</div>
+                  <div style="font-size: 10px; color: var(--text-secondary);">14.08.2026 &bull; FAST Onaylı</div>
+                </div>
+                <span style="font-size: 13px; font-weight: 700; color: var(--accent-green);">₺1.400,00</span>
               </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="color: #94a3b8;">Ödeme Tarihi:</span>
-                <span style="font-weight: 600;">26 Eylül 2026 • 22:15</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="color: #94a3b8;">Bağımsız Bölüm:</span>
-                <span style="font-weight: 600;">A Blok Daire 14</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="color: #94a3b8;">Kat Maliki:</span>
-                <span style="font-weight: 600;">Ahmet Yılmaz</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="color: #94a3b8;">Ana Para Aidat:</span>
-                <span style="font-weight: 600;">₺1.400,00</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                <span style="color: #94a3b8;">KMK %5 Gecikme Tazminatı:</span>
-                <span style="font-weight: 600; color: #f87171;">₺23,33</span>
-              </div>
-              <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between; font-size: 14px;">
-                <span style="font-weight: 800; color: #f8fafc;">TOPLAM TAHSİLAT:</span>
-                <span style="font-weight: 800; color: #34d399;">₺1.423,33</span>
+
+              <div style="background: var(--bg-dark); border: 1px solid var(--border-dark); border-radius: 10px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <div style="font-size: 12px; font-weight: 600; color: #fff;">Temmuz 2026 Aidatı</div>
+                  <div style="font-size: 10px; color: var(--text-secondary);">12.07.2026 &bull; Kredi Kartı</div>
+                </div>
+                <span style="font-size: 13px; font-weight: 700; color: var(--accent-green);">₺1.400,00</span>
               </div>
             </div>
 
-            <button class="btn-deep-link" onclick="closeModal()">
-              <span>PDF Dekontu İndir</span>
-            </button>
-            <button class="btn-secondary-action" onclick="closeModal()">
-              Kapat
-            </button>
+            <button class="btn-papara-outlined" style="width: 100%; padding: 10px;" onclick="closeModal('receiptsModal')">Kapat</button>
           </div>
         </div>
 
       </div>
     </div>
 
-            <!-- SaaS New Site Onboarding Modal (EPIC-03) -->
-        <div class="modal-overlay" id="newSiteModal">
-          <div class="bottom-sheet">
-            <div class="sheet-handle"></div>
-            <h2 class="sheet-title">Yeni Site Onboard Et</h2>
-            <p class="sheet-sub">SaaS Multi-Tenant Altyapısına Yeni Konut Sitesi Ekleme</p>
-
-            <div class="form-group">
-              <label class="form-label">Konut Sitesi Adı</label>
-              <input type="text" class="form-input" id="newSiteName" value="Orkide Park Evleri" placeholder="Örn: Kardelen Rezidans">
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Bağımsız Bölüm Sayısı</label>
-                <input type="number" class="form-input" id="newSiteUnits" value="95">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Potansiyel Vergi No</label>
-                <input type="text" class="form-input" id="newSiteTaxNo" value="9876543210">
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Site Yöneticisi E-posta</label>
-              <input type="email" class="form-input" id="newSiteManagerEmail" value="murat@orkidepark.com">
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Entegre Olacak Banka</label>
-              <select class="form-input" id="newSiteBank">
-                <option>Garanti BBVA Kurumsal (Sanal IBAN)</option>
-                <option>Türkiye İş Bankası (Tek Hesap)</option>
-                <option>Akbank Kurumsal</option>
-                <option>Yapı Kredi</option>
-              </select>
-            </div>
-
-            <button class="btn-pay-now" style="width: 100%; justify-content: center; background: #7c3aed; margin-top: 8px;" onclick="provisionNewSite()">
-              <span>Siteyi Kaydet & Yöneticiye Aktivasyon Gönder</span>
-            </button>
-            <button class="btn-secondary-action" style="margin-top: 8px;" onclick="closeModal()">
-              Vazgeç
-            </button>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- Evaluator & Design Audit Panel -->
-    <div class="eval-panel">
-      <div class="eval-title">
-        <span>📋</span> UX Agent MVP Değerlendirme Raporu
+    <!-- =========================================================================
+         SIDE SPEC & VERIFICATION PANEL
+         ========================================================================= -->
+    <div class="side-spec-panel">
+      <div class="spec-header-title">
+        <span class="material-symbols-outlined" style="color: var(--accent-cyan);">architecture</span>
+        <span>Papara Design Standard & İkon Felsefesi</span>
       </div>
 
-      <div class="audit-box">
-        <strong>MVP Tasarım Felsefesi (Lean Scope):</strong><br>
-        İlk sürüm için kullanıcının dikkatini dağıtan ve henüz arka plan servisi hazır olmayan bütün görsel fazlalıklar elendi. Sakin uygulamayı açtığında <strong>yalnızca ne kadar borcu olduğunu, neden gecikmeye girdiğini ve 2 saniyede nasıl ödeyebileceğini</strong> görür.
-      </div>
-
-      <div class="removed-list">
-        <h4>❌ Tasarımdan Çıkarılan Kapsam Dışı Özellikler:</h4>
-        <ul>
-          <li><strong>Arıza Bildir:</strong> Bakım modülü henüz faz 2'de.</li>
-          <li><strong>Sayaç Gir:</strong> Pay ölçer yasal altyapısı V2'ye taşındı.</li>
-          <li><strong>Rezervasyon:</strong> Tesis kotası ve takvim MVP dışı bırakıldı.</li>
-          <li><strong>Yönetim & İletişim:</strong> Karmaşık sohbet yerine tek duyuru kartı tutuldu.</li>
-          <li><strong>Gereksiz 5 Sekmeli Alt Çubuk:</strong> Yalnızca Ana Sayfa, Dekontlar ve Dairem bırakıldı.</li>
+      <div class="standard-manifesto-box">
+        <h4>Flutter AppTheme (Midnight) Standartları</h4>
+        <p>
+          Mobil uygulama ve prototip arasındaki görsel tutarlılık aşağıdaki 4 temel tasarım ilkesiyle garanti altına alınmıştır:
+        </p>
+        <ul style="padding-left: 18px; margin-top: 8px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+          <li><strong>24dp Optik Izgara:</strong> Tüm aksiyon ve navigasyon ikonları 2dp baz çizgili 24x24dp sınır kutusunda yer alır.</li>
+          <li><strong>%15 Opaklık Renkli Squircle:</strong> İkonlar, semantik renklerin %15 opaklıklı dairesel arka planlarında taşınır (48dp dokunma hedefi).</li>
+          <li><strong>Emoji Yasağı:</strong> Arayüz aksiyonlarında sistem emojileri yasaktır; tamamı Google Material Symbols vektörüdür.</li>
+          <li><strong>Papara CTA & Vurgu:</strong> Birincil aksiyonlar #00D2FF (Cyan) zemin ve koyu metin (#0F172A) ile sunulur.</li>
         </ul>
       </div>
 
-      <div class="retained-list">
-        <h4>✅ Korunan & Güçlendirilen MVP Bileşenleri:</h4>
-        <ul>
-          <li><strong>Hero Balance Card:</strong> ₺1.423,33 net bakiye + 10 gün gecikme etiketi.</li>
-          <li><strong>KMK Yasal Şeffaflık:</strong> +₺23,33 faiz dökümü (%100 kanuni uyum).</li>
-          <li><strong>3'lü Ödeme Çözümü (Bottom Sheet):</strong> FAST QR, 3DS Kart ve Sanal IBAN.</li>
-          <li><strong>Daireye Özel Sanal IBAN:</strong> Açıklama yazma hatasını kaldıran kopyalama kutusu.</li>
-          <li><strong>Dijital Dekont Listesi:</strong> Ödenen ayların doğrulanabilir dekontları.</li>
-          <li><strong>Room DB Offline Rozeti:</strong> İnternet yokken bile önbellekten güvenli okuma.</li>
-        </ul>
+      <!-- Icon & Color Token Mapping Table -->
+      <table class="icon-token-table">
+        <thead>
+          <tr>
+            <th>Fonksiyon</th>
+            <th>Material İkon</th>
+            <th>Semantik Renk</th>
+            <th>Kullanım Alanı</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Aidat Öde</td>
+            <td>
+              <div class="icon-preview-cell">
+                <div class="mini-icon-circle" style="background: rgba(2, 132, 199, 0.15); color: var(--accent-cyan);">
+                  <span class="material-symbols-outlined">credit_card</span>
+                </div>
+                <span>credit_card</span>
+              </div>
+            </td>
+            <td><code style="color: var(--accent-cyan);">#00D2FF</code></td>
+            <td>Hero CTA, Aksiyon Butonu</td>
+          </tr>
+          <tr>
+            <td>Sanal IBAN</td>
+            <td>
+              <div class="icon-preview-cell">
+                <div class="mini-icon-circle" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green);">
+                  <span class="material-symbols-outlined">account_balance</span>
+                </div>
+                <span>account_balance</span>
+              </div>
+            </td>
+            <td><code style="color: var(--accent-green);">#00E5A3</code></td>
+            <td>Sanal Hesap Kartı, FAST</td>
+          </tr>
+          <tr>
+            <td>Dekontlar</td>
+            <td>
+              <div class="icon-preview-cell">
+                <div class="mini-icon-circle" style="background: rgba(56, 189, 248, 0.15); color: var(--accent-sky);">
+                  <span class="material-symbols-outlined">receipt_long</span>
+                </div>
+                <span>receipt_long</span>
+              </div>
+            </td>
+            <td><code style="color: var(--accent-sky);">#38BDF8</code></td>
+            <td>Mali Geçmiş, E-İmzalı Dekont</td>
+          </tr>
+          <tr>
+            <td>Sakin Davet</td>
+            <td>
+              <div class="icon-preview-cell">
+                <div class="mini-icon-circle" style="background: rgba(245, 158, 11, 0.15); color: var(--accent-orange);">
+                  <span class="material-symbols-outlined">person_add</span>
+                </div>
+                <span>person_add</span>
+              </div>
+            </td>
+            <td><code style="color: var(--accent-orange);">#FF9500</code></td>
+            <td>Kat Maliki Davet Linki</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Simulation Role Switcher Buttons -->
+      <div style="margin-top: 22px;">
+        <h4 style="font-size: 13px; color: #fff; margin-bottom: 8px;">Mobil Rol & Simülasyon Kontrolleri:</h4>
+        <div class="sim-controls-grid">
+          <button class="btn-sim-control active" id="ctrlBtnResident" onclick="switchRole('resident')">
+            <span class="material-symbols-outlined" style="font-size: 16px;">home</span>
+            <span>Kat Maliki Görünümü</span>
+          </button>
+          <button class="btn-sim-control" id="ctrlBtnManager" onclick="switchRole('manager')">
+            <span class="material-symbols-outlined" style="font-size: 16px;">apartment</span>
+            <span>Site Yöneticisi Kokpiti</span>
+          </button>
+          <button class="btn-sim-control" id="ctrlBtnSaas" onclick="switchRole('saas')">
+            <span class="material-symbols-outlined" style="font-size: 16px;">domain</span>
+            <span>SaaS SuperAdmin</span>
+          </button>
+          <button class="btn-sim-control" onclick="toggleOfflineMode()">
+            <span class="material-symbols-outlined" style="font-size: 16px;">wifi_off</span>
+            <span>Çevrimdışı / Çevrimiçi</span>
+          </button>
+        </div>
       </div>
 
-      <div class="control-btn-grid">
-        <button class="btn-ctrl primary" onclick="toggleDebtState()">
-          🔄 Durumu Değiştir (Borçlu ⟷ Borçsuz)
-        </button>
-        <button class="btn-ctrl" onclick="toggleTheme()">
-          🌓 Tema (Açık / Koyu)
-        </button>
-        <button class="btn-ctrl" onclick="openPaymentModal()">
-          💳 Ödeme Ekranını Aç
-        </button>
-      </div>
-
-      <!-- Auth & Session Controls -->
-      <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">🔐 Kimlik Doğrulama & Oturum:</span>
-          <span id="authStatusBadge" style="font-size: 10px; font-weight: 700; color: #34d399; background: rgba(16,185,129,0.15); padding: 2px 8px; border-radius: 999px;">Ahmet Yılmaz (Açık)</span>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <button class="btn-ctrl" onclick="handleLogout()" style="margin: 0; padding: 10px 8px; font-size: 11px; justify-content: center; background: rgba(239,68,68,0.15); color: #f87171; border-color: rgba(239,68,68,0.3);">
-            🚪 Çıkış Yap (Login Gör)
-          </button>
-          <button class="btn-ctrl primary" onclick="handleLogin('ahmet')" style="margin: 0; padding: 10px 8px; font-size: 11px; justify-content: center;">
-            🔑 Hızlı Giriş Yap
-          </button>
-        </div>
-      </div>
-
-            <!-- Persona Switcher for Evaluation -->
-      <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);">
-        <div style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
-          🎭 Aktif Kullanıcı Rolü (RBAC Test):
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px;">
-          <button class="btn-ctrl primary" id="btnEvalRoleResident" onclick="switchRolePersona('home_owner')" style="margin: 0; padding: 10px 4px; font-size: 11px; justify-content: center;">
-            🏠 Kat Maliki
-          </button>
-          <button class="btn-ctrl" id="btnEvalRoleManager" onclick="switchRolePersona('site_manager')" style="margin: 0; padding: 10px 4px; font-size: 11px; justify-content: center;">
-            👔 Yöneticisi
-          </button>
-          <button class="btn-ctrl" id="btnEvalRoleSaas" onclick="switchRolePersona('saas_admin')" style="margin: 0; padding: 10px 4px; font-size: 11px; justify-content: center;">
-            🌐 SaaS Admin
-          </button>
-        </div>
-        <div id="evalRoleDescription" style="font-size: 11px; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 8px; color: #94a3b8; border-left: 3px solid #38bdf8;">
-          <strong>Yetki Kapsamı:</strong> Yalnızca Begonya Sitesi A Blok D:14 dairesine ait aidat, ceza ve dekontları görebilir. Site kasasını göremez (403 Forbidden).
-        </div>
-      </div>
-
-      <!-- Quick Tab Switcher for Evaluator -->
-      <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);">
-        <div style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
-          📱 Sekmeler Arası Test Butonları:
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
-          <button class="btn-ctrl primary" id="btnCtrlHome" onclick="switchMainTab('home')" style="margin: 0; padding: 10px 6px; font-size: 12px; justify-content: center;">
-            🏠 Ana Sayfa
-          </button>
-          <button class="btn-ctrl" id="btnCtrlReceipts" onclick="switchMainTab('receipts')" style="margin: 0; padding: 10px 6px; font-size: 12px; justify-content: center;">
-            📄 Dekontlar
-          </button>
-          <button class="btn-ctrl" id="btnCtrlUnit" onclick="switchMainTab('unit')" style="margin: 0; padding: 10px 6px; font-size: 12px; justify-content: center;">
-            🏢 Dairem
-          </button>
-        </div>
-      </div>
     </div>
 
   </div>
 
+  <!-- Interactive JavaScript Logic -->
   <script>
-    let isDebtPaid = false;
-    let isLightMode = false;
+    let currentRole = 'resident';
+    let isOffline = false;
+
+    function switchRole(role) {
+      currentRole = role;
+      document.querySelectorAll('.btn-sim-control').forEach(b => b.classList.remove('active'));
+      
+      const resView = document.getElementById('viewResident');
+      const mgrView = document.getElementById('viewManager');
+      const saasView = document.getElementById('viewSaas');
+      const roleBadge = document.getElementById('topRoleBadge');
+      const secLabel = document.getElementById('secondaryNavLabel');
+      const secIcon = document.getElementById('secondaryNavIcon');
+
+      resView.style.display = 'none';
+      mgrView.style.display = 'none';
+      saasView.style.display = 'none';
+
+      if (role === 'resident') {
+        resView.style.display = 'flex';
+        roleBadge.innerText = 'Kat Maliki';
+        secLabel.innerText = 'Dairem';
+        secIcon.innerText = 'home';
+        document.getElementById('ctrlBtnResident').classList.add('active');
+      } else if (role === 'manager') {
+        mgrView.style.display = 'flex';
+        roleBadge.innerText = 'Yönetici';
+        secLabel.innerText = 'Yönetim';
+        secIcon.innerText = 'apartment';
+        document.getElementById('ctrlBtnManager').classList.add('active');
+      } else if (role === 'saas') {
+        saasView.style.display = 'flex';
+        roleBadge.innerText = 'SaaS Admin';
+        secLabel.innerText = 'Siteler';
+        secIcon.innerText = 'domain';
+        document.getElementById('ctrlBtnSaas').classList.add('active');
+      }
+    }
+
+    function switchNavTab(tab) {
+      document.querySelectorAll('.nav-tab-btn').forEach(b => b.classList.remove('active'));
+      if (tab === 'home') {
+        document.getElementById('tabNavHome').classList.add('active');
+        switchRole(currentRole);
+      } else if (tab === 'secondary') {
+        document.getElementById('tabNavSecondary').classList.add('active');
+        if (currentRole === 'resident') {
+          scrollToIban();
+        }
+      }
+    }
+
+    function toggleOfflineMode() {
+      isOffline = !isOffline;
+      const appWifi = document.getElementById('appbarWifiIcon');
+      const statusWifi = document.getElementById('statusWifiIcon');
+      const pill = document.getElementById('dueStatusPill');
+
+      if (isOffline) {
+        appWifi.innerText = 'wifi_off';
+        appWifi.style.color = 'var(--accent-orange)';
+        statusWifi.innerText = 'wifi_off';
+        statusWifi.style.color = 'var(--accent-orange)';
+        pill.innerText = 'Çevrimdışı';
+        pill.className = 'status-pill offline';
+      } else {
+        appWifi.innerText = 'wifi';
+        appWifi.style.color = 'var(--accent-green)';
+        statusWifi.innerText = 'wifi';
+        statusWifi.style.color = 'var(--accent-green)';
+        pill.innerText = '10 Gün Gecikme';
+        pill.className = 'status-pill penalty';
+      }
+    }
 
     function openPaymentModal() {
       document.getElementById('payModal').classList.add('active');
     }
 
-    function openReceiptModal() {
-      closeModal();
-      document.getElementById('receiptModal').classList.add('active');
+    function openInviteModal() {
+      document.getElementById('inviteModal').classList.add('active');
     }
 
-    function closeModal() {
-      document.getElementById('payModal').classList.remove('active');
-      document.getElementById('receiptModal').classList.remove('active');
+    function openReceiptsModal() {
+      document.getElementById('receiptsModal').classList.add('active');
     }
 
-    function switchPayTab(tabIndex) {
-      const tabs = document.querySelectorAll('.pay-tab');
-      const contents = document.querySelectorAll('.tab-content');
-      tabs.forEach((t, i) => t.classList.toggle('active', i === tabIndex));
-      contents.forEach((c, i) => c.classList.toggle('active', i === tabIndex));
+    function openDuesDetailModal() {
+      alert('KMK Madde 20 Hesap Özeti:\n\nSon Ödeme: 15.09.2026\nHesaplama Tarihi: 25.09.2026 (10 Gün Gecikme)\nAylık Yasal Gecikme: %5\nGecikme Tazminatı: (1400 * 0.05 / 30) * 10 = 23,33 TL\nToplam: 1.423,33 TL');
     }
 
-    function simulatePaymentSuccess() {
-      closeModal();
-      isDebtPaid = true;
-      applyState();
-      setTimeout(() => {
-        openReceiptModal();
-      }, 400);
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
     }
 
-    function toggleDebtState() {
-      isDebtPaid = !isDebtPaid;
-      applyState();
+    function scrollToIban() {
+      const widget = document.getElementById('virtualIbanWidget');
+      if (widget) widget.scrollIntoView({ behavior: 'smooth' });
     }
 
-    function applyState() {
-      const balanceText = document.getElementById('balanceText');
-      const overdueBadge = document.getElementById('overdueBadge');
-      const dueDateText = document.getElementById('dueDateText');
-      const kmkBox = document.getElementById('kmkBox');
-      const btnOpenPay = document.getElementById('btnOpenPay');
-
-      if (isDebtPaid) {
-        balanceText.innerHTML = '<span class="balance-currency">₺</span>0,00';
-        overdueBadge.className = 'paid-pill';
-        overdueBadge.innerText = 'Tüm Aidatlar Ödendi ✓';
-        dueDateText.innerText = 'Vadesi geçmiş borcunuz bulunmamaktadır';
-        kmkBox.style.display = 'none';
-        btnOpenPay.style.opacity = '0.5';
-        btnOpenPay.style.pointerEvents = 'none';
-        btnOpenPay.innerHTML = '<span>Borçsuz Durumda</span>';
-      } else {
-        balanceText.innerHTML = '<span class="balance-currency">₺</span>1.423,33';
-        overdueBadge.className = 'overdue-pill';
-        overdueBadge.innerText = '10 Gün Gecikme';
-        dueDateText.innerText = 'Son Ödeme: 15 Eylül 2026 (%5 yasal faiz dahil)';
-        kmkBox.style.display = 'flex';
-        btnOpenPay.style.opacity = '1';
-        btnOpenPay.style.pointerEvents = 'auto';
-        btnOpenPay.innerHTML = '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg><span>Hemen Güvenle Öde</span>';
-      }
-    }
-
-    function toggleTheme() {
-      isLightMode = !isLightMode;
-      document.getElementById('phoneScreen').classList.toggle('light-mode', isLightMode);
-    }
-
-    function copyIban() {
-      try {
-        navigator.clipboard.writeText('TR1200062000000000000014');
-      } catch (e) {
-        console.warn('Clipboard write fallback');
-      }
-      alert('Daireye özel Sanal IBAN panoya kopyalandı:\nTR12 0006 2000 0014');
-    }
-
-    function copyIbanAndRef() {
-      try {
-        navigator.clipboard.writeText('IBAN: TR1200062000000000000014\nTutar: 1423.33 TL\nAçıklama: SP-A14-2609-8F92');
-      } catch (e) {
-        console.warn('Clipboard write fallback');
-      }
-      alert('Ödeme bilgileri panoya kopyalandı:\n• IBAN: TR12 0006 2000 0014\n• Tutar: 1.423,33 TL\n• Açıklama: SP-A14-2609-8F92');
+    function copyIbanString() {
+      const iban = document.getElementById('ibanText').innerText.replace(/\s+/g, '');
+      navigator.clipboard.writeText(iban).catch(() => {});
+      alert('Sanal IBAN panoya kopyalandı!\n' + iban);
     }
 
     function copyInviteLink() {
-      try {
-        navigator.clipboard.writeText('https://sitepulse.app/invite/unit?token=INV-BEGONYA-A14-9988');
-      } catch (e) {
-        console.warn('Clipboard write fallback');
-      }
-      alert('Daireye özel sakin davet linki panoya kopyalandı:\nhttps://sitepulse.app/invite/unit?token=INV-BEGONYA-A14-9988\n\nBu link yalnızca A Blok D:14 dairesi için sakin kaydı açar.');
+      navigator.clipboard.writeText('https://sitepulse.app/invite/unit-a14-99824').catch(() => {});
+      alert('Davet linki panoya kopyalandı!');
+      closeModal('inviteModal');
     }
 
-    function switchMainTab(tab) {
-      console.log('switchMainTab invoked with:', tab);
-      const viewHome = document.getElementById('viewHome');
-      const viewReceipts = document.getElementById('viewReceipts');
-      const viewUnit = document.getElementById('viewUnit');
-
-      if (!viewHome || !viewReceipts || !viewUnit) {
-        console.error('View element missing:', { viewHome, viewReceipts, viewUnit });
-        return;
-      }
-
-      viewHome.style.display = (tab === 'home') ? 'flex' : 'none';
-      viewReceipts.style.display = (tab === 'receipts') ? 'flex' : 'none';
-      viewUnit.style.display = (tab === 'unit') ? 'flex' : 'none';
-
-      // Update Bottom Bar Nav Items
-      const navHome = document.getElementById('navHome');
-      const navReceipts = document.getElementById('navReceipts');
-      const navUnit = document.getElementById('navUnit');
-      if (navHome) navHome.classList.toggle('active', tab === 'home');
-      if (navReceipts) navReceipts.classList.toggle('active', tab === 'receipts');
-      if (navUnit) navUnit.classList.toggle('active', tab === 'unit');
-
-      // Update Evaluator Panel Controls
-      const btnCtrlHome = document.getElementById('btnCtrlHome');
-      const btnCtrlReceipts = document.getElementById('btnCtrlReceipts');
-      const btnCtrlUnit = document.getElementById('btnCtrlUnit');
-      if (btnCtrlHome) btnCtrlHome.className = (tab === 'home') ? 'btn-ctrl primary' : 'btn-ctrl';
-      if (btnCtrlReceipts) btnCtrlReceipts.className = (tab === 'receipts') ? 'btn-ctrl primary' : 'btn-ctrl';
-      if (btnCtrlUnit) btnCtrlUnit.className = (tab === 'unit') ? 'btn-ctrl primary' : 'btn-ctrl';
-
-      // Scroll content container back to top smoothly
-      const appContent = document.querySelector('.app-content');
-      if (appContent) {
-        appContent.scrollTop = 0;
-      }
+    function executePayment() {
+      closeModal('payModal');
+      document.getElementById('amountDisplay').innerText = '₺0,00';
+      document.getElementById('dueStatusPill').innerText = 'Ödendi';
+      document.getElementById('dueStatusPill').className = 'status-pill ontime';
+      document.getElementById('heroCard').classList.remove('overdue');
+      document.getElementById('kmkBox').style.display = 'none';
+      alert('₺1.423,33 tutarındaki ödeme başarıyla alındı! E-dekont üretildi.');
     }
 
-    
-    let currentRole = 'home_owner';
-    let selectedPersona = 'home_owner';
-
-    function selectPersona(role) {
-      selectedPersona = role;
-      const btnHome = document.getElementById('btnRoleHomeOwner');
-      const btnMgr = document.getElementById('btnRoleSiteManager');
-      const btnSaas = document.getElementById('btnRoleSaasAdmin');
-      const phoneInput = document.getElementById('loginPhoneInput');
-      const btnLogin = document.getElementById('btnSubmitLogin');
-      const hint = document.getElementById('personaHint');
-
-      if (btnHome) btnHome.classList.toggle('active', role === 'home_owner');
-      if (btnMgr) btnMgr.classList.toggle('active', role === 'site_manager');
-      if (btnSaas) btnSaas.classList.toggle('active', role === 'saas_admin');
-
-      if (role === 'home_owner') {
-        if (phoneInput) phoneInput.value = '0532 111 22 33';
-        if (btnLogin) btnLogin.innerHTML = '<span>Giriş Yap (Kat Maliki - Ahmet Yılmaz)</span><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
-        if (hint) hint.innerHTML = 'Ahmet Yılmaz • A Blok D:14 Kat Maliki (Bireysel aidat borcu, sanal IBAN, dekontlar)';
-      } else if (role === 'site_manager') {
-        if (phoneInput) phoneInput.value = 'mehmet.demir@begonya.com';
-        if (btnLogin) btnLogin.innerHTML = '<span>Giriş Yap (Site Yöneticisi - Mehmet Demir)</span><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
-        if (hint) hint.innerHTML = 'Mehmet Demir • Begonya Sitesi Yöneticisi (135 daire bütçesi, ₺348K kasa, banka mutabakatı)';
-      } else if (role === 'saas_admin') {
-        if (phoneInput) phoneInput.value = 'admin@sitepulse.io';
-        if (btnLogin) btnLogin.innerHTML = '<span>Giriş Yap (SaaS Admin - Selin Kaya)</span><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
-        if (hint) hint.innerHTML = 'Selin Kaya • SitePulse Süper Admin (12 site portföyü, ₺72.5K MRR, API altyapısı)';
-      }
+    function approvePendingRegistration() {
+      alert('Caner Erkin (B Blok D:18) başvurusu onaylandı!\nÜretilen geçici şifre: SP-2026-B18-PW9\nKullanıcıya SMS ile iletildi.');
     }
 
-    function switchRolePersona(role) {
-      currentRole = role;
-      selectedPersona = role;
-      isLoggedIn = true;
-      applyRoleUI(role);
+    function openAddResidentModal() {
+      alert('Site Yöneticisi Daire/Sakin Ekleme formu açılıyor.');
     }
 
-    function applyRoleUI(role) {
-      currentRole = role;
-      const appTopBar = document.getElementById('appTopBar');
-      const bottomNav = document.getElementById('bottomNav');
-      const viewLogin = document.getElementById('viewLogin');
-      if (viewLogin) viewLogin.style.display = 'none';
-      if (appTopBar) appTopBar.style.display = 'flex';
-      if (bottomNav) bottomNav.style.display = 'flex';
-
-      // Update TopBar based on role
-      const avatarEl = appTopBar.querySelector('.avatar');
-      const userTextH3 = appTopBar.querySelector('.user-text h3');
-      const userTextP = appTopBar.querySelector('.user-text p');
-      const authStatusBadge = document.getElementById('authStatusBadge');
-      const evalRoleDesc = document.getElementById('evalRoleDescription');
-
-      // Update Evaluator Panel buttons
-      const btnEvalRes = document.getElementById('btnEvalRoleResident');
-      const btnEvalMgr = document.getElementById('btnEvalRoleManager');
-      const btnEvalSaas = document.getElementById('btnEvalRoleSaas');
-      if (btnEvalRes) btnEvalRes.className = (role === 'home_owner') ? 'btn-ctrl primary' : 'btn-ctrl';
-      if (btnEvalMgr) btnEvalMgr.className = (role === 'site_manager') ? 'btn-ctrl primary' : 'btn-ctrl';
-      if (btnEvalSaas) btnEvalSaas.className = (role === 'saas_admin') ? 'btn-ctrl primary' : 'btn-ctrl';
-
-      hideAllViews();
-
-      if (role === 'home_owner') {
-        avatarEl.innerText = 'AY';
-        avatarEl.style.background = 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)';
-        userTextH3.innerHTML = '<span>Ahmet Yılmaz</span><span style="font-size: 9px; padding: 1px 5px; background: rgba(56, 189, 248, 0.2); color: #38bdf8; border-radius: 4px;">D:14</span>';
-        userTextP.innerText = 'Begonya Sitesi • A Blok D:14 Kat Maliki';
-        if (authStatusBadge) {
-          authStatusBadge.innerText = 'Ahmet Yılmaz (Malik)';
-          authStatusBadge.style.color = '#38bdf8';
-          authStatusBadge.style.background = 'rgba(56, 189, 248, 0.15)';
-        }
-        if (evalRoleDesc) {
-          evalRoleDesc.innerHTML = '<strong>Yetki Kapsamı (HOME_OWNER):</strong> Sadece A Blok D:14 dairesinin borç/gecikme durumunu ve kendi Sanal IBAN\'ını görebilir. Site geneli kasayı göremez (403 Forbidden).';
-          evalRoleDesc.style.borderLeftColor = '#38bdf8';
-        }
-        renderBottomNav('home_owner');
-        switchMainTab('home');
-      } else if (role === 'site_manager') {
-        avatarEl.innerText = 'MD';
-        avatarEl.style.background = 'linear-gradient(135deg, #0d9488 0%, #047857 100%)';
-        userTextH3.innerHTML = '<span>Mehmet Demir</span><span style="font-size: 9px; padding: 1px 5px; background: rgba(16, 185, 129, 0.2); color: #34d399; border-radius: 4px;">Yönetici</span>';
-        userTextP.innerText = 'Begonya Sitesi Yönetim Kurulu Bşk.';
-        if (authStatusBadge) {
-          authStatusBadge.innerText = 'Mehmet Demir (Yönetici)';
-          authStatusBadge.style.color = '#34d399';
-          authStatusBadge.style.background = 'rgba(16, 185, 129, 0.15)';
-        }
-        if (evalRoleDesc) {
-          evalRoleDesc.innerHTML = '<strong>Yetki Kapsamı (SITE_MANAGER):</strong> Begonya Sitesi\'nin 135 dairesinin borç listesini, ₺348K kasayı ve Garanti BBVA Sanal IBAN mutabakatlarını yönetir. Başka siteleri göremez.';
-          evalRoleDesc.style.borderLeftColor = '#10b981';
-        }
-        renderBottomNav('site_manager');
-        switchManagerTab('mgr_home');
-      } else if (role === 'saas_admin') {
-        avatarEl.innerText = 'SK';
-        avatarEl.style.background = 'linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%)';
-        userTextH3.innerHTML = '<span>Selin Kaya</span><span style="font-size: 9px; padding: 1px 5px; background: rgba(168, 85, 247, 0.2); color: #c084fc; border-radius: 4px;">SaaS Admin</span>';
-        userTextP.innerText = 'SitePulse Global Platform Süper Admin';
-        if (authStatusBadge) {
-          authStatusBadge.innerText = 'Selin Kaya (SaaS Admin)';
-          authStatusBadge.style.color = '#c084fc';
-          authStatusBadge.style.background = 'rgba(168, 85, 247, 0.15)';
-        }
-        if (evalRoleDesc) {
-          evalRoleDesc.innerHTML = '<strong>Yetki Kapsamı (SAAS_ADMIN):</strong> Cross-tenant küresel yetki. Tüm siteleri (Begonya, Palmiye, vb.) görür, yeni konut sitesi kaydeder (onboard), MRR ve API sağlığını denetler.';
-          evalRoleDesc.style.borderLeftColor = '#a855f7';
-        }
-        renderBottomNav('saas_admin');
-        switchSaasTab('saas_home');
-      }
+    function openAddSiteModal() {
+      alert('SaaS SuperAdmin Yeni Site Onboarding formu açılıyor.');
     }
 
-    function hideAllViews() {
-      const views = [
-        'viewHome', 'viewReceipts', 'viewUnit',
-        'viewManagerHome', 'viewManagerDebtors', 'viewManagerBank',
-        'viewSaasHome', 'viewSaasSites', 'viewSaasInfra',
-        'viewLogin'
-      ];
-      views.forEach(v => {
-        const el = document.getElementById(v);
-        if (el) el.style.display = 'none';
-      });
+    function openProfileSheet() {
+      alert('Profil & Yetki Menüsü:\n\nKullanıcı: Ahmet Yılmaz\nRol: Kat Maliki\nSite: Begonya Sitesi (A Blok D:14)\nYetki Kapsamı: Daire İçi & Sakin Davet');
     }
-
-    function renderBottomNav(role) {
-      const bottomNav = document.getElementById('bottomNav');
-      if (!bottomNav) return;
-
-      if (role === 'home_owner') {
-        bottomNav.innerHTML = `
-          <div class="nav-item active" id="navHome" onclick="switchMainTab('home')">
-            <svg viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            <span>Ana Sayfa</span>
-          </div>
-          <div class="nav-item" id="navReceipts" onclick="switchMainTab('receipts')">
-            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/></svg>
-            <span>Dekontlar</span>
-          </div>
-          <div class="nav-item" id="navUnit" onclick="switchMainTab('unit')">
-            <svg viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <span>Dairem</span>
-          </div>
-        `;
-      } else if (role === 'site_manager') {
-        bottomNav.innerHTML = `
-          <div class="nav-item active" id="navMgrHome" onclick="switchManagerTab('mgr_home')">
-            <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-            <span>Kokpit</span>
-          </div>
-          <div class="nav-item" id="navMgrDebtors" onclick="switchManagerTab('mgr_debtors')">
-            <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
-            <span>Borçlular</span>
-          </div>
-          <div class="nav-item" id="navMgrBank" onclick="switchManagerTab('mgr_bank')">
-            <svg viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-            <span>Banka (EPIC-07)</span>
-          </div>
-        `;
-      } else if (role === 'saas_admin') {
-        bottomNav.innerHTML = `
-          <div class="nav-item active" id="navSaasHome" onclick="switchSaasTab('saas_home')">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-            <span>Platform</span>
-          </div>
-          <div class="nav-item" id="navSaasSites" onclick="switchSaasTab('saas_sites')">
-            <svg viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            <span>Siteler</span>
-          </div>
-          <div class="nav-item" id="navSaasInfra" onclick="switchSaasTab('saas_infra')">
-            <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            <span>Altyapı</span>
-          </div>
-        `;
-      }
-    }
-
-    function switchManagerTab(tab) {
-      const vHome = document.getElementById('viewManagerHome');
-      const vDebtors = document.getElementById('viewManagerDebtors');
-      const vBank = document.getElementById('viewManagerBank');
-
-      if (vHome) vHome.style.display = (tab === 'mgr_home') ? 'flex' : 'none';
-      if (vDebtors) vDebtors.style.display = (tab === 'mgr_debtors') ? 'flex' : 'none';
-      if (vBank) vBank.style.display = (tab === 'mgr_bank') ? 'flex' : 'none';
-
-      const nHome = document.getElementById('navMgrHome');
-      const nDebtors = document.getElementById('navMgrDebtors');
-      const nBank = document.getElementById('navMgrBank');
-      if (nHome) nHome.classList.toggle('active', tab === 'mgr_home');
-      if (nDebtors) nDebtors.classList.toggle('active', tab === 'mgr_debtors');
-      if (nBank) nBank.classList.toggle('active', tab === 'mgr_bank');
-
-      const appContent = document.querySelector('.app-content');
-      if (appContent) appContent.scrollTop = 0;
-    }
-
-    function switchSaasTab(tab) {
-      const vHome = document.getElementById('viewSaasHome');
-      const vSites = document.getElementById('viewSaasSites');
-      const vInfra = document.getElementById('viewSaasInfra');
-
-      if (vHome) vHome.style.display = (tab === 'saas_home') ? 'flex' : 'none';
-      if (vSites) vSites.style.display = (tab === 'saas_sites') ? 'flex' : 'none';
-      if (vInfra) vInfra.style.display = (tab === 'saas_infra') ? 'flex' : 'none';
-
-      const nHome = document.getElementById('navSaasHome');
-      const nSites = document.getElementById('navSaasSites');
-      const nInfra = document.getElementById('navSaasInfra');
-      if (nHome) nHome.classList.toggle('active', tab === 'saas_home');
-      if (nSites) nSites.classList.toggle('active', tab === 'saas_sites');
-      if (nInfra) nInfra.classList.toggle('active', tab === 'saas_infra');
-
-      const appContent = document.querySelector('.app-content');
-      if (appContent) appContent.scrollTop = 0;
-    }
-
-    function sendBroadcastReminder() {
-      alert('📢 Begonya Sitesi Toplu Hatırlatma SMS\\Bildirimi Gönderildi:\\n\\n"Sayın Sakinimiz, Eylül 2026 aidat borcunuz gecikmededir. KMK %5 gecikme faizi işlememesi için Sanal IBAN veya kartınızla ödeme yapmanızı rica ederiz."\\n\\nGönderilen: 15 Daire');
-    }
-
-    function sendSingleReminder(flat, person, amount) {
-      alert('📢 Tekil SMS Gönderildi:\\nKime: ' + person + ' (' + flat + ')\\nTutar: ₺' + amount + '\\nİçerik: Vadesi geçmiş aidat borcunuz bulunmaktadır.');
-    }
-
-    function openNewSiteModal() {
-      document.getElementById('newSiteModal').classList.add('active');
-    }
-
-    function provisionNewSite() {
-      const name = document.getElementById('newSiteName').value || 'Yeni Konut Sitesi';
-      const units = document.getElementById('newSiteUnits').value || '100';
-      const email = document.getElementById('newSiteManagerEmail').value || 'yonetici@site.com';
-      const bank = document.getElementById('newSiteBank').value;
-
-      closeModal();
-
-      const sitesList = document.getElementById('saasSitesList');
-      if (sitesList) {
-        const newSiteCard = document.createElement('div');
-        newSiteCard.className = 'receipt-item';
-        newSiteCard.innerHTML = `
-          <div class="receipt-left">
-            <div class="avatar" style="width: 32px; height: 32px; font-size: 11px; background: #10b981;">NEW</div>
-            <div class="receipt-info">
-              <h4>${name}</h4>
-              <p>${units} Daire • Yönetici: ${email} • ${bank}</p>
-            </div>
-          </div>
-          <span class="paid-pill" style="font-size: 10px;">PROVISION EDİLDİ</span>
-        `;
-        sitesList.prepend(newSiteCard);
-      }
-
-      alert('✨ Yeni Konut Sitesi Başarıyla Onboard Edildi (EPIC-03)!\\n\\nSite: ' + name + '\\nBağımsız Bölüm: ' + units + ' Daire\\nYönetici: ' + email + '\\nGeçici Şifre SMS ve E-posta ile gönderildi.');
-    }
-
-</script>
+  </script>
 </body>
 </html>

@@ -182,7 +182,7 @@ class HeroBalanceCard extends StatelessWidget {
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentCyan,
-                    foregroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
