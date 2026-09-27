@@ -363,42 +363,49 @@ class _LoginScreenState extends State<LoginScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: badgeColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(icon, color: badgeColor, size: 18),
                     ),
-                    child: Icon(icon, color: badgeColor, size: 18),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: AppColors.textPrimary(context),
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            name,
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                      Text(
-                        name,
-                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: badgeColor.withOpacity(0.12),
+                  color: badgeColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: badgeColor.withOpacity(0.3)),
+                  border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
                 ),
                 child: Text(
                   badgeText,
@@ -457,42 +464,49 @@ class _LoginScreenState extends State<LoginScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentCyan.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentCyan.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.admin_panel_settings, color: AppColors.accentCyan, size: 18),
                     ),
-                    child: const Icon(Icons.admin_panel_settings, color: AppColors.accentCyan, size: 18),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Site Yöneticisi',
-                        style: TextStyle(
-                          color: AppColors.textPrimary(context),
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Site Yöneticisi',
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Mehmet Demir (mehmet.demir@begonya.com)',
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                      Text(
-                        'Mehmet Demir (mehmet.demir@begonya.com)',
-                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.accentCyan.withOpacity(0.15),
+                  color: AppColors.accentCyan.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.accentCyan.withOpacity(0.4)),
+                  border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
                 ),
                 child: const Text(
                   'Yönetici & Maliki',
@@ -520,12 +534,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     const Icon(Icons.alt_route, size: 14, color: AppColors.accentCyan),
                     const SizedBox(width: 6),
-                    Text(
-                      'Giriş Yolu Seçimi (Yönetici aynı zamanda kat malikidir):',
-                      style: TextStyle(
-                        color: AppColors.textPrimary(context),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: Text(
+                        'Giriş Yolu Seçimi (Yönetici aynı zamanda kat malikidir):',
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],

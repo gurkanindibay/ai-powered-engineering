@@ -1293,25 +1293,9 @@
               </div>
             </div>
 
-            <!-- 2. Resident Actions Row (Papara 4-Action Squircle Row) -->
+            <!-- 2. Resident Actions Row (Papara 4-Action Squircle Row: Dekontlar, Sakin Davet, Talep / Arıza, Duyurular) -->
             <div class="actions-grid">
-              <!-- Tile 1: Pay Dues -->
-              <div class="action-tile" onclick="openPaymentModal()">
-                <div class="action-icon-circle" style="background: rgba(2, 132, 199, 0.15); color: var(--accent-cyan);">
-                  <span class="material-symbols-outlined">credit_card</span>
-                </div>
-                <div class="action-label">Aidat Öde</div>
-              </div>
-
-              <!-- Tile 2: Virtual IBAN -->
-              <div class="action-tile" onclick="scrollToIban()">
-                <div class="action-icon-circle" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green);">
-                  <span class="material-symbols-outlined">account_balance</span>
-                </div>
-                <div class="action-label">Sanal IBAN</div>
-              </div>
-
-              <!-- Tile 3: Receipts -->
+              <!-- Tile 1: Receipts -->
               <div class="action-tile" onclick="openReceiptsModal()">
                 <div class="action-icon-circle" style="background: rgba(56, 189, 248, 0.15); color: var(--accent-sky);">
                   <span class="material-symbols-outlined">receipt_long</span>
@@ -1319,13 +1303,31 @@
                 <div class="action-label">Dekontlar</div>
               </div>
 
-              <!-- Tile 4: Invite Resident -->
+              <!-- Tile 2: Invite Resident -->
               <div class="action-tile" onclick="openInviteModal()">
                 <span class="action-badge-top">Link Üret</span>
                 <div class="action-icon-circle" style="background: rgba(245, 158, 11, 0.15); color: var(--accent-orange);">
                   <span class="material-symbols-outlined">person_add</span>
                 </div>
                 <div class="action-label">Sakin Davet</div>
+              </div>
+
+              <!-- Tile 3: Maintenance / Issue Request -->
+              <div class="action-tile" onclick="openIssueModal()">
+                <span class="action-badge-top" style="background: var(--accent-cyan); color: #fff;">Bildir</span>
+                <div class="action-icon-circle" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan);">
+                  <span class="material-symbols-outlined">build_circle</span>
+                </div>
+                <div class="action-label">Talep / Arıza</div>
+              </div>
+
+              <!-- Tile 4: Building Announcements -->
+              <div class="action-tile" onclick="openAnnouncementsModal()">
+                <span class="action-badge-top" style="background: var(--accent-green); color: #fff;">3 Yeni</span>
+                <div class="action-icon-circle" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green);">
+                  <span class="material-symbols-outlined">campaign</span>
+                </div>
+                <div class="action-label">Duyurular</div>
               </div>
             </div>
 
@@ -1926,6 +1928,14 @@
 
     function openDuesDetailModal() {
       alert('KMK Madde 20 Hesap Özeti:\n\nSon Ödeme: 15.09.2026\nHesaplama Tarihi: 25.09.2026 (10 Gün Gecikme)\nAylık Yasal Gecikme: %5\nGecikme Tazminatı: (1400 * 0.05 / 30) * 10 = 23,33 TL\nToplam: 1.423,33 TL');
+    }
+
+    function openIssueModal() {
+      alert('Yönetime Talep & Arıza Bildirimi:\n\n• Asansör / Kapı Otomatiği\n• Tesisat / Su Kaçağı\n• Aydınlatma & Çevre Temizliği\n\nTalebiniz #TLP-842 numarası ile site yönetimine iletildi.');
+    }
+
+    function openAnnouncementsModal() {
+      alert('Site Duyuruları (3 Yeni):\n\n1. [Planlı Bakım] A ve B Blok Asansör Periyodik Muayenesi - 28 Eylül\n2. [Genel Kurul] Olağan Kat Malikleri Toplantısı - 15 Ekim\n3. [Bilgi] Merkezi Isıtma Kazan Bakımı Tamamlandı - 24 Eylül');
     }
 
     function closeModal(id) {

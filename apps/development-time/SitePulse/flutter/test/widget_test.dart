@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/main.dart';
+import 'package:sitepulse/ui/components/payment_checkout_dialog.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 
 void main() {
@@ -80,7 +81,7 @@ void main() {
     expect(find.text('Onay Bekleyen Başvurular'), findsOneWidget);
   });
 
-  testWidgets('SitePulseApp renders Home Owner dashboard when authenticated', (WidgetTester tester) async {
+  testWidgets('SitePulseApp renders Home Owner dashboard cleanly without Virtual IBAN cluttering home screen', (WidgetTester tester) async {
     final controller = DashboardController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
@@ -90,9 +91,83 @@ void main() {
     expect(find.text('Kat Maliki (Ev Sahibi)'), findsWidgets);
     expect(find.text('Ödenecek Toplam Tutar'), findsOneWidget);
     expect(find.text('₺1.423,33'), findsWidgets);
-    expect(find.text('Daireye Özel Sanal IBAN'), findsOneWidget);
-    expect(find.text('TR12 0006 2000 0000 0000 0014'), findsOneWidget);
     expect(find.text('Hemen Öde'), findsOneWidget);
+
+    // Verify Virtual IBAN is NOT cluttering the home screen feed
+    expect(find.text('Daireye Özel Sanal IBAN'), findsNothing);
+  });
+
+  testWidgets('Tapping Hemen Öde opens PaymentCheckoutDialog with method selection between Card and Virtual IBAN', (WidgetTester tester) async {
+    final controller = DashboardController(startAuthenticated: true);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Tap "Hemen Öde" on balance card
+    final payBtn = find.text('Hemen Öde');
+    expect(payBtn, findsOneWidget);
+    await tester.tap(payBtn);
+    await tester.pumpAndSettle();
+
+    // Verify checkout dialog with payment method selection
+    expect(find.text('Aidat Ödeme Adımı'), findsOneWidget);
+    expect(find.text('Ödeme Yöntemini Seçin'), findsOneWidget);
+    expect(find.text('Kredi Kartı'), findsOneWidget);
+    expect(find.text('Sanal IBAN'), findsOneWidget);
+    expect(find.textContaining('3D Secure ile'), findsOneWidget);
+
+    // Switch payment method to Sanal IBAN inside dialog
+    final ibanMethodBtn = find.descendant(
+      of: find.byType(PaymentCheckoutDialog),
+      matching: find.text('Sanal IBAN'),
+    );
+    await tester.tap(ibanMethodBtn);
+    await tester.pumpAndSettle();
+
+    // Verify Virtual IBAN details and instructions are shown
+    expect(find.text('Dairenize Tanımlı Sanal IBAN'), findsOneWidget);
+    expect(find.text('TR12 0006 2000 0000 0000 0014'), findsOneWidget);
+    expect(find.text('Kopyala'), findsOneWidget);
+
+    // Dismiss dialog using close icon
+    final closeBtn = find.byIcon(Icons.close);
+    expect(closeBtn, findsOneWidget);
+    await tester.tap(closeBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Aidat Ödeme Adımı'), findsNothing);
+  });
+
+  testWidgets('Tapping Duyurular and Talep / Arıza action buttons opens respective dialogs', (WidgetTester tester) async {
+    final controller = DashboardController(startAuthenticated: true);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Verify simplified ResidentActionsRow eliminates duplicate Aidat Öde
+    expect(find.text('Aidat Öde'), findsNothing);
+
+    // Tap "Duyurular"
+    final announcementsBtn = find.text('Duyurular');
+    expect(announcementsBtn, findsOneWidget);
+    await tester.tap(announcementsBtn);
+    await tester.pumpAndSettle();
+
+    // Verify announcements dialog opened
+    expect(find.text('Site Duyuruları'), findsOneWidget);
+    expect(find.text('A ve B Blok Asansör Periyodik Muayenesi'), findsOneWidget);
+
+    // Close dialog
+    await tester.tap(find.text('Kapat'));
+    await tester.pumpAndSettle();
+
+    // Tap "Talep / Arıza"
+    final requestsBtn = find.text('Talep / Arıza');
+    expect(requestsBtn, findsOneWidget);
+    await tester.tap(requestsBtn);
+    await tester.pumpAndSettle();
+
+    // Verify issue report dialog opened
+    expect(find.text('Yönetime Talep & Arıza'), findsOneWidget);
+    expect(find.text('Talebi Gönder'), findsOneWidget);
   });
 
   testWidgets('SitePulseApp switches to Site Manager view and displays collection cockpit', (WidgetTester tester) async {

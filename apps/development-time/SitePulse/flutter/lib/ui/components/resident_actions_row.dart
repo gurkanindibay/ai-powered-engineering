@@ -3,18 +3,18 @@ import '../theme/app_theme.dart';
 
 class ResidentActionsRow extends StatelessWidget {
   final bool isOwner;
-  final VoidCallback onPayTap;
-  final VoidCallback onIbanTap;
   final VoidCallback onReceiptsTap;
   final VoidCallback onInviteTap;
+  final VoidCallback onRequestsTap;
+  final VoidCallback onAnnouncementsTap;
 
   const ResidentActionsRow({
     super.key,
     required this.isOwner,
-    required this.onPayTap,
-    required this.onIbanTap,
     required this.onReceiptsTap,
     required this.onInviteTap,
+    required this.onRequestsTap,
+    required this.onAnnouncementsTap,
   });
 
   @override
@@ -22,32 +22,22 @@ class ResidentActionsRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
+        // 1. Receipts & Past Statements
         _buildActionButton(
           context,
-          icon: Icons.credit_card,
-          label: 'Aidat Öde',
-          color: AppColors.accentCyan,
-          onTap: onPayTap,
-        ),
-        _buildActionButton(
-          context,
-          icon: Icons.account_balance,
-          label: 'Sanal IBAN',
-          color: AppColors.accentGreen,
-          onTap: onIbanTap,
-        ),
-        _buildActionButton(
-          context,
-          icon: Icons.receipt_long,
+          icon: Icons.receipt_long_outlined,
           label: 'Dekontlar',
           color: AppColors.primary,
           onTap: onReceiptsTap,
         ),
+        // 2. Invite Resident / Family
         _buildActionButton(
           context,
-          icon: Icons.person_add_alt_1,
+          icon: Icons.person_add_alt_1_outlined,
           label: 'Sakin Davet',
           color: isOwner ? AppColors.accentOrange : AppColors.textSecondary(context),
+          badgeText: isOwner ? 'Link Üret' : 'Yetki Yok',
+          badgeColor: isOwner ? AppColors.accentOrange : AppColors.border(context),
           onTap: () {
             if (isOwner) {
               onInviteTap();
@@ -60,7 +50,26 @@ class ResidentActionsRow extends StatelessWidget {
               );
             }
           },
-          badgeText: isOwner ? 'Link Üret' : 'Yetki Yok',
+        ),
+        // 3. Maintenance Request / Issue Reporting
+        _buildActionButton(
+          context,
+          icon: Icons.build_circle_outlined,
+          label: 'Talep / Arıza',
+          color: AppColors.accentCyan,
+          badgeText: 'Bildir',
+          badgeColor: AppColors.accentCyan,
+          onTap: onRequestsTap,
+        ),
+        // 4. Site Announcements
+        _buildActionButton(
+          context,
+          icon: Icons.campaign_outlined,
+          label: 'Duyurular',
+          color: AppColors.accentGreen,
+          badgeText: '3 Yeni',
+          badgeColor: AppColors.accentGreen,
+          onTap: onAnnouncementsTap,
         ),
       ],
     );
@@ -73,6 +82,7 @@ class ResidentActionsRow extends StatelessWidget {
     required Color color,
     required VoidCallback onTap,
     String? badgeText,
+    Color? badgeColor,
   }) {
     return Expanded(
       child: Padding(
@@ -97,7 +107,7 @@ class ResidentActionsRow extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.15),
+                        color: color.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(icon, color: color, size: 20),
@@ -109,7 +119,7 @@ class ResidentActionsRow extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                           decoration: BoxDecoration(
-                            color: isOwner ? AppColors.accentOrange : AppColors.border(context),
+                            color: badgeColor ?? (isOwner ? AppColors.accentOrange : AppColors.border(context)),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(

@@ -5,6 +5,7 @@ import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
 import '../components/hero_balance_card.dart';
 import '../components/manager_cockpit_view.dart';
+import '../components/payment_checkout_dialog.dart';
 import '../components/profile_role_sheet.dart';
 import '../components/resident_actions_row.dart';
 import '../components/saas_admin_view.dart';
@@ -363,29 +364,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 16),
             ResidentActionsRow(
               isOwner: widget.controller.userRole == UserRole.homeOwner,
-              onPayTap: () {
-                if (dues != null) _showPaymentDialog(dues);
-              },
-              onIbanTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Sanal IBAN bilgisi aşağıda yer almaktadır.'),
-                    backgroundColor: AppColors.accentCyan,
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
               onReceiptsTap: _showReceiptsDialog,
               onInviteTap: () {
                 widget.controller.generateUnitInviteLink();
               },
+              onRequestsTap: _showIssueReportDialog,
+              onAnnouncementsTap: _showAnnouncementsDialog,
             ),
             const SizedBox(height: 18),
             _buildHesapHareketleriSection(),
-            const SizedBox(height: 18),
-            VirtualIbanCard(
-              unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
-            ),
             const SizedBox(height: 16),
             _buildDairemHouseholdCard(),
           ],
@@ -410,29 +397,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 16),
               ResidentActionsRow(
                 isOwner: true,
-                onPayTap: () {
-                  if (dues != null) _showPaymentDialog(dues);
-                },
-                onIbanTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Sanal IBAN bilgisi aşağıda yer almaktadır.'),
-                      backgroundColor: AppColors.accentCyan,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                },
                 onReceiptsTap: _showReceiptsDialog,
                 onInviteTap: () {
                   widget.controller.generateUnitInviteLink();
                 },
+                onRequestsTap: _showIssueReportDialog,
+                onAnnouncementsTap: _showAnnouncementsDialog,
               ),
               const SizedBox(height: 18),
               _buildHesapHareketleriSection(),
-              const SizedBox(height: 18),
-              VirtualIbanCard(
-                unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
-              ),
               const SizedBox(height: 16),
               _buildDairemHouseholdCard(),
             ],
@@ -782,135 +755,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showPaymentDialog(AidatBorcu dues) {
-    final cardNumberCtrl = TextEditingController(text: '5428 •••• •••• 9012');
-    final expiryCtrl = TextEditingController(text: '12/28');
-    final cvvCtrl = TextEditingController(text: '884');
-
+  void _showPaymentDialog(AidatBorcu dues, {CheckoutPaymentMethod initialMethod = CheckoutPaymentMethod.card}) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.credit_card, color: AppColors.accentCyan),
-            const SizedBox(width: 8),
-            Text('Online Aidat Ödeme', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.card(context),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border(context)),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Dönem Borcu (Ana Para)', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
-                      Text('₺${dues.anaPara.toStringAsFixed(2)}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12)),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('KMK %5 Kanuni Gecikme', style: TextStyle(color: AppColors.accentRed, fontSize: 12)),
-                      Text('+₺${dues.gecikmeTazminati.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.accentRed, fontSize: 12, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  Divider(color: AppColors.border(context), height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Toplam Tutar', style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.bold, fontSize: 14)),
-                      Text('₺${dues.toplamTutar.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 16)),
-                    ],
-                  ),
-                ],
-              ),
+      builder: (ctx) => PaymentCheckoutDialog(
+        dues: dues,
+        siteName: widget.controller.activeUnit.siteAdi,
+        unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+        virtualIban: widget.controller.userRole == UserRole.siteManager &&
+                widget.controller.siteAdminPath == SiteAdminActivePath.myFlatOwner
+            ? 'TR12 0006 2000 0000 0000 0001'
+            : 'TR12 0006 2000 0000 0000 0014',
+        initialMethod: initialMethod,
+        onPaymentSuccess: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('₺${dues.toplamTutar.toStringAsFixed(2)} tutarındaki kart ödemeniz başarıyla alındı! Makbuz üretildi.'),
+              backgroundColor: AppColors.accentGreen,
+              duration: const Duration(seconds: 4),
             ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: cardNumberCtrl,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Kart Numarası',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: expiryCtrl,
-                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'SKT (AA/YY)',
-                      labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                      filled: true,
-                      fillColor: AppColors.card(context),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: cvvCtrl,
-                    obscureText: true,
-                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'CVV',
-                      labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                      filled: true,
-                      fillColor: AppColors.card(context),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context))),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('₺${dues.toplamTutar.toStringAsFixed(2)} tutarındaki ödeme başarıyla alındı! Makbuz üretildi.'),
-                  backgroundColor: AppColors.accentGreen,
-                  duration: const Duration(seconds: 4),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentCyan,
-              foregroundColor: Colors.white,
-            ),
-            child: Text('3D Secure ile ₺${dues.toplamTutar.toStringAsFixed(2)} Öde'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -996,6 +861,270 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           Text(amount, style: const TextStyle(color: AppColors.accentGreen, fontSize: 13, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  void _showIssueReportDialog() {
+    String selectedCategory = 'Asansör';
+    final descCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          backgroundColor: AppColors.surface(context),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.accentCyan.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.build_circle_outlined, color: AppColors.accentCyan, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Yönetime Talep & Arıza',
+                style: TextStyle(
+                  color: AppColors.textPrimary(context),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Arıza veya Talep Kategorisi',
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: ['Asansör', 'Tesisat / Su', 'Aydınlatma', 'Otopark', 'Diğer'].map((cat) {
+                      final isSelected = selectedCategory == cat;
+                      return ChoiceChip(
+                        label: Text(cat, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : AppColors.textPrimary(context))),
+                        selected: isSelected,
+                        selectedColor: AppColors.accentCyan,
+                        backgroundColor: AppColors.card(context),
+                        side: BorderSide(color: isSelected ? AppColors.accentCyan : AppColors.border(context)),
+                        onSelected: (_) => setDlgState(() => selectedCategory = cat),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Açıklama',
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: descCtrl,
+                    maxLines: 3,
+                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
+                    decoration: InputDecoration(
+                      hintText: 'Sorunun yerini ve detayını kısaca yazın...',
+                      hintStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                      filled: true,
+                      fillColor: AppColors.card(context),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.all(10),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.card(context),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.border(context)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, size: 14, color: AppColors.accentCyan),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Acil teknik durumlar için site görevlisini (Dahili: 101) doğrudan arayabilirsiniz.',
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary(context))),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Talebiniz #TLP-842 numarasıyla site yönetimine iletildi.'),
+                    backgroundColor: AppColors.accentGreen,
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Talebi Gönder'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAnnouncementsDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface(context),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppColors.accentGreen.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.campaign_outlined, color: AppColors.accentGreen, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Site Duyuruları',
+              style: TextStyle(
+                color: AppColors.textPrimary(context),
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildAnnouncementItem(
+                  tag: 'Planlı Bakım',
+                  tagColor: AppColors.accentOrange,
+                  title: 'A ve B Blok Asansör Periyodik Muayenesi',
+                  date: '28 Eylül 2026 • 10:00 - 14:00',
+                  desc: 'TMMOB akredite muayene kuruluşu tarafından yıllık periyodik kontroller yapılacaktır. Bakım esnasında asansörler kısa süreli servis dışı kalacaktır.',
+                ),
+                const SizedBox(height: 10),
+                _buildAnnouncementItem(
+                  tag: 'Genel Kurul',
+                  tagColor: AppColors.accentCyan,
+                  title: 'Olağan Kat Malikleri Genel Kurul Toplantısı',
+                  date: '15 Ekim 2026 • 19:30',
+                  desc: 'Begonya Sitesi 2026-2027 dönemi tahmini işletme bütçesi, aidat artış oranı ve yönetim kurulu seçimi Sosyal Tesis toplantı salonunda gerçekleştirilecektir.',
+                ),
+                const SizedBox(height: 10),
+                _buildAnnouncementItem(
+                  tag: 'Bilgilendirme',
+                  tagColor: AppColors.accentGreen,
+                  title: 'Merkezi Isıtma & Boyler Kazanı Kış Bakımı Tamamlandı',
+                  date: '24 Eylül 2026',
+                  desc: 'Kazan dairesi brülör ve sirkülasyon pompaları kış sezonuna hazır hale getirilmiştir.',
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.card(context),
+              foregroundColor: AppColors.textPrimary(context),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Kapat'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnnouncementItem({
+    required String tag,
+    required Color tagColor,
+    required String title,
+    required String date,
+    required String desc,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.card(context),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: tagColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: tagColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  tag,
+                  style: TextStyle(color: tagColor, fontSize: 9.5, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  date,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12.5, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            desc,
+            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, height: 1.3),
+          ),
         ],
       ),
     );
