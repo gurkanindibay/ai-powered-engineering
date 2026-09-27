@@ -12,6 +12,12 @@ TARGET="${1:-web}"
 cd "$SITEPULSE_ROOT/flutter"
 
 if [ "$TARGET" == "web" ]; then
+    PORT=9090
+    if lsof -ti :$PORT > /dev/null 2>&1; then
+        echo "Port $PORT is currently in use. Stopping existing instance..."
+        fuser -k -9 ${PORT}/tcp > /dev/null 2>&1 || true
+        sleep 1
+    fi
     echo "Starting Flutter Web Server on port 9090..."
     "$FLUTTER_BIN" run -d web-server --web-port 9090 --web-hostname 0.0.0.0
 elif [ "$TARGET" == "chrome" ]; then

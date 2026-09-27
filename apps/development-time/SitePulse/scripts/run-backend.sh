@@ -33,5 +33,12 @@ echo "  - POST /api/v1/auth/login"
 echo "  - POST /api/v1/auth/google"
 echo "========================================================================"
 
+PORT=8080
+if lsof -ti :$PORT > /dev/null 2>&1; then
+    echo "Port $PORT is currently in use. Stopping existing instance..."
+    fuser -k -9 ${PORT}/tcp > /dev/null 2>&1 || true
+    sleep 1
+fi
+
 cd "$SITEPULSE_ROOT/backend"
 "$CARGO_BIN" run --release

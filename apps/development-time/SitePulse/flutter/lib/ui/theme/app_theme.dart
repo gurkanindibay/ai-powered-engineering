@@ -9,13 +9,13 @@ class AppColors {
   static const accentRed = Color(0xFFEF4444);     // Refined Crimson Red (Replaces neon hot pink)
   static const accentOrange = Color(0xFFF59E0B);  // Warm Natural Amber (Replaces neon orange)
 
-  // Dark Theme (Papara Matte Midnight)
-  static const darkBackground = Color(0xFF0B0F19);
-  static const darkSurface = Color(0xFF151D2F);
-  static const darkCard = Color(0xFF1E293B);
-  static const darkBorder = Color(0xFF2E3D5B);
-  static const darkTextPrimary = Color(0xFFF8FAFC);
-  static const darkTextSecondary = Color(0xFF94A3B8);
+  // Dark Theme (Papara Iconic Black & White / Matte Obsidian)
+  static const darkBackground = Color(0xFF121317);
+  static const darkSurface = Color(0xFF1C1D24);
+  static const darkCard = Color(0xFF181920);
+  static const darkBorder = Color(0xFF282A33);
+  static const darkTextPrimary = Color(0xFFFFFFFF);
+  static const darkTextSecondary = Color(0xFF8E9297);
 
   // Light Theme
   static const lightBackground = Color(0xFFF4F7FC);
