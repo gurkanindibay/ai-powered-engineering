@@ -63,8 +63,12 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
       title: 'Aidat Ödeme Adımı',
       subtitle: '${widget.siteName} • ${widget.unitDesc}',
       leading: IconButton(
-        icon: const Icon(Icons.close),
-        color: AppColors.textPrimary(context),
+        icon: Icon(
+          Icons.arrow_back_ios_new_rounded,
+          color: AppColors.textPrimary(context),
+          size: 20,
+        ),
+        tooltip: 'Geri Dön',
         onPressed: () => Navigator.pop(context),
       ),
       child: Column(

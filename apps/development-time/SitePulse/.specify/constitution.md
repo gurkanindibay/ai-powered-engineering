@@ -55,7 +55,7 @@
 2. **UI & Usability Mandates (UI/UX Guardrails):**
    - **Touch Targets:** Minimum 48dp on all clickable elements.
    - **Design Tokens:** All colors and typography must use Material 3 Theme tokens; no hardcoded hex values in widgets.
-   - **Mobile Modal Standard (Bottom Sheets over Center Popups):** Desktop-style floating center popups (`AlertDialog`, centered `Dialog`) are strictly prohibited on mobile interfaces. All dialogs, sheets, forms, and confirmation flows must slide up from the bottom as responsive, keyboard-cushioned (`MediaQuery.viewInsets.bottom`), swipe-dismissable **Modal Bottom Sheets** (`AppModalSheet` / `showModalBottomSheet`) with a 28dp top radius and drag handle.
+   - **Papara-Style Full-Screen Navigation Standard:** Desktop-style floating center popups (`AlertDialog`, centered `Dialog`) and partial/half-screen modal bottom sheets are strictly prohibited for interactive flows on mobile interfaces. In accordance with leading Turkish fintech UX (e.g. Papara, Enpara), all multi-step interactions, payment checkouts, detail breakdowns, forms, announcements, and confirmations must open as dedicated, 100% viewport **Full-Screen Pages** (`AppFullscreenPage` / `Navigator.push(MaterialPageRoute(fullscreenDialog: true))`). Each page features a clean `AppBar` (title, subtitle, back/close button) and a sticky bottom action bar (`AppFullscreenPage.buildBottomBar`), and upon completion or dismissal returns cleanly to the exact calling screen via `Navigator.pop()` without layout shifts.
    - **State Handling:** Every screen must explicitly define four states: `Loading`, `Empty`, `Error`, and `Success`.
    - **Accessibility:** Content descriptions on all icons, WCAG 2.1 AA contrast ratios on text and buttons.
 

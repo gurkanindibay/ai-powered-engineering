@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 class AppFullscreenPage extends StatelessWidget {
   final String title;
   final String? subtitle;
+  final Widget? icon;
   final Widget? leading;
   final List<Widget>? actions;
   final Widget child;
@@ -23,6 +24,7 @@ class AppFullscreenPage extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.icon,
     this.leading,
     this.actions,
     required this.child,
@@ -46,6 +48,36 @@ class AppFullscreenPage extends StatelessWidget {
     );
   }
 
+  /// Builds a sticky bottom action bar tailored for Papara-style full screen pages.
+  static Widget buildBottomBar({
+    required BuildContext context,
+    required List<Widget> children,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        border: Border(top: BorderSide(color: AppColors.border(context))),
+      ),
+      child: SafeArea(
+        top: false,
+        child: children.length == 1
+            ? SizedBox(
+                width: double.infinity,
+                child: children.first,
+              )
+            : Row(
+                children: [
+                  for (int i = 0; i < children.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 12),
+                    Expanded(child: children[i]),
+                  ],
+                ],
+              ),
+      ),
+    );
+  }
+
   /// Displays a full-screen confirmation page (e.g. for deletions or password resets)
   /// in Papara-style and returns true if confirmed.
   static Future<bool?> pushConfirmation({
@@ -63,7 +95,12 @@ class AppFullscreenPage extends StatelessWidget {
       builder: (ctx) => AppFullscreenPage(
         title: title,
         leading: IconButton(
-          icon: const Icon(Icons.close),
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppColors.textPrimary(ctx),
+            size: 20,
+          ),
+          tooltip: 'Geri Dön',
           onPressed: () => Navigator.pop(ctx, false),
         ),
         bottomBar: Container(
@@ -162,33 +199,48 @@ class AppFullscreenPage extends StatelessWidget {
         centerTitle: false,
         leading: leading ??
             IconButton(
-              icon: Icon(Icons.arrow_back, color: AppColors.textPrimary(context)),
+              icon: Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: AppColors.textPrimary(context),
+                size: 20,
+              ),
+              tooltip: 'Geri Dön',
               onPressed: () => Navigator.pop(context),
             ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        title: Row(
           children: [
-            Text(
-              title,
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                subtitle!,
-                style: TextStyle(
-                  color: AppColors.textSecondary(context),
-                  fontSize: 11,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
+            if (icon != null) ...[
+              icon!,
+              const SizedBox(width: 10),
             ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: AppColors.textPrimary(context),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      style: TextStyle(
+                        color: AppColors.textSecondary(context),
+                        fontSize: 11,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
         actions: actions,

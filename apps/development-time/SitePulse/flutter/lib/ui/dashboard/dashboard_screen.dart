@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
+import '../components/app_fullscreen_page.dart';
 import '../components/app_modal_sheet.dart';
 import '../components/hero_balance_card.dart';
 import '../components/manager_cockpit_view.dart';
@@ -748,19 +749,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _openProfileSheet(BuildContext context) {
-    showModalBottomSheet(
+    AppFullscreenPage.push(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (ctx) => ProfileRoleSheet(controller: widget.controller),
     );
   }
 
   void _showPaymentDialog(AidatBorcu dues, {CheckoutPaymentMethod initialMethod = CheckoutPaymentMethod.card}) {
-    showModalBottomSheet(
+    AppFullscreenPage.push(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (ctx) => PaymentCheckoutDialog(
         dues: dues,
         siteName: widget.controller.activeUnit.siteAdi,
@@ -784,9 +781,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showDuesDetailDialog(AidatBorcu dues) {
-    AppModalSheet.show(
+    AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppModalSheet(
+      builder: (ctx) => AppFullscreenPage(
         title: 'Aidat Hesap Özeti',
         subtitle: 'KMK Madde 20 Yasal Gecikme Cetveli',
         icon: Container(
@@ -797,47 +794,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: const Icon(Icons.calculate_outlined, color: AppColors.accentCyan, size: 20),
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentCyan,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            child: const Text('Kapat'),
-          ),
-        ],
+          ],
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.card(context),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: AppColors.border(context)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Kat Mülkiyeti Kanunu (KMK) Madde 20 Uyarınca:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Text('• Son Ödeme Tarihi: 15.09.2026', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
-                  const SizedBox(height: 6),
-                  const Text('• Hesaplama Tarihi: 25.09.2026 (10 Gün Gecikme)', style: TextStyle(color: AppColors.accentRed, fontSize: 13)),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
+                  const Text('• Hesaplama Tarihi: 25.09.2026 (10 Gün Gecikme)', style: TextStyle(color: AppColors.accentRed, fontSize: 13, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 8),
                   Text('• Aylık Yasal Gecikme Oranı: %5', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: AppColors.accentRed.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.accentRed.withValues(alpha: 0.2)),
                     ),
-                    child: const Text('• Gecikme Tazminatı: (1400 * 0.05 / 30) * 10 = 23,33 TL', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold, fontSize: 12)),
+                    child: const Text('• Gecikme Tazminatı: (1400 * 0.05 / 30) * 10 = 23,33 TL', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold, fontSize: 12.5)),
                   ),
                 ],
               ),
@@ -849,9 +850,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showReceiptsDialog() {
-    AppModalSheet.show(
+    AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppModalSheet(
+      builder: (ctx) => AppFullscreenPage(
         title: 'Ödeme Makbuzları',
         subtitle: 'Geçmiş aidat ve tahsilat belgeleri',
         icon: Container(
@@ -862,24 +863,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: const Icon(Icons.receipt_long, color: AppColors.accentCyan, size: 20),
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentCyan,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            child: const Text('Tamam'),
-          ),
-        ],
+          ],
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             _buildReceiptItem('Ağustos 2026 Aidatı', '₺1.400,00', '14.08.2026 • FAST Onaylı'),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             _buildReceiptItem('Temmuz 2026 Aidatı', '₺1.400,00', '12.07.2026 • Kredi Kartı'),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             _buildReceiptItem('Haziran 2026 Aidatı', '₺1.400,00', '15.06.2026 • FAST Onaylı'),
           ],
         ),
@@ -889,10 +893,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildReceiptItem(String title, String amount, String meta) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.card(context),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border(context)),
       ),
       child: Row(
@@ -901,11 +905,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.w600)),
-              Text(meta, style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10)),
+              Text(title, style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(meta, style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
             ],
           ),
-          Text(amount, style: const TextStyle(color: AppColors.accentGreen, fontSize: 13, fontWeight: FontWeight.bold)),
+          Text(amount, style: const TextStyle(color: AppColors.accentGreen, fontSize: 14, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -915,10 +920,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String selectedCategory = 'Asansör';
     final descCtrl = TextEditingController();
 
-    AppModalSheet.show(
+    AppFullscreenPage.push(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AppModalSheet(
+        builder: (ctx, setDlgState) => AppFullscreenPage(
           title: 'Yönetime Talep & Arıza',
           subtitle: 'Teknik ve idari bildirim formu',
           icon: Container(
@@ -929,46 +934,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             child: const Icon(Icons.build_circle_outlined, color: AppColors.accentCyan, size: 20),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary(context))),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Talebiniz #TLP-842 numarasıyla site yönetimine iletildi.'),
-                    backgroundColor: AppColors.accentGreen,
-                    duration: Duration(seconds: 3),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          bottomBar: AppFullscreenPage.buildBottomBar(
+            context: ctx,
+            children: [
+              OutlinedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: BorderSide(color: AppColors.border(context)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
-              child: const Text('Talebi Gönder'),
-            ),
-          ],
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Talebiniz #TLP-842 numarasıyla site yönetimine iletildi.'),
+                      backgroundColor: AppColors.accentGreen,
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentCyan,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Talebi Gönder', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Arıza veya Talep Kategorisi',
-                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontWeight: FontWeight.w600),
+                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Wrap(
-                spacing: 6,
-                runSpacing: 6,
+                spacing: 8,
+                runSpacing: 8,
                 children: ['Asansör', 'Tesisat / Su', 'Aydınlatma', 'Otopark', 'Diğer'].map((cat) {
                   final isSelected = selectedCategory == cat;
                   return ChoiceChip(
-                    label: Text(cat, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : AppColors.textPrimary(context))),
+                    label: Text(cat, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppColors.textPrimary(context))),
                     selected: isSelected,
                     selectedColor: AppColors.accentCyan,
                     backgroundColor: AppColors.card(context),
@@ -977,41 +990,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Text(
                 'Açıklama',
-                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontWeight: FontWeight.w600),
+                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               TextField(
                 controller: descCtrl,
-                maxLines: 3,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
+                maxLines: 4,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
                   hintText: 'Sorunun yerini ve detayını kısaca yazın...',
-                  hintStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                  hintStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
                   filled: true,
                   fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  contentPadding: const EdgeInsets.all(10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.all(12),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.card(context),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: AppColors.border(context)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline, size: 14, color: AppColors.accentCyan),
-                    const SizedBox(width: 8),
+                    const Icon(Icons.info_outline, size: 16, color: AppColors.accentCyan),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Acil teknik durumlar için site görevlisini (Dahili: 101) doğrudan arayabilirsiniz.',
-                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                       ),
                     ),
                   ],
@@ -1025,9 +1038,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showAnnouncementsDialog() {
-    AppModalSheet.show(
+    AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppModalSheet(
+      builder: (ctx) => AppFullscreenPage(
         title: 'Site Duyuruları',
         subtitle: 'Yönetim kurulu güncel bilgilendirmeleri',
         icon: Container(
@@ -1038,19 +1051,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: const Icon(Icons.campaign_outlined, color: AppColors.accentGreen, size: 20),
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.card(context),
-              foregroundColor: AppColors.textPrimary(context),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            child: const Text('Kapat'),
-          ),
-        ],
+          ],
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             _buildAnnouncementItem(
               tag: 'Planlı Bakım',
@@ -1059,7 +1075,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               date: '28 Eylül 2026 • 10:00 - 14:00',
               desc: 'TMMOB akredite muayene kuruluşu tarafından yıllık periyodik kontroller yapılacaktır. Bakım esnasında asansörler kısa süreli servis dışı kalacaktır.',
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             _buildAnnouncementItem(
               tag: 'Genel Kurul',
               tagColor: AppColors.accentCyan,
@@ -1067,7 +1083,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               date: '15 Ekim 2026 • 19:30',
               desc: 'Begonya Sitesi 2026-2027 dönemi tahmini işletme bütçesi, aidat artış oranı ve yönetim kurulu seçimi Sosyal Tesis toplantı salonunda gerçekleştirilecektir.',
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             _buildAnnouncementItem(
               tag: 'Bilgilendirme',
               tagColor: AppColors.accentGreen,
@@ -1089,7 +1105,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String desc,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.card(context),
         borderRadius: BorderRadius.circular(12),
@@ -1102,7 +1118,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: tagColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
@@ -1110,7 +1126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Text(
                   tag,
-                  style: TextStyle(color: tagColor, fontSize: 9.5, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: tagColor, fontSize: 10, fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1118,21 +1134,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Text(
                   date,
                   textAlign: TextAlign.end,
-                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             title,
-            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12.5, fontWeight: FontWeight.bold),
+            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             desc,
-            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, height: 1.3),
+            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, height: 1.35),
           ),
         ],
       ),
@@ -1140,9 +1156,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showInviteDialog(UnitInviteInfo invite) {
-    AppModalSheet.show(
+    AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppModalSheet(
+      builder: (ctx) => AppFullscreenPage(
         title: 'Hane Sakini Davet Linki',
         subtitle: 'Kapsam: ${invite.unitLabel} • ${invite.expiresAtStr}',
         icon: Container(
@@ -1153,61 +1169,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: const Icon(Icons.share, color: AppColors.accentOrange, size: 20),
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: invite.inviteUrl));
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Davet linki kopyalandı!'), backgroundColor: AppColors.accentGreen),
-              );
-            },
-            child: const Text('Linki Kopyala', style: TextStyle(color: AppColors.accentCyan)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.card(context),
-              foregroundColor: AppColors.textPrimary(context),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            OutlinedButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: invite.inviteUrl));
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Davet linki kopyalandı!'), backgroundColor: AppColors.accentGreen),
+                );
+              },
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                side: BorderSide(color: AppColors.border(context)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Linki Kopyala', style: TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.w600)),
             ),
-            child: const Text('Kapat'),
-          ),
-        ],
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.card(context),
+                foregroundColor: AppColors.textPrimary(context),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.card(context),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border(context)),
+              ),
+              child: SelectableText(
+                invite.inviteUrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontFamily: 'monospace'),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppColors.card(context),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.border(context)),
               ),
-              child: SelectableText(
-                invite.inviteUrl,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontFamily: 'monospace'),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.card(context),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border(context)),
-              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.shield_outlined, size: 16, color: AppColors.accentOrange),
-                  const SizedBox(width: 8),
+                  const Icon(Icons.shield_outlined, size: 18, color: AppColors.accentOrange),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       invite.securityNotice,
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, height: 1.35),
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, height: 1.4),
                     ),
                   ),
                 ],
@@ -1220,9 +1244,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showApprovalSuccessDialog(ApprovalSuccessInfo info) {
-    AppModalSheet.show(
+    AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppModalSheet(
+      builder: (ctx) => AppFullscreenPage(
         title: 'Başvuru Onaylandı!',
         subtitle: '${info.fullName} (${info.flatDesc})',
         icon: Container(
@@ -1233,40 +1257,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: const Icon(Icons.check_circle, color: AppColors.accentGreen, size: 20),
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentGreen,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentGreen,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            child: const Text('Tamam'),
-          ),
-        ],
+          ],
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Kullanıcının başvurusu onaylandı ve sisteme dahil edildi.', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
-            const SizedBox(height: 12),
-            Text('Üretilen Geçici Sakin Şifresi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
-            const SizedBox(height: 4),
+            Text('Kullanıcının başvurusu onaylandı ve sisteme dahil edildi.', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14)),
+            const SizedBox(height: 16),
+            Text('Üretilen Geçici Sakin Şifresi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+            const SizedBox(height: 6),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: AppColors.card(context),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.accentGreen),
               ),
               child: SelectableText(
                 info.temporaryPassword,
-                style: const TextStyle(color: AppColors.accentGreen, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                style: const TextStyle(color: AppColors.accentGreen, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
               ),
             ),
-            const SizedBox(height: 10),
-            Text('Şifre ve giriş linki ${info.email} adresine SMS ve e-posta olarak iletildi.', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, height: 1.3)),
+            const SizedBox(height: 14),
+            Text('Şifre ve giriş linki ${info.email} adresine SMS ve e-posta olarak iletildi.', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, height: 1.4)),
           ],
         ),
       ),
@@ -1280,9 +1307,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         : '${creds.siteName} başarıyla platforma kaydedildi.';
     final icon = creds.isRenewal ? Icons.key : Icons.apartment;
 
-    AppModalSheet.show(
+    AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppModalSheet(
+      builder: (ctx) => AppFullscreenPage(
         title: title,
         subtitle: subtitle,
         icon: Container(
@@ -1293,36 +1320,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: Icon(icon, color: AppColors.accentCyan, size: 20),
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentCyan,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            child: const Text('Tamam'),
-          ),
-        ],
+          ],
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Yönetici: ${creds.adminName} (${creds.adminEmail})', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
-            const SizedBox(height: 12),
-            Text('Geçici Yönetim Şifresi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
-            const SizedBox(height: 4),
+            Text('Yönetici: ${creds.adminName} (${creds.adminEmail})', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
+            const SizedBox(height: 16),
+            Text('Geçici Yönetim Şifresi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+            const SizedBox(height: 6),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: AppColors.card(context),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.accentCyan),
               ),
               child: SelectableText(
                 creds.temporaryPassword,
-                style: const TextStyle(color: AppColors.accentCyan, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                style: const TextStyle(color: AppColors.accentCyan, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
               ),
             ),
           ],
@@ -1332,9 +1362,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showHomeOwnerProvisionedDialog(ProvisionedHomeOwnerCredentials creds) {
-    AppModalSheet.show(
+    AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppModalSheet(
+      builder: (ctx) => AppFullscreenPage(
         title: 'Sakin Kaydedildi!',
         subtitle: '${creds.ownerName} (${creds.block} D:${creds.unitNo}) başarıyla eklendi.',
         icon: Container(
@@ -1345,34 +1375,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: const Icon(Icons.person_add, color: AppColors.accentGreen, size: 20),
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentGreen,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentGreen,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            child: const Text('Tamam'),
-          ),
-        ],
+          ],
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Üretilen Geçici Şifre:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
-            const SizedBox(height: 4),
+            Text('Üretilen Geçici Şifre:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+            const SizedBox(height: 6),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: AppColors.card(context),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.accentGreen),
               ),
               child: SelectableText(
                 creds.temporaryPassword,
-                style: const TextStyle(color: AppColors.accentGreen, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                style: const TextStyle(color: AppColors.accentGreen, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
               ),
             ),
           ],
@@ -1389,9 +1422,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final phoneCtrl = TextEditingController();
     final duesCtrl = TextEditingController(text: '1400.00');
 
-    AppModalSheet.show(
+    AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppModalSheet(
+      builder: (ctx) => AppFullscreenPage(
         title: 'Yeni Daire / Sakin Ekle',
         subtitle: 'Siteye bağımsız bölüm ve malik/kiracı kaydı',
         icon: Container(
@@ -1402,40 +1435,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: const Icon(Icons.person_add_alt_1, color: AppColors.accentGreen, size: 20),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context))),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final ownerName = nameCtrl.text.trim();
-              final unitText = unitCtrl.text.trim();
-              if (ownerName.isEmpty || unitText.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Lütfen Sakin Ad Soyad ve Daire No alanlarını doldurunuz.'),
-                    backgroundColor: Colors.redAccent,
-                  ),
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            OutlinedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                side: BorderSide(color: AppColors.border(context)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final ownerName = nameCtrl.text.trim();
+                final unitText = unitCtrl.text.trim();
+                if (ownerName.isEmpty || unitText.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Lütfen Sakin Ad Soyad ve Daire No alanlarını doldurunuz.'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                widget.controller.registerHomeOwner(
+                  block: blockCtrl.text.trim(),
+                  unitNo: int.tryParse(unitText) ?? 1,
+                  ownerName: ownerName,
+                  email: emailCtrl.text.trim(),
+                  phone: phoneCtrl.text.trim(),
+                  duesAmount: Decimal.tryParse(duesCtrl.text.trim()) ?? Decimal.parse('1400.00'),
                 );
-                return;
-              }
-              Navigator.pop(ctx);
-              widget.controller.registerHomeOwner(
-                block: blockCtrl.text.trim(),
-                unitNo: int.tryParse(unitText) ?? 1,
-                ownerName: ownerName,
-                email: emailCtrl.text.trim(),
-                phone: phoneCtrl.text.trim(),
-                duesAmount: Decimal.tryParse(duesCtrl.text.trim()) ?? Decimal.parse('1400.00'),
-              );
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentGreen, foregroundColor: Colors.white),
-            child: const Text('Kaydet & Şifre Üret'),
-          ),
-        ],
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentGreen,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Kaydet & Şifre Üret', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: blockCtrl,
@@ -1448,7 +1493,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: unitCtrl,
               keyboardType: TextInputType.number,
@@ -1461,7 +1506,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: nameCtrl,
               style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -1473,7 +1518,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: emailCtrl,
               keyboardType: TextInputType.emailAddress,
@@ -1486,7 +1531,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: phoneCtrl,
               keyboardType: TextInputType.phone,
@@ -1499,7 +1544,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: duesCtrl,
               keyboardType: TextInputType.number,
@@ -1526,9 +1571,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final adminEmailCtrl = TextEditingController();
     final adminPhoneCtrl = TextEditingController();
 
-    AppModalSheet.show(
+    AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppModalSheet(
+      builder: (ctx) => AppFullscreenPage(
         title: 'Yeni Site / Kompleks Kaydet',
         subtitle: 'SaaS tenant kurulumu ve yetkili atama',
         icon: Container(
@@ -1539,40 +1584,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: const Icon(Icons.apartment, color: AppColors.accentCyan, size: 20),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context))),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final siteName = nameCtrl.text.trim();
-              final adminName = adminNameCtrl.text.trim();
-              if (siteName.isEmpty || adminName.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Lütfen Site Adı ve Yönetici Ad Soyad alanlarını doldurunuz.'),
-                    backgroundColor: Colors.redAccent,
-                  ),
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            OutlinedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                side: BorderSide(color: AppColors.border(context)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final siteName = nameCtrl.text.trim();
+                final adminName = adminNameCtrl.text.trim();
+                if (siteName.isEmpty || adminName.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Lütfen Site Adı ve Yönetici Ad Soyad alanlarını doldurunuz.'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                widget.controller.registerNewSite(
+                  name: siteName,
+                  city: cityCtrl.text.trim().isEmpty ? 'İstanbul' : cityCtrl.text.trim(),
+                  address: addressCtrl.text.trim(),
+                  adminName: adminName,
+                  adminEmail: adminEmailCtrl.text.trim().isEmpty ? 'yonetici@sitepulse.internal' : adminEmailCtrl.text.trim(),
+                  adminPhone: adminPhoneCtrl.text.trim().isEmpty ? '+90 532 000 00 00' : adminPhoneCtrl.text.trim(),
                 );
-                return;
-              }
-              Navigator.pop(ctx);
-              widget.controller.registerNewSite(
-                name: siteName,
-                city: cityCtrl.text.trim().isEmpty ? 'İstanbul' : cityCtrl.text.trim(),
-                address: addressCtrl.text.trim(),
-                adminName: adminName,
-                adminEmail: adminEmailCtrl.text.trim().isEmpty ? 'yonetici@sitepulse.internal' : adminEmailCtrl.text.trim(),
-                adminPhone: adminPhoneCtrl.text.trim().isEmpty ? '+90 532 000 00 00' : adminPhoneCtrl.text.trim(),
-              );
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.white),
-            child: const Text('Siteyi Kaydet & Yetkilendir'),
-          ),
-        ],
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Siteyi Kaydet & Yetkilendir', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: nameCtrl,
@@ -1585,7 +1642,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: cityCtrl,
               style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -1597,7 +1654,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: addressCtrl,
               style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -1609,7 +1666,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: adminNameCtrl,
               style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -1621,7 +1678,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: adminEmailCtrl,
               keyboardType: TextInputType.emailAddress,
@@ -1634,7 +1691,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(
               controller: adminPhoneCtrl,
               keyboardType: TextInputType.phone,
@@ -1655,9 +1712,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _confirmDeleteSite(TenantSiteItem site) {
     if (site.hasActions) {
-      AppModalSheet.show(
+      AppFullscreenPage.push(
         context: context,
-        builder: (ctx) => AppModalSheet(
+        builder: (ctx) => AppFullscreenPage(
           title: 'Site Silinemez',
           subtitle: 'KMK mevzuatı ve veri bütünlüğü uyarısı',
           icon: Container(
@@ -1668,23 +1725,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             child: const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 20),
           ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.white),
-              child: const Text('Anladım'),
-            ),
-          ],
+          bottomBar: AppFullscreenPage.buildBottomBar(
+            context: ctx,
+            children: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentCyan,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Anladım', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
           child: Text(
             '${site.name} sitesine ait aktif daireler (${site.totalUnits}) veya finansal tahsilat hareketleri bulunmaktadır. KMK mevzuatı ve veri bütünlüğü gereği işlem kaydı bulunan siteler silinemez.',
-            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13, height: 1.4),
+            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13, height: 1.5),
           ),
         ),
       );
       return;
     }
 
-    AppModalSheet.showConfirmation(
+    AppFullscreenPage.pushConfirmation(
       context: context,
       title: 'Siteyi Sil',
       message: '${site.name} sitesini platformdan tamamen silmek istediğinize emin misiniz?\n\nBu sitede henüz herhangi bir daire veya finansal hareket bulunmamaktadır. Bu işlem geri alınamaz.',
@@ -1708,7 +1773,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _confirmResetAdminPassword(TenantSiteItem site) {
-    AppModalSheet.showConfirmation(
+    AppFullscreenPage.pushConfirmation(
       context: context,
       title: 'Geçici Şifre Yenile',
       message: '${site.name} yöneticisi ${site.adminName} (${site.adminEmail}) için yeni bir geçici yönetim şifresi üretilecektir.\n\nMevcut şifre geçersiz kılınır ve yönetici sisteme girdiğinde yeni şifre belirlemeye yönlendirilir.\n\nOnaylıyor musunuz?',

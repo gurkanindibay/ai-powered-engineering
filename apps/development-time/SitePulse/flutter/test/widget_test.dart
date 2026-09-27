@@ -128,10 +128,10 @@ void main() {
     expect(find.text('TR12 0006 2000 0000 0000 0014'), findsOneWidget);
     expect(find.text('Kopyala'), findsOneWidget);
 
-    // Dismiss dialog using close icon
-    final closeBtn = find.byIcon(Icons.close);
-    expect(closeBtn, findsOneWidget);
-    await tester.tap(closeBtn);
+    // Dismiss screen using Papara-style chevron return arrow
+    final backBtn = find.byIcon(Icons.arrow_back_ios_new_rounded);
+    expect(backBtn, findsOneWidget);
+    await tester.tap(backBtn);
     await tester.pumpAndSettle();
 
     expect(find.text('Aidat Ödeme Adımı'), findsNothing);

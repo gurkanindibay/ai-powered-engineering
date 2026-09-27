@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../domain/models/auth_models.dart';
 import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
+import 'app_fullscreen_page.dart';
 
 class ProfileRoleSheet extends StatefulWidget {
   final DashboardController controller;
@@ -31,33 +32,21 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
   Widget build(BuildContext context) {
     final session = widget.controller.userSession;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface(context),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+    return AppFullscreenPage(
+      title: 'Profil & Rol Yönetimi',
+      subtitle: '${session.fullName} • ${session.role.displayName}',
+      leading: IconButton(
+        icon: Icon(
+          Icons.arrow_back_ios_new_rounded,
+          color: AppColors.textPrimary(context),
+          size: 20,
+        ),
+        tooltip: 'Geri Dön',
+        onPressed: () => Navigator.pop(context),
       ),
-      padding: EdgeInsets.only(
-        top: 16,
-        left: 20,
-        right: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border(context),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
 
             // Profile Header
             Row(
@@ -348,7 +337,6 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
             ),
           ],
         ),
-      ),
-    );
+      );
+    }
   }
-}
