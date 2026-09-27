@@ -49,6 +49,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       font-weight: 800;
       background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
       letter-spacing: -0.5px;
     }
