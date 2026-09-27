@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/main.dart';
@@ -14,7 +13,7 @@ void main() {
     expect(find.text('SitePulse'), findsOneWidget);
     expect(find.text('Kat Maliki (Ev Sahibi)'), findsWidgets);
     expect(find.text('Ödenecek Toplam Tutar'), findsOneWidget);
-    expect(find.text('₺1423.33'), findsOneWidget);
+    expect(find.text('₺1.423,33'), findsOneWidget);
     expect(find.text('Daireye Özel Sanal IBAN'), findsOneWidget);
     expect(find.text('TR12 0006 2000 0000 0000 0014'), findsOneWidget);
     expect(find.text('Hemen Öde'), findsOneWidget);
