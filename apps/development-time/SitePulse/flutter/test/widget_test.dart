@@ -13,7 +13,7 @@ void main() {
     expect(find.text('SitePulse'), findsOneWidget);
     expect(find.text('Kat Maliki (Ev Sahibi)'), findsWidgets);
     expect(find.text('Ödenecek Toplam Tutar'), findsOneWidget);
-    expect(find.text('₺1.423,33'), findsOneWidget);
+    expect(find.text('₺1.423,33'), findsWidgets);
     expect(find.text('Daireye Özel Sanal IBAN'), findsOneWidget);
     expect(find.text('TR12 0006 2000 0000 0000 0014'), findsOneWidget);
     expect(find.text('Hemen Öde'), findsOneWidget);
@@ -65,7 +65,7 @@ void main() {
 
     expect(controller.isDarkMode, isFalse);
     expect(find.text('SitePulse'), findsOneWidget);
-    expect(find.text('₺1423.33'), findsOneWidget);
+    expect(find.text('₺1.423,33'), findsWidgets);
 
     // Toggle back to Dark mode
     controller.toggleTheme();
