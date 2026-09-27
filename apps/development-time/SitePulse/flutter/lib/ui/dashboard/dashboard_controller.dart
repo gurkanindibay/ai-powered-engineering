@@ -7,12 +7,64 @@ import '../../domain/usecases/calculate_dues_usecase.dart';
 class DashboardController extends ChangeNotifier {
   final CalculateDuesUseCase _calculateDuesUseCase;
 
-  DashboardController({CalculateDuesUseCase? calculateDuesUseCase})
-      : _calculateDuesUseCase = calculateDuesUseCase ?? CalculateDuesUseCase() {
+  static const defaultResidentUnit = ApartmentUnit(
+    id: 'd-14',
+    siteName: 'Begonya Sitesi',
+    block: 'A',
+    unitNo: 14,
+    floor: 4,
+    landShare: 24,
+    ownerName: 'Ahmet Yılmaz',
+    tenantName: 'Zeynep Kaya',
+  );
+
+  static const managerUnit = ApartmentUnit(
+    id: 'd-1',
+    siteName: 'Begonya Sitesi',
+    block: 'B',
+    unitNo: 1,
+    floor: 1,
+    landShare: 24,
+    ownerName: 'Mehmet Demir',
+    tenantName: 'Mehmet Demir (Oturuyor)',
+  );
+
+  static final List<UnitResidentMember> managerResidents = [
+    const UnitResidentMember(
+      id: 'u-m1',
+      fullName: 'Mehmet Demir',
+      relationship: 'Kat Maliki & Yönetici',
+      phone: '+90 532 100 2030',
+      email: 'mehmet.demir@begonya.com',
+      isOwner: true,
+      permissionScope: 'Tam Yetki (Daire + Yönetim)',
+    ),
+    const UnitResidentMember(
+      id: 'u-m2',
+      fullName: 'Ayşe Demir',
+      relationship: 'Eş / Aile Sakini',
+      phone: '+90 532 100 2031',
+      email: 'ayse.demir@begonya.com',
+      isOwner: false,
+      permissionScope: 'Sakin Yetkisi',
+    ),
+  ];
+
+  DashboardController({
+    CalculateDuesUseCase? calculateDuesUseCase,
+    bool startAuthenticated = false,
+  })  : _calculateDuesUseCase = calculateDuesUseCase ?? CalculateDuesUseCase(),
+        _isAuthenticated = startAuthenticated {
     _initData();
   }
 
   // Session & Auth
+  bool _isAuthenticated;
+  bool get isAuthenticated => _isAuthenticated;
+
+  SiteAdminActivePath _siteAdminPath = SiteAdminActivePath.managerCockpit;
+  SiteAdminActivePath get siteAdminPath => _siteAdminPath;
+
   late UserSession _userSession;
   UserSession get userSession => _userSession;
   UserRole get userRole => _userSession.role;
@@ -32,15 +84,29 @@ class DashboardController extends ChangeNotifier {
 
   // Home Owner state
   late ApartmentUnit _activeUnit;
-  ApartmentUnit get activeUnit => _activeUnit;
-  ApartmentUnit get activeDaire => _activeUnit;
+  ApartmentUnit get activeUnit =>
+      (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner)
+          ? managerUnit
+          : _activeUnit;
+  ApartmentUnit get activeDaire => activeUnit;
 
   List<DuesLiability> _duesList = [];
-  List<DuesLiability> get duesList => _duesList;
-  DuesLiability? get primaryDues => _duesList.isNotEmpty ? _duesList.first : null;
+  List<DuesLiability> _managerDuesList = [];
+  List<DuesLiability> get duesList {
+    if (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner) {
+      return _managerDuesList;
+    }
+    return _duesList;
+  }
+  DuesLiability? get primaryDues => duesList.isNotEmpty ? duesList.first : null;
 
   List<UnitResidentMember> _unitResidents = [];
-  List<UnitResidentMember> get unitResidents => _unitResidents;
+  List<UnitResidentMember> get unitResidents {
+    if (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner) {
+      return managerResidents;
+    }
+    return _unitResidents;
+  }
 
   UnitInviteInfo? _unitInviteInfo;
   UnitInviteInfo? get unitInviteInfo => _unitInviteInfo;
@@ -81,16 +147,7 @@ class DashboardController extends ChangeNotifier {
   void _initData() {
     _userSession = _createSession(UserRole.homeOwner, AuthProvider.local);
 
-    _activeUnit = const ApartmentUnit(
-      id: 'd-14',
-      siteName: 'Begonya Sitesi',
-      block: 'A',
-      unitNo: 14,
-      floor: 4,
-      landShare: 24,
-      ownerName: 'Ahmet Yılmaz',
-      tenantName: 'Zeynep Kaya',
-    );
+    _activeUnit = defaultResidentUnit;
 
     // Initial dues with 10 days overdue calculation (Spec-001)
     final baseDues = DuesLiability(
@@ -104,6 +161,18 @@ class DashboardController extends ChangeNotifier {
       status: DebtStatus.pending,
     );
     _duesList = [_calculateDuesUseCase.execute(baseDues, DateTime(2026, 9, 25))];
+
+    final managerBaseDues = DuesLiability(
+      id: 'b-201',
+      unitId: 'd-1',
+      period: 'Eylül 2026',
+      principalAmount: Decimal.parse('1400.00'),
+      delayPenalty: Decimal.zero,
+      totalAmount: Decimal.parse('1400.00'),
+      dueDate: DateTime(2026, 9, 15),
+      status: DebtStatus.pending,
+    );
+    _managerDuesList = [_calculateDuesUseCase.execute(managerBaseDues, DateTime(2026, 9, 25))];
 
     _collectionSummary = ComplexCollectionSummary();
 
@@ -215,9 +284,52 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void switchSessionRole(UserRole role) {
-    _userSession = _createSession(role, _userSession.authProvider);
+  void switchSessionRole(UserRole role, {AuthProvider? provider, SiteAdminActivePath? adminPath}) {
+    _userSession = _createSession(role, provider ?? _userSession.authProvider);
+    if (role == UserRole.siteManager) {
+      if (adminPath != null) {
+        _siteAdminPath = adminPath;
+      }
+      _activeUnit = (_siteAdminPath == SiteAdminActivePath.myFlatOwner) ? managerUnit : defaultResidentUnit;
+    } else {
+      _activeUnit = defaultResidentUnit;
+    }
     notifyListeners();
+  }
+
+  void loginAs({
+    required UserRole role,
+    SiteAdminActivePath? adminPath,
+    AuthProvider provider = AuthProvider.local,
+  }) {
+    switchSessionRole(role, provider: provider, adminPath: adminPath);
+    _isAuthenticated = true;
+    _authMessage = '${role.displayName} olarak giriş yapıldı.';
+    notifyListeners();
+  }
+
+  void logout() {
+    _isAuthenticated = false;
+    _authMessage = null;
+    notifyListeners();
+  }
+
+  void setSiteAdminPath(SiteAdminActivePath path) {
+    _siteAdminPath = path;
+    if (path == SiteAdminActivePath.myFlatOwner) {
+      _activeUnit = managerUnit;
+    } else {
+      _activeUnit = defaultResidentUnit;
+    }
+    notifyListeners();
+  }
+
+  void toggleSiteAdminPath() {
+    if (_siteAdminPath == SiteAdminActivePath.managerCockpit) {
+      setSiteAdminPath(SiteAdminActivePath.myFlatOwner);
+    } else {
+      setSiteAdminPath(SiteAdminActivePath.managerCockpit);
+    }
   }
 
   void loginWithPassword(String email, String password) {
@@ -236,6 +348,12 @@ class DashboardController extends ChangeNotifier {
                 : UserRole.homeOwner;
 
     _userSession = _createSession(role, AuthProvider.local, customEmail: email);
+    if (role == UserRole.siteManager) {
+      _activeUnit = (_siteAdminPath == SiteAdminActivePath.myFlatOwner) ? managerUnit : defaultResidentUnit;
+    } else {
+      _activeUnit = defaultResidentUnit;
+    }
+    _isAuthenticated = true;
     _authMessage = 'Şifre ile başarıyla giriş yapıldı (${role.displayName}).';
     notifyListeners();
   }
@@ -249,6 +367,8 @@ class DashboardController extends ChangeNotifier {
       customEmail: 'ahmet.yilmaz@gmail.com',
       avatarUrl: 'https://lh3.googleusercontent.com/a/google-user-icon',
     );
+    _activeUnit = defaultResidentUnit;
+    _isAuthenticated = true;
     _authMessage = 'Google hesabı ile tek tıkla giriş sağlandı.';
     notifyListeners();
   }

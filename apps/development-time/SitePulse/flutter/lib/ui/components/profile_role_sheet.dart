@@ -326,6 +326,26 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                 ),
               );
             }),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  widget.controller.logout();
+                },
+                icon: const Icon(Icons.logout_rounded, color: AppColors.accentRed, size: 18),
+                label: const Text(
+                  'Çıkış Yap & Giriş Ekranına Dön',
+                  style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: AppColors.accentRed.withOpacity(0.4)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
           ],
         ),
       ),

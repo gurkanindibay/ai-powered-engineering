@@ -158,6 +158,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               widget.controller.toggleTheme();
             },
           ),
+          IconButton(
+            tooltip: 'Çıkış Yap / Rol Değiştir',
+            icon: const Icon(
+              Icons.logout_rounded,
+              color: AppColors.accentRed,
+              size: 20,
+            ),
+            onPressed: () {
+              widget.controller.logout();
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: InkWell(
@@ -226,6 +237,107 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildSiteManagerPathSwitcher() {
+    final currentPath = widget.controller.siteAdminPath;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                if (currentPath != SiteAdminActivePath.managerCockpit) {
+                  widget.controller.setSiteAdminPath(SiteAdminActivePath.managerCockpit);
+                }
+              },
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: currentPath == SiteAdminActivePath.managerCockpit
+                      ? AppColors.primary
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.apartment,
+                      size: 16,
+                      color: currentPath == SiteAdminActivePath.managerCockpit
+                          ? Colors.white
+                          : AppColors.textSecondary(context),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Site Yönetim Paneli',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: currentPath == SiteAdminActivePath.managerCockpit
+                            ? Colors.white
+                            : AppColors.textSecondary(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                if (currentPath != SiteAdminActivePath.myFlatOwner) {
+                  widget.controller.setSiteAdminPath(SiteAdminActivePath.myFlatOwner);
+                }
+              },
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: currentPath == SiteAdminActivePath.myFlatOwner
+                      ? AppColors.accentCyan
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.home,
+                      size: 16,
+                      color: currentPath == SiteAdminActivePath.myFlatOwner
+                          ? Colors.black87
+                          : AppColors.textSecondary(context),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Kendi Dairem (Kat Maliki)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: currentPath == SiteAdminActivePath.myFlatOwner
+                            ? Colors.black87
+                            : AppColors.textSecondary(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCurrentTabContent(bool isHomeRole) {
     if (_selectedTabIndex == 1) {
       return _buildSecondaryTabContent(isHomeRole);
@@ -242,8 +354,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (dues != null)
               HeroBalanceCard(
                 dues: dues,
-                siteName: widget.controller.activeDaire.siteAdi,
-                unitName: '${widget.controller.activeDaire.blok} Blok D:${widget.controller.activeDaire.daireNo}',
+                siteName: widget.controller.activeUnit.siteAdi,
+                unitName: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
                 isOffline: widget.controller.isOffline,
                 onPayPressed: () => _showPaymentDialog(dues),
                 onDetailPressed: () => _showDuesDetailDialog(dues),
@@ -272,17 +384,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildHesapHareketleriSection(),
             const SizedBox(height: 18),
             VirtualIbanCard(
-              unitDesc: '${widget.controller.activeDaire.blok} Blok D:${widget.controller.activeDaire.daireNo}',
+              unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
             ),
             const SizedBox(height: 16),
             _buildDairemHouseholdCard(),
           ],
         );
       case UserRole.siteManager:
-        return ManagerCockpitView(
-          controller: widget.controller,
-          onAddResidentTap: _showAddResidentDialog,
-        );
+        final currentPath = widget.controller.siteAdminPath;
+        if (currentPath == SiteAdminActivePath.myFlatOwner) {
+          final dues = widget.controller.primaryDues;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSiteManagerPathSwitcher(),
+              if (dues != null)
+                HeroBalanceCard(
+                  dues: dues,
+                  siteName: widget.controller.activeUnit.siteAdi,
+                  unitName: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+                  isOffline: widget.controller.isOffline,
+                  onPayPressed: () => _showPaymentDialog(dues),
+                  onDetailPressed: () => _showDuesDetailDialog(dues),
+                ),
+              const SizedBox(height: 16),
+              ResidentActionsRow(
+                isOwner: true,
+                onPayTap: () {
+                  if (dues != null) _showPaymentDialog(dues);
+                },
+                onIbanTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Sanal IBAN bilgisi aşağıda yer almaktadır.'),
+                      backgroundColor: AppColors.accentCyan,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                onReceiptsTap: _showReceiptsDialog,
+                onInviteTap: () {
+                  widget.controller.generateUnitInviteLink();
+                },
+              ),
+              const SizedBox(height: 18),
+              _buildHesapHareketleriSection(),
+              const SizedBox(height: 18),
+              VirtualIbanCard(
+                unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+              ),
+              const SizedBox(height: 16),
+              _buildDairemHouseholdCard(),
+            ],
+          );
+        } else {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSiteManagerPathSwitcher(),
+              ManagerCockpitView(
+                controller: widget.controller,
+                onAddResidentTap: _showAddResidentDialog,
+              ),
+            ],
+          );
+        }
       case UserRole.saasAdmin:
         return SaasAdminView(
           controller: widget.controller,
@@ -306,15 +472,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _buildDairemHouseholdCard(),
           const SizedBox(height: 16),
           VirtualIbanCard(
-            unitDesc: '${widget.controller.activeDaire.blok} Blok D:${widget.controller.activeDaire.daireNo}',
+            unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
           ),
         ],
       );
     } else if (widget.controller.userRole == UserRole.siteManager) {
-      return ManagerCockpitView(
-        controller: widget.controller,
-        onAddResidentTap: _showAddResidentDialog,
-      );
+      final currentPath = widget.controller.siteAdminPath;
+      if (currentPath == SiteAdminActivePath.myFlatOwner) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSiteManagerPathSwitcher(),
+            Text(
+              'Dairem & Hane Bilgileri',
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            _buildDairemHouseholdCard(),
+            const SizedBox(height: 16),
+            VirtualIbanCard(
+              unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+            ),
+          ],
+        );
+      } else {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSiteManagerPathSwitcher(),
+            ManagerCockpitView(
+              controller: widget.controller,
+              onAddResidentTap: _showAddResidentDialog,
+            ),
+          ],
+        );
+      }
     } else {
       return SaasAdminView(
         controller: widget.controller,
@@ -485,7 +677,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildDairemHouseholdCard() {
     final residents = widget.controller.unitResidents;
-    final isOwner = widget.controller.userRole == UserRole.homeOwner;
+    final isOwner = widget.controller.userRole == UserRole.homeOwner ||
+        (widget.controller.userRole == UserRole.siteManager &&
+            widget.controller.siteAdminPath == SiteAdminActivePath.myFlatOwner);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -505,7 +699,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const Icon(Icons.people_outline, color: AppColors.accentCyan, size: 20),
                   const SizedBox(width: 8),
                   Text(
-                    'Hane Sakinleri (A Blok D:14)',
+                    'Hane Sakinleri (${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo})',
                     style: TextStyle(
                       color: AppColors.textPrimary(context),
                       fontSize: 14,

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'ui/auth/login_screen.dart';
 import 'ui/dashboard/dashboard_controller.dart';
 import 'ui/dashboard/dashboard_screen.dart';
 import 'ui/theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  final controller = DashboardController();
+  final controller = DashboardController(startAuthenticated: false);
   runApp(SitePulseApp(controller: controller));
 }
 
@@ -25,9 +26,12 @@ class SitePulseApp extends StatelessWidget {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: controller.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-          home: DashboardScreen(controller: controller),
+          home: controller.isAuthenticated
+              ? DashboardScreen(controller: controller)
+              : LoginScreen(controller: controller),
         );
       },
     );
   }
 }
+

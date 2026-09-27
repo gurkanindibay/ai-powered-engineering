@@ -9,6 +9,15 @@ enum UserRole {
   const UserRole(this.displayName, this.initials);
 }
 
+enum SiteAdminActivePath {
+  managerCockpit('Site Yönetim Paneli', 'Tüm bloklar, aidat tahsilat tablosu ve sakin onayları'),
+  myFlatOwner('Kendi Dairem (Kat Maliki)', 'B Blok D:1 yönetici dairesi aidat, makbuz ve hane yönetimi');
+
+  final String title;
+  final String description;
+  const SiteAdminActivePath(this.title, this.description);
+}
+
 enum AuthProvider {
   local('Şifre ile Giriş', '🔑'),
   google('Google Hesabı', '🌐'),

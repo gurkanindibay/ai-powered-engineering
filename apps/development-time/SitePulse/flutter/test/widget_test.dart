@@ -5,8 +5,83 @@ import 'package:sitepulse/main.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 
 void main() {
-  testWidgets('SitePulseApp renders Home Owner dashboard by default', (WidgetTester tester) async {
-    final controller = DashboardController();
+  testWidgets('SitePulseApp renders LoginScreen when unauthenticated and displays test personas', (WidgetTester tester) async {
+    final controller = DashboardController(startAuthenticated: false);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Verify Login Screen branding and persona section
+    expect(find.text('SitePulse'), findsOneWidget);
+    expect(find.text('Test Kullanıcıları ile Hızlı Giriş'), findsOneWidget);
+    expect(find.text('SaaS Platform Admin'), findsWidgets);
+    expect(find.text('Site Yöneticisi'), findsWidgets);
+    expect(find.text('Kat Maliki (Ev Sahibi)'), findsWidgets);
+    expect(find.text('Ev Sakini (Aile / Kiracı)'), findsWidgets);
+    expect(find.text('Kat Maliki Olarak Gir'), findsOneWidget);
+  });
+
+  testWidgets('Selecting Site Admin shows dual path options and logging in as Kat Maliki enters own flat view', (WidgetTester tester) async {
+    final controller = DashboardController(startAuthenticated: false);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Verify dual path options appear on Site Manager card
+    final myFlatOption = find.textContaining('🏠 Kendi Dairem (Kat Maliki)');
+    expect(myFlatOption, findsOneWidget);
+
+    // Scroll to option and tap it
+    await tester.ensureVisible(myFlatOption);
+    await tester.pumpAndSettle();
+    await tester.tap(myFlatOption);
+    await tester.pumpAndSettle();
+
+    // Tap login button for own flat
+    final loginButton = find.text('Kendi Dairem ile Başla (B Blok D:1)');
+    expect(loginButton, findsOneWidget);
+    await tester.ensureVisible(loginButton);
+    await tester.pumpAndSettle();
+    await tester.tap(loginButton);
+    await tester.pumpAndSettle();
+
+    // Verify Mehmet Demir entered his own flat view
+    expect(controller.isAuthenticated, isTrue);
+    expect(controller.siteAdminPath, SiteAdminActivePath.myFlatOwner);
+    expect(find.text('Kendi Dairem (Kat Maliki)'), findsWidgets);
+    expect(find.textContaining('B Blok D:1'), findsWidgets);
+    expect(find.text('Mehmet Demir'), findsWidgets);
+
+    // Test AppBar logout button returns to LoginScreen
+    final logoutButton = find.byTooltip('Çıkış Yap / Rol Değiştir');
+    expect(logoutButton, findsOneWidget);
+    await tester.tap(logoutButton);
+    await tester.pumpAndSettle();
+
+    expect(controller.isAuthenticated, isFalse);
+    expect(find.text('Test Kullanıcıları ile Hızlı Giriş'), findsOneWidget);
+  });
+
+  testWidgets('Logging in as Site Admin with Cockpit path displays complex collection cockpit', (WidgetTester tester) async {
+    final controller = DashboardController(startAuthenticated: false);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Default path is managerCockpit
+    final loginButton = find.text('Yönetici Paneli ile Başla');
+    expect(loginButton, findsOneWidget);
+    await tester.ensureVisible(loginButton);
+    await tester.pumpAndSettle();
+    await tester.tap(loginButton);
+    await tester.pumpAndSettle();
+
+    expect(controller.isAuthenticated, isTrue);
+    expect(controller.siteAdminPath, SiteAdminActivePath.managerCockpit);
+    expect(find.text('Eylül 2026 Tahsilat Durumu'), findsOneWidget);
+    expect(find.text('%80 Tahsil Edildi'), findsOneWidget);
+    expect(find.text('Onay Bekleyen Başvurular'), findsOneWidget);
+  });
+
+  testWidgets('SitePulseApp renders Home Owner dashboard when authenticated', (WidgetTester tester) async {
+    final controller = DashboardController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -21,7 +96,7 @@ void main() {
   });
 
   testWidgets('SitePulseApp switches to Site Manager view and displays collection cockpit', (WidgetTester tester) async {
-    final controller = DashboardController();
+    final controller = DashboardController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -37,7 +112,7 @@ void main() {
   });
 
   testWidgets('SitePulseApp switches to SaaS SuperAdmin view and displays platform tenants', (WidgetTester tester) async {
-    final controller = DashboardController();
+    final controller = DashboardController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -53,7 +128,7 @@ void main() {
   });
 
   testWidgets('SitePulseApp toggles theme mode between Dark and Light correctly', (WidgetTester tester) async {
-    final controller = DashboardController();
+    final controller = DashboardController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -76,7 +151,7 @@ void main() {
   });
 
   testWidgets('SitePulseApp opens Yeni Site dialog, submits and closes popup cleanly', (WidgetTester tester) async {
-    final controller = DashboardController();
+    final controller = DashboardController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -121,7 +196,7 @@ void main() {
   });
 
   testWidgets('SitePulseApp allows deleting an action-free site with confirmation dialog', (WidgetTester tester) async {
-    final controller = DashboardController();
+    final controller = DashboardController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -157,7 +232,7 @@ void main() {
   });
 
   testWidgets('SitePulseApp allows renewing temporary management password with confirmation dialog', (WidgetTester tester) async {
-    final controller = DashboardController();
+    final controller = DashboardController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -197,5 +272,3 @@ void main() {
     expect(find.text('Geçici Yönetim Şifresi Yenilendi!'), findsNothing);
   });
 }
-
-

@@ -179,5 +179,28 @@ void main() {
       expect(success, isFalse);
       expect(controller.provisionedCredentials, isNull);
     });
+
+    test('when loginAs called with test personas, updates session and sets isAuthenticated true', () {
+      // Login as Site Admin with myFlatOwner path
+      controller.loginAs(
+        role: UserRole.siteManager,
+        adminPath: SiteAdminActivePath.myFlatOwner,
+      );
+
+      expect(controller.isAuthenticated, isTrue);
+      expect(controller.userRole, UserRole.siteManager);
+      expect(controller.siteAdminPath, SiteAdminActivePath.myFlatOwner);
+      expect(controller.activeUnit.blok, 'B');
+      expect(controller.activeUnit.daireNo, 1);
+      expect(controller.unitResidents.first.fullName, 'Mehmet Demir');
+
+      // Toggle to managerCockpit path
+      controller.toggleSiteAdminPath();
+      expect(controller.siteAdminPath, SiteAdminActivePath.managerCockpit);
+
+      // Logout
+      controller.logout();
+      expect(controller.isAuthenticated, isFalse);
+    });
   });
 }

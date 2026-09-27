@@ -8,6 +8,7 @@ class AppColors {
   static const accentGreen = Color(0xFF10B981);   // Natural Emerald Green (Replaces neon green)
   static const accentRed = Color(0xFFEF4444);     // Refined Crimson Red (Replaces neon hot pink)
   static const accentOrange = Color(0xFFF59E0B);  // Warm Natural Amber (Replaces neon orange)
+  static const accentPurple = Color(0xFF8B5CF6);  // Royal Violet for SaaS Admin Badge
 
   // Dark Theme (Papara Iconic Black & White / Matte Obsidian)
   static const darkBackground = Color(0xFF121317);
