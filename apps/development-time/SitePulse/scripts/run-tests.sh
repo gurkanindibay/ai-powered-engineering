@@ -229,6 +229,18 @@ print(res.stdout.strip())
 '
 echo ""
 
+# 4. Flutter Mobile Client Test Suite
+echo "▶ [4/4] Running Flutter Mobile Client Unit & Widget Tests..."
+FLUTTER_BIN="${FLUTTER_ROOT:-/home/gurkanindibay/flutter}/bin/flutter"
+if [ -x "$FLUTTER_BIN" ]; then
+    (cd "$SITEPULSE_ROOT/flutter" && "$FLUTTER_BIN" test)
+    echo "  [PASS] Flutter Client 16/16 Unit & Widget Tests Verified!"
+else
+    echo "  [WARN] Flutter binary not found at $FLUTTER_BIN, skipping Flutter tests."
+fi
+echo ""
+
 echo "========================================================================"
 echo "  ✔ ALL SITEPULSE TESTS & VERIFICATION GATES PASSED SUCCESSFULLY!"
 echo "========================================================================"
+

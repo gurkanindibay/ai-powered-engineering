@@ -1,0 +1,427 @@
+import 'package:flutter/material.dart';
+import '../../domain/models/dues_models.dart';
+import '../theme/app_theme.dart';
+import '../dashboard/dashboard_controller.dart';
+
+class ManagerCockpitView extends StatelessWidget {
+  final DashboardController controller;
+  final VoidCallback onAddResidentTap;
+
+  const ManagerCockpitView({
+    super.key,
+    required this.controller,
+    required this.onAddResidentTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = controller.collectionSummary;
+    final pendingList = controller.pendingRegistrations;
+    final flats = controller.flatsList;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Tahsilat Özeti Card
+        Container(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppColors.darkBorder, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Eylül 2026 Tahsilat Durumu',
+                    style: TextStyle(
+                      color: AppColors.darkTextSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentGreen.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '%${summary.collectionPercentage} Tahsil Edildi',
+                      style: const TextStyle(
+                        color: AppColors.accentGreen,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    '₺${summary.totalCollected.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      color: AppColors.darkTextPrimary,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '/ ₺${summary.totalExpected.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      color: AppColors.darkTextSecondary,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: summary.collectionPercentage / 100.0,
+                  backgroundColor: AppColors.darkBackground,
+                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accentGreen),
+                  minHeight: 8,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildMetricTile('Toplam Daire', '${summary.totalUnitsCount}'),
+                  _buildMetricTile('Ödeyen', '${summary.paidUnitsCount}', color: AppColors.accentGreen),
+                  _buildMetricTile('Geciken', '${summary.overdueUnitsCount}', color: AppColors.accentRed),
+                  _buildMetricTile('Kalan Borç', '₺${summary.totalOverdueAmount.toStringAsFixed(0)}', color: AppColors.accentOrange),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // 2. Onay Bekleyen Sakin Başvuruları
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Onay Bekleyen Başvurular',
+                  style: TextStyle(
+                    color: AppColors.darkTextPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: pendingList.isNotEmpty ? AppColors.accentOrange : AppColors.darkBorder,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${pendingList.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            TextButton.icon(
+              onPressed: onAddResidentTap,
+              icon: const Icon(Icons.add, size: 16, color: AppColors.accentCyan),
+              label: const Text(
+                'Manuel Sakin Ekle',
+                style: TextStyle(color: AppColors.accentCyan, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 8),
+
+        if (pendingList.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.darkSurface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.darkBorder),
+            ),
+            child: const Center(
+              child: Text(
+                'Onay bekleyen başvuru bulunmuyor.',
+                style: TextStyle(color: AppColors.darkTextSecondary, fontSize: 13),
+              ),
+            ),
+          )
+        else
+          ...pendingList.map((req) => _buildPendingRequestCard(context, req)),
+
+        const SizedBox(height: 24),
+
+        // 3. Daire Aidat Takibi
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Daire Aidat Takibi',
+              style: TextStyle(
+                color: AppColors.darkTextPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Row(
+              children: [
+                _buildFilterChip('Tümü', 'ALL'),
+                const SizedBox(width: 6),
+                _buildFilterChip('Geciken', 'OVERDUE'),
+                const SizedBox(width: 6),
+                _buildFilterChip('Ödeyen', 'PAID'),
+              ],
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        ...flats.map((flat) => _buildFlatStatusCard(flat)),
+      ],
+    );
+  }
+
+  Widget _buildMetricTile(String label, String value, {Color? color}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 10),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            color: color ?? AppColors.darkTextPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterChip(String label, String code) {
+    final isSelected = controller.flatFilter == code;
+    return InkWell(
+      onTap: () => controller.setFlatFilter(code),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accentCyan : AppColors.darkSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppColors.accentCyan : AppColors.darkBorder,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? const Color(0xFF0F172A) : AppColors.darkTextSecondary,
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPendingRequestCard(BuildContext context, RegistrationRequestItem req) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.darkSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.darkBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${req.block} D:${req.unitNo} • ${req.isResident ? 'Ev Sakini' : 'Kat Maliki'}',
+                style: const TextStyle(
+                  color: AppColors.accentCyan,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                req.timeAgoStr,
+                style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            req.fullName,
+            style: const TextStyle(
+              color: AppColors.darkTextPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${req.phone} • ${req.email}',
+            style: const TextStyle(color: AppColors.darkTextSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    controller.approveRegistration(req.id);
+                  },
+                  icon: const Icon(Icons.check, size: 16),
+                  label: const Text('Onayla & Şifre Üret', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentGreen,
+                    foregroundColor: const Color(0xFF0F172A),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: () => controller.rejectRegistration(req.id),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.accentRed,
+                  side: const BorderSide(color: AppColors.accentRed),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Reddet', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFlatStatusCard(FlatPaymentStatus flat) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.darkSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.darkBorder),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: flat.isPaid
+                      ? AppColors.accentGreen.withOpacity(0.15)
+                      : AppColors.accentRed.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    '${flat.block}${flat.unitNo}',
+                    style: TextStyle(
+                      color: flat.isPaid ? AppColors.accentGreen : AppColors.accentRed,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    flat.residentName,
+                    style: const TextStyle(
+                      color: AppColors.darkTextPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    '${flat.block} Blok D:${flat.unitNo}',
+                    style: const TextStyle(
+                      color: AppColors.darkTextSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '₺${flat.amountDue.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: AppColors.darkTextPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                flat.isPaid
+                    ? 'Ödendi (${flat.paidDateStr ?? 'Tamam'})'
+                    : '${flat.daysOverdue} Gün Gecikme',
+                style: TextStyle(
+                  color: flat.isPaid ? AppColors.accentGreen : AppColors.accentRed,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

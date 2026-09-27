@@ -17,11 +17,11 @@ class LoopRunner:
         task_id = task["id"]
         results: List[GateResult] = []
 
-        # 1. Syntax check across Kotlin files
-        android_src = project_root / "android" / "app" / "src" / "main" / "java" / "com" / "sitepulse" / "app"
-        if android_src.exists():
-            for kt_file in android_src.rglob("*.kt"):
-                res = self.syntax_gate.verify(kt_file)
+        # 1. Syntax check across Flutter Dart files
+        flutter_src = project_root / "flutter" / "lib"
+        if flutter_src.exists():
+            for dart_file in flutter_src.rglob("*.dart"):
+                res = self.syntax_gate.verify(dart_file)
                 if not res.passed:
                     results.append(res)
 

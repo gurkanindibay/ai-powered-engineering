@@ -32,3 +32,12 @@ local.properties
 Thumbs.db
 .idea/
 .vscode/
+
+# Flutter / Dart artifacts
+.dart_tool/
+**/.dart_tool/
+.pub-cache/
+**/.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+

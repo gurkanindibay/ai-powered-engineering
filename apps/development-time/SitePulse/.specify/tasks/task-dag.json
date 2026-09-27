@@ -5,7 +5,7 @@
     {
       "id": "task-01",
       "name": "Core Domain Models & Financial Value Objects",
-      "module": "android-domain",
+      "module": "flutter-domain",
       "status": "COMPLETED",
       "depends_on": [],
       "spec_ref": "SPEC-001",
@@ -14,7 +14,7 @@
     {
       "id": "task-02",
       "name": "KMK Statutory Delay Fee Calculation Engine",
-      "module": "android-domain",
+      "module": "flutter-domain",
       "status": "COMPLETED",
       "depends_on": [
         "task-01"
@@ -25,7 +25,7 @@
     {
       "id": "task-03",
       "name": "Dashboard State Management & ViewModel",
-      "module": "android-ui",
+      "module": "flutter-ui",
       "status": "COMPLETED",
       "depends_on": [
         "task-01",
@@ -37,7 +37,7 @@
     {
       "id": "task-04",
       "name": "Material 3 Dashboard Compose Screens",
-      "module": "android-ui",
+      "module": "flutter-ui",
       "status": "COMPLETED",
       "depends_on": [
         "task-03"
@@ -79,14 +79,14 @@
     {
       "id": "task-08",
       "name": "Offline Room Cache & Repository Layer",
-      "module": "android-data",
+      "module": "flutter-data",
       "status": "COMPLETED",
       "depends_on": [
         "task-01",
         "task-07"
       ],
       "spec_ref": "SPEC-001",
-      "description": "Local SQLite/Room database caching for resident dashboard data synchronized with Spring REST API."
+      "description": "Local SQLite/Hive database caching for resident dashboard data synchronized with Spring REST API."
     }
   ]
 }
