@@ -288,6 +288,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           controller: widget.controller,
           onAddSiteTap: _showAddSiteDialog,
           onDeleteSiteTap: _confirmDeleteSite,
+          onResetPasswordTap: _confirmResetAdminPassword,
         );
     }
   }
@@ -319,6 +320,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         controller: widget.controller,
         onAddSiteTap: _showAddSiteDialog,
         onDeleteSiteTap: _confirmDeleteSite,
+        onResetPasswordTap: _confirmResetAdminPassword,
       );
     }
   }
@@ -908,6 +910,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showSiteProvisionedDialog(ProvisionedSiteCredentials creds) {
+    final title = creds.isRenewal ? 'Geçici Yönetim Şifresi Yenilendi!' : 'Yeni Site & Yönetici Hazır!';
+    final subtitle = creds.isRenewal
+        ? '${creds.siteName} yöneticisi için yeni bir geçici şifre üretildi. Yönetici ilk girişte şifresini değiştirmek zorundadır.'
+        : '${creds.siteName} başarıyla platforma kaydedildi.';
+    final icon = creds.isRenewal ? Icons.key : Icons.apartment;
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -915,16 +923,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            const Icon(Icons.apartment, color: AppColors.accentCyan),
+            Icon(icon, color: AppColors.accentCyan),
             const SizedBox(width: 8),
-            Text('Yeni Site & Yönetici Hazır!', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
+            Text(title, style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${creds.siteName} başarıyla platforma kaydedildi.', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
+            Text(subtitle, style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
             const SizedBox(height: 10),
             Text('Yönetici: ${creds.adminName} (${creds.adminEmail})', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
             const SizedBox(height: 8),
@@ -1326,6 +1334,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
             child: const Text('Evet, Sil'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmResetAdminPassword(TenantSiteItem site) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface(context),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.lock_reset, color: AppColors.accentCyan),
+            const SizedBox(width: 8),
+            Text('Geçici Şifre Yenile', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          '${site.name} yöneticisi ${site.adminName} (${site.adminEmail}) için yeni bir geçici yönetim şifresi üretilecektir.\n\nMevcut şifre geçersiz kılınır ve yönetici sisteme girdiğinde yeni şifre belirlemeye yönlendirilir.\n\nOnaylıyor musunuz?',
+          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary(context))),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              widget.controller.resetSiteManagerPassword(site.id);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan, foregroundColor: Colors.white),
+            child: const Text('Şifreyi Yenile'),
           ),
         ],
       ),

@@ -7,12 +7,14 @@ class SaasAdminView extends StatelessWidget {
   final DashboardController controller;
   final VoidCallback onAddSiteTap;
   final void Function(TenantSiteItem site)? onDeleteSiteTap;
+  final void Function(TenantSiteItem site)? onResetPasswordTap;
 
   const SaasAdminView({
     super.key,
     required this.controller,
     required this.onAddSiteTap,
     this.onDeleteSiteTap,
+    this.onResetPasswordTap,
   });
 
   @override
@@ -189,133 +191,183 @@ class SaasAdminView extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.domain, color: AppColors.accentCyan, size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        site.name,
-                        style: TextStyle(
-                          color: AppColors.textPrimary(context),
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      Text(
-                        '${site.city} • ${site.totalUnits} Daire',
-                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentGreen.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
+                      child: const Icon(Icons.domain, color: AppColors.accentCyan, size: 20),
                     ),
-                    child: Text(
-                      site.planType,
-                      style: const TextStyle(
-                        color: AppColors.accentGreen,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            site.name,
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            '${site.city} • ${site.totalUnits} Daire',
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  if (onDeleteSiteTap != null) ...[
-                    const SizedBox(width: 8),
-                    if (!site.hasActions)
-                      InkWell(
-                        onTap: () => onDeleteSiteTap!(site),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red.withOpacity(0.3)),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.delete_outline, size: 13, color: Colors.redAccent),
-                              SizedBox(width: 3),
-                              Text('Sil', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      Tooltip(
-                        message: 'Bu siteye ait aktif daire veya işlem kaydı bulunduğundan silinemez.',
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.card(context),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.border(context)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.lock_outline, size: 11, color: AppColors.textSecondary(context)),
-                              const SizedBox(width: 3),
-                              Text('İşlemli', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 9)),
-                            ],
-                          ),
-                        ),
-                      ),
                   ],
-                ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.accentGreen.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  site.planType,
+                  style: const TextStyle(
+                    color: AppColors.accentGreen,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: AppColors.card(context),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.border(context)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Site Yöneticisi',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Site Yöneticisi',
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            site.adminName,
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
-                    Text(
-                      site.adminName,
-                      style: TextStyle(
-                        color: AppColors.textPrimary(context),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        '${site.adminPhone} • ${site.adminEmail}',
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                        textAlign: TextAlign.end,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
-                Text(
-                  '${site.adminPhone} • ${site.adminEmail}',
-                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (onResetPasswordTap != null)
+                      InkWell(
+                        onTap: () => onResetPasswordTap!(site),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentCyan.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.accentCyan.withOpacity(0.4)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.key, size: 13, color: AppColors.accentCyan),
+                              SizedBox(width: 4),
+                              Text(
+                                'Şifre Yenile',
+                                style: TextStyle(
+                                  color: AppColors.accentCyan,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (onDeleteSiteTap != null) ...[
+                      const SizedBox(width: 8),
+                      if (!site.hasActions)
+                        InkWell(
+                          onTap: () => onDeleteSiteTap!(site),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red.withOpacity(0.3)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.delete_outline, size: 13, color: Colors.redAccent),
+                                SizedBox(width: 4),
+                                Text('Sil', style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        Tooltip(
+                          message: 'Bu siteye ait aktif daire veya işlem kaydı bulunduğundan silinemez.',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface(context),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.border(context)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.lock_outline, size: 12, color: AppColors.textSecondary(context)),
+                                const SizedBox(width: 4),
+                                Text('İşlemli', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10)),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ],
                 ),
               ],
             ),

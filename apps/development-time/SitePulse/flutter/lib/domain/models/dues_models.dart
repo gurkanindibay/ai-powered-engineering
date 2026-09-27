@@ -297,6 +297,7 @@ class ProvisionedSiteCredentials {
   final String adminEmail;
   final String temporaryPassword;
   final String planType;
+  final bool isRenewal;
 
   const ProvisionedSiteCredentials({
     required this.siteId,
@@ -305,6 +306,7 @@ class ProvisionedSiteCredentials {
     required this.adminEmail,
     required this.temporaryPassword,
     required this.planType,
+    this.isRenewal = false,
   });
 }
 

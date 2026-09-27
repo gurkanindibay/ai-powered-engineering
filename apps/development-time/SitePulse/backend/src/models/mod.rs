@@ -262,6 +262,18 @@ pub struct SiteRegistrationResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SiteAdminPasswordResetResponse {
+    pub site_id: String,
+    pub site_name: String,
+    pub admin_user_id: String,
+    pub admin_full_name: String,
+    pub admin_email: String,
+    pub temporary_password: String,
+    pub must_change_password: bool,
+    pub renewed_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaasSiteSummaryDto {
     pub site_id: String,
     pub site_name: String,

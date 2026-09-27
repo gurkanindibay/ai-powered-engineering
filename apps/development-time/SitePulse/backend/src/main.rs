@@ -40,6 +40,10 @@ async fn main() {
         // SaaS Multi-Tenancy
         .route("/api/v1/saas/sites", get(handlers::get_all_sites).post(handlers::register_site))
         .route("/api/v1/saas/sites/:id", delete(handlers::delete_site))
+        .route(
+            "/api/v1/saas/sites/:id/reset-admin-password",
+            post(handlers::reset_site_admin_password),
+        )
         .route("/api/v1/saas/stats", get(handlers::get_saas_stats))
         // Site Admin & Flats
         .route(

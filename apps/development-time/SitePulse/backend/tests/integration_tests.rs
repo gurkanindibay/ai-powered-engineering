@@ -345,3 +345,43 @@ async fn when_deleting_site_with_active_units_or_actions_then_strictly_rejected(
     let err_msg = del_res.unwrap_err();
     assert!(err_msg.contains("active units exist") || err_msg.contains("işlem kaydı"));
 }
+
+#[tokio::test]
+async fn when_resetting_admin_password_then_generates_new_temporary_password_and_forces_change() {
+    let state = AppState::new();
+    let tenant_service = SaasTenantService::new(state.clone());
+    let auth_service = AuthService::new(state.clone());
+
+    let reset_res = tenant_service
+        .reset_site_admin_password("site-1")
+        .await
+        .expect("Password reset failed");
+
+    assert_eq!(reset_res.site_id, "site-1");
+    assert!(reset_res.temporary_password.starts_with("SP-"));
+    assert!(reset_res.must_change_password);
+    assert_eq!(reset_res.admin_email, "mehmet.demir@begonya.com");
+
+    // Verify the site manager can authenticate with the renewed temporary password
+    let login_req = PasswordLoginRequest {
+        email: reset_res.admin_email,
+        password: reset_res.temporary_password,
+    };
+    let login_res = auth_service
+        .authenticate_with_password(login_req)
+        .await
+        .expect("Authentication with renewed password should succeed");
+
+    assert_eq!(login_res.user.role, Role::SiteManager);
+    assert!(login_res.user.must_change_password);
+}
+
+#[tokio::test]
+async fn when_resetting_admin_password_for_non_existent_site_then_fails() {
+    let state = AppState::new();
+    let service = SaasTenantService::new(state);
+
+    let reset_res = service.reset_site_admin_password("invalid-site-id").await;
+    assert!(reset_res.is_err());
+}
+

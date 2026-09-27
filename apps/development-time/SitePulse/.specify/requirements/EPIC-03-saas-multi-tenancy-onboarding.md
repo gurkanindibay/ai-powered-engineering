@@ -2,7 +2,7 @@
 
 > **Epic ID:** EPIC-03  
 > **Module:** SaaS Platform Architecture (`backend-rust`, `flutter-ui`)  
-> **Status:** COMPLETED (6 / 6 Stories Completed - 100%)  
+> **Status:** COMPLETED (7 / 7 Stories Completed - 100%)  
 > **Target Audience:** SaaS Super Administrator, Sales & Operations Team  
 > **Business Value:** Enables SitePulse to scale commercially as a cloud SaaS across hundreds of independent residential complexes.
 
@@ -147,4 +147,35 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
   - `flutter/test/dashboard_controller_test.dart`
   - `flutter/test/widget_test.dart`
   - `backend/tests/saas_tenant_tests.rs`
+
+---
+
+### STORY-03-07: Temporary Password Renewal & Recovery for Site Managers
+- **Status:** `COMPLETED`
+- **Spec Ref:** `SPEC-002 (Section 3.4)`
+- **Description:** Allow SaaS Super Admins to generate or renew/reissue a temporary management password (`Geçici Yönetim Şifresi`) for any registered site manager who has forgotten or lost their credentials. The renewed credentials enforce password change on first login.
+- **Acceptance Criteria (Gherkin):**
+  ```gherkin
+  Scenario: SaaS Admin renews temporary password for a site manager
+    Given a registered site with a site manager
+    When SaaS Admin triggers "Şifre Yenile" for the site
+    Then a new cryptographically secure temporary password (pattern: SP-[A-Z0-9]{4}-PASS) is generated
+    And the site admin record is updated with mustChangePassword = true
+    And the credentials dialog is presented to the SaaS Admin for delivery to the site manager
+
+  Scenario: Password renewal fails for non-existent site
+    When SaaS Admin requests password renewal for an invalid site_id
+    Then the request fails with 404 Not Found
+  ```
+- **Implementation Artifacts:**
+  - `apps/development-time/SitePulse/backend/src/models/mod.rs`
+  - `apps/development-time/SitePulse/backend/src/services/saas_tenant_service.rs`
+  - `apps/development-time/SitePulse/backend/src/handlers/mod.rs`
+  - `apps/development-time/SitePulse/flutter/lib/ui/dashboard/dashboard_controller.dart`
+  - `apps/development-time/SitePulse/flutter/lib/ui/components/saas_admin_view.dart`
+  - `apps/development-time/SitePulse/flutter/lib/ui/dashboard/dashboard_screen.dart`
+- **Verification & Tests:**
+  - `flutter/test/dashboard_controller_test.dart`
+  - `flutter/test/widget_test.dart`
+  - `backend/tests/integration_tests.rs`
 

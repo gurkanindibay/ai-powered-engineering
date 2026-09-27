@@ -181,6 +181,18 @@ pub async fn delete_site(
         .map_err(|e| (StatusCode::CONFLICT, e))
 }
 
+pub async fn reset_site_admin_password(
+    Path(site_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<(StatusCode, Json<SiteAdminPasswordResetResponse>), (StatusCode, String)> {
+    let service = SaasTenantService::new(state);
+    service
+        .reset_site_admin_password(&site_id)
+        .await
+        .map(|res| (StatusCode::OK, Json(res)))
+        .map_err(|e| (StatusCode::NOT_FOUND, e))
+}
+
 // 4. Site Admin Handlers
 #[derive(Deserialize)]
 pub struct SiteIdParam {

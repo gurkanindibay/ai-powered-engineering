@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::models::{
     RegisterSiteRequest, Role, SaasGlobalStatsDto, SaasSiteSummaryDto, Site,
-    SiteRegistrationResponse, User,
+    SiteAdminPasswordResetResponse, SiteRegistrationResponse, User,
 };
 use crate::state::AppState;
 
@@ -212,6 +212,52 @@ impl SaasTenantService {
         inner.users.retain(|u| u.site_id != site_id || u.role == Role::SaasAdmin);
 
         Ok(())
+    }
+
+    pub async fn reset_site_admin_password(
+        &self,
+        site_id: &str,
+    ) -> Result<SiteAdminPasswordResetResponse, String> {
+        let mut inner = self.state.inner.write().await;
+
+        let site = inner
+            .sites
+            .iter()
+            .find(|s| s.id == site_id)
+            .ok_or_else(|| format!("Site with id '{}' not found", site_id))?
+            .clone();
+
+        let user_idx = inner
+            .users
+            .iter()
+            .position(|u| u.site_id == site_id && u.role == Role::SiteManager)
+            .ok_or_else(|| format!("No SiteManager found for site '{}'", site_id))?;
+
+        let temp_pass = generate_secure_temporary_password();
+        let password_hash = format!("ARGON2_HASH_{}", &temp_pass);
+
+        let admin_user_id;
+        let admin_full_name;
+        let admin_email;
+        {
+            let user = &mut inner.users[user_idx];
+            user.password_hash = Some(password_hash);
+            user.must_change_password = true;
+            admin_user_id = user.id.clone();
+            admin_full_name = user.full_name.clone();
+            admin_email = user.email.clone();
+        }
+
+        Ok(SiteAdminPasswordResetResponse {
+            site_id: site.id,
+            site_name: site.name,
+            admin_user_id,
+            admin_full_name,
+            admin_email,
+            temporary_password: temp_pass,
+            must_change_password: true,
+            renewed_at: Utc::now(),
+        })
     }
 }
 

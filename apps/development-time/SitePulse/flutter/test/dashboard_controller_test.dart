@@ -160,5 +160,24 @@ void main() {
       expect(controller.saasSites.any((s) => s.id == 'site-1'), isTrue);
       expect(controller.authMessage, contains('silinemez'));
     });
+
+    test('when reset site manager password, generates new temporary password and sets credentials', () {
+      final success = controller.resetSiteManagerPassword('site-1');
+      expect(success, isTrue);
+      expect(controller.provisionedCredentials, isNotNull);
+      final creds = controller.provisionedCredentials!;
+      expect(creds.siteId, 'site-1');
+      expect(creds.adminEmail, 'mehmet.demir@begonya.com');
+      expect(creds.temporaryPassword.startsWith('SP-'), isTrue);
+      expect(creds.temporaryPassword.endsWith('-PASS'), isTrue);
+      expect(creds.isRenewal, isTrue);
+      expect(controller.authMessage, contains('yeni geçici şifre üretildi'));
+    });
+
+    test('when reset password for non-existent site, returns false', () {
+      final success = controller.resetSiteManagerPassword('invalid-site-id');
+      expect(success, isFalse);
+      expect(controller.provisionedCredentials, isNull);
+    });
   });
 }

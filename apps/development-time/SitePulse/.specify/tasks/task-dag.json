@@ -99,6 +99,18 @@
       ],
       "spec_ref": "SPEC-002",
       "description": "Implement deletion of sites that have no associated actions, units, dues, or requests across Rust backend and Flutter UI with strict invariant guards."
+    },
+    {
+      "id": "task-10",
+      "name": "Site Manager Temporary Password Renewal",
+      "module": "full-stack",
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-03",
+        "task-07"
+      ],
+      "spec_ref": "SPEC-002",
+      "description": "Allow SaaS Super Admins to generate or renew a temporary management password for site managers with forced password change on next login."
     }
   ]
 }

@@ -155,5 +155,47 @@ void main() {
     expect(find.text('Zambak Konutları'), findsNothing);
     expect(find.textContaining('başarıyla silindi.'), findsOneWidget);
   });
+
+  testWidgets('SitePulseApp allows renewing temporary management password with confirmation dialog', (WidgetTester tester) async {
+    final controller = DashboardController();
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Switch to SaaS Admin
+    controller.switchSessionRole(UserRole.saasAdmin);
+    await tester.pumpAndSettle();
+
+    // Find "Şifre Yenile" button
+    final resetButtons = find.text('Şifre Yenile');
+    expect(resetButtons, findsWidgets);
+
+    // Tap first "Şifre Yenile"
+    await tester.ensureVisible(resetButtons.first);
+    await tester.pumpAndSettle();
+    await tester.tap(resetButtons.first);
+    await tester.pumpAndSettle();
+
+    // Verify confirmation dialog
+    expect(find.text('Geçici Şifre Yenile'), findsOneWidget);
+    expect(find.textContaining('yeni bir geçici yönetim şifresi üretilecektir'), findsOneWidget);
+
+    // Tap "Şifreyi Yenile"
+    final confirmBtn = find.text('Şifreyi Yenile');
+    expect(confirmBtn, findsOneWidget);
+    await tester.tap(confirmBtn);
+    await tester.pumpAndSettle();
+
+    // Verify renewal credentials dialog is shown
+    expect(find.text('Geçici Yönetim Şifresi Yenilendi!'), findsOneWidget);
+    expect(find.textContaining('Begonya Sitesi yöneticisi için yeni bir geçici şifre üretildi.'), findsOneWidget);
+    expect(find.textContaining('SP-'), findsOneWidget);
+
+    // Tap "Tamam" to dismiss
+    await tester.tap(find.text('Tamam'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Geçici Yönetim Şifresi Yenilendi!'), findsNothing);
+  });
 }
+
 

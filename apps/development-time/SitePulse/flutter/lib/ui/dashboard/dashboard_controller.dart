@@ -318,6 +318,30 @@ class DashboardController extends ChangeNotifier {
     return true;
   }
 
+  /// Generates/renews a temporary management password for a site manager.
+  /// Sets mustChangePassword and triggers credentials presentation dialog.
+  bool resetSiteManagerPassword(String siteId) {
+    final index = _saasSites.indexWhere((s) => s.id == siteId);
+    if (index == -1) return false;
+    final site = _saasSites[index];
+
+    final randomPart = DateTime.now().millisecondsSinceEpoch.toString().substring(8);
+    final tempPassword = 'SP-$randomPart-PASS';
+
+    _provisionedCredentials = ProvisionedSiteCredentials(
+      siteId: site.id,
+      siteName: site.name,
+      adminName: site.adminName,
+      adminEmail: site.adminEmail,
+      temporaryPassword: tempPassword,
+      planType: site.planType,
+      isRenewal: true,
+    );
+    _authMessage = '${site.name} yöneticisi için yeni geçici şifre üretildi.';
+    notifyListeners();
+    return true;
+  }
+
   void clearProvisionedCredentials() {
     _provisionedCredentials = null;
     notifyListeners();

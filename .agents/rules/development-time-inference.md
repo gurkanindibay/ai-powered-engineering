@@ -26,3 +26,6 @@ Development-time inference uses AI models, agents, and spec harnesses *during th
    - In factory and autonomous generation settings, code must be compiled and tested in an isolated sandbox before being merged into the codebase.
 5. **English-Only Source Code Mandate**:
    - All manufactured code, domain models, database schemas, tables, columns, variables, functions, and tests must be strictly written in English. Non-English code identifiers are strictly prohibited.
+6. **Automatic Stack Restart After Fixes**:
+   - After completing any issue fix or code modification in SitePulse, proactively restart the full development stack by executing `apps/development-time/SitePulse/scripts/restart-all.sh` so the user can immediately test live changes across the backend (8080), Flutter web client (9090), and UX prototype (9091).
+

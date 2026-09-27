@@ -116,3 +116,36 @@ Scenario: Attempting to delete a site with existing actions is strictly rejected
   And "Begonya Sitesi" remains intact and protected in the system
 ```
 
+### 3.4 Renew / Reissue Temporary Site Manager Password
+- **Endpoint:** `POST /api/v1/saas/sites/{siteId}/reset-admin-password`
+- **Pre-condition:** Calling actor must have `SAAS_ADMIN` role.
+- **Business Need & Rationale:** Site managers may forget, lose, or fail to receive their initial onboarding credentials. SaaS Super Admins must be able to securely regenerate and reissue a temporary password on demand.
+- **Domain Invariant & Guard Rule:**
+  - The target site must exist and have an assigned primary Site Manager user account.
+  - A new cryptographically strong temporary password (`SP-XXXX-YYYY`) is generated.
+  - The user's `must_change_password` flag is reset to `true`.
+  - The password hash in storage is immediately updated.
+- **Response Payload:** `200 OK`
+```json
+{
+  "siteId": "site-1",
+  "siteName": "Begonya Sitesi",
+  "adminUserId": "usr-site-manager-1",
+  "adminFullName": "Mehmet Demir",
+  "adminEmail": "mehmet.demir@begonya.com",
+  "temporaryPassword": "SP-8K2L-P9Q1",
+  "mustChangePassword": true,
+  "renewedAt": "2026-09-27T18:25:00Z"
+}
+```
+
+- **Acceptance Scenarios (Gherkin):**
+```gherkin
+Scenario: SaaS Admin renews temporary password for a site manager
+  Given a registered site "Begonya Sitesi" with manager "Mehmet Demir"
+  When SaaS Admin clicks "Şifre Yenile" and confirms
+  Then a new temporary password in format "SP-XXXX-YYYY" is generated
+  And the manager's account mustChangePassword flag is set to true
+  And a credentials modal with copy-to-clipboard functionality appears
+```
+
