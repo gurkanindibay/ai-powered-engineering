@@ -5,8 +5,8 @@ use rust_decimal::Decimal;
 use tokio::sync::RwLock;
 
 use crate::models::{
-    DebtStatus, DuesLiability, IndependentUnit, PendingRegistrationResponse, Role, Site,
-    SiteInvitationLinkResponse, UnitInviteLinkResponse, UnitMemberDto, User,
+    DebtStatus, DuesLiability, IndependentUnit, PendingRegistrationResponse, ReconciliationMatch,
+    Role, Site, SiteInvitationLinkResponse, UnitInviteLinkResponse, UnitMemberDto, User,
 };
 
 #[derive(Clone)]
@@ -24,6 +24,7 @@ pub struct AppStateInner {
     pub unit_invite_tokens: HashMap<String, UnitInviteLinkResponse>,
     #[allow(dead_code)]
     pub site_invite_tokens: HashMap<String, SiteInvitationLinkResponse>,
+    pub reconciliation_queue: Vec<ReconciliationMatch>,
 }
 
 impl AppState {
@@ -37,6 +38,7 @@ impl AppState {
             unit_members: HashMap::new(),
             unit_invite_tokens: HashMap::new(),
             site_invite_tokens: HashMap::new(),
+            reconciliation_queue: Vec::new(),
         };
 
         // Seed Begonya Sitesi

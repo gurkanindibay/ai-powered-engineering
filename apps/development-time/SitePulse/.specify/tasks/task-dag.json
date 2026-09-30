@@ -111,6 +111,18 @@
       ],
       "spec_ref": "SPEC-002",
       "description": "Allow SaaS Super Admins to generate or renew a temporary management password for site managers with forced password change on next login."
+    },
+    {
+      "id": "task-11",
+      "name": "Zero-Approval Bank Statement (Excel / CSV / MT940) Parser",
+      "module": "full-stack",
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-04",
+        "task-07"
+      ],
+      "spec_ref": "SPEC-003",
+      "description": "Zero-approval parser for Turkish bank statements (Excel, CSV, SWIFT MT940) with regex/NLP flat & resident matching, 100% confidence scoring, and automated dues reconciliation queue."
     }
   ]
 }

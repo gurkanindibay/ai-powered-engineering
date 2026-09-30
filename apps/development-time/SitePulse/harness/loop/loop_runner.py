@@ -34,7 +34,7 @@ class LoopRunner:
                     results.append(res)
 
         # 3. Domain & Financial integrity check (KMK Article 20)
-        if task_id in ("task-01", "task-02", "task-06", "task-07"):
+        if task_id in ("task-01", "task-02", "task-06", "task-07", "task-11"):
             # Verify ₺1400 overdue by 10 days produces ₺1423.33 exactly
             principal = Decimal("1400.00")
             days = 10

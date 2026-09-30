@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
+import 'app_fullscreen_page.dart';
+import 'bank_statement_reconciliation_page.dart';
 
 class ManagerCockpitView extends StatelessWidget {
   final DashboardController controller;
@@ -123,6 +125,94 @@ class ManagerCockpitView extends StatelessWidget {
                 ],
               ),
             ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Bank Statement Ingestion & Automated Reconciliation Action Card (STORY-07-02)
+        InkWell(
+          onTap: () {
+            AppFullscreenPage.push(
+              context: context,
+              builder: (_) => BankStatementReconciliationPage(controller: controller),
+            );
+          },
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: AppColors.accentCyan.withOpacity(0.5),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.accentCyan.withOpacity(0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentCyan.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.account_balance, color: AppColors.accentCyan, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Banka Ekstresi & Eşleştirme',
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentGreen.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Zero-Approval',
+                              style: TextStyle(
+                                color: AppColors.accentGreen,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Excel, CSV veya MT940 ekstrelerini yapıştırın, aidatları otomatik eşleyin.',
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.accentCyan),
+              ],
+            ),
           ),
         ),
 

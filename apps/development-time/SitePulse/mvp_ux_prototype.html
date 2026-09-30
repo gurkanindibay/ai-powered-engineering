@@ -1494,10 +1494,14 @@
                 </div>
               </div>
 
-              <div class="hero-btn-row">
+              <div class="hero-btn-row" style="display: flex; flex-direction: column; gap: 8px;">
                 <button class="btn-papara-cta" onclick="openAddResidentModal()">
                   <span class="material-symbols-outlined" style="font-size: 18px;">person_add</span>
                   <span>Yeni Sakin Tanımla</span>
+                </button>
+                <button class="btn-papara-cta" style="background: rgba(2, 132, 199, 0.15); color: var(--accent-cyan); border: 1px solid rgba(2, 132, 199, 0.3);" onclick="openBankStatementModal()">
+                  <span class="material-symbols-outlined" style="font-size: 18px;">receipt_long</span>
+                  <span>Banka Ekstresi Yükle / Eşleştir (STORY-07-02)</span>
                 </button>
               </div>
             </div>
@@ -1978,6 +1982,10 @@
 
     function openAddResidentModal() {
       alert('Site Yöneticisi Daire/Sakin Ekleme formu açılıyor.');
+    }
+
+    function openBankStatementModal() {
+      alert('STORY-07-02: Otomatik Banka Ekstresi Eşleştirme (Excel / CSV / MT940)\n\n✓ Girdi: HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33\n✓ Eşleşen: Ahmet Yılmaz (A Blok D:14)\n✓ KMK Madde 20 Gecikme Tazminatı Dahil: ₺1.423,33 (%100 Eşleşme Güveni)\n✓ Durum: ONAY_BEKLIYOR -> ONAYLANDI (Zero-Approval Doğrulandı)');
     }
 
     function openAddSiteModal() {

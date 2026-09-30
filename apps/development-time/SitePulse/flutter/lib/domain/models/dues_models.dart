@@ -190,6 +190,28 @@ class FlatPaymentStatus {
   });
 
   String get flatDesc => '$block Blok D:$unitNo';
+
+  FlatPaymentStatus copyWith({
+    String? id,
+    String? block,
+    int? unitNo,
+    String? residentName,
+    Decimal? amountDue,
+    int? daysOverdue,
+    bool? isPaid,
+    String? paidDateStr,
+  }) {
+    return FlatPaymentStatus(
+      id: id ?? this.id,
+      block: block ?? this.block,
+      unitNo: unitNo ?? this.unitNo,
+      residentName: residentName ?? this.residentName,
+      amountDue: amountDue ?? this.amountDue,
+      daysOverdue: daysOverdue ?? this.daysOverdue,
+      isPaid: isPaid ?? this.isPaid,
+      paidDateStr: paidDateStr ?? this.paidDateStr,
+    );
+  }
 }
 
 class TenantSiteItem {
@@ -344,4 +366,120 @@ class ApprovalSuccessInfo {
     required this.email,
     required this.temporaryPassword,
   });
+}
+
+// ============================================================================
+// Bank Statement Ingestion & Automated Reconciliation Models (STORY-07-02)
+// ============================================================================
+
+class BankStatementParsedItem {
+  final String transactionId;
+  final DateTime date;
+  final Decimal amount;
+  final String currency;
+  final String description;
+  final String? senderName;
+  final String? referenceNo;
+
+  const BankStatementParsedItem({
+    required this.transactionId,
+    required this.date,
+    required this.amount,
+    required this.currency,
+    required this.description,
+    this.senderName,
+    this.referenceNo,
+  });
+
+  factory BankStatementParsedItem.fromJson(Map<String, dynamic> json) {
+    return BankStatementParsedItem(
+      transactionId: json['transaction_id'] ?? '',
+      date: DateTime.tryParse(json['date'] ?? '') ?? DateTime.now(),
+      amount: Decimal.tryParse(json['amount']?.toString() ?? '0') ?? Decimal.zero,
+      currency: json['currency'] ?? 'TRY',
+      description: json['description'] ?? '',
+      senderName: json['sender_name'],
+      referenceNo: json['reference_no'],
+    );
+  }
+}
+
+class ReconciliationQueueItem {
+  final String matchId;
+  final BankStatementParsedItem transaction;
+  final String? matchedUnitId;
+  final String? matchedBlock;
+  final int? matchedUnitNumber;
+  final String? matchedResidentName;
+  final int confidenceScore;
+  final String? matchedDueId;
+  final Decimal? outstandingBalance;
+  final bool amountMatchesBalance;
+  final String status; // "ONAY_BEKLIYOR", "ONAYLANDI", "ESLESTIRILEMEDI"
+  final String? notes;
+
+  const ReconciliationQueueItem({
+    required this.matchId,
+    required this.transaction,
+    this.matchedUnitId,
+    this.matchedBlock,
+    this.matchedUnitNumber,
+    this.matchedResidentName,
+    required this.confidenceScore,
+    this.matchedDueId,
+    this.outstandingBalance,
+    required this.amountMatchesBalance,
+    required this.status,
+    this.notes,
+  });
+
+  String get matchedUnitDesc {
+    if (matchedBlock != null && matchedUnitNumber != null) {
+      return '$matchedBlock Blok D:$matchedUnitNumber';
+    }
+    return 'Belirlenemedi';
+  }
+
+  bool get isApproved => status == 'ONAYLANDI';
+  bool get isPendingApproval => status == 'ONAY_BEKLIYOR';
+
+  factory ReconciliationQueueItem.fromJson(Map<String, dynamic> json) {
+    return ReconciliationQueueItem(
+      matchId: json['match_id'] ?? '',
+      transaction: BankStatementParsedItem.fromJson(
+        Map<String, dynamic>.from(json['transaction'] ?? {}),
+      ),
+      matchedUnitId: json['matched_unit_id'],
+      matchedBlock: json['matched_block'],
+      matchedUnitNumber: json['matched_unit_number'],
+      matchedResidentName: json['matched_resident_name'],
+      confidenceScore: json['confidence_score'] ?? 0,
+      matchedDueId: json['matched_due_id'],
+      outstandingBalance: json['outstanding_balance'] != null
+          ? Decimal.tryParse(json['outstanding_balance'].toString())
+          : null,
+      amountMatchesBalance: json['amount_matches_balance'] ?? false,
+      status: json['status_code'] ?? json['status'] ?? 'ONAY_BEKLIYOR',
+      notes: json['notes'],
+    );
+  }
+
+  ReconciliationQueueItem copyWith({
+    String? status,
+  }) {
+    return ReconciliationQueueItem(
+      matchId: matchId,
+      transaction: transaction,
+      matchedUnitId: matchedUnitId,
+      matchedBlock: matchedBlock,
+      matchedUnitNumber: matchedUnitNumber,
+      matchedResidentName: matchedResidentName,
+      confidenceScore: confidenceScore,
+      matchedDueId: matchedDueId,
+      outstandingBalance: outstandingBalance,
+      amountMatchesBalance: amountMatchesBalance,
+      status: status ?? this.status,
+      notes: notes,
+    );
+  }
 }

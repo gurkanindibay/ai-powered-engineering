@@ -1,0 +1,250 @@
+use chrono::NaiveDate;
+use regex::Regex;
+use rust_decimal::Decimal;
+use uuid::Uuid;
+
+use crate::models::{
+    BankTransactionItem, DebtStatus, DuesLiability, IndependentUnit,
+    ReconciliationMatch, ReconciliationStatus, User,
+};
+use crate::services::dues_calculation_service::DuesCalculationService;
+
+pub struct ReconciliationService {
+    dues_service: DuesCalculationService,
+}
+
+impl ReconciliationService {
+    pub fn new() -> Self {
+        Self {
+            dues_service: DuesCalculationService::new(),
+        }
+    }
+
+    /// Reconciles parsed bank transactions against site units, resident roster, and outstanding dues.
+    pub fn reconcile_transactions(
+        &self,
+        transactions: &[BankTransactionItem],
+        units: &[IndependentUnit],
+        users: &[User],
+        dues: &[DuesLiability],
+        evaluation_date: NaiveDate,
+    ) -> Vec<ReconciliationMatch> {
+        let mut results = Vec::new();
+
+        for txn in transactions {
+            let matched = self.match_single_transaction(txn, units, users, dues, evaluation_date);
+            results.push(matched);
+        }
+
+        results
+    }
+
+    fn match_single_transaction(
+        &self,
+        txn: &BankTransactionItem,
+        units: &[IndependentUnit],
+        users: &[User],
+        dues: &[DuesLiability],
+        evaluation_date: NaiveDate,
+    ) -> ReconciliationMatch {
+        let desc = &txn.description;
+
+        // 1. Extract block and flat
+        let extracted_unit = Self::extract_block_and_flat(desc);
+
+        let mut matched_unit: Option<&IndependentUnit> = None;
+        if let Some((ref blk, unit_no)) = extracted_unit {
+            matched_unit = units.iter().find(|u| {
+                u.block_id.eq_ignore_ascii_case(blk) && u.unit_number == unit_no
+            });
+        }
+
+        // If block wasn't extracted but flat was, try matching by flat number alone if unique
+        if matched_unit.is_none() {
+            if let Some(flat_no) = Self::extract_flat_only(desc) {
+                let candidate_units: Vec<&IndependentUnit> = units
+                    .iter()
+                    .filter(|u| u.unit_number == flat_no)
+                    .collect();
+                if candidate_units.len() == 1 {
+                    matched_unit = Some(candidate_units[0]);
+                }
+            }
+        }
+
+        // 2. Extract resident name or find resident matching description
+        let mut matched_user: Option<&User> = None;
+        for user in users {
+            if Self::text_contains_name(desc, &user.full_name) {
+                matched_user = Some(user);
+                break;
+            }
+        }
+
+        // If unit was found, verify if owner matches
+        if matched_unit.is_some() && matched_user.is_none() {
+            if let Some(owner_id) = matched_unit.unwrap().owner_user_id.as_deref() {
+                matched_user = users.iter().find(|u| u.id == owner_id);
+            }
+        }
+
+        // 3. Find outstanding dues for the unit
+        let mut matched_due: Option<DuesLiability> = None;
+        let mut outstanding_balance: Option<Decimal> = None;
+        let mut amount_matches = false;
+
+        if let Some(unit) = matched_unit {
+            // Find pending or overdue dues for this unit
+            let unit_dues: Vec<&DuesLiability> = dues
+                .iter()
+                .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+                .collect();
+
+            if let Some(first_due) = unit_dues.first() {
+                // Calculate dynamic KMK penalty up to evaluation date
+                let evaluated = self.dues_service.calculate_delay_penalty((*first_due).clone(), evaluation_date);
+                let balance = evaluated.total_amount;
+                outstanding_balance = Some(balance);
+                matched_due = Some(evaluated);
+
+                if txn.amount == balance {
+                    amount_matches = true;
+                }
+            }
+        }
+
+        // 4. Calculate Confidence Score & Status
+        let mut confidence: u8 = 0;
+        let has_unit = matched_unit.is_some();
+        let has_name = matched_user.is_some() && Self::text_contains_name(desc, &matched_user.unwrap().full_name);
+
+        if has_unit && amount_matches {
+            // Unit and exact amount match: 100% confidence
+            confidence = 100;
+        } else if has_unit && has_name && amount_matches {
+            confidence = 100;
+        } else if has_unit && has_name {
+            confidence = 90;
+        } else if has_unit {
+            confidence = 80;
+        } else if has_name {
+            confidence = 70;
+        }
+
+        let status = if confidence >= 70 {
+            ReconciliationStatus::PendingApproval
+        } else {
+            ReconciliationStatus::Unmatched
+        };
+
+        let match_id = format!("MATCH-{}", Uuid::new_v4().simple());
+
+        ReconciliationMatch {
+            match_id,
+            transaction: txn.clone(),
+            matched_unit_id: matched_unit.map(|u| u.id.clone()),
+            matched_block: matched_unit.map(|u| u.block_id.clone()),
+            matched_unit_number: matched_unit.map(|u| u.unit_number),
+            matched_resident_name: matched_user.map(|u| u.full_name.clone()),
+            confidence_score: confidence,
+            matched_due_id: matched_due.map(|d| d.id),
+            outstanding_balance,
+            amount_matches_balance: amount_matches,
+            status,
+            status_code: status.as_str().to_string(),
+            notes: if amount_matches {
+                Some("Exact amount matches outstanding dues balance (including KMK penalty)".to_string())
+            } else if has_unit {
+                Some("Unit identified from transfer narrative".to_string())
+            } else {
+                None
+            },
+        }
+    }
+
+    /// Extracts Block and Flat from text.
+    /// Handles patterns like:
+    /// - "A BLOK D:14"
+    /// - "A Blok D.14"
+    /// - "A Blok Daire 14"
+    /// - "Blok A D:14"
+    /// - "A-14"
+    pub fn extract_block_and_flat(text: &str) -> Option<(String, i32)> {
+        // Pattern 1: [A-Z0-9]+ BLOK D:(\d+) or DAIRE (\d+)
+        let re1 = Regex::new(
+            r"(?i)\b([A-Z0-9]+)\s*blok\b.*?\b(?:d[:\.\s-]*|daire[:\.\s-]*|no[:\.\s-]*|k[:\.\s-]*\d+\s+d[:\.\s-]*)(\d+)\b",
+        ).ok()?;
+
+        if let Some(caps) = re1.captures(text) {
+            let blk = caps.get(1)?.as_str().to_uppercase();
+            let flat: i32 = caps.get(2)?.as_str().parse().ok()?;
+            return Some((blk, flat));
+        }
+
+        // Pattern 2: BLOK [A-Z0-9]+ D:(\d+)
+        let re2 = Regex::new(
+            r"(?i)\bblok\s*([A-Z0-9]+)\b.*?\b(?:d[:\.\s-]*|daire[:\.\s-]*)(\d+)\b",
+        ).ok()?;
+
+        if let Some(caps) = re2.captures(text) {
+            let blk = caps.get(1)?.as_str().to_uppercase();
+            let flat: i32 = caps.get(2)?.as_str().parse().ok()?;
+            return Some((blk, flat));
+        }
+
+        // Pattern 3: Compact format e.g. "A/14" or "A-14"
+        let re3 = Regex::new(r"(?i)\b([A-Z])\s*[-/]\s*(\d+)\b").ok()?;
+        if let Some(caps) = re3.captures(text) {
+            let blk = caps.get(1)?.as_str().to_uppercase();
+            let flat: i32 = caps.get(2)?.as_str().parse().ok()?;
+            return Some((blk, flat));
+        }
+
+        None
+    }
+
+    /// Extracts standalone flat number if preceded by D:, DAIRE, or NO.
+    pub fn extract_flat_only(text: &str) -> Option<i32> {
+        let re = Regex::new(r"(?i)\b(?:d[:\.\s-]*|daire[:\.\s-]*|no[:\.\s-]*)(\d+)\b").ok()?;
+        if let Some(caps) = re.captures(text) {
+            return caps.get(1)?.as_str().parse().ok();
+        }
+        None
+    }
+
+    /// Case-insensitive and Turkish-normalized name containment check.
+    pub fn text_contains_name(haystack: &str, needle: &str) -> bool {
+        let norm_haystack = Self::normalize_turkish(haystack);
+        let norm_needle = Self::normalize_turkish(needle);
+
+        if norm_needle.is_empty() {
+            return false;
+        }
+
+        // Check if all words of the name appear in the text
+        let needle_words: Vec<&str> = norm_needle.split_whitespace().collect();
+        if needle_words.is_empty() {
+            return false;
+        }
+
+        needle_words.iter().all(|w| norm_haystack.contains(w))
+    }
+
+    /// Normalizes Turkish characters to lowercase ASCII equivalents for robust fuzzy matching.
+    pub fn normalize_turkish(input: &str) -> String {
+        input
+            .to_lowercase()
+            .replace('ı', "i")
+            .replace('İ', "i")
+            .replace('ğ', "g")
+            .replace('Ğ', "g")
+            .replace('ü', "u")
+            .replace('Ü', "u")
+            .replace('ş', "s")
+            .replace('Ş', "s")
+            .replace('ö', "o")
+            .replace('Ö', "o")
+            .replace('ç', "c")
+            .replace('Ç', "c")
+    }
+}

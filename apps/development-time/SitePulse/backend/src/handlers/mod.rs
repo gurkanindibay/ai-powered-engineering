@@ -319,3 +319,115 @@ pub async fn health_check() -> impl IntoResponse {
         })),
     )
 }
+
+// 8. Bank Statement Ingestion & Automated Reconciliation Handlers (STORY-07-02)
+pub async fn parse_bank_statement(
+    State(state): State<AppState>,
+    Json(payload): Json<ParseBankStatementRequest>,
+) -> Result<(StatusCode, Json<ParseBankStatementResponse>), (StatusCode, String)> {
+    let parser = crate::services::BankStatementParser::new();
+    let recon_service = crate::services::ReconciliationService::new();
+
+    let txns = parser
+        .parse_statement(&payload.content, payload.format)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+
+    let today = Utc::now().date_naive();
+    let mut inner = state.inner.write().await;
+
+    // Filter units, users, and dues for the requested site_id
+    let site_units: Vec<IndependentUnit> = inner
+        .units
+        .iter()
+        .filter(|u| u.site_id == payload.site_id)
+        .cloned()
+        .collect();
+
+    let site_users: Vec<User> = inner
+        .users
+        .iter()
+        .filter(|u| u.site_id == payload.site_id)
+        .cloned()
+        .collect();
+
+    let site_dues: Vec<DuesLiability> = inner
+        .dues
+        .iter()
+        .cloned()
+        .collect();
+
+    let matches = recon_service.reconcile_transactions(&txns, &site_units, &site_users, &site_dues, today);
+
+    // Append to reconciliation queue in state
+    for m in &matches {
+        inner.reconciliation_queue.push(m.clone());
+    }
+
+    let matched_count = matches.iter().filter(|m| m.status == ReconciliationStatus::PendingApproval).count();
+    let unmatched_count = matches.len() - matched_count;
+
+    Ok((
+        StatusCode::OK,
+        Json(ParseBankStatementResponse {
+            site_id: payload.site_id,
+            total_transactions: matches.len(),
+            matched_count,
+            unmatched_count,
+            matches,
+        }),
+    ))
+}
+
+pub async fn get_reconciliation_queue(
+    State(state): State<AppState>,
+) -> Json<Vec<ReconciliationMatch>> {
+    let inner = state.inner.read().await;
+    Json(inner.reconciliation_queue.clone())
+}
+
+pub async fn confirm_reconciliation(
+    State(state): State<AppState>,
+    Json(payload): Json<ConfirmReconciliationRequest>,
+) -> Result<(StatusCode, Json<ConfirmReconciliationResponse>), (StatusCode, String)> {
+    let mut inner = state.inner.write().await;
+    let mut confirmed_count = 0;
+    let mut total_amount_cleared = Decimal::ZERO;
+    let mut updated_unit_ids = Vec::new();
+    let mut confirmed_matches = Vec::new();
+
+    let mut cleared_dues: Vec<String> = Vec::new();
+
+    for match_id in &payload.match_ids {
+        if let Some(m) = inner.reconciliation_queue.iter_mut().find(|m| m.match_id == *match_id) {
+            m.status = ReconciliationStatus::Approved;
+            m.status_code = ReconciliationStatus::Approved.as_str().to_string();
+
+            if let Some(ref unit_id) = m.matched_unit_id {
+                updated_unit_ids.push(unit_id.clone());
+                if let Some(ref due_id) = m.matched_due_id {
+                    cleared_dues.push(due_id.clone());
+                }
+                total_amount_cleared += m.transaction.amount;
+                confirmed_count += 1;
+                confirmed_matches.push(m.clone());
+            }
+        }
+    }
+
+    // Now update dues liabilities without overlapping borrow
+    for due_id in cleared_dues {
+        if let Some(due) = inner.dues.iter_mut().find(|d| d.id == due_id) {
+            due.status = DebtStatus::Paid;
+        }
+    }
+
+    Ok((
+        StatusCode::OK,
+        Json(ConfirmReconciliationResponse {
+            confirmed_count,
+            total_amount_cleared,
+            updated_unit_ids,
+            confirmed_matches,
+        }),
+    ))
+}

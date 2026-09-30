@@ -2,7 +2,7 @@
 
 > **Epic ID:** EPIC-07  
 > **Module:** `backend-rust`, `flutter-ui`, `flutter-domain`  
-> **Status:** SPECIFIED (0 / 6 Stories Completed - Backlog Ready)  
+> **Status:** IN PROGRESS (1 / 6 Stories Completed - STORY-07-02 Verified)  
 > **Target Audience:** `SITE_MANAGER`, `HOME_RESIDENT`, `SAAS_ADMIN`  
 > **Governance:** Turkish Condominium Law (634 Sayılı KMK Madde 35), TCMB Açık Bankacılık & 6493 Sayılı Kanun  
 > **Business Value:** Automates dues collection and ledger reconciliation directly with Turkish banks (*Garanti BBVA, İş Bankası, Yapı Kredi, Akbank*) and licensed FinTech payment facilitators. Eliminates manual bank statement tracking, removes human matching errors via flat-specific Virtual IBANs (Sanal IBAN) and dynamic FAST TR-Karekods, and provides a zero-permission Excel/MT940 parser for individual developers.
@@ -52,7 +52,7 @@ This epic solves the operational bottleneck of manually matching bank transfers 
 ---
 
 ### STORY-07-02: Zero-Approval Bank Statement (Excel / CSV / MT940) Parser
-- **Status:** `PLANNED`
+- **Status:** `COMPLETED` (Verified with integration & UI test suite)
 - **Target Role:** Site Manager (Individual Developer Friendly)
 - **Description:** Allow site managers to upload monthly Excel, CSV, or SWIFT MT940 statements exported from any Turkish bank internet branch. An intelligent regex/NLP matcher parses transfer descriptions, extracts block/flat identifiers and resident names, and proposes batch dues clearances.
 - **Acceptance Criteria (Gherkin):**

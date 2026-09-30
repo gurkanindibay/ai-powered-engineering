@@ -421,3 +421,95 @@ pub struct UnitMemberDto {
     pub email: String,
     pub is_owner: bool,
 }
+
+// ============================================================================
+// Bank Statement Ingestion & Automated Reconciliation Models (STORY-07-02)
+// ============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum BankStatementFormat {
+    Excel,
+    Csv,
+    Mt940,
+    Auto,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ReconciliationStatus {
+    PendingApproval, // "ONAY_BEKLIYOR"
+    Approved,        // "ONAYLANDI"
+    Unmatched,       // "ESLESTIRILEMEDI"
+    Rejected,        // "REDDEDILDI"
+}
+
+impl ReconciliationStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ReconciliationStatus::PendingApproval => "ONAY_BEKLIYOR",
+            ReconciliationStatus::Approved => "ONAYLANDI",
+            ReconciliationStatus::Unmatched => "ESLESTIRILEMEDI",
+            ReconciliationStatus::Rejected => "REDDEDILDI",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BankTransactionItem {
+    pub transaction_id: String,
+    pub date: NaiveDate,
+    pub amount: Decimal,
+    pub currency: String,
+    pub description: String,
+    pub sender_name: Option<String>,
+    pub sender_iban: Option<String>,
+    pub reference_no: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReconciliationMatch {
+    pub match_id: String,
+    pub transaction: BankTransactionItem,
+    pub matched_unit_id: Option<String>,
+    pub matched_block: Option<String>,
+    pub matched_unit_number: Option<i32>,
+    pub matched_resident_name: Option<String>,
+    pub confidence_score: u8,
+    pub matched_due_id: Option<String>,
+    pub outstanding_balance: Option<Decimal>,
+    pub amount_matches_balance: bool,
+    pub status: ReconciliationStatus,
+    pub status_code: String,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParseBankStatementRequest {
+    pub site_id: String,
+    pub content: String,
+    pub format: Option<BankStatementFormat>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParseBankStatementResponse {
+    pub site_id: String,
+    pub total_transactions: usize,
+    pub matched_count: usize,
+    pub unmatched_count: usize,
+    pub matches: Vec<ReconciliationMatch>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfirmReconciliationRequest {
+    pub site_id: String,
+    pub match_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfirmReconciliationResponse {
+    pub confirmed_count: usize,
+    pub total_amount_cleared: Decimal,
+    pub updated_unit_ids: Vec<String>,
+    pub confirmed_matches: Vec<ReconciliationMatch>,
+}

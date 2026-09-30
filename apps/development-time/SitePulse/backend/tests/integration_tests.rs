@@ -385,3 +385,136 @@ async fn when_resetting_admin_password_for_non_existent_site_then_fails() {
     assert!(reset_res.is_err());
 }
 
+// ============================================================================
+// STORY-07-02: Zero-Approval Bank Statement (Excel / CSV / MT940) Parser Tests
+// ============================================================================
+
+#[tokio::test]
+async fn when_parsing_turkish_bank_excel_then_matches_flat_and_amount() {
+    let state = AppState::new();
+    let parser = sitepulse_backend::services::BankStatementParser::new();
+    let recon_service = sitepulse_backend::services::ReconciliationService::new();
+
+    // Excel export single line / row copied from bank
+    let excel_content = "HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33";
+
+    let txns = parser
+        .parse_statement(excel_content, Some(sitepulse_backend::models::BankStatementFormat::Excel))
+        .expect("Failed to parse Excel statement row");
+
+    assert_eq!(txns.len(), 1);
+    let txn = &txns[0];
+    assert_eq!(txn.amount, Decimal::from_str_exact("1423.33").unwrap());
+
+    let inner = state.inner.read().await;
+    let units = &inner.units;
+    let users = &inner.users;
+    let dues = &inner.dues;
+
+    // Evaluation date: 10 days overdue past 2026-09-15 -> 2026-09-25
+    let eval_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
+
+    let matches = recon_service.reconcile_transactions(&txns, units, users, dues, eval_date);
+    assert_eq!(matches.len(), 1);
+
+    let m = &matches[0];
+    // Then the engine identifies unit "A Blok D:14" with 100% confidence
+    assert_eq!(m.matched_unit_id.as_deref(), Some("d-14"));
+    assert_eq!(m.matched_block.as_deref(), Some("A"));
+    assert_eq!(m.matched_unit_number, Some(14));
+    assert_eq!(m.matched_resident_name.as_deref(), Some("Ahmet Yılmaz"));
+    assert_eq!(m.confidence_score, 100);
+
+    // And matches the exact outstanding dues balance ₺1.423,33
+    assert_eq!(m.outstanding_balance, Some(Decimal::from_str_exact("1423.33").unwrap()));
+    assert!(m.amount_matches_balance);
+
+    // And marks the transaction as "ONAY_BEKLIYOR" in the reconciliation queue
+    assert_eq!(m.status, sitepulse_backend::models::ReconciliationStatus::PendingApproval);
+    assert_eq!(m.status_code, "ONAY_BEKLIYOR");
+}
+
+#[tokio::test]
+async fn when_parsing_mt940_statement_then_extracts_transactions_and_matches_due() {
+    let state = AppState::new();
+    let parser = sitepulse_backend::services::BankStatementParser::new();
+    let recon_service = sitepulse_backend::services::ReconciliationService::new();
+
+    let mt940_content = r#":20:STARTMR
+:25:TR120006200000000000001001
+:28C:00001/001
+:60F:C260901TRY50000,00
+:61:2609150915CR1423,33NTRFNONREF//TXN77889
+:86:HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT
+:62F:C260930TRY51423,33
+-"#;
+
+    let txns = parser
+        .parse_statement(mt940_content, Some(sitepulse_backend::models::BankStatementFormat::Mt940))
+        .expect("Failed to parse SWIFT MT940 content");
+
+    assert_eq!(txns.len(), 1);
+    let txn = &txns[0];
+    assert_eq!(txn.date, NaiveDate::from_ymd_opt(2026, 9, 15).unwrap());
+    assert_eq!(txn.amount, Decimal::from_str_exact("1423.33").unwrap());
+    assert_eq!(txn.currency, "TRY");
+
+    let inner = state.inner.read().await;
+    let eval_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
+
+    let matches = recon_service.reconcile_transactions(&txns, &inner.units, &inner.users, &inner.dues, eval_date);
+    assert_eq!(matches.len(), 1);
+
+    let m = &matches[0];
+    assert_eq!(m.matched_unit_id.as_deref(), Some("d-14"));
+    assert_eq!(m.confidence_score, 100);
+    assert_eq!(m.status_code, "ONAY_BEKLIYOR");
+}
+
+#[tokio::test]
+async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
+    let state = AppState::new();
+    let parser = sitepulse_backend::services::BankStatementParser::new();
+    let recon_service = sitepulse_backend::services::ReconciliationService::new();
+
+    let content = "HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33";
+    let txns = parser.parse_statement(content, None).unwrap();
+
+    let eval_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
+    let mut inner = state.inner.write().await;
+    let matches = recon_service.reconcile_transactions(&txns, &inner.units, &inner.users, &inner.dues, eval_date);
+
+    for m in &matches {
+        inner.reconciliation_queue.push(m.clone());
+    }
+    let match_id = matches[0].match_id.clone();
+    drop(inner);
+
+    // Call confirm_reconciliation
+    let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
+        site_id: "site-1".to_string(),
+        match_ids: vec![match_id.clone()],
+    };
+
+    let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
+        axum::extract::State(state.clone()),
+        axum::Json(payload),
+    )
+    .await
+    .expect("Reconciliation confirmation failed");
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.confirmed_count, 1);
+    assert_eq!(res.total_amount_cleared, Decimal::from_str_exact("1423.33").unwrap());
+    assert_eq!(res.updated_unit_ids, vec!["d-14".to_string()]);
+
+    let inner = state.inner.read().await;
+    // Check due status is now Paid
+    let due = inner.dues.iter().find(|d| d.id == "b-101").unwrap();
+    assert_eq!(due.status, sitepulse_backend::models::DebtStatus::Paid);
+
+    // Check queue item is Approved
+    let queue_item = inner.reconciliation_queue.iter().find(|m| m.match_id == match_id).unwrap();
+    assert_eq!(queue_item.status, sitepulse_backend::models::ReconciliationStatus::Approved);
+}
+
