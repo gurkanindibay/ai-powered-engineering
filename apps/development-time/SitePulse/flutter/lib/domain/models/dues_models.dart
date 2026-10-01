@@ -465,21 +465,30 @@ class ReconciliationQueueItem {
   }
 
   ReconciliationQueueItem copyWith({
+    String? matchedUnitId,
+    String? matchedBlock,
+    int? matchedUnitNumber,
+    String? matchedResidentName,
+    int? confidenceScore,
+    String? matchedDueId,
+    Decimal? outstandingBalance,
+    bool? amountMatchesBalance,
     String? status,
+    String? notes,
   }) {
     return ReconciliationQueueItem(
       matchId: matchId,
       transaction: transaction,
-      matchedUnitId: matchedUnitId,
-      matchedBlock: matchedBlock,
-      matchedUnitNumber: matchedUnitNumber,
-      matchedResidentName: matchedResidentName,
-      confidenceScore: confidenceScore,
-      matchedDueId: matchedDueId,
-      outstandingBalance: outstandingBalance,
-      amountMatchesBalance: amountMatchesBalance,
+      matchedUnitId: matchedUnitId ?? this.matchedUnitId,
+      matchedBlock: matchedBlock ?? this.matchedBlock,
+      matchedUnitNumber: matchedUnitNumber ?? this.matchedUnitNumber,
+      matchedResidentName: matchedResidentName ?? this.matchedResidentName,
+      confidenceScore: confidenceScore ?? this.confidenceScore,
+      matchedDueId: matchedDueId ?? this.matchedDueId,
+      outstandingBalance: outstandingBalance ?? this.outstandingBalance,
+      amountMatchesBalance: amountMatchesBalance ?? this.amountMatchesBalance,
       status: status ?? this.status,
-      notes: notes,
+      notes: notes ?? this.notes,
     );
   }
 }

@@ -1,9 +1,11 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/dues_models.dart';
+import '../../domain/services/bank_file_picker.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
 import 'app_fullscreen_page.dart';
+import 'manual_unit_assignment_page.dart';
 
 class BankStatementReconciliationPage extends StatefulWidget {
   final DashboardController controller;
@@ -21,9 +23,26 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
   final TextEditingController _textController = TextEditingController();
   final Set<String> _selectedMatchIds = {};
   String _activePreset = 'Garanti BBVA';
+  String _filterStatus = 'ALL'; // 'ALL', 'MATCHED', 'UNMATCHED', 'GIDER'
 
   static const String sampleGarantiExcel =
       'HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33';
+
+  static const String sampleKuveytTurkExcel =
+      '01.07.2026;A07MY;Para Transferi, Gönderen: ALAETTİN ÇELİK  , Alıcı: GÜRKAN İNDİBAY, Ödeme Türü:  Diğer Ödeme Türleri;1.320,00;TL\n'
+      '01.07.2026;A03JZ;Para Transferi, Gönderen: MUSTAFA RÜZGAR  , Alıcı: GÜRKAN İNDİBAY, Ödeme Türü:  Diğer Ödeme Türleri;660,00;TL\n'
+      '13.07.2026;A045C;Para Transferi, Gönderen: MUSTAFA BURAK TÜRKMEN  , Alıcı: GÜRKAN İNDİBAY, Ödeme Türü:  Diğer Ödeme Türleri;1.000,00;TL\n'
+      '13.07.2026;A0475;Para Transferi, Gönderen: MUSTAFA RÜZGAR  , Alıcı: GÜRKAN İNDİBAY, Ödeme Türü:  Diğer Ödeme Türleri;715,00;TL\n'
+      '13.07.2026;ADS09;sait - Gönderen:SAİT ŞENER, Alıcı:gürkan indibay, FAST Para Transferi;715,00;TL\n'
+      '14.07.2026;A00A0;Cami çikolata - Para Transferi, Gönderen: SERVET KARACA  , Alıcı: GÜRKAN İNDİBAY;715,00;TL\n'
+      '17.09.2026;A01YN;Para Transferi, Gönderen: HASAN İNDİBAY  , Alıcı: GÜRKAN İNDİBAY, Ödeme Türü:  Diğer Ödeme Türleri;28.000,00;TL\n'
+      '18.09.2026;AKVJW;Gönderen:GÜRKAN İNDİBAY, Alıcı:Abdullah haidari, FAST Para Transferi;-20.000,00;TL';
+
+  static const String sampleIsBankExcel =
+      '06/08/2026-21:06:38,06/08/2026,Bankamatik,500,500,AD,Para Yatırma,EFEKTİF YATAN 6500********57 62.KART HESABINA PARA YATIRMA,,,,,,21348010002120260806210638613\n'
+      '02/08/2026-07:55:32,03/08/2026,Bankamatik,1000,1000,AD,Para Yatırma,EFEKTİF YATAN 6500********57 62.KART HESABINA PARA YATIRMA,,,,,,21348010002120260802075532281\n'
+      '06/08/2026-21:07:50,06/08/2026,İşCep,-500,0,0S,Havale,MİDAS MENKUL DEĞERLER ANONİM ŞİRKETİ*GÜRKAN İNDİBAY tarafından aktarılan,,,,,,21348010002120260806210750091\n'
+      '02/08/2026-07:56:51,02/08/2026,İşCep,-1000,0,0S,Havale,MİDAS MENKUL DEĞERLER ANONİM ŞİRKETİ*GÜRKAN İNDİBAY tarafından aktarılan,,,,,,21348010002120260802075651398';
 
   static const String sampleIsBankCsv =
       'Tarih;Açıklama;Tutar;Para Birimi\n'
@@ -44,9 +63,15 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
   void initState() {
     super.initState();
     _textController.text = sampleGarantiExcel;
-    // Auto-parse default sample on open so manager sees instant match
-    widget.controller.parseBankStatement(sampleGarantiExcel);
-    _selectAllPending();
+    // Auto-parse default sample on open after the initial build frame
+    // to prevent notifyListeners() from triggering setState() during widget mount
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.controller.parseBankStatement(sampleGarantiExcel);
+      setState(() {
+        _selectAllPending();
+      });
+    });
   }
 
   void _selectAllPending() {
@@ -83,6 +108,34 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     final selectedTotal = queue
         .where((q) => _selectedMatchIds.contains(q.matchId) && q.isPendingApproval)
         .fold<Decimal>(Decimal.zero, (sum, item) => sum + item.transaction.amount);
+
+    final matchedItems = queue.where((q) => q.status == 'ONAY_BEKLIYOR').toList();
+    final unmatchedItems = queue.where((q) => q.status == 'ESLESTIRILEMEDI').toList();
+    final approvedItems = queue.where((q) => q.status == 'ONAYLANDI').toList();
+    final expenseItems = queue.where((q) => q.status == 'GIDER').toList();
+
+    final matchedCount = matchedItems.length + approvedItems.length;
+    final unmatchedCount = unmatchedItems.length;
+    final expenseCount = expenseItems.length;
+
+    final matchedTotal = queue
+        .where((q) => q.status == 'ONAY_BEKLIYOR' || q.status == 'ONAYLANDI')
+        .fold<Decimal>(Decimal.zero, (sum, i) => sum + i.transaction.amount);
+
+    final unmatchedTotal = unmatchedItems
+        .fold<Decimal>(Decimal.zero, (sum, i) => sum + i.transaction.amount);
+
+    final expenseTotal = expenseItems
+        .fold<Decimal>(Decimal.zero, (sum, i) => sum + i.transaction.amount);
+
+    List<ReconciliationQueueItem> displayedQueue = queue;
+    if (_filterStatus == 'MATCHED') {
+      displayedQueue = queue.where((q) => q.status == 'ONAY_BEKLIYOR' || q.status == 'ONAYLANDI').toList();
+    } else if (_filterStatus == 'UNMATCHED') {
+      displayedQueue = unmatchedItems;
+    } else if (_filterStatus == 'GIDER') {
+      displayedQueue = expenseItems;
+    }
 
     return AppFullscreenPage(
       title: 'Banka Ekstresi & Eşleştirme',
@@ -176,9 +229,89 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
 
           const SizedBox(height: 18),
 
-          // 2. Preset Selectors
+          // 2. Direct File Upload Action
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.accentCyan.withOpacity(0.35)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentCyan.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.file_upload_outlined, color: AppColors.accentCyan, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Doğrudan Banka Dosyası Yükle',
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Kuveyt Türk (.xlsx), İş Bankası (.xls), CSV veya MT940',
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final picked = await pickBankFile();
+                    if (picked != null) {
+                      widget.controller.parseBankStatementFile(
+                        fileName: picked.name,
+                        bytes: picked.bytes,
+                      );
+                      setState(() {
+                        _activePreset = picked.name;
+                        _textController.text = '${picked.name} yüklendi (${widget.controller.reconciliationQueue.length} hareket ayrıştırıldı)';
+                        _selectAllPending();
+                      });
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${picked.name} başarıyla yüklendi ve dairelerle eşleştirildi!'),
+                            backgroundColor: AppColors.accentGreen,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.upload_file, size: 16),
+                  label: const Text('Dosya Seç'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // 3. Preset Selectors
           Text(
-            'Örnek Banka Ekstre Formatları',
+            'Hızlı Test & Örnek Ekstre Formatları',
             style: TextStyle(
               color: AppColors.textPrimary(context),
               fontSize: 13,
@@ -191,6 +324,10 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
             child: Row(
               children: [
                 _buildPresetChip('Garanti BBVA', sampleGarantiExcel),
+                const SizedBox(width: 8),
+                _buildPresetChip('Kuveyt Türk (.xlsx)', sampleKuveytTurkExcel),
+                const SizedBox(width: 8),
+                _buildPresetChip('İş Bankası (.xls)', sampleIsBankExcel),
                 const SizedBox(width: 8),
                 _buildPresetChip('İş Bankası CSV', sampleIsBankCsv),
                 const SizedBox(width: 8),
@@ -247,16 +384,129 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
 
-          // 4. Reconciliation Queue Header
+          // 4. Ara Adım: Eşleştirme Analiz Raporu & Filtreleme (Intermediate Step)
+          if (queue.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.border(context)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.analytics_outlined, color: AppColors.accentCyan, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Eşleştirme Analiz Raporu (Ara Adım)',
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildMetricCard(
+                          title: 'Eşleşen Daireler',
+                          count: matchedCount,
+                          amount: matchedTotal,
+                          color: AppColors.accentGreen,
+                          icon: Icons.check_circle_outline,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildMetricCard(
+                          title: 'Eşleşemeyen',
+                          count: unmatchedCount,
+                          amount: unmatchedTotal,
+                          color: AppColors.accentOrange,
+                          icon: Icons.help_outline,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildMetricCard(
+                          title: 'Gider / Masraf',
+                          count: expenseCount,
+                          amount: expenseTotal,
+                          color: Colors.blueGrey,
+                          icon: Icons.receipt_long,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (unmatchedCount > 0) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentOrange.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.accentOrange.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: AppColors.accentOrange, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '$unmatchedCount işlem daire ile eşleşmedi. Aşağıdaki "Daire Seç & Eşle" butonundan ilgili daireyi belirleyin.',
+                              style: const TextStyle(
+                                color: AppColors.accentOrange,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  // Filter Chips
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildFilterTab('Tümü (${queue.length})', 'ALL'),
+                        const SizedBox(width: 8),
+                        _buildFilterTab('🟢 Eşleşenler ($matchedCount)', 'MATCHED'),
+                        const SizedBox(width: 8),
+                        _buildFilterTab('🟠 Eşleşmeyenler ($unmatchedCount)', 'UNMATCHED'),
+                        const SizedBox(width: 8),
+                        _buildFilterTab('⚪ Giderler ($expenseCount)', 'GIDER'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+          ],
+
+          // 5. Reconciliation Queue Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
                   Text(
-                    'Eşleşen İşlemler',
+                    _filterStatus == 'MATCHED'
+                        ? 'Eşleşen İşlemler'
+                        : (_filterStatus == 'UNMATCHED'
+                            ? 'Eşleşmeyen İşlemler'
+                            : (_filterStatus == 'GIDER' ? 'Gider / Masraf İşlemleri' : 'Tüm Hareketler')),
                     style: TextStyle(
                       color: AppColors.textPrimary(context),
                       fontSize: 15,
@@ -267,29 +517,30 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: queue.isNotEmpty ? AppColors.accentCyan : AppColors.border(context),
+                      color: displayedQueue.isNotEmpty ? AppColors.accentCyan : AppColors.border(context),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '${queue.length}',
+                      '${displayedQueue.length}',
                       style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
               ),
-              if (queue.isNotEmpty)
+              if (displayedQueue.isNotEmpty)
                 TextButton(
                   onPressed: () {
                     setState(() {
-                      if (_selectedMatchIds.length == queue.length) {
-                        _selectedMatchIds.clear();
+                      final pendingIds = displayedQueue.where((q) => q.isPendingApproval).map((q) => q.matchId).toSet();
+                      if (_selectedMatchIds.containsAll(pendingIds) && pendingIds.isNotEmpty) {
+                        _selectedMatchIds.removeAll(pendingIds);
                       } else {
-                        _selectAllPending();
+                        _selectedMatchIds.addAll(pendingIds);
                       }
                     });
                   },
                   child: Text(
-                    _selectedMatchIds.length == queue.length ? 'Seçimi Kaldır' : 'Tümünü Seç',
+                    _selectedMatchIds.isNotEmpty ? 'Seçimi Düzenle' : 'Tümünü Seç',
                     style: const TextStyle(fontSize: 12, color: AppColors.accentCyan),
                   ),
                 ),
@@ -298,8 +549,8 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
 
           const SizedBox(height: 8),
 
-          // 5. Results List
-          if (queue.isEmpty)
+          // 6. Results List
+          if (displayedQueue.isEmpty)
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
@@ -309,14 +560,16 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
               ),
               child: Center(
                 child: Text(
-                  'Ayrıştırılmış işlem bulunmuyor. Yukarıdaki formatlardan birini seçerek "Ayrıştır & Eşleştir" butonuna basınız.',
+                  queue.isEmpty
+                      ? 'Ayrıştırılmış işlem bulunmuyor. Yukarıdaki formatlardan birini seçerek "Ayrıştır & Eşleştir" butonuna basınız.'
+                      : 'Seçili filtreye uygun işlem bulunmuyor.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
                 ),
               ),
             )
           else
-            ...queue.map((item) => _buildQueueItemCard(context, item)),
+            ...displayedQueue.map((item) => _buildQueueItemCard(context, item)),
 
           const SizedBox(height: 40),
         ],
@@ -354,6 +607,8 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     final isDark = AppColors.isDark(context);
     final isSelected = _selectedMatchIds.contains(item.matchId);
     final isApproved = item.isApproved;
+    final isUnmatched = item.status == 'ESLESTIRILEMEDI';
+    final isExpense = item.status == 'GIDER';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -364,8 +619,10 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
         border: Border.all(
           color: isApproved
               ? AppColors.accentGreen
-              : (isSelected ? AppColors.accentCyan : AppColors.border(context)),
-          width: isApproved || isSelected ? 1.5 : 1.0,
+              : (isUnmatched
+                  ? AppColors.accentOrange.withOpacity(0.6)
+                  : (isSelected ? AppColors.accentCyan : AppColors.border(context))),
+          width: isApproved || isSelected || isUnmatched ? 1.5 : 1.0,
         ),
       ),
       child: Column(
@@ -382,13 +639,17 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                     decoration: BoxDecoration(
                       color: item.confidenceScore == 100
                           ? AppColors.accentGreen.withOpacity(0.15)
-                          : AppColors.accentOrange.withOpacity(0.15),
+                          : (isUnmatched
+                              ? AppColors.accentOrange.withOpacity(0.2)
+                              : AppColors.accentOrange.withOpacity(0.15)),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '%${item.confidenceScore} Güven',
+                      isUnmatched ? 'Daire Bulunamadı' : '%${item.confidenceScore} Güven',
                       style: TextStyle(
-                        color: item.confidenceScore == 100 ? AppColors.accentGreen : AppColors.accentOrange,
+                        color: item.confidenceScore == 100
+                            ? AppColors.accentGreen
+                            : (isUnmatched ? AppColors.accentOrange : AppColors.accentOrange),
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -400,13 +661,23 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                     decoration: BoxDecoration(
                       color: isApproved
                           ? AppColors.accentGreen.withOpacity(0.15)
-                          : AppColors.accentOrange.withOpacity(0.15),
+                          : (isExpense
+                              ? Colors.grey.withOpacity(0.15)
+                              : (isUnmatched
+                                  ? AppColors.accentOrange.withOpacity(0.15)
+                                  : AppColors.accentCyan.withOpacity(0.15))),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      item.status,
+                      isExpense
+                          ? 'GİDEN / MASRAF'
+                          : (isUnmatched ? 'ESLESTIRILEMEDI' : item.status),
                       style: TextStyle(
-                        color: isApproved ? AppColors.accentGreen : AppColors.accentOrange,
+                        color: isApproved
+                            ? AppColors.accentGreen
+                            : (isExpense
+                                ? Colors.grey
+                                : (isUnmatched ? AppColors.accentOrange : AppColors.accentCyan)),
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -414,7 +685,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   ),
                 ],
               ),
-              if (!isApproved)
+              if (!isApproved && !isExpense && !isUnmatched)
                 Checkbox(
                   value: isSelected,
                   activeColor: AppColors.accentCyan,
@@ -428,7 +699,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                     });
                   },
                 )
-              else
+              else if (isApproved)
                 const Icon(Icons.check_circle, color: AppColors.accentGreen, size: 22),
             ],
           ),
@@ -457,12 +728,16 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.apartment, size: 14, color: AppColors.accentCyan),
+                        Icon(
+                          isUnmatched ? Icons.home_work_outlined : Icons.apartment,
+                          size: 14,
+                          color: isUnmatched ? AppColors.accentOrange : AppColors.accentCyan,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           item.matchedUnitDesc,
-                          style: const TextStyle(
-                            color: AppColors.accentCyan,
+                          style: TextStyle(
+                            color: isUnmatched ? AppColors.accentOrange : AppColors.accentCyan,
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
                           ),
@@ -482,7 +757,10 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                       const SizedBox(height: 2),
                       Text(
                         item.notes!,
-                        style: const TextStyle(color: AppColors.accentGreen, fontSize: 11),
+                        style: TextStyle(
+                          color: isUnmatched ? AppColors.accentOrange : AppColors.accentGreen,
+                          fontSize: 11,
+                        ),
                       ),
                     ],
                   ],
@@ -492,14 +770,182 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
               Text(
                 '₺${item.transaction.amount.toStringAsFixed(2)}',
                 style: TextStyle(
-                  color: AppColors.textPrimary(context),
+                  color: isExpense ? Colors.redAccent : AppColors.textPrimary(context),
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
+
+          // Action Buttons: Manual Unit Assignment & Edit
+          if (isUnmatched) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _openManualAssignment(context, item),
+                icon: const Icon(Icons.add_home_work_outlined, size: 16),
+                label: const Text('Daire Seç & Eşle'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentOrange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ] else if (!isApproved && !isExpense) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  onPressed: () => _openManualAssignment(context, item),
+                  icon: const Icon(Icons.edit_note, size: 15, color: AppColors.accentCyan),
+                  label: const Text(
+                    'Daireyi Değiştir',
+                    style: TextStyle(
+                      color: AppColors.accentCyan,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Future<void> _openManualAssignment(BuildContext context, ReconciliationQueueItem item) async {
+    final selectedFlat = await Navigator.push<FlatPaymentStatus>(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (ctx) => ManualUnitAssignmentPage(
+          item: item,
+          flats: widget.controller.flatsList,
+        ),
+      ),
+    );
+
+    if (selectedFlat != null) {
+      widget.controller.manuallyAssignFlatToTransaction(
+        matchId: item.matchId,
+        block: selectedFlat.block,
+        unitNo: selectedFlat.unitNo,
+      );
+      setState(() {
+        _selectedMatchIds.add(item.matchId);
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${item.transaction.senderName ?? "İşlem"} -> ${selectedFlat.block} Blok D:${selectedFlat.unitNo} (${selectedFlat.residentName}) ile başarıyla eşleştirildi!',
+            ),
+            backgroundColor: AppColors.accentGreen,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildMetricCard({
+    required String title,
+    required int count,
+    required Decimal amount,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$count İşlem',
+            style: TextStyle(
+              color: color,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '₺${amount.toStringAsFixed(2)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterTab(String label, String filterKey) {
+    final isSelected = _filterStatus == filterKey;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _filterStatus = filterKey;
+        });
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accentCyan : AppColors.surface(context),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? AppColors.accentCyan : AppColors.border(context),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : AppColors.textPrimary(context),
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          ),
+        ),
       ),
     );
   }

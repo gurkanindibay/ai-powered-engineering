@@ -1,7 +1,9 @@
+import 'dart:typed_data';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/foundation.dart';
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
+import '../../domain/services/bank_file_parser.dart';
 import '../../domain/usecases/calculate_dues_usecase.dart';
 
 class DashboardController extends ChangeNotifier {
@@ -190,6 +192,13 @@ class DashboardController extends ChangeNotifier {
       FlatPaymentStatus(id: '4', block: 'A', unitNo: 1, residentName: 'Selim Ak', amountDue: Decimal.parse('1400.00'), daysOverdue: 0, isPaid: true, paidDateStr: '12 Eyl'),
       FlatPaymentStatus(id: '5', block: 'B', unitNo: 7, residentName: 'Canan Ece', amountDue: Decimal.parse('1400.00'), daysOverdue: 0, isPaid: true, paidDateStr: '14 Eyl'),
       FlatPaymentStatus(id: '6', block: 'A', unitNo: 2, residentName: 'Ali Demir', amountDue: Decimal.parse('1400.00'), daysOverdue: 0, isPaid: true, paidDateStr: '10 Eyl'),
+      // Kuveyt Türk & İş Bankası Sakinleri (STORY-07-02 Eşleştirme)
+      FlatPaymentStatus(id: '7', block: 'A', unitNo: 10, residentName: 'Alaettin Çelik', amountDue: Decimal.parse('1320.00'), daysOverdue: 0, isPaid: false),
+      FlatPaymentStatus(id: '8', block: 'B', unitNo: 4, residentName: 'Mustafa Rüzgar', amountDue: Decimal.parse('715.00'), daysOverdue: 0, isPaid: false),
+      FlatPaymentStatus(id: '9', block: 'A', unitNo: 8, residentName: 'Mustafa Burak Türkmen', amountDue: Decimal.parse('1000.00'), daysOverdue: 0, isPaid: false),
+      FlatPaymentStatus(id: '10', block: 'B', unitNo: 12, residentName: 'Sait Şener', amountDue: Decimal.parse('715.00'), daysOverdue: 0, isPaid: false),
+      FlatPaymentStatus(id: '11', block: 'A', unitNo: 6, residentName: 'Servet Karaca', amountDue: Decimal.parse('715.00'), daysOverdue: 0, isPaid: false),
+      FlatPaymentStatus(id: '12', block: 'B', unitNo: 16, residentName: 'Hasan İndibay', amountDue: Decimal.parse('28000.00'), daysOverdue: 0, isPaid: false),
     ];
 
     _pendingRegistrations = [
@@ -592,6 +601,30 @@ class DashboardController extends ChangeNotifier {
 
   // Bank Statement Ingestion & Automated Reconciliation Methods (STORY-07-02)
 
+  void parseBankStatementFile({
+    required String fileName,
+    required Uint8List bytes,
+  }) {
+    final rows = BankFileParser.parseBytes(fileName: fileName, bytes: bytes);
+    final List<ReconciliationQueueItem> parsedMatches = [];
+
+    for (int i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      final matchItem = _matchTransactionToRoster(
+        description: r.description,
+        amount: r.amount,
+        date: r.date,
+        rawId: r.rawId.isNotEmpty ? r.rawId : 'FILE-ROW-${i + 1}',
+        explicitSender: r.senderName,
+        isIncoming: r.isIncoming,
+      );
+      parsedMatches.add(matchItem);
+    }
+
+    _reconciliationQueue = parsedMatches;
+    notifyListeners();
+  }
+
   void parseBankStatement(String content, {String format = 'AUTO'}) {
     final lines = content.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
     final List<ReconciliationQueueItem> parsedMatches = [];
@@ -618,34 +651,49 @@ class DashboardController extends ChangeNotifier {
         parsedMatches.add(matchItem);
       }
     } else {
-      // Delimited or free-form text lines (Excel / CSV)
-      int rowIdx = 1;
-      for (final line in lines) {
-        if (line.toLowerCase().contains('tarih') &&
-            (line.toLowerCase().contains('tutar') || line.toLowerCase().contains('alacak'))) {
-          continue; // header
-        }
-
-        // Extract amount: e.g. ₺1.423,33 or 1.423,33 or 1423.33
-        final amtReg = RegExp(r'₺?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+[.,][0-9]{2})');
-        final amtMatch = amtReg.firstMatch(line);
-        if (amtMatch != null) {
-          var cleanAmt = amtMatch.group(1)!;
-          if (cleanAmt.contains('.') && cleanAmt.contains(',')) {
-            cleanAmt = cleanAmt.replaceAll('.', '').replaceAll(',', '.');
-          } else if (cleanAmt.contains(',')) {
-            cleanAmt = cleanAmt.replaceAll(',', '.');
-          }
-          final amt = Decimal.tryParse(cleanAmt) ?? Decimal.zero;
-
+      final parsedRows = BankFileParser.parseText(content);
+      if (parsedRows.isNotEmpty) {
+        for (int i = 0; i < parsedRows.length; i++) {
+          final r = parsedRows[i];
           final matchItem = _matchTransactionToRoster(
-            description: line,
-            amount: amt,
-            date: DateTime(2026, 9, 15),
-            rawId: 'TXN-EXCEL-${rowIdx.toString().padLeft(3, '0')}',
+            description: r.description,
+            amount: r.amount,
+            date: r.date,
+            rawId: r.rawId.isNotEmpty ? r.rawId : 'TXN-ROW-${i + 1}',
+            explicitSender: r.senderName,
+            isIncoming: r.isIncoming,
           );
           parsedMatches.add(matchItem);
-          rowIdx++;
+        }
+      } else {
+        // Delimited or free-form text lines (Excel / CSV)
+        int rowIdx = 1;
+        for (final line in lines) {
+          if (line.toLowerCase().contains('tarih') &&
+              (line.toLowerCase().contains('tutar') || line.toLowerCase().contains('alacak'))) {
+            continue; // header
+          }
+
+          final amtReg = RegExp(r'₺?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+[.,][0-9]{2})');
+          final amtMatch = amtReg.firstMatch(line);
+          if (amtMatch != null) {
+            var cleanAmt = amtMatch.group(1)!;
+            if (cleanAmt.contains('.') && cleanAmt.contains(',')) {
+              cleanAmt = cleanAmt.replaceAll('.', '').replaceAll(',', '.');
+            } else if (cleanAmt.contains(',')) {
+              cleanAmt = cleanAmt.replaceAll(',', '.');
+            }
+            final amt = Decimal.tryParse(cleanAmt) ?? Decimal.zero;
+
+            final matchItem = _matchTransactionToRoster(
+              description: line,
+              amount: amt,
+              date: DateTime(2026, 9, 15),
+              rawId: 'TXN-EXCEL-${rowIdx.toString().padLeft(3, '0')}',
+            );
+            parsedMatches.add(matchItem);
+            rowIdx++;
+          }
         }
       }
     }
@@ -659,6 +707,8 @@ class DashboardController extends ChangeNotifier {
     required Decimal amount,
     required DateTime date,
     required String rawId,
+    String? explicitSender,
+    bool isIncoming = true,
   }) {
     // 1. Detect block and flat
     String? matchedBlock;
@@ -683,7 +733,7 @@ class DashboardController extends ChangeNotifier {
       matchedUnitNo = int.tryParse(fMatch.group(1)!);
     }
 
-    // Match against flats
+    // Match against flats by UnitNo
     FlatPaymentStatus? candidateFlat;
     if (matchedUnitNo != null) {
       for (final f in _flatsList) {
@@ -697,12 +747,26 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
-    // Check resident name in description
+    // Check explicitSender or resident name in description
     if (matchedResidentName == null) {
+      String normalizeTr(String text) {
+        return text
+            .toUpperCase()
+            .replaceAll('İ', 'I')
+            .replaceAll('ı', 'I')
+            .replaceAll('Ğ', 'G')
+            .replaceAll('Ü', 'U')
+            .replaceAll('Ş', 'S')
+            .replaceAll('Ö', 'O')
+            .replaceAll('Ç', 'C');
+      }
+
+      final normDesc = normalizeTr(description);
+      final normSender = explicitSender != null ? normalizeTr(explicitSender) : '';
+
       for (final f in _flatsList) {
-        final upperDesc = description.toUpperCase();
-        final upperName = f.residentName.toUpperCase();
-        if (upperDesc.contains(upperName)) {
+        final normName = normalizeTr(f.residentName);
+        if ((normSender.isNotEmpty && normSender.contains(normName)) || normDesc.contains(normName)) {
           candidateFlat = f;
           matchedBlock = f.block;
           matchedUnitNo = f.unitNo;
@@ -711,6 +775,30 @@ class DashboardController extends ChangeNotifier {
           break;
         }
       }
+    }
+
+    if (!isIncoming) {
+      // Outgoing expense or transfer, not an incoming dues payment
+      return ReconciliationQueueItem(
+        matchId: 'MATCH-${DateTime.now().millisecondsSinceEpoch}-${rawId.hashCode.abs() % 1000}',
+        transaction: BankStatementParsedItem(
+          transactionId: rawId,
+          date: date,
+          amount: amount,
+          currency: 'TRY',
+          description: description,
+        ),
+        matchedUnitId: null,
+        matchedBlock: null,
+        matchedUnitNumber: null,
+        matchedResidentName: explicitSender,
+        confidenceScore: 0,
+        matchedDueId: null,
+        outstandingBalance: null,
+        amountMatchesBalance: false,
+        status: 'GIDER',
+        notes: 'Giden Transfer / Banka Masrafı (Aidat Tahsilatı Değil)',
+      );
     }
 
     if (candidateFlat != null) {
@@ -749,8 +837,45 @@ class DashboardController extends ChangeNotifier {
       status: status,
       notes: amountMatchesBalance
           ? 'Aidat borcuyla (%5 KMK gecikme tazminatı dahil) birebir eşleşti'
-          : (candidateFlat != null ? 'Daire tespit edildi' : null),
+          : (candidateFlat != null ? 'Daire ve sakin tespit edildi' : null),
     );
+  }
+
+  void manuallyAssignFlatToTransaction({
+    required String matchId,
+    required String block,
+    required int unitNo,
+  }) {
+    final idx = _reconciliationQueue.indexWhere((m) => m.matchId == matchId);
+    if (idx == -1) return;
+
+    final target = _reconciliationQueue[idx];
+    FlatPaymentStatus? candidateFlat;
+    for (final f in _flatsList) {
+      if (f.unitNo == unitNo && f.block == block) {
+        candidateFlat = f;
+        break;
+      }
+    }
+
+    final balance = candidateFlat?.amountDue;
+    final amtMatch = (balance != null && target.transaction.amount == balance);
+
+    final updated = target.copyWith(
+      matchedUnitId: candidateFlat != null ? (unitNo == 14 ? 'd-14' : 'd-$unitNo') : 'd-$unitNo',
+      matchedBlock: block,
+      matchedUnitNumber: unitNo,
+      matchedResidentName: candidateFlat?.residentName ?? 'Daire $unitNo',
+      confidenceScore: 100,
+      matchedDueId: 'b-101',
+      outstandingBalance: balance,
+      amountMatchesBalance: amtMatch,
+      status: 'ONAY_BEKLIYOR',
+      notes: 'Yönetici tarafından manuel olarak eşleştirildi${amtMatch ? " (Borçla tam eşleşti)" : ""}',
+    );
+
+    _reconciliationQueue[idx] = updated;
+    notifyListeners();
   }
 
   void confirmReconciliation(List<String> matchIds) {

@@ -78,9 +78,12 @@ void main() {
 
     testWidgets('BankStatementReconciliationPage renders presets, parses statement, and allows batch confirmation', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: BankStatementReconciliationPage(controller: controller),
+        ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) => MaterialApp(
+            home: Scaffold(
+              body: BankStatementReconciliationPage(controller: controller),
+            ),
           ),
         ),
       );
@@ -109,6 +112,65 @@ void main() {
 
       // Verify status transitions to ONAYLANDI
       expect(find.text('ONAYLANDI'), findsOneWidget);
+    });
+
+    test('when transaction is unmatched, allows manually assigning flat and confirms payment', () {
+      // Line with no block or unit info
+      const line = '01.07.2026;TXN99;Bilinmeyen Aciklama;1.320,00;TL';
+      controller.parseBankStatement(line);
+
+      expect(controller.reconciliationQueue.length, 1);
+      final item = controller.reconciliationQueue.first;
+      expect(item.confidenceScore, 0);
+      expect(item.status, 'ESLESTIRILEMEDI');
+      expect(item.matchedUnitDesc, 'Belirlenemedi');
+
+      // Manually assign to B Blok D:3
+      controller.manuallyAssignFlatToTransaction(
+        matchId: item.matchId,
+        block: 'B',
+        unitNo: 3,
+      );
+
+      final updated = controller.reconciliationQueue.firstWhere((q) => q.matchId == item.matchId);
+      expect(updated.confidenceScore, 100);
+      expect(updated.status, 'ONAY_BEKLIYOR');
+      expect(updated.matchedBlock, 'B');
+      expect(updated.matchedUnitNumber, 3);
+      expect(updated.matchedUnitDesc, 'B Blok D:3');
+
+      // Confirm reconciliation
+      controller.confirmReconciliation([updated.matchId]);
+      final confirmed = controller.reconciliationQueue.firstWhere((q) => q.matchId == item.matchId);
+      expect(confirmed.status, 'ONAYLANDI');
+      expect(confirmed.isApproved, true);
+
+      final flatB3 = controller.flatsList.firstWhere((f) => f.block == 'B' && f.unitNo == 3);
+      expect(flatB3.isPaid, true);
+    });
+
+    testWidgets('BankStatementReconciliationPage displays intermediate breakdown report and filter tabs', (tester) async {
+      await tester.pumpWidget(
+        ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) => MaterialApp(
+            home: Scaffold(
+              body: BankStatementReconciliationPage(controller: controller),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Intermediate step report
+      expect(find.text('Eşleştirme Analiz Raporu (Ara Adım)'), findsOneWidget);
+      expect(find.text('Eşleşen Daireler'), findsOneWidget);
+      expect(find.text('Eşleşemeyen'), findsOneWidget);
+      expect(find.text('Gider / Masraf'), findsOneWidget);
+
+      // Filter tabs
+      expect(find.textContaining('🟢 Eşleşenler'), findsOneWidget);
+      expect(find.textContaining('🟠 Eşleşmeyenler'), findsOneWidget);
     });
   });
 }
