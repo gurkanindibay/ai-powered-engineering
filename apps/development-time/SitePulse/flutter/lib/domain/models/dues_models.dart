@@ -143,7 +143,7 @@ class ComplexCollectionSummary {
   int get collectionRatePercent {
     if (totalExpected == Decimal.zero) return 0;
     final ratio = (totalCollected * Decimal.fromInt(100) / totalExpected);
-    return ratio.toDecimal().toDouble().round();
+    return ratio.toDouble().round();
   }
 
   int get collectionPercentage => collectionRatePercent;

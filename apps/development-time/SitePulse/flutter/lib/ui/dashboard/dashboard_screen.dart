@@ -5,6 +5,7 @@ import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
 import '../components/app_fullscreen_page.dart';
 import '../components/app_modal_sheet.dart';
+import '../components/dues_management_view.dart';
 import '../components/hero_balance_card.dart';
 import '../components/manager_cockpit_view.dart';
 import '../components/payment_checkout_dialog.dart';
@@ -200,41 +201,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
           color: AppColors.surface(context),
           border: Border(top: BorderSide(color: AppColors.border(context), width: 1)),
         ),
-        child: BottomNavigationBar(
-          currentIndex: _selectedTabIndex,
-          onTap: (index) {
-            if (index == 2) {
-              _openProfileSheet(context);
-            } else {
-              setState(() {
-                _selectedTabIndex = index;
-              });
-            }
+        child: Builder(
+          builder: (context) {
+            final isManagerCockpit = widget.controller.userRole == UserRole.siteManager &&
+                widget.controller.siteAdminPath == SiteAdminActivePath.managerCockpit;
+            final maxIndex = isManagerCockpit ? 2 : 1;
+            final safeIndex = _selectedTabIndex > maxIndex ? 0 : _selectedTabIndex;
+
+            return BottomNavigationBar(
+              currentIndex: safeIndex,
+              onTap: (index) {
+                final profileIndex = isManagerCockpit ? 3 : 2;
+                if (index == profileIndex) {
+                  _openProfileSheet(context);
+                } else {
+                  setState(() {
+                    _selectedTabIndex = index;
+                  });
+                }
+              },
+              backgroundColor: Colors.transparent,
+              selectedItemColor: AppColors.isDark(context) ? AppColors.accentCyan : AppColors.lightTextPrimary,
+              unselectedItemColor: AppColors.textSecondary(context),
+              selectedFontSize: 11,
+              unselectedFontSize: 11,
+              type: BottomNavigationBarType.fixed,
+              elevation: 0,
+              items: [
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.dashboard_outlined),
+                  activeIcon: Icon(Icons.dashboard),
+                  label: 'Ana Sayfa',
+                ),
+                if (isManagerCockpit)
+                  BottomNavigationBarItem(
+                    icon: Badge(
+                      isLabelVisible: widget.controller.unmatchedBankCount > 0,
+                      label: Text('${widget.controller.unmatchedBankCount}'),
+                      backgroundColor: AppColors.accentOrange,
+                      child: const Icon(Icons.payments_outlined),
+                    ),
+                    activeIcon: Badge(
+                      isLabelVisible: widget.controller.unmatchedBankCount > 0,
+                      label: Text('${widget.controller.unmatchedBankCount}'),
+                      backgroundColor: AppColors.accentOrange,
+                      child: const Icon(Icons.payments),
+                    ),
+                    label: 'Aidat Yönetimi',
+                  ),
+                BottomNavigationBarItem(
+                  icon: Icon(isHomeRole ? Icons.home_outlined : Icons.apartment_outlined),
+                  activeIcon: Icon(isHomeRole ? Icons.home : Icons.apartment),
+                  label: isHomeRole ? 'Dairem' : (session.role == UserRole.saasAdmin ? 'Siteler' : 'Yönetim'),
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.person_outline),
+                  activeIcon: Icon(Icons.person),
+                  label: 'Profil & Yetki',
+                ),
+              ],
+            );
           },
-          backgroundColor: Colors.transparent,
-          selectedItemColor: AppColors.isDark(context) ? AppColors.accentCyan : AppColors.lightTextPrimary,
-          unselectedItemColor: AppColors.textSecondary(context),
-          selectedFontSize: 11,
-          unselectedFontSize: 11,
-          type: BottomNavigationBarType.fixed,
-          elevation: 0,
-          items: [
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard_outlined),
-              activeIcon: Icon(Icons.dashboard),
-              label: 'Ana Sayfa',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(isHomeRole ? Icons.home_outlined : Icons.apartment_outlined),
-              activeIcon: Icon(isHomeRole ? Icons.home : Icons.apartment),
-              label: isHomeRole ? 'Dairem' : (session.role == UserRole.saasAdmin ? 'Siteler' : 'Yönetim'),
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              activeIcon: Icon(Icons.person),
-              label: 'Profil & Yetki',
-            ),
-          ],
         ),
       ),
     );
@@ -342,8 +369,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildCurrentTabContent(bool isHomeRole) {
-    if (_selectedTabIndex == 1) {
-      return _buildSecondaryTabContent(isHomeRole);
+    final isManagerCockpit = widget.controller.userRole == UserRole.siteManager &&
+        widget.controller.siteAdminPath == SiteAdminActivePath.managerCockpit;
+
+    if (isManagerCockpit) {
+      if (_selectedTabIndex == 1) {
+        return DuesManagementView(controller: widget.controller);
+      } else if (_selectedTabIndex == 2) {
+        return _buildSecondaryTabContent(isHomeRole);
+      }
+    } else {
+      if (_selectedTabIndex == 1) {
+        return _buildSecondaryTabContent(isHomeRole);
+      }
     }
 
     // Tab 0: Main Screen according to Role

@@ -130,6 +130,65 @@ class DashboardController extends ChangeNotifier {
   String _flatFilter = 'ALL';
   String get flatFilter => _flatFilter;
 
+  // Monthly Dues State
+  String _selectedDuesMonth = 'Eylül 2026';
+  String get selectedDuesMonth => _selectedDuesMonth;
+
+  final List<String> availableDuesMonths = const [
+    'Ekim 2026',
+    'Eylül 2026',
+    'Ağustos 2026',
+    'Temmuz 2026',
+    'Haziran 2026',
+  ];
+
+  final Map<String, List<FlatPaymentStatus>> _monthlyFlats = {};
+
+  void setSelectedDuesMonth(String month) {
+    if (_selectedDuesMonth != month) {
+      _selectedDuesMonth = month;
+      notifyListeners();
+    }
+  }
+
+  List<FlatPaymentStatus> get currentMonthFlats {
+    final list = _monthlyFlats[_selectedDuesMonth] ?? _flatsList;
+    if (_flatFilter == 'OVERDUE') {
+      return list.where((f) => !f.isPaid && f.daysOverdue > 0).toList();
+    } else if (_flatFilter == 'PAID') {
+      return list.where((f) => f.isPaid).toList();
+    }
+    return list;
+  }
+
+  ComplexCollectionSummary get currentMonthSummary {
+    final list = _monthlyFlats[_selectedDuesMonth] ?? _flatsList;
+    int paid = list.where((f) => f.isPaid).length;
+    int overdue = list.where((f) => !f.isPaid).length;
+    Decimal collected = Decimal.zero;
+    Decimal remaining = Decimal.zero;
+    for (final f in list) {
+      if (f.isPaid) {
+        collected += f.amountDue;
+      } else {
+        remaining += f.amountDue;
+      }
+    }
+    return ComplexCollectionSummary(
+      totalExpected: collected + remaining,
+      totalCollected: collected,
+      totalOverdueWithInterest: remaining,
+      paidUnitsCount: paid,
+      overdueUnitsCount: overdue,
+      totalUnitsCount: list.length,
+    );
+  }
+
+  List<ReconciliationQueueItem> get unmatchedBankTransactions =>
+      _reconciliationQueue.where((item) => item.status == 'ESLESTIRILEMEDI').toList();
+
+  int get unmatchedBankCount => unmatchedBankTransactions.length;
+
   List<RegistrationRequestItem> _pendingRegistrations = [];
   List<RegistrationRequestItem> get pendingRegistrations => _pendingRegistrations;
 
@@ -280,6 +339,83 @@ class DashboardController extends ChangeNotifier {
         email: 'ahmet.yilmaz@begonya.com',
         isOwner: true,
         permissionScope: 'Sadece A Blok D:14',
+      ),
+    ];
+
+    _monthlyFlats['Eylül 2026'] = List<FlatPaymentStatus>.from(_flatsList);
+    _monthlyFlats['Ağustos 2026'] = _flatsList.map((f) {
+      if (f.unitNo == 14 || f.unitNo == 15) {
+        return f.copyWith(isPaid: false, daysOverdue: 35);
+      }
+      return f.copyWith(isPaid: true, daysOverdue: 0, paidDateStr: '12 Ağu');
+    }).toList();
+    _monthlyFlats['Temmuz 2026'] = _flatsList.map((f) {
+      if (f.unitNo == 14) {
+        return f.copyWith(isPaid: false, daysOverdue: 65);
+      }
+      return f.copyWith(isPaid: true, daysOverdue: 0, paidDateStr: '10 Tem');
+    }).toList();
+    _monthlyFlats['Ekim 2026'] = _flatsList.map((f) {
+      if (f.unitNo == 1 || f.unitNo == 7) {
+        return f.copyWith(isPaid: true, daysOverdue: 0, paidDateStr: '01 Eki');
+      }
+      return f.copyWith(isPaid: false, daysOverdue: 0);
+    }).toList();
+
+    _reconciliationQueue = [
+      ReconciliationQueueItem(
+        matchId: 'DEMO-TXN-1',
+        transaction: BankStatementParsedItem(
+          transactionId: 'TXN-KUV-01',
+          date: DateTime(2026, 7, 13),
+          amount: Decimal.parse('715.00'),
+          currency: 'TRY',
+          description: 'FAST Para Transferi - Gönderen: SAİT ŞENER, Alıcı: GÜRKAN İNDİBAY',
+        ),
+        matchedUnitId: 'd-12',
+        matchedBlock: 'B',
+        matchedUnitNumber: 12,
+        matchedResidentName: 'Sait Şener',
+        confidenceScore: 100,
+        amountMatchesBalance: true,
+        status: 'ONAY_BEKLIYOR',
+        notes: 'Sakin adı ve borç tutarı birebir eşleşti',
+      ),
+      ReconciliationQueueItem(
+        matchId: 'DEMO-TXN-2',
+        transaction: BankStatementParsedItem(
+          transactionId: 'TXN-ISB-02',
+          date: DateTime(2026, 8, 6),
+          amount: Decimal.parse('1400.00'),
+          currency: 'TRY',
+          description: 'Havale - EFEKTİF YATAN ATM KART HESABINA',
+        ),
+        matchedUnitId: null,
+        matchedBlock: null,
+        matchedUnitNumber: null,
+        matchedResidentName: null,
+        confidenceScore: 0,
+        amountMatchesBalance: false,
+        status: 'ESLESTIRILEMEDI',
+        notes: 'Açıklamada daire veya sakin adı bulunamadı, manuel eşleme bekliyor',
+      ),
+      ReconciliationQueueItem(
+        matchId: 'DEMO-TXN-3',
+        transaction: BankStatementParsedItem(
+          transactionId: 'TXN-KUV-03',
+          date: DateTime(2026, 7, 14),
+          amount: Decimal.parse('715.00'),
+          currency: 'TRY',
+          description: 'Para Transferi - Gönderen: BİLİNMEYEN HAVALE, Alıcı: GÜRKAN İNDİBAY',
+        ),
+        matchedUnitId: null,
+        matchedBlock: null,
+        matchedUnitNumber: null,
+        matchedResidentName: null,
+        confidenceScore: 0,
+        amountMatchesBalance: false,
+        status: 'ESLESTIRILEMEDI',
+        notes: 'Kayıtlı olmayan gönderen, daire ataması gerekiyor',
       ),
     ];
   }

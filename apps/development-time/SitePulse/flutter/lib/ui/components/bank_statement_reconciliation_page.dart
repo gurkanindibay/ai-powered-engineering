@@ -10,21 +10,6 @@ import 'manual_unit_assignment_page.dart';
 class BankStatementReconciliationPage extends StatefulWidget {
   final DashboardController controller;
 
-  const BankStatementReconciliationPage({
-    super.key,
-    required this.controller,
-  });
-
-  @override
-  State<BankStatementReconciliationPage> createState() => _BankStatementReconciliationPageState();
-}
-
-class _BankStatementReconciliationPageState extends State<BankStatementReconciliationPage> {
-  final TextEditingController _textController = TextEditingController();
-  final Set<String> _selectedMatchIds = {};
-  String _activePreset = 'Garanti BBVA';
-  String _filterStatus = 'ALL'; // 'ALL', 'MATCHED', 'UNMATCHED', 'GIDER'
-
   static const String sampleGarantiExcel =
       'HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33';
 
@@ -59,15 +44,31 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
       ':62F:C260930TRY51423,33\n'
       '-';
 
+  const BankStatementReconciliationPage({
+    super.key,
+    required this.controller,
+  });
+
+  @override
+  State<BankStatementReconciliationPage> createState() => _BankStatementReconciliationPageState();
+}
+
+class _BankStatementReconciliationPageState extends State<BankStatementReconciliationPage> {
+  final TextEditingController _textController = TextEditingController();
+  final Set<String> _selectedMatchIds = {};
+  String _activePreset = 'Garanti BBVA';
+  String _filterStatus = 'ALL'; // 'ALL', 'MATCHED', 'UNMATCHED', 'GIDER'
+
+
   @override
   void initState() {
     super.initState();
-    _textController.text = sampleGarantiExcel;
+    _textController.text = BankStatementReconciliationPage.sampleGarantiExcel;
     // Auto-parse default sample on open after the initial build frame
     // to prevent notifyListeners() from triggering setState() during widget mount
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      widget.controller.parseBankStatement(sampleGarantiExcel);
+      widget.controller.parseBankStatement(BankStatementReconciliationPage.sampleGarantiExcel);
       setState(() {
         _selectAllPending();
       });
@@ -323,15 +324,15 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildPresetChip('Garanti BBVA', sampleGarantiExcel),
+                _buildPresetChip('Garanti BBVA', BankStatementReconciliationPage.sampleGarantiExcel),
                 const SizedBox(width: 8),
-                _buildPresetChip('Kuveyt Türk (.xlsx)', sampleKuveytTurkExcel),
+                _buildPresetChip('Kuveyt Türk (.xlsx)', BankStatementReconciliationPage.sampleKuveytTurkExcel),
                 const SizedBox(width: 8),
-                _buildPresetChip('İş Bankası (.xls)', sampleIsBankExcel),
+                _buildPresetChip('İş Bankası (.xls)', BankStatementReconciliationPage.sampleIsBankExcel),
                 const SizedBox(width: 8),
-                _buildPresetChip('İş Bankası CSV', sampleIsBankCsv),
+                _buildPresetChip('İş Bankası CSV', BankStatementReconciliationPage.sampleIsBankCsv),
                 const SizedBox(width: 8),
-                _buildPresetChip('SWIFT MT940', sampleSwiftMt940),
+                _buildPresetChip('SWIFT MT940', BankStatementReconciliationPage.sampleSwiftMt940),
               ],
             ),
           ),
