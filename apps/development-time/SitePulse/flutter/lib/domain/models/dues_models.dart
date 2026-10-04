@@ -492,3 +492,85 @@ class ReconciliationQueueItem {
     );
   }
 }
+
+enum SupportedBank {
+  kuveytTurk('KUVEYT_TURK', 'Kuveyt Türk Katılım Bankası', 'EXCEL', '.xlsx'),
+  isBankasi('IS_BANKASI', 'Türkiye İş Bankası', 'CSV', '.csv'),
+  ziraatBankasi('ZIRAAT_BANKASI', 'Ziraat Bankası', 'MT940', '.sta'),
+  garantiBbva('GARANTI_BBVA', 'Garanti BBVA', 'CSV', '.csv'),
+  akbank('AKBANK', 'Akbank', 'CSV', '.csv'),
+  yapiKredi('YAPI_KREDI', 'Yapı Kredi Bankası', 'EXCEL', '.xlsx'),
+  halkbank('HALKBANK', 'Halkbank', 'MT940', '.sta'),
+  vakifbank('VAKIFBANK', 'Vakıfbank', 'MT940', '.sta'),
+  denizBank('DENIZBANK', 'DenizBank', 'CSV', '.csv'),
+  qnbFinansbank('QNB_FINANSBANK', 'QNB Finansbank', 'CSV', '.csv');
+
+  final String code;
+  final String displayName;
+  final String statementFormat; // 'EXCEL', 'CSV', 'MT940'
+  final String fileExtension;
+
+  const SupportedBank(this.code, this.displayName, this.statementFormat, this.fileExtension);
+
+  static SupportedBank? fromCode(String code) {
+    for (final b in SupportedBank.values) {
+      if (b.code.toUpperCase() == code.toUpperCase()) return b;
+    }
+    return null;
+  }
+}
+
+class SiteBankAccount {
+  final String id;
+  final String siteId;
+  final String bankCode;
+  final String bankName;
+  final String iban;
+  final String accountHolder;
+  final String statementFormat;
+  final bool isActive;
+  final String? configuredBy;
+  final DateTime updatedAt;
+
+  const SiteBankAccount({
+    required this.id,
+    required this.siteId,
+    required this.bankCode,
+    required this.bankName,
+    required this.iban,
+    required this.accountHolder,
+    required this.statementFormat,
+    this.isActive = true,
+    this.configuredBy,
+    required this.updatedAt,
+  });
+
+  SupportedBank? get supportedBank => SupportedBank.fromCode(bankCode);
+
+  SiteBankAccount copyWith({
+    String? id,
+    String? siteId,
+    String? bankCode,
+    String? bankName,
+    String? iban,
+    String? accountHolder,
+    String? statementFormat,
+    bool? isActive,
+    String? configuredBy,
+    DateTime? updatedAt,
+  }) {
+    return SiteBankAccount(
+      id: id ?? this.id,
+      siteId: siteId ?? this.siteId,
+      bankCode: bankCode ?? this.bankCode,
+      bankName: bankName ?? this.bankName,
+      iban: iban ?? this.iban,
+      accountHolder: accountHolder ?? this.accountHolder,
+      statementFormat: statementFormat ?? this.statementFormat,
+      isActive: isActive ?? this.isActive,
+      configuredBy: configuredBy ?? this.configuredBy,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+}
+

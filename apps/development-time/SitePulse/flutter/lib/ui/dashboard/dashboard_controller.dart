@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/foundation.dart';
 import '../../domain/models/auth_models.dart';
@@ -212,10 +211,35 @@ class DashboardController extends ChangeNotifier {
   String? _reconciliationSuccessMessage;
   String? get reconciliationSuccessMessage => _reconciliationSuccessMessage;
 
+  // Site Bank Account Configuration State (STORY-08-01)
+  SiteBankAccount? _siteBankAccount;
+  SiteBankAccount? get siteBankAccount => _siteBankAccount;
+
+  String? _bankStatementError;
+  String? get bankStatementError => _bankStatementError;
+  void clearBankStatementError() {
+    _bankStatementError = null;
+    notifyListeners();
+  }
+
   void _initData() {
     _userSession = _createSession(UserRole.homeOwner, AuthProvider.local);
 
     _activeUnit = defaultResidentUnit;
+
+    // Seed Begonya Sitesi active bank account (Kuveyt Türk -> EXCEL format)
+    _siteBankAccount = SiteBankAccount(
+      id: 'sba-site-1-kt',
+      siteId: 'site-1',
+      bankCode: 'KUVEYT_TURK',
+      bankName: 'Kuveyt Türk Katılım Bankası',
+      iban: 'TR620020500009863791600001',
+      accountHolder: 'Begonya Sitesi Yönetimi',
+      statementFormat: 'EXCEL',
+      isActive: true,
+      configuredBy: 'usr-site-manager-1',
+      updatedAt: DateTime(2026, 9, 1),
+    );
 
     // Initial dues with 10 days overdue calculation (Spec-001)
     final baseDues = DuesLiability(
@@ -737,10 +761,73 @@ class DashboardController extends ChangeNotifier {
 
   // Bank Statement Ingestion & Automated Reconciliation Methods (STORY-07-02)
 
+  // Site Bank Account Configuration (STORY-08-01)
+  bool configureBankAccount({
+    required String bankCode,
+    required String iban,
+    required String accountHolder,
+  }) {
+    final bank = SupportedBank.fromCode(bankCode);
+    if (bank == null) {
+      _bankStatementError = 'Geçersiz banka kodu: $bankCode';
+      notifyListeners();
+      return false;
+    }
+    final cleanIban = iban.replaceAll(' ', '').toUpperCase();
+    if (!cleanIban.startsWith('TR') || cleanIban.length != 26) {
+      _bankStatementError = 'Geçersiz IBAN! Türk IBAN numarası TR ile başlamalı ve 26 haneli olmalıdır.';
+      notifyListeners();
+      return false;
+    }
+    if (accountHolder.trim().isEmpty) {
+      _bankStatementError = 'Hesap sahibi adı / unvanı boş bırakılamaz.';
+      notifyListeners();
+      return false;
+    }
+
+    _siteBankAccount = SiteBankAccount(
+      id: 'sba-${DateTime.now().millisecondsSinceEpoch}',
+      siteId: 'site-1',
+      bankCode: bank.code,
+      bankName: bank.displayName,
+      iban: cleanIban,
+      accountHolder: accountHolder.trim(),
+      statementFormat: bank.statementFormat,
+      isActive: true,
+      configuredBy: _userSession.id,
+      updatedAt: DateTime.now(),
+    );
+
+    _bankStatementError = null;
+    notifyListeners();
+    return true;
+  }
+
   void parseBankStatementFile({
     required String fileName,
     required Uint8List bytes,
   }) {
+    _bankStatementError = null;
+
+    // Validate format against configured bank account
+    if (_siteBankAccount != null) {
+      final ext = fileName.toLowerCase();
+      final expectedFormat = _siteBankAccount!.statementFormat;
+      if (expectedFormat == 'EXCEL' && !ext.endsWith('.xlsx') && !ext.endsWith('.xls')) {
+        _bankStatementError = 'Format Uyuşmazlığı: ${_siteBankAccount!.bankName} hesabı için Excel (.xlsx) dosyası yüklenmelidir.';
+        notifyListeners();
+        return;
+      } else if (expectedFormat == 'MT940' && !ext.endsWith('.sta') && !ext.endsWith('.txt') && !ext.endsWith('.mt940')) {
+        _bankStatementError = 'Format Uyuşmazlığı: ${_siteBankAccount!.bankName} hesabı için SWIFT MT940 (.sta / .txt) dosyası yüklenmelidir.';
+        notifyListeners();
+        return;
+      } else if (expectedFormat == 'CSV' && !ext.endsWith('.csv') && !ext.endsWith('.txt')) {
+        _bankStatementError = 'Format Uyuşmazlığı: ${_siteBankAccount!.bankName} hesabı için CSV (.csv) dosyası yüklenmelidir.';
+        notifyListeners();
+        return;
+      }
+    }
+
     final rows = BankFileParser.parseBytes(fileName: fileName, bytes: bytes);
     final List<ReconciliationQueueItem> parsedMatches = [];
 
@@ -762,6 +849,22 @@ class DashboardController extends ChangeNotifier {
   }
 
   void parseBankStatement(String content, {String format = 'AUTO'}) {
+    _bankStatementError = null;
+    final isMt940 = content.contains(':61:') && content.contains(':86:');
+
+    // Enforce statement format if specified explicitly
+    if (format != 'AUTO') {
+      if (format == 'MT940' && !isMt940) {
+        _bankStatementError = 'Format Uyuşmazlığı: SWIFT MT940 formatı gereklidir. Yapıştırılan içerik MT940 formatında değildir.';
+        notifyListeners();
+        return;
+      } else if ((format == 'EXCEL' || format == 'CSV') && isMt940) {
+        _bankStatementError = 'Format Uyuşmazlığı: $format formatı seçildi ancak yapıştırılan içerik SWIFT MT940.';
+        notifyListeners();
+        return;
+      }
+    }
+
     final lines = content.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
     final List<ReconciliationQueueItem> parsedMatches = [];
 

@@ -67,6 +67,12 @@ async fn main() {
         .route("/api/v1/bank/statements/parse", post(handlers::parse_bank_statement))
         .route("/api/v1/bank/statements/reconciliation-queue", get(handlers::get_reconciliation_queue))
         .route("/api/v1/bank/statements/confirm-reconciliation", post(handlers::confirm_reconciliation))
+        // Site Bank Account Configuration (STORY-08-01)
+        .route("/api/v1/site-admin/banks", get(handlers::list_supported_banks))
+        .route(
+            "/api/v1/site-admin/bank-account/:site_id",
+            get(handlers::get_site_bank_account).post(handlers::configure_site_bank_account),
+        )
         .layer(cors)
         .with_state(state);
 

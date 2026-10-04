@@ -12,7 +12,7 @@ use serde_json::json;
 use crate::models::*;
 use crate::services::{
     AuthService, DuesCalculationService, HomeResidentInvitationService,
-    RegistrationApprovalService, SaasTenantService, SiteAdminService,
+    RegistrationApprovalService, SaasTenantService, SiteAdminService, SiteBankAccountService,
 };
 use crate::state::AppState;
 
@@ -325,11 +325,63 @@ pub async fn parse_bank_statement(
     State(state): State<AppState>,
     Json(payload): Json<ParseBankStatementRequest>,
 ) -> Result<(StatusCode, Json<ParseBankStatementResponse>), (StatusCode, String)> {
+    // Automatically derive permissible format from the site's active bank account
+    let bank_service = SiteBankAccountService::new(state.clone());
+    let active_account = bank_service.get_active_account(&payload.site_id).await;
+
+    let effective_format = match active_account {
+        Some(ref account) => {
+            let bank_fmt = match account.statement_format.as_str() {
+                "EXCEL" => BankStatementFormat::Excel,
+                "CSV" => BankStatementFormat::Csv,
+                "MT940" => BankStatementFormat::Mt940,
+                _ => BankStatementFormat::Auto,
+            };
+
+            // If caller specified an explicit format, verify it matches the active bank's permissible format
+            if let Some(req_fmt) = payload.format {
+                if req_fmt != BankStatementFormat::Auto && req_fmt != bank_fmt {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        format!(
+                            "Invalid file format: Site '{}' bank '{}' requires {} statement files. {:?} is not allowed.",
+                            payload.site_id, account.bank_name, account.statement_format, req_fmt
+                        ),
+                    ));
+                }
+            }
+
+            // Validate file content structure against bank's format
+            let trimmed = payload.content.trim();
+            let is_mt940 = trimmed.starts_with(":20:") || (trimmed.contains(":61:") && trimmed.contains(":86:"));
+            if bank_fmt == BankStatementFormat::Mt940 && !is_mt940 {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "File format mismatch: Bank '{}' requires SWIFT MT940 format (with :20:, :61:, :86: tags), but uploaded file is tabular/CSV.",
+                        account.bank_name
+                    ),
+                ));
+            } else if (bank_fmt == BankStatementFormat::Excel || bank_fmt == BankStatementFormat::Csv) && is_mt940 {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "File format mismatch: Bank '{}' requires {} format, but uploaded file appears to be SWIFT MT940.",
+                        account.bank_name, account.statement_format
+                    ),
+                ));
+            }
+
+            Some(bank_fmt)
+        }
+        None => payload.format,
+    };
+
     let parser = crate::services::BankStatementParser::new();
     let recon_service = crate::services::ReconciliationService::new();
 
     let txns = parser
-        .parse_statement(&payload.content, payload.format)
+        .parse_statement(&payload.content, effective_format)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 
     let today = Utc::now().date_naive();
@@ -431,3 +483,36 @@ pub async fn confirm_reconciliation(
         }),
     ))
 }
+
+// 9. Site Bank Account Configuration Handlers (STORY-08-01)
+pub async fn list_supported_banks() -> Json<Vec<SupportedBankEntry>> {
+    Json(SiteBankAccountService::list_supported_banks())
+}
+
+pub async fn get_site_bank_account(
+    Path(site_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<BankAccountConfigResponse>, (StatusCode, String)> {
+    let service = SiteBankAccountService::new(state);
+    match service.get_active_account(&site_id).await {
+        Some(account) => Ok(Json(account)),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            format!("No active bank account configured for site '{}'", site_id),
+        )),
+    }
+}
+
+pub async fn configure_site_bank_account(
+    Path(site_id): Path<String>,
+    State(state): State<AppState>,
+    Json(payload): Json<ConfigureBankAccountRequest>,
+) -> Result<(StatusCode, Json<BankAccountConfigResponse>), (StatusCode, String)> {
+    let service = SiteBankAccountService::new(state);
+    service
+        .configure_account(&site_id, payload)
+        .await
+        .map(|res| (StatusCode::OK, Json(res)))
+        .map_err(|err| (StatusCode::BAD_REQUEST, err))
+}
+

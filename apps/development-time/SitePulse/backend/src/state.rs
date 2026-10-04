@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::models::{
     DebtStatus, DuesLiability, IndependentUnit, PendingRegistrationResponse, ReconciliationMatch,
-    Role, Site, SiteInvitationLinkResponse, UnitInviteLinkResponse, UnitMemberDto, User,
+    Role, Site, SiteBankAccount, SiteInvitationLinkResponse, UnitInviteLinkResponse, UnitMemberDto, User,
 };
 
 #[derive(Clone)]
@@ -25,6 +25,7 @@ pub struct AppStateInner {
     #[allow(dead_code)]
     pub site_invite_tokens: HashMap<String, SiteInvitationLinkResponse>,
     pub reconciliation_queue: Vec<ReconciliationMatch>,
+    pub site_bank_accounts: Vec<SiteBankAccount>,
 }
 
 impl AppState {
@@ -39,6 +40,7 @@ impl AppState {
             unit_invite_tokens: HashMap::new(),
             site_invite_tokens: HashMap::new(),
             reconciliation_queue: Vec::new(),
+            site_bank_accounts: Vec::new(),
         };
 
         // Seed Begonya Sitesi
@@ -162,6 +164,21 @@ impl AppState {
                 is_owner: true,
             }],
         );
+
+        // Seed Bank Account for Begonya Sitesi (site-1)
+        inner.site_bank_accounts.push(SiteBankAccount {
+            id: "sba-site-1-kt".to_string(),
+            site_id: "site-1".to_string(),
+            bank_code: "KUVEYT_TURK".to_string(),
+            bank_name: "Kuveyt Türk Katılım Bankası".to_string(),
+            iban: "TR620020500009863791600001".to_string(),
+            account_holder: "Begonya Sitesi Yönetimi".to_string(),
+            statement_format: "EXCEL".to_string(),
+            is_active: true,
+            configured_by: Some("usr-site-manager-1".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        });
 
         Self {
             inner: Arc::new(RwLock::new(inner)),

@@ -7,6 +7,7 @@ pub mod reconciliation_service;
 pub mod registration_approval_service;
 pub mod saas_tenant_service;
 pub mod site_admin_service;
+pub mod site_bank_account_service;
 
 pub use auth_service::AuthService;
 pub use bank_statement_parser::BankStatementParser;
@@ -18,3 +19,4 @@ pub use reconciliation_service::ReconciliationService;
 pub use registration_approval_service::RegistrationApprovalService;
 pub use saas_tenant_service::SaasTenantService;
 pub use site_admin_service::SiteAdminService;
+pub use site_bank_account_service::SiteBankAccountService;

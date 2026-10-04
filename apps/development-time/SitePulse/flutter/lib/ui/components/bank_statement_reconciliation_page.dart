@@ -228,7 +228,151 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
             ),
           ),
 
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
+
+          // 1b. Active Bank Account Configuration Card (STORY-08-01)
+          Builder(
+            builder: (ctx) {
+              final activeAccount = widget.controller.siteBankAccount;
+              final bankName = activeAccount?.bankName ?? 'Kuveyt Türk Katılım Bankası';
+              final iban = activeAccount?.iban ?? 'TR62 0020 5000 0986 3791 6000 01';
+              final holder = activeAccount?.accountHolder ?? 'Begonya Sitesi Yönetimi';
+              final formatStr = activeAccount?.statementFormat ?? 'EXCEL';
+
+              Color formatColor = AppColors.accentGreen;
+              if (formatStr == 'CSV') formatColor = AppColors.accentCyan;
+              if (formatStr == 'MT940') formatColor = const Color(0xFFA855F7); // purple
+
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.accentCyan.withOpacity(0.4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentCyan.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.account_balance, color: AppColors.accentCyan, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  Text(
+                                    bankName,
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary(context),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: formatColor.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: formatColor.withOpacity(0.4)),
+                                    ),
+                                    child: Text(
+                                      'Format: $formatStr',
+                                      style: TextStyle(
+                                        color: formatColor,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'IBAN: $iban • $holder',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary(context),
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => _showChangeBankAccountDialog(context),
+                          icon: const Icon(Icons.edit, size: 13),
+                          label: const Text('Değiştir', style: TextStyle(fontSize: 11)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.accentCyan,
+                            side: BorderSide(color: AppColors.accentCyan.withOpacity(0.5)),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Tek aktif banka hesabı kuralı geçerlidir. Banka değiştirildiğinde yeni bankanın ekstre formatı otomatik olarak izinli hale gelir.',
+                      style: TextStyle(
+                        color: AppColors.textSecondary(context).withOpacity(0.7),
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+
+          if (widget.controller.bankStatementError != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.accentRed.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.accentRed.withOpacity(0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: AppColors.accentRed, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      widget.controller.bankStatementError!,
+                      style: const TextStyle(color: AppColors.accentRed, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.accentRed, size: 16),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => widget.controller.clearBankStatementError(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 14),
 
           // 2. Direct File Upload Action
           Container(
@@ -948,6 +1092,308 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           ),
         ),
       ),
+    );
+  }
+
+  void _showChangeBankAccountDialog(BuildContext context) {
+    final isDark = AppColors.isDark(context);
+    final currentAccount = widget.controller.siteBankAccount;
+    SupportedBank selectedBank = currentAccount?.supportedBank ?? SupportedBank.kuveytTurk;
+    final ibanController = TextEditingController(text: currentAccount?.iban ?? 'TR620020500009863791600001');
+    final holderController = TextEditingController(text: currentAccount?.accountHolder ?? 'Begonya Sitesi Yönetimi');
+    String? dialogError;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return Dialog(
+              backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 480),
+                padding: const EdgeInsets.all(24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentCyan.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.account_balance, color: AppColors.accentCyan, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Site Banka Hesabı Tanımla',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary(context),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  'Banka seçimine göre ekstre formatı otomatik belirlenir',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary(context),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      // Bank Selector
+                      Text(
+                        'Banka Seçimi',
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.border(context)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<SupportedBank>(
+                            value: selectedBank,
+                            isExpanded: true,
+                            dropdownColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                            items: SupportedBank.values.map((bank) {
+                              return DropdownMenuItem<SupportedBank>(
+                                value: bank,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        bank.displayName,
+                                        style: TextStyle(
+                                          color: AppColors.textPrimary(context),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.accentCyan.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        bank.statementFormat,
+                                        style: const TextStyle(
+                                          color: AppColors.accentCyan,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (SupportedBank? newBank) {
+                              if (newBank != null) {
+                                setDialogState(() {
+                                  selectedBank = newBank;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // Derived Format Banner
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentCyan.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.accentCyan.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.auto_awesome, color: AppColors.accentCyan, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Bu banka için ekstre formatı otomatik olarak ${selectedBank.statementFormat} (${selectedBank.fileExtension}) olarak tanımlanacaktır.',
+                                style: const TextStyle(
+                                  color: AppColors.accentCyan,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // IBAN
+                      Text(
+                        'IBAN Numarası',
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: ibanController,
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'TR000000000000000000000000',
+                          hintStyle: TextStyle(color: AppColors.textSecondary(context).withOpacity(0.5)),
+                          filled: true,
+                          fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.border(context)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // Account Holder
+                      Text(
+                        'Hesap Sahibi / Site Unvanı',
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: holderController,
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 13,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Örn. Begonya Sitesi Yönetimi',
+                          hintStyle: TextStyle(color: AppColors.textSecondary(context).withOpacity(0.5)),
+                          filled: true,
+                          fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.border(context)),
+                          ),
+                        ),
+                      ),
+                      if (dialogError != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentRed.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.accentRed.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: AppColors.accentRed, size: 16),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  dialogError!,
+                                  style: const TextStyle(color: AppColors.accentRed, fontSize: 11),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogCtx).pop(),
+                            child: Text(
+                              'Vazgeç',
+                              style: TextStyle(color: AppColors.textSecondary(context)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              final success = widget.controller.configureBankAccount(
+                                bankCode: selectedBank.code,
+                                iban: ibanController.text,
+                                accountHolder: holderController.text,
+                              );
+                              if (success) {
+                                Navigator.of(dialogCtx).pop();
+                                setState(() {
+                                  // Update active sample according to newly selected bank
+                                  if (selectedBank.statementFormat == 'MT940') {
+                                    _applyPreset('SWIFT MT940', BankStatementReconciliationPage.sampleSwiftMt940);
+                                  } else if (selectedBank == SupportedBank.kuveytTurk) {
+                                    _applyPreset('Kuveyt Türk (.xlsx)', BankStatementReconciliationPage.sampleKuveytTurkExcel);
+                                  } else if (selectedBank == SupportedBank.isBankasi) {
+                                    _applyPreset('İş Bankası CSV', BankStatementReconciliationPage.sampleIsBankCsv);
+                                  } else {
+                                    _applyPreset('Garanti BBVA', BankStatementReconciliationPage.sampleGarantiExcel);
+                                  }
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Banka hesabı ${selectedBank.displayName} olarak güncellendi. Yeni ekstre formatı: ${selectedBank.statementFormat}',
+                                    ),
+                                    backgroundColor: AppColors.accentGreen,
+                                  ),
+                                );
+                              } else {
+                                setDialogState(() {
+                                  dialogError = widget.controller.bankStatementError;
+                                });
+                              }
+                            },
+                            icon: const Icon(Icons.check, size: 16),
+                            label: const Text('Kaydet & Formatı Uygula'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentCyan,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

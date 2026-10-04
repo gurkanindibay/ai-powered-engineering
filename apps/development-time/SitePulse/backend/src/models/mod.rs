@@ -426,6 +426,155 @@ pub struct UnitMemberDto {
 // Bank Statement Ingestion & Automated Reconciliation Models (STORY-07-02)
 // ============================================================================
 
+// ============================================================================
+// Site Bank Account Configuration (STORY-08-01)
+// Allows a site manager to define the bank and IBAN for the site.
+// The statement file format is automatically derived from the bank.
+// Only one active bank account is permitted per site at any time.
+// ============================================================================
+
+/// Supported Turkish banks and their associated statement file format.
+/// Adding a new bank here automatically enables its format for upload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupportedBank {
+    KuveytTurk,
+    IsBankasi,
+    ZiraatBankasi,
+    GarantiBbva,
+    AkBank,
+    YapiKredi,
+    Halkbank,
+    Vakifbank,
+    DenizBank,
+    QnbFinansbank,
+}
+
+impl SupportedBank {
+    /// Returns the canonical bank code string stored in the database.
+    pub fn as_code(&self) -> &'static str {
+        match self {
+            SupportedBank::KuveytTurk => "KUVEYT_TURK",
+            SupportedBank::IsBankasi => "IS_BANKASI",
+            SupportedBank::ZiraatBankasi => "ZIRAAT_BANKASI",
+            SupportedBank::GarantiBbva => "GARANTI_BBVA",
+            SupportedBank::AkBank => "AKBANK",
+            SupportedBank::YapiKredi => "YAPI_KREDI",
+            SupportedBank::Halkbank => "HALKBANK",
+            SupportedBank::Vakifbank => "VAKIFBANK",
+            SupportedBank::DenizBank => "DENIZBANK",
+            SupportedBank::QnbFinansbank => "QNB_FINANSBANK",
+        }
+    }
+
+    /// Human-readable display name for the bank.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            SupportedBank::KuveytTurk => "Kuveyt Türk Katılım Bankası",
+            SupportedBank::IsBankasi => "Türkiye İş Bankası",
+            SupportedBank::ZiraatBankasi => "Ziraat Bankası",
+            SupportedBank::GarantiBbva => "Garanti BBVA",
+            SupportedBank::AkBank => "Akbank",
+            SupportedBank::YapiKredi => "Yapı Kredi Bankası",
+            SupportedBank::Halkbank => "Halkbank",
+            SupportedBank::Vakifbank => "Vakıfbank",
+            SupportedBank::DenizBank => "DenizBank",
+            SupportedBank::QnbFinansbank => "QNB Finansbank",
+        }
+    }
+
+    /// Derives the required statement file format from the bank.
+    /// Banks that provide SWIFT MT940 exports use MT940;
+    /// banks whose online-banking portal exports XLSX use Excel.
+    /// All others default to CSV.
+    pub fn statement_format(&self) -> BankStatementFormat {
+        match self {
+            // Kuveyt Türk and Yapı Kredi export XLSX from online banking
+            SupportedBank::KuveytTurk | SupportedBank::YapiKredi => BankStatementFormat::Excel,
+            // Ziraat, Halkbank, Vakıfbank support MT940 exports
+            SupportedBank::ZiraatBankasi
+            | SupportedBank::Halkbank
+            | SupportedBank::Vakifbank => BankStatementFormat::Mt940,
+            // All others use CSV
+            _ => BankStatementFormat::Csv,
+        }
+    }
+
+    /// Resolves a bank from its code string (case-insensitive).
+    pub fn from_code(code: &str) -> Option<Self> {
+        match code.to_uppercase().as_str() {
+            "KUVEYT_TURK" => Some(SupportedBank::KuveytTurk),
+            "IS_BANKASI" => Some(SupportedBank::IsBankasi),
+            "ZIRAAT_BANKASI" => Some(SupportedBank::ZiraatBankasi),
+            "GARANTI_BBVA" => Some(SupportedBank::GarantiBbva),
+            "AKBANK" => Some(SupportedBank::AkBank),
+            "YAPI_KREDI" => Some(SupportedBank::YapiKredi),
+            "HALKBANK" => Some(SupportedBank::Halkbank),
+            "VAKIFBANK" => Some(SupportedBank::Vakifbank),
+            "DENIZBANK" => Some(SupportedBank::DenizBank),
+            "QNB_FINANSBANK" => Some(SupportedBank::QnbFinansbank),
+            _ => None,
+        }
+    }
+}
+
+/// The single active bank account for a site, as persisted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SiteBankAccount {
+    pub id: String,
+    pub site_id: String,
+    pub bank_code: String,
+    pub bank_name: String,
+    pub iban: String,
+    pub account_holder: String,
+    /// Automatically derived from bank_code; stored as canonical string.
+    pub statement_format: String,
+    pub is_active: bool,
+    pub configured_by: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// --- Request / Response DTOs ---
+
+/// Request body for configuring or replacing the site bank account.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigureBankAccountRequest {
+    /// One of the supported bank codes, e.g. "KUVEYT_TURK".
+    pub bank_code: String,
+    /// IBAN in TR format (26 chars, e.g. TR620020500009863791600001).
+    pub iban: String,
+    /// Legal name of the account holder.
+    pub account_holder: String,
+    /// Optional: ID of the user performing the configuration.
+    pub configured_by: Option<String>,
+}
+
+/// Full bank account info returned to the client, including the auto-set format.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BankAccountConfigResponse {
+    pub id: String,
+    pub site_id: String,
+    pub bank_code: String,
+    pub bank_name: String,
+    pub iban: String,
+    pub account_holder: String,
+    /// The statement file format required for this bank (EXCEL / CSV / MT940).
+    pub statement_format: String,
+    pub is_active: bool,
+    pub configured_by: Option<String>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Lightweight catalogue entry used to populate the bank selector dropdown.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SupportedBankEntry {
+    pub code: String,
+    pub display_name: String,
+    /// Statement format automatically applied when this bank is selected.
+    pub statement_format: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum BankStatementFormat {
