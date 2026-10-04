@@ -430,7 +430,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
   }
 
   Future<void> _openManualAssignment(ReconciliationQueueItem item) async {
-    final selectedFlat = await Navigator.push<FlatPaymentStatus>(
+    final result = await Navigator.push<dynamic>(
       context,
       MaterialPageRoute(
         fullscreenDialog: true,
@@ -441,20 +441,32 @@ class _DuesManagementViewState extends State<DuesManagementView> {
       ),
     );
 
-    if (selectedFlat != null) {
+    if (result != null) {
+      final FlatPaymentStatus selectedFlat = (result is ManualAssignmentResult)
+          ? result.flat
+          : (result as FlatPaymentStatus);
+      final bool sendMsg = (result is ManualAssignmentResult) ? result.sendOptionalMessage : false;
+      final String? msgText = (result is ManualAssignmentResult) ? result.optionalMessageText : null;
+
       widget.controller.manuallyAssignFlatToTransaction(
         matchId: item.matchId,
         block: selectedFlat.block,
         unitNo: selectedFlat.unitNo,
       );
-      // Auto confirm if manager chooses
-      widget.controller.confirmReconciliation([item.matchId]);
+      // Auto confirm if manager chooses with optional message to host
+      widget.controller.confirmReconciliation(
+        [item.matchId],
+        optionalHostMessage: sendMsg ? msgText : null,
+      );
 
       if (mounted) {
+        final msgNote = (sendMsg && msgText != null && msgText.trim().isNotEmpty)
+            ? ' Ev sahibine (${selectedFlat.residentName}) bilgilendirme mesajı iletildi.'
+            : '';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${item.transaction.senderName ?? "İşlem"} -> ${selectedFlat.block} Blok D:${selectedFlat.unitNo} (${selectedFlat.residentName}) ile eşleştirildi ve onaylandı!',
+              '${item.transaction.senderName ?? "İşlem"} -> ${selectedFlat.block} Blok D:${selectedFlat.unitNo} (${selectedFlat.residentName}) ile eşleştirildi ve onaylandı!$msgNote',
             ),
             backgroundColor: AppColors.accentGreen,
           ),

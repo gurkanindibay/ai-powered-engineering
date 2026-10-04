@@ -575,3 +575,40 @@ class SiteBankAccount {
   }
 }
 
+class ReconciliationHostMessage {
+  final String messageId;
+  final String matchId;
+  final String block;
+  final int unitNo;
+  final String residentName;
+  final Decimal amount;
+  final String messageText;
+  final DateTime sentAt;
+
+  const ReconciliationHostMessage({
+    required this.messageId,
+    required this.matchId,
+    required this.block,
+    required this.unitNo,
+    required this.residentName,
+    required this.amount,
+    required this.messageText,
+    required this.sentAt,
+  });
+
+  String get flatDesc => '$block Blok D:$unitNo';
+}
+
+class ManualAssignmentResult {
+  final FlatPaymentStatus flat;
+  final bool sendOptionalMessage;
+  final String? optionalMessageText;
+
+  const ManualAssignmentResult({
+    required this.flat,
+    this.sendOptionalMessage = false,
+    this.optionalMessageText,
+  });
+}
+
+

@@ -216,6 +216,9 @@ class DashboardController extends ChangeNotifier {
   String? _reconciliationSuccessMessage;
   String? get reconciliationSuccessMessage => _reconciliationSuccessMessage;
 
+  final List<ReconciliationHostMessage> _sentHostMessages = [];
+  List<ReconciliationHostMessage> get sentHostMessages => List.unmodifiable(_sentHostMessages);
+
   // Site Bank Account Configuration State (STORY-08-01)
   SiteBankAccount? _siteBankAccount;
   SiteBankAccount? get siteBankAccount => _siteBankAccount;
@@ -1213,7 +1216,7 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void confirmReconciliation(List<String> matchIds) {
+  void confirmReconciliation(List<String> matchIds, {String? optionalHostMessage}) {
     if (matchIds.isEmpty) return;
 
     Decimal totalCleared = Decimal.zero;
@@ -1225,6 +1228,22 @@ class DashboardController extends ChangeNotifier {
         _processedTransactionIds.add(item.transaction.transactionId);
         if (item.matchedUnitNumber != null) {
           _processedUnitKeys.add('${item.matchedBlock ?? "A"}_${item.matchedUnitNumber}');
+        }
+
+        // Record optional message dispatch to host
+        if (optionalHostMessage != null && optionalHostMessage.trim().isNotEmpty) {
+          _sentHostMessages.add(
+            ReconciliationHostMessage(
+              messageId: 'MSG-${DateTime.now().millisecondsSinceEpoch}-${item.matchId}',
+              matchId: item.matchId,
+              block: item.matchedBlock ?? 'A',
+              unitNo: item.matchedUnitNumber ?? 0,
+              residentName: item.matchedResidentName ?? 'Kat Sakini',
+              amount: item.transaction.amount,
+              messageText: optionalHostMessage.trim(),
+              sentAt: DateTime.now(),
+            ),
+          );
         }
 
         // Clear in flats list
@@ -1262,8 +1281,11 @@ class DashboardController extends ChangeNotifier {
     }
 
     _reconciliationQueue = updatedQueue;
+    final messageNote = (optionalHostMessage != null && optionalHostMessage.trim().isNotEmpty)
+        ? ' ve kat sakin(ler)ine bilgilendirme mesajı iletildi.'
+        : ' ve borç kapatıldı.';
     _reconciliationSuccessMessage =
-        '₺${totalCleared.toStringAsFixed(2)} tutarındaki banka aidat transferi başarıyla onaylandı ve borç kapatıldı.';
+        '₺${totalCleared.toStringAsFixed(2)} tutarındaki banka aidat transferi başarıyla onaylandı$messageNote';
     notifyListeners();
   }
 

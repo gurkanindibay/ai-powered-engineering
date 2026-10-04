@@ -494,6 +494,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
     let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
         site_id: "site-1".to_string(),
         match_ids: vec![match_id.clone()],
+        optional_message: None,
     };
 
     let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
@@ -507,6 +508,8 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
     assert_eq!(res.confirmed_count, 1);
     assert_eq!(res.total_amount_cleared, Decimal::from_str_exact("1423.33").unwrap());
     assert_eq!(res.updated_unit_ids, vec!["d-14".to_string()]);
+    assert_eq!(res.message_sent, false);
+    assert!(res.notification_summary.is_none());
 
     let inner = state.inner.read().await;
     // Check due status is now Paid
@@ -516,6 +519,44 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
     // Check queue item is Approved
     let queue_item = inner.reconciliation_queue.iter().find(|m| m.match_id == match_id).unwrap();
     assert_eq!(queue_item.status, sitepulse_backend::models::ReconciliationStatus::Approved);
+}
+
+#[tokio::test]
+async fn when_confirming_reconciliation_with_optional_message_then_reports_notification_sent() {
+    let state = AppState::new();
+    let parser = sitepulse_backend::services::BankStatementParser::new();
+    let recon_service = sitepulse_backend::services::ReconciliationService::new();
+
+    let content = "HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33";
+    let txns = parser.parse_statement(content, None).unwrap();
+
+    let eval_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
+    let mut inner = state.inner.write().await;
+    let matches = recon_service.reconcile_transactions(&txns, &inner.units, &inner.users, &inner.dues, eval_date);
+
+    for m in &matches {
+        inner.reconciliation_queue.push(m.clone());
+    }
+    let match_id = matches[0].match_id.clone();
+    drop(inner);
+
+    let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
+        site_id: "site-1".to_string(),
+        match_ids: vec![match_id.clone()],
+        optional_message: Some("Sayın Ahmet Yılmaz, ₺1.423,33 aidat ödemeniz onaylanmıştır.".to_string()),
+    };
+
+    let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
+        axum::extract::State(state.clone()),
+        axum::Json(payload),
+    )
+    .await
+    .expect("Reconciliation confirmation failed");
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.confirmed_count, 1);
+    assert_eq!(res.message_sent, true);
+    assert!(res.notification_summary.as_ref().unwrap().contains("iletildi"));
 }
 
 #[tokio::test]

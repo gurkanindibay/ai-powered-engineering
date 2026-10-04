@@ -3,7 +3,9 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
+import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/ui/components/bank_statement_reconciliation_page.dart';
+import 'package:sitepulse/ui/components/manual_unit_assignment_page.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 
 void main() {
@@ -172,8 +174,20 @@ void main() {
       await tester.tap(confirmButton);
       await tester.pumpAndSettle();
 
-      // Verify status transitions to ONAYLANDI
+      // Verify confirmation dialog and optional message request are presented
+      expect(find.text('Eşleştirme ve Tahsilat Onayı'), findsOneWidget);
+      expect(find.text('Ev Sahiplerine / Sakinlere Bilgilendirme Mesajı Gönder (Opsiyonel)'), findsOneWidget);
+
+      // Confirm in dialog
+      final dialogConfirmBtn = find.text('Onayla ve Kaydet');
+      expect(dialogConfirmBtn, findsOneWidget);
+      await tester.tap(dialogConfirmBtn);
+      await tester.pumpAndSettle();
+
+      // Verify status transitions to ONAYLANDI and host message is recorded
       expect(find.text('ONAYLANDI'), findsOneWidget);
+      expect(controller.sentHostMessages.length, 1);
+      expect(controller.sentHostMessages.first.residentName, 'Ahmet Yılmaz');
     });
 
     test('when transaction is unmatched, allows manually assigning flat and confirms payment', () {
@@ -280,6 +294,85 @@ void main() {
       expect(secondMatch.status, 'ZATEN_YUKLENDI');
       expect(secondMatch.isAlreadyUploaded, true);
       expect(secondMatch.notes, contains('Daha önce zaten yüklenmiş'));
+    });
+
+    test('when confirming reconciliation with optional message then records host notification message', () {
+      const line = 'HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33';
+      controller.parseBankStatement(line);
+
+      final matchId = controller.reconciliationQueue.first.matchId;
+      expect(controller.sentHostMessages, isEmpty);
+
+      const customMsg = 'Sayın Ahmet Yılmaz, Eylül ayı aidatınız tahsil edilmiştir.';
+      controller.confirmReconciliation([matchId], optionalHostMessage: customMsg);
+
+      expect(controller.sentHostMessages.length, 1);
+      final sent = controller.sentHostMessages.first;
+      expect(sent.residentName, 'Ahmet Yılmaz');
+      expect(sent.block, 'A');
+      expect(sent.unitNo, 14);
+      expect(sent.amount, Decimal.parse('1423.33'));
+      expect(sent.messageText, customMsg);
+      expect(controller.reconciliationSuccessMessage, contains('bilgilendirme mesajı iletildi'));
+    });
+
+    testWidgets('when matching host in ManualUnitAssignmentPage, requires confirmation and optional message request', (tester) async {
+      const line = '01.07.2026;TXN99;Bilinmeyen Aciklama;1.320,00;TL';
+      controller.parseBankStatement(line);
+      final item = controller.reconciliationQueue.first;
+
+      ManualAssignmentResult? assignmentResult;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () async {
+                  assignmentResult = await Navigator.push<ManualAssignmentResult>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ManualUnitAssignmentPage(
+                        item: item,
+                        flats: controller.flatsList,
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Open Assignment'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Open page
+      await tester.tap(find.text('Open Assignment'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Manuel Daire Eşleştirme'), findsOneWidget);
+
+      // Tap on a flat to match (e.g. B Blok D:3)
+      final flatCard = find.text('B Blok D:3');
+      expect(flatCard, findsOneWidget);
+      await tester.tap(flatCard);
+      await tester.pumpAndSettle();
+
+      // Verify confirmation dialog and optional message request appear
+      expect(find.text('Ev Sahibi & Ödeme Eşleştirme Onayı'), findsOneWidget);
+      expect(find.text('Ev Sahibine Bilgilendirme Mesajı Gönder (Opsiyonel)'), findsOneWidget);
+
+      // Confirm match
+      final confirmBtn = find.text('Eşleştirmeyi Onayla');
+      expect(confirmBtn, findsOneWidget);
+      await tester.tap(confirmBtn);
+      await tester.pumpAndSettle();
+
+      // Verify result was returned with optional message enabled
+      expect(assignmentResult, isNotNull);
+      expect(assignmentResult!.flat.flatDesc, 'B Blok D:3');
+      expect(assignmentResult!.sendOptionalMessage, true);
+      expect(assignmentResult!.optionalMessageText, contains('aidat ödemeniz'));
     });
   });
 }

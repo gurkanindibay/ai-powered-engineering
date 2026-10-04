@@ -475,6 +475,20 @@ pub async fn confirm_reconciliation(
         }
     }
 
+    let message_sent = payload
+        .optional_message
+        .as_ref()
+        .map(|msg| !msg.trim().is_empty())
+        .unwrap_or(false);
+    let notification_summary = if message_sent {
+        Some(format!(
+            "{} ev sahibine/kat sakinine bilgilendirme mesajı iletildi.",
+            confirmed_count
+        ))
+    } else {
+        None
+    };
+
     Ok((
         StatusCode::OK,
         Json(ConfirmReconciliationResponse {
@@ -482,6 +496,8 @@ pub async fn confirm_reconciliation(
             total_amount_cleared,
             updated_unit_ids,
             confirmed_matches,
+            message_sent,
+            notification_summary,
         }),
     ))
 }

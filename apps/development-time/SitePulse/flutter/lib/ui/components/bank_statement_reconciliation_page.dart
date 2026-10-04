@@ -188,21 +188,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           ElevatedButton.icon(
             onPressed: _selectedMatchIds.isEmpty
                 ? null
-                : () {
-                    widget.controller.confirmReconciliation(_selectedMatchIds.toList());
-                    setState(() {
-                      _selectedMatchIds.clear();
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          widget.controller.reconciliationSuccessMessage ??
-                              'Banka işlemleri başarıyla onaylandı!',
-                        ),
-                        backgroundColor: AppColors.accentGreen,
-                      ),
-                    );
-                  },
+                : () => _showBatchConfirmationDialog(context),
             icon: const Icon(Icons.check_circle_outline, size: 18),
             label: Text(
               _selectedMatchIds.isEmpty
@@ -1174,6 +1160,26 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                if (item.matchedUnitNumber != null) ...[
+                  TextButton.icon(
+                    onPressed: () => _showSingleItemConfirmationDialog(context, item),
+                    icon: const Icon(Icons.check_circle_outline, size: 15, color: AppColors.accentGreen),
+                    label: const Text(
+                      'Eşleşmeyi Onayla',
+                      style: TextStyle(
+                        color: AppColors.accentGreen,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 TextButton.icon(
                   onPressed: () => _openManualAssignment(context, item),
                   icon: const Icon(Icons.edit_note, size: 15, color: AppColors.accentCyan),
@@ -1200,7 +1206,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
   }
 
   Future<void> _openManualAssignment(BuildContext context, ReconciliationQueueItem item) async {
-    final selectedFlat = await Navigator.push<FlatPaymentStatus>(
+    final result = await Navigator.push<dynamic>(
       context,
       MaterialPageRoute(
         fullscreenDialog: true,
@@ -1211,25 +1217,517 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
       ),
     );
 
-    if (selectedFlat != null) {
+    if (result != null) {
+      final FlatPaymentStatus selectedFlat = (result is ManualAssignmentResult)
+          ? result.flat
+          : (result as FlatPaymentStatus);
+      final bool sendMsg = (result is ManualAssignmentResult) ? result.sendOptionalMessage : false;
+      final String? msgText = (result is ManualAssignmentResult) ? result.optionalMessageText : null;
+
       widget.controller.manuallyAssignFlatToTransaction(
         matchId: item.matchId,
         block: selectedFlat.block,
         unitNo: selectedFlat.unitNo,
       );
+
+      // Confirm reconciliation with optional message to host
+      widget.controller.confirmReconciliation(
+        [item.matchId],
+        optionalHostMessage: sendMsg ? msgText : null,
+      );
+
       setState(() {
-        _selectedMatchIds.add(item.matchId);
+        _selectedMatchIds.remove(item.matchId);
       });
+
       if (mounted) {
+        final msgNote = (sendMsg && msgText != null && msgText.trim().isNotEmpty)
+            ? ' Ev sahibine (${selectedFlat.residentName}) bilgilendirme mesajı iletildi.'
+            : '';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${item.transaction.senderName ?? "İşlem"} -> ${selectedFlat.block} Blok D:${selectedFlat.unitNo} (${selectedFlat.residentName}) ile başarıyla eşleştirildi!',
+              '${item.transaction.senderName ?? "İşlem"} -> ${selectedFlat.block} Blok D:${selectedFlat.unitNo} (${selectedFlat.residentName}) ile eşleştirildi ve onaylandı!$msgNote',
             ),
             backgroundColor: AppColors.accentGreen,
           ),
         );
       }
+    }
+  }
+
+  Future<void> _showSingleItemConfirmationDialog(
+    BuildContext context,
+    ReconciliationQueueItem item,
+  ) async {
+    final residentName = item.matchedResidentName ?? 'Kat Sakini';
+    final unitDesc = item.matchedUnitDesc;
+    final txn = item.transaction;
+
+    bool sendMessage = true;
+    final messageController = TextEditingController(
+      text:
+          'Sayın $residentName, $unitDesc nolu bağımsız bölümünüze ait ₺${txn.amount.toStringAsFixed(2)} tutarındaki aidat ödemeniz onaylanmış ve kayıtlara işlenmiştir. Teşekkür ederiz.',
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final isDark = AppColors.isDark(dialogCtx);
+            return Dialog(
+              backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 520),
+                padding: const EdgeInsets.all(24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentGreen.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.verified_user_outlined, color: AppColors.accentGreen, size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Ev Sahibi & Ödeme Eşleştirme Onayı',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary(dialogCtx),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '$unitDesc ($residentName) için ödeme onayı',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary(dialogCtx),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(dialogCtx, false),
+                            icon: const Icon(Icons.close, size: 20),
+                            color: AppColors.textSecondary(dialogCtx),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Host / Payment Card
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface(dialogCtx),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.border(dialogCtx)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.apartment, color: AppColors.accentCyan, size: 16),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      unitDesc,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                    Text(
+                                      ' • $residentName',
+                                      style: TextStyle(color: AppColors.textSecondary(dialogCtx), fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                                Text(
+                                  '₺${txn.amount.toStringAsFixed(2)}',
+                                  style: const TextStyle(color: AppColors.accentGreen, fontSize: 15, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              txn.description,
+                              style: TextStyle(color: AppColors.textSecondary(dialogCtx), fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Optional Message Request Section
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: sendMessage,
+                            activeColor: AppColors.accentCyan,
+                            onChanged: (val) {
+                              setDialogState(() {
+                                sendMessage = val ?? false;
+                              });
+                            },
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setDialogState(() {
+                                  sendMessage = !sendMessage;
+                                });
+                              },
+                              child: Text(
+                                'Ev Sahibine Bilgilendirme Mesajı Gönder (Opsiyonel)',
+                                style: TextStyle(
+                                  color: AppColors.textPrimary(dialogCtx),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (sendMessage) ...[
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: messageController,
+                          maxLines: 3,
+                          style: TextStyle(color: AppColors.textPrimary(dialogCtx), fontSize: 12),
+                          decoration: InputDecoration(
+                            hintText: 'Ev sahibine iletilecek mesaj metnini düzenleyebilirsiniz...',
+                            filled: true,
+                            fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: AppColors.border(dialogCtx)),
+                            ),
+                            contentPadding: const EdgeInsets.all(12),
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 22),
+
+                      // Actions
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(dialogCtx, false),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('Vazgeç'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => Navigator.pop(dialogCtx, true),
+                              icon: const Icon(Icons.check, size: 16),
+                              label: const Text('Eşleştirmeyi Onayla'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.accentGreen,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed == true && mounted) {
+      widget.controller.confirmReconciliation(
+        [item.matchId],
+        optionalHostMessage: sendMessage ? messageController.text.trim() : null,
+      );
+      setState(() {
+        _selectedMatchIds.remove(item.matchId);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.controller.reconciliationSuccessMessage ?? 'Banka işlemi başarıyla onaylandı!',
+          ),
+          backgroundColor: AppColors.accentGreen,
+        ),
+      );
+    }
+  }
+
+  Future<void> _showBatchConfirmationDialog(BuildContext context) async {
+    final selectedItems = widget.controller.reconciliationQueue
+        .where((q) => _selectedMatchIds.contains(q.matchId))
+        .toList();
+    if (selectedItems.isEmpty) return;
+
+    final totalAmount = selectedItems.fold<Decimal>(
+      Decimal.zero,
+      (sum, item) => sum + item.transaction.amount,
+    );
+
+    bool sendMessage = true;
+    final messageController = TextEditingController(
+      text:
+          'Sayın Kat Sakini, aidat ödemeniz banka ekstresi ile eşleştirilmiş ve tahsilatınız muhasebeleştirilmiştir. Teşekkür ederiz.',
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final isDark = AppColors.isDark(dialogCtx);
+            return Dialog(
+              backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 520),
+                padding: const EdgeInsets.all(24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentGreen.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.check_circle_outline, color: AppColors.accentGreen, size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Eşleştirme ve Tahsilat Onayı',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary(dialogCtx),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${selectedItems.length} daire için ödeme onayı ve opsiyonel bildirim',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary(dialogCtx),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(dialogCtx, false),
+                            icon: const Icon(Icons.close, size: 20),
+                            color: AppColors.textSecondary(dialogCtx),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Selected Items Summary
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 180),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface(dialogCtx),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border(dialogCtx)),
+                        ),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: selectedItems.length,
+                          separatorBuilder: (_, __) => Divider(color: AppColors.border(dialogCtx), height: 12),
+                          itemBuilder: (context, i) {
+                            final item = selectedItems[i];
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.apartment, size: 14, color: AppColors.accentCyan),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      item.matchedUnitDesc,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                    if (item.matchedResidentName != null) ...[
+                                      Text(
+                                        ' • ${item.matchedResidentName}',
+                                        style: TextStyle(color: AppColors.textSecondary(dialogCtx), fontSize: 11),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                Text(
+                                  '₺${item.transaction.amount.toStringAsFixed(2)}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.accentGreen),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Total Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Toplam Onaylanacak:', style: TextStyle(color: AppColors.textSecondary(dialogCtx), fontSize: 12, fontWeight: FontWeight.w600)),
+                          Text('₺${totalAmount.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.accentGreen, fontSize: 16, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // Optional Message Request Section
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: sendMessage,
+                            activeColor: AppColors.accentCyan,
+                            onChanged: (val) {
+                              setDialogState(() {
+                                sendMessage = val ?? false;
+                              });
+                            },
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setDialogState(() {
+                                  sendMessage = !sendMessage;
+                                });
+                              },
+                              child: Text(
+                                'Ev Sahiplerine / Sakinlere Bilgilendirme Mesajı Gönder (Opsiyonel)',
+                                style: TextStyle(
+                                  color: AppColors.textPrimary(dialogCtx),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (sendMessage) ...[
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: messageController,
+                          maxLines: 3,
+                          style: TextStyle(color: AppColors.textPrimary(dialogCtx), fontSize: 12),
+                          decoration: InputDecoration(
+                            hintText: 'Ev sahiplerine iletilecek mesaj metnini düzenleyebilirsiniz...',
+                            filled: true,
+                            fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: AppColors.border(dialogCtx)),
+                            ),
+                            contentPadding: const EdgeInsets.all(12),
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 22),
+
+                      // Actions
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(dialogCtx, false),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('Vazgeç'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => Navigator.pop(dialogCtx, true),
+                              icon: const Icon(Icons.check, size: 16),
+                              label: const Text('Onayla ve Kaydet'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.accentGreen,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed == true && mounted) {
+      widget.controller.confirmReconciliation(
+        _selectedMatchIds.toList(),
+        optionalHostMessage: sendMessage ? messageController.text.trim() : null,
+      );
+      setState(() {
+        _selectedMatchIds.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.controller.reconciliationSuccessMessage ?? 'Banka işlemleri başarıyla onaylandı!',
+          ),
+          backgroundColor: AppColors.accentGreen,
+        ),
+      );
     }
   }
 

@@ -657,6 +657,8 @@ pub struct ParseBankStatementResponse {
 pub struct ConfirmReconciliationRequest {
     pub site_id: String,
     pub match_ids: Vec<String>,
+    #[serde(default)]
+    pub optional_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -665,4 +667,8 @@ pub struct ConfirmReconciliationResponse {
     pub total_amount_cleared: Decimal,
     pub updated_unit_ids: Vec<String>,
     pub confirmed_matches: Vec<ReconciliationMatch>,
+    #[serde(default)]
+    pub message_sent: bool,
+    #[serde(default)]
+    pub notification_summary: Option<String>,
 }
