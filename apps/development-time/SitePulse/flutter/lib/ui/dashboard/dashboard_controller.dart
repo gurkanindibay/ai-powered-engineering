@@ -210,6 +210,9 @@ class DashboardController extends ChangeNotifier {
   List<ReconciliationQueueItem> _reconciliationQueue = [];
   List<ReconciliationQueueItem> get reconciliationQueue => _reconciliationQueue;
 
+  final Set<String> _processedTransactionIds = {};
+  final Set<String> _processedUnitKeys = {};
+
   String? _reconciliationSuccessMessage;
   String? get reconciliationSuccessMessage => _reconciliationSuccessMessage;
 
@@ -1115,21 +1118,41 @@ class DashboardController extends ChangeNotifier {
       );
     }
 
-    if (candidateFlat != null) {
+    final effectiveBlock = matchedBlock ?? candidateFlat?.block;
+    final effectiveUnitNo = matchedUnitNo ?? candidateFlat?.unitNo;
+    final String? unitKey = (effectiveBlock != null && effectiveUnitNo != null)
+        ? '${effectiveBlock}_$effectiveUnitNo'
+        : null;
+
+    final bool isTxnAlreadyProcessed = _processedTransactionIds.contains(rawId);
+    final bool isFlatAlreadyPaid = candidateFlat != null && candidateFlat.isPaid;
+    final bool isUnitAlreadyProcessed = unitKey != null && _processedUnitKeys.contains(unitKey);
+    final bool isAlreadyUploaded = isTxnAlreadyProcessed || isFlatAlreadyPaid || isUnitAlreadyProcessed;
+
+    String status;
+    String? notes;
+
+    if (isAlreadyUploaded) {
+      confidence = 100;
+      status = 'ZATEN_YUKLENDI';
+      final paidDate = candidateFlat?.paidDateStr != null ? ' (${candidateFlat!.paidDateStr})' : '';
+      notes = 'Daha önce zaten yüklenmiş / ödenmiş aidat$paidDate. Mükerrer işlem önlendi.';
+      outstandingBalance = Decimal.zero;
+      amountMatchesBalance = true;
+    } else if (candidateFlat != null) {
       outstandingBalance = candidateFlat.amountDue;
       matchedDueId = 'b-101';
       amountMatchesBalance = (amount == outstandingBalance);
-
-      if (amountMatchesBalance) {
-        confidence = 100;
-      } else {
-        confidence = 90;
-      }
+      confidence = amountMatchesBalance ? 100 : 90;
+      status = confidence >= 70 ? 'ONAY_BEKLIYOR' : 'ESLESTIRILEMEDI';
+      notes = amountMatchesBalance
+          ? 'Aidat borcuyla (%5 KMK gecikme tazminatı dahil) birebir eşleşti'
+          : 'Daire ve sakin tespit edildi';
     } else {
       confidence = 0;
+      status = 'ESLESTIRILEMEDI';
+      notes = null;
     }
-
-    final status = confidence >= 70 ? 'ONAY_BEKLIYOR' : 'ESLESTIRILEMEDI';
 
     return ReconciliationQueueItem(
       matchId: 'MATCH-${DateTime.now().millisecondsSinceEpoch}-${rawId.hashCode.abs() % 1000}',
@@ -1149,9 +1172,7 @@ class DashboardController extends ChangeNotifier {
       outstandingBalance: outstandingBalance,
       amountMatchesBalance: amountMatchesBalance,
       status: status,
-      notes: amountMatchesBalance
-          ? 'Aidat borcuyla (%5 KMK gecikme tazminatı dahil) birebir eşleşti'
-          : (candidateFlat != null ? 'Daire ve sakin tespit edildi' : null),
+      notes: notes,
     );
   }
 
@@ -1201,6 +1222,10 @@ class DashboardController extends ChangeNotifier {
     for (final item in _reconciliationQueue) {
       if (matchIds.contains(item.matchId)) {
         updatedQueue.add(item.copyWith(status: 'ONAYLANDI'));
+        _processedTransactionIds.add(item.transaction.transactionId);
+        if (item.matchedUnitNumber != null) {
+          _processedUnitKeys.add('${item.matchedBlock ?? "A"}_${item.matchedUnitNumber}');
+        }
 
         // Clear in flats list
         if (item.matchedUnitNumber != null) {

@@ -140,13 +140,18 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     final unmatchedItems = queue.where((q) => q.status == 'ESLESTIRILEMEDI').toList();
     final approvedItems = queue.where((q) => q.status == 'ONAYLANDI').toList();
     final expenseItems = queue.where((q) => q.status == 'GIDER').toList();
+    final alreadyUploadedItems = queue.where((q) => q.isAlreadyUploaded).toList();
 
     final matchedCount = matchedItems.length + approvedItems.length;
     final unmatchedCount = unmatchedItems.length;
     final expenseCount = expenseItems.length;
+    final alreadyUploadedCount = alreadyUploadedItems.length;
 
     final matchedTotal = queue
         .where((q) => q.status == 'ONAY_BEKLIYOR' || q.status == 'ONAYLANDI')
+        .fold<Decimal>(Decimal.zero, (sum, i) => sum + i.transaction.amount);
+
+    final alreadyUploadedTotal = alreadyUploadedItems
         .fold<Decimal>(Decimal.zero, (sum, i) => sum + i.transaction.amount);
 
     final unmatchedTotal = unmatchedItems
@@ -158,6 +163,8 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     List<ReconciliationQueueItem> displayedQueue = queue;
     if (_filterStatus == 'MATCHED') {
       displayedQueue = queue.where((q) => q.status == 'ONAY_BEKLIYOR' || q.status == 'ONAYLANDI').toList();
+    } else if (_filterStatus == 'ALREADY_UPLOADED') {
+      displayedQueue = alreadyUploadedItems;
     } else if (_filterStatus == 'UNMATCHED') {
       displayedQueue = unmatchedItems;
     } else if (_filterStatus == 'GIDER') {
@@ -642,39 +649,129 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildMetricCard(
-                          title: 'Eşleşen Daireler',
-                          count: matchedCount,
-                          amount: matchedTotal,
-                          color: AppColors.accentGreen,
-                          icon: Icons.check_circle_outline,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildMetricCard(
-                          title: 'Eşleşemeyen',
-                          count: unmatchedCount,
-                          amount: unmatchedTotal,
-                          color: AppColors.accentOrange,
-                          icon: Icons.help_outline,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildMetricCard(
-                          title: 'Gider / Masraf',
-                          count: expenseCount,
-                          amount: expenseTotal,
-                          color: Colors.blueGrey,
-                          icon: Icons.receipt_long,
-                        ),
-                      ),
-                    ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isNarrow = constraints.maxWidth < 650;
+                      if (isNarrow) {
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            SizedBox(
+                              width: (constraints.maxWidth - 8) / 2,
+                              child: _buildMetricCard(
+                                title: 'Eşleşen Daireler',
+                                count: matchedCount,
+                                amount: matchedTotal,
+                                color: AppColors.accentGreen,
+                                icon: Icons.check_circle_outline,
+                              ),
+                            ),
+                            SizedBox(
+                              width: (constraints.maxWidth - 8) / 2,
+                              child: _buildMetricCard(
+                                title: 'Zaten Yüklenmiş',
+                                count: alreadyUploadedCount,
+                                amount: alreadyUploadedTotal,
+                                color: Colors.blue,
+                                icon: Icons.verified_outlined,
+                              ),
+                            ),
+                            SizedBox(
+                              width: (constraints.maxWidth - 8) / 2,
+                              child: _buildMetricCard(
+                                title: 'Eşleşemeyen',
+                                count: unmatchedCount,
+                                amount: unmatchedTotal,
+                                color: AppColors.accentOrange,
+                                icon: Icons.help_outline,
+                              ),
+                            ),
+                            SizedBox(
+                              width: (constraints.maxWidth - 8) / 2,
+                              child: _buildMetricCard(
+                                title: 'Gider / Masraf',
+                                count: expenseCount,
+                                amount: expenseTotal,
+                                color: Colors.blueGrey,
+                                icon: Icons.receipt_long,
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: _buildMetricCard(
+                              title: 'Eşleşen Daireler',
+                              count: matchedCount,
+                              amount: matchedTotal,
+                              color: AppColors.accentGreen,
+                              icon: Icons.check_circle_outline,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildMetricCard(
+                              title: 'Zaten Yüklenmiş',
+                              count: alreadyUploadedCount,
+                              amount: alreadyUploadedTotal,
+                              color: Colors.blue,
+                              icon: Icons.verified_outlined,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildMetricCard(
+                              title: 'Eşleşemeyen',
+                              count: unmatchedCount,
+                              amount: unmatchedTotal,
+                              color: AppColors.accentOrange,
+                              icon: Icons.help_outline,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildMetricCard(
+                              title: 'Gider / Masraf',
+                              count: expenseCount,
+                              amount: expenseTotal,
+                              color: Colors.blueGrey,
+                              icon: Icons.receipt_long,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
+                  if (alreadyUploadedCount > 0) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.verified, color: Colors.blue, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '$alreadyUploadedCount aidat işlemi daha önce zaten yüklenmiş / ödenmiş olarak tespit edildi. Mükerrer tahsilatı önlemek için bu işlemler onaya sunulmadı.',
+                              style: const TextStyle(
+                                color: Colors.blue,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (unmatchedCount > 0) ...[
                     const SizedBox(height: 12),
                     Container(
@@ -712,6 +809,8 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                         const SizedBox(width: 8),
                         _buildFilterTab('🟢 Eşleşenler ($matchedCount)', 'MATCHED'),
                         const SizedBox(width: 8),
+                        _buildFilterTab('🔵 Zaten Yüklenenler ($alreadyUploadedCount)', 'ALREADY_UPLOADED'),
+                        const SizedBox(width: 8),
                         _buildFilterTab('🟠 Eşleşmeyenler ($unmatchedCount)', 'UNMATCHED'),
                         const SizedBox(width: 8),
                         _buildFilterTab('⚪ Giderler ($expenseCount)', 'GIDER'),
@@ -733,9 +832,11 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   Text(
                     _filterStatus == 'MATCHED'
                         ? 'Eşleşen İşlemler'
-                        : (_filterStatus == 'UNMATCHED'
-                            ? 'Eşleşmeyen İşlemler'
-                            : (_filterStatus == 'GIDER' ? 'Gider / Masraf İşlemleri' : 'Tüm Hareketler')),
+                        : (_filterStatus == 'ALREADY_UPLOADED'
+                            ? 'Daha Önce Yüklenen / Ödenen İşlemler'
+                            : (_filterStatus == 'UNMATCHED'
+                                ? 'Eşleşmeyen İşlemler'
+                                : (_filterStatus == 'GIDER' ? 'Gider / Masraf İşlemleri' : 'Tüm Hareketler'))),
                     style: TextStyle(
                       color: AppColors.textPrimary(context),
                       fontSize: 15,
@@ -838,6 +939,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     final isApproved = item.isApproved;
     final isUnmatched = item.status == 'ESLESTIRILEMEDI';
     final isExpense = item.status == 'GIDER';
+    final isAlreadyUploaded = item.isAlreadyUploaded;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -848,10 +950,12 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
         border: Border.all(
           color: isApproved
               ? AppColors.accentGreen
-              : (isUnmatched
-                  ? AppColors.accentOrange.withOpacity(0.6)
-                  : (isSelected ? AppColors.accentCyan : AppColors.border(context))),
-          width: isApproved || isSelected || isUnmatched ? 1.5 : 1.0,
+              : (isAlreadyUploaded
+                  ? Colors.blueAccent
+                  : (isUnmatched
+                      ? AppColors.accentOrange.withOpacity(0.6)
+                      : (isSelected ? AppColors.accentCyan : AppColors.border(context)))),
+          width: isApproved || isSelected || isUnmatched || isAlreadyUploaded ? 1.5 : 1.0,
         ),
       ),
       child: Column(
@@ -866,19 +970,25 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: item.confidenceScore == 100
-                          ? AppColors.accentGreen.withOpacity(0.15)
-                          : (isUnmatched
-                              ? AppColors.accentOrange.withOpacity(0.2)
-                              : AppColors.accentOrange.withOpacity(0.15)),
+                      color: isAlreadyUploaded
+                          ? Colors.blue.withOpacity(0.15)
+                          : (item.confidenceScore == 100
+                              ? AppColors.accentGreen.withOpacity(0.15)
+                              : (isUnmatched
+                                  ? AppColors.accentOrange.withOpacity(0.2)
+                                  : AppColors.accentOrange.withOpacity(0.15))),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      isUnmatched ? 'Daire Bulunamadı' : '%${item.confidenceScore} Güven',
+                      isAlreadyUploaded
+                          ? 'Daha Önce İşlendi'
+                          : (isUnmatched ? 'Daire Bulunamadı' : '%${item.confidenceScore} Güven'),
                       style: TextStyle(
-                        color: item.confidenceScore == 100
-                            ? AppColors.accentGreen
-                            : (isUnmatched ? AppColors.accentOrange : AppColors.accentOrange),
+                        color: isAlreadyUploaded
+                            ? Colors.blueAccent
+                            : (item.confidenceScore == 100
+                                ? AppColors.accentGreen
+                                : (isUnmatched ? AppColors.accentOrange : AppColors.accentOrange)),
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -890,23 +1000,29 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                     decoration: BoxDecoration(
                       color: isApproved
                           ? AppColors.accentGreen.withOpacity(0.15)
-                          : (isExpense
-                              ? Colors.grey.withOpacity(0.15)
-                              : (isUnmatched
-                                  ? AppColors.accentOrange.withOpacity(0.15)
-                                  : AppColors.accentCyan.withOpacity(0.15))),
+                          : (isAlreadyUploaded
+                              ? Colors.blue.withOpacity(0.15)
+                              : (isExpense
+                                  ? Colors.grey.withOpacity(0.15)
+                                  : (isUnmatched
+                                      ? AppColors.accentOrange.withOpacity(0.15)
+                                      : AppColors.accentCyan.withOpacity(0.15)))),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      isExpense
-                          ? 'GİDEN / MASRAF'
-                          : (isUnmatched ? 'ESLESTIRILEMEDI' : item.status),
+                      isAlreadyUploaded
+                          ? 'ZATEN YÜKLENDİ'
+                          : (isExpense
+                              ? 'GİDEN / MASRAF'
+                              : (isUnmatched ? 'ESLESTIRILEMEDI' : item.status)),
                       style: TextStyle(
                         color: isApproved
                             ? AppColors.accentGreen
-                            : (isExpense
-                                ? Colors.grey
-                                : (isUnmatched ? AppColors.accentOrange : AppColors.accentCyan)),
+                            : (isAlreadyUploaded
+                                ? Colors.blueAccent
+                                : (isExpense
+                                    ? Colors.grey
+                                    : (isUnmatched ? AppColors.accentOrange : AppColors.accentCyan))),
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -914,7 +1030,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   ),
                 ],
               ),
-              if (!isApproved && !isExpense && !isUnmatched)
+              if (!isApproved && !isExpense && !isUnmatched && !isAlreadyUploaded)
                 Checkbox(
                   value: isSelected,
                   activeColor: AppColors.accentCyan,
@@ -929,7 +1045,33 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   },
                 )
               else if (isApproved)
-                const Icon(Icons.check_circle, color: AppColors.accentGreen, size: 22),
+                const Icon(Icons.check_circle, color: AppColors.accentGreen, size: 22)
+              else if (isAlreadyUploaded)
+                Tooltip(
+                  message: 'Bu aidat daha önce zaten yüklendi / ödendi. Mükerrer işleme alınamaz.',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.history, color: Colors.blueAccent, size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          'Mükerrer Kayıt',
+                          style: TextStyle(
+                            color: Colors.blueAccent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
 
@@ -987,7 +1129,9 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                       Text(
                         item.notes!,
                         style: TextStyle(
-                          color: isUnmatched ? AppColors.accentOrange : AppColors.accentGreen,
+                          color: isAlreadyUploaded
+                              ? Colors.blueAccent
+                              : (isUnmatched ? AppColors.accentOrange : AppColors.accentGreen),
                           fontSize: 11,
                         ),
                       ),
@@ -1025,7 +1169,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                 ),
               ),
             ),
-          ] else if (!isApproved && !isExpense) ...[
+          ] else if (!isApproved && !isExpense && !isAlreadyUploaded) ...[
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,

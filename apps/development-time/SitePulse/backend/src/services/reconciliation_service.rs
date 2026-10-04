@@ -93,11 +93,18 @@ impl ReconciliationService {
         let mut outstanding_balance: Option<Decimal> = None;
         let mut amount_matches = false;
 
+        let mut is_already_processed = false;
+
         if let Some(unit) = matched_unit {
             // Find pending or overdue dues for this unit
             let unit_dues: Vec<&DuesLiability> = dues
                 .iter()
                 .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+                .collect();
+
+            let paid_dues: Vec<&DuesLiability> = dues
+                .iter()
+                .filter(|d| d.unit_id == unit.id && d.status == DebtStatus::Paid)
                 .collect();
 
             if let Some(first_due) = unit_dues.first() {
@@ -110,6 +117,8 @@ impl ReconciliationService {
                 if txn.amount == balance {
                     amount_matches = true;
                 }
+            } else if !paid_dues.is_empty() {
+                is_already_processed = true;
             }
         }
 
@@ -118,7 +127,9 @@ impl ReconciliationService {
         let has_unit = matched_unit.is_some();
         let has_name = matched_user.is_some() && Self::text_contains_name(desc, &matched_user.unwrap().full_name);
 
-        if has_unit && amount_matches {
+        if is_already_processed {
+            confidence = 100;
+        } else if has_unit && amount_matches {
             // Unit and exact amount match: 100% confidence
             confidence = 100;
         } else if has_unit && has_name && amount_matches {
@@ -131,10 +142,24 @@ impl ReconciliationService {
             confidence = 70;
         }
 
-        let status = if confidence >= 70 {
-            ReconciliationStatus::PendingApproval
+        let (status, notes) = if is_already_processed {
+            (
+                ReconciliationStatus::AlreadyProcessed,
+                Some("Bu dairenin aidatı daha önce zaten yüklenmiş / ödenmiştir. Mükerrer tahsilat önlendi.".to_string()),
+            )
+        } else if confidence >= 70 {
+            (
+                ReconciliationStatus::PendingApproval,
+                if amount_matches {
+                    Some("Exact amount matches outstanding dues balance (including KMK penalty)".to_string())
+                } else if has_unit {
+                    Some("Unit identified from transfer narrative".to_string())
+                } else {
+                    None
+                },
+            )
         } else {
-            ReconciliationStatus::Unmatched
+            (ReconciliationStatus::Unmatched, None)
         };
 
         let match_id = format!("MATCH-{}", Uuid::new_v4().simple());
@@ -152,13 +177,7 @@ impl ReconciliationService {
             amount_matches_balance: amount_matches,
             status,
             status_code: status.as_str().to_string(),
-            notes: if amount_matches {
-                Some("Exact amount matches outstanding dues balance (including KMK penalty)".to_string())
-            } else if has_unit {
-                Some("Unit identified from transfer narrative".to_string())
-            } else {
-                None
-            },
+            notes,
         }
     }
 

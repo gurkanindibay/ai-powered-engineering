@@ -416,7 +416,8 @@ pub async fn parse_bank_statement(
     }
 
     let matched_count = matches.iter().filter(|m| m.status == ReconciliationStatus::PendingApproval).count();
-    let unmatched_count = matches.len() - matched_count;
+    let already_processed_count = matches.iter().filter(|m| m.status == ReconciliationStatus::AlreadyProcessed).count();
+    let unmatched_count = matches.iter().filter(|m| m.status == ReconciliationStatus::Unmatched).count();
 
     Ok((
         StatusCode::OK,
@@ -425,6 +426,7 @@ pub async fn parse_bank_statement(
             total_transactions: matches.len(),
             matched_count,
             unmatched_count,
+            already_processed_count,
             matches,
         }),
     ))

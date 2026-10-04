@@ -587,10 +587,11 @@ pub enum BankStatementFormat {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ReconciliationStatus {
-    PendingApproval, // "ONAY_BEKLIYOR"
-    Approved,        // "ONAYLANDI"
-    Unmatched,       // "ESLESTIRILEMEDI"
-    Rejected,        // "REDDEDILDI"
+    PendingApproval,  // "ONAY_BEKLIYOR"
+    Approved,         // "ONAYLANDI"
+    Unmatched,        // "ESLESTIRILEMEDI"
+    Rejected,         // "REDDEDILDI"
+    AlreadyProcessed, // "ZATEN_YUKLENDI"
 }
 
 impl ReconciliationStatus {
@@ -600,6 +601,7 @@ impl ReconciliationStatus {
             ReconciliationStatus::Approved => "ONAYLANDI",
             ReconciliationStatus::Unmatched => "ESLESTIRILEMEDI",
             ReconciliationStatus::Rejected => "REDDEDILDI",
+            ReconciliationStatus::AlreadyProcessed => "ZATEN_YUKLENDI",
         }
     }
 }
@@ -646,6 +648,8 @@ pub struct ParseBankStatementResponse {
     pub total_transactions: usize,
     pub matched_count: usize,
     pub unmatched_count: usize,
+    #[serde(default)]
+    pub already_processed_count: usize,
     pub matches: Vec<ReconciliationMatch>,
 }
 

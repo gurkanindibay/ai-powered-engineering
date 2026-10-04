@@ -442,6 +442,7 @@ class ReconciliationQueueItem {
 
   bool get isApproved => status == 'ONAYLANDI';
   bool get isPendingApproval => status == 'ONAY_BEKLIYOR';
+  bool get isAlreadyUploaded => status == 'ZATEN_YUKLENDI' || status == 'ZATEN_ODENDI';
 
   factory ReconciliationQueueItem.fromJson(Map<String, dynamic> json) {
     return ReconciliationQueueItem(

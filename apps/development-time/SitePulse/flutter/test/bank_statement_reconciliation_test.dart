@@ -234,5 +234,52 @@ void main() {
       expect(find.textContaining('🟢 Eşleşenler'), findsOneWidget);
       expect(find.textContaining('🟠 Eşleşmeyenler'), findsOneWidget);
     });
+
+    test('when transaction belongs to already paid flat then marks status as ZATEN_YUKLENDI and prevents double collection', () {
+      // Selim Ak (A Blok D:1) is already paid in initial seeded data
+      final flatA1 = controller.flatsList.firstWhere((f) => f.block == 'A' && f.unitNo == 1);
+      expect(flatA1.isPaid, true);
+
+      const line = 'HAVALE - SELIM AK A BLOK D:1 AIDAT ODEMESI - ₺1.250,00';
+      controller.parseBankStatement(line);
+
+      expect(controller.reconciliationQueue.length, 1);
+      final item = controller.reconciliationQueue.first;
+
+      expect(item.matchedUnitDesc, 'A Blok D:1');
+      expect(item.status, 'ZATEN_YUKLENDI');
+      expect(item.isAlreadyUploaded, true);
+      expect(item.confidenceScore, 100);
+      expect(item.amountMatchesBalance, true);
+      expect(item.notes, contains('Daha önce zaten yüklenmiş'));
+
+      // Ensure select all does not include already uploaded items for approval
+      final pendingCount = controller.reconciliationQueue.where((q) => q.isPendingApproval).length;
+      expect(pendingCount, 0);
+    });
+
+    test('when flat is confirmed in one statement, subsequent statement with same unit is flagged as ZATEN_YUKLENDI', () {
+      // First statement: A Blok D:14 (Ahmet Yilmaz) is pending
+      const line1 = 'HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33';
+      controller.parseBankStatement(line1);
+
+      expect(controller.reconciliationQueue.length, 1);
+      final firstMatch = controller.reconciliationQueue.first;
+      expect(firstMatch.status, 'ONAY_BEKLIYOR');
+
+      // Manager confirms the payment
+      controller.confirmReconciliation([firstMatch.matchId]);
+      expect(controller.reconciliationQueue.first.isApproved, true);
+
+      // Second statement: Manager uploads statement again or new statement with same payment
+      const line2 = 'HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33';
+      controller.parseBankStatement(line2);
+
+      expect(controller.reconciliationQueue.length, 1);
+      final secondMatch = controller.reconciliationQueue.first;
+      expect(secondMatch.status, 'ZATEN_YUKLENDI');
+      expect(secondMatch.isAlreadyUploaded, true);
+      expect(secondMatch.notes, contains('Daha önce zaten yüklenmiş'));
+    });
   });
 }
