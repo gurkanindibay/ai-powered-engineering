@@ -95,7 +95,33 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
       _activePreset = name;
       _textController.text = content;
     });
-    widget.controller.parseBankStatement(content);
+    final success = widget.controller.parseBankStatement(content);
+    if (!success) {
+      setState(() {
+        _selectedMatchIds.clear();
+      });
+      if (mounted && widget.controller.bankStatementError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.controller.bankStatementError!,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.accentRed,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
     setState(() {
       _selectAllPending();
     });
@@ -407,7 +433,9 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                         ),
                       ),
                       Text(
-                        'Kuveyt Türk (.xlsx), İş Bankası (.xls), CSV veya MT940',
+                        widget.controller.siteBankAccount != null
+                            ? '${widget.controller.siteBankAccount!.bankName} (${widget.controller.siteBankAccount!.statementFormat} - ${widget.controller.siteBankAccount!.supportedBank?.fileExtension ?? ""})'
+                            : 'Kuveyt Türk (.xlsx), İş Bankası (.xls), CSV veya MT940',
                         style: TextStyle(
                           color: AppColors.textSecondary(context),
                           fontSize: 11,
@@ -418,12 +446,40 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                 ),
                 ElevatedButton.icon(
                   onPressed: () async {
-                    final picked = await pickBankFile();
+                    final activeAccount = widget.controller.siteBankAccount;
+                    final acceptFilter = activeAccount?.supportedBank?.fileExtension;
+                    final picked = await pickBankFile(accept: acceptFilter);
                     if (picked != null) {
-                      widget.controller.parseBankStatementFile(
+                      final success = widget.controller.parseBankStatementFile(
                         fileName: picked.name,
                         bytes: picked.bytes,
                       );
+                      if (!success) {
+                        setState(() {
+                          _selectedMatchIds.clear();
+                        });
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(
+                                children: [
+                                  const Icon(Icons.error_outline, color: Colors.white),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      widget.controller.bankStatementError ?? 'Format uyuşmazlığı nedeniyle dosya reddedildi.',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              backgroundColor: AppColors.accentRed,
+                              duration: const Duration(seconds: 5),
+                            ),
+                          );
+                        }
+                        return;
+                      }
                       setState(() {
                         _activePreset = picked.name;
                         _textController.text = '${picked.name} yüklendi (${widget.controller.reconciliationQueue.length} hareket ayrıştırıldı)';
@@ -440,7 +496,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                     }
                   },
                   icon: const Icon(Icons.upload_file, size: 16),
-                  label: const Text('Dosya Seç'),
+                  label: const Text('Dosya Yükle'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentCyan,
                     foregroundColor: Colors.white,
@@ -513,7 +569,35 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () {
-                widget.controller.parseBankStatement(_textController.text);
+                final text = _textController.text.trim();
+                if (text.isEmpty) return;
+                final success = widget.controller.parseBankStatement(text);
+                if (!success) {
+                  setState(() {
+                    _selectedMatchIds.clear();
+                  });
+                  if (mounted && widget.controller.bankStatementError != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(Icons.error_outline, color: Colors.white),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                widget.controller.bankStatementError!,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        backgroundColor: AppColors.accentRed,
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  }
+                  return;
+                }
                 setState(() {
                   _selectAllPending();
                 });

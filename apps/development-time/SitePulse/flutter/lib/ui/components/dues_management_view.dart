@@ -49,12 +49,37 @@ class _DuesManagementViewState extends State<DuesManagementView> {
   }
 
   Future<void> _handleFileUpload() async {
-    final picked = await pickBankFile();
+    final activeAccount = widget.controller.siteBankAccount;
+    final acceptFilter = activeAccount?.supportedBank?.fileExtension;
+    final picked = await pickBankFile(accept: acceptFilter);
     if (picked != null) {
-      widget.controller.parseBankStatementFile(
+      final success = widget.controller.parseBankStatementFile(
         fileName: picked.name,
         bytes: picked.bytes,
       );
+      if (!success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.controller.bankStatementError ?? 'Format uyuşmazlığı nedeniyle dosya reddedildi.',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.accentRed,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+        return;
+      }
       if (mounted) {
         _showImportSummaryModal(picked.name);
       }
@@ -62,7 +87,30 @@ class _DuesManagementViewState extends State<DuesManagementView> {
   }
 
   void _handlePresetUpload(String name, String content) {
-    widget.controller.parseBankStatement(content);
+    final success = widget.controller.parseBankStatement(content);
+    if (!success) {
+      if (mounted && widget.controller.bankStatementError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.controller.bankStatementError!,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.accentRed,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
     _showImportSummaryModal(name);
   }
 

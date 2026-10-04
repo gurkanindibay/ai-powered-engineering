@@ -9,10 +9,10 @@ class PickedBankFile {
   PickedBankFile({required this.name, required this.bytes});
 }
 
-Future<PickedBankFile?> pickBankFile() async {
+Future<PickedBankFile?> pickBankFile({String? accept}) async {
   final completer = Completer<PickedBankFile?>();
   final uploadInput = html.FileUploadInputElement();
-  uploadInput.accept = '.xlsx,.xls,.csv,.txt,.sta';
+  uploadInput.accept = accept ?? '.xlsx,.xls,.csv,.txt,.sta';
   uploadInput.click();
 
   uploadInput.onChange.listen((e) {

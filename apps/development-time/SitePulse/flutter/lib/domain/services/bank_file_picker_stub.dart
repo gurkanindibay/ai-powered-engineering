@@ -7,6 +7,6 @@ class PickedBankFile {
   PickedBankFile({required this.name, required this.bytes});
 }
 
-Future<PickedBankFile?> pickBankFile() async {
+Future<PickedBankFile?> pickBankFile({String? accept}) async {
   return null;
 }

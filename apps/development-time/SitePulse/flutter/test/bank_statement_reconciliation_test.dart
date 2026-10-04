@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,7 +33,13 @@ void main() {
       expect(match.status, 'ONAY_BEKLIYOR');
     });
 
-    test('when parsing swift mt940 statement then extracts transaction and matches flat', () {
+    test('when parsing swift mt940 statement with MT940 bank configured then extracts transaction and matches flat', () {
+      controller.configureBankAccount(
+        bankCode: 'VAKIFBANK',
+        iban: 'TR120001500000000000001001',
+        accountHolder: 'Begonya Sitesi Yönetimi',
+      );
+
       const mt940 = ':20:STARTMR\n'
           ':25:TR120006200000000000001001\n'
           ':28C:00001/001\n'
@@ -42,7 +49,8 @@ void main() {
           ':62F:C260930TRY51423,33\n'
           '-';
 
-      controller.parseBankStatement(mt940);
+      final success = controller.parseBankStatement(mt940);
+      expect(success, true);
 
       expect(controller.reconciliationQueue.length, 1);
       final match = controller.reconciliationQueue.first;
@@ -51,6 +59,60 @@ void main() {
       expect(match.confidenceScore, 100);
       expect(match.transaction.amount, Decimal.parse('1423.33'));
       expect(match.status, 'ONAY_BEKLIYOR');
+    });
+
+    test('when file format does not match active bank format then parseBankStatementFile strictly rejects it', () {
+      // Default bank is Kuveyt Turk (EXCEL)
+      expect(controller.siteBankAccount?.bankCode, 'KUVEYT_TURK');
+      expect(controller.siteBankAccount?.statementFormat, 'EXCEL');
+
+      // 1. Upload CSV to EXCEL bank -> Rejected
+      final csvBytes = Uint8List.fromList('01.07.2026;TXN1;Ahmet Yilmaz;1423.33;TL'.codeUnits);
+      final successCsv = controller.parseBankStatementFile(
+        fileName: 'ekstre.csv',
+        bytes: csvBytes,
+      );
+      expect(successCsv, false);
+      expect(controller.bankStatementError, contains('Format Reddedildi'));
+      expect(controller.bankStatementError, contains('Kuveyt Türk Katılım Bankası'));
+      expect(controller.reconciliationQueue, isEmpty);
+
+      // 2. Upload MT940 (.sta) to EXCEL bank -> Rejected
+      final staBytes = Uint8List.fromList(':20:START\n:61:260915CR1423,33\n:86:AHMET YILMAZ'.codeUnits);
+      final successSta = controller.parseBankStatementFile(
+        fileName: 'ekstre.sta',
+        bytes: staBytes,
+      );
+      expect(successSta, false);
+      expect(controller.bankStatementError, contains('Format Reddedildi'));
+      expect(controller.reconciliationQueue, isEmpty);
+
+      // 3. Upload MT940 text disguised with .xlsx extension -> Rejected
+      final fakeXlsxBytes = Uint8List.fromList(':20:FAKE_MT940\n:61:260915CR1423,33\n:86:AHMET YILMAZ'.codeUnits);
+      final successFake = controller.parseBankStatementFile(
+        fileName: 'fake_ekstre.xlsx',
+        bytes: fakeXlsxBytes,
+      );
+      expect(successFake, false);
+      expect(controller.bankStatementError, contains('Format Reddedildi'));
+      expect(controller.reconciliationQueue, isEmpty);
+
+      // 4. Change bank to Vakifbank (MT940) and test rejection of Excel/CSV
+      controller.configureBankAccount(
+        bankCode: 'VAKIFBANK',
+        iban: 'TR120001500000000000001001',
+        accountHolder: 'Begonya Sitesi Yönetimi',
+      );
+      expect(controller.siteBankAccount?.statementFormat, 'MT940');
+
+      final successExcelOnMt940 = controller.parseBankStatementFile(
+        fileName: 'hesap-ekstresi.xlsx',
+        bytes: Uint8List(50),
+      );
+      expect(successExcelOnMt940, false);
+      expect(controller.bankStatementError, contains('Vakıfbank'));
+      expect(controller.bankStatementError, contains('SWIFT MT940'));
+      expect(controller.reconciliationQueue, isEmpty);
     });
 
     test('when confirming reconciliation then marks flat as paid and updates collection summary', () {

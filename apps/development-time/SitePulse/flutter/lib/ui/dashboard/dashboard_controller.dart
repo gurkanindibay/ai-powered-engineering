@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/foundation.dart';
 import '../../domain/models/auth_models.dart';
@@ -219,6 +221,10 @@ class DashboardController extends ChangeNotifier {
   String? get bankStatementError => _bankStatementError;
   void clearBankStatementError() {
     _bankStatementError = null;
+    notifyListeners();
+  }
+  void setBankStatementError(String error) {
+    _bankStatementError = error;
     notifyListeners();
   }
 
@@ -803,7 +809,7 @@ class DashboardController extends ChangeNotifier {
     return true;
   }
 
-  void parseBankStatementFile({
+  bool parseBankStatementFile({
     required String fileName,
     required Uint8List bytes,
   }) {
@@ -813,22 +819,62 @@ class DashboardController extends ChangeNotifier {
     if (_siteBankAccount != null) {
       final ext = fileName.toLowerCase();
       final expectedFormat = _siteBankAccount!.statementFormat;
-      if (expectedFormat == 'EXCEL' && !ext.endsWith('.xlsx') && !ext.endsWith('.xls')) {
-        _bankStatementError = 'Format Uyuşmazlığı: ${_siteBankAccount!.bankName} hesabı için Excel (.xlsx) dosyası yüklenmelidir.';
-        notifyListeners();
-        return;
-      } else if (expectedFormat == 'MT940' && !ext.endsWith('.sta') && !ext.endsWith('.txt') && !ext.endsWith('.mt940')) {
-        _bankStatementError = 'Format Uyuşmazlığı: ${_siteBankAccount!.bankName} hesabı için SWIFT MT940 (.sta / .txt) dosyası yüklenmelidir.';
-        notifyListeners();
-        return;
-      } else if (expectedFormat == 'CSV' && !ext.endsWith('.csv') && !ext.endsWith('.txt')) {
-        _bankStatementError = 'Format Uyuşmazlığı: ${_siteBankAccount!.bankName} hesabı için CSV (.csv) dosyası yüklenmelidir.';
-        notifyListeners();
-        return;
+      if (expectedFormat == 'EXCEL') {
+        if (!ext.endsWith('.xlsx') && !ext.endsWith('.xls')) {
+          _bankStatementError = 'Format Reddedildi: ${_siteBankAccount!.bankName} hesabı yalnızca Excel (.xlsx / .xls) dosyalarını kabul eder. Yüklenen dosya ($fileName) reddedildi.';
+          _reconciliationQueue = [];
+          notifyListeners();
+          return false;
+        }
+        // Verify not MT940 disguised as Excel
+        final text = utf8.decode(bytes, allowMalformed: true);
+        if (text.contains(':20:') && text.contains(':61:')) {
+          _bankStatementError = 'Format Reddedildi: ${_siteBankAccount!.bankName} hesabı Excel (.xlsx) formatı gerektirir. SWIFT MT940 formatındaki dosya ($fileName) reddedildi.';
+          _reconciliationQueue = [];
+          notifyListeners();
+          return false;
+        }
+      } else if (expectedFormat == 'MT940') {
+        if (!ext.endsWith('.sta') && !ext.endsWith('.txt') && !ext.endsWith('.mt940')) {
+          _bankStatementError = 'Format Reddedildi: ${_siteBankAccount!.bankName} hesabı yalnızca SWIFT MT940 (.sta / .txt / .mt940) dosyalarını kabul eder. Yüklenen dosya ($fileName) reddedildi.';
+          _reconciliationQueue = [];
+          notifyListeners();
+          return false;
+        }
+        // Verify content contains MT940 tags
+        final text = utf8.decode(bytes, allowMalformed: true);
+        if (!text.contains(':61:') || !text.contains(':86:')) {
+          _bankStatementError = 'Format Reddedildi: ${_siteBankAccount!.bankName} hesabı için yüklenen dosya geçerli SWIFT MT940 formatında değil (:61:, :86: etiketleri bulunamadı). Dosya reddedildi.';
+          _reconciliationQueue = [];
+          notifyListeners();
+          return false;
+        }
+      } else if (expectedFormat == 'CSV') {
+        if (!ext.endsWith('.csv') && !ext.endsWith('.txt')) {
+          _bankStatementError = 'Format Reddedildi: ${_siteBankAccount!.bankName} hesabı yalnızca CSV (.csv) dosyalarını kabul eder. Yüklenen dosya ($fileName) reddedildi.';
+          _reconciliationQueue = [];
+          notifyListeners();
+          return false;
+        }
+        // Verify user didn't upload MT940 into CSV bank
+        final text = utf8.decode(bytes, allowMalformed: true);
+        if (text.contains(':20:') && text.contains(':61:')) {
+          _bankStatementError = 'Format Reddedildi: ${_siteBankAccount!.bankName} hesabı CSV formatı gerektirir. Yüklenen dosya SWIFT MT940 formatında olduğu için reddedildi.';
+          _reconciliationQueue = [];
+          notifyListeners();
+          return false;
+        }
       }
     }
 
     final rows = BankFileParser.parseBytes(fileName: fileName, bytes: bytes);
+    if (rows.isEmpty) {
+      _bankStatementError = 'Format Reddedildi: Yüklenen dosya ($fileName) ${_siteBankAccount?.bankName ?? "ilgili banka"} formatına uygun hareket içermediği için reddedildi.';
+      _reconciliationQueue = [];
+      notifyListeners();
+      return false;
+    }
+
     final List<ReconciliationQueueItem> parsedMatches = [];
 
     for (int i = 0; i < rows.length; i++) {
@@ -846,22 +892,43 @@ class DashboardController extends ChangeNotifier {
 
     _reconciliationQueue = parsedMatches;
     notifyListeners();
+    return true;
   }
 
-  void parseBankStatement(String content, {String format = 'AUTO'}) {
+  bool parseBankStatement(String content, {String format = 'AUTO'}) {
     _bankStatementError = null;
-    final isMt940 = content.contains(':61:') && content.contains(':86:');
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) {
+      _bankStatementError = 'Format Reddedildi: Ekstre içeriği boş.';
+      _reconciliationQueue = [];
+      notifyListeners();
+      return false;
+    }
 
-    // Enforce statement format if specified explicitly
-    if (format != 'AUTO') {
-      if (format == 'MT940' && !isMt940) {
-        _bankStatementError = 'Format Uyuşmazlığı: SWIFT MT940 formatı gereklidir. Yapıştırılan içerik MT940 formatında değildir.';
+    final isMt940 = trimmed.startsWith(':20:') || (trimmed.contains(':61:') && trimmed.contains(':86:'));
+
+    // Enforce statement format from active bank or explicit format parameter
+    final activeAccount = _siteBankAccount;
+    final targetFormat = format != 'AUTO'
+        ? format
+        : (activeAccount?.statementFormat ?? 'AUTO');
+
+    if (targetFormat != 'AUTO') {
+      if (targetFormat == 'MT940' && !isMt940) {
+        _bankStatementError = 'Format Reddedildi: ${activeAccount?.bankName ?? "Seçili banka"} hesabı SWIFT MT940 (:61:, :86:) formatı gerektirir. Yapıştırılan içerik MT940 formatında olmadığı için reddedildi.';
+        _reconciliationQueue = [];
         notifyListeners();
-        return;
-      } else if ((format == 'EXCEL' || format == 'CSV') && isMt940) {
-        _bankStatementError = 'Format Uyuşmazlığı: $format formatı seçildi ancak yapıştırılan içerik SWIFT MT940.';
+        return false;
+      } else if (targetFormat == 'EXCEL' && isMt940) {
+        _bankStatementError = 'Format Reddedildi: ${activeAccount?.bankName ?? "Seçili banka"} hesabı Excel (.xlsx) formatı gerektirir. SWIFT MT940 formatındaki içerik reddedildi.';
+        _reconciliationQueue = [];
         notifyListeners();
-        return;
+        return false;
+      } else if (targetFormat == 'CSV' && isMt940) {
+        _bankStatementError = 'Format Reddedildi: ${activeAccount?.bankName ?? "Seçili banka"} hesabı CSV (.csv) formatı gerektirir. SWIFT MT940 formatındaki içerik reddedildi.';
+        _reconciliationQueue = [];
+        notifyListeners();
+        return false;
       }
     }
 
@@ -937,8 +1004,16 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
+    if (parsedMatches.isEmpty) {
+      _bankStatementError = 'Format Reddedildi: İçerikte ${activeAccount?.bankName ?? "ilgili banka"} formatına uygun işlem satırı bulunamadı.';
+      _reconciliationQueue = [];
+      notifyListeners();
+      return false;
+    }
+
     _reconciliationQueue = parsedMatches;
     notifyListeners();
+    return true;
   }
 
   ReconciliationQueueItem _matchTransactionToRoster({
