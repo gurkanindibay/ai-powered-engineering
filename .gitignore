@@ -41,3 +41,5 @@ Thumbs.db
 .flutter-plugins
 .flutter-plugins-dependencies
 
+apps/development-time/SitePulse/backend/keys/*
+
