@@ -73,6 +73,19 @@ async fn main() {
             "/api/v1/site-admin/bank-account/:site_id",
             get(handlers::get_site_bank_account).post(handlers::configure_site_bank_account),
         )
+        // Kuveyt Türk Sandbox & Flat Virtual IBAN Allocation (STORY-07-01 & STORY-07-06)
+        .route(
+            "/api/v1/units/:id/virtual-iban",
+            get(handlers::get_or_allocate_virtual_iban).post(handlers::get_or_allocate_virtual_iban),
+        )
+        .route("/api/v1/bank/kuveyt-turk/status", get(handlers::get_kuveyt_turk_status))
+        .route("/api/v1/bank/kuveyt-turk/configure", post(handlers::configure_kuveyt_turk))
+        .route("/api/v1/bank/kuveyt-turk/test-connection", post(handlers::test_kuveyt_turk_connection))
+        // Real-Time Bank Webhook & Virtual IBAN Settlement (STORY-07-03)
+        .route(
+            "/api/v1/bank/webhook/incoming-transfer",
+            post(handlers::handle_bank_incoming_webhook),
+        )
         .layer(cors)
         .with_state(state);
 

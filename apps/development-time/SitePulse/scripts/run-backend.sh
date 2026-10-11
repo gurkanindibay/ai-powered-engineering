@@ -41,4 +41,9 @@ if lsof -ti :$PORT > /dev/null 2>&1; then
 fi
 
 cd "$SITEPULSE_ROOT/backend"
+if [ -f ".env" ]; then
+    set -a
+    source .env
+    set +a
+fi
 "$CARGO_BIN" run --release

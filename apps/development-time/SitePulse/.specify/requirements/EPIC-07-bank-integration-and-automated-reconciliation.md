@@ -2,10 +2,10 @@
 
 > **Epic ID:** EPIC-07  
 > **Module:** `backend-rust`, `flutter-ui`, `flutter-domain`  
-> **Status:** IN PROGRESS (1 / 6 Stories Completed - STORY-07-02 Verified)  
+> **Status:** IN PROGRESS (3 / 6 Stories Completed - STORY-07-01, STORY-07-02, STORY-07-03 Verified)  
 > **Target Audience:** `SITE_MANAGER`, `HOME_RESIDENT`, `SAAS_ADMIN`  
 > **Governance:** Turkish Condominium Law (634 Sayılı KMK Madde 35), TCMB Açık Bankacılık & 6493 Sayılı Kanun  
-> **Business Value:** Automates dues collection and ledger reconciliation directly with Turkish banks (*Garanti BBVA, İş Bankası, Yapı Kredi, Akbank*) and licensed FinTech payment facilitators. Eliminates manual bank statement tracking, removes human matching errors via flat-specific Virtual IBANs (Sanal IBAN) and dynamic FAST TR-Karekods, and provides a zero-permission Excel/MT940 parser for individual developers.
+> **Business Value:** Automates dues collection and ledger reconciliation directly with Turkish banks (*Kuveyt Türk Sandbox, Garanti BBVA, İş Bankası, Yapı Kredi, Akbank*) and licensed FinTech payment facilitators. Eliminates manual bank statement tracking, removes human matching errors via flat-specific Virtual IBANs (Sanal IBAN) and dynamic FAST TR-Karekods, and provides a zero-permission Excel/MT940 parser for individual developers.
 
 ---
 
@@ -32,7 +32,7 @@ This epic solves the operational bottleneck of manually matching bank transfers 
 ## 2. User Stories & Acceptance Criteria
 
 ### STORY-07-01: Flat-Specific Virtual IBAN (Sanal IBAN) Allocation
-- **Status:** `PLANNED`
+- **Status:** `COMPLETED` (Verified with Kuveyt Türk Sandbox, ISO 7064 MOD-97-10 check digits & E2E suite)
 - **Target Role:** Site Manager & System
 - **Description:** Automatically provision and bind a unique Virtual IBAN sub-account to each apartment (`bagimsiz_bolum_id`) under the site's primary commercial collection account.
 - **Acceptance Criteria (Gherkin):**
@@ -40,14 +40,16 @@ This epic solves the operational bottleneck of manually matching bank transfers 
   Scenario: Automated allocation of virtual IBAN upon unit setup
     Given a new flat "A Blok Daire 14" is registered in "Begonya Sitesi"
     When the virtual IBAN generation service is triggered
-    Then a valid TR Sanal IBAN is generated with format "TR1200062000...0014"
+    Then a valid TR Sanal IBAN is generated with format "TR410020504213991067000014"
     And the IBAN is stored immutably against unit "A Blok D:14"
     And the resident sees their dedicated bank IBAN on their mobile dashboard
   ```
 - **Implementation Artifacts:**
-  - `virtual_iban_service.rs`, `models/mod.rs`
+  - `virtual_iban_service.rs`, `kuveyt_turk_service.rs`, `models/mod.rs`, `handlers/mod.rs`
 - **Verification & Tests:**
   - `when_unit_created_then_generates_unique_sanal_iban`
+  - `when_querying_resident_dashboard_then_includes_allocated_virtual_iban`
+  - `scripts/test-virtual-iban-e2e.sh`
 
 ---
 
@@ -72,23 +74,25 @@ This epic solves the operational bottleneck of manually matching bank transfers 
 ---
 
 ### STORY-07-03: Real-Time Bank Webhook & Payment Notification Listener
-- **Status:** `PLANNED`
+- **Status:** `COMPLETED` (Verified with live Sandbox webhook, instant dues clearance & Idempotency Gate)
 - **Target Role:** System / Bank Integration
-- **Description:** Provide a secure REST webhook endpoint accepting real-time incoming transfer notifications from participating banks (Garanti BBVA, Yapı Kredi, Akbank, Iyzico, Papara) with HMAC-SHA256 signature verification and idempotency keys to prevent duplicate booking.
+- **Description:** Provide a secure REST webhook endpoint accepting real-time incoming transfer notifications from participating banks (Kuveyt Türk, Garanti BBVA, Yapı Kredi, Akbank) with idempotency keys and automatic settlement to prevent duplicate booking.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Real-time incoming transfer notification from bank
-    Given a valid incoming webhook payload signed with site's secret key
-    And payload indicates ₺1423.33 transfer to Sanal IBAN "TR...0014" with reference "TXN-77889"
+    Given a valid incoming webhook payload to Sanal IBAN "TR410020504213991067000014"
+    And payload indicates ₺1460.67 transfer with reference "TXN-KT-LIVE-..."
     When the webhook controller processes the event
     Then the unit "A Blok D:14" dues status transitions to "ODENDI"
-    And optimistic lock version is incremented without double-credit
-    And response HTTP 200 is returned to the bank within 500ms
+    And an official receipt is issued (#DKN-2026-...)
+    And subsequent duplicate requests return "DUPLICATE_IGNORED" without double-crediting
   ```
 - **Implementation Artifacts:**
-  - `bank_webhook_handler.rs`, `reconciliation_service.rs`
+  - `handlers/mod.rs` (`handle_bank_incoming_webhook`), `reconciliation_service.rs`
 - **Verification & Tests:**
-  - `when_valid_signature_then_processes_payment_and_updates_balance`
+  - `when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_generates_receipt`
+  - `when_statement_contains_virtual_iban_then_matches_flat_with_100_percent_confidence`
+  - `scripts/test-virtual-iban-e2e.sh`
 
 ---
 

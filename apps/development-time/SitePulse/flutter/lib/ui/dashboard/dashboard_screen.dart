@@ -485,6 +485,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _buildDairemHouseholdCard(),
           const SizedBox(height: 16),
           VirtualIbanCard(
+            iban: widget.controller.activeUnit.virtualIban ?? 'TR64 0020 5000 0986 3791 6000 14',
             unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
           ),
         ],
@@ -504,6 +505,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildDairemHouseholdCard(),
             const SizedBox(height: 16),
             VirtualIbanCard(
+              iban: widget.controller.activeUnit.virtualIban ?? 'TR91 0020 5000 0986 3791 6000 01',
               unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
             ),
           ],

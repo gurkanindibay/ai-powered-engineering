@@ -96,6 +96,7 @@ class ApartmentUnit {
   final int landShare;
   final String ownerName;
   final String tenantName;
+  final String? virtualIban;
 
   const ApartmentUnit({
     required this.id,
@@ -106,6 +107,7 @@ class ApartmentUnit {
     required this.landShare,
     required this.ownerName,
     required this.tenantName,
+    this.virtualIban,
   });
 
   // Backwards compatibility getters

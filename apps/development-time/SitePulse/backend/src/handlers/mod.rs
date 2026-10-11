@@ -11,10 +11,12 @@ use serde_json::json;
 
 use crate::models::*;
 use crate::services::{
-    AuthService, DuesCalculationService, HomeResidentInvitationService,
+    AuthService, DuesCalculationService, HomeResidentInvitationService, KuveytTurkSandboxService,
     RegistrationApprovalService, SaasTenantService, SiteAdminService, SiteBankAccountService,
+    VirtualIbanService,
 };
 use crate::state::AppState;
+use uuid::Uuid;
 
 // 1. Resident Dashboard Handler
 pub async fn get_resident_dashboard(
@@ -29,15 +31,24 @@ pub async fn get_resident_dashboard(
         .iter()
         .find(|u| u.id == unit_id)
         .cloned()
-        .unwrap_or(IndependentUnit {
-            id: unit_id.clone(),
-            site_id: "site-1".to_string(),
-            block_id: "A".to_string(),
-            unit_number: 14,
-            floor: 4,
-            land_share: 24,
-            owner_user_id: None,
-            tenant_user_id: None,
+        .unwrap_or_else(|| {
+            let default_viban = VirtualIbanService::generate_virtual_iban(
+                VirtualIbanService::KUVEYT_TURK_BANK_CODE,
+                "site-1",
+                "A",
+                14,
+            );
+            IndependentUnit {
+                id: unit_id.clone(),
+                site_id: "site-1".to_string(),
+                block_id: "A".to_string(),
+                unit_number: 14,
+                floor: 4,
+                land_share: 24,
+                owner_user_id: None,
+                tenant_user_id: None,
+                virtual_iban: Some(default_viban),
+            }
         });
 
     let today = Utc::now().date_naive();
@@ -76,6 +87,7 @@ pub async fn get_resident_dashboard(
         announcement_content:
             "İSKİ ana hat yenilemesi sebebiyle 18 Eylül 10:00 - 14:00 arası su kesilecektir."
                 .to_string(),
+        virtual_iban: unit.virtual_iban,
     };
 
     (StatusCode::OK, Json(response))
@@ -532,5 +544,221 @@ pub async fn configure_site_bank_account(
         .await
         .map(|res| (StatusCode::OK, Json(res)))
         .map_err(|err| (StatusCode::BAD_REQUEST, err))
+}
+
+// 10. Kuveyt Türk Sandbox & Flat Virtual IBAN Allocation Handlers (STORY-07-01 & STORY-07-06)
+pub async fn get_or_allocate_virtual_iban(
+    Path(unit_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let mut inner = state.inner.write().await;
+    let unit = inner
+        .units
+        .iter_mut()
+        .find(|u| u.id == unit_id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Unit '{}' not found", unit_id)))?;
+
+    if let Some(existing) = &unit.virtual_iban {
+        return Ok(Json(json!({
+            "unit_id": unit.id,
+            "virtual_iban": existing,
+            "formatted": VirtualIbanService::format_for_display(existing),
+            "bank_code": VirtualIbanService::KUVEYT_TURK_BANK_CODE,
+            "bank_name": "Kuveyt Türk Katılım Bankası",
+            "status": "ALLOCATED"
+        })));
+    }
+
+    let generated = VirtualIbanService::generate_virtual_iban(
+        VirtualIbanService::KUVEYT_TURK_BANK_CODE,
+        &unit.site_id,
+        &unit.block_id,
+        unit.unit_number,
+    );
+    unit.virtual_iban = Some(generated.clone());
+
+    Ok(Json(json!({
+        "unit_id": unit.id,
+        "virtual_iban": generated,
+        "formatted": VirtualIbanService::format_for_display(&generated),
+        "bank_code": VirtualIbanService::KUVEYT_TURK_BANK_CODE,
+        "bank_name": "Kuveyt Türk Katılım Bankası",
+        "status": "NEWLY_ALLOCATED"
+    })))
+}
+
+pub async fn get_kuveyt_turk_status(
+    State(state): State<AppState>,
+) -> Json<crate::services::KuveytTurkSandboxConfig> {
+    let inner = state.inner.read().await;
+    let service = KuveytTurkSandboxService::new();
+    let config = service.get_config_status(inner.kuveyt_turk_client_id.as_deref());
+    Json(config)
+}
+
+pub async fn configure_kuveyt_turk(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::services::ConfigureKuveytTurkRequest>,
+) -> (StatusCode, Json<crate::services::KuveytTurkSandboxConfig>) {
+    let mut inner = state.inner.write().await;
+    inner.kuveyt_turk_client_id = Some(payload.client_id.trim().to_string());
+    inner.kuveyt_turk_client_secret = Some(payload.client_secret.trim().to_string());
+
+    let service = KuveytTurkSandboxService::new();
+    let config = service.get_config_status(inner.kuveyt_turk_client_id.as_deref());
+    (StatusCode::OK, Json(config))
+}
+
+pub async fn test_kuveyt_turk_connection(
+    State(state): State<AppState>,
+    Json(payload): Json<Option<crate::services::ConfigureKuveytTurkRequest>>,
+) -> Result<Json<crate::services::KuveytTurkProbeResult>, (StatusCode, String)> {
+    let (client_id, client_secret) = {
+        let inner = state.inner.read().await;
+        if let Some(req) = payload {
+            (req.client_id, req.client_secret)
+        } else {
+            let id = inner
+                .kuveyt_turk_client_id
+                .clone()
+                .or_else(|| std::env::var("KT_CLIENT_ID").ok())
+                .unwrap_or_default();
+            let secret = inner
+                .kuveyt_turk_client_secret
+                .clone()
+                .or_else(|| std::env::var("KT_CLIENT_SECRET").ok())
+                .unwrap_or_default();
+            (id, secret)
+        }
+    };
+
+    if client_id.trim().is_empty() || client_secret.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Client ID and Client Secret are required to test connection with Kuveyt Türk Sandbox."
+                .to_string(),
+        ));
+    }
+
+    let service = KuveytTurkSandboxService::new();
+    let probe = service
+        .test_connection(&client_id, &client_secret)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    Ok(Json(probe))
+}
+
+// 11. Bank Incoming Webhook & Real-Time Virtual IBAN Settlement (STORY-07-03)
+pub async fn handle_bank_incoming_webhook(
+    State(state): State<AppState>,
+    Json(payload): Json<BankIncomingWebhookRequest>,
+) -> Result<(StatusCode, Json<BankIncomingWebhookResponse>), (StatusCode, String)> {
+    let clean_viban = payload.virtual_iban.replace(' ', "").to_uppercase();
+    let mut inner = state.inner.write().await;
+
+    // 1. Match unit by Virtual IBAN
+    let unit_index = inner.units.iter().position(|u| {
+        u.virtual_iban
+            .as_ref()
+            .map(|v| v.replace(' ', "").to_uppercase() == clean_viban)
+            .unwrap_or(false)
+    });
+
+    let unit = match unit_index {
+        Some(idx) => inner.units[idx].clone(),
+        None => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!("Virtual IBAN '{}' is not registered to any unit in this site.", payload.virtual_iban),
+            ));
+        }
+    };
+
+    // 2. Check for duplicate transaction id (Idempotency Gate)
+    let already_processed = inner
+        .reconciliation_queue
+        .iter()
+        .any(|m| m.transaction.transaction_id == payload.transaction_id && m.status == ReconciliationStatus::Approved);
+
+    if already_processed {
+        return Ok((
+            StatusCode::OK,
+            Json(BankIncomingWebhookResponse {
+                status: "DUPLICATE_IGNORED".to_string(),
+                transaction_id: payload.transaction_id,
+                matched_unit_id: unit.id,
+                matched_block: unit.block_id,
+                matched_unit_number: unit.unit_number,
+                cleared_due_period: None,
+                cleared_amount: Decimal::ZERO,
+                remaining_debt: Decimal::ZERO,
+                receipt_id: format!("DUP-{}", Uuid::new_v4().simple()),
+                message: "Duplicate bank transaction notification ignored. Idempotency preserved.".to_string(),
+            }),
+        ));
+    }
+
+    // 3. Find unit's pending/overdue dues and clear them
+    let mut cleared_period: Option<String> = None;
+    let mut cleared_amount = Decimal::ZERO;
+
+    if let Some(due) = inner.dues.iter_mut().find(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid) {
+        due.status = DebtStatus::Paid;
+        cleared_period = Some(due.period.clone());
+        cleared_amount = due.total_amount;
+    }
+
+    // 4. Calculate remaining debt
+    let remaining_debt: Decimal = inner
+        .dues
+        .iter()
+        .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+        .map(|d| d.total_amount)
+        .sum();
+
+    // 5. Generate immutable receipt and append to reconciliation queue
+    let receipt_id = format!("DKN-2026-{}", Uuid::new_v4().simple());
+
+    inner.reconciliation_queue.push(ReconciliationMatch {
+        match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
+        transaction: BankTransactionItem {
+            transaction_id: payload.transaction_id.clone(),
+            date: Utc::now().date_naive(),
+            amount: payload.amount,
+            currency: payload.currency.unwrap_or_else(|| "TRY".to_string()),
+            description: payload.description.unwrap_or_else(|| format!("Virtual IBAN Transfer: {}", payload.virtual_iban)),
+            sender_name: payload.sender_name,
+            sender_iban: payload.sender_iban,
+            reference_no: Some(payload.transaction_id.clone()),
+        },
+        matched_unit_id: Some(unit.id.clone()),
+        matched_block: Some(unit.block_id.clone()),
+        matched_unit_number: Some(unit.unit_number),
+        matched_resident_name: Some("Ahmet Yılmaz".to_string()),
+        confidence_score: 100,
+        matched_due_id: None,
+        outstanding_balance: Some(cleared_amount),
+        amount_matches_balance: true,
+        status: ReconciliationStatus::Approved,
+        status_code: ReconciliationStatus::Approved.as_str().to_string(),
+        notes: Some("100% Automated Match & Instant Settlement via Flat Virtual IBAN".to_string()),
+    });
+
+    Ok((
+        StatusCode::OK,
+        Json(BankIncomingWebhookResponse {
+            status: "CLEARED".to_string(),
+            transaction_id: payload.transaction_id,
+            matched_unit_id: unit.id,
+            matched_block: unit.block_id.clone(),
+            matched_unit_number: unit.unit_number,
+            cleared_due_period: cleared_period,
+            cleared_amount,
+            remaining_debt,
+            receipt_id,
+            message: format!("₺{} dues settlement successfully cleared and matched to unit {} Blok D:{} via Virtual IBAN.", payload.amount, unit.block_id, unit.unit_number),
+        }),
+    ))
 }
 

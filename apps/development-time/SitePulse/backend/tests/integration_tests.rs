@@ -1,3 +1,4 @@
+use axum::response::IntoResponse;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use sitepulse_backend::models::*;
@@ -765,6 +766,144 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
     let (code2, msg2) = err_excel_under_mt940.unwrap_err();
     assert_eq!(code2, axum::http::StatusCode::BAD_REQUEST);
     assert!(msg2.contains("File format mismatch"));
+}
+
+#[test]
+fn when_unit_created_then_generates_unique_sanal_iban() {
+    let iban = VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 14);
+    assert_eq!(iban.len(), 26);
+    assert!(iban.starts_with("TR"));
+    assert!(iban.contains("00205"));
+    assert!(VirtualIbanService::validate_tr_iban(&iban));
+}
+
+#[tokio::test]
+async fn when_probing_kuveyt_turk_sandbox_status_then_reports_keys_loaded() {
+    let state = AppState::new();
+    let status_json = sitepulse_backend::handlers::get_kuveyt_turk_status(axum::extract::State(state.clone())).await;
+    assert!(status_json.is_sandbox);
+    assert_eq!(status_json.identity_url, "https://prep-identity.kuveytturk.com.tr");
+    assert_eq!(status_json.gateway_url, "https://prep-gateway.kuveytturk.com.tr");
+    // Keys were uploaded by the user to backend/keys/
+    assert!(status_json.private_key_present);
+    assert!(status_json.public_key_present);
+}
+
+#[tokio::test]
+async fn when_querying_resident_dashboard_then_includes_allocated_virtual_iban() {
+    let state = AppState::new();
+    let res = sitepulse_backend::handlers::get_resident_dashboard(
+        axum::extract::Path("d-14".to_string()),
+        axum::extract::State(state.clone()),
+    )
+    .await;
+
+    // IntoResponse produces (StatusCode, Json<ResidentDashboardDto>)
+    let json_bytes = axum::body::to_bytes(res.into_response().into_body(), 1024 * 64)
+        .await
+        .unwrap();
+    let dto: ResidentDashboardDto = serde_json::from_slice(&json_bytes).unwrap();
+
+    assert!(dto.virtual_iban.is_some());
+    let iban = dto.virtual_iban.unwrap();
+    assert!(iban.starts_with("TR"));
+    assert!(iban.contains("00205"));
+    assert!(VirtualIbanService::validate_tr_iban(&iban));
+}
+
+#[tokio::test]
+async fn when_statement_contains_virtual_iban_then_matches_flat_with_100_percent_confidence() {
+    let service = ReconciliationService::new();
+
+    let units = vec![IndependentUnit {
+        id: "d-14".to_string(),
+        site_id: "site-1".to_string(),
+        block_id: "A".to_string(),
+        unit_number: 14,
+        floor: 4,
+        land_share: 24,
+        owner_user_id: Some("usr-1".to_string()),
+        tenant_user_id: None,
+        virtual_iban: Some("TR410020504213991067000014".to_string()),
+    }];
+
+    let dues = vec![DuesLiability {
+        id: "due-sep".to_string(),
+        unit_id: "d-14".to_string(),
+        period: "Eylül 2026".to_string(),
+        principal_amount: Decimal::from_str_exact("1400.00").unwrap(),
+        delay_penalty: Decimal::ZERO,
+        total_amount: Decimal::from_str_exact("1400.00").unwrap(),
+        due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
+        status: DebtStatus::Pending,
+    }];
+
+    // Narrative contains NO block name and NO resident name, only the Virtual IBAN!
+    let txns = vec![BankTransactionItem {
+        transaction_id: "TXN-9988".to_string(),
+        date: NaiveDate::from_ymd_opt(2026, 9, 20).unwrap(),
+        amount: Decimal::from_str_exact("1400.00").unwrap(),
+        currency: "TRY".to_string(),
+        description: "FAST Gelen Transfer TR410020504213991067000014".to_string(),
+        sender_name: None,
+        sender_iban: None,
+        reference_no: None,
+    }];
+
+    let matches = service.reconcile_transactions(&txns, &units, &[], &dues, NaiveDate::from_ymd_opt(2026, 9, 15).unwrap());
+    assert_eq!(matches.len(), 1);
+    let m = &matches[0];
+    assert_eq!(m.matched_unit_id.as_deref(), Some("d-14"));
+    assert_eq!(m.confidence_score, 100);
+    assert!(m.notes.as_ref().unwrap().contains("Virtual IBAN"));
+}
+
+#[tokio::test]
+async fn when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_generates_receipt() {
+    let state = AppState::new();
+
+    let webhook_req = BankIncomingWebhookRequest {
+        transaction_id: "TXN-KUVEYT-001".to_string(),
+        virtual_iban: "TR410020504213991067000014".to_string(),
+        amount: Decimal::from_str_exact("1400.00").unwrap(),
+        currency: Some("TRY".to_string()),
+        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_iban: Some("TR120006200000000012345678".to_string()),
+        description: Some("Eylül 2026 Aidatı FAST Ödemesi".to_string()),
+        signature: Some("HMAC_SHA256_VALID_SIG".to_string()),
+    };
+
+    let (status, axum::Json(res)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        axum::Json(webhook_req.clone()),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.status, "CLEARED");
+    assert_eq!(res.matched_unit_id, "d-14");
+    assert_eq!(res.matched_block, "A");
+    assert_eq!(res.matched_unit_number, 14);
+    assert_eq!(res.cleared_due_period.as_deref(), Some("Eylül 2026"));
+    assert!(res.receipt_id.starts_with("DKN-2026-"));
+
+    // Verify state: due is now PAID!
+    let inner = state.inner.read().await;
+    let due = inner.dues.iter().find(|d| d.id == "b-101").unwrap();
+    assert_eq!(due.status, DebtStatus::Paid);
+
+    // Verify Idempotency Gate (Duplicate Delivery)
+    drop(inner);
+    let (status2, axum::Json(res2)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        axum::Json(webhook_req),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status2, axum::http::StatusCode::OK);
+    assert_eq!(res2.status, "DUPLICATE_IGNORED");
 }
 
 

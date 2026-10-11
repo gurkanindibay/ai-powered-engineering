@@ -26,8 +26,14 @@ echo "  ✔ Development ports freed."
 # 2. Launch High-Performance Rust Backend Service (Axum 0.7 + Tokio)
 echo "▶ [2/4] Starting Rust Backend API on port 8080..."
 cd "$SITEPULSE_ROOT/backend"
+if [ -f ".env" ]; then
+    set -a
+    source .env
+    set +a
+fi
 nohup "$CARGO_BIN" run --release > /tmp/sitepulse-backend.log 2>&1 &
 BACKEND_PID=$!
+disown $BACKEND_PID 2>/dev/null || true
 
 echo -n "  Waiting for backend health check..."
 BACKEND_READY=0
@@ -50,6 +56,7 @@ fi
 echo "▶ [3/4] Starting Interactive Prototype Server on port 9091..."
 nohup python3 -m http.server 9091 --directory "$SITEPULSE_ROOT" > /tmp/sitepulse-prototype.log 2>&1 &
 PROTO_PID=$!
+disown $PROTO_PID 2>/dev/null || true
 echo "  ✔ Prototype Server online (PID: $PROTO_PID)"
 
 # 4. Launch Flutter Native Web App (Port 9090)
@@ -57,11 +64,12 @@ echo "▶ [4/4] Starting Flutter Web Client on port 9090..."
 cd "$SITEPULSE_ROOT/flutter"
 nohup "$FLUTTER_BIN" run -d web-server --web-port 9090 --web-hostname 0.0.0.0 < /dev/null > /tmp/sitepulse-flutter.log 2>&1 &
 FLUTTER_PID=$!
+disown $FLUTTER_PID 2>/dev/null || true
 
 echo -n "  Waiting for Flutter Web server..."
 FLUTTER_READY=0
 for i in {1..30}; do
-    if curl -s -f http://127.0.0.1:9090/ > /dev/null 2>&1; then
+    if curl -s -f http://127.0.0.1:9090/index.html > /dev/null 2>&1 || curl -s -f http://127.0.0.1:9090/ > /dev/null 2>&1; then
         FLUTTER_READY=1
         break
     fi

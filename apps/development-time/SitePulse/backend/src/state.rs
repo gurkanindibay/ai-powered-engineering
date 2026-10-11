@@ -8,6 +8,7 @@ use crate::models::{
     DebtStatus, DuesLiability, IndependentUnit, PendingRegistrationResponse, ReconciliationMatch,
     Role, Site, SiteBankAccount, SiteInvitationLinkResponse, UnitInviteLinkResponse, UnitMemberDto, User,
 };
+use crate::services::VirtualIbanService;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -26,6 +27,8 @@ pub struct AppStateInner {
     pub site_invite_tokens: HashMap<String, SiteInvitationLinkResponse>,
     pub reconciliation_queue: Vec<ReconciliationMatch>,
     pub site_bank_accounts: Vec<SiteBankAccount>,
+    pub kuveyt_turk_client_id: Option<String>,
+    pub kuveyt_turk_client_secret: Option<String>,
 }
 
 impl AppState {
@@ -41,6 +44,8 @@ impl AppState {
             site_invite_tokens: HashMap::new(),
             reconciliation_queue: Vec::new(),
             site_bank_accounts: Vec::new(),
+            kuveyt_turk_client_id: std::env::var("KT_CLIENT_ID").ok(),
+            kuveyt_turk_client_secret: std::env::var("KT_CLIENT_SECRET").ok(),
         };
 
         // Seed Begonya Sitesi
@@ -114,6 +119,12 @@ impl AppState {
         });
 
         // Seed Unit A Blok D:14 (id: d-14)
+        let seeded_virtual_iban = VirtualIbanService::generate_virtual_iban(
+            VirtualIbanService::KUVEYT_TURK_BANK_CODE,
+            "site-1",
+            "A",
+            14,
+        );
         inner.units.push(IndependentUnit {
             id: "d-14".to_string(),
             site_id: "site-1".to_string(),
@@ -123,6 +134,7 @@ impl AppState {
             land_share: 24,
             owner_user_id: Some("usr-home-owner-1".to_string()),
             tenant_user_id: None,
+            virtual_iban: Some(seeded_virtual_iban),
         });
 
         // Seed September 2026 Dues (₺1400 overdue 10 days)

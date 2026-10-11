@@ -49,25 +49,48 @@ impl ReconciliationService {
     ) -> ReconciliationMatch {
         let desc = &txn.description;
 
-        // 1. Extract block and flat
-        let extracted_unit = Self::extract_block_and_flat(desc);
-
+        // 0. Match by Virtual IBAN (Sanal IBAN)
+        let mut matched_by_virtual_iban = false;
         let mut matched_unit: Option<&IndependentUnit> = None;
-        if let Some((ref blk, unit_no)) = extracted_unit {
-            matched_unit = units.iter().find(|u| {
-                u.block_id.eq_ignore_ascii_case(blk) && u.unit_number == unit_no
-            });
+
+        for unit in units {
+            if let Some(viban) = &unit.virtual_iban {
+                let clean_viban = viban.replace(' ', "").to_uppercase();
+                let clean_desc = desc.replace(' ', "").to_uppercase();
+                let clean_ref = txn
+                    .reference_no
+                    .as_deref()
+                    .unwrap_or("")
+                    .replace(' ', "")
+                    .to_uppercase();
+
+                if clean_desc.contains(&clean_viban) || clean_ref.contains(&clean_viban) {
+                    matched_unit = Some(unit);
+                    matched_by_virtual_iban = true;
+                    break;
+                }
+            }
         }
 
-        // If block wasn't extracted but flat was, try matching by flat number alone if unique
+        // 1. If not matched by Virtual IBAN, extract block and flat
         if matched_unit.is_none() {
-            if let Some(flat_no) = Self::extract_flat_only(desc) {
-                let candidate_units: Vec<&IndependentUnit> = units
-                    .iter()
-                    .filter(|u| u.unit_number == flat_no)
-                    .collect();
-                if candidate_units.len() == 1 {
-                    matched_unit = Some(candidate_units[0]);
+            let extracted_unit = Self::extract_block_and_flat(desc);
+            if let Some((ref blk, unit_no)) = extracted_unit {
+                matched_unit = units.iter().find(|u| {
+                    u.block_id.eq_ignore_ascii_case(blk) && u.unit_number == unit_no
+                });
+            }
+
+            // If block wasn't extracted but flat was, try matching by flat number alone if unique
+            if matched_unit.is_none() {
+                if let Some(flat_no) = Self::extract_flat_only(desc) {
+                    let candidate_units: Vec<&IndependentUnit> = units
+                        .iter()
+                        .filter(|u| u.unit_number == flat_no)
+                        .collect();
+                    if candidate_units.len() == 1 {
+                        matched_unit = Some(candidate_units[0]);
+                    }
                 }
             }
         }
@@ -129,6 +152,9 @@ impl ReconciliationService {
 
         if is_already_processed {
             confidence = 100;
+        } else if matched_by_virtual_iban {
+            // Flat-Specific Virtual IBAN allocation is 100% confident by architectural design
+            confidence = 100;
         } else if has_unit && amount_matches {
             // Unit and exact amount match: 100% confidence
             confidence = 100;
@@ -150,7 +176,9 @@ impl ReconciliationService {
         } else if confidence >= 70 {
             (
                 ReconciliationStatus::PendingApproval,
-                if amount_matches {
+                if matched_by_virtual_iban {
+                    Some("100% Match via Flat-Specific Virtual IBAN (Sanal IBAN). Zero manual narrative entry required.".to_string())
+                } else if amount_matches {
                     Some("Exact amount matches outstanding dues balance (including KMK penalty)".to_string())
                 } else if has_unit {
                     Some("Unit identified from transfer narrative".to_string())

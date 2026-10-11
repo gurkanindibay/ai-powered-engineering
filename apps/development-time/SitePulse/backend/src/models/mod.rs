@@ -122,6 +122,8 @@ pub struct IndependentUnit {
     pub land_share: i32,
     pub owner_user_id: Option<String>,
     pub tenant_user_id: Option<String>,
+    #[serde(default)]
+    pub virtual_iban: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,6 +163,8 @@ pub struct ResidentDashboardDto {
     pub dues: Vec<DuesSummaryDto>,
     pub announcement_title: String,
     pub announcement_content: String,
+    #[serde(default)]
+    pub virtual_iban: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -671,4 +675,35 @@ pub struct ConfirmReconciliationResponse {
     pub message_sent: bool,
     #[serde(default)]
     pub notification_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BankIncomingWebhookRequest {
+    pub transaction_id: String,
+    pub virtual_iban: String,
+    pub amount: Decimal,
+    #[serde(default)]
+    pub currency: Option<String>,
+    #[serde(default)]
+    pub sender_name: Option<String>,
+    #[serde(default)]
+    pub sender_iban: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub signature: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BankIncomingWebhookResponse {
+    pub status: String,
+    pub transaction_id: String,
+    pub matched_unit_id: String,
+    pub matched_block: String,
+    pub matched_unit_number: i32,
+    pub cleared_due_period: Option<String>,
+    pub cleared_amount: Decimal,
+    pub remaining_debt: Decimal,
+    pub receipt_id: String,
+    pub message: String,
 }

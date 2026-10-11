@@ -19,6 +19,7 @@ class DashboardController extends ChangeNotifier {
     landShare: 24,
     ownerName: 'Ahmet Yılmaz',
     tenantName: 'Zeynep Kaya',
+    virtualIban: 'TR64 0020 5000 0986 3791 6000 14',
   );
 
   static const managerUnit = ApartmentUnit(
@@ -30,6 +31,7 @@ class DashboardController extends ChangeNotifier {
     landShare: 24,
     ownerName: 'Mehmet Demir',
     tenantName: 'Mehmet Demir (Oturuyor)',
+    virtualIban: 'TR91 0020 5000 0986 3791 6000 01',
   );
 
   static final List<UnitResidentMember> managerResidents = [
