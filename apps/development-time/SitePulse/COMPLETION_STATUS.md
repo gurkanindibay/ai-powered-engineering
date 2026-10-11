@@ -13,8 +13,8 @@
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                              OVERALL COMPLETION METRICS                                │
 │                                                                                        │
-│   Total Epics: 6              Total User Stories: 34         Verification Gates: 8/8   │
-│   Stories Completed: 34       Stories Pending: 0             Automated Tests: 38/38    │
+│   Total Epics: 7              Total User Stories: 41         Verification Gates: 8/8   │
+│   Stories Completed: 41       Stories Pending: 0             Automated Tests: 92/92    │
 │                                                                                        │
 │   ████████████████████████████████████████████████████████████████  100.0% COMPLETE    │
 └────────────────────────────────────────────────────────────────────────────────────────┘
@@ -30,6 +30,7 @@
 | **EPIC-04** | Digital Resident Self-Registration & Approval Queue | `backend-rust`, `flutter-ui`, `flutter-domain` | 7 | 7 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-04-invitation-approval-workflow.md](.specify/requirements/EPIC-04-invitation-approval-workflow.md) |
 | **EPIC-05** | Backend Persistence, REST APIs & Verification Harness | `backend-db`, `backend-rust`, `harness` | 6 | 6 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-05-backend-persistence-verification-harness.md](.specify/requirements/EPIC-05-backend-persistence-verification-harness.md) |
 | **EPIC-06** | Identity, Authentication & Scoped Permission Model | `backend-auth`, `backend-rust`, `flutter-ui` | 5 | 5 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-06-identity-access-auth.md](.specify/requirements/EPIC-06-identity-access-auth.md) |
+| **EPIC-07** | Bank Integration, Virtual IBAN & Dues Accrual | `backend-rust`, `flutter-ui`, `flutter-domain` | 7 | 7 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-07-bank-integration-and-automated-reconciliation.md](.specify/requirements/EPIC-07-bank-integration-and-automated-reconciliation.md) |
 
 ---
 
@@ -71,6 +72,13 @@
 | **STORY-06-03** | EPIC-06 | Google OAuth2 / ID Token Authentication | All Roles | **COMPLETED** | `auth_service.rs`, `handlers/mod.rs` | `when_valid_google_id_token_then_authenticates_and_links_account` | Unit Test Gate |
 | **STORY-06-04** | EPIC-06 | JWT Token Minting & Permission Scoping | Mobile/Web | **COMPLETED** | `auth_service.rs`, `models/mod.rs` | Token claims unit assertions | Unit Test Gate |
 | **STORY-06-05** | EPIC-06 | Cross-Platform Flutter Login & Registration UI | Mobile/Web | **COMPLETED** | `manager_models.dart`, `dashboard_screen.dart` | Flutter client visual verification | Visual Audit |
+| **STORY-07-01** | EPIC-07 | Flat-Specific Virtual IBAN (Sanal IBAN) Allocation | Resident | **COMPLETED** | `virtual_iban_service.rs`, `models/mod.rs` | `when_unit_created_then_generates_unique_sanal_iban` | Bank Integration Gate |
+| **STORY-07-02** | EPIC-07 | Zero-Approval Bank Statement (Excel/CSV/MT940) Parser | Site Manager | **COMPLETED** | `bank_statement_parser.rs`, `mt940_engine.rs` | `when_parsing_turkish_bank_excel_then_matches_flat_and_amount` | Financial Precision Gate |
+| **STORY-07-03** | EPIC-07 | Real-Time Bank Webhook & Payment Notification Listener | System | **COMPLETED** | `handlers/mod.rs`, `reconciliation_service.rs` | `when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_generates_receipt` | Idempotency Gate |
+| **STORY-07-04** | EPIC-07 | User-Friendly FAST & Virtual IBAN Payment Flow | Resident | **COMPLETED** | `payment_checkout_dialog.dart`, `hero_balance_card.dart` | `Tapping Hemen Öde opens PaymentCheckoutDialog` | Visual UX Gate |
+| **STORY-07-05** | EPIC-07 | Advance Payment Allocation, Dynamic Surplus & Auto-Offset | Resident/Manager | **COMPLETED** | `handlers/mod.rs`, `hero_balance_card.dart` | `when_excess_or_multiple_payments_delivered_then_credited_as_advance_payment` | Financial Integrity Gate |
+| **STORY-07-06** | EPIC-07 | Site Bank Account Configuration & Format Enforcement | Site Manager | **COMPLETED** | `handlers/mod.rs`, `dues_management_view.dart` | `when_site_manager_configures_bank_account_then_format_is_automatically_set_by_bank` | Configuration Gate |
+| **STORY-07-07** | EPIC-07 | Monthly Dues Accrual & Duplicate Prevention Guard | Manager/System | **COMPLETED** | `scheduler.rs`, `dues_management_view.dart` | `when_dues_period_already_accrued_then_duplicate_accrual_is_prevented` | Invariant Guard Gate |
 
 ---
 
@@ -135,7 +143,7 @@ Execution command:
   - `task-06`: Rust High-Precision Domain Models & Decimal Invariants [VERIFIED]
   - `task-07`: Axum Tokio REST API for Resident & Management Dashboard [VERIFIED]
   - `task-08`: Offline Cache & Repository Layer [VERIFIED]
-- **Rust Backend Unit & Integration Tests (17/17 Passing):**
+- **Rust Backend Unit & Integration Tests (38/38 Passing):**
   - KMK Article 20 10-day 5% delay penalty calculation [PASS]
   - Non-overdue zero delay penalty invariant [PASS]
   - SaaS multi-tenancy site registration & admin password [PASS]
@@ -149,19 +157,35 @@ Execution command:
   - Password registration & SHA-256 validation [PASS]
   - Wrong password rejection invariant [PASS]
   - Role permissions and unit-scoped access restriction [PASS]
-- **Flutter Client Unit & Widget Tests (16/16 Passing):**
+  - Flat-specific unique Virtual IBAN generation & format validation [PASS]
+  - Kuveyt Türk Sandbox probing & certificate load validation [PASS]
+  - Real-time bank webhook incoming transfer settlement & receipt generation [PASS]
+  - Excess payment advance balance allocation & surplus crediting [PASS]
+  - Monthly dues accrual with automatic advance balance offset [PASS]
+  - Duplicate dues period accrual prevention & idempotent rejection [PASS]
+  - Embedded Tokio scheduler periodic batch execution & duplicate prevention [PASS]
+  - Bank account configuration & active statement format enforcement [PASS]
+  - SWIFT MT940 statement parsing, tag extraction & flat matching [PASS]
+  - Excel Turkish bank statement parsing & 100% confidence matching [PASS]
+  - Reconciliation batch confirmation & ledger update [PASS]
+  - Action-free site deletion guard & active unit rejection [PASS]
+  - Site manager temporary password renewal & force-change [PASS]
+- **Flutter Client Unit & Widget Tests (49/49 Passing):**
   - KMK calculation use case tests (overdue vs non-overdue) [PASS]
-  - DashboardController initialization & role-based scoping [PASS]
+  - DashboardController initialization, role scoping & account movements [PASS]
   - SaaS Admin, Site Manager, Home Owner, Home Resident flows [PASS]
   - Widget tests for all role dashboards and theme switching [PASS]
+  - Bank statement reconciliation page, presets & batch confirmation [PASS]
+  - Dedicated Aidat Yönetimi tab & Unmatched Bank Transfers pool [PASS]
+  - Toplu Aidat Tahakkuku confirmation dialog with duplicate prevention note [PASS]
+  - PaymentCheckoutDialog method selection (Card vs Virtual IBAN FAST) [PASS]
 
 ---
 
 ## 6. Backlog Roadmap & Future Horizons
 
-1. **EPIC-07: Bank Account Integration, Virtual IBAN & Automated Dues Reconciliation:**
-   - Formal specification defined in [.specify/requirements/EPIC-07-bank-integration-and-automated-reconciliation.md](.specify/requirements/EPIC-07-bank-integration-and-automated-reconciliation.md).
-   - Covers flat-specific Sanal IBAN provisioning, zero-approval Excel/MT940 parser, real-time webhook listeners, and dynamic FAST TR-Karekod.
+1. **EPIC-07: Bank Account Integration, Virtual IBAN, Automated Dues Reconciliation & Periodic Accrual:**
+   - **COMPLETED & VERIFIED:** Covers flat-specific Sanal IBAN provisioning, zero-approval Excel/MT940 parser, real-time webhook listeners, advance payment surplus tracking, and monthly batch accrual with duplicate prevention.
 2. **Version 2.0 Feature Horizons:**
    - Sub-meter heating and water consumption cost allocation (*"Sayaç Gir / Pay Ölçer"*).
    - Common facility and amenity reservation calendar (*"Rezervasyon"*).

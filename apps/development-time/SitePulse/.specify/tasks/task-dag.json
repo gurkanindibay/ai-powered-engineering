@@ -123,6 +123,39 @@
       ],
       "spec_ref": "SPEC-003",
       "description": "Zero-approval parser for Turkish bank statements (Excel, CSV, SWIFT MT940) with regex/NLP flat & resident matching, 100% confidence scoring, and automated dues reconciliation queue."
+    },
+    {
+      "id": "task-12",
+      "name": "Flat-Specific Virtual IBAN Allocation & Real-Time Bank Webhook Settlement",
+      "module": "full-stack",
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-07"
+      ],
+      "spec_ref": "SPEC-003",
+      "description": "Provision ISO 7064 MOD-97-10 validated Virtual IBANs (Kuveyt Türk Sandbox) and real-time incoming transfer webhook settlement with HMAC signature and idempotency guard."
+    },
+    {
+      "id": "task-13",
+      "name": "Advance Payment Allocation & Dynamic Hero Balance Display",
+      "module": "full-stack",
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-12"
+      ],
+      "spec_ref": "SPEC-003",
+      "description": "Credit payment surplus as advance balance, dynamically render positive balance on resident Hero Card, and track transactions in ledger."
+    },
+    {
+      "id": "task-14",
+      "name": "Automated Monthly Dues Batch Scheduler & Duplicate Accrual Guard",
+      "module": "full-stack",
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-13"
+      ],
+      "spec_ref": "SPEC-003",
+      "description": "Embedded Tokio background scheduler and site manager UI action for monthly dues accrual with strict duplicate prevention and automatic advance payment offsetting."
     }
   ]
 }
