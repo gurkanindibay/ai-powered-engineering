@@ -18,13 +18,205 @@ use crate::services::{
 use crate::state::AppState;
 use uuid::Uuid;
 
+/// Domain Service / Rule: Advance Balance Auto-Offsetting
+/// When dues liabilities exist or arrive for a unit, any available advance balance
+/// (Avans Bakiye) is automatically deducted against the debt (FIFO order by due_date).
+pub fn apply_advance_payments_offset(
+    inner: &mut crate::state::AppStateInner,
+    target_unit_id: Option<&str>,
+) -> (usize, Decimal) {
+    let unit_ids: Vec<String> = match target_unit_id {
+        Some(u) => vec![u.to_string()],
+        None => inner.units.iter().map(|u| u.id.clone()).collect(),
+    };
+
+    let mut auto_settled_count = 0;
+    let mut total_offset_amount = Decimal::ZERO;
+
+    for u_id in unit_ids {
+        let advance = match inner.advance_payments.get_mut(&u_id) {
+            Some(adv) if *adv > Decimal::ZERO => adv,
+            _ => continue,
+        };
+
+        // Find all unpaid dues for this unit
+        let mut unpaid_indices: Vec<usize> = inner
+            .dues
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.unit_id == u_id && d.status != DebtStatus::Paid)
+            .map(|(i, _)| i)
+            .collect();
+
+        // FIFO: Sort by due_date ascending
+        unpaid_indices.sort_by_key(|&i| inner.dues[i].due_date);
+
+        let unit_block = inner.units.iter().find(|u| u.id == u_id).map(|u| u.block_id.clone()).unwrap_or_else(|| "A".to_string());
+        let unit_number = inner.units.iter().find(|u| u.id == u_id).map(|u| u.unit_number).unwrap_or(1);
+
+        for idx in unpaid_indices {
+            if *advance <= Decimal::ZERO {
+                break;
+            }
+
+            let due = &mut inner.dues[idx];
+            let due_amount = due.total_amount;
+            let period = due.period.clone();
+            let due_id = due.id.clone();
+
+            if *advance >= due_amount {
+                // Full settlement of this due liability
+                *advance -= due_amount;
+                due.status = DebtStatus::Paid;
+                total_offset_amount += due_amount;
+                auto_settled_count += 1;
+
+                let offset_txn_id = format!("TXN-ADV-OFFSET-{}", due_id);
+                if !inner.reconciliation_queue.iter().any(|m| m.transaction.transaction_id == offset_txn_id) {
+                    inner.reconciliation_queue.push(ReconciliationMatch {
+                        match_id: format!("MATCH-OFFSET-{}", Uuid::new_v4().simple()),
+                        transaction: BankTransactionItem {
+                            transaction_id: offset_txn_id,
+                            date: Utc::now().date_naive(),
+                            amount: due_amount,
+                            currency: "TRY".to_string(),
+                            description: format!("Avans Mahsubu: {} Aidatı", period),
+                            sender_name: Some("Otomatik Avans Mahsubu".to_string()),
+                            sender_iban: None,
+                            reference_no: Some(due_id.clone()),
+                        },
+                        matched_unit_id: Some(u_id.clone()),
+                        matched_block: Some(unit_block.clone()),
+                        matched_unit_number: Some(unit_number),
+                        matched_resident_name: Some("Ahmet Yılmaz".to_string()),
+                        confidence_score: 100,
+                        matched_due_id: Some(due_id),
+                        outstanding_balance: Some(due_amount),
+                        amount_matches_balance: true,
+                        status: ReconciliationStatus::Approved,
+                        status_code: ReconciliationStatus::Approved.as_str().to_string(),
+                        notes: Some(format!("{} aidatı avans bakiyenizden otomatik mahsup edildi", period)),
+                    });
+                }
+            } else {
+                // Partial deduction
+                let partial = *advance;
+                *advance = Decimal::ZERO;
+                due.principal_amount -= partial;
+                due.total_amount -= partial;
+                total_offset_amount += partial;
+
+                let offset_txn_id = format!("TXN-ADV-PARTIAL-{}", due_id);
+                if !inner.reconciliation_queue.iter().any(|m| m.transaction.transaction_id == offset_txn_id) {
+                    inner.reconciliation_queue.push(ReconciliationMatch {
+                        match_id: format!("MATCH-OFFSET-PARTIAL-{}", Uuid::new_v4().simple()),
+                        transaction: BankTransactionItem {
+                            transaction_id: offset_txn_id,
+                            date: Utc::now().date_naive(),
+                            amount: partial,
+                            currency: "TRY".to_string(),
+                            description: format!("Kısmi Avans Mahsubu: {} Aidatı", period),
+                            sender_name: Some("Otomatik Avans Mahsubu".to_string()),
+                            sender_iban: None,
+                            reference_no: Some(due_id.clone()),
+                        },
+                        matched_unit_id: Some(u_id.clone()),
+                        matched_block: Some(unit_block.clone()),
+                        matched_unit_number: Some(unit_number),
+                        matched_resident_name: Some("Ahmet Yılmaz".to_string()),
+                        confidence_score: 100,
+                        matched_due_id: Some(due_id),
+                        outstanding_balance: Some(partial),
+                        amount_matches_balance: false,
+                        status: ReconciliationStatus::Approved,
+                        status_code: ReconciliationStatus::Approved.as_str().to_string(),
+                        notes: Some(format!("₺{:.2} tutarındaki avans {} aidatından mahsup edildi", partial, period)),
+                    });
+                }
+            }
+        }
+    }
+
+    (auto_settled_count, total_offset_amount)
+}
+
+fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, String) {
+    let note = m.notes.as_deref().unwrap_or("");
+
+    // Case 0: Settled dues via Advance Offset (Avans Mahsubu)
+    if note.contains("mahsup") || note.contains("otomatik mahsup") {
+        let title = if note.contains("Kısmi") || note.contains("kısmi") {
+            "Kısmi Avans Mahsubu".to_string()
+        } else {
+            "Avans ile Aidat Tahsili".to_string()
+        };
+        let subtitle = note.to_string();
+        return (title, subtitle);
+    }
+
+    // Case 1: Settled dues (with or without surplus)
+    if note.contains("Settled") || note.contains("aidat") || note.contains("Aidat") || m.matched_due_id.is_some() {
+        let title = "FAST ile Aidat Ödemesi".to_string();
+
+        let subtitle = if note.contains("surplus") || note.contains("artan") || note.contains("avans bakiyenize") {
+            // Support legacy English notes from queue: "100% Match via Virtual IBAN. Settled Eylül 2026; ₺60.67 surplus credited to advance payment."
+            if let Some(settled_idx) = note.find("Settled ") {
+                let after_settled = &note[settled_idx + 8..];
+                let period = after_settled.split(';').next().unwrap_or("Dönem").trim();
+                let surplus = if let Some(surplus_idx) = note.find(';') {
+                    let after_semi = &note[surplus_idx + 1..];
+                    after_semi.split(" surplus").next().unwrap_or("").trim()
+                } else {
+                    ""
+                };
+                let surplus_formatted = surplus.replace('.', ",");
+                if !surplus_formatted.is_empty() {
+                    format!("{} aidatı ödendi • {} avans bakiyenize aktarıldı", period, surplus_formatted)
+                } else {
+                    format!("{} aidatı ödendi • Kalan tutar avans bakiyenize aktarıldı", period)
+                }
+            } else if note.contains("aidatı ödendi") {
+                note.to_string()
+            } else {
+                "Aidat ödendi • Artan tutar avans bakiyenize aktarıldı".to_string()
+            }
+        } else if let Some(settled_idx) = note.find("Settled ") {
+            let after_settled = &note[settled_idx + 8..];
+            let period = after_settled.split(';').next().unwrap_or("Dönem").trim();
+            format!("{} aidat borcu kapatıldı", period)
+        } else if note.contains("aidat borcu kapatıldı") {
+            note.to_string()
+        } else {
+            "Aidat borcu başarıyla kapatıldı".to_string()
+        };
+
+        (title, subtitle)
+    } 
+    // Case 2: Advance top-up (Avans Yükleme)
+    else if note.contains("No outstanding debt") || note.contains("advance payment") || note.contains("Avans") || note.contains("avans") {
+        let title = "FAST ile Avans Yükleme".to_string();
+        let subtitle = "Aktif borç bulunmuyor • Avans bakiyenize aktarıldı".to_string();
+        (title, subtitle)
+    }
+    // Case 3: Other bank transfer
+    else {
+        let title = "FAST ile Bakiye Yükleme".to_string();
+        let subtitle = if note.is_empty() || note.contains("Virtual IBAN") {
+            "FAST transferi başarıyla hesabınıza aktarıldı".to_string()
+        } else {
+            note.to_string()
+        };
+        (title, subtitle)
+    }
+}
+
 // 1. Resident Dashboard Handler
 pub async fn get_resident_dashboard(
     Path(unit_id): Path<String>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let calc_service = DuesCalculationService::new();
-    let inner = state.inner.read().await;
+    let mut inner = state.inner.write().await;
 
     let unit = inner
         .units
@@ -51,6 +243,9 @@ pub async fn get_resident_dashboard(
             }
         });
 
+    // Automatically apply available advance payments against any unpaid dues (FIFO)
+    apply_advance_payments_offset(&mut inner, Some(&unit_id));
+
     let today = Utc::now().date_naive();
     let evaluated_dues: Vec<DuesLiability> = inner
         .dues
@@ -62,20 +257,89 @@ pub async fn get_resident_dashboard(
     let total_debt: Decimal = evaluated_dues.iter().map(|d| d.total_amount).sum();
     let is_overdue = evaluated_dues.iter().any(|d| d.status == DebtStatus::Overdue);
 
-    let dues_dtos: Vec<DuesSummaryDto> = evaluated_dues
-        .into_iter()
-        .map(|d| DuesSummaryDto {
-            id: d.id,
-            period: d.period,
-            principal_amount: d.principal_amount,
-            delay_penalty: d.delay_penalty,
-            total_amount: d.total_amount,
-            due_date: d.due_date.to_string(),
-            status: format!("{:?}", d.status).to_uppercase(),
+    let dues_dtos: Vec<DuesSummaryDto> = inner
+        .dues
+        .iter()
+        .filter(|d| d.unit_id == unit_id)
+        .map(|d| {
+            if d.status == DebtStatus::Paid {
+                DuesSummaryDto {
+                    id: d.id.clone(),
+                    period: d.period.clone(),
+                    principal_amount: d.principal_amount,
+                    delay_penalty: Decimal::ZERO,
+                    total_amount: d.total_amount,
+                    due_date: d.due_date.to_string(),
+                    status: "PAID".to_string(),
+                }
+            } else {
+                let evaluated = calc_service.calculate_delay_penalty(d.clone(), today);
+                DuesSummaryDto {
+                    id: evaluated.id.clone(),
+                    period: evaluated.period.clone(),
+                    principal_amount: evaluated.principal_amount,
+                    delay_penalty: evaluated.delay_penalty,
+                    total_amount: evaluated.total_amount,
+                    due_date: evaluated.due_date.to_string(),
+                    status: format!("{:?}", evaluated.status).to_uppercase(),
+                }
+            }
         })
         .collect();
 
     let site_title = format!("Begonya Sitesi • {} Blok D:{}", unit.block_id, unit.unit_number);
+    let advance_payment = inner
+        .advance_payments
+        .get(&unit_id)
+        .copied()
+        .unwrap_or(Decimal::ZERO);
+
+    let mut transactions: Vec<AccountTransactionDto> = Vec::new();
+
+    // 1. Approved bank transactions from reconciliation queue for this unit
+    for m in inner.reconciliation_queue.iter().rev() {
+        if m.matched_unit_id.as_deref() == Some(&unit_id) && m.status == ReconciliationStatus::Approved {
+            let (title, subtitle) = format_resident_transaction_display(m);
+            transactions.push(AccountTransactionDto {
+                id: m.transaction.transaction_id.clone(),
+                title,
+                subtitle,
+                amount: m.transaction.amount,
+                date: m.transaction.date.format("%d.%m.%Y").to_string(),
+                is_credit: true,
+            });
+        }
+    }
+
+    // 2. If dues are unpaid/pending, show current dues as debit (negative)
+    for due in &evaluated_dues {
+        transactions.push(AccountTransactionDto {
+            id: due.id.clone(),
+            title: format!("{} Aidatı", due.period),
+            subtitle: if is_overdue { "Gecikmeli Aidat Borcu" } else { "Ödeme Bekleniyor" }.to_string(),
+            amount: due.total_amount,
+            date: due.due_date.format("%d.%m.%Y").to_string(),
+            is_credit: false,
+        });
+    }
+
+    // 3. Historical baseline transactions
+    transactions.push(AccountTransactionDto {
+        id: "tx-hist-01".to_string(),
+        title: "Ağustos 2026 Aidatı".to_string(),
+        subtitle: "Kredi Kartı ile Ödendi".to_string(),
+        amount: Decimal::from_str_exact("1400.00").unwrap(),
+        date: "15.08.2026".to_string(),
+        is_credit: true,
+    });
+    transactions.push(AccountTransactionDto {
+        id: "tx-hist-02".to_string(),
+        title: "Demirbaş Katılım Payı".to_string(),
+        subtitle: "Yönetim Hesabına Transfer".to_string(),
+        amount: Decimal::from_str_exact("500.00").unwrap(),
+        date: "02.08.2026".to_string(),
+        is_credit: true,
+    });
 
     let response = ResidentDashboardDto {
         unit_id: unit.id,
@@ -88,6 +352,8 @@ pub async fn get_resident_dashboard(
             "İSKİ ana hat yenilemesi sebebiyle 18 Eylül 10:00 - 14:00 arası su kesilecektir."
                 .to_string(),
         virtual_iban: unit.virtual_iban,
+        advance_payment,
+        transactions,
     };
 
     (StatusCode::OK, Json(response))
@@ -682,6 +948,12 @@ pub async fn handle_bank_incoming_webhook(
         .any(|m| m.transaction.transaction_id == payload.transaction_id && m.status == ReconciliationStatus::Approved);
 
     if already_processed {
+        let current_advance = inner
+            .advance_payments
+            .get(&unit.id)
+            .copied()
+            .unwrap_or(Decimal::ZERO);
+
         return Ok((
             StatusCode::OK,
             Json(BankIncomingWebhookResponse {
@@ -693,21 +965,38 @@ pub async fn handle_bank_incoming_webhook(
                 cleared_due_period: None,
                 cleared_amount: Decimal::ZERO,
                 remaining_debt: Decimal::ZERO,
+                advance_payment: current_advance,
                 receipt_id: format!("DUP-{}", Uuid::new_v4().simple()),
                 message: "Duplicate bank transaction notification ignored. Idempotency preserved.".to_string(),
             }),
         ));
     }
 
-    // 3. Find unit's pending/overdue dues and clear them
+    // 3. Clear pending/overdue dues and credit surplus/advance payment
     let mut cleared_period: Option<String> = None;
     let mut cleared_amount = Decimal::ZERO;
+    let mut remaining_payment = payload.amount;
 
     if let Some(due) = inner.dues.iter_mut().find(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid) {
-        due.status = DebtStatus::Paid;
-        cleared_period = Some(due.period.clone());
-        cleared_amount = due.total_amount;
+        if remaining_payment >= due.total_amount {
+            due.status = DebtStatus::Paid;
+            cleared_period = Some(due.period.clone());
+            cleared_amount = due.total_amount;
+            remaining_payment -= due.total_amount;
+        } else {
+            due.total_amount -= remaining_payment;
+            cleared_period = Some(due.period.clone());
+            cleared_amount = remaining_payment;
+            remaining_payment = Decimal::ZERO;
+        }
     }
+
+    // Any surplus or subsequent payment is credited to unit's advance payment ledger (Avans Bakiye)
+    let unit_advance = inner.advance_payments.entry(unit.id.clone()).or_insert(Decimal::ZERO);
+    if remaining_payment > Decimal::ZERO {
+        *unit_advance += remaining_payment;
+    }
+    let total_advance = *unit_advance;
 
     // 4. Calculate remaining debt
     let remaining_debt: Decimal = inner
@@ -719,6 +1008,36 @@ pub async fn handle_bank_incoming_webhook(
 
     // 5. Generate immutable receipt and append to reconciliation queue
     let receipt_id = format!("DKN-2026-{}", Uuid::new_v4().simple());
+
+    let message = if let Some(ref period) = cleared_period {
+        if remaining_payment > Decimal::ZERO {
+            format!(
+                "₺{} dues settlement cleared for {} (Unit {} Blok D:{}). Surplus of ₺{} credited as advance payment (Avans Bakiye: ₺{}).",
+                cleared_amount, period, unit.block_id, unit.unit_number, remaining_payment, total_advance
+            )
+        } else {
+            format!(
+                "₺{} dues settlement successfully cleared and matched to unit {} Blok D:{} via Virtual IBAN.",
+                cleared_amount, unit.block_id, unit.unit_number
+            )
+        }
+    } else {
+        format!(
+            "No outstanding dues for unit {} Blok D:{}. Full payment of ₺{} credited as advance payment (Avans Bakiye: ₺{}).",
+            unit.block_id, unit.unit_number, payload.amount, total_advance
+        )
+    };
+
+    let notes = if let Some(ref period) = cleared_period {
+        if remaining_payment > Decimal::ZERO {
+            let surplus_str = format!("{:.2}", remaining_payment).replace('.', ",");
+            format!("{} aidatı ödendi • ₺{} avans bakiyenize aktarıldı", period, surplus_str)
+        } else {
+            format!("{} aidat borcu kapatıldı", period)
+        }
+    } else {
+        "Aktif borç bulunmuyor • Avans bakiyenize aktarıldı".to_string()
+    };
 
     inner.reconciliation_queue.push(ReconciliationMatch {
         match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
@@ -742,7 +1061,7 @@ pub async fn handle_bank_incoming_webhook(
         amount_matches_balance: true,
         status: ReconciliationStatus::Approved,
         status_code: ReconciliationStatus::Approved.as_str().to_string(),
-        notes: Some("100% Automated Match & Instant Settlement via Flat Virtual IBAN".to_string()),
+        notes: Some(notes),
     });
 
     Ok((
@@ -756,9 +1075,101 @@ pub async fn handle_bank_incoming_webhook(
             cleared_due_period: cleared_period,
             cleared_amount,
             remaining_debt,
+            advance_payment: total_advance,
             receipt_id,
-            message: format!("₺{} dues settlement successfully cleared and matched to unit {} Blok D:{} via Virtual IBAN.", payload.amount, unit.block_id, unit.unit_number),
+            message,
         }),
     ))
 }
+
+// Periodic Dues Accrual & Automatic Advance Balance Offsetting
+pub async fn accrue_monthly_dues(
+    State(state): State<AppState>,
+    Json(payload): Json<AccrueDuesPeriodRequest>,
+) -> Result<(StatusCode, Json<AccrueDuesPeriodResponse>), (StatusCode, String)> {
+    let mut inner = state.inner.write().await;
+    let units_in_site: Vec<IndependentUnit> = inner
+        .units
+        .iter()
+        .filter(|u| u.site_id == payload.site_id)
+        .cloned()
+        .collect();
+
+    if units_in_site.is_empty() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("No units found for site '{}'", payload.site_id),
+        ));
+    }
+
+    let total_units_in_site = units_in_site.len();
+
+    // Invariant Guard: Prevent duplicate accrual for already-accrued units
+    let mut newly_accrued_units_count = 0;
+    let mut total_amount_accrued = Decimal::ZERO;
+
+    for unit in &units_in_site {
+        let already_exists = inner
+            .dues
+            .iter()
+            .any(|d| d.unit_id == unit.id && d.period == payload.period);
+        if !already_exists {
+            let due_id = format!("DUE-{}-{}", unit.id, Uuid::new_v4().simple());
+            inner.dues.push(DuesLiability {
+                id: due_id,
+                unit_id: unit.id.clone(),
+                period: payload.period.clone(),
+                principal_amount: payload.amount,
+                delay_penalty: Decimal::ZERO,
+                total_amount: payload.amount,
+                due_date: payload.due_date,
+                status: DebtStatus::Pending,
+            });
+            total_amount_accrued += payload.amount;
+            newly_accrued_units_count += 1;
+        }
+    }
+
+    if newly_accrued_units_count == 0 {
+        return Ok((
+            StatusCode::OK,
+            Json(AccrueDuesPeriodResponse {
+                site_id: payload.site_id,
+                period: payload.period.clone(),
+                total_units_accrued: total_units_in_site,
+                newly_accrued_units_count: 0,
+                auto_settled_units_count: 0,
+                total_amount_accrued: Decimal::ZERO,
+                total_amount_offset_from_advance: Decimal::ZERO,
+                already_accrued: true,
+                message: format!(
+                    "'{}' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi.",
+                    payload.period
+                ),
+            }),
+        ));
+    }
+
+    // Automatically apply available advance payments against newly accrued dues!
+    let (auto_settled_count, total_offset) = apply_advance_payments_offset(&mut inner, None);
+
+    Ok((
+        StatusCode::OK,
+        Json(AccrueDuesPeriodResponse {
+            site_id: payload.site_id,
+            period: payload.period.clone(),
+            total_units_accrued: total_units_in_site,
+            newly_accrued_units_count,
+            auto_settled_units_count: auto_settled_count,
+            total_amount_accrued,
+            total_amount_offset_from_advance: total_offset,
+            already_accrued: false,
+            message: format!(
+                "'{}' dönemi için {} daireye başarıyla aidat tahakkuk ettirildi. {} daire avanstan otomatik kapatıldı.",
+                payload.period, newly_accrued_units_count, auto_settled_count
+            ),
+        }),
+    ))
+}
+
 

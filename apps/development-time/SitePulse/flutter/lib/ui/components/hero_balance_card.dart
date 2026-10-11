@@ -1,3 +1,4 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../domain/models/dues_models.dart';
@@ -10,6 +11,8 @@ class HeroBalanceCard extends StatelessWidget {
   final bool isOffline;
   final VoidCallback onPayPressed;
   final VoidCallback onDetailPressed;
+  final Decimal? advancePayment;
+  final String? virtualIban;
 
   const HeroBalanceCard({
     super.key,
@@ -19,16 +22,30 @@ class HeroBalanceCard extends StatelessWidget {
     required this.isOffline,
     required this.onPayPressed,
     required this.onDetailPressed,
+    this.advancePayment,
+    this.virtualIban,
   });
 
   @override
   Widget build(BuildContext context) {
-    final hasPenalty = dues.gecikmeTazminati.toDouble() > 0;
+    final debtDouble = dues.toplamTutar.toDouble();
+    final advDouble = advancePayment?.toDouble() ?? 0.0;
+    final hasPenalty = dues.gecikmeTazminati.toDouble() > 0 &&
+        debtDouble > 0 &&
+        dues.status != DebtStatus.paid;
     final isDark = AppColors.isDark(context);
+    final hasAdvance = debtDouble <= 0 && advDouble > 0;
 
     // Format amount: e.g. 1423.33 → ₺1.423,33 (Turkish locale)
-    final totalDouble = dues.toplamTutar.toDouble();
-    final amountText = _formatTurkishCurrency(totalDouble);
+    final totalDouble = hasAdvance ? advDouble : debtDouble;
+    final rawAmountText = _formatTurkishCurrency(totalDouble);
+    final amountText = hasAdvance ? '+$rawAmountText' : rawAmountText;
+    final debtFormatted = _formatTurkishCurrency(debtDouble);
+    final advFormatted = '+${_formatTurkishCurrency(advDouble)}';
+
+    final mainLabel = hasAdvance
+        ? 'Toplam Hesap Bakiyesi (Artı Bakiye)'
+        : (debtDouble > 0 ? 'Ödenecek Toplam Tutar' : 'Toplam Hesap Bakiyesi');
 
     return Container(
       decoration: BoxDecoration(
@@ -37,7 +54,9 @@ class HeroBalanceCard extends StatelessWidget {
         border: Border.all(
           color: hasPenalty
               ? const Color(0xFFEF4444).withValues(alpha: 0.35)
-              : AppColors.border(context),
+              : (hasAdvance
+                  ? const Color(0xFF10B981).withValues(alpha: 0.35)
+                  : AppColors.border(context)),
           width: 1.0,
         ),
         boxShadow: isDark
@@ -98,11 +117,11 @@ class HeroBalanceCard extends StatelessWidget {
 
           // ── 2. Label ─────────────────────────────────────────────────
           Text(
-            'Ödenecek Toplam Tutar',
+            mainLabel,
             style: TextStyle(
-              color: AppColors.textSecondary(context),
+              color: hasAdvance ? const Color(0xFF10B981) : AppColors.textSecondary(context),
               fontSize: 12,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w600,
               letterSpacing: 0.2,
             ),
           ),
@@ -113,7 +132,7 @@ class HeroBalanceCard extends StatelessWidget {
             amountText,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: AppColors.textPrimary(context),
+              color: hasAdvance ? const Color(0xFF10B981) : AppColors.textPrimary(context),
               fontSize: 32,
               fontWeight: FontWeight.w800,
               letterSpacing: -1.0,
@@ -143,6 +162,34 @@ class HeroBalanceCard extends StatelessWidget {
                 ),
               ),
             )
+          else if (hasAdvance)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle_outline, size: 13, color: Color(0xFF10B981)),
+                  SizedBox(width: 4),
+                  Text(
+                    'Gelecek Dönem İçin Avans Mevcut',
+                    style: TextStyle(
+                      color: Color(0xFF10B981),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            )
           else
             Container(
               padding:
@@ -156,7 +203,7 @@ class HeroBalanceCard extends StatelessWidget {
                 ),
               ),
               child: const Text(
-                'Güncel — Gecikme Yok',
+                'Güncel — Borç Yok',
                 style: TextStyle(
                   color: Color(0xFF10B981),
                   fontSize: 11,
@@ -164,18 +211,85 @@ class HeroBalanceCard extends StatelessWidget {
                 ),
               ),
             ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+
+          // ── Dual Balance Breakdown Strip (Borç & Avans) ────────────────
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF141417) : const Color(0xFFF1F3F5),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border(context), width: 1),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ödenecek Borç',
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        debtFormatted,
+                        style: TextStyle(
+                          color: debtDouble > 0 ? const Color(0xFFEF4444) : AppColors.textPrimary(context),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 26,
+                  color: AppColors.border(context),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Avans Bakiye (Alacak)',
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        advFormatted,
+                        style: TextStyle(
+                          color: advDouble > 0 ? const Color(0xFF10B981) : AppColors.textSecondary(context),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
 
           // ── 5. Action Buttons Row ─────────────────────────────────────
           Row(
             children: [
-              // Hemen Öde — solid red (high urgency CTA)
               Expanded(
                 child: _ActionButton(
-                  label: 'Hemen Öde',
-                  icon: Icons.payments_outlined,
+                  label: hasAdvance || debtDouble <= 0 ? 'Avans Yükle' : 'Hemen Öde',
+                  icon: hasAdvance || debtDouble <= 0 ? Icons.add_card_outlined : Icons.payments_outlined,
                   filled: true,
-                  color: const Color(0xFFEF4444),
+                  color: hasAdvance || debtDouble <= 0 ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                   onTap: onPayPressed,
                 ),
               ),
@@ -197,7 +311,7 @@ class HeroBalanceCard extends StatelessWidget {
 
           // ── 6. IBAN Row ───────────────────────────────────────────────
           _IbanRow(
-            iban: 'TR12 0006 2000 0000 0000 0014',
+            iban: virtualIban ?? 'TR41 0020 5042 1399 1067 0000 14',
             context: context,
           ),
         ],

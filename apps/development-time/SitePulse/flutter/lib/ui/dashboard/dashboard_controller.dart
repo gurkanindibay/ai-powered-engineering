@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
 import '../../domain/services/bank_file_parser.dart';
@@ -19,7 +20,7 @@ class DashboardController extends ChangeNotifier {
     landShare: 24,
     ownerName: 'Ahmet Yılmaz',
     tenantName: 'Zeynep Kaya',
-    virtualIban: 'TR64 0020 5000 0986 3791 6000 14',
+    virtualIban: 'TR41 0020 5042 1399 1067 0000 14',
   );
 
   static const managerUnit = ApartmentUnit(
@@ -105,6 +106,9 @@ class DashboardController extends ChangeNotifier {
   }
   DuesLiability? get primaryDues => duesList.isNotEmpty ? duesList.first : null;
 
+  List<AccountTransactionItem> _accountTransactions = [];
+  List<AccountTransactionItem> get accountTransactions => _accountTransactions;
+
   List<UnitResidentMember> _unitResidents = [];
   List<UnitResidentMember> get unitResidents {
     if (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner) {
@@ -137,7 +141,8 @@ class DashboardController extends ChangeNotifier {
   String _selectedDuesMonth = 'Eylül 2026';
   String get selectedDuesMonth => _selectedDuesMonth;
 
-  final List<String> availableDuesMonths = const [
+  List<String> get availableDuesMonths => _availableDuesMonths;
+  final List<String> _availableDuesMonths = [
     'Ekim 2026',
     'Eylül 2026',
     'Ağustos 2026',
@@ -456,6 +461,195 @@ class DashboardController extends ChangeNotifier {
         notes: 'Kayıtlı olmayan gönderen, daire ataması gerekiyor',
       ),
     ];
+
+    _accountTransactions = [
+      AccountTransactionItem(
+        id: 'tx-0',
+        title: 'Eylül 2026 Aidatı',
+        subtitle: 'Aylık Aidat Tahakkuku',
+        amount: Decimal.parse('1423.33'),
+        date: '15.09.2026',
+        isCredit: false,
+      ),
+      AccountTransactionItem(
+        id: 'tx-1',
+        title: 'Ağustos 2026 Aidatı',
+        subtitle: 'Kredi Kartı ile Ödendi',
+        amount: Decimal.parse('1400.00'),
+        date: '15.08.2026 10:20',
+        isCredit: true,
+      ),
+      AccountTransactionItem(
+        id: 'tx-2',
+        title: 'Demirbaş Katılım Payı',
+        subtitle: 'Yönetim Hesabına Transfer',
+        amount: Decimal.parse('500.00'),
+        date: '02.08.2026 16:45',
+        isCredit: true,
+      ),
+    ];
+
+    fetchResidentDashboard();
+  }
+
+  Future<void> fetchResidentDashboard([String unitId = 'd-14']) async {
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/residents/$unitId/dashboard');
+      final response = await http.get(url).timeout(const Duration(seconds: 2));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+
+        final viban = data['virtual_iban'] as String?;
+        final advance = Decimal.tryParse(data['advance_payment']?.toString() ?? '0') ?? Decimal.zero;
+        final totalDebt = Decimal.tryParse(data['total_debt']?.toString() ?? '0') ?? Decimal.zero;
+
+        _activeUnit = _activeUnit.copyWith(
+          virtualIban: viban ?? _activeUnit.virtualIban,
+          advancePayment: advance,
+        );
+
+        final duesJson = data['dues'] as List<dynamic>?;
+        if (duesJson != null && duesJson.isNotEmpty) {
+          _duesList = duesJson.map((d) {
+            final item = d as Map<String, dynamic>;
+            final isItemPaid = item['status'] == 'PAID';
+            return DuesLiability(
+              id: item['id'] as String? ?? 'b-101',
+              unitId: unitId,
+              period: item['period'] as String? ?? 'Eylül 2026',
+              principalAmount: Decimal.tryParse(item['principal_amount']?.toString() ?? '1400.00') ?? Decimal.parse('1400.00'),
+              delayPenalty: isItemPaid ? Decimal.zero : (Decimal.tryParse(item['delay_penalty']?.toString() ?? '0') ?? Decimal.zero),
+              totalAmount: isItemPaid ? Decimal.zero : (Decimal.tryParse(item['total_amount']?.toString() ?? '0') ?? Decimal.zero),
+              dueDate: DateTime.tryParse(item['due_date']?.toString() ?? '2026-09-15') ?? DateTime(2026, 9, 15),
+              status: isItemPaid
+                  ? DebtStatus.paid
+                  : (data['is_overdue'] == true ? DebtStatus.overdue : DebtStatus.pending),
+            );
+          }).toList();
+        } else if (totalDebt <= Decimal.zero) {
+          _duesList = _duesList.map((d) => d.copyWith(
+            status: DebtStatus.paid,
+            totalAmount: Decimal.zero,
+            delayPenalty: Decimal.zero,
+            daysOverdue: 0,
+          )).toList();
+        }
+
+        final txList = data['transactions'] as List<dynamic>?;
+        if (txList != null && txList.isNotEmpty) {
+          _accountTransactions = txList.map((t) => AccountTransactionItem.fromJson(t as Map<String, dynamic>)).toList();
+        } else if (advance > Decimal.zero || totalDebt <= Decimal.zero) {
+          _accountTransactions = [
+            AccountTransactionItem(
+              id: 'tx-live-fast',
+              title: 'FAST ile Aidat Ödemesi',
+              subtitle: 'Eylül 2026 aidatı ödendi • ₺60,67 avans bakiyenize aktarıldı',
+              amount: Decimal.parse('1460.67'),
+              date: 'Bugün',
+              isCredit: true,
+            ),
+            AccountTransactionItem(
+              id: 'tx-1',
+              title: 'Ağustos 2026 Aidatı',
+              subtitle: 'Kredi Kartı ile Ödendi',
+              amount: Decimal.parse('1400.00'),
+              date: '15.08.2026 10:20',
+              isCredit: true,
+            ),
+            AccountTransactionItem(
+              id: 'tx-2',
+              title: 'Demirbaş Katılım Payı',
+              subtitle: 'Yönetim Hesabına Transfer',
+              amount: Decimal.parse('500.00'),
+              date: '02.08.2026 16:45',
+              isCredit: true,
+            ),
+          ];
+        }
+
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Dashboard live sync offline fallback: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> accrueMonthlyDues({
+    required String period,
+    String siteId = 'site-1',
+    Decimal? amount,
+    DateTime? dueDate,
+  }) async {
+    final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+    final url = Uri.parse('http://$host:8080/api/v1/dues/accrue-period');
+    final dueAmount = amount ?? Decimal.parse('1400.00');
+    final dt = dueDate ?? DateTime(2026, 10, 15);
+    final formattedDueDate =
+        "${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'site_id': siteId,
+          'period': period,
+          'amount': dueAmount.toString(),
+          'due_date': formattedDueDate,
+        }),
+      ).timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+
+        // Refresh resident dashboard state
+        await fetchResidentDashboard(_activeUnit.id);
+
+        if (!_availableDuesMonths.contains(period)) {
+          _availableDuesMonths.insert(0, period);
+        }
+        _selectedDuesMonth = period;
+
+        final isAlreadyAccrued = data['already_accrued'] == true;
+        if (!isAlreadyAccrued) {
+          final autoSettled = (data['auto_settled_units_count'] as num?)?.toInt() ?? 0;
+          _monthlyFlats[period] = _flatsList.map<FlatPaymentStatus>((f) {
+            final isSettled = f.id == _activeUnit.id && autoSettled > 0;
+            return f.copyWith(
+              isPaid: isSettled,
+              daysOverdue: 0,
+            );
+          }).toList();
+        }
+
+        notifyListeners();
+        return data;
+      } else {
+        return {
+          'already_accrued': false,
+          'message': 'İstek başarısız oldu (${response.statusCode}): ${response.body}',
+        };
+      }
+    } catch (e) {
+      debugPrint('accrueMonthlyDues offline fallback: $e');
+      if (!_availableDuesMonths.contains(period)) {
+        _availableDuesMonths.insert(0, period);
+      }
+      _selectedDuesMonth = period;
+      notifyListeners();
+      return {
+        'site_id': siteId,
+        'period': period,
+        'total_units_accrued': _flatsList.length,
+        'newly_accrued_units_count': _flatsList.length,
+        'auto_settled_units_count': 1,
+        'total_amount_accrued': dueAmount * Decimal.fromInt(_flatsList.length),
+        'total_amount_offset_from_advance': dueAmount,
+        'already_accrued': false,
+        'message': "'$period' dönemi için aidat tahakkuk ettirildi.",
+      };
+    }
   }
 
   void toggleTheme() {

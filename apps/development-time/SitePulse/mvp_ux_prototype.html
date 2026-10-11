@@ -1264,21 +1264,34 @@
               </div>
 
               <!-- Amount: full width, centered, no side competition -->
-              <div class="amount-label">Ödenecek Toplam Tutar</div>
+              <div class="amount-label" id="amountLabel" style="color: #10B981;">Mevcut Avans Bakiyesi (Alacak)</div>
               <div style="text-align: center; margin-bottom: 6px;">
-                <div class="amount-val" id="amountDisplay" style="font-size: 32px; font-weight: 800; letter-spacing: -1px; color: var(--text-primary); white-space: nowrap;">₺1.423,33</div>
+                <div class="amount-val" id="amountDisplay" style="font-size: 32px; font-weight: 800; letter-spacing: -1px; color: #10B981; white-space: nowrap;">+₺60,67</div>
               </div>
 
               <!-- Status pill: centered tight under amount -->
-              <div style="display: flex; justify-content: center; margin-bottom: 14px;">
-                <div class="status-pill penalty" id="dueStatusPill">10 Gün Gecikme (%5 KMK)</div>
+              <div style="display: flex; justify-content: center; margin-bottom: 12px;">
+                <div class="status-pill ontime" id="dueStatusPill">Gelecek Dönem İçin Avans Mevcut</div>
+              </div>
+
+              <!-- Dual Balance Breakdown Strip (Borç & Avans) -->
+              <div style="display: flex; align-items: center; justify-content: space-between; background: var(--card-dark); border: 1px solid var(--border-dark); border-radius: 14px; padding: 10px 14px; margin-bottom: 12px;">
+                <div style="flex: 1; text-align: left;">
+                  <div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">Ödenecek Borç</div>
+                  <div id="pillDebtAmount" style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">₺0,00</div>
+                </div>
+                <div style="width: 1px; height: 26px; background: var(--border-dark);"></div>
+                <div style="flex: 1; text-align: right;">
+                  <div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">Avans Bakiye (Alacak)</div>
+                  <div id="pillAdvanceAmount" style="font-size: 14px; font-weight: 700; color: #10B981; margin-top: 2px;">+₺4.442,68</div>
+                </div>
               </div>
 
               <!-- Action buttons row: two pill buttons full width -->
               <div style="display: flex; gap: 10px; margin-bottom: 8px;">
-                <button onclick="openPaymentModal()" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--accent-red); color: #fff; border: none; border-radius: 12px; padding: 11px 14px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: opacity 0.15s;" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">
-                  <span class="material-symbols-outlined" style="font-size: 17px;">payments</span>
-                  Hemen Öde
+                <button onclick="openPaymentModal()" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--accent-green); color: #fff; border: none; border-radius: 12px; padding: 11px 14px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: opacity 0.15s;" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">
+                  <span class="material-symbols-outlined" style="font-size: 17px;">add_card</span>
+                  Avans Yükle
                 </button>
                 <button onclick="openDuesDetailModal()" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; background: transparent; color: var(--text-primary); border: 1px solid var(--border-dark); border-radius: 12px; padding: 11px 14px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: border-color 0.15s;" onmouseover="this.style.borderColor='var(--accent-cyan)'" onmouseout="this.style.borderColor='var(--border-dark)'">
                   <span class="material-symbols-outlined" style="font-size: 17px;">receipt_long</span>
@@ -1288,7 +1301,7 @@
 
               <!-- Monospace IBAN line -->
               <div class="iban-subline" onclick="copyIbanString()">
-                <span>Daire IBAN: TR12 0006 2000 0000 0000 0014</span>
+                <span>Daire IBAN: TR41 0020 5042 1399 1067 0000 14</span>
                 <span class="material-symbols-outlined" style="font-size: 13px;">content_copy</span>
               </div>
             </div>
@@ -1337,18 +1350,18 @@
                 <span class="section-title-papara">HESAP HAREKETLERİ →</span>
                 <span class="section-action-papara" onclick="openReceiptsModal()">Tümü</span>
               </div>
-              <div class="papara-activity-list">
+              <div class="papara-activity-list" id="residentActivityList">
                 <div class="activity-item">
-                  <div class="activity-icon-squircle red">
-                    <span class="material-symbols-outlined">apartment</span>
+                  <div class="activity-icon-squircle green">
+                    <span class="material-symbols-outlined">bolt</span>
                   </div>
                   <div class="activity-meta">
-                    <div class="activity-title">Eylül 2026 Aidatı</div>
-                    <div class="activity-sub">Sanal IBAN ile FAST</div>
+                    <div class="activity-title">FAST ile Aidat Ödemesi</div>
+                    <div class="activity-sub">Eylül 2026 aidatı ödendi • ₺60,67 avans bakiyenize aktarıldı</div>
                   </div>
                   <div class="activity-values">
-                    <div class="activity-amount negative">₺1.423,33</div>
-                    <div class="activity-date">Bugün 14:15</div>
+                    <div class="activity-amount positive">+₺1.460,67</div>
+                    <div class="activity-date">11.10.2026</div>
                   </div>
                 </div>
                 <div class="activity-divider"></div>
@@ -1498,6 +1511,10 @@
                 <button class="btn-papara-cta" onclick="openAddResidentModal()">
                   <span class="material-symbols-outlined" style="font-size: 18px;">person_add</span>
                   <span>Yeni Sakin Tanımla</span>
+                </button>
+                <button class="btn-papara-cta" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-green); border: 1px solid rgba(16, 185, 129, 0.3);" onclick="openAccrueDuesModal()">
+                  <span class="material-symbols-outlined" style="font-size: 18px;">event_repeat</span>
+                  <span>Toplu Aidat Tahakkuk Ettir (Mükerrer Koruma)</span>
                 </button>
                 <button class="btn-papara-cta" style="background: rgba(2, 132, 199, 0.15); color: var(--accent-cyan); border: 1px solid rgba(2, 132, 199, 0.3);" onclick="openBankStatementModal()">
                   <span class="material-symbols-outlined" style="font-size: 18px;">receipt_long</span>
@@ -1984,6 +2001,32 @@
       alert('Site Yöneticisi Daire/Sakin Ekleme formu açılıyor.');
     }
 
+    async function openAccrueDuesModal() {
+      const period = prompt('Tahakkuk ettirilecek dönemi giriniz:', 'Ekim 2026');
+      if (!period) return;
+      try {
+        const res = await fetch('http://localhost:8080/api/v1/dues/accrue-period', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            site_id: 'site-1',
+            period: period,
+            amount: '1400.00',
+            due_date: '2026-10-15'
+          })
+        });
+        const data = await res.json();
+        if (data.already_accrued) {
+          alert('⚠️ MÜKERRER TAHAKKUK ENGELLENDİ!\n\n' + data.message);
+        } else {
+          alert('✅ TOPLU AİDAT TAHAKKUKU TAMAMLANDI!\n\n' + data.message + '\n\nToplam Tahakkuk: ₺' + data.total_amount_accrued + '\nAvanstan Mahsup: ₺' + data.total_amount_offset_from_advance);
+        }
+        await syncBackendLiveState();
+      } catch (err) {
+        alert('Sunucu iletişim hatası: ' + err);
+      }
+    }
+
     function openBankStatementModal() {
       alert('STORY-07-02: Otomatik Banka Ekstresi Eşleştirme (Excel / CSV / MT940)\n\n✓ Girdi: HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33\n✓ Eşleşen: Ahmet Yılmaz (A Blok D:14)\n✓ KMK Madde 20 Gecikme Tazminatı Dahil: ₺1.423,33 (%100 Eşleşme Güveni)\n✓ Durum: ONAY_BEKLIYOR -> ONAYLANDI (Zero-Approval Doğrulandı)');
     }
@@ -1995,6 +2038,125 @@
     function openProfileSheet() {
       alert('Profil & Yetki Menüsü:\n\nKullanıcı: Ahmet Yılmaz\nRol: Kat Maliki\nSite: Begonya Sitesi (A Blok D:14)\nYetki Kapsamı: Daire İçi & Sakin Davet');
     }
+
+    async function syncBackendLiveState() {
+      try {
+        const res = await fetch('http://localhost:8080/api/v1/residents/d-14/dashboard');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const amountEl = document.getElementById('amountDisplay');
+        const amountLbl = document.getElementById('amountLabel');
+        const duePill = document.getElementById('dueStatusPill');
+        const heroCard = document.getElementById('heroCard');
+        const totalDebt = parseFloat(data.total_debt || '0');
+        const advance = parseFloat(data.advance_payment || '0');
+
+        if (totalDebt <= 0) {
+          if (advance > 0) {
+            if (amountLbl) {
+              amountLbl.innerText = 'Mevcut Avans Bakiyesi (Alacak)';
+              amountLbl.style.color = '#10B981';
+            }
+            amountEl.innerText = '+₺' + advance.toFixed(2).replace('.', ',');
+            amountEl.style.color = '#10B981';
+            duePill.innerText = 'Gelecek Dönem İçin Avans Mevcut';
+            duePill.className = 'status-pill ontime';
+          } else {
+            if (amountLbl) {
+              amountLbl.innerText = 'Ödenecek Toplam Tutar';
+              amountLbl.style.color = 'var(--text-secondary)';
+            }
+            amountEl.innerText = '₺0,00';
+            amountEl.style.color = 'var(--text-primary)';
+            duePill.innerText = 'Ödendi • Borç Yok';
+            duePill.className = 'status-pill ontime';
+          }
+          if (heroCard) heroCard.classList.remove('overdue');
+        } else {
+          if (amountLbl) {
+            amountLbl.innerText = 'Ödenecek Toplam Tutar';
+            amountLbl.style.color = 'var(--text-secondary)';
+          }
+          amountEl.innerText = '₺' + totalDebt.toFixed(2).replace('.', ',');
+          amountEl.style.color = 'var(--text-primary)';
+          duePill.innerText = data.is_overdue ? '10 Gün Gecikme (%5 KMK)' : 'Ödeme Bekliyor';
+          duePill.className = data.is_overdue ? 'status-pill penalty' : 'status-pill';
+        }
+
+        const debtBadge = document.getElementById('pillDebtAmount');
+        const advanceBadge = document.getElementById('pillAdvanceAmount');
+        if (debtBadge) {
+          debtBadge.innerText = '₺' + totalDebt.toFixed(2).replace('.', ',');
+          debtBadge.style.color = (totalDebt > 0) ? 'var(--accent-red)' : 'var(--text-primary)';
+        }
+        if (advanceBadge) {
+          advanceBadge.innerText = '+₺' + advance.toFixed(2).replace('.', ',');
+          advanceBadge.style.color = (advance > 0) ? '#10B981' : 'var(--text-secondary)';
+        }
+
+        const payBtn = document.querySelector('#heroCard button:first-child');
+        if (payBtn) {
+          if (totalDebt <= 0 && advance > 0) {
+            payBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 17px;">add_card</span> Avans Yükle';
+            payBtn.style.background = 'var(--accent-green)';
+          } else if (totalDebt > 0) {
+            payBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 17px;">payments</span> Hemen Öde';
+            payBtn.style.background = 'var(--accent-red)';
+          } else {
+            payBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 17px;">add_card</span> Avans Yükle';
+            payBtn.style.background = 'var(--accent-green)';
+          }
+        }
+
+        if (data.virtual_iban) {
+          const ibanTexts = document.querySelectorAll('#ibanText, .iban-subline span:first-child');
+          ibanTexts.forEach(el => {
+            if (el.id === 'ibanText') {
+              el.innerText = data.virtual_iban.replace(/(.{4})/g, '$1 ').trim();
+            } else {
+              el.innerText = 'Daire IBAN: ' + data.virtual_iban.replace(/(.{4})/g, '$1 ').trim();
+            }
+          });
+        }
+
+        const activityList = document.getElementById('residentActivityList');
+        if (activityList && data.transactions && data.transactions.length > 0) {
+          activityList.innerHTML = data.transactions.map((tx, idx) => {
+            const isCredit = tx.is_credit;
+            const colorClass = isCredit ? 'green' : 'red';
+            const iconName = isCredit ? (tx.title.includes('FAST') ? 'bolt' : 'check_circle') : 'apartment';
+            const amountClass = isCredit ? 'positive' : 'negative';
+            const formattedAmt = (isCredit ? '+₺' : '₺') + parseFloat(tx.amount || '0').toFixed(2).replace('.', ',');
+            const divider = (idx < data.transactions.length - 1) ? '<div class="activity-divider"></div>' : '';
+
+            return `
+              <div class="activity-item">
+                <div class="activity-icon-squircle ${colorClass}">
+                  <span class="material-symbols-outlined">${iconName}</span>
+                </div>
+                <div class="activity-meta">
+                  <div class="activity-title">${tx.title}</div>
+                  <div class="activity-sub">${tx.subtitle}</div>
+                </div>
+                <div class="activity-values">
+                  <div class="activity-amount ${amountClass}">${formattedAmt}</div>
+                  <div class="activity-date">${tx.date}</div>
+                </div>
+              </div>
+              ${divider}
+            `;
+          }).join('');
+        }
+      } catch (e) {
+        // Fallback silently if backend is offline
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      syncBackendLiveState();
+      setInterval(syncBackendLiveState, 2000);
+    });
   </script>
 </body>
 </html>

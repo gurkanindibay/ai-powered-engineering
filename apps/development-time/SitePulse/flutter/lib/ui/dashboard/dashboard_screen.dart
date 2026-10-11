@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,15 +31,23 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedTabIndex = 0;
+  Timer? _liveSyncTimer;
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onControllerUpdate);
+    widget.controller.fetchResidentDashboard();
+    _liveSyncTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted) {
+        widget.controller.fetchResidentDashboard();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _liveSyncTimer?.cancel();
     widget.controller.removeListener(_onControllerUpdate);
     super.dispose();
   }
@@ -191,9 +200,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: _buildCurrentTabContent(isHomeRole),
+        child: RefreshIndicator(
+          onRefresh: () => widget.controller.fetchResidentDashboard(),
+          color: AppColors.accentCyan,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: _buildCurrentTabContent(isHomeRole),
+          ),
         ),
       ),
       bottomNavigationBar: Container(
@@ -398,6 +412,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 siteName: widget.controller.activeUnit.siteAdi,
                 unitName: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
                 isOffline: widget.controller.isOffline,
+                advancePayment: widget.controller.activeUnit.advancePayment,
+                virtualIban: widget.controller.activeUnit.virtualIban,
                 onPayPressed: () => _showPaymentDialog(dues),
                 onDetailPressed: () => _showDuesDetailDialog(dues),
               ),
@@ -431,6 +447,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   siteName: widget.controller.activeUnit.siteAdi,
                   unitName: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
                   isOffline: widget.controller.isOffline,
+                  advancePayment: widget.controller.activeUnit.advancePayment,
+                  virtualIban: widget.controller.activeUnit.virtualIban,
                   onPayPressed: () => _showPaymentDialog(dues),
                   onDetailPressed: () => _showDuesDetailDialog(dues),
                 ),
@@ -533,35 +551,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHesapHareketleriSection() {
-    final transactions = [
-      {
-        'title': 'Eylül 2026 Aidatı',
-        'subtitle': 'Sanal IBAN ile FAST',
-        'amount': '₺1.423,33',
-        'date': 'Bugün 14:15',
-        'isCredit': false,
-        'icon': Icons.apartment,
-        'color': const Color(0xFFEF4444),
-      },
-      {
-        'title': 'Ağustos 2026 Aidatı',
-        'subtitle': 'Kredi Kartı ile Ödendi',
-        'amount': '₺1.400,00',
-        'date': '15.08.2026 10:20',
-        'isCredit': true,
-        'icon': Icons.check_circle_outline,
-        'color': const Color(0xFF10B981),
-      },
-      {
-        'title': 'Demirbaş Katılım Payı',
-        'subtitle': 'Yönetim Hesabına Transfer',
-        'amount': '₺500,00',
-        'date': '02.08.2026 16:45',
-        'isCredit': true,
-        'icon': Icons.build_circle_outlined,
-        'color': const Color(0xFF10B981),
-      },
-    ];
+    final transactions = widget.controller.accountTransactions;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -602,7 +592,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: transactions.asMap().entries.map((entry) {
               final index = entry.key;
               final item = entry.value;
-              final color = item['color'] as Color;
+              final color = item.isCredit ? const Color(0xFF10B981) : const Color(0xFFEF4444);
+              final icon = item.isCredit
+                  ? (item.title.contains('FAST') ? Icons.flash_on : Icons.check_circle_outline)
+                  : Icons.apartment;
 
               return Column(
                 children: [
@@ -618,7 +611,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
-                            item['icon'] as IconData,
+                            icon,
                             color: color,
                             size: 20,
                           ),
@@ -629,7 +622,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                item['title'] as String,
+                                item.title,
                                 style: TextStyle(
                                   color: AppColors.textPrimary(context),
                                   fontSize: 13,
@@ -638,7 +631,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                item['subtitle'] as String,
+                                item.subtitle,
                                 style: TextStyle(
                                   color: AppColors.textSecondary(context),
                                   fontSize: 11,
@@ -651,18 +644,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              item['amount'] as String,
+                              item.amountStr,
                               style: TextStyle(
-                                color: (item['isCredit'] as bool)
-                                    ? const Color(0xFF10B981)
-                                    : const Color(0xFFEF4444),
+                                color: color,
                                 fontSize: 13.5,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              item['date'] as String,
+                              item.date,
                               style: TextStyle(
                                 color: AppColors.textSecondary(context),
                                 fontSize: 10,

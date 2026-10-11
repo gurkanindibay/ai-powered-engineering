@@ -202,5 +202,17 @@ void main() {
       controller.logout();
       expect(controller.isAuthenticated, isFalse);
     });
+
+    test('when initialized, then accountTransactions contains initial transactions and formats amounts correctly', () {
+      expect(controller.accountTransactions.isNotEmpty, isTrue);
+      final firstTx = controller.accountTransactions.first;
+      expect(firstTx.title, 'Eylül 2026 Aidatı');
+      expect(firstTx.isCredit, isFalse);
+      expect(firstTx.amountStr.startsWith('₺'), isTrue);
+
+      final secondTx = controller.accountTransactions[1];
+      expect(secondTx.isCredit, isTrue);
+      expect(secondTx.amountStr.startsWith('+₺'), isTrue);
+    });
   });
 }

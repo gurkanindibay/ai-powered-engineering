@@ -27,6 +27,7 @@ pub struct AppStateInner {
     pub site_invite_tokens: HashMap<String, SiteInvitationLinkResponse>,
     pub reconciliation_queue: Vec<ReconciliationMatch>,
     pub site_bank_accounts: Vec<SiteBankAccount>,
+    pub advance_payments: HashMap<String, Decimal>,
     pub kuveyt_turk_client_id: Option<String>,
     pub kuveyt_turk_client_secret: Option<String>,
 }
@@ -44,6 +45,7 @@ impl AppState {
             site_invite_tokens: HashMap::new(),
             reconciliation_queue: Vec::new(),
             site_bank_accounts: Vec::new(),
+            advance_payments: HashMap::new(),
             kuveyt_turk_client_id: std::env::var("KT_CLIENT_ID").ok(),
             kuveyt_turk_client_secret: std::env::var("KT_CLIENT_SECRET").ok(),
         };

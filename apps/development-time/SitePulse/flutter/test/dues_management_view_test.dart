@@ -124,5 +124,38 @@ void main() {
       expect(find.textContaining('Eşleşemeyen'), findsOneWidget);
       expect(find.textContaining('Eşleşenleri Onayla & Kaydet'), findsOneWidget);
     });
+
+    testWidgets('DuesManagementView opens Toplu Aidat Tahakkuku confirmation dialog with duplicate prevention note', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: DuesManagementView(controller: controller),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap on Toplu Aidat Tahakkuku button
+      final accrueBtn = find.text('Toplu Aidat Tahakkuku');
+      expect(accrueBtn, findsOneWidget);
+      await tester.tap(accrueBtn);
+      await tester.pumpAndSettle();
+
+      // Verify dialog is shown
+      expect(find.text('Toplu Aidat Tahakkuku'), findsNWidgets(2)); // Button + Dialog Title
+      expect(find.text('Tahakkuk Dönemi:'), findsOneWidget);
+      expect(find.text('₺1.400,00'), findsOneWidget);
+      expect(find.textContaining('Mükerrer tahakkuklar sistem tarafından engellenir'), findsOneWidget);
+      expect(find.text('Tahakkuk Ettir'), findsOneWidget);
+
+      // Confirm accrual
+      await tester.tap(find.text('Tahakkuk Ettir'));
+      await tester.pumpAndSettle();
+
+      // Verify snackbar feedback is displayed
+      expect(find.byType(SnackBar), findsOneWidget);
+    });
   });
 }

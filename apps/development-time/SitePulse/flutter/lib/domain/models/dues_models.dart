@@ -97,6 +97,7 @@ class ApartmentUnit {
   final String ownerName;
   final String tenantName;
   final String? virtualIban;
+  final Decimal? advancePayment;
 
   const ApartmentUnit({
     required this.id,
@@ -108,6 +109,7 @@ class ApartmentUnit {
     required this.ownerName,
     required this.tenantName,
     this.virtualIban,
+    this.advancePayment,
   });
 
   // Backwards compatibility getters
@@ -118,10 +120,72 @@ class ApartmentUnit {
   int get arsaPayi => landShare;
   String get malikAdi => ownerName;
   String get kiraciAdi => tenantName;
+  Decimal get avansBakiye => advancePayment ?? Decimal.zero;
+  bool get hasAdvancePayment => (advancePayment ?? Decimal.zero) > Decimal.zero;
+
+  ApartmentUnit copyWith({
+    String? id,
+    String? siteName,
+    String? block,
+    int? unitNo,
+    int? floor,
+    int? landShare,
+    String? ownerName,
+    String? tenantName,
+    String? virtualIban,
+    Decimal? advancePayment,
+  }) {
+    return ApartmentUnit(
+      id: id ?? this.id,
+      siteName: siteName ?? this.siteName,
+      block: block ?? this.block,
+      unitNo: unitNo ?? this.unitNo,
+      floor: floor ?? this.floor,
+      landShare: landShare ?? this.landShare,
+      ownerName: ownerName ?? this.ownerName,
+      tenantName: tenantName ?? this.tenantName,
+      virtualIban: virtualIban ?? this.virtualIban,
+      advancePayment: advancePayment ?? this.advancePayment,
+    );
+  }
 }
 
 // Backwards compatibility alias
 typedef Daire = ApartmentUnit;
+
+class AccountTransactionItem {
+  final String id;
+  final String title;
+  final String subtitle;
+  final Decimal amount;
+  final String date;
+  final bool isCredit;
+
+  const AccountTransactionItem({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.amount,
+    required this.date,
+    required this.isCredit,
+  });
+
+  String get amountStr {
+    final formatted = amount.toStringAsFixed(2).replaceAll('.', ',');
+    return isCredit ? '+₺$formatted' : '₺$formatted';
+  }
+
+  factory AccountTransactionItem.fromJson(Map<String, dynamic> json) {
+    return AccountTransactionItem(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? 'Aidat Hareketi',
+      subtitle: json['subtitle'] as String? ?? '',
+      amount: Decimal.tryParse(json['amount']?.toString() ?? '0') ?? Decimal.zero,
+      date: json['date'] as String? ?? 'Bugün',
+      isCredit: json['is_credit'] as bool? ?? false,
+    );
+  }
+}
 
 class ComplexCollectionSummary {
   final Decimal totalExpected;

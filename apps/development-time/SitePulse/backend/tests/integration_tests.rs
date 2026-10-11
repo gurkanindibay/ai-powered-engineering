@@ -906,4 +906,246 @@ async fn when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_ge
     assert_eq!(res2.status, "DUPLICATE_IGNORED");
 }
 
+#[tokio::test]
+async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_payment() {
+    let state = AppState::new();
 
+    // 1. First payment clears existing ₺1400 due
+    let webhook_req_1 = BankIncomingWebhookRequest {
+        transaction_id: "TXN-ADV-001".to_string(),
+        virtual_iban: "TR410020504213991067000014".to_string(),
+        amount: Decimal::from_str_exact("1400.00").unwrap(),
+        currency: Some("TRY".to_string()),
+        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_iban: Some("TR120006200000000012345678".to_string()),
+        description: Some("Eylül 2026 Aidatı".to_string()),
+        signature: Some("HMAC_VALID".to_string()),
+    };
+
+    let (status1, axum::Json(res1)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        axum::Json(webhook_req_1),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status1, axum::http::StatusCode::OK);
+    assert_eq!(res1.cleared_amount, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(res1.remaining_debt, Decimal::ZERO);
+    assert_eq!(res1.advance_payment, Decimal::ZERO);
+
+    // 2. Second payment (with new txn id) delivered to same Virtual IBAN when debt is 0
+    let webhook_req_2 = BankIncomingWebhookRequest {
+        transaction_id: "TXN-ADV-002".to_string(),
+        virtual_iban: "TR410020504213991067000014".to_string(),
+        amount: Decimal::from_str_exact("1460.67").unwrap(),
+        currency: Some("TRY".to_string()),
+        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_iban: Some("TR120006200000000012345678".to_string()),
+        description: Some("Ekim 2026 Avans Aidatı".to_string()),
+        signature: Some("HMAC_VALID".to_string()),
+    };
+
+    let (status2, axum::Json(res2)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        axum::Json(webhook_req_2),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status2, axum::http::StatusCode::OK);
+    assert_eq!(res2.status, "CLEARED");
+    assert_eq!(res2.cleared_due_period, None);
+    assert_eq!(res2.remaining_debt, Decimal::ZERO);
+    assert_eq!(res2.advance_payment, Decimal::from_str_exact("1460.67").unwrap());
+    assert!(res2.message.contains("advance payment"));
+
+    // 3. Third payment adds another ₺500 to advance payment
+    let webhook_req_3 = BankIncomingWebhookRequest {
+        transaction_id: "TXN-ADV-003".to_string(),
+        virtual_iban: "TR410020504213991067000014".to_string(),
+        amount: Decimal::from_str_exact("500.00").unwrap(),
+        currency: Some("TRY".to_string()),
+        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_iban: Some("TR120006200000000012345678".to_string()),
+        description: Some("Ekstra Avans".to_string()),
+        signature: Some("HMAC_VALID".to_string()),
+    };
+
+    let (_, axum::Json(res3)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        axum::Json(webhook_req_3),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(res3.advance_payment, Decimal::from_str_exact("1960.67").unwrap());
+
+    // 4. Verify Resident Dashboard reflects the accumulated advance payment
+    let res = sitepulse_backend::handlers::get_resident_dashboard(
+        axum::extract::Path("d-14".to_string()),
+        axum::extract::State(state),
+    )
+    .await;
+
+    let json_bytes = axum::body::to_bytes(res.into_response().into_body(), 1024 * 64)
+        .await
+        .unwrap();
+    let dash: ResidentDashboardDto = serde_json::from_slice(&json_bytes).unwrap();
+
+    assert_eq!(dash.total_debt, Decimal::ZERO);
+    assert_eq!(dash.advance_payment, Decimal::from_str_exact("1960.67").unwrap());
+
+    // 5. Verify user-friendly transaction titles and subtitles
+    let adv_tx = dash.transactions.iter().find(|t| t.id == "TXN-ADV-002").unwrap();
+    assert_eq!(adv_tx.title, "FAST ile Avans Yükleme");
+    assert_eq!(adv_tx.subtitle, "Aktif borç bulunmuyor • Avans bakiyenize aktarıldı");
+
+    let due_tx = dash.transactions.iter().find(|t| t.id == "TXN-ADV-001").unwrap();
+    assert_eq!(due_tx.title, "FAST ile Aidat Ödemesi");
+    assert_eq!(due_tx.subtitle, "Eylül 2026 aidat borcu kapatıldı");
+}
+
+#[tokio::test]
+async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_automatically_offsets_debt() {
+    let state = AppState::new();
+
+    // 1. Payment of ₺2860.67 clears September due (₺1400.00) and leaves ₺1460.67 surplus in advance
+    let webhook_req = BankIncomingWebhookRequest {
+        transaction_id: "TXN-AUTO-OFFSET-001".to_string(),
+        virtual_iban: "TR410020504213991067000014".to_string(),
+        amount: Decimal::from_str_exact("2860.67").unwrap(),
+        currency: Some("TRY".to_string()),
+        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_iban: Some("TR120006200000000012345678".to_string()),
+        description: Some("Eylül 2026 Aidatı + Avans".to_string()),
+        signature: Some("HMAC_VALID".to_string()),
+    };
+
+    let (status, axum::Json(res)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        axum::Json(webhook_req),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.remaining_debt, Decimal::ZERO);
+    assert_eq!(res.advance_payment, Decimal::from_str_exact("1460.67").unwrap());
+
+    // 2. New monthly dues period arrives: "Ekim 2026" (₺1400.00)
+    let accrue_req = AccrueDuesPeriodRequest {
+        site_id: "site-1".to_string(),
+        period: "Ekim 2026".to_string(),
+        amount: Decimal::from_str_exact("1400.00").unwrap(),
+        due_date: NaiveDate::from_ymd_opt(2026, 10, 15).unwrap(),
+    };
+
+    let (accrue_status, axum::Json(accrue_res)) = sitepulse_backend::handlers::accrue_monthly_dues(
+        axum::extract::State(state.clone()),
+        axum::Json(accrue_req),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(accrue_status, axum::http::StatusCode::OK);
+    assert_eq!(accrue_res.auto_settled_units_count, 1);
+    assert_eq!(accrue_res.total_amount_offset_from_advance, Decimal::from_str_exact("1400.00").unwrap());
+
+    // 3. Verify Resident Dashboard:
+    // - New October due is automatically marked as PAID!
+    // - Total debt is ₺0!
+    // - Remaining advance balance is ₺60.67!
+    let dash_res = sitepulse_backend::handlers::get_resident_dashboard(
+        axum::extract::Path("d-14".to_string()),
+        axum::extract::State(state),
+    )
+    .await;
+
+    let json_bytes = axum::body::to_bytes(dash_res.into_response().into_body(), 1024 * 64)
+        .await
+        .unwrap();
+    let dash: ResidentDashboardDto = serde_json::from_slice(&json_bytes).unwrap();
+
+    assert_eq!(dash.total_debt, Decimal::ZERO);
+    assert_eq!(dash.advance_payment, Decimal::from_str_exact("60.67").unwrap());
+
+    let oct_due = dash.dues.iter().find(|d| d.period == "Ekim 2026").unwrap();
+    assert_eq!(oct_due.status, "PAID");
+
+    // 4. Verify transaction history records the automatic advance offset!
+    let offset_tx = dash.transactions.iter().find(|t| t.title == "Avans ile Aidat Tahsili").unwrap();
+    assert_eq!(offset_tx.amount, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(offset_tx.subtitle, "Ekim 2026 aidatı avans bakiyenizden otomatik mahsup edildi");
+    assert!(offset_tx.is_credit);
+}
+
+#[tokio::test]
+async fn when_dues_period_already_accrued_then_duplicate_accrual_is_prevented() {
+    let state = AppState::new();
+
+    let accrue_req = AccrueDuesPeriodRequest {
+        site_id: "site-1".to_string(),
+        period: "Kasım 2026".to_string(),
+        amount: Decimal::from_str_exact("1400.00").unwrap(),
+        due_date: NaiveDate::from_ymd_opt(2026, 11, 15).unwrap(),
+    };
+
+    // First accrual: Succeeds
+    let (status1, axum::Json(res1)) = sitepulse_backend::handlers::accrue_monthly_dues(
+        axum::extract::State(state.clone()),
+        axum::Json(accrue_req.clone()),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status1, axum::http::StatusCode::OK);
+    assert!(!res1.already_accrued);
+    assert!(res1.newly_accrued_units_count > 0);
+
+    let initial_dues_count = {
+        let inner = state.inner.read().await;
+        inner.dues.iter().filter(|d| d.period == "Kasım 2026").count()
+    };
+    assert_eq!(initial_dues_count, res1.newly_accrued_units_count);
+
+    // Second accrual for the exact same period and site: MUST BE PREVENTED
+    let (status2, axum::Json(res2)) = sitepulse_backend::handlers::accrue_monthly_dues(
+        axum::extract::State(state.clone()),
+        axum::Json(accrue_req),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status2, axum::http::StatusCode::OK);
+    assert!(res2.already_accrued);
+    assert_eq!(res2.newly_accrued_units_count, 0);
+    assert!(res2.message.contains("Mükerrer tahakkuk engellendi"));
+
+    // Verify dues count did not increase
+    let final_dues_count = {
+        let inner = state.inner.read().await;
+        inner.dues.iter().filter(|d| d.period == "Kasım 2026").count()
+    };
+    assert_eq!(final_dues_count, initial_dues_count);
+}
+
+#[tokio::test]
+async fn when_scheduler_batch_runs_then_accrues_and_prevents_duplicate_accrual() {
+    let state = AppState::new();
+    let test_date = NaiveDate::from_ymd_opt(2026, 12, 1).unwrap();
+
+    // First batch run: accrues for all sites
+    let (sites_accrued_1, units_accrued_1) =
+        sitepulse_backend::scheduler::run_periodic_accrual_for_all_sites(&state, test_date).await;
+
+    assert!(sites_accrued_1 > 0);
+    assert!(units_accrued_1 > 0);
+
+    // Second batch run for the same date/period: must be completely idempotent (0 newly accrued)
+    let (sites_accrued_2, units_accrued_2) =
+        sitepulse_backend::scheduler::run_periodic_accrual_for_all_sites(&state, test_date).await;
+
+    assert_eq!(sites_accrued_2, 0);
+    assert_eq!(units_accrued_2, 0);
+}

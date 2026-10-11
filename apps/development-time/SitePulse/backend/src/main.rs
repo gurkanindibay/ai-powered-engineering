@@ -1,5 +1,6 @@
 mod handlers;
 mod models;
+mod scheduler;
 mod services;
 mod state;
 
@@ -86,8 +87,16 @@ async fn main() {
             "/api/v1/bank/webhook/incoming-transfer",
             post(handlers::handle_bank_incoming_webhook),
         )
+        // Periodic Dues Accrual & Automatic Advance Balance Offsetting
+        .route(
+            "/api/v1/dues/accrue-period",
+            post(handlers::accrue_monthly_dues),
+        )
         .layer(cors)
-        .with_state(state);
+        .with_state(state.clone());
+
+    // Spawn automated monthly dues accrual background scheduler (batch job)
+    tokio::spawn(scheduler::start_automated_dues_accrual_scheduler(state));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     tracing::info!("🦀 SitePulse Rust Backend listening on http://{}", addr);

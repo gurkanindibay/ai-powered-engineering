@@ -113,6 +113,27 @@ pub struct DuesLiability {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccrueDuesPeriodRequest {
+    pub site_id: String,
+    pub period: String,
+    pub amount: Decimal,
+    pub due_date: NaiveDate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccrueDuesPeriodResponse {
+    pub site_id: String,
+    pub period: String,
+    pub total_units_accrued: usize,
+    pub newly_accrued_units_count: usize,
+    pub auto_settled_units_count: usize,
+    pub total_amount_accrued: Decimal,
+    pub total_amount_offset_from_advance: Decimal,
+    pub already_accrued: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndependentUnit {
     pub id: String,
     pub site_id: String,
@@ -155,6 +176,16 @@ pub struct Site {
 
 // DTOs
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountTransactionDto {
+    pub id: String,
+    pub title: String,
+    pub subtitle: String,
+    pub amount: Decimal,
+    pub date: String,
+    pub is_credit: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResidentDashboardDto {
     pub unit_id: String,
     pub site_title: String,
@@ -165,6 +196,10 @@ pub struct ResidentDashboardDto {
     pub announcement_content: String,
     #[serde(default)]
     pub virtual_iban: Option<String>,
+    #[serde(default)]
+    pub advance_payment: Decimal,
+    #[serde(default)]
+    pub transactions: Vec<AccountTransactionDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -704,6 +739,8 @@ pub struct BankIncomingWebhookResponse {
     pub cleared_due_period: Option<String>,
     pub cleared_amount: Decimal,
     pub remaining_debt: Decimal,
+    #[serde(default)]
+    pub advance_payment: Decimal,
     pub receipt_id: String,
     pub message: String,
 }

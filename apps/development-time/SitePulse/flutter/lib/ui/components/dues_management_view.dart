@@ -475,6 +475,176 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     }
   }
 
+  Future<void> _showAccrueDuesDialog() async {
+    final selectedMonth = widget.controller.selectedDuesMonth;
+    final isDark = AppColors.isDark(context);
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        bool isSubmitting = false;
+
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: isDark ? AppColors.darkCard : AppColors.lightCard,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentGreen.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.event_repeat, color: AppColors.accentGreen, size: 22),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Toplu Aidat Tahakkuku',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tüm bağımsız bölümler için aylık aidat borç tahakkukunu başlatın.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary(context),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border(context)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Tahakkuk Dönemi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
+                            Text(selectedMonth, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Daire Başı Aidat:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
+                            const Text('₺1.400,00', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.accentGreen, fontSize: 13)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Son Ödeme Tarihi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
+                            const Text('15.10.2026', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentCyan.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.accentCyan.withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline, color: AppColors.accentCyan, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Avans bakiyesi bulunan daireler tahakkuk anında otomatik olarak mahsup edilecektir. Mükerrer tahakkuklar sistem tarafından engellenir.',
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 11,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
+                  child: const Text('Vazgeç'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentGreen,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          setDialogState(() => isSubmitting = true);
+                          final result = await widget.controller.accrueMonthlyDues(
+                            period: selectedMonth,
+                          );
+                          if (mounted) {
+                            Navigator.pop(dialogCtx);
+                            final alreadyAccrued = result['already_accrued'] == true;
+                            final msg = result['message'] as String? ?? '';
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Row(
+                                  children: [
+                                    Icon(
+                                      alreadyAccrued ? Icons.info_outline : Icons.check_circle,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        msg,
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                backgroundColor:
+                                    alreadyAccrued ? AppColors.accentOrange : AppColors.accentGreen,
+                                duration: const Duration(seconds: 4),
+                              ),
+                            );
+                          }
+                        },
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Tahakkuk Ettir'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = AppColors.isDark(context);
@@ -495,8 +665,11 @@ class _DuesManagementViewState extends State<DuesManagementView> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 1. Header: Month Selector & Upload Button
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
           children: [
             // Month Selector Pill
             Container(
@@ -551,17 +724,34 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               ),
             ),
 
-            // Import Bank File Button
-            ElevatedButton.icon(
-              onPressed: _showImportOptionsDialog,
-              icon: const Icon(Icons.upload_file, size: 16),
-              label: const Text('Excel / Ekstre Yükle'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+            // Action Buttons: Accrue Dues & Import Bank File
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _showAccrueDuesDialog,
+                  icon: const Icon(Icons.event_repeat, size: 16),
+                  label: const Text('Toplu Aidat Tahakkuku'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _showImportOptionsDialog,
+                  icon: const Icon(Icons.upload_file, size: 16),
+                  label: const Text('Excel / Ekstre Yükle'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
