@@ -845,3 +845,39 @@ pub struct MatchAllPaymentsResponse {
     pub matched_advance_count: usize,
     pub message: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisteredSenderIbanDto {
+    pub sender_iban: String,
+    pub formatted_iban: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub bank_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnitMatchingCriteriaDto {
+    pub unit_id: String,
+    pub block: String,
+    pub unit_number: i32,
+    pub resident_name: String,
+    pub virtual_iban: Option<String>,
+    pub remembered_ibans: Vec<RegisteredSenderIbanDto>,
+    pub registered_payer_names: Vec<String>,
+    pub recommended_description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddSenderIbanRequest {
+    pub sender_iban: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub bank_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdatePayerNamesRequest {
+    pub payer_names: Vec<String>,
+}

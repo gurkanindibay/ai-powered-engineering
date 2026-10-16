@@ -1491,3 +1491,66 @@ async fn when_transfer_cannot_be_matched_then_enters_unmatched_pool_successfully
     assert_eq!(item.status, sitepulse_backend::models::ReconciliationStatus::Unmatched);
     assert!(item.matched_unit_id.is_none());
 }
+
+#[tokio::test]
+async fn when_homeowner_manages_matching_criteria_then_criteria_can_be_viewed_added_and_deleted() {
+    let state = AppState::new();
+
+    // 1. Get initial matching criteria for d-14
+    let axum::Json(criteria) = sitepulse_backend::handlers::get_unit_matching_criteria(
+        axum::extract::Path("d-14".to_string()),
+        axum::extract::State(state.clone()),
+    )
+    .await
+    .expect("Should retrieve matching criteria");
+
+    assert_eq!(criteria.unit_id, "d-14");
+    assert_eq!(criteria.block, "A");
+    assert_eq!(criteria.unit_number, 14);
+    assert!(criteria.virtual_iban.is_some());
+    assert_eq!(criteria.recommended_description, "A Blok D:14");
+    assert!(criteria.remembered_ibans.iter().any(|i| i.sender_iban == "TR120006200000000000000001"));
+
+    // 2. Add a new sender IBAN (e.g. İş Bankası)
+    let add_req = sitepulse_backend::models::AddSenderIbanRequest {
+        sender_iban: "TR77 0006 4000 0011 2233 4455 66".to_string(),
+        label: Some("İş Bankası Şahsi Hesabım".to_string()),
+        bank_name: Some("İş Bankası".to_string()),
+    };
+
+    let axum::Json(updated) = sitepulse_backend::handlers::add_unit_sender_iban(
+        axum::extract::Path("d-14".to_string()),
+        axum::extract::State(state.clone()),
+        axum::Json(add_req),
+    )
+    .await
+    .expect("Should add sender IBAN");
+
+    assert!(updated.remembered_ibans.iter().any(|i| i.sender_iban == "TR770006400000112233445566"));
+
+    // 3. Update payer names (add family member)
+    let payer_req = sitepulse_backend::models::UpdatePayerNamesRequest {
+        payer_names: vec!["Ahmet Yılmaz".to_string(), "Zeynep Kaya".to_string(), "Can Yılmaz".to_string()],
+    };
+
+    let axum::Json(updated_names) = sitepulse_backend::handlers::update_unit_payer_names(
+        axum::extract::Path("d-14".to_string()),
+        axum::extract::State(state.clone()),
+        axum::Json(payer_req),
+    )
+    .await
+    .expect("Should update payer names");
+
+    assert_eq!(updated_names.registered_payer_names.len(), 3);
+    assert!(updated_names.registered_payer_names.contains(&"Can Yılmaz".to_string()));
+
+    // 4. Delete the added sender IBAN
+    let axum::Json(after_delete) = sitepulse_backend::handlers::delete_unit_sender_iban(
+        axum::extract::Path(("d-14".to_string(), "TR770006400000112233445566".to_string())),
+        axum::extract::State(state.clone()),
+    )
+    .await
+    .expect("Should delete sender IBAN");
+
+    assert!(!after_delete.remembered_ibans.iter().any(|i| i.sender_iban == "TR770006400000112233445566"));
+}

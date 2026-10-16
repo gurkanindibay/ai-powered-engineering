@@ -31,6 +31,8 @@ pub struct AppStateInner {
     pub advance_payments: HashMap<String, Decimal>,
     pub homeowner_payments: Vec<HomeownerPaymentRecord>,
     pub remembered_sender_ibans: HashMap<String, String>,
+    pub sender_iban_metadata: HashMap<String, (Option<String>, Option<String>)>,
+    pub unit_payer_names: HashMap<String, Vec<String>>,
     pub kuveyt_turk_client_id: Option<String>,
     pub kuveyt_turk_client_secret: Option<String>,
 }
@@ -51,6 +53,8 @@ impl AppState {
             advance_payments: HashMap::new(),
             homeowner_payments: Vec::new(),
             remembered_sender_ibans: HashMap::new(),
+            sender_iban_metadata: HashMap::new(),
+            unit_payer_names: HashMap::new(),
             kuveyt_turk_client_id: std::env::var("KT_CLIENT_ID").ok(),
             kuveyt_turk_client_secret: std::env::var("KT_CLIENT_SECRET").ok(),
         };
@@ -143,6 +147,20 @@ impl AppState {
             tenant_user_id: None,
             virtual_iban: Some(seeded_virtual_iban),
         });
+
+        // Seed initial matching criteria for unit d-14 (Ahmet Yılmaz)
+        inner.unit_payer_names.insert(
+            "d-14".to_string(),
+            vec!["Ahmet Yılmaz".to_string(), "Zeynep Kaya".to_string()],
+        );
+        inner.remembered_sender_ibans.insert(
+            "TR120006200000000000000001".to_string(),
+            "d-14".to_string(),
+        );
+        inner.sender_iban_metadata.insert(
+            "TR120006200000000000000001".to_string(),
+            (Some("Garanti BBVA - Maaş Hesabı".to_string()), Some("Garanti BBVA".to_string())),
+        );
 
         // Seed September 2026 Dues (₺1400 overdue 10 days)
         inner.dues.push(DuesLiability {

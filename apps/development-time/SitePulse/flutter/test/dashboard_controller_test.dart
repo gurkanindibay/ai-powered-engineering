@@ -323,5 +323,36 @@ void main() {
 
       expect(controller.activeUnit.advancePayment, Decimal.parse('750.00'));
     });
+
+    test('when managing unit matching criteria, allows viewing, adding IBAN, deleting IBAN, and updating names', () async {
+      // Default matching criteria is present
+      final criteria = controller.matchingCriteria;
+      expect(criteria, isNotNull);
+      expect(criteria!.unitId, 'd-14');
+      expect(criteria.virtualIban, contains('TR41'));
+      expect(criteria.rememberedIbans.isNotEmpty, isTrue);
+      expect(criteria.registeredPayerNames, contains('Ahmet Yılmaz'));
+
+      // Add new sender IBAN
+      await controller.addSenderIbanToUnit(
+        iban: 'TR55 0006 1000 0000 1234 5678 99',
+        label: 'İş Bankası - İkinci Hesap',
+        bankName: 'İş Bankası',
+      );
+      final updatedCriteria = controller.matchingCriteria!;
+      expect(updatedCriteria.rememberedIbans.any((i) => i.senderIban.contains('TR550006100000001234567899')), isTrue);
+
+      // Delete sender IBAN
+      await controller.deleteSenderIbanFromUnit(iban: 'TR550006100000001234567899');
+      final afterDelete = controller.matchingCriteria!;
+      expect(afterDelete.rememberedIbans.any((i) => i.senderIban.contains('TR550006100000001234567899')), isFalse);
+
+      // Update payer names
+      await controller.updateUnitPayerNames(names: ['Ahmet Yılmaz', 'Zeynep Kaya', 'Ali Yılmaz']);
+      final afterNames = controller.matchingCriteria!;
+      expect(afterNames.registeredPayerNames.length, 3);
+      expect(afterNames.registeredPayerNames, contains('Ali Yılmaz'));
+    });
   });
 }
+

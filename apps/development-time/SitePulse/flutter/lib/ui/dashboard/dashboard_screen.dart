@@ -13,6 +13,7 @@ import '../components/payment_checkout_dialog.dart';
 import '../components/profile_role_sheet.dart';
 import '../components/resident_actions_row.dart';
 import '../components/saas_admin_view.dart';
+import '../components/unit_matching_criteria_card.dart';
 import '../components/virtual_iban_card.dart';
 import '../theme/app_theme.dart';
 import 'dashboard_controller.dart';
@@ -431,6 +432,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildHesapHareketleriSection(),
             const SizedBox(height: 16),
             _buildDairemHouseholdCard(),
+            const SizedBox(height: 16),
+            UnitMatchingCriteriaCard(controller: widget.controller),
           ],
         );
       case UserRole.siteManager:
@@ -466,6 +469,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _buildHesapHareketleriSection(),
               const SizedBox(height: 16),
               _buildDairemHouseholdCard(),
+              const SizedBox(height: 16),
+              UnitMatchingCriteriaCard(controller: widget.controller),
             ],
           );
         } else {
@@ -506,6 +511,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             iban: widget.controller.activeUnit.virtualIban ?? 'TR64 0020 5000 0986 3791 6000 14',
             unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
           ),
+          const SizedBox(height: 16),
+          UnitMatchingCriteriaCard(controller: widget.controller),
         ],
       );
     } else if (widget.controller.userRole == UserRole.siteManager) {
@@ -526,6 +533,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               iban: widget.controller.activeUnit.virtualIban ?? 'TR91 0020 5000 0986 3791 6000 01',
               unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
             ),
+            const SizedBox(height: 16),
+            UnitMatchingCriteriaCard(controller: widget.controller),
           ],
         );
       } else {

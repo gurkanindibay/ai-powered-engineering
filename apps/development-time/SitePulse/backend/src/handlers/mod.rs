@@ -856,6 +856,9 @@ pub async fn remember_sender_iban(
     }
 
     inner.remembered_sender_ibans.insert(clean.clone(), payload.unit_id.clone());
+    if let Some(ref sender_name) = payload.sender_name {
+        inner.sender_iban_metadata.insert(clean.clone(), (Some(sender_name.clone()), None));
+    }
 
     Ok(Json(RememberSenderIbanResponse {
         success: true,
@@ -863,6 +866,127 @@ pub async fn remember_sender_iban(
         sender_iban: clean,
         message: "Sender IBAN successfully mapped and remembered for automated future matching.".to_string(),
     }))
+}
+
+// 8b. Homeowner Payment Matching Criteria Handlers
+pub async fn get_unit_matching_criteria(
+    Path(unit_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<UnitMatchingCriteriaDto>, (StatusCode, String)> {
+    let inner = state.inner.read().await;
+    let unit = inner
+        .units
+        .iter()
+        .find(|u| u.id == unit_id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Unit '{}' not found", unit_id)))?;
+
+    let owner_name = unit
+        .owner_user_id
+        .as_ref()
+        .and_then(|uid| inner.users.iter().find(|u| &u.id == uid))
+        .map(|u| u.full_name.clone())
+        .unwrap_or_else(|| "Ahmet Yılmaz".to_string());
+
+    let mut remembered = Vec::new();
+    for (iban, u_id) in &inner.remembered_sender_ibans {
+        if u_id == &unit_id {
+            let (label, bank_name) = inner
+                .sender_iban_metadata
+                .get(iban)
+                .cloned()
+                .unwrap_or((None, None));
+            remembered.push(RegisteredSenderIbanDto {
+                sender_iban: iban.clone(),
+                formatted_iban: VirtualIbanService::format_for_display(iban),
+                label,
+                bank_name,
+            });
+        }
+    }
+    remembered.sort_by(|a, b| a.sender_iban.cmp(&b.sender_iban));
+
+    let registered_payer_names = inner
+        .unit_payer_names
+        .get(&unit_id)
+        .cloned()
+        .unwrap_or_else(|| vec![owner_name.clone()]);
+
+    let recommended_desc = format!("{} Blok D:{}", unit.block_id, unit.unit_number);
+
+    Ok(Json(UnitMatchingCriteriaDto {
+        unit_id: unit.id.clone(),
+        block: unit.block_id.clone(),
+        unit_number: unit.unit_number,
+        resident_name: owner_name,
+        virtual_iban: unit.virtual_iban.clone(),
+        remembered_ibans: remembered,
+        registered_payer_names,
+        recommended_description: recommended_desc,
+    }))
+}
+
+pub async fn add_unit_sender_iban(
+    Path(unit_id): Path<String>,
+    State(state): State<AppState>,
+    Json(payload): Json<AddSenderIbanRequest>,
+) -> Result<Json<UnitMatchingCriteriaDto>, (StatusCode, String)> {
+    let clean = payload.sender_iban.replace(' ', "").to_uppercase();
+    if clean.len() < 15 {
+        return Err((StatusCode::BAD_REQUEST, "Geçersiz IBAN formatı (minimum 15 karakter).".to_string()));
+    }
+
+    {
+        let mut inner = state.inner.write().await;
+        if !inner.units.iter().any(|u| u.id == unit_id) {
+            return Err((StatusCode::NOT_FOUND, format!("Unit '{}' not found", unit_id)));
+        }
+
+        inner.remembered_sender_ibans.insert(clean.clone(), unit_id.clone());
+        inner.sender_iban_metadata.insert(clean.clone(), (payload.label, payload.bank_name));
+    }
+
+    get_unit_matching_criteria(Path(unit_id), State(state)).await
+}
+
+pub async fn delete_unit_sender_iban(
+    Path((unit_id, sender_iban)): Path<(String, String)>,
+    State(state): State<AppState>,
+) -> Result<Json<UnitMatchingCriteriaDto>, (StatusCode, String)> {
+    let clean = sender_iban.replace(' ', "").to_uppercase();
+    {
+        let mut inner = state.inner.write().await;
+        if let Some(mapped_unit) = inner.remembered_sender_ibans.get(&clean) {
+            if mapped_unit == &unit_id {
+                inner.remembered_sender_ibans.remove(&clean);
+                inner.sender_iban_metadata.remove(&clean);
+            }
+        }
+    }
+
+    get_unit_matching_criteria(Path(unit_id), State(state)).await
+}
+
+pub async fn update_unit_payer_names(
+    Path(unit_id): Path<String>,
+    State(state): State<AppState>,
+    Json(payload): Json<UpdatePayerNamesRequest>,
+) -> Result<Json<UnitMatchingCriteriaDto>, (StatusCode, String)> {
+    {
+        let mut inner = state.inner.write().await;
+        if !inner.units.iter().any(|u| u.id == unit_id) {
+            return Err((StatusCode::NOT_FOUND, format!("Unit '{}' not found", unit_id)));
+        }
+        let cleaned_names: Vec<String> = payload
+            .payer_names
+            .into_iter()
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty())
+            .collect();
+
+        inner.unit_payer_names.insert(unit_id.clone(), cleaned_names);
+    }
+
+    get_unit_matching_criteria(Path(unit_id), State(state)).await
 }
 
 // 9. Site Bank Account Configuration Handlers (STORY-08-01)
@@ -1047,16 +1171,31 @@ pub async fn handle_bank_incoming_webhook(
             }
         }
 
-        // Priority 3: If not matched by block & flat in description, check sender name against resident roster
+        // Priority 3: Check sender name against registered unit payer names or resident roster
         if unit_index.is_none() {
             if let Some(ref sender) = payload.sender_name {
                 let sender_lower = sender.to_lowercase();
-                for user in &inner.users {
-                    if user.full_name.to_lowercase().contains(&sender_lower) || sender_lower.contains(&user.full_name.to_lowercase()) {
-                        unit_index = inner.units.iter().position(|u| u.owner_user_id.as_deref() == Some(&user.id));
+                for (u_id, names) in &inner.unit_payer_names {
+                    if names.iter().any(|n| {
+                        let nl = n.to_lowercase();
+                        sender_lower.contains(&nl) || nl.contains(&sender_lower)
+                    }) {
+                        unit_index = inner.units.iter().position(|u| u.id == *u_id);
                         if unit_index.is_some() {
-                            match_mechanism = "Regular IBAN & Sender Name Matching (Gönderen İsim Eşleşmesi)";
+                            match_mechanism = "Regular IBAN & Registered Payer Name Matching (Kayıtlı Gönderen İsim Eşleşmesi)";
                             break;
+                        }
+                    }
+                }
+
+                if unit_index.is_none() {
+                    for user in &inner.users {
+                        if user.full_name.to_lowercase().contains(&sender_lower) || sender_lower.contains(&user.full_name.to_lowercase()) {
+                            unit_index = inner.units.iter().position(|u| u.owner_user_id.as_deref() == Some(&user.id));
+                            if unit_index.is_some() {
+                                match_mechanism = "Regular IBAN & Sender Name Matching (Gönderen İsim Eşleşmesi)";
+                                break;
+                            }
                         }
                     }
                 }

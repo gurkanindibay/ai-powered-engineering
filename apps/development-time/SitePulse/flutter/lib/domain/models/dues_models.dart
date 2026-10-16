@@ -704,4 +704,93 @@ class ManualAssignmentResult {
   });
 }
 
+class RegisteredSenderIban {
+  final String senderIban;
+  final String formattedIban;
+  final String? label;
+  final String? bankName;
+
+  const RegisteredSenderIban({
+    required this.senderIban,
+    required this.formattedIban,
+    this.label,
+    this.bankName,
+  });
+
+  factory RegisteredSenderIban.fromJson(Map<String, dynamic> json) {
+    return RegisteredSenderIban(
+      senderIban: json['sender_iban'] ?? '',
+      formattedIban: json['formatted_iban'] ?? json['sender_iban'] ?? '',
+      label: json['label'],
+      bankName: json['bank_name'],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'sender_iban': senderIban,
+    'formatted_iban': formattedIban,
+    'label': label,
+    'bank_name': bankName,
+  };
+}
+
+class UnitMatchingCriteria {
+  final String unitId;
+  final String block;
+  final int unitNumber;
+  final String residentName;
+  final String? virtualIban;
+  final List<RegisteredSenderIban> rememberedIbans;
+  final List<String> registeredPayerNames;
+  final String recommendedDescription;
+
+  const UnitMatchingCriteria({
+    required this.unitId,
+    required this.block,
+    required this.unitNumber,
+    required this.residentName,
+    this.virtualIban,
+    required this.rememberedIbans,
+    required this.registeredPayerNames,
+    required this.recommendedDescription,
+  });
+
+  String get flatDesc => '$block Blok D:$unitNumber';
+
+  factory UnitMatchingCriteria.fromJson(Map<String, dynamic> json) {
+    return UnitMatchingCriteria(
+      unitId: json['unit_id'] ?? '',
+      block: json['block'] ?? 'A',
+      unitNumber: json['unit_number'] ?? 1,
+      residentName: json['resident_name'] ?? '',
+      virtualIban: json['virtual_iban'],
+      rememberedIbans: (json['remembered_ibans'] as List<dynamic>?)
+              ?.map((i) => RegisteredSenderIban.fromJson(Map<String, dynamic>.from(i)))
+              .toList() ??
+          [],
+      registeredPayerNames: (json['registered_payer_names'] as List<dynamic>?)
+              ?.map((n) => n.toString())
+              .toList() ??
+          [],
+      recommendedDescription: json['recommended_description'] ?? '',
+    );
+  }
+
+  UnitMatchingCriteria copyWith({
+    List<RegisteredSenderIban>? rememberedIbans,
+    List<String>? registeredPayerNames,
+  }) {
+    return UnitMatchingCriteria(
+      unitId: unitId,
+      block: block,
+      unitNumber: unitNumber,
+      residentName: residentName,
+      virtualIban: virtualIban,
+      rememberedIbans: rememberedIbans ?? this.rememberedIbans,
+      registeredPayerNames: registeredPayerNames ?? this.registeredPayerNames,
+      recommendedDescription: recommendedDescription,
+    );
+  }
+}
+
 

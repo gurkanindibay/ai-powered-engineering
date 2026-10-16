@@ -491,10 +491,145 @@ class DashboardController extends ChangeNotifier {
       ),
     ];
 
+    _matchingCriteria = UnitMatchingCriteria(
+      unitId: 'd-14',
+      block: 'A',
+      unitNumber: 14,
+      residentName: 'Ahmet Yılmaz',
+      virtualIban: 'TR41 0020 5042 1399 1067 0000 14',
+      rememberedIbans: const [
+        RegisteredSenderIban(
+          senderIban: 'TR120006200000000000000001',
+          formattedIban: 'TR12 0006 2000 0000 0000 0001',
+          label: 'Garanti BBVA - Maaş Hesabı',
+          bankName: 'Garanti BBVA',
+        ),
+      ],
+      registeredPayerNames: const ['Ahmet Yılmaz', 'Zeynep Kaya'],
+      recommendedDescription: 'A Blok D:14',
+    );
+
     fetchResidentDashboard();
   }
 
+  UnitMatchingCriteria? _matchingCriteria;
+  UnitMatchingCriteria? get matchingCriteria => _matchingCriteria;
+
+  Future<void> fetchUnitMatchingCriteria([String unitId = 'd-14']) async {
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/residents/$unitId/matching-criteria');
+      final response = await http.get(url).timeout(const Duration(seconds: 2));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        _matchingCriteria = UnitMatchingCriteria.fromJson(data);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Matching criteria fetch error: $e');
+    }
+  }
+
+  Future<void> addSenderIbanToUnit({
+    required String iban,
+    String? label,
+    String? bankName,
+    String unitId = 'd-14',
+  }) async {
+    final clean = iban.replaceAll(' ', '').toUpperCase();
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/residents/$unitId/matching-criteria/ibans');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'sender_iban': iban,
+          'label': label,
+          'bank_name': bankName,
+        }),
+      ).timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        _matchingCriteria = UnitMatchingCriteria.fromJson(data);
+        notifyListeners();
+        return;
+      }
+    } catch (e) {
+      debugPrint('addSenderIbanToUnit remote error: $e');
+    }
+
+    // Local fallback
+    final currentList = List<RegisteredSenderIban>.from(_matchingCriteria?.rememberedIbans ?? []);
+    currentList.removeWhere((i) => i.senderIban == clean);
+    currentList.add(RegisteredSenderIban(
+      senderIban: clean,
+      formattedIban: iban,
+      label: label,
+      bankName: bankName,
+    ));
+    _matchingCriteria = _matchingCriteria?.copyWith(rememberedIbans: currentList);
+    notifyListeners();
+  }
+
+  Future<void> deleteSenderIbanFromUnit({
+    required String iban,
+    String unitId = 'd-14',
+  }) async {
+    final clean = iban.replaceAll(' ', '').toUpperCase();
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/residents/$unitId/matching-criteria/ibans/$clean');
+      final response = await http.delete(url).timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        _matchingCriteria = UnitMatchingCriteria.fromJson(data);
+        notifyListeners();
+        return;
+      }
+    } catch (e) {
+      debugPrint('deleteSenderIbanFromUnit remote error: $e');
+    }
+
+    // Local fallback
+    final currentList = List<RegisteredSenderIban>.from(_matchingCriteria?.rememberedIbans ?? []);
+    currentList.removeWhere((i) => i.senderIban == clean);
+    _matchingCriteria = _matchingCriteria?.copyWith(rememberedIbans: currentList);
+    notifyListeners();
+  }
+
+  Future<void> updateUnitPayerNames({
+    required List<String> names,
+    String unitId = 'd-14',
+  }) async {
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/residents/$unitId/matching-criteria/payer-names');
+      final response = await http.put(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'payer_names': names}),
+      ).timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        _matchingCriteria = UnitMatchingCriteria.fromJson(data);
+        notifyListeners();
+        return;
+      }
+    } catch (e) {
+      debugPrint('updateUnitPayerNames remote error: $e');
+    }
+
+    // Local fallback
+    _matchingCriteria = _matchingCriteria?.copyWith(registeredPayerNames: names);
+    notifyListeners();
+  }
+
   Future<void> fetchResidentDashboard([String unitId = 'd-14']) async {
+    fetchUnitMatchingCriteria(unitId);
     try {
       final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
       final url = Uri.parse('http://$host:8080/api/v1/residents/$unitId/dashboard');

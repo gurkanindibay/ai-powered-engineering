@@ -6,7 +6,7 @@ mod state;
 
 use std::net::SocketAddr;
 use axum::{
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use tower_http::cors::{Any, CorsLayer};
@@ -90,6 +90,23 @@ async fn main() {
         .route(
             "/api/v1/bank/remembered-ibans",
             post(handlers::remember_sender_iban),
+        )
+        // Homeowner Payment Matching Criteria
+        .route(
+            "/api/v1/residents/:unit_id/matching-criteria",
+            get(handlers::get_unit_matching_criteria),
+        )
+        .route(
+            "/api/v1/residents/:unit_id/matching-criteria/ibans",
+            post(handlers::add_unit_sender_iban),
+        )
+        .route(
+            "/api/v1/residents/:unit_id/matching-criteria/ibans/:sender_iban",
+            delete(handlers::delete_unit_sender_iban),
+        )
+        .route(
+            "/api/v1/residents/:unit_id/matching-criteria/payer-names",
+            put(handlers::update_unit_payer_names),
         )
         // Periodic Dues Accrual & Automatic Advance Balance Offsetting
         .route(
