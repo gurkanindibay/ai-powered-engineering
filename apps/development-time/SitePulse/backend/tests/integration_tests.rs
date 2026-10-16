@@ -1,5 +1,5 @@
 use axum::response::IntoResponse;
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
 use rust_decimal::Decimal;
 use sitepulse_backend::models::*;
 use sitepulse_backend::services::*;
@@ -496,6 +496,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
         site_id: "site-1".to_string(),
         match_ids: vec![match_id.clone()],
         optional_message: None,
+        remember_sender_iban: None,
     };
 
     let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
@@ -545,6 +546,7 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
         site_id: "site-1".to_string(),
         match_ids: vec![match_id.clone()],
         optional_message: Some("Sayın Ahmet Yılmaz, ₺1.423,33 aidat ödemeniz onaylanmıştır.".to_string()),
+        remember_sender_iban: None,
     };
 
     let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
@@ -1148,4 +1150,344 @@ async fn when_scheduler_batch_runs_then_accrues_and_prevents_duplicate_accrual()
 
     assert_eq!(sites_accrued_2, 0);
     assert_eq!(units_accrued_2, 0);
+}
+
+#[tokio::test]
+async fn when_homeowner_records_payment_with_existing_debt_then_clears_debt() {
+    let state = AppState::new();
+
+    // D-14 has existing dues of ₺1400.00
+    let payload = sitepulse_backend::models::RecordHomeownerPaymentRequest {
+        unit_id: "d-14".to_string(),
+        amount: Decimal::from_str_exact("1400.00").unwrap(),
+        payment_method: "CREDIT_CARD".to_string(),
+        reference_code: Some("CC-TEST-001".to_string()),
+        note: Some("Eylül aidat kart ödemesi".to_string()),
+        homeowner_name: Some("Ahmet Yılmaz".to_string()),
+    };
+
+    let (status, axum::Json(res)) = sitepulse_backend::handlers::record_homeowner_payment(
+        axum::extract::State(state.clone()),
+        axum::Json(payload),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.cleared_debt_amount, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(res.advance_payment_amount, Decimal::ZERO);
+    assert_eq!(res.remaining_debt, Decimal::ZERO);
+    assert_eq!(res.status, sitepulse_backend::models::PaymentMatchStatus::MatchedDebt);
+
+    // Verify due liability is marked as Paid in state
+    let inner = state.inner.read().await;
+    let due = inner.dues.iter().find(|d| d.unit_id == "d-14").unwrap();
+    assert_eq!(due.status, sitepulse_backend::models::DebtStatus::Paid);
+}
+
+#[tokio::test]
+async fn when_homeowner_records_payment_with_no_debt_then_matches_as_advance_payment() {
+    let state = AppState::new();
+
+    // Add unit d-1 with no dues liabilities
+    {
+        let mut inner = state.inner.write().await;
+        inner.units.push(sitepulse_backend::models::IndependentUnit {
+            id: "d-1".to_string(),
+            site_id: "site-1".to_string(),
+            block_id: "A".to_string(),
+            unit_number: 1,
+            floor: 1,
+            land_share: 20,
+            owner_user_id: None,
+            tenant_user_id: None,
+            virtual_iban: None,
+        });
+    }
+
+    let payload = sitepulse_backend::models::RecordHomeownerPaymentRequest {
+        unit_id: "d-1".to_string(),
+        amount: Decimal::from_str_exact("2000.00").unwrap(),
+        payment_method: "FAST".to_string(),
+        reference_code: Some("FAST-ADV-101".to_string()),
+        note: Some("Gelecek aylar için avans".to_string()),
+        homeowner_name: Some("Selim Ak".to_string()),
+    };
+
+    let (status, axum::Json(res)) = sitepulse_backend::handlers::record_homeowner_payment(
+        axum::extract::State(state.clone()),
+        axum::Json(payload),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.cleared_debt_amount, Decimal::ZERO);
+    assert_eq!(res.advance_payment_amount, Decimal::from_str_exact("2000.00").unwrap());
+    assert_eq!(res.total_unit_advance_balance, Decimal::from_str_exact("2000.00").unwrap());
+    assert_eq!(res.status, sitepulse_backend::models::PaymentMatchStatus::MatchedAdvance);
+
+    let inner = state.inner.read().await;
+    let adv = inner.advance_payments.get("d-1").copied().unwrap_or(Decimal::ZERO);
+    assert_eq!(adv, Decimal::from_str_exact("2000.00").unwrap());
+}
+
+#[tokio::test]
+async fn when_homeowner_records_payment_exceeding_debt_then_clears_debt_and_credits_surplus_as_advance() {
+    let state = AppState::new();
+
+    // D-14 has debt of ₺1400.00; payment of ₺2500.00 clears ₺1400 and credits ₺1100 to advance
+    let payload = sitepulse_backend::models::RecordHomeownerPaymentRequest {
+        unit_id: "d-14".to_string(),
+        amount: Decimal::from_str_exact("2500.00").unwrap(),
+        payment_method: "CREDIT_CARD".to_string(),
+        reference_code: Some("CC-SURPLUS-001".to_string()),
+        note: Some("Aidat + avans ödemesi".to_string()),
+        homeowner_name: Some("Ahmet Yılmaz".to_string()),
+    };
+
+    let (status, axum::Json(res)) = sitepulse_backend::handlers::record_homeowner_payment(
+        axum::extract::State(state.clone()),
+        axum::Json(payload),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.cleared_debt_amount, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(res.advance_payment_amount, Decimal::from_str_exact("1100.00").unwrap());
+    assert_eq!(res.remaining_debt, Decimal::ZERO);
+    assert_eq!(res.total_unit_advance_balance, Decimal::from_str_exact("1100.00").unwrap());
+    assert_eq!(res.status, sitepulse_backend::models::PaymentMatchStatus::PartiallyMatched);
+
+    let inner = state.inner.read().await;
+    let adv = inner.advance_payments.get("d-14").copied().unwrap_or(Decimal::ZERO);
+    assert_eq!(adv, Decimal::from_str_exact("1100.00").unwrap());
+}
+
+#[tokio::test]
+async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_payments_with_debts_and_advance() {
+    let state = AppState::new();
+
+    // Add unit d-1 and record two pending payments in state
+    {
+        let mut inner = state.inner.write().await;
+        inner.units.push(sitepulse_backend::models::IndependentUnit {
+            id: "d-1".to_string(),
+            site_id: "site-1".to_string(),
+            block_id: "A".to_string(),
+            unit_number: 1,
+            floor: 1,
+            land_share: 20,
+            owner_user_id: None,
+            tenant_user_id: None,
+            virtual_iban: None,
+        });
+
+        // Payment 1 for d-14 (has debt ₺1400) of ₺1400
+        inner.homeowner_payments.push(sitepulse_backend::models::HomeownerPaymentRecord {
+            id: "PAY-PENDING-1".to_string(),
+            unit_id: "d-14".to_string(),
+            block_id: "A".to_string(),
+            unit_number: 14,
+            homeowner_name: Some("Ahmet Yılmaz".to_string()),
+            amount: Decimal::from_str_exact("1400.00").unwrap(),
+            payment_method: "BANK_TRANSFER".to_string(),
+            reference_code: Some("REF-1".to_string()),
+            note: Some("Aidat".to_string()),
+            status: sitepulse_backend::models::PaymentMatchStatus::Pending,
+            cleared_debt_amount: Decimal::ZERO,
+            advance_credit_amount: Decimal::ZERO,
+            created_at: Utc::now(),
+        });
+
+        // Payment 2 for d-1 (no debt) of ₺1500
+        inner.homeowner_payments.push(sitepulse_backend::models::HomeownerPaymentRecord {
+            id: "PAY-PENDING-2".to_string(),
+            unit_id: "d-1".to_string(),
+            block_id: "A".to_string(),
+            unit_number: 1,
+            homeowner_name: Some("Selim Ak".to_string()),
+            amount: Decimal::from_str_exact("1500.00").unwrap(),
+            payment_method: "BANK_TRANSFER".to_string(),
+            reference_code: Some("REF-2".to_string()),
+            note: Some("Avans".to_string()),
+            status: sitepulse_backend::models::PaymentMatchStatus::Pending,
+            cleared_debt_amount: Decimal::ZERO,
+            advance_credit_amount: Decimal::ZERO,
+            created_at: Utc::now(),
+        });
+    }
+
+    // Call match_all_homeowner_payments
+    let (status, axum::Json(res)) = sitepulse_backend::handlers::match_all_homeowner_payments(
+        axum::extract::State(state.clone()),
+        axum::Json(sitepulse_backend::models::MatchAllPaymentsRequest {
+            site_id: Some("site-1".to_string()),
+        }),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.total_payments_processed, 2);
+    assert_eq!(res.total_debt_cleared, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(res.total_advance_credited, Decimal::from_str_exact("1500.00").unwrap());
+    assert_eq!(res.matched_debts_count, 1);
+    assert_eq!(res.matched_advance_count, 1);
+
+    // Verify d-14 debt is cleared and d-1 has ₺1500 advance
+    let inner = state.inner.read().await;
+    let d14_due = inner.dues.iter().find(|d| d.unit_id == "d-14").unwrap();
+    assert_eq!(d14_due.status, sitepulse_backend::models::DebtStatus::Paid);
+
+    let d1_adv = inner.advance_payments.get("d-1").copied().unwrap_or(Decimal::ZERO);
+    assert_eq!(d1_adv, Decimal::from_str_exact("1500.00").unwrap());
+}
+
+#[tokio::test]
+async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_advance_payments() {
+    let state = AppState::new();
+    let recon_service = sitepulse_backend::services::ReconciliationService::new();
+
+    // 1. Transaction 1: ₺2000 for d-14 (which has ₺1400 debt) -> ₺600 surplus
+    let txn1 = sitepulse_backend::models::BankTransactionItem {
+        transaction_id: "TXN-SURPLUS-99".to_string(),
+        date: NaiveDate::from_ymd_opt(2026, 9, 20).unwrap(),
+        amount: Decimal::from_str_exact("2000.00").unwrap(),
+        currency: "TRY".to_string(),
+        description: "HAVALE - AHMET YILMAZ A BLOK D:14 FAZLA ODEME".to_string(),
+        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_iban: None,
+        reference_no: None,
+    };
+
+    let eval_date = NaiveDate::from_ymd_opt(2026, 9, 20).unwrap();
+    let inner = state.inner.read().await;
+    let matches = recon_service.reconcile_transactions(&[txn1], &inner.units, &inner.users, &inner.dues, eval_date);
+    drop(inner);
+
+    assert_eq!(matches.len(), 1);
+    let m = &matches[0];
+    assert_eq!(m.matched_unit_id.as_deref(), Some("d-14"));
+    assert_eq!(m.confidence_score, 90);
+    assert_eq!(m.status, sitepulse_backend::models::ReconciliationStatus::PendingApproval);
+
+    let match_id = m.match_id.clone();
+    state.inner.write().await.reconciliation_queue.push(m.clone());
+
+    let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
+        site_id: "site-1".to_string(),
+        match_ids: vec![match_id],
+        optional_message: None,
+        remember_sender_iban: None,
+    };
+
+    let (status, axum::Json(res)) = sitepulse_backend::handlers::confirm_reconciliation(
+        axum::extract::State(state.clone()),
+        axum::Json(payload),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(res.confirmed_count, 1);
+    assert_eq!(res.total_amount_cleared, Decimal::from_str_exact("2000.00").unwrap());
+
+    // Verify:
+    // 1) Due is Paid
+    // 2) d-14 advance balance received the ₺600 surplus!
+    let inner = state.inner.read().await;
+    let due = inner.dues.iter().find(|d| d.id == "b-101").unwrap();
+    assert_eq!(due.status, sitepulse_backend::models::DebtStatus::Paid);
+
+    let adv = inner.advance_payments.get("d-14").copied().unwrap_or(Decimal::ZERO);
+    assert_eq!(adv, Decimal::from_str_exact("588.33").unwrap());
+}
+
+#[tokio::test]
+async fn when_sender_iban_is_remembered_subsequent_blank_desc_payment_auto_matches() {
+    let state = AppState::new();
+
+    // 1. Manually remember sender IBAN for unit d-14
+    let req = sitepulse_backend::models::RememberSenderIbanRequest {
+        site_id: "site-1".to_string(),
+        unit_id: "d-14".to_string(),
+        sender_iban: "TR99 0006 2000 0000 0000 9999 88".to_string(),
+        sender_name: Some("Ali Veli".to_string()),
+    };
+
+    let axum::Json(resp) = sitepulse_backend::handlers::remember_sender_iban(
+        axum::extract::State(state.clone()),
+        axum::Json(req),
+    )
+    .await
+    .expect("Remember sender IBAN should succeed");
+
+    assert!(resp.success);
+    // 2. An incoming webhook arrives from this sender IBAN, to general site IBAN, with NO description
+    let webhook_payload = sitepulse_backend::models::BankIncomingWebhookRequest {
+        transaction_id: "TXN-TEST-REMEMBERED-IBAN-1".to_string(),
+        virtual_iban: "TR33 0006 2000 0000 0000 0000 01".to_string(), // General site IBAN
+        amount: Decimal::from_str_exact("500.00").unwrap(),
+        currency: Some("TRY".to_string()),
+        sender_iban: Some("TR99 0006 2000 0000 0000 9999 88".to_string()),
+        sender_name: Some("Ali Veli".to_string()),
+        description: Some("".to_string()), // Completely blank description!
+        signature: None,
+    };
+
+    let (status, axum::Json(webhook_res)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        axum::Json(webhook_payload),
+    )
+    .await
+    .expect("Webhook processing should succeed");
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(webhook_res.status, "CLEARED");
+    assert_eq!(webhook_res.matched_unit_id, "d-14");
+    assert!(webhook_res.message.contains("Remembered Sender IBAN"));
+}
+
+#[tokio::test]
+async fn when_transfer_cannot_be_matched_then_enters_unmatched_pool_successfully() {
+    let state = AppState::new();
+
+    // An incoming transfer to general site IBAN with unknown sender and blank description
+    let webhook_payload = sitepulse_backend::models::BankIncomingWebhookRequest {
+        transaction_id: "TXN-TEST-UNMATCHED-99".to_string(),
+        virtual_iban: "TR33 0006 2000 0000 0000 0000 01".to_string(), // General site IBAN
+        amount: Decimal::from_str_exact("1200.00").unwrap(),
+        currency: Some("TRY".to_string()),
+        sender_iban: Some("TR55 0006 2000 0000 0000 5555 55".to_string()),
+        sender_name: Some("Bilinmeyen Kisi".to_string()),
+        description: Some("".to_string()), // Blank description
+        signature: None,
+    };
+
+    let (status, axum::Json(webhook_res)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        axum::Json(webhook_payload),
+    )
+    .await
+    .expect("Webhook processing should succeed");
+
+    // Money arrived at the bank, so HTTP 200 OK
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(webhook_res.status, "UNMATCHED");
+    assert_eq!(webhook_res.matched_unit_id, "UNMATCHED");
+    assert_eq!(webhook_res.cleared_amount, Decimal::ZERO);
+
+    // Verify it is placed in reconciliation_queue
+    let inner = state.inner.read().await;
+    let found = inner
+        .reconciliation_queue
+        .iter()
+        .find(|m| m.transaction.transaction_id == "TXN-TEST-UNMATCHED-99");
+
+    assert!(found.is_some());
+    let item = found.unwrap();
+    assert_eq!(item.status, sitepulse_backend::models::ReconciliationStatus::Unmatched);
+    assert!(item.matched_unit_id.is_none());
 }

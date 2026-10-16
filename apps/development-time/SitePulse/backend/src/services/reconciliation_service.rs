@@ -116,18 +116,13 @@ impl ReconciliationService {
         let mut outstanding_balance: Option<Decimal> = None;
         let mut amount_matches = false;
 
-        let mut is_already_processed = false;
+        let is_already_processed = false;
 
         if let Some(unit) = matched_unit {
             // Find pending or overdue dues for this unit
             let unit_dues: Vec<&DuesLiability> = dues
                 .iter()
                 .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
-                .collect();
-
-            let paid_dues: Vec<&DuesLiability> = dues
-                .iter()
-                .filter(|d| d.unit_id == unit.id && d.status == DebtStatus::Paid)
                 .collect();
 
             if let Some(first_due) = unit_dues.first() {
@@ -140,8 +135,9 @@ impl ReconciliationService {
                 if txn.amount == balance {
                     amount_matches = true;
                 }
-            } else if !paid_dues.is_empty() {
-                is_already_processed = true;
+            } else {
+                // No outstanding dues for this unit: match payment as advance payment (Avans Bakiye)
+                outstanding_balance = Some(Decimal::ZERO);
             }
         }
 
@@ -149,12 +145,17 @@ impl ReconciliationService {
         let mut confidence: u8 = 0;
         let has_unit = matched_unit.is_some();
         let has_name = matched_user.is_some() && Self::text_contains_name(desc, &matched_user.unwrap().full_name);
+        let is_advance_match = matched_unit.is_some() && matched_due.is_none();
 
         if is_already_processed {
             confidence = 100;
         } else if matched_by_virtual_iban {
             // Flat-Specific Virtual IBAN allocation is 100% confident by architectural design
             confidence = 100;
+        } else if is_advance_match && (has_unit && has_name) {
+            confidence = 100;
+        } else if is_advance_match && has_unit {
+            confidence = 90;
         } else if has_unit && amount_matches {
             // Unit and exact amount match: 100% confidence
             confidence = 100;
@@ -176,10 +177,30 @@ impl ReconciliationService {
         } else if confidence >= 70 {
             (
                 ReconciliationStatus::PendingApproval,
-                if matched_by_virtual_iban {
-                    Some("100% Match via Flat-Specific Virtual IBAN (Sanal IBAN). Zero manual narrative entry required.".to_string())
+                if is_advance_match {
+                    Some(format!(
+                        "Aktif aidat borcu bulunmuyor • ₺{} tutarındaki ödeme avans bakiyesi (Avans Bakiye) olarak eşleştirildi.",
+                        txn.amount
+                    ))
+                } else if matched_by_virtual_iban {
+                    if txn.amount > outstanding_balance.unwrap_or(Decimal::ZERO) {
+                        let surplus = txn.amount - outstanding_balance.unwrap_or(Decimal::ZERO);
+                        Some(format!(
+                            "100% Match via Virtual IBAN. Settled; ₺{} surplus credited to advance payment.",
+                            surplus
+                        ))
+                    } else {
+                        Some("100% Match via Flat-Specific Virtual IBAN (Sanal IBAN). Zero manual narrative entry required.".to_string())
+                    }
                 } else if amount_matches {
                     Some("Exact amount matches outstanding dues balance (including KMK penalty)".to_string())
+                } else if txn.amount > outstanding_balance.unwrap_or(Decimal::ZERO) {
+                    let surplus = txn.amount - outstanding_balance.unwrap_or(Decimal::ZERO);
+                    Some(format!(
+                        "₺{} aidat borcu kapatılacak, artan ₺{} avans bakiyesine aktarılacak.",
+                        outstanding_balance.unwrap_or(Decimal::ZERO),
+                        surplus
+                    ))
                 } else if has_unit {
                     Some("Unit identified from transfer narrative".to_string())
                 } else {

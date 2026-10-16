@@ -17,7 +17,7 @@ class PaymentCheckoutDialog extends StatefulWidget {
   final String unitDesc;
   final String virtualIban;
   final CheckoutPaymentMethod initialMethod;
-  final VoidCallback onPaymentSuccess;
+  final void Function(Decimal amount) onPaymentSuccess;
 
   const PaymentCheckoutDialog({
     super.key,
@@ -35,6 +35,8 @@ class PaymentCheckoutDialog extends StatefulWidget {
 
 class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
   late CheckoutPaymentMethod _selectedMethod;
+  late final TextEditingController _amountCtrl;
+  Decimal _enteredAmount = Decimal.zero;
   final _cardNumberCtrl = TextEditingController(text: '5428 •••• •••• 9012');
   final _cardHolderCtrl = TextEditingController(text: 'Ahmet Yılmaz');
   final _expiryCtrl = TextEditingController(text: '12/28');
@@ -44,10 +46,28 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
   void initState() {
     super.initState();
     _selectedMethod = widget.initialMethod;
+    final initialVal = widget.dues.toplamTutar > Decimal.zero
+        ? widget.dues.toplamTutar
+        : Decimal.parse('500.00');
+    _enteredAmount = initialVal;
+    _amountCtrl = TextEditingController(text: initialVal.toStringAsFixed(2));
+    _amountCtrl.addListener(_onAmountChanged);
+  }
+
+  void _onAmountChanged() {
+    final clean = _amountCtrl.text.replaceAll(',', '.').replaceAll('₺', '').trim();
+    final parsed = Decimal.tryParse(clean) ?? Decimal.zero;
+    if (parsed != _enteredAmount) {
+      setState(() {
+        _enteredAmount = parsed;
+      });
+    }
   }
 
   @override
   void dispose() {
+    _amountCtrl.removeListener(_onAmountChanged);
+    _amountCtrl.dispose();
     _cardNumberCtrl.dispose();
     _cardHolderCtrl.dispose();
     _expiryCtrl.dispose();
@@ -154,6 +174,11 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                 ),
               ),
 
+              const SizedBox(height: 16),
+
+              // Free text amount entry section
+              _buildAmountSection(),
+
               const SizedBox(height: 18),
 
               // Payment Method Title
@@ -200,6 +225,267 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
             ],
           ),
     );
+  }
+
+  Widget _buildAmountSection() {
+    final debt = widget.dues.toplamTutar;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card(context),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Ödemek İstediğiniz Tutar',
+                style: TextStyle(
+                  color: AppColors.textPrimary(context),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (debt > Decimal.zero)
+                Text(
+                  'Mevcut Borç: ₺${debt.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    color: AppColors.textSecondary(context),
+                    fontSize: 11,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _amountCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*[\.,]?\d{0,2}')),
+            ],
+            style: TextStyle(
+              color: AppColors.textPrimary(context),
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+            decoration: InputDecoration(
+              labelText: 'Tutar Giriniz (₺)',
+              labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+              prefixText: '₺ ',
+              prefixStyle: const TextStyle(
+                color: AppColors.accentCyan,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+              suffixIcon: _amountCtrl.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 16),
+                      onPressed: () {
+                        _amountCtrl.text = '';
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: AppColors.background(context),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.accentCyan, width: 1.5),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Quick Preset Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                if (debt > Decimal.zero) ...[
+                  _buildQuickPresetChip(
+                    label: 'Borcun Tamamı (₺${debt.toStringAsFixed(2)})',
+                    amount: debt,
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickPresetChip(
+                    label: '+₺500 Avans',
+                    amount: debt + Decimal.parse('500.00'),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickPresetChip(
+                    label: '+₺1.000 Avans',
+                    amount: debt + Decimal.parse('1000.00'),
+                  ),
+                ] else ...[
+                  _buildQuickPresetChip(label: '₺500', amount: Decimal.parse('500.00')),
+                  const SizedBox(width: 6),
+                  _buildQuickPresetChip(label: '₺1.000', amount: Decimal.parse('1000.00')),
+                  const SizedBox(width: 6),
+                  _buildQuickPresetChip(label: '₺2.000', amount: Decimal.parse('2000.00')),
+                  const SizedBox(width: 6),
+                  _buildQuickPresetChip(label: '₺5.000', amount: Decimal.parse('5000.00')),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Dynamic calculation and allocation preview
+          _buildAmountImpactBanner(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickPresetChip({required String label, required Decimal amount}) {
+    final isSelected = _enteredAmount == amount;
+    return InkWell(
+      onTap: () {
+        _amountCtrl.text = amount.toStringAsFixed(2);
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.accentCyan.withValues(alpha: 0.15)
+              : AppColors.background(context),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? AppColors.accentCyan : AppColors.border(context),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? AppColors.accentCyan : AppColors.textSecondary(context),
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAmountImpactBanner() {
+    final debt = widget.dues.toplamTutar;
+    if (_enteredAmount <= Decimal.zero) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.accentRed.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.accentRed),
+            SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Lütfen geçerli bir ödeme tutarı giriniz.',
+                style: TextStyle(color: AppColors.accentRed, fontSize: 11),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (debt > Decimal.zero) {
+      if (_enteredAmount < debt) {
+        final remaining = debt - _enteredAmount;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.info_outline, size: 16, color: Colors.orange),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Kısmi Ödeme: ₺${_enteredAmount.toStringAsFixed(2)} borçtan düşülecek • Kalan borç: ₺${remaining.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        );
+      } else if (_enteredAmount == debt) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.accentGreen.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.check_circle_outline, size: 16, color: AppColors.accentGreen),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Mevcut aidat borcunuzun tamamı kapatılacak.',
+                  style: TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        );
+      } else {
+        final surplus = _enteredAmount - debt;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.accentCyan.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.stars_rounded, size: 16, color: AppColors.accentCyan),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '₺${debt.toStringAsFixed(2)} borç kapatılacak • ₺${surplus.toStringAsFixed(2)} avans bakiyenize (Avans Bakiye) aktarılacak.',
+                  style: const TextStyle(color: AppColors.accentCyan, fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } else {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.accentGreen.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.account_balance_wallet_outlined, size: 16, color: AppColors.accentGreen),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Borcunuz bulunmuyor. ₺${_enteredAmount.toStringAsFixed(2)} tutarının tamamı avans bakiyenize (Avans Bakiye) aktarılacak.',
+                style: const TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Widget _buildMethodSelectorOption({
@@ -344,13 +630,17 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              widget.onPaymentSuccess();
-            },
+            onPressed: _enteredAmount > Decimal.zero
+                ? () {
+                    Navigator.pop(context);
+                    widget.onPaymentSuccess(_enteredAmount);
+                  }
+                : null,
             icon: const Icon(Icons.lock, size: 16),
             label: Text(
-              '3D Secure ile ₺${widget.dues.toplamTutar.toStringAsFixed(2)} Öde',
+              widget.dues.toplamTutar > Decimal.zero
+                  ? '3D Secure ile ₺${_enteredAmount.toStringAsFixed(2)} Öde'
+                  : '3D Secure ile ₺${_enteredAmount.toStringAsFixed(2)} Avans Yükle',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
             style: ElevatedButton.styleFrom(
@@ -499,7 +789,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Ödenecek Tutar:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
-                  Text('₺${widget.dues.toplamTutar.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.accentCyan, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text('₺${_enteredAmount.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.accentCyan, fontSize: 12, fontWeight: FontWeight.bold)),
                 ],
               ),
             ],

@@ -271,6 +271,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
   Future<void> _confirmAssignment(FlatPaymentStatus flat) async {
     final txn = widget.item.transaction;
     bool sendMessage = true;
+    bool rememberIban = txn.senderIban != null && txn.senderIban!.isNotEmpty;
     final messageController = TextEditingController(
       text:
           'Sayın ${flat.residentName}, ${flat.flatDesc} nolu dairenize ait ₺${txn.amount.toStringAsFixed(2)} tutarındaki aidat ödemeniz banka hareketleri ile eşleştirilmiş ve onaylanmıştır. Teşekkür ederiz.',
@@ -416,7 +417,74 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 14),
+
+                      // Remember Sender IBAN Option for Site Manager
+                      if (txn.senderIban != null && txn.senderIban!.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: rememberIban
+                                ? AppColors.accentCyan.withOpacity(0.08)
+                                : AppColors.surface(dialogCtx),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: rememberIban
+                                  ? AppColors.accentCyan.withOpacity(0.35)
+                                  : AppColors.border(dialogCtx),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Checkbox(
+                                value: rememberIban,
+                                activeColor: AppColors.accentCyan,
+                                onChanged: (val) {
+                                  setDialogState(() {
+                                    rememberIban = val ?? true;
+                                  });
+                                },
+                              ),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setDialogState(() {
+                                      rememberIban = !rememberIban;
+                                    });
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Bu Gönderici IBAN\'ını ${flat.flatDesc} ile Kalıcı Eşle',
+                                          style: TextStyle(
+                                            color: AppColors.textPrimary(dialogCtx),
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          'Gelecek ödemelerde bu hesaptan (${txn.senderIban}) yapılan transferler açıklama boş olsa dahi otomatik olarak ${flat.flatDesc} (${flat.residentName}) ile eşleştirilecektir.',
+                                          style: TextStyle(
+                                            color: AppColors.textSecondary(dialogCtx),
+                                            fontSize: 11,
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
 
                       // Optional Message Request Section
                       Row(
@@ -516,6 +584,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
           flat: flat,
           sendOptionalMessage: sendMessage,
           optionalMessageText: sendMessage ? messageController.text.trim() : null,
+          rememberSenderIban: rememberIban,
         ),
       );
     }

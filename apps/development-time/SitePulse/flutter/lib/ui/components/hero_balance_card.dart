@@ -294,11 +294,11 @@ class HeroBalanceCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              // Detay — ghost outline (secondary)
+              // Detay / Hesap Özeti — ghost outline (secondary)
               Expanded(
                 child: _ActionButton(
-                  label: 'Detay',
-                  icon: Icons.receipt_long_outlined,
+                  label: hasAdvance || debtDouble <= 0 ? 'Hesap Özeti' : 'Borç Detayı',
+                  icon: hasAdvance || debtDouble <= 0 ? Icons.account_balance_wallet_outlined : Icons.receipt_long_outlined,
                   filled: false,
                   color: AppColors.textPrimary(context),
                   borderColor: AppColors.border(context),

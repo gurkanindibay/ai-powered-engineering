@@ -12,8 +12,8 @@ use serde_json::json;
 use crate::models::*;
 use crate::services::{
     AuthService, DuesCalculationService, HomeResidentInvitationService, KuveytTurkSandboxService,
-    RegistrationApprovalService, SaasTenantService, SiteAdminService, SiteBankAccountService,
-    VirtualIbanService,
+    ReconciliationService, RegistrationApprovalService, SaasTenantService, SiteAdminService,
+    SiteBankAccountService, VirtualIbanService,
 };
 use crate::state::AppState;
 use uuid::Uuid;
@@ -142,6 +142,15 @@ pub fn apply_advance_payments_offset(
 
 fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, String) {
     let note = m.notes.as_deref().unwrap_or("");
+    let desc = &m.transaction.description;
+    let desc_upper = desc.to_uppercase();
+    let note_upper = note.to_uppercase();
+
+    let is_card = desc_upper.contains("KART") 
+        || desc_upper.contains("CREDIT_CARD") 
+        || desc_upper.contains("CARD") 
+        || note_upper.contains("KART")
+        || note_upper.contains("CREDIT_CARD");
 
     // Case 0: Settled dues via Advance Offset (Avans Mahsubu)
     if note.contains("mahsup") || note.contains("otomatik mahsup") {
@@ -154,11 +163,29 @@ fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, Stri
         return (title, subtitle);
     }
 
-    // Case 1: Settled dues (with or without surplus)
-    if note.contains("Settled") || note.contains("aidat") || note.contains("Aidat") || m.matched_due_id.is_some() {
-        let title = "FAST ile Aidat Ödemesi".to_string();
+    // Case 1: Advance top-up (pure advance when no debt exists)
+    if note.contains("No outstanding debt") 
+        || note.contains("Aktif aidat borcu bulunmuyor") 
+        || note.contains("Aktif borç bulunmuyor") 
+        || (m.matched_due_id.is_none() && !note.contains("Settled") && (note.contains("advance payment") || note.contains("avans bakiyenize eklendi"))) {
+        let title = if is_card {
+            "Kart ile Avans Yükleme".to_string()
+        } else {
+            "FAST ile Avans Yükleme".to_string()
+        };
+        let subtitle = "Aktif borç bulunmuyor • Avans bakiyenize aktarıldı".to_string();
+        return (title, subtitle);
+    }
 
-        let subtitle = if note.contains("surplus") || note.contains("artan") || note.contains("avans bakiyenize") {
+    // Case 2: Settled dues (with or without surplus)
+    if note.contains("Settled") || note.contains("aidat") || note.contains("Aidat") || m.matched_due_id.is_some() || desc_upper.contains("AIDAT") {
+        let title = if is_card {
+            "Kart ile Aidat Ödemesi".to_string()
+        } else {
+            "FAST ile Aidat Ödemesi".to_string()
+        };
+
+        let subtitle = if note.contains("surplus") || note.contains("artan") || note.contains("avans bakiyenize") || note.contains("avans bakiyesine") {
             // Support legacy English notes from queue: "100% Match via Virtual IBAN. Settled Eylül 2026; ₺60.67 surplus credited to advance payment."
             if let Some(settled_idx) = note.find("Settled ") {
                 let after_settled = &note[settled_idx + 8..];
@@ -175,7 +202,7 @@ fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, Stri
                 } else {
                     format!("{} aidatı ödendi • Kalan tutar avans bakiyenize aktarıldı", period)
                 }
-            } else if note.contains("aidatı ödendi") {
+            } else if note.contains("aidatı ödendi") || note.contains("aidat borcu ödendi") {
                 note.to_string()
             } else {
                 "Aidat ödendi • Artan tutar avans bakiyenize aktarıldı".to_string()
@@ -184,7 +211,7 @@ fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, Stri
             let after_settled = &note[settled_idx + 8..];
             let period = after_settled.split(';').next().unwrap_or("Dönem").trim();
             format!("{} aidat borcu kapatıldı", period)
-        } else if note.contains("aidat borcu kapatıldı") {
+        } else if note.contains("aidat borcu kapatıldı") || note.contains("aidat borcu başarıyla kapatıldı") {
             note.to_string()
         } else {
             "Aidat borcu başarıyla kapatıldı".to_string()
@@ -192,17 +219,19 @@ fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, Stri
 
         (title, subtitle)
     } 
-    // Case 2: Advance top-up (Avans Yükleme)
-    else if note.contains("No outstanding debt") || note.contains("advance payment") || note.contains("Avans") || note.contains("avans") {
-        let title = "FAST ile Avans Yükleme".to_string();
-        let subtitle = "Aktif borç bulunmuyor • Avans bakiyenize aktarıldı".to_string();
-        (title, subtitle)
-    }
     // Case 3: Other bank transfer
     else {
-        let title = "FAST ile Bakiye Yükleme".to_string();
+        let title = if is_card {
+            "Kart ile Bakiye Yükleme".to_string()
+        } else {
+            "FAST ile Bakiye Yükleme".to_string()
+        };
         let subtitle = if note.is_empty() || note.contains("Virtual IBAN") {
-            "FAST transferi başarıyla hesabınıza aktarıldı".to_string()
+            if is_card {
+                "Kredi kartı ödemesi başarıyla hesabınıza aktarıldı".to_string()
+            } else {
+                "FAST transferi başarıyla hesabınıza aktarıldı".to_string()
+            }
         } else {
             note.to_string()
         };
@@ -728,6 +757,7 @@ pub async fn confirm_reconciliation(
     let mut confirmed_matches = Vec::new();
 
     let mut cleared_dues: Vec<String> = Vec::new();
+    let mut advance_credits: Vec<(String, Decimal)> = Vec::new();
 
     for match_id in &payload.match_ids {
         if let Some(m) = inner.reconciliation_queue.iter_mut().find(|m| m.match_id == *match_id) {
@@ -736,10 +766,21 @@ pub async fn confirm_reconciliation(
 
             if let Some(ref unit_id) = m.matched_unit_id {
                 updated_unit_ids.push(unit_id.clone());
+                let txn_amount = m.transaction.amount;
+
                 if let Some(ref due_id) = m.matched_due_id {
                     cleared_dues.push(due_id.clone());
+                    let due_balance = m.outstanding_balance.unwrap_or(txn_amount);
+                    if txn_amount > due_balance {
+                        let surplus = txn_amount - due_balance;
+                        advance_credits.push((unit_id.clone(), surplus));
+                    }
+                } else {
+                    // No debt: full payment is matched as advance payment!
+                    advance_credits.push((unit_id.clone(), txn_amount));
                 }
-                total_amount_cleared += m.transaction.amount;
+
+                total_amount_cleared += txn_amount;
                 confirmed_count += 1;
                 confirmed_matches.push(m.clone());
             }
@@ -750,6 +791,26 @@ pub async fn confirm_reconciliation(
     for due_id in cleared_dues {
         if let Some(due) = inner.dues.iter_mut().find(|d| d.id == due_id) {
             due.status = DebtStatus::Paid;
+        }
+    }
+
+    // Credit any surplus or zero-debt payments to advance_payments ledger
+    for (unit_id, amount) in advance_credits {
+        let entry = inner.advance_payments.entry(unit_id).or_insert(Decimal::ZERO);
+        *entry += amount;
+    }
+
+    // Process site manager's preference to remember sender IBANs for future payments
+    let mut remembered_ibans_count = 0;
+    if payload.remember_sender_iban == Some(true) {
+        for m in &confirmed_matches {
+            if let (Some(sender_iban), Some(unit_id)) = (&m.transaction.sender_iban, &m.matched_unit_id) {
+                let clean = sender_iban.replace(' ', "").to_uppercase();
+                if !clean.is_empty() {
+                    inner.remembered_sender_ibans.insert(clean, unit_id.clone());
+                    remembered_ibans_count += 1;
+                }
+            }
         }
     }
 
@@ -776,8 +837,32 @@ pub async fn confirm_reconciliation(
             confirmed_matches,
             message_sent,
             notification_summary,
+            remembered_ibans_count,
         }),
     ))
+}
+
+pub async fn remember_sender_iban(
+    State(state): State<AppState>,
+    Json(payload): Json<RememberSenderIbanRequest>,
+) -> Result<Json<RememberSenderIbanResponse>, (StatusCode, String)> {
+    let mut inner = state.inner.write().await;
+    let clean = payload.sender_iban.replace(' ', "").to_uppercase();
+    if clean.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Sender IBAN cannot be empty.".to_string()));
+    }
+    if !inner.units.iter().any(|u| u.id == payload.unit_id) {
+        return Err((StatusCode::NOT_FOUND, format!("Unit '{}' not found in this site.", payload.unit_id)));
+    }
+
+    inner.remembered_sender_ibans.insert(clean.clone(), payload.unit_id.clone());
+
+    Ok(Json(RememberSenderIbanResponse {
+        success: true,
+        unit_id: payload.unit_id,
+        sender_iban: clean,
+        message: "Sender IBAN successfully mapped and remembered for automated future matching.".to_string(),
+    }))
 }
 
 // 9. Site Bank Account Configuration Handlers (STORY-08-01)
@@ -923,20 +1008,114 @@ pub async fn handle_bank_incoming_webhook(
     let clean_viban = payload.virtual_iban.replace(' ', "").to_uppercase();
     let mut inner = state.inner.write().await;
 
-    // 1. Match unit by Virtual IBAN
-    let unit_index = inner.units.iter().position(|u| {
+    // 1. Match unit by Virtual IBAN or Remembered Sender IBAN or Regular IBAN + Description / Sender Roster
+    let mut is_virtual_iban = false;
+    let mut match_mechanism = "Virtual IBAN";
+    let mut unit_index = inner.units.iter().position(|u| {
         u.virtual_iban
             .as_ref()
             .map(|v| v.replace(' ', "").to_uppercase() == clean_viban)
             .unwrap_or(false)
     });
 
+    if unit_index.is_some() {
+        is_virtual_iban = true;
+        match_mechanism = "Virtual IBAN";
+    } else {
+        // Priority 1: Check if sender_iban was previously remembered/authorized by site manager for a unit
+        if let Some(ref sender_iban) = payload.sender_iban {
+            let clean_sender = sender_iban.replace(' ', "").to_uppercase();
+            if let Some(saved_unit_id) = inner.remembered_sender_ibans.get(&clean_sender) {
+                unit_index = inner.units.iter().position(|u| u.id == *saved_unit_id);
+                if unit_index.is_some() {
+                    match_mechanism = "Remembered Sender IBAN (Yönetici Tarafından Eşleştirilmiş Gönderici IBAN'ı)";
+                }
+            }
+        }
+
+        // Priority 2: Check if payment was sent to Site's Regular/Main Account IBAN,
+        // or check narrative / description for block and flat
+        if unit_index.is_none() {
+            let desc = payload.description.as_deref().unwrap_or("");
+            if let Some((ref blk, unit_no)) = ReconciliationService::extract_block_and_flat(desc) {
+                unit_index = inner.units.iter().position(|u| {
+                    u.block_id.eq_ignore_ascii_case(blk) && u.unit_number == unit_no
+                });
+                if unit_index.is_some() {
+                    match_mechanism = "Regular IBAN & Narrative Matching (Açıklama Ayrıştırması)";
+                }
+            }
+        }
+
+        // Priority 3: If not matched by block & flat in description, check sender name against resident roster
+        if unit_index.is_none() {
+            if let Some(ref sender) = payload.sender_name {
+                let sender_lower = sender.to_lowercase();
+                for user in &inner.users {
+                    if user.full_name.to_lowercase().contains(&sender_lower) || sender_lower.contains(&user.full_name.to_lowercase()) {
+                        unit_index = inner.units.iter().position(|u| u.owner_user_id.as_deref() == Some(&user.id));
+                        if unit_index.is_some() {
+                            match_mechanism = "Regular IBAN & Sender Name Matching (Gönderen İsim Eşleşmesi)";
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let unit = match unit_index {
         Some(idx) => inner.units[idx].clone(),
         None => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                format!("Virtual IBAN '{}' is not registered to any unit in this site.", payload.virtual_iban),
+            // Transaction arrived at site bank account, but cannot be automatically matched.
+            // In financial & banking systems, money transfer succeeds and enters site bank account.
+            // We record this in reconciliation_queue as UNMATCHED / ESLESTIRILEMEDI so the site manager can manually assign it!
+            let txn_desc = payload.description.clone().unwrap_or_else(|| {
+                format!("Site Ana Hesabı FAST Transferi: {}", payload.virtual_iban)
+            });
+            let match_id = format!("MATCH-{}", Uuid::new_v4().simple());
+            let receipt_id = format!("DKN-UNM-{}", Uuid::new_v4().simple());
+
+            inner.reconciliation_queue.push(ReconciliationMatch {
+                match_id: match_id.clone(),
+                transaction: BankTransactionItem {
+                    transaction_id: payload.transaction_id.clone(),
+                    date: Utc::now().date_naive(),
+                    amount: payload.amount,
+                    currency: payload.currency.clone().unwrap_or_else(|| "TRY".to_string()),
+                    description: txn_desc,
+                    sender_name: payload.sender_name.clone(),
+                    sender_iban: payload.sender_iban.clone(),
+                    reference_no: Some(payload.transaction_id.clone()),
+                },
+                matched_unit_id: None,
+                matched_block: None,
+                matched_unit_number: None,
+                matched_resident_name: None,
+                confidence_score: 0,
+                matched_due_id: None,
+                outstanding_balance: None,
+                amount_matches_balance: false,
+                status: ReconciliationStatus::Unmatched,
+                status_code: ReconciliationStatus::Unmatched.as_str().to_string(),
+                notes: Some("Açıklama boş veya daire tespit edilemedi. Yönetici manuel eşleştirmesi bekliyor.".to_string()),
+            });
+
+            return Ok((
+                StatusCode::OK,
+                Json(BankIncomingWebhookResponse {
+                    status: "UNMATCHED".to_string(),
+                    transaction_id: payload.transaction_id,
+                    matched_unit_id: "UNMATCHED".to_string(),
+                    matched_block: "-".to_string(),
+                    matched_unit_number: 0,
+                    cleared_due_period: None,
+                    cleared_amount: Decimal::ZERO,
+                    remaining_debt: Decimal::ZERO,
+                    advance_payment: Decimal::ZERO,
+                    receipt_id,
+                    message: "Para transferi site banka hesabına ulaştı fakat daire ile otomatik eşleştirilemedi. İşlem, Site Yöneticisinin manuel eşleştirmesi için EŞLEŞMEYENLER havuzuna eklendi.".to_string(),
+                }),
             ));
         }
     };
@@ -1017,14 +1196,21 @@ pub async fn handle_bank_incoming_webhook(
             )
         } else {
             format!(
-                "₺{} dues settlement successfully cleared and matched to unit {} Blok D:{} via Virtual IBAN.",
-                cleared_amount, unit.block_id, unit.unit_number
+                "₺{} dues settlement successfully cleared and matched to unit {} Blok D:{} via {}.",
+                cleared_amount,
+                unit.block_id,
+                unit.unit_number,
+                match_mechanism
             )
         }
     } else {
         format!(
-            "No outstanding dues for unit {} Blok D:{}. Full payment of ₺{} credited as advance payment (Avans Bakiye: ₺{}).",
-            unit.block_id, unit.unit_number, payload.amount, total_advance
+            "No outstanding dues for unit {} Blok D:{}. Full payment of ₺{} credited as advance payment (Avans Bakiye: ₺{}) via {}.",
+            unit.block_id,
+            unit.unit_number,
+            payload.amount,
+            total_advance,
+            match_mechanism
         )
     };
 
@@ -1039,6 +1225,14 @@ pub async fn handle_bank_incoming_webhook(
         "Aktif borç bulunmuyor • Avans bakiyenize aktarıldı".to_string()
     };
 
+    let txn_desc = payload.description.unwrap_or_else(|| {
+        if is_virtual_iban {
+            format!("Sanal IBAN FAST Transferi: {}", payload.virtual_iban)
+        } else {
+            format!("Site Ana Hesabı FAST Transferi: {}", payload.virtual_iban)
+        }
+    });
+
     inner.reconciliation_queue.push(ReconciliationMatch {
         match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
         transaction: BankTransactionItem {
@@ -1046,7 +1240,7 @@ pub async fn handle_bank_incoming_webhook(
             date: Utc::now().date_naive(),
             amount: payload.amount,
             currency: payload.currency.unwrap_or_else(|| "TRY".to_string()),
-            description: payload.description.unwrap_or_else(|| format!("Virtual IBAN Transfer: {}", payload.virtual_iban)),
+            description: txn_desc,
             sender_name: payload.sender_name,
             sender_iban: payload.sender_iban,
             reference_no: Some(payload.transaction_id.clone()),
@@ -1170,6 +1364,289 @@ pub async fn accrue_monthly_dues(
             ),
         }),
     ))
+}
+
+/// Records a payment sent/recorded by a homeowner inside the application.
+/// Matches against outstanding debts first (FIFO by due_date).
+/// If no debt exists (or if payment > debt), credits the remainder to advance_payments (Avans Bakiye).
+pub async fn record_homeowner_payment(
+    State(state): State<AppState>,
+    Json(payload): Json<RecordHomeownerPaymentRequest>,
+) -> Result<(StatusCode, Json<RecordHomeownerPaymentResponse>), (StatusCode, String)> {
+    let mut inner = state.inner.write().await;
+
+    let unit = inner
+        .units
+        .iter()
+        .find(|u| u.id == payload.unit_id)
+        .cloned();
+
+    let unit = match unit {
+        Some(u) => u,
+        None => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!("Unit '{}' not found.", payload.unit_id),
+            ));
+        }
+    };
+
+    let payment_id = format!("PAY-{}", Uuid::new_v4().simple());
+    let mut remaining_payment = payload.amount;
+    let mut cleared_debt = Decimal::ZERO;
+
+    // 1. Match against unpaid dues in FIFO order by due_date
+    let mut unpaid_dues_indices: Vec<usize> = inner
+        .dues
+        .iter()
+        .enumerate()
+        .filter(|(_, d)| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+        .map(|(i, _)| i)
+        .collect();
+
+    unpaid_dues_indices.sort_by_key(|&i| inner.dues[i].due_date);
+
+    for idx in unpaid_dues_indices {
+        if remaining_payment <= Decimal::ZERO {
+            break;
+        }
+        let due = &mut inner.dues[idx];
+        if remaining_payment >= due.total_amount {
+            cleared_debt += due.total_amount;
+            remaining_payment -= due.total_amount;
+            due.status = DebtStatus::Paid;
+        } else {
+            due.principal_amount -= remaining_payment;
+            due.total_amount -= remaining_payment;
+            cleared_debt += remaining_payment;
+            remaining_payment = Decimal::ZERO;
+        }
+    }
+
+    // 2. If there is remaining payment (or if unit had no debt), credit to advance_payments!
+    let advance_credit = remaining_payment;
+    if advance_credit > Decimal::ZERO {
+        let entry = inner.advance_payments.entry(unit.id.clone()).or_insert(Decimal::ZERO);
+        *entry += advance_credit;
+    }
+
+    let total_unit_advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
+
+    let remaining_debt: Decimal = inner
+        .dues
+        .iter()
+        .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+        .map(|d| d.total_amount)
+        .sum();
+
+    let match_status = if cleared_debt > Decimal::ZERO && advance_credit > Decimal::ZERO {
+        PaymentMatchStatus::PartiallyMatched
+    } else if cleared_debt > Decimal::ZERO {
+        PaymentMatchStatus::MatchedDebt
+    } else {
+        PaymentMatchStatus::MatchedAdvance
+    };
+
+    let message = if cleared_debt > Decimal::ZERO && advance_credit > Decimal::ZERO {
+        format!(
+            "₺{} aidat borcu ödendi, kalan ₺{} avans bakiyesine aktarıldı (Mevcut Avans: ₺{}).",
+            cleared_debt, advance_credit, total_unit_advance
+        )
+    } else if cleared_debt > Decimal::ZERO {
+        format!("₺{} tutarındaki aidat borcu başarıyla kapatıldı.", cleared_debt)
+    } else {
+        format!(
+            "Aktif aidat borcu bulunmuyor. ₺{} tutarındaki ödeme avans bakiyenize eklendi (Mevcut Avans: ₺{}).",
+            advance_credit, total_unit_advance
+        )
+    };
+
+    // Store in homeowner_payments ledger
+    let record = HomeownerPaymentRecord {
+        id: payment_id.clone(),
+        unit_id: unit.id.clone(),
+        block_id: unit.block_id.clone(),
+        unit_number: unit.unit_number,
+        homeowner_name: payload.homeowner_name.or_else(|| {
+            unit.owner_user_id.as_ref().and_then(|uid| {
+                inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone())
+            })
+        }),
+        amount: payload.amount,
+        payment_method: payload.payment_method.clone(),
+        reference_code: payload.reference_code.clone(),
+        note: payload.note.clone(),
+        status: match_status,
+        cleared_debt_amount: cleared_debt,
+        advance_credit_amount: advance_credit,
+        created_at: Utc::now(),
+    };
+
+    let resident_name = inner.users.iter().find(|u| u.id == unit.id).map(|u| u.full_name.clone());
+
+    inner.homeowner_payments.push(record);
+
+    // Also record in reconciliation_queue as an approved digital receipt
+    let receipt_id = format!("RCP-{}", Uuid::new_v4().simple());
+    inner.reconciliation_queue.push(ReconciliationMatch {
+        match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
+        transaction: BankTransactionItem {
+            transaction_id: payload.reference_code.unwrap_or_else(|| payment_id.clone()),
+            date: Utc::now().date_naive(),
+            amount: payload.amount,
+            currency: "TRY".to_string(),
+            description: payload.note.unwrap_or_else(|| {
+                if payload.payment_method.to_uppercase().contains("CARD") || payload.payment_method.to_uppercase().contains("KART") {
+                    "Kredi Kartı ile Aidat Ödemesi".to_string()
+                } else {
+                    format!("{} ile Aidat Ödemesi", payload.payment_method)
+                }
+            }),
+            sender_name: resident_name.clone(),
+            sender_iban: None,
+            reference_no: Some(receipt_id),
+        },
+        matched_unit_id: Some(unit.id.clone()),
+        matched_block: Some(unit.block_id.clone()),
+        matched_unit_number: Some(unit.unit_number),
+        matched_resident_name: resident_name,
+        confidence_score: 100,
+        matched_due_id: None,
+        outstanding_balance: Some(cleared_debt),
+        amount_matches_balance: cleared_debt == payload.amount,
+        status: ReconciliationStatus::Approved,
+        status_code: ReconciliationStatus::Approved.as_str().to_string(),
+        notes: Some(message.clone()),
+    });
+
+    Ok((
+        StatusCode::OK,
+        Json(RecordHomeownerPaymentResponse {
+            payment_id,
+            unit_id: unit.id,
+            amount: payload.amount,
+            cleared_debt_amount: cleared_debt,
+            advance_payment_amount: advance_credit,
+            remaining_debt,
+            total_unit_advance_balance: total_unit_advance,
+            status: match_status,
+            message,
+        }),
+    ))
+}
+
+/// Collects all homeowner payments recorded in the application and matches them with debts.
+/// If a homeowner/unit has debts, matches and deducts from debts (FIFO).
+/// If no debt exists (or remaining surplus), matches it as advance payment (Avans Bakiye).
+pub async fn match_all_homeowner_payments(
+    State(state): State<AppState>,
+    Json(payload): Json<MatchAllPaymentsRequest>,
+) -> Result<(StatusCode, Json<MatchAllPaymentsResponse>), (StatusCode, String)> {
+    let mut inner = state.inner.write().await;
+
+    let target_site_id = payload.site_id.unwrap_or_else(|| "site-1".to_string());
+    let mut total_processed = 0;
+    let mut total_cleared = Decimal::ZERO;
+    let mut total_advance = Decimal::ZERO;
+    let mut matched_debts_count = 0;
+    let mut matched_advance_count = 0;
+
+    let site_unit_ids: Vec<String> = inner
+        .units
+        .iter()
+        .filter(|u| u.site_id == target_site_id)
+        .map(|u| u.id.clone())
+        .collect();
+
+    for i in 0..inner.homeowner_payments.len() {
+        if !site_unit_ids.contains(&inner.homeowner_payments[i].unit_id) {
+            continue;
+        }
+
+        if inner.homeowner_payments[i].status != PaymentMatchStatus::Pending {
+            continue;
+        }
+
+        let unit_id = inner.homeowner_payments[i].unit_id.clone();
+        let mut remaining = inner.homeowner_payments[i].amount;
+        let mut cleared = Decimal::ZERO;
+
+        // Match against unpaid debts (FIFO by due date)
+        let mut unpaid_dues_indices: Vec<usize> = inner
+            .dues
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.unit_id == unit_id && d.status != DebtStatus::Paid)
+            .map(|(idx, _)| idx)
+            .collect();
+        unpaid_dues_indices.sort_by_key(|&idx| inner.dues[idx].due_date);
+
+        for idx in unpaid_dues_indices {
+            if remaining <= Decimal::ZERO {
+                break;
+            }
+            let due = &mut inner.dues[idx];
+            if remaining >= due.total_amount {
+                cleared += due.total_amount;
+                remaining -= due.total_amount;
+                due.status = DebtStatus::Paid;
+            } else {
+                due.principal_amount -= remaining;
+                due.total_amount -= remaining;
+                cleared += remaining;
+                remaining = Decimal::ZERO;
+            }
+        }
+
+        let advance = remaining;
+        if advance > Decimal::ZERO {
+            let entry = inner.advance_payments.entry(unit_id.clone()).or_insert(Decimal::ZERO);
+            *entry += advance;
+            total_advance += advance;
+            matched_advance_count += 1;
+        }
+
+        if cleared > Decimal::ZERO {
+            total_cleared += cleared;
+            matched_debts_count += 1;
+        }
+
+        let new_status = if cleared > Decimal::ZERO && advance > Decimal::ZERO {
+            PaymentMatchStatus::PartiallyMatched
+        } else if cleared > Decimal::ZERO {
+            PaymentMatchStatus::MatchedDebt
+        } else {
+            PaymentMatchStatus::MatchedAdvance
+        };
+
+        inner.homeowner_payments[i].status = new_status;
+        inner.homeowner_payments[i].cleared_debt_amount = cleared;
+        inner.homeowner_payments[i].advance_credit_amount = advance;
+        total_processed += 1;
+    }
+
+    Ok((
+        StatusCode::OK,
+        Json(MatchAllPaymentsResponse {
+            total_payments_processed: total_processed,
+            total_debt_cleared: total_cleared,
+            total_advance_credited: total_advance,
+            matched_debts_count,
+            matched_advance_count,
+            message: format!(
+                "Toplam {} ödeme işlendi: ₺{} borç kapatıldı, ₺{} avans bakiyelerine aktarıldı.",
+                total_processed, total_cleared, total_advance
+            ),
+        }),
+    ))
+}
+
+/// Returns the list of homeowner payment records
+pub async fn get_homeowner_payments(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let inner = state.inner.read().await;
+    (StatusCode::OK, Json(inner.homeowner_payments.clone()))
 }
 
 

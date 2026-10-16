@@ -21,6 +21,7 @@ echo "▶ Starting Prototype server on port 9091 (background)..."
 nohup python3 -m http.server 9091 --directory "$SITEPULSE_ROOT" > /tmp/sitepulse-prototype.log 2>&1 &
 disown 2>/dev/null || true
 echo "  [OK] Prototype server active: http://localhost:9091/mvp_ux_prototype.html"
+echo "  [OK] Bank & FAST Simulator:   http://localhost:9091/bank_transfer_simulator.html"
 
 # 3. Start Rust Backend on port 8080 in background
 echo "▶ Starting Rust Backend API on port 8080 (background)..."

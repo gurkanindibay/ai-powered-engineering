@@ -87,11 +87,19 @@ async fn main() {
             "/api/v1/bank/webhook/incoming-transfer",
             post(handlers::handle_bank_incoming_webhook),
         )
+        .route(
+            "/api/v1/bank/remembered-ibans",
+            post(handlers::remember_sender_iban),
+        )
         // Periodic Dues Accrual & Automatic Advance Balance Offsetting
         .route(
             "/api/v1/dues/accrue-period",
             post(handlers::accrue_monthly_dues),
         )
+        // Homeowner Payments Collection & Matching
+        .route("/api/v1/payments/record", post(handlers::record_homeowner_payment))
+        .route("/api/v1/payments/match-all", post(handlers::match_all_homeowner_payments))
+        .route("/api/v1/payments/homeowner-records", get(handlers::get_homeowner_payments))
         .layer(cors)
         .with_state(state.clone());
 

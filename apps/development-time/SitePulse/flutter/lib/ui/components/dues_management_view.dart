@@ -27,6 +27,12 @@ class _DuesManagementViewState extends State<DuesManagementView> {
   final TextEditingController _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    widget.controller.fetchReconciliationQueue();
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -447,16 +453,18 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           : (result as FlatPaymentStatus);
       final bool sendMsg = (result is ManualAssignmentResult) ? result.sendOptionalMessage : false;
       final String? msgText = (result is ManualAssignmentResult) ? result.optionalMessageText : null;
+      final bool rememberIban = (result is ManualAssignmentResult) ? result.rememberSenderIban : true;
 
       widget.controller.manuallyAssignFlatToTransaction(
         matchId: item.matchId,
         block: selectedFlat.block,
         unitNo: selectedFlat.unitNo,
       );
-      // Auto confirm if manager chooses with optional message to host
+      // Auto confirm if manager chooses with optional message to host and remember sender IBAN
       widget.controller.confirmReconciliation(
         [item.matchId],
         optionalHostMessage: sendMsg ? msgText : null,
+        rememberSenderIban: rememberIban,
       );
 
       if (mounted) {

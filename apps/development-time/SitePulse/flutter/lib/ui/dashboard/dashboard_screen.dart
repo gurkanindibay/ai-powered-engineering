@@ -599,69 +599,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               return Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
+                  InkWell(
+                    onTap: item.isCredit ? () => _showSingleReceiptDetailDialog(item) : null,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              icon,
+                              color: color,
+                              size: 20,
+                            ),
                           ),
-                          child: Icon(
-                            icon,
-                            color: color,
-                            size: 20,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.title,
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary(context),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  item.subtitle,
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary(context),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                item.title,
+                                item.amountStr,
                                 style: TextStyle(
-                                  color: AppColors.textPrimary(context),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
+                                  color: color,
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                item.subtitle,
+                                item.date,
                                 style: TextStyle(
                                   color: AppColors.textSecondary(context),
-                                  fontSize: 11,
+                                  fontSize: 10,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              item.amountStr,
-                              style: TextStyle(
-                                color: color,
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              item.date,
-                              style: TextStyle(
-                                color: AppColors.textSecondary(context),
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                   if (index < transactions.length - 1)
@@ -798,10 +802,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? 'TR12 0006 2000 0000 0000 0001'
             : 'TR12 0006 2000 0000 0000 0014',
         initialMethod: initialMethod,
-        onPaymentSuccess: () {
+        onPaymentSuccess: (paidAmount) {
+          widget.controller.recordHomeownerPayment(
+            block: widget.controller.activeUnit.block,
+            unitNo: widget.controller.activeUnit.unitNo,
+            amount: paidAmount,
+            paymentMethod: 'CREDIT_CARD',
+            note: '${dues.donem} Aidat Kart Ödemesi',
+          );
+          final snackMsg = paidAmount > dues.toplamTutar && dues.toplamTutar > Decimal.zero
+              ? '₺${paidAmount.toStringAsFixed(2)} tutarındaki kart ödemeniz alındı! Borcunuz kapatıldı, ₺${(paidAmount - dues.toplamTutar).toStringAsFixed(2)} avans bakiyenize aktarıldı.'
+              : (paidAmount < dues.toplamTutar
+                  ? '₺${paidAmount.toStringAsFixed(2)} tutarındaki kısmi ödemeniz alındı. Kalan borç: ₺${(dues.toplamTutar - paidAmount).toStringAsFixed(2)}'
+                  : (dues.toplamTutar <= Decimal.zero
+                      ? '₺${paidAmount.toStringAsFixed(2)} tutarı avans bakiyenize başarıyla aktarıldı.'
+                      : '₺${paidAmount.toStringAsFixed(2)} tutarındaki kart ödemeniz başarıyla alındı! Borcunuz kapatıldı.'));
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('₺${dues.toplamTutar.toStringAsFixed(2)} tutarındaki kart ödemeniz başarıyla alındı! Makbuz üretildi.'),
+              content: Text(snackMsg),
               backgroundColor: AppColors.accentGreen,
               duration: const Duration(seconds: 4),
             ),
@@ -812,80 +831,368 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showDuesDetailDialog(AidatBorcu dues) {
-    AppFullscreenPage.push(
-      context: context,
-      builder: (ctx) => AppFullscreenPage(
-        title: 'Aidat Hesap Özeti',
-        subtitle: 'KMK Madde 20 Yasal Gecikme Cetveli',
-        icon: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.accentCyan.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
+    final advPayment = widget.controller.activeUnit.advancePayment ?? Decimal.zero;
+    final totalDebt = dues.toplamTutar;
+    final hasDebt = totalDebt > Decimal.zero;
+    final duesList = widget.controller.duesList;
+
+    if (!hasDebt) {
+      AppFullscreenPage.push(
+        context: context,
+        builder: (ctx) => AppFullscreenPage(
+          title: 'Hesap & Bakiye Özeti',
+          subtitle: '${widget.controller.activeUnit.siteAdi} • ${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.accentGreen.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.account_balance_wallet_outlined, color: AppColors.accentGreen, size: 20),
           ),
-          child: const Icon(Icons.calculate_outlined, color: AppColors.accentCyan, size: 20),
-        ),
-        bottomBar: AppFullscreenPage.buildBottomBar(
-          context: ctx,
-          children: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          bottomBar: AppFullscreenPage.buildBottomBar(
+            context: ctx,
+            children: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentGreen,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
-              child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.card(context),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border(context)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Kat Mülkiyeti Kanunu (KMK) Madde 20 Uyarınca:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 12),
-                  Text('• Son Ödeme Tarihi: 15.09.2026', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
-                  const SizedBox(height: 8),
-                  const Text('• Hesaplama Tarihi: 25.09.2026 (10 Gün Gecikme)', style: TextStyle(color: AppColors.accentRed, fontSize: 13, fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 8),
-                  Text('• Aylık Yasal Gecikme Oranı: %5', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
-                  const SizedBox(height: 14),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentRed.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.accentRed.withValues(alpha: 0.2)),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Borç Durum Banner
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.accentGreen.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentGreen.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.check_circle_outline, color: AppColors.accentGreen, size: 24),
                     ),
-                    child: const Text('• Gecikme Tazminatı: (1400 * 0.05 / 30) * 10 = 23,33 TL', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold, fontSize: 12.5)),
-                  ),
-                ],
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Borç Durumu: Güncel',
+                            style: TextStyle(
+                              color: AppColors.accentGreen,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Dairenize ait vadesi geçmiş veya bekleyen herhangi bir aidat borcu bulunmamaktadır.',
+                            style: TextStyle(
+                              color: AppColors.textSecondary(context),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+
+              // 2. Avans Bakiye Kartı
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.surface(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border(context)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Mevcut Avans Bakiyesi (Alacak)',
+                          style: TextStyle(
+                            color: AppColors.textSecondary(context),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentGreen.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Kullanıma Hazır',
+                            style: TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '+₺${advPayment.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: AppColors.accentGreen,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.card(context),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.border(context)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.info_outline, size: 18, color: AppColors.accentCyan),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Avans bakiyeniz, gelecek aylarda yeni aidatlar tahakkuk ettiğinde (ör. ay başında) otomatik olarak borçtan mahsup edilir. Herhangi bir ek işlem yapmanıza gerek kalmaz.',
+                              style: TextStyle(
+                                color: AppColors.textPrimary(context),
+                                fontSize: 11.5,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // 3. Dönemsel Aidat Durumu
+              Text(
+                'DÖNEMSEL AİDAT DURUMU',
+                style: TextStyle(
+                  color: AppColors.textSecondary(context),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border(context)),
+                ),
+                child: Column(
+                  children: duesList.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final d = entry.value;
+                    final isPaid = d.status == DebtStatus.paid || d.totalAmount <= Decimal.zero;
+
+                    return Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    d.period,
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary(context),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isPaid ? 'Ödendi • Borç Bulunmuyor' : 'Vadesi: ${d.dueDate.day}.${d.dueDate.month}.${d.dueDate.year}',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary(context),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  Text(
+                                    '₺${d.principalAmount.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary(context),
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: isPaid
+                                          ? AppColors.accentGreen.withValues(alpha: 0.15)
+                                          : AppColors.accentRed.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      isPaid ? 'Ödendi' : 'Bekliyor',
+                                      style: TextStyle(
+                                        color: isPaid ? AppColors.accentGreen : AppColors.accentRed,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (idx < duesList.length - 1)
+                          Divider(
+                            height: 1,
+                            thickness: 1,
+                            indent: 14,
+                            endIndent: 14,
+                            color: AppColors.border(context),
+                          ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      AppFullscreenPage.push(
+        context: context,
+        builder: (ctx) => AppFullscreenPage(
+          title: 'Aidat Borç Detayı',
+          subtitle: '${dues.donem} • KMK Madde 20 Yasal Gecikme Cetveli',
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.accentCyan.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.calculate_outlined, color: AppColors.accentCyan, size: 20),
+          ),
+          bottomBar: AppFullscreenPage.buildBottomBar(
+            context: ctx,
+            children: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentCyan,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.card(context),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border(context)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Kat Mülkiyeti Kanunu (KMK) Madde 20 Uyarınca:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 12),
+                    Text('• Dönem: ${dues.donem}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
+                    const SizedBox(height: 8),
+                    Text('• Ana Para Aidat: ₺${dues.anaPara.toStringAsFixed(2)}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Text('• Son Ödeme Tarihi: ${dues.sonOdemeTarihi.day.toString().padLeft(2, '0')}.${dues.sonOdemeTarihi.month.toString().padLeft(2, '0')}.${dues.sonOdemeTarihi.year}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
+                    if (dues.gecikmeTazminati > Decimal.zero) ...[
+                      const SizedBox(height: 8),
+                      Text('• Gecikme Durumu: ${dues.gecikenGunSayisi} Gün Gecikme', style: const TextStyle(color: AppColors.accentRed, fontSize: 13, fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 8),
+                      Text('• Aylık Yasal Gecikme Oranı: %5 (KMK Madde 20/c)', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentRed.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.accentRed.withValues(alpha: 0.2)),
+                        ),
+                        child: Text(
+                          '• Gecikme Tazminatı: (${dues.anaPara.toStringAsFixed(0)} * 0.05 / 30) * ${dues.gecikenGunSayisi} = ₺${dues.gecikmeTazminati.toStringAsFixed(2)}',
+                          style: const TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold, fontSize: 12.5),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    Divider(color: AppColors.border(context)),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Ödenecek Toplam Tutar:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text('₺${dues.toplamTutar.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
   }
 
   void _showReceiptsDialog() {
+    final creditTransactions = widget.controller.accountTransactions
+        .where((t) => t.isCredit)
+        .toList();
+
     AppFullscreenPage.push(
       context: context,
       builder: (ctx) => AppFullscreenPage(
-        title: 'Ödeme Makbuzları',
-        subtitle: 'Geçmiş aidat ve tahsilat belgeleri',
+        title: 'Ödeme Makbuzları & Dekontlar',
+        subtitle: '${widget.controller.activeUnit.siteAdi} • ${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
         icon: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -905,45 +1212,264 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
-        child: Column(
+        child: creditTransactions.isEmpty
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Column(
+                    children: [
+                      Icon(Icons.receipt_outlined, size: 48, color: AppColors.textSecondary(context)),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Henüz onaylanmış bir ödeme dekontu bulunmuyor.',
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : Column(
+                children: creditTransactions.map((tx) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _buildReceiptItem(tx),
+                  );
+                }).toList(),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildReceiptItem(AccountTransactionItem tx) {
+    return InkWell(
+      onTap: () => _showSingleReceiptDetailDialog(tx),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.card(context),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border(context)),
+        ),
+        child: Row(
           children: [
-            _buildReceiptItem('Ağustos 2026 Aidatı', '₺1.400,00', '14.08.2026 • FAST Onaylı'),
-            const SizedBox(height: 10),
-            _buildReceiptItem('Temmuz 2026 Aidatı', '₺1.400,00', '12.07.2026 • Kredi Kartı'),
-            const SizedBox(height: 10),
-            _buildReceiptItem('Haziran 2026 Aidatı', '₺1.400,00', '15.06.2026 • FAST Onaylı'),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accentGreen.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.receipt_outlined, size: 18, color: AppColors.accentGreen),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tx.title,
+                    style: TextStyle(
+                      color: AppColors.textPrimary(context),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${tx.date} • ${tx.subtitle}',
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  tx.amountStr,
+                  style: const TextStyle(
+                    color: AppColors.accentGreen,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Görüntüle',
+                      style: TextStyle(
+                        color: AppColors.accentCyan,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.chevron_right, size: 12, color: AppColors.accentCyan),
+                  ],
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildReceiptItem(String title, String amount, String meta) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.card(context),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border(context)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
+  void _showSingleReceiptDetailDialog(AccountTransactionItem tx) {
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => AppFullscreenPage(
+        title: 'Ödeme Dekontu Detayı',
+        subtitle: 'Resmi Dijital Tahsilat Belgesi',
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.accentGreen.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.verified, color: AppColors.accentGreen, size: 20),
+        ),
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.card(context),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border(context)),
+          ),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 2),
-              Text(meta, style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'TAHSİLAT MAKBUZU',
+                    style: TextStyle(
+                      color: AppColors.textSecondary(context),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentGreen.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'ONAYLANDI',
+                      style: TextStyle(color: AppColors.accentGreen, fontSize: 10.5, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      tx.amountStr,
+                      style: const TextStyle(
+                        color: AppColors.accentGreen,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      tx.title,
+                      style: TextStyle(
+                        color: AppColors.textPrimary(context),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Divider(color: AppColors.border(context)),
+              const SizedBox(height: 12),
+              _buildReceiptRow('İşlem / Makbuz No:', tx.id),
+              const SizedBox(height: 8),
+              _buildReceiptRow('İşlem Tarihi:', tx.date),
+              const SizedBox(height: 8),
+              _buildReceiptRow('Site & Daire:', '${widget.controller.activeUnit.siteAdi} • ${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}'),
+              const SizedBox(height: 8),
+              _buildReceiptRow('Ödeyen:', widget.controller.activeUnit.ownerName.isNotEmpty ? widget.controller.activeUnit.ownerName : 'Ahmet Yılmaz'),
+              const SizedBox(height: 8),
+              _buildReceiptRow('Açıklama:', tx.subtitle),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.background(context),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border(context)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.security, size: 16, color: AppColors.accentGreen),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Bu makbuz SitePulse elektronik aidat yönetim sistemi tarafından doğrulanmıştır.',
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
-          Text(amount, style: const TextStyle(color: AppColors.accentGreen, fontSize: 14, fontWeight: FontWeight.bold)),
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildReceiptRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
     );
   }
 

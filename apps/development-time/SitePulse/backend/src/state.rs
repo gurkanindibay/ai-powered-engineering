@@ -5,8 +5,9 @@ use rust_decimal::Decimal;
 use tokio::sync::RwLock;
 
 use crate::models::{
-    DebtStatus, DuesLiability, IndependentUnit, PendingRegistrationResponse, ReconciliationMatch,
-    Role, Site, SiteBankAccount, SiteInvitationLinkResponse, UnitInviteLinkResponse, UnitMemberDto, User,
+    DebtStatus, DuesLiability, HomeownerPaymentRecord, IndependentUnit, PendingRegistrationResponse,
+    ReconciliationMatch, Role, Site, SiteBankAccount, SiteInvitationLinkResponse,
+    UnitInviteLinkResponse, UnitMemberDto, User,
 };
 use crate::services::VirtualIbanService;
 
@@ -28,6 +29,8 @@ pub struct AppStateInner {
     pub reconciliation_queue: Vec<ReconciliationMatch>,
     pub site_bank_accounts: Vec<SiteBankAccount>,
     pub advance_payments: HashMap<String, Decimal>,
+    pub homeowner_payments: Vec<HomeownerPaymentRecord>,
+    pub remembered_sender_ibans: HashMap<String, String>,
     pub kuveyt_turk_client_id: Option<String>,
     pub kuveyt_turk_client_secret: Option<String>,
 }
@@ -46,6 +49,8 @@ impl AppState {
             reconciliation_queue: Vec::new(),
             site_bank_accounts: Vec::new(),
             advance_payments: HashMap::new(),
+            homeowner_payments: Vec::new(),
+            remembered_sender_ibans: HashMap::new(),
             kuveyt_turk_client_id: std::env::var("KT_CLIENT_ID").ok(),
             kuveyt_turk_client_secret: std::env::var("KT_CLIENT_SECRET").ok(),
         };

@@ -450,6 +450,8 @@ class DashboardController extends ChangeNotifier {
           amount: Decimal.parse('715.00'),
           currency: 'TRY',
           description: 'Para Transferi - Gönderen: BİLİNMEYEN HAVALE, Alıcı: GÜRKAN İNDİBAY',
+          senderName: 'Bilinmeyen Gönderici',
+          senderIban: 'TR12 0006 2000 0000 0000 0001',
         ),
         matchedUnitId: null,
         matchedBlock: null,
@@ -570,8 +572,38 @@ class DashboardController extends ChangeNotifier {
 
         notifyListeners();
       }
+      fetchReconciliationQueue();
     } catch (e) {
       debugPrint('Dashboard live sync offline fallback: $e');
+    }
+  }
+
+  Future<void> fetchReconciliationQueue([String siteId = 'site-1']) async {
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/bank/statements/reconciliation-queue?site_id=$siteId');
+      final response = await http.get(url).timeout(const Duration(seconds: 2));
+      if (response.statusCode == 200) {
+        final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>?;
+        if (list != null && list.isNotEmpty) {
+          final liveItems = list.map((item) => ReconciliationQueueItem.fromJson(item as Map<String, dynamic>)).toList();
+          bool added = false;
+          for (final liveItem in liveItems) {
+            final exists = _reconciliationQueue.any((q) =>
+                q.matchId == liveItem.matchId ||
+                q.transaction.transactionId == liveItem.transaction.transactionId);
+            if (!exists) {
+              _reconciliationQueue.insert(0, liveItem);
+              added = true;
+            }
+          }
+          if (added) {
+            notifyListeners();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Reconciliation queue fetch error: $e');
     }
   }
 
@@ -1412,11 +1444,16 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void confirmReconciliation(List<String> matchIds, {String? optionalHostMessage}) {
+  void confirmReconciliation(
+    List<String> matchIds, {
+    String? optionalHostMessage,
+    bool rememberSenderIban = true,
+  }) {
     if (matchIds.isEmpty) return;
 
     Decimal totalCleared = Decimal.zero;
     final List<ReconciliationQueueItem> updatedQueue = [];
+    int rememberedIbansCount = 0;
 
     for (final item in _reconciliationQueue) {
       if (matchIds.contains(item.matchId)) {
@@ -1424,6 +1461,17 @@ class DashboardController extends ChangeNotifier {
         _processedTransactionIds.add(item.transaction.transactionId);
         if (item.matchedUnitNumber != null) {
           _processedUnitKeys.add('${item.matchedBlock ?? "A"}_${item.matchedUnitNumber}');
+        }
+
+        // Persist remembered sender IBAN for future automatic payments matching
+        if (rememberSenderIban && item.transaction.senderIban != null && item.transaction.senderIban!.isNotEmpty) {
+          final unitId = item.matchedUnitId ?? 'd-${item.matchedUnitNumber ?? 14}';
+          _persistRememberedSenderIban(
+            unitId: unitId,
+            senderIban: item.transaction.senderIban!,
+            senderName: item.transaction.senderName,
+          );
+          rememberedIbansCount++;
         }
 
         // Record optional message dispatch to host
@@ -1450,24 +1498,34 @@ class DashboardController extends ChangeNotifier {
 
           if (flatIndex != -1) {
             final flat = _flatsList[flatIndex];
+            final paymentAmount = item.transaction.amount;
+
             if (!flat.isPaid) {
               _flatsList[flatIndex] = flat.copyWith(
                 isPaid: true,
                 daysOverdue: 0,
                 paidDateStr: 'Banka Ekstresi',
               );
-              totalCleared += flat.amountDue;
+              totalCleared += paymentAmount;
+              if (paymentAmount > flat.amountDue) {
+                final surplus = paymentAmount - flat.amountDue;
+                _creditUnitAdvance(item.matchedBlock ?? flat.block, flat.unitNo, surplus);
+              }
 
               _collectionSummary = _collectionSummary.copyWith(
                 paidUnitsCount: _collectionSummary.paidUnitsCount + 1,
                 overdueUnitsCount: _collectionSummary.overdueUnitsCount > 0
                     ? _collectionSummary.overdueUnitsCount - 1
                     : 0,
-                totalCollected: _collectionSummary.totalCollected + flat.amountDue,
+                totalCollected: _collectionSummary.totalCollected + paymentAmount,
                 totalOverdueWithInterest: _collectionSummary.totalOverdueAmount > flat.amountDue
                     ? _collectionSummary.totalOverdueAmount - flat.amountDue
                     : Decimal.zero,
               );
+            } else {
+              // Flat has NO debt (already paid or zero debt): match entire payment as advance payment!
+              totalCleared += paymentAmount;
+              _creditUnitAdvance(item.matchedBlock ?? flat.block, flat.unitNo, paymentAmount);
             }
           }
         }
@@ -1478,11 +1536,170 @@ class DashboardController extends ChangeNotifier {
 
     _reconciliationQueue = updatedQueue;
     final messageNote = (optionalHostMessage != null && optionalHostMessage.trim().isNotEmpty)
-        ? ' ve kat sakin(ler)ine bilgilendirme mesajı iletildi.'
-        : ' ve borç kapatıldı.';
+        ? ' ve kat sakin(ler)ine bilgilendirme mesajı iletildi'
+        : ' ve borç kapatıldı';
+    final ibanNote = rememberedIbansCount > 0
+        ? ' (Gönderici IBAN gelecekteki ödemeler için kalıcı olarak eşleştirildi)'
+        : '';
     _reconciliationSuccessMessage =
-        '₺${totalCleared.toStringAsFixed(2)} tutarındaki banka aidat transferi başarıyla onaylandı$messageNote';
+        '₺${totalCleared.toStringAsFixed(2)} tutarındaki banka aidat transferi başarıyla onaylandı$messageNote$ibanNote.';
     notifyListeners();
+  }
+
+  Future<void> _persistRememberedSenderIban({
+    required String unitId,
+    required String senderIban,
+    String? senderName,
+  }) async {
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/bank/remembered-ibans');
+      await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'site_id': 'site-1',
+          'unit_id': unitId,
+          'sender_iban': senderIban,
+          'sender_name': senderName,
+        }),
+      ).timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Best-effort in offline/test environment
+    }
+  }
+
+  void _creditUnitAdvance(String block, int unitNo, Decimal amount) {
+    if (_activeUnit.unitNo == unitNo && _activeUnit.block == block) {
+      final currentAdv = _activeUnit.advancePayment ?? Decimal.zero;
+      _activeUnit = _activeUnit.copyWith(
+        advancePayment: currentAdv + amount,
+      );
+    }
+  }
+
+  /// Records an in-app payment sent by a homeowner.
+  /// Matches against outstanding unit debts first.
+  /// If no debt exists (or if payment exceeds debt), credits remainder to advancePayment (Avans Bakiye).
+  Future<void> recordHomeownerPayment({
+    required String block,
+    required int unitNo,
+    required Decimal amount,
+    String paymentMethod = 'CREDIT_CARD',
+    String? note,
+  }) async {
+    final flatIndex = _flatsList.indexWhere((f) => f.unitNo == unitNo && f.block == block);
+    Decimal clearedDebt = Decimal.zero;
+    Decimal advanceCredit = Decimal.zero;
+
+    if (flatIndex != -1) {
+      final flat = _flatsList[flatIndex];
+      if (!flat.isPaid && flat.amountDue > Decimal.zero) {
+        if (amount >= flat.amountDue) {
+          clearedDebt = flat.amountDue;
+          advanceCredit = amount - flat.amountDue;
+          _flatsList[flatIndex] = flat.copyWith(
+            isPaid: true,
+            daysOverdue: 0,
+            paidDateStr: paymentMethod == 'CREDIT_CARD' ? 'Kredi Kartı (3D Secure)' : 'FAST / Havale',
+          );
+          _collectionSummary = _collectionSummary.copyWith(
+            paidUnitsCount: _collectionSummary.paidUnitsCount + 1,
+            overdueUnitsCount: _collectionSummary.overdueUnitsCount > 0 ? _collectionSummary.overdueUnitsCount - 1 : 0,
+            totalCollected: _collectionSummary.totalCollected + clearedDebt,
+            totalOverdueWithInterest: _collectionSummary.totalOverdueAmount > clearedDebt
+                ? _collectionSummary.totalOverdueAmount - clearedDebt
+                : Decimal.zero,
+          );
+        } else {
+          clearedDebt = amount;
+          _flatsList[flatIndex] = flat.copyWith(amountDue: flat.amountDue - amount);
+          _collectionSummary = _collectionSummary.copyWith(
+            totalCollected: _collectionSummary.totalCollected + amount,
+            totalOverdueWithInterest: _collectionSummary.totalOverdueAmount > amount
+                ? _collectionSummary.totalOverdueAmount - amount
+                : Decimal.zero,
+          );
+        }
+      } else {
+        // No debt: full amount is advance payment
+        advanceCredit = amount;
+      }
+    } else {
+      advanceCredit = amount;
+    }
+
+    if (advanceCredit > Decimal.zero) {
+      _creditUnitAdvance(block, unitNo, advanceCredit);
+    }
+
+    // Optimistically update resident dues list for active unit
+    if (_activeUnit.unitNo == unitNo && _activeUnit.block == block) {
+      if (clearedDebt > Decimal.zero) {
+        _duesList = _duesList.map((d) {
+          if (clearedDebt >= d.totalAmount) {
+            return d.copyWith(
+              status: DebtStatus.paid,
+              totalAmount: Decimal.zero,
+              delayPenalty: Decimal.zero,
+              daysOverdue: 0,
+            );
+          } else {
+            return d.copyWith(
+              totalAmount: d.totalAmount - clearedDebt,
+            );
+          }
+        }).toList();
+      }
+    }
+
+    final isCard = paymentMethod == 'CREDIT_CARD';
+    final txTitle = isCard
+        ? (clearedDebt > Decimal.zero ? 'Kart ile Aidat Ödemesi' : 'Kart ile Avans Yükleme')
+        : (clearedDebt > Decimal.zero ? 'FAST ile Aidat Ödemesi' : 'FAST ile Avans Yükleme');
+
+    final txSubtitle = advanceCredit > Decimal.zero && clearedDebt > Decimal.zero
+        ? '₺${clearedDebt.toStringAsFixed(2)} borç kapatıldı • ₺${advanceCredit.toStringAsFixed(2)} avans bakiyenize aktarıldı'
+        : (clearedDebt > Decimal.zero ? 'Aidat borcu başarıyla kapatıldı' : 'Aktif borç bulunmuyor • Avans bakiyenize aktarıldı');
+
+    _accountTransactions.insert(
+      0,
+      AccountTransactionItem(
+        id: 'TXN-APP-${DateTime.now().millisecondsSinceEpoch}',
+        title: txTitle,
+        subtitle: txSubtitle,
+        amount: amount,
+        date: 'Bugün',
+        isCredit: true,
+      ),
+    );
+
+    notifyListeners();
+
+    // Sync with backend API
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/payments/record');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'site_id': 'site-1',
+          'unit_id': _activeUnit.id,
+          'block': block,
+          'unit_no': unitNo,
+          'amount': amount.toString(),
+          'payment_method': paymentMethod,
+          'note': note ?? (isCard ? 'Kart ile Aidat Ödemesi' : 'FAST ile Aidat Ödemesi'),
+        }),
+      ).timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200) {
+        await fetchResidentDashboard(_activeUnit.id);
+      }
+    } catch (e) {
+      debugPrint('recordHomeownerPayment backend sync: $e');
+    }
   }
 
   void clearReconciliationSuccess() {

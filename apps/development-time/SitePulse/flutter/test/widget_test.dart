@@ -1,3 +1,4 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
@@ -108,12 +109,24 @@ void main() {
     await tester.tap(payBtn);
     await tester.pumpAndSettle();
 
-    // Verify checkout dialog with payment method selection
+    // Verify checkout dialog with payment method selection and free text amount field
     expect(find.text('Aidat Ödeme Adımı'), findsOneWidget);
+    expect(find.text('Ödemek İstediğiniz Tutar'), findsOneWidget);
+    expect(find.text('Tutar Giriniz (₺)'), findsOneWidget);
     expect(find.text('Ödeme Yöntemini Seçin'), findsOneWidget);
     expect(find.text('Kredi Kartı'), findsOneWidget);
     expect(find.text('Sanal IBAN'), findsOneWidget);
     expect(find.textContaining('3D Secure ile'), findsOneWidget);
+
+    // Enter a custom surplus payment amount in the free text field
+    final amountInput = find.widgetWithText(TextField, 'Tutar Giriniz (₺)');
+    expect(amountInput, findsOneWidget);
+    await tester.enterText(amountInput, '2000.00');
+    await tester.pumpAndSettle();
+
+    // Verify dynamic calculation banner displays surplus going to Avans Bakiye
+    expect(find.textContaining('avans bakiyenize (Avans Bakiye) aktarılacak'), findsOneWidget);
+    expect(find.textContaining('3D Secure ile ₺2000.00 Öde'), findsOneWidget);
 
     // Switch payment method to Sanal IBAN inside dialog
     final ibanMethodBtn = find.descendant(
@@ -123,10 +136,11 @@ void main() {
     await tester.tap(ibanMethodBtn);
     await tester.pumpAndSettle();
 
-    // Verify Virtual IBAN details and instructions are shown
+    // Verify Virtual IBAN details and instructions are shown with updated amount
     expect(find.text('Dairenize Tanımlı Sanal IBAN'), findsOneWidget);
     expect(find.text('TR12 0006 2000 0000 0000 0014'), findsOneWidget);
     expect(find.text('Kopyala'), findsOneWidget);
+    expect(find.text('₺2000.00'), findsOneWidget);
 
     // Dismiss screen using Papara-style chevron return arrow
     final backBtn = find.byIcon(Icons.arrow_back_ios_new_rounded);
@@ -168,6 +182,70 @@ void main() {
     // Verify issue report dialog opened
     expect(find.text('Yönetime Talep & Arıza'), findsOneWidget);
     expect(find.text('Talebi Gönder'), findsOneWidget);
+  });
+
+  testWidgets('Tapping Dekontlar action button opens receipts dialog aligned with account transactions and allows opening receipt detail', (WidgetTester tester) async {
+    final controller = DashboardController(startAuthenticated: true);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Verify Dekontlar button exists in ResidentActionsRow
+    final dekontlarBtn = find.text('Dekontlar');
+    expect(dekontlarBtn, findsOneWidget);
+    await tester.tap(dekontlarBtn);
+    await tester.pumpAndSettle();
+
+    // Verify receipts dialog title and that it displays credit transactions from accountTransactions
+    expect(find.text('Ödeme Makbuzları & Dekontlar'), findsOneWidget);
+    final firstCreditTx = controller.accountTransactions.firstWhere((t) => t.isCredit);
+    expect(find.text(firstCreditTx.title), findsWidgets);
+    expect(find.text(firstCreditTx.amountStr), findsWidgets);
+
+    // Tap on a receipt item to view official receipt details
+    final viewBtn = find.text('Görüntüle').first;
+    await tester.tap(viewBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ödeme Dekontu Detayı'), findsOneWidget);
+    expect(find.text('TAHSİLAT MAKBUZU'), findsOneWidget);
+    expect(find.text('ONAYLANDI'), findsOneWidget);
+
+    // Close detail dialog
+    await tester.tap(find.text('Kapat'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('Tapping Hesap Özeti button when debt is zero and advance is present opens dynamic account balance summary dialog', (WidgetTester tester) async {
+    final controller = DashboardController(startAuthenticated: true);
+    // Pay off debt and load advance
+    controller.recordHomeownerPayment(
+      block: 'A',
+      unitNo: 14,
+      amount: Decimal.parse('2000.00'),
+    );
+
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Verify Avans Yükle and Hesap Özeti buttons appear
+    expect(find.text('Avans Yükle'), findsOneWidget);
+    final hesapOzetiBtn = find.text('Hesap Özeti');
+    expect(hesapOzetiBtn, findsOneWidget);
+
+    // Tap Hesap Özeti
+    await tester.tap(hesapOzetiBtn);
+    await tester.pumpAndSettle();
+
+    // Verify dynamic account and advance balance dialog is rendered
+    expect(find.text('Hesap & Bakiye Özeti'), findsOneWidget);
+    expect(find.text('Borç Durumu: Güncel'), findsOneWidget);
+    expect(find.text('Mevcut Avans Bakiyesi (Alacak)'), findsOneWidget);
+    expect(find.textContaining('Avans bakiyeniz, gelecek aylarda yeni aidatlar tahakkuk ettiğinde'), findsOneWidget);
+    expect(find.text('DÖNEMSEL AİDAT DURUMU'), findsOneWidget);
+
+    // Close dialog
+    await tester.tap(find.text('Kapat'));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('SitePulseApp switches to Site Manager view and displays collection cockpit', (WidgetTester tester) async {

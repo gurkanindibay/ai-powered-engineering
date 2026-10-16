@@ -1223,6 +1223,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           : (result as FlatPaymentStatus);
       final bool sendMsg = (result is ManualAssignmentResult) ? result.sendOptionalMessage : false;
       final String? msgText = (result is ManualAssignmentResult) ? result.optionalMessageText : null;
+      final bool rememberIban = (result is ManualAssignmentResult) ? result.rememberSenderIban : true;
 
       widget.controller.manuallyAssignFlatToTransaction(
         matchId: item.matchId,
@@ -1230,10 +1231,11 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
         unitNo: selectedFlat.unitNo,
       );
 
-      // Confirm reconciliation with optional message to host
+      // Confirm reconciliation with optional message to host and remember sender IBAN preference
       widget.controller.confirmReconciliation(
         [item.matchId],
         optionalHostMessage: sendMsg ? msgText : null,
+        rememberSenderIban: rememberIban,
       );
 
       setState(() {

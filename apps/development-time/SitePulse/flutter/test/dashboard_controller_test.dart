@@ -214,5 +214,114 @@ void main() {
       expect(secondTx.isCredit, isTrue);
       expect(secondTx.amountStr.startsWith('+₺'), isTrue);
     });
+
+    test('when recordHomeownerPayment with exact debt amount, clears debt and marks flat as paid', () {
+      // Unit A-14 initial debt is 1423.33
+      final initialTxCount = controller.accountTransactions.length;
+      final flatBefore = controller.flatsList.firstWhere((f) => f.block == 'A' && f.unitNo == 14);
+      expect(flatBefore.isPaid, isFalse);
+      expect(flatBefore.amountDue, Decimal.parse('1423.33'));
+
+      controller.recordHomeownerPayment(
+        block: 'A',
+        unitNo: 14,
+        amount: Decimal.parse('1423.33'),
+        paymentMethod: 'CREDIT_CARD',
+      );
+
+      final flatAfter = controller.flatsList.firstWhere((f) => f.block == 'A' && f.unitNo == 14);
+      expect(flatAfter.isPaid, isTrue);
+      expect(flatAfter.daysOverdue, 0);
+      expect(controller.activeUnit.advancePayment, isNull);
+      expect(controller.accountTransactions.length, initialTxCount + 1);
+      expect(controller.accountTransactions.first.title, 'Kart ile Aidat Ödemesi');
+      expect(controller.accountTransactions.first.subtitle, contains('Aidat borcu başarıyla kapatıldı'));
+    });
+
+    test('when recordHomeownerPayment with surplus, clears debt and credits surplus to advance payment', () {
+      // Unit A-14 initial debt is 1423.33, pay 2000.00 -> surplus 576.67
+      controller.recordHomeownerPayment(
+        block: 'A',
+        unitNo: 14,
+        amount: Decimal.parse('2000.00'),
+        paymentMethod: 'CREDIT_CARD',
+      );
+
+      final flatAfter = controller.flatsList.firstWhere((f) => f.block == 'A' && f.unitNo == 14);
+      expect(flatAfter.isPaid, isTrue);
+      expect(controller.activeUnit.advancePayment, Decimal.parse('576.67'));
+      expect(controller.accountTransactions.first.title, 'Kart ile Aidat Ödemesi');
+      expect(controller.accountTransactions.first.subtitle, contains('₺1423.33 borç kapatıldı • ₺576.67 avans bakiyenize aktarıldı'));
+    });
+
+    test('when recordHomeownerPayment on unit with zero debt, credits entire amount to advance payment', () {
+      // First pay the debt in full
+      controller.recordHomeownerPayment(
+        block: 'A',
+        unitNo: 14,
+        amount: Decimal.parse('1423.33'),
+      );
+      expect(controller.activeUnit.advancePayment, isNull);
+
+      // Now send an additional payment of 500.00 when debt is 0
+      controller.recordHomeownerPayment(
+        block: 'A',
+        unitNo: 14,
+        amount: Decimal.parse('500.00'),
+      );
+
+      expect(controller.activeUnit.advancePayment, Decimal.parse('500.00'));
+      expect(controller.accountTransactions.first.title, 'Kart ile Avans Yükleme');
+      expect(controller.accountTransactions.first.subtitle, contains('Aktif borç bulunmuyor • Avans bakiyenize aktarıldı'));
+    });
+
+    test('when recordHomeownerPayment with partial amount, reduces debt without advance credit', () {
+      // Unit A-14 initial debt is 1423.33, pay 500.00 -> remaining debt 923.33
+      controller.recordHomeownerPayment(
+        block: 'A',
+        unitNo: 14,
+        amount: Decimal.parse('500.00'),
+      );
+
+      final flatAfter = controller.flatsList.firstWhere((f) => f.block == 'A' && f.unitNo == 14);
+      expect(flatAfter.isPaid, isFalse);
+      expect(flatAfter.amountDue, Decimal.parse('923.33'));
+      expect(controller.activeUnit.advancePayment, isNull);
+    });
+
+    test('when confirmReconciliation with payment surplus, credits surplus to advance payment', () {
+      // Statement for A Blok D:14 with 2000.00 (debt is 1423.33)
+      const line = 'HAVALE - AHMET YILMAZ A BLOK D:14 - ₺2.000,00';
+      controller.parseBankStatement(line);
+
+      final match = controller.reconciliationQueue.first;
+      expect(match.matchedBlock, 'A');
+      expect(match.matchedUnitNumber, 14);
+
+      controller.confirmReconciliation([match.matchId]);
+
+      final flatAfter = controller.flatsList.firstWhere((f) => f.block == 'A' && f.unitNo == 14);
+      expect(flatAfter.isPaid, isTrue);
+      // Surplus: 2000.00 - 1423.33 = 576.67
+      expect(controller.activeUnit.advancePayment, Decimal.parse('576.67'));
+    });
+
+    test('when confirmReconciliation for flat with no debt, credits full payment to advance payment', () {
+      // First clear debt
+      controller.recordHomeownerPayment(
+        block: 'A',
+        unitNo: 14,
+        amount: Decimal.parse('1423.33'),
+      );
+
+      // Now reconcile a bank statement line of 750.00
+      const line = 'HAVALE - AHMET YILMAZ A BLOK D:14 - ₺750,00';
+      controller.parseBankStatement(line);
+
+      final match = controller.reconciliationQueue.first;
+      controller.confirmReconciliation([match.matchId]);
+
+      expect(controller.activeUnit.advancePayment, Decimal.parse('750.00'));
+    });
   });
 }

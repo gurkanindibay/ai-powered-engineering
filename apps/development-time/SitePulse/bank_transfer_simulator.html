@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Banka & FAST Para Transferi Simülatörü — SitePulse Test Portalı</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-body: #0A0B0E;
+      --bg-card: #12141A;
+      --bg-card-subtle: #181B24;
+      --bg-input: #1C202B;
+      --border: #262B38;
+      --border-focus: #00D2B4;
+      --primary: #00D2B4;
+      --primary-hover: #00BFA2;
+      --text-main: #F3F4F6;
+      --text-muted: #9CA3AF;
+      --accent-green: #10B981;
+      --accent-red: #EF4444;
+      --accent-orange: #F59E0B;
+      --accent-blue: #3B82F6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--bg-body);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 28px 20px 60px;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* Top Notice Banner */
+    .test-banner {
+      background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(0, 210, 180, 0.15));
+      border: 1px solid rgba(0, 210, 180, 0.3);
+      border-radius: 14px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .test-banner-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .badge-standalone {
+      background: var(--primary);
+      color: #0A0B0E;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .test-banner-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .test-banner-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 28px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-left h1 {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-left p {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    .bank-selector-capsule {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-main);
+    }
+
+    .bank-logo-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+    }
+
+    /* Two Columns Layout */
+    .grid-layout {
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 860px) {
+      .grid-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Transfer Mode Tabs */
+    .transfer-tabs {
+      display: flex;
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 4px;
+      margin-bottom: 20px;
+      gap: 4px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 10px 12px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: #0A0B0E;
+      font-weight: 700;
+      box-shadow: 0 2px 8px rgba(0, 210, 180, 0.3);
+    }
+
+    /* Form Fields */
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-input, .form-select {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .input-hint {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 5px;
+      line-height: 1.4;
+    }
+
+    .input-hint strong {
+      color: var(--primary);
+    }
+
+    /* Quick Chips */
+    .quick-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .chip-btn {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .chip-btn:hover {
+      background: var(--border);
+      border-color: var(--primary);
+    }
+
+    /* Submit Button */
+    .btn-submit {
+      width: 100%;
+      background: var(--primary);
+      color: #0A0B0E;
+      border: none;
+      border-radius: 14px;
+      padding: 15px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 15px rgba(0, 210, 180, 0.25);
+    }
+
+    .btn-submit:hover:not(:disabled) {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-submit:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Live Resident Balance Box */
+    .resident-status-card {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .resident-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 12.5px;
+    }
+
+    .resident-row:last-child {
+      border-bottom: none;
+    }
+
+    .resident-val {
+      font-weight: 700;
+    }
+
+    .resident-val.green {
+      color: var(--accent-green);
+    }
+
+    .resident-val.red {
+      color: var(--accent-red);
+    }
+
+    /* Result / Receipt Box */
+    .result-container {
+      margin-top: 20px;
+      display: none;
+    }
+
+    .receipt-card {
+      background: linear-gradient(180deg, #161A23 0%, #10131A 100%);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      position: relative;
+    }
+
+    .receipt-card.success {
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .receipt-card.warning {
+      border-color: rgba(245, 158, 11, 0.4);
+    }
+
+    .receipt-card.error {
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .receipt-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px dashed var(--border);
+    }
+
+    .receipt-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .receipt-badge.success {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-green);
+    }
+
+    .receipt-badge.warning {
+      background: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+    }
+
+    .receipt-badge.error {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--accent-red);
+    }
+
+    .receipt-field {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12.5px;
+      padding: 5px 0;
+    }
+
+    .receipt-field-label {
+      color: var(--text-muted);
+    }
+
+    .receipt-field-val {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    /* History Table */
+    .history-card {
+      margin-top: 28px;
+    }
+
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+      margin-top: 12px;
+    }
+
+    .history-table th {
+      text-align: left;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .history-table td {
+      padding: 12px 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .tag-method {
+      display: inline-block;
+      padding: 3px 7px;
+      border-radius: 6px;
+      font-size: 10.5px;
+      font-weight: 700;
+    }
+
+    .tag-viban {
+      background: rgba(0, 210, 180, 0.15);
+      color: var(--primary);
+    }
+
+    .tag-regular {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent-blue);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Top Notice -->
+    <div class="test-banner">
+      <div class="test-banner-content">
+        <span class="badge-standalone">Uygulama Dışı Test Sayfası</span>
+        <div>
+          <div class="test-banner-title">SitePulse Bağımsız Bankacılık & FAST / EFT / Havale Simülatörü</div>
+          <div class="test-banner-sub">Bu sayfa SitePulse uygulamasının bir parçası değildir; harici internet bankacılığı transferlerini ve anlık FAST webhook çağrılarını test etmek için geliştirilmiş test arayüzüdür.</div>
+        </div>
+      </div>
+      <div>
+        <a href="http://localhost:9090" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 12px; font-weight: 700; background: rgba(0, 210, 180, 0.12); padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(0, 210, 180, 0.3);">SitePulse'ı Aç ↗</a>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <header>
+      <div class="header-left">
+        <h1><span>🏦</span> İnternet Bankacılığı FAST / Havale Gönder</h1>
+        <p>Sanal IBAN (Virtual IBAN) veya Standart Site IBAN'ı ile para transferi simülasyonu yapın.</p>
+      </div>
+      <div class="bank-selector-capsule">
+        <div class="bank-logo-dot"></div>
+        <span><strong>Kuveyt Türk</strong> FAST / EFT Gateway (Port 8080)</span>
+      </div>
+    </header>
+
+    <div class="grid-layout">
+      <!-- Left Column: Transfer Form -->
+      <div class="card">
+        <div class="card-title">
+          <span>Para Transferi Bilgileri</span>
+          <span style="font-size: 11.5px; color: var(--text-muted); font-weight: normal;">FAST 7/24 Anlık Takas</span>
+        </div>
+
+        <!-- Mode Tabs -->
+        <div class="transfer-tabs">
+          <button type="button" class="tab-btn active" id="tab-viban" onclick="switchMethod('VIBAN')">
+            <span>🔷</span> Daireye Özel Sanal IBAN
+          </button>
+          <button type="button" class="tab-btn" id="tab-regular" onclick="switchMethod('REGULAR')">
+            <span>🏛️</span> Site Yönetimi Genel IBAN'ı
+          </button>
+        </div>
+
+        <form id="transfer-form" onsubmit="executeBankTransfer(event)">
+          <!-- Recipient IBAN -->
+          <div class="form-group">
+            <label class="form-label" id="label-recipient-iban">Alıcı Sanal IBAN (A Blok D:14)</label>
+            <input type="text" id="recipient-iban" class="form-input font-mono" value="TR41 0020 5042 1399 1067 0000 14" required>
+            <div class="input-hint" id="hint-recipient-iban">
+              <strong>Sanal IBAN Prensibi:</strong> Bu IBAN yalnızca A Blok D:14 nolu daireye tahsis edilmiştir. Açıklama yazmasanız bile banka webhook'u işlemi %100 güvenle ilgili daireyle eşleştirir.
+            </div>
+          </div>
+
+          <!-- Recipient Name -->
+          <div class="form-group">
+            <label class="form-label">Alıcı Hesap Ünvanı</label>
+            <input type="text" id="recipient-name" class="form-input" value="Begonya Sitesi - A Blok D:14 Sanal Hesabı" readonly style="opacity: 0.8;">
+          </div>
+
+          <!-- Sender Info -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Gönderen Adı Soyadı</label>
+              <input type="text" id="sender-name" class="form-input" value="Ahmet Yılmaz" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Gönderen IBAN</label>
+              <input type="text" id="sender-iban" class="form-input font-mono" value="TR12 0006 2000 0000 0000 0001">
+            </div>
+          </div>
+
+          <!-- Amount -->
+          <div class="form-group">
+            <label class="form-label">Transfer Tutarı (TL)</label>
+            <input type="number" step="0.01" min="1" id="transfer-amount" class="form-input font-mono" style="font-size: 18px; font-weight: 700; color: var(--primary);" value="1400.00" required>
+            <div class="quick-chips">
+              <button type="button" class="chip-btn" onclick="setAmount('500.00')">₺500</button>
+              <button type="button" class="chip-btn" onclick="setAmount('1000.00')">₺1.000</button>
+              <button type="button" class="chip-btn" onclick="setAmount('1400.00')">₺1.400</button>
+              <button type="button" class="chip-btn" onclick="setAmount('3000.00')">₺3.000</button>
+              <button type="button" class="chip-btn" onclick="setAmount('5000.00')">₺5.000</button>
+            </div>
+          </div>
+
+          <!-- Description / Narrative -->
+          <div class="form-group">
+            <label class="form-label">Açıklama (Transfer Açıklaması)</label>
+            <input type="text" id="transfer-desc" class="form-input" value="Ekim 2026 Aidat FAST Ödemesi">
+            <div class="quick-chips" style="margin-top: 6px;">
+              <button type="button" class="chip-btn" onclick="setDesc('A Blok D:14 Ekim 2026 Aidatı')">A Blok D:14 Ekim Aidatı</button>
+              <button type="button" class="chip-btn" onclick="setDesc('A Blok D:14 Avans Ödemesi')">A Blok D:14 Avans</button>
+              <button type="button" class="chip-btn" onclick="setDesc('')">Açıklama Boş (Sanal IBAN / Hatırlanan IBAN Testi)</button>
+            </div>
+            <div class="input-hint" id="hint-desc">
+              Sanal IBAN veya Yönetici tarafından kalıcı eşleştirilmiş (Hatırlanan) Gönderici IBAN kullanıldığında açıklama boş olsa bile sistem ödemeyi daireyle otomatik eşleştirir.
+            </div>
+          </div>
+
+          <button type="submit" class="btn-submit" id="submit-btn">
+            <span>⚡</span> FAST Transferini Gerçekleştir
+          </button>
+        </form>
+      </div>
+
+      <!-- Right Column: Live Resident Status & Digital Receipt -->
+      <div>
+        <!-- Live Status Card -->
+        <div class="card">
+          <div class="card-title">
+            <span>Canlı Daire Durumu (A Blok D:14)</span>
+            <button type="button" class="chip-btn" onclick="fetchLiveResidentStatus()" style="font-size: 11px;">🔄 Yenile</button>
+          </div>
+
+          <div class="resident-status-card">
+            <div class="resident-row">
+              <span class="receipt-field-label">Daire:</span>
+              <span class="resident-val" id="live-unit-name">A Blok D:14 • Begonya Sitesi</span>
+            </div>
+            <div class="resident-row">
+              <span class="receipt-field-label">Kat Maliki:</span>
+              <span class="resident-val">Ahmet Yılmaz</span>
+            </div>
+            <div class="resident-row">
+              <span class="receipt-field-label">Ödenecek Aidat Borcu:</span>
+              <span class="resident-val red" id="live-total-debt">Yükleniyor...</span>
+            </div>
+            <div class="resident-row">
+              <span class="receipt-field-label">Avans Bakiyesi (Alacak):</span>
+              <span class="resident-val green" id="live-advance-balance">Yükleniyor...</span>
+            </div>
+            <div class="resident-row">
+              <span class="receipt-field-label">Tahsisli Sanal IBAN:</span>
+              <span class="resident-val font-mono" style="font-size: 11px;" id="live-virtual-iban">Yükleniyor...</span>
+            </div>
+          </div>
+
+          <div style="font-size: 11.5px; color: var(--text-muted); line-height: 1.4;">
+            💡 <em>Bu panel doğrudan Rust Backend API'sinden (<code>GET /api/v1/residents/d-14/dashboard</code>) anlık verileri çeker. Transferi yaptıktan sonra bakiyeniz otomatik olarak güncellenir.</em>
+          </div>
+
+          <!-- Transaction Result Receipt -->
+          <div class="result-container" id="result-container">
+            <div class="receipt-card success" id="receipt-card">
+              <div class="receipt-header">
+                <div>
+                  <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">BANKA İŞLEM RAPORU</div>
+                  <div style="font-size: 14px; font-weight: 800; color: var(--text-main);" id="receipt-title">FAST TRANSFERİ ONAYLANDI</div>
+                </div>
+                <div class="receipt-badge success" id="receipt-badge">
+                  <span>✓</span> <span id="receipt-status-text">BAŞARILI</span>
+                </div>
+              </div>
+
+              <div class="receipt-field">
+                <span class="receipt-field-label">İşlem ID (Txn ID):</span>
+                <span class="receipt-field-val font-mono" id="res-txn-id">-</span>
+              </div>
+              <div class="receipt-field">
+                <span class="receipt-field-label">Dekont Referans No:</span>
+                <span class="receipt-field-val font-mono" id="res-receipt-id">-</span>
+              </div>
+              <div class="receipt-field">
+                <span class="receipt-field-label">Eşleşen Daire:</span>
+                <span class="receipt-field-val" id="res-matched-unit">-</span>
+              </div>
+              <div class="receipt-field">
+                <span class="receipt-field-label">Kapatılan Aidat Borcu:</span>
+                <span class="receipt-field-val" id="res-cleared-amount">-</span>
+              </div>
+              <div class="receipt-field">
+                <span class="receipt-field-label">Avans Bakiyesine Aktarılan:</span>
+                <span class="receipt-field-val green" id="res-advance-amount">-</span>
+              </div>
+              <div class="receipt-field">
+                <span class="receipt-field-label">Güncel Avans Bakiyesi:</span>
+                <span class="receipt-field-val green" id="res-total-advance">-</span>
+              </div>
+
+              <div style="margin-top: 12px; padding: 10px; background: rgba(0, 0, 0, 0.2); border-radius: 8px; font-size: 11.5px; color: var(--text-muted);" id="res-message">
+                -
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- History Card -->
+    <div class="card history-card">
+      <div class="card-title">
+        <span>Bu Test Sayfasından Gönderilen Son Transferler</span>
+        <button type="button" class="chip-btn" onclick="clearLocalHistory()">Geçmişi Temizle</button>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Zaman</th>
+              <th>Yöntem</th>
+              <th>Alıcı IBAN</th>
+              <th>Açıklama</th>
+              <th>Tutar</th>
+              <th>Durum</th>
+              <th>Sonuç / Avans</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <tr>
+              <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 24px;">Henüz bu oturumda bir test transferi yapılmadı.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const BACKEND_URL = 'http://localhost:8080';
+    let currentMethod = 'VIBAN';
+    const localHistory = [];
+
+    // Predefined IBANs
+    const VIRTUAL_IBAN = 'TR41 0020 5042 1399 1067 0000 14';
+    const REGULAR_IBAN = 'TR62 0020 5000 0986 3791 6000 01';
+
+    function switchMethod(method) {
+      currentMethod = method;
+      const tabViban = document.getElementById('tab-viban');
+      const tabRegular = document.getElementById('tab-regular');
+      const recipientIban = document.getElementById('recipient-iban');
+      const recipientName = document.getElementById('recipient-name');
+      const labelIban = document.getElementById('label-recipient-iban');
+      const hintIban = document.getElementById('hint-recipient-iban');
+      const descInput = document.getElementById('transfer-desc');
+
+      if (method === 'VIBAN') {
+        tabViban.classList.add('active');
+        tabRegular.classList.remove('active');
+        labelIban.innerText = 'Alıcı Sanal IBAN (A Blok D:14)';
+        recipientIban.value = VIRTUAL_IBAN;
+        recipientName.value = 'Begonya Sitesi - A Blok D:14 Sanal Hesabı';
+        hintIban.innerHTML = '<strong>Sanal IBAN Prensibi:</strong> Bu IBAN doğrudan A Blok D:14 dairesine aittir. Açıklamaya gerek kalmadan %100 doğrulukla sisteme işlenir.';
+        if (!descInput.value || descInput.value.includes('Site Ana Hesabı')) {
+          descInput.value = 'Ekim 2026 Aidat FAST Ödemesi';
+        }
+      } else {
+        tabRegular.classList.add('active');
+        tabViban.classList.remove('active');
+        labelIban.innerText = 'Alıcı Standart Site IBAN\'ı (Site Yönetim Hesabı)';
+        recipientIban.value = REGULAR_IBAN;
+        recipientName.value = 'Begonya Sitesi Yönetimi (Kuveyt Türk)';
+        hintIban.innerHTML = '<strong>Genel IBAN Prensibi:</strong> Tüm site sakinleri aynı genel IBAN\'a ödeme yapar. Eşleştirmenin sağlanması için açıklamaya mutlaka <strong>A Blok D:14</strong> yazılmalıdır.';
+        descInput.value = 'A Blok D:14 Ekim 2026 Aidatı';
+      }
+    }
+
+    function setAmount(val) {
+      document.getElementById('transfer-amount').value = val;
+    }
+
+    function setDesc(val) {
+      document.getElementById('transfer-desc').value = val;
+    }
+
+    async function fetchLiveResidentStatus() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/residents/d-14/dashboard?site_id=site-1`);
+        if (!res.ok) throw new Error('Backend HTTP ' + res.status);
+        const data = await res.json();
+
+        const debt = parseFloat(data.total_debt || '0');
+        const advance = parseFloat(data.advance_payment || '0');
+
+        document.getElementById('live-total-debt').innerText = debt > 0 ? `₺${debt.toFixed(2)}` : '₺0,00 (Borç Yok)';
+        document.getElementById('live-total-debt').className = debt > 0 ? 'resident-val red' : 'resident-val green';
+
+        document.getElementById('live-advance-balance').innerText = advance > 0 ? `+₺${advance.toFixed(2)}` : '₺0,00';
+        document.getElementById('live-virtual-iban').innerText = data.virtual_iban || VIRTUAL_IBAN;
+      } catch (err) {
+        console.error('fetchLiveResidentStatus error:', err);
+        document.getElementById('live-total-debt').innerText = 'Bağlantı Hatası';
+        document.getElementById('live-advance-balance').innerText = 'Bağlantı Hatası';
+      }
+    }
+
+    async function executeBankTransfer(e) {
+      e.preventDefault();
+      const submitBtn = document.getElementById('submit-btn');
+      const resultContainer = document.getElementById('result-container');
+      const receiptCard = document.getElementById('receipt-card');
+
+      const iban = document.getElementById('recipient-iban').value.trim();
+      const amount = parseFloat(document.getElementById('transfer-amount').value || '0');
+      const senderName = document.getElementById('sender-name').value.trim();
+      const senderIban = document.getElementById('sender-iban').value.trim();
+      const desc = document.getElementById('transfer-desc').value.trim();
+
+      if (amount <= 0) {
+        alert('Lütfen geçerli bir transfer tutarı giriniz.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>⏳</span> FAST Ağına İletiliyor...';
+
+      const txnId = 'TXN-BANK-SIM-' + Math.floor(10000000 + Math.random() * 90000000);
+
+      const payload = {
+        transaction_id: txnId,
+        virtual_iban: iban,
+        amount: amount.toFixed(2),
+        currency: 'TRY',
+        sender_name: senderName,
+        sender_iban: senderIban,
+        description: desc || (currentMethod === 'VIBAN' ? 'Sanal IBAN FAST Transferi' : 'Site Yönetimi Transferi'),
+        signature: 'HMAC_SHA256_TEST_SIMULATOR'
+      };
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/v1/bank/webhook/incoming-transfer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        resultContainer.style.display = 'block';
+
+        if (response.ok) {
+          if (data.status === 'UNMATCHED') {
+            receiptCard.className = 'receipt-card warning';
+            document.getElementById('receipt-title').innerText = 'FAST TRANSFERİ BAŞARILI (EŞLEŞTİRME BEKLİYOR)';
+            document.getElementById('receipt-badge').className = 'receipt-badge warning';
+            document.getElementById('receipt-status-text').innerText = 'EŞLEŞMEYEN HAVUZUNDA (UNMATCHED)';
+
+            document.getElementById('res-txn-id').innerText = data.transaction_id || txnId;
+            document.getElementById('res-receipt-id').innerText = data.receipt_id || 'DKN-' + txnId;
+            document.getElementById('res-matched-unit').innerText = 'Eşleşen Daire Yok (Yönetici Eşleştirmesi Bekleniyor)';
+            document.getElementById('res-cleared-amount').innerText = '₺0,00';
+            document.getElementById('res-advance-amount').innerText = '₺0,00';
+            document.getElementById('res-total-advance').innerText = '-';
+            document.getElementById('res-message').innerText = data.message || 'Transfer site banka hesabına ulaştı. Açıklamada daire tespit edilemediği için SitePulse Aidat Yönetimi > Eşleşmeyenler Havuzuna eklendi.';
+
+            // Log history
+            addHistoryRecord({
+              date: new Date().toLocaleTimeString(),
+              method: currentMethod,
+              iban: iban,
+              desc: desc || '-',
+              amount: `₺${amount.toFixed(2)}`,
+              status: 'EŞLEŞTİRME BEKLİYOR',
+              result: 'Site bankasına ulaştı, Eşleşmeyen Havuzuna aktarıldı'
+            });
+          } else {
+            receiptCard.className = 'receipt-card success';
+            document.getElementById('receipt-title').innerText = 'FAST TRANSFERİ BAŞARIYLA GERÇEKLEŞTİ';
+            document.getElementById('receipt-badge').className = 'receipt-badge success';
+            document.getElementById('receipt-status-text').innerText = data.status || 'ONAYLANDI';
+
+            document.getElementById('res-txn-id').innerText = data.transaction_id || txnId;
+            document.getElementById('res-receipt-id').innerText = data.receipt_id || 'DKN-' + txnId;
+            document.getElementById('res-matched-unit').innerText = `${data.matched_block} Blok D:${data.matched_unit_number} (${data.matched_unit_id})`;
+            document.getElementById('res-cleared-amount').innerText = `₺${parseFloat(data.cleared_amount || '0').toFixed(2)}`;
+            document.getElementById('res-advance-amount').innerText = `+₺${(amount - parseFloat(data.cleared_amount || '0')).toFixed(2)}`;
+            document.getElementById('res-total-advance').innerText = `+₺${parseFloat(data.advance_payment || '0').toFixed(2)}`;
+            document.getElementById('res-message').innerText = data.message || 'Transfer başarıyla işlendi ve hesap bakiyesine yansıtıldı.';
+
+            // Log history
+            addHistoryRecord({
+              date: new Date().toLocaleTimeString(),
+              method: currentMethod,
+              iban: iban,
+              desc: desc || '-',
+              amount: `₺${amount.toFixed(2)}`,
+              status: 'BAŞARILI',
+              result: `₺${parseFloat(data.cleared_amount || '0').toFixed(2)} borç kapandı, ₺${parseFloat(data.advance_payment || '0').toFixed(2)} güncel avans`
+            });
+          }
+
+          // Refresh live status
+          await fetchLiveResidentStatus();
+        } else {
+          receiptCard.className = 'receipt-card error';
+          document.getElementById('receipt-title').innerText = 'TRANSFER EŞLEŞTİRİLEMEDİ';
+          document.getElementById('receipt-badge').className = 'receipt-badge error';
+          document.getElementById('receipt-status-text').innerText = 'HATA (' + response.status + ')';
+
+          document.getElementById('res-txn-id').innerText = txnId;
+          document.getElementById('res-receipt-id').innerText = '-';
+          document.getElementById('res-matched-unit').innerText = 'Eşleşen Daire Yok';
+          document.getElementById('res-cleared-amount').innerText = '₺0,00';
+          document.getElementById('res-advance-amount').innerText = '₺0,00';
+          document.getElementById('res-total-advance').innerText = '-';
+          document.getElementById('res-message').innerText = typeof data === 'string' ? data : (data.message || 'Transfer daire ile eşleştirilemedi. Lütfen açıklamada blok ve daire belirtin.');
+
+          addHistoryRecord({
+            date: new Date().toLocaleTimeString(),
+            method: currentMethod,
+            iban: iban,
+            desc: desc || '-',
+            amount: `₺${amount.toFixed(2)}`,
+            status: 'HATA',
+            result: typeof data === 'string' ? data : (data.message || 'Eşleştirilemedi')
+          });
+        }
+      } catch (err) {
+        console.error('Transfer execution error:', err);
+        resultContainer.style.display = 'block';
+        receiptCard.className = 'receipt-card error';
+        document.getElementById('receipt-title').innerText = 'BAĞLANTI HATASI';
+        document.getElementById('receipt-badge').className = 'receipt-badge error';
+        document.getElementById('receipt-status-text').innerText = 'BAĞLANAMADI';
+        document.getElementById('res-message').innerText = 'Rust Backend (http://localhost:8080) ile iletişim kurulamadı. Sunucunun çalıştığından emin olun.';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>⚡</span> FAST Transferini Gerçekleştir';
+      }
+    }
+
+    function addHistoryRecord(record) {
+      localHistory.unshift(record);
+      renderHistory();
+    }
+
+    function clearLocalHistory() {
+      localHistory.length = 0;
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const tbody = document.getElementById('history-tbody');
+      if (localHistory.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 24px;">Henüz bu oturumda bir test transferi yapılmadı.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = localHistory.map(item => `
+        <tr>
+          <td style="color: var(--text-muted); font-size: 11.5px;">${item.date}</td>
+          <td><span class="tag-method ${item.method === 'VIBAN' ? 'tag-viban' : 'tag-regular'}">${item.method === 'VIBAN' ? 'Sanal IBAN' : 'Genel IBAN'}</span></td>
+          <td class="font-mono" style="font-size: 11px;">${item.iban}</td>
+          <td>${item.desc}</td>
+          <td class="font-mono" style="font-weight: 700; color: var(--text-main);">${item.amount}</td>
+          <td><span style="color: ${item.status === 'BAŞARILI' ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: 700;">${item.status}</span></td>
+          <td style="font-size: 11.5px; color: var(--text-muted);">${item.result}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchLiveResidentStatus();
+    });
+  </script>
+</body>
+</html>

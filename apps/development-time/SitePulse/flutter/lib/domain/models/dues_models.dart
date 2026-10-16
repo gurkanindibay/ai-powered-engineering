@@ -445,6 +445,7 @@ class BankStatementParsedItem {
   final String currency;
   final String description;
   final String? senderName;
+  final String? senderIban;
   final String? referenceNo;
 
   const BankStatementParsedItem({
@@ -454,6 +455,7 @@ class BankStatementParsedItem {
     required this.currency,
     required this.description,
     this.senderName,
+    this.senderIban,
     this.referenceNo,
   });
 
@@ -465,7 +467,30 @@ class BankStatementParsedItem {
       currency: json['currency'] ?? 'TRY',
       description: json['description'] ?? '',
       senderName: json['sender_name'],
+      senderIban: json['sender_iban'],
       referenceNo: json['reference_no'],
+    );
+  }
+
+  BankStatementParsedItem copyWith({
+    String? transactionId,
+    DateTime? date,
+    Decimal? amount,
+    String? currency,
+    String? description,
+    String? senderName,
+    String? senderIban,
+    String? referenceNo,
+  }) {
+    return BankStatementParsedItem(
+      transactionId: transactionId ?? this.transactionId,
+      date: date ?? this.date,
+      amount: amount ?? this.amount,
+      currency: currency ?? this.currency,
+      description: description ?? this.description,
+      senderName: senderName ?? this.senderName,
+      senderIban: senderIban ?? this.senderIban,
+      referenceNo: referenceNo ?? this.referenceNo,
     );
   }
 }
@@ -669,11 +694,13 @@ class ManualAssignmentResult {
   final FlatPaymentStatus flat;
   final bool sendOptionalMessage;
   final String? optionalMessageText;
+  final bool rememberSenderIban;
 
   const ManualAssignmentResult({
     required this.flat,
     this.sendOptionalMessage = false,
     this.optionalMessageText,
+    this.rememberSenderIban = true,
   });
 }
 

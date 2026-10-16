@@ -698,6 +698,8 @@ pub struct ConfirmReconciliationRequest {
     pub match_ids: Vec<String>,
     #[serde(default)]
     pub optional_message: Option<String>,
+    #[serde(default)]
+    pub remember_sender_iban: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -710,6 +712,25 @@ pub struct ConfirmReconciliationResponse {
     pub message_sent: bool,
     #[serde(default)]
     pub notification_summary: Option<String>,
+    #[serde(default)]
+    pub remembered_ibans_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RememberSenderIbanRequest {
+    pub site_id: String,
+    pub unit_id: String,
+    pub sender_iban: String,
+    #[serde(default)]
+    pub sender_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RememberSenderIbanResponse {
+    pub success: bool,
+    pub unit_id: String,
+    pub sender_iban: String,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -742,5 +763,85 @@ pub struct BankIncomingWebhookResponse {
     #[serde(default)]
     pub advance_payment: Decimal,
     pub receipt_id: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PaymentMatchStatus {
+    Pending,
+    MatchedDebt,
+    MatchedAdvance,
+    PartiallyMatched,
+}
+
+impl PaymentMatchStatus {
+    #[allow(dead_code)]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PaymentMatchStatus::Pending => "PENDING",
+            PaymentMatchStatus::MatchedDebt => "MATCHED_DEBT",
+            PaymentMatchStatus::MatchedAdvance => "MATCHED_ADVANCE",
+            PaymentMatchStatus::PartiallyMatched => "PARTIALLY_MATCHED",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HomeownerPaymentRecord {
+    pub id: String,
+    pub unit_id: String,
+    pub block_id: String,
+    pub unit_number: i32,
+    pub homeowner_name: Option<String>,
+    pub amount: Decimal,
+    pub payment_method: String, // 'CREDIT_CARD', 'BANK_TRANSFER', 'FAST', 'CASH'
+    pub reference_code: Option<String>,
+    pub note: Option<String>,
+    pub status: PaymentMatchStatus,
+    pub cleared_debt_amount: Decimal,
+    pub advance_credit_amount: Decimal,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordHomeownerPaymentRequest {
+    pub unit_id: String,
+    pub amount: Decimal,
+    pub payment_method: String,
+    #[serde(default)]
+    pub reference_code: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+    #[serde(default)]
+    pub homeowner_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordHomeownerPaymentResponse {
+    pub payment_id: String,
+    pub unit_id: String,
+    pub amount: Decimal,
+    pub cleared_debt_amount: Decimal,
+    pub advance_payment_amount: Decimal,
+    pub remaining_debt: Decimal,
+    pub total_unit_advance_balance: Decimal,
+    pub status: PaymentMatchStatus,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchAllPaymentsRequest {
+    #[serde(default)]
+    pub site_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchAllPaymentsResponse {
+    pub total_payments_processed: usize,
+    pub total_debt_cleared: Decimal,
+    pub total_advance_credited: Decimal,
+    pub matched_debts_count: usize,
+    pub matched_advance_count: usize,
     pub message: String,
 }

@@ -133,7 +133,7 @@
         "task-07"
       ],
       "spec_ref": "SPEC-003",
-      "description": "Provision ISO 7064 MOD-97-10 validated Virtual IBANs (Kuveyt Türk Sandbox) and real-time incoming transfer webhook settlement with HMAC signature and idempotency guard."
+      "description": "Provision ISO 7064 MOD-97-10 validated Virtual IBANs (Kuveyt T\u00fcrk Sandbox) and real-time incoming transfer webhook settlement with HMAC signature and idempotency guard."
     },
     {
       "id": "task-13",
