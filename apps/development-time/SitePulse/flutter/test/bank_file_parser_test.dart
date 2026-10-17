@@ -3,6 +3,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/services/bank_file_parser.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
+import 'test_fixtures.dart';
 
 void main() {
   group('Real Bank Statement Ingestion Tests (Kuveyt Turk & Is Bankasi)', () {
@@ -10,6 +11,7 @@ void main() {
 
     setUp(() {
       controller = DashboardController(startAuthenticated: true);
+      controller.loadTestFixtures();
     });
 
     test('parses Kuveyt Turk XLSX and matches resident flats with high confidence', () {

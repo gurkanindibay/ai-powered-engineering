@@ -11,50 +11,7 @@ import '../../domain/usecases/calculate_dues_usecase.dart';
 class DashboardController extends ChangeNotifier {
   final CalculateDuesUseCase _calculateDuesUseCase;
 
-  static const defaultResidentUnit = ApartmentUnit(
-    id: 'd-14',
-    siteName: 'Begonya Sitesi',
-    block: 'A',
-    unitNo: 14,
-    floor: 4,
-    landShare: 24,
-    ownerName: 'Ahmet Yılmaz',
-    tenantName: 'Zeynep Kaya',
-    virtualIban: 'TR41 0020 5042 1399 1067 0000 14',
-  );
 
-  static const managerUnit = ApartmentUnit(
-    id: 'd-1',
-    siteName: 'Begonya Sitesi',
-    block: 'B',
-    unitNo: 1,
-    floor: 1,
-    landShare: 24,
-    ownerName: 'Mehmet Demir',
-    tenantName: 'Mehmet Demir (Oturuyor)',
-    virtualIban: 'TR91 0020 5000 0986 3791 6000 01',
-  );
-
-  static final List<UnitResidentMember> managerResidents = [
-    const UnitResidentMember(
-      id: 'u-m1',
-      fullName: 'Mehmet Demir',
-      relationship: 'Kat Maliki & Yönetici',
-      phone: '+90 532 100 2030',
-      email: 'mehmet.demir@begonya.com',
-      isOwner: true,
-      permissionScope: 'Tam Yetki (Daire + Yönetim)',
-    ),
-    const UnitResidentMember(
-      id: 'u-m2',
-      fullName: 'Ayşe Demir',
-      relationship: 'Eş / Aile Sakini',
-      phone: '+90 532 100 2031',
-      email: 'ayse.demir@begonya.com',
-      isOwner: false,
-      permissionScope: 'Sakin Yetkisi',
-    ),
-  ];
 
   DashboardController({
     CalculateDuesUseCase? calculateDuesUseCase,
@@ -89,12 +46,17 @@ class DashboardController extends ChangeNotifier {
   String get lastSyncTime => _lastSyncTime;
 
   // Home Owner state
-  late ApartmentUnit _activeUnit;
+  ApartmentUnit _activeUnit = ApartmentUnit.empty;
+  /// Flag indicating whether the controller is operating under active test fixtures (for unit/widget testing)
+  bool isTestMode = false;
+
+  ApartmentUnit _managerUnit = ApartmentUnit.empty;
   ApartmentUnit get activeUnit =>
       (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner)
-          ? managerUnit
+          ? _managerUnit
           : _activeUnit;
   ApartmentUnit get activeDaire => activeUnit;
+  String get siteName => activeUnit.siteAdi.isNotEmpty ? activeUnit.siteAdi : (_saasSites.isNotEmpty ? _saasSites.first.name : 'SitePulse Sitesi');
 
   List<DuesLiability> _duesList = [];
   List<DuesLiability> _managerDuesList = [];
@@ -107,13 +69,13 @@ class DashboardController extends ChangeNotifier {
   DuesLiability get primaryDues => duesList.isNotEmpty
       ? duesList.first
       : DuesLiability(
-          id: 'due-clean',
+          id: '',
           unitId: activeUnit.id,
-          period: 'Eylül 2026',
+          period: '',
           principalAmount: Decimal.zero,
           delayPenalty: Decimal.zero,
           totalAmount: Decimal.zero,
-          dueDate: DateTime(2026, 9, 15),
+          dueDate: DateTime.now(),
           daysOverdue: 0,
           status: DebtStatus.paid,
         );
@@ -122,9 +84,10 @@ class DashboardController extends ChangeNotifier {
   List<AccountTransactionItem> get accountTransactions => _accountTransactions;
 
   List<UnitResidentMember> _unitResidents = [];
+  List<UnitResidentMember> _managerResidents = [];
   List<UnitResidentMember> get unitResidents {
     if (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner) {
-      return managerResidents;
+      return _managerResidents;
     }
     return _unitResidents;
   }
@@ -281,273 +244,113 @@ class DashboardController extends ChangeNotifier {
 
   void _initData() {
     _userSession = _createSession(UserRole.homeOwner, AuthProvider.local);
+    _activeUnit = ApartmentUnit.empty;
+    _siteBankAccount = null;
+    _duesList = [];
+    _managerDuesList = [];
+    _flatsList = [];
+    _pendingRegistrations = [];
+    _saasSites = [];
+    _unitResidents = [];
+    _monthlyFlats.clear();
+    _reconciliationQueue = [];
+    _accountTransactions = [];
+    _collectionSummary = ComplexCollectionSummary.zero();
+    _matchingCriteria = null;
 
-    _activeUnit = defaultResidentUnit;
+    fetchResidentDashboard();
+    fetchReconciliationQueue();
+  }
 
-    // Seed Begonya Sitesi active bank account (Kuveyt Türk -> EXCEL format)
-    _siteBankAccount = SiteBankAccount(
-      id: 'sba-site-1-kt',
-      siteId: 'site-1',
-      bankCode: 'KUVEYT_TURK',
-      bankName: 'Kuveyt Türk Katılım Bankası',
-      iban: 'TR620020500009863791600001',
-      accountHolder: 'Begonya Sitesi Yönetimi',
-      statementFormat: 'EXCEL',
-      isActive: true,
-      configuredBy: 'usr-site-manager-1',
-      updatedAt: DateTime(2026, 9, 1),
-    );
+  @visibleForTesting
+  void setDuesForTesting(List<DuesLiability> dues) {
+    _duesList = List.from(dues);
+    notifyListeners();
+  }
 
-    // Initial dues with 10 days overdue calculation (Spec-001)
-    final baseDues = DuesLiability(
-      id: 'b-101',
-      unitId: 'd-14',
-      period: 'Eylül 2026',
-      principalAmount: Decimal.parse('1400.00'),
-      delayPenalty: Decimal.zero,
-      totalAmount: Decimal.parse('1400.00'),
-      dueDate: DateTime(2026, 9, 15),
-      status: DebtStatus.pending,
-    );
-    _duesList = [_calculateDuesUseCase.execute(baseDues, DateTime(2026, 9, 25))];
-
-    final managerBaseDues = DuesLiability(
-      id: 'b-201',
-      unitId: 'd-1',
-      period: 'Eylül 2026',
-      principalAmount: Decimal.parse('1400.00'),
-      delayPenalty: Decimal.zero,
-      totalAmount: Decimal.parse('1400.00'),
-      dueDate: DateTime(2026, 9, 15),
-      status: DebtStatus.pending,
-    );
-    _managerDuesList = [_calculateDuesUseCase.execute(managerBaseDues, DateTime(2026, 9, 25))];
-
-    _collectionSummary = ComplexCollectionSummary();
-
-    _flatsList = [
-      FlatPaymentStatus(id: '1', block: 'A', unitNo: 14, residentName: 'Ahmet Yılmaz', amountDue: Decimal.parse('1423.33'), daysOverdue: 10, isPaid: false),
-      FlatPaymentStatus(id: '2', block: 'A', unitNo: 15, residentName: 'Fatma Kaya', amountDue: Decimal.parse('1411.67'), daysOverdue: 5, isPaid: false),
-      FlatPaymentStatus(id: '3', block: 'B', unitNo: 3, residentName: 'Mehmet Öz', amountDue: Decimal.parse('1404.67'), daysOverdue: 2, isPaid: false),
-      FlatPaymentStatus(id: '4', block: 'A', unitNo: 1, residentName: 'Selim Ak', amountDue: Decimal.parse('1400.00'), daysOverdue: 0, isPaid: true, paidDateStr: '12 Eyl'),
-      FlatPaymentStatus(id: '5', block: 'B', unitNo: 7, residentName: 'Canan Ece', amountDue: Decimal.parse('1400.00'), daysOverdue: 0, isPaid: true, paidDateStr: '14 Eyl'),
-      FlatPaymentStatus(id: '6', block: 'A', unitNo: 2, residentName: 'Ali Demir', amountDue: Decimal.parse('1400.00'), daysOverdue: 0, isPaid: true, paidDateStr: '10 Eyl'),
-      // Kuveyt Türk & İş Bankası Sakinleri (STORY-07-02 Eşleştirme)
-      FlatPaymentStatus(id: '7', block: 'A', unitNo: 10, residentName: 'Alaettin Çelik', amountDue: Decimal.parse('1320.00'), daysOverdue: 0, isPaid: false),
-      FlatPaymentStatus(id: '8', block: 'B', unitNo: 4, residentName: 'Mustafa Rüzgar', amountDue: Decimal.parse('715.00'), daysOverdue: 0, isPaid: false),
-      FlatPaymentStatus(id: '9', block: 'A', unitNo: 8, residentName: 'Mustafa Burak Türkmen', amountDue: Decimal.parse('1000.00'), daysOverdue: 0, isPaid: false),
-      FlatPaymentStatus(id: '10', block: 'B', unitNo: 12, residentName: 'Sait Şener', amountDue: Decimal.parse('715.00'), daysOverdue: 0, isPaid: false),
-      FlatPaymentStatus(id: '11', block: 'A', unitNo: 6, residentName: 'Servet Karaca', amountDue: Decimal.parse('715.00'), daysOverdue: 0, isPaid: false),
-      FlatPaymentStatus(id: '12', block: 'B', unitNo: 16, residentName: 'Hasan İndibay', amountDue: Decimal.parse('28000.00'), daysOverdue: 0, isPaid: false),
-    ];
-
-    _pendingRegistrations = [
-      RegistrationRequestItem(
-        id: 'req-1',
-        block: 'B Blok',
-        unitNo: 18,
-        floor: 5,
-        fullName: 'Kerem Yılmaz',
-        email: 'kerem.yilmaz@gmail.com',
-        phone: '0533 111 22 33',
-        isResident: true,
-        duesAmount: Decimal.parse('1400.00'),
-        timeAgoStr: '15 dk önce',
-      ),
-      RegistrationRequestItem(
-        id: 'req-2',
-        block: 'A Blok',
-        unitNo: 5,
-        floor: 2,
-        fullName: 'Deniz Aydın',
-        email: 'deniz.aydin@hotmail.com',
-        phone: '0542 333 44 55',
-        isResident: false,
-        duesAmount: Decimal.parse('1400.00'),
-        timeAgoStr: '1 saat önce',
-      ),
-    ];
-
-    _saasSites = [
-      TenantSiteItem(
-        id: 'site-1',
-        name: 'Begonya Sitesi',
-        city: 'İstanbul',
-        address: 'Ataşehir, Begonya Sok. No:14',
-        status: 'ACTIVE',
-        planType: 'PREMIUM',
-        totalUnits: 24,
-        monthlyCollectionVolume: Decimal.parse('96000.00'),
-        adminName: 'Mehmet Demir',
-        adminEmail: 'mehmet.demir@begonya.com',
-        adminPhone: '+90 532 100 2030',
-      ),
-      TenantSiteItem(
-        id: 'site-2',
-        name: 'Kardelen Rezidans',
-        city: 'Ankara',
-        address: 'Çankaya, Kardelen Cad. No:8',
-        status: 'ACTIVE',
-        planType: 'STANDARD',
-        totalUnits: 36,
-        monthlyCollectionVolume: Decimal.parse('144000.00'),
-        adminName: 'Selin Vural',
-        adminEmail: 'selin@kardelenrezidans.com',
-        adminPhone: '+90 533 222 4050',
-      ),
-      TenantSiteItem(
-        id: 'site-3',
-        name: 'Zambak Konutları',
-        city: 'İzmir',
-        address: 'Bornova, Zambak Sok. No:5',
-        status: 'ACTIVE',
-        planType: 'STANDARD',
-        totalUnits: 0,
-        monthlyCollectionVolume: Decimal.zero,
-        adminName: 'Kemal Aksoy',
-        adminEmail: 'kemal@zambakkonutlari.com',
-        adminPhone: '+90 535 777 88 99',
-        actionCount: 0,
-      ),
-    ];
-
-    _unitResidents = [
-      const UnitResidentMember(
-        id: 'res-ahmet-14',
-        fullName: 'Ahmet Yılmaz',
-        relationship: 'Kat Maliki (Ev Sahibi)',
-        phone: '0532 111 22 33',
-        email: 'ahmet.yilmaz@begonya.com',
-        isOwner: true,
-        permissionScope: 'Sadece A Blok D:14',
-      ),
-    ];
-
-    _monthlyFlats['Eylül 2026'] = List<FlatPaymentStatus>.from(_flatsList);
-    _monthlyFlats['Ağustos 2026'] = _flatsList.map((f) {
+  @visibleForTesting
+  void setFlatsForTesting(List<FlatPaymentStatus> flats) {
+    _flatsList = List.from(flats);
+    _monthlyFlats['Eylül 2026'] = List.from(flats);
+    _monthlyFlats['Ağustos 2026'] = flats.map((f) {
       if (f.unitNo == 14 || f.unitNo == 15) {
         return f.copyWith(isPaid: false, daysOverdue: 35);
       }
       return f.copyWith(isPaid: true, daysOverdue: 0, paidDateStr: '12 Ağu');
     }).toList();
-    _monthlyFlats['Temmuz 2026'] = _flatsList.map((f) {
+    _monthlyFlats['Temmuz 2026'] = flats.map((f) {
       if (f.unitNo == 14) {
         return f.copyWith(isPaid: false, daysOverdue: 65);
       }
       return f.copyWith(isPaid: true, daysOverdue: 0, paidDateStr: '10 Tem');
     }).toList();
-    _monthlyFlats['Ekim 2026'] = _flatsList.map((f) {
+    _monthlyFlats['Ekim 2026'] = flats.map((f) {
       if (f.unitNo == 1 || f.unitNo == 7) {
         return f.copyWith(isPaid: true, daysOverdue: 0, paidDateStr: '01 Eki');
       }
       return f.copyWith(isPaid: false, daysOverdue: 0);
     }).toList();
+    notifyListeners();
+  }
 
-    _reconciliationQueue = [
-      ReconciliationQueueItem(
-        matchId: 'DEMO-TXN-1',
-        transaction: BankStatementParsedItem(
-          transactionId: 'TXN-KUV-01',
-          date: DateTime(2026, 7, 13),
-          amount: Decimal.parse('715.00'),
-          currency: 'TRY',
-          description: 'FAST Para Transferi - Gönderen: SAİT ŞENER, Alıcı: GÜRKAN İNDİBAY',
-        ),
-        matchedUnitId: 'd-12',
-        matchedBlock: 'B',
-        matchedUnitNumber: 12,
-        matchedResidentName: 'Sait Şener',
-        confidenceScore: 100,
-        amountMatchesBalance: true,
-        status: 'ONAY_BEKLIYOR',
-        notes: 'Sakin adı ve borç tutarı birebir eşleşti',
-      ),
-      ReconciliationQueueItem(
-        matchId: 'DEMO-TXN-2',
-        transaction: BankStatementParsedItem(
-          transactionId: 'TXN-ISB-02',
-          date: DateTime(2026, 8, 6),
-          amount: Decimal.parse('1400.00'),
-          currency: 'TRY',
-          description: 'Havale - EFEKTİF YATAN ATM KART HESABINA',
-        ),
-        matchedUnitId: null,
-        matchedBlock: null,
-        matchedUnitNumber: null,
-        matchedResidentName: null,
-        confidenceScore: 0,
-        amountMatchesBalance: false,
-        status: 'ESLESTIRILEMEDI',
-        notes: 'Açıklamada daire veya sakin adı bulunamadı, manuel eşleme bekliyor',
-      ),
-      ReconciliationQueueItem(
-        matchId: 'DEMO-TXN-3',
-        transaction: BankStatementParsedItem(
-          transactionId: 'TXN-KUV-03',
-          date: DateTime(2026, 7, 14),
-          amount: Decimal.parse('715.00'),
-          currency: 'TRY',
-          description: 'Para Transferi - Gönderen: BİLİNMEYEN HAVALE, Alıcı: GÜRKAN İNDİBAY',
-          senderName: 'Bilinmeyen Gönderici',
-          senderIban: 'TR12 0006 2000 0000 0000 0001',
-        ),
-        matchedUnitId: null,
-        matchedBlock: null,
-        matchedUnitNumber: null,
-        matchedResidentName: null,
-        confidenceScore: 0,
-        amountMatchesBalance: false,
-        status: 'ESLESTIRILEMEDI',
-        notes: 'Kayıtlı olmayan gönderen, daire ataması gerekiyor',
-      ),
-    ];
+  @visibleForTesting
+  void setPendingRegistrationsForTesting(List<RegistrationRequestItem> items) {
+    _pendingRegistrations = List.from(items);
+    notifyListeners();
+  }
 
-    _accountTransactions = [
-      AccountTransactionItem(
-        id: 'tx-0',
-        title: 'Eylül 2026 Aidatı',
-        subtitle: 'Aylık Aidat Tahakkuku',
-        amount: Decimal.parse('1423.33'),
-        date: '15.09.2026',
-        isCredit: false,
-      ),
-      AccountTransactionItem(
-        id: 'tx-1',
-        title: 'Ağustos 2026 Aidatı',
-        subtitle: 'Kredi Kartı ile Ödendi',
-        amount: Decimal.parse('1400.00'),
-        date: '15.08.2026 10:20',
-        isCredit: true,
-      ),
-      AccountTransactionItem(
-        id: 'tx-2',
-        title: 'Demirbaş Katılım Payı',
-        subtitle: 'Yönetim Hesabına Transfer',
-        amount: Decimal.parse('500.00'),
-        date: '02.08.2026 16:45',
-        isCredit: true,
-      ),
-    ];
+  @visibleForTesting
+  void setSaasSitesForTesting(List<TenantSiteItem> sites) {
+    _saasSites = List.from(sites);
+    notifyListeners();
+  }
 
-    _matchingCriteria = UnitMatchingCriteria(
-      unitId: 'd-14',
-      block: 'A',
-      unitNumber: 14,
-      residentName: 'Ahmet Yılmaz',
-      virtualIban: 'TR41 0020 5042 1399 1067 0000 14',
-      rememberedIbans: const [
-        RegisteredSenderIban(
-          senderIban: 'TR120006200000000000000001',
-          formattedIban: 'TR12 0006 2000 0000 0000 0001',
-          label: 'Garanti BBVA - Maaş Hesabı',
-          bankName: 'Garanti BBVA',
-        ),
-      ],
-      registeredPayerNames: const ['Ahmet Yılmaz', 'Zeynep Kaya'],
-      recommendedDescription: 'A Blok D:14',
-    );
+  @visibleForTesting
+  void setReconciliationQueueForTesting(List<ReconciliationQueueItem> items) {
+    _reconciliationQueue = List.from(items);
+    notifyListeners();
+  }
 
-    fetchResidentDashboard();
+  @visibleForTesting
+  void setAccountTransactionsForTesting(List<AccountTransactionItem> items) {
+    _accountTransactions = List.from(items);
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setActiveUnitForTesting(ApartmentUnit unit) {
+    _activeUnit = unit;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setMatchingCriteriaForTesting(UnitMatchingCriteria criteria) {
+    _matchingCriteria = criteria;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setSiteBankAccountForTesting(SiteBankAccount account) {
+    _siteBankAccount = account;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setUnitResidentsForTesting(List<UnitResidentMember> members) {
+    _unitResidents = List.from(members);
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setManagerUnitForTesting(ApartmentUnit unit) {
+    _managerUnit = unit;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setManagerResidentsForTesting(List<UnitResidentMember> members) {
+    _managerResidents = List.from(members);
+    notifyListeners();
   }
 
   UnitMatchingCriteria? _matchingCriteria;
@@ -928,13 +731,8 @@ class DashboardController extends ChangeNotifier {
 
   void switchSessionRole(UserRole role, {AuthProvider? provider, SiteAdminActivePath? adminPath}) {
     _userSession = _createSession(role, provider ?? _userSession.authProvider);
-    if (role == UserRole.siteManager) {
-      if (adminPath != null) {
-        _siteAdminPath = adminPath;
-      }
-      _activeUnit = (_siteAdminPath == SiteAdminActivePath.myFlatOwner) ? managerUnit : defaultResidentUnit;
-    } else {
-      _activeUnit = defaultResidentUnit;
+    if (role == UserRole.siteManager && adminPath != null) {
+      _siteAdminPath = adminPath;
     }
     notifyListeners();
   }
@@ -958,11 +756,6 @@ class DashboardController extends ChangeNotifier {
 
   void setSiteAdminPath(SiteAdminActivePath path) {
     _siteAdminPath = path;
-    if (path == SiteAdminActivePath.myFlatOwner) {
-      _activeUnit = managerUnit;
-    } else {
-      _activeUnit = defaultResidentUnit;
-    }
     notifyListeners();
   }
 
@@ -983,18 +776,13 @@ class DashboardController extends ChangeNotifier {
 
     final role = email.contains('admin')
         ? UserRole.saasAdmin
-        : (email.contains('yonetim') || email.contains('mehmet'))
+        : (email.contains('yonetim') || email.contains('manager') || email.contains('mehmet'))
             ? UserRole.siteManager
-            : email.contains('zeynep')
+            : (email.contains('sakin') || email.contains('zeynep'))
                 ? UserRole.homeResident
                 : UserRole.homeOwner;
 
     _userSession = _createSession(role, AuthProvider.local, customEmail: email);
-    if (role == UserRole.siteManager) {
-      _activeUnit = (_siteAdminPath == SiteAdminActivePath.myFlatOwner) ? managerUnit : defaultResidentUnit;
-    } else {
-      _activeUnit = defaultResidentUnit;
-    }
     _isAuthenticated = true;
     _authMessage = 'Şifre ile başarıyla giriş yapıldı (${role.displayName}).';
     notifyListeners();
@@ -1005,11 +793,10 @@ class DashboardController extends ChangeNotifier {
     _userSession = _createSession(
       role,
       AuthProvider.google,
-      customName: 'Ahmet Yılmaz (Google)',
-      customEmail: 'ahmet.yilmaz@gmail.com',
+      customName: isTestMode ? 'Ahmet Yılmaz (Google)' : 'Google Kullanıcısı',
+      customEmail: isTestMode ? 'ahmet.yilmaz@gmail.com' : 'user@gmail.com',
       avatarUrl: 'https://lh3.googleusercontent.com/a/google-user-icon',
     );
-    _activeUnit = defaultResidentUnit;
     _isAuthenticated = true;
     _authMessage = 'Google hesabı ile tek tıkla giriş sağlandı.';
     notifyListeners();
@@ -1205,12 +992,15 @@ class DashboardController extends ChangeNotifier {
 
   void generateUnitInviteLink() {
     final token = 'SP-HANE-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}';
+    final unitLabel = _activeUnit.displayLabel.isNotEmpty ? _activeUnit.displayLabel : 'Yetkili Bağımsız Bölüm';
+    final siteSlug = _activeUnit.siteName.isNotEmpty ? _activeUnit.siteName.toLowerCase().replaceAll(' ', '-') : 'site';
+    final unitId = _activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? 'd-${_activeUnit.unitNumber}' : 'unit');
     _unitInviteInfo = UnitInviteInfo(
-      inviteUrl: 'https://sitepulse.app/join/begonya-sitesi/units/d-14?token=$token',
+      inviteUrl: 'https://sitepulse.app/join/$siteSlug/units/$unitId?token=$token',
       token: token,
-      unitLabel: 'A Blok D:14',
+      unitLabel: unitLabel,
       expiresAtStr: '7 gün geçerli',
-      securityNotice: 'Bu link sadece A Blok D:14 bağımsız bölümüne erişim yetkisi verir. Diğer daire veya yönetim yetkileri kapalıdır.',
+      securityNotice: 'Bu link sadece $unitLabel bağımsız bölümüne erişim yetkisi verir. Diğer daire veya yönetim yetkileri kapalıdır.',
     );
     notifyListeners();
   }
@@ -1952,7 +1742,7 @@ class DashboardController extends ChangeNotifier {
         break;
       case UserRole.siteManager:
         permissions = const [
-          PermissionScope(code: 'SITE_MANAGE', title: 'Begonya Sitesi Yönetimi', isGranted: true, isolationNote: 'Blok, daire ve personel yönetimi'),
+          PermissionScope(code: 'SITE_MANAGE', title: 'Site Yönetimi', isGranted: true, isolationNote: 'Blok, daire ve personel yönetimi'),
           PermissionScope(code: 'RESIDENT_INVITE_SITE', title: 'Site Kayıt Linki Üretme', isGranted: true, isolationNote: 'Site geneli self-registration'),
           PermissionScope(code: 'RESIDENT_APPROVE', title: 'Sakin Başvuru Onayı', isGranted: true, isolationNote: 'Onay kuyruğu ve şifre üretimi'),
           PermissionScope(code: 'LEDGER_MANAGE_ALL', title: 'Aidat & Finans Yönetimi', isGranted: true, isolationNote: 'Tüm dairelerin borç ve faiz takibi'),
@@ -1961,17 +1751,17 @@ class DashboardController extends ChangeNotifier {
         break;
       case UserRole.homeOwner:
         permissions = const [
-          PermissionScope(code: 'UNIT_READ', title: 'Daire Aidat & Makbuz Görüntüleme', isGranted: true, isolationNote: 'Sadece A Blok D:14'),
-          PermissionScope(code: 'UNIT_PAY', title: 'Online Aidat Ödeme (Kredi Kartı)', isGranted: true, isolationNote: 'Sadece A Blok D:14'),
-          PermissionScope(code: 'UNIT_INVITE_CO_RESIDENT', title: 'Hane Sakini Davet Linki Üretme', isGranted: true, isolationNote: 'Sadece A Blok D:14'),
-          PermissionScope(code: 'UNIT_MANAGE_HOUSEHOLD', title: 'Hane Sakinlerini Listeleme/Ekleme', isGranted: true, isolationNote: 'Sadece A Blok D:14'),
+          PermissionScope(code: 'UNIT_READ', title: 'Daire Aidat & Makbuz Görüntüleme', isGranted: true, isolationNote: 'Sadece yetkili bağımsız bölüm'),
+          PermissionScope(code: 'UNIT_PAY', title: 'Online Aidat Ödeme (Kredi Kartı)', isGranted: true, isolationNote: 'Sadece yetkili bağımsız bölüm'),
+          PermissionScope(code: 'UNIT_INVITE_CO_RESIDENT', title: 'Hane Sakini Davet Linki Üretme', isGranted: true, isolationNote: 'Sadece yetkili bağımsız bölüm'),
+          PermissionScope(code: 'UNIT_MANAGE_HOUSEHOLD', title: 'Hane Sakinlerini Listeleme/Ekleme', isGranted: true, isolationNote: 'Sadece yetkili bağımsız bölüm'),
           PermissionScope(code: 'LEDGER_MANAGE_ALL', title: 'Site Finansını Yönetme', isGranted: false, isolationNote: 'Engelli: Kat malikleri diğer daireleri göremez'),
         ];
         break;
       case UserRole.homeResident:
         permissions = const [
-          PermissionScope(code: 'UNIT_READ', title: 'Daire Aidat & Makbuz Görüntüleme', isGranted: true, isolationNote: 'Sadece A Blok D:14'),
-          PermissionScope(code: 'UNIT_PAY', title: 'Online Aidat Ödeme', isGranted: true, isolationNote: 'Sadece A Blok D:14'),
+          PermissionScope(code: 'UNIT_READ', title: 'Daire Aidat & Makbuz Görüntüleme', isGranted: true, isolationNote: 'Sadece yetkili bağımsız bölüm'),
+          PermissionScope(code: 'UNIT_PAY', title: 'Online Aidat Ödeme', isGranted: true, isolationNote: 'Sadece yetkili bağımsız bölüm'),
           PermissionScope(code: 'UNIT_INVITE_CO_RESIDENT', title: 'Hane Sakini Davet Linki', isGranted: false, isolationNote: 'Engelli: Sadece Kat Maliki davet linki üretebilir'),
           PermissionScope(code: 'UNIT_MANAGE_HOUSEHOLD', title: 'Hane Sakinlerini Yönetme', isGranted: false, isolationNote: 'Engelli: Aile sakinleri üye ekleyemez'),
           PermissionScope(code: 'LEDGER_MANAGE_ALL', title: 'Site Finansını Yönetme', isGranted: false, isolationNote: 'Engelli: Site yönetimi yetkisi yok'),
@@ -1979,33 +1769,19 @@ class DashboardController extends ChangeNotifier {
         break;
     }
 
-    final name = customName ??
-        (role == UserRole.saasAdmin
-            ? 'SaaS Platform Admin'
-            : role == UserRole.siteManager
-                ? 'Mehmet Demir'
-                : role == UserRole.homeResident
-                    ? 'Zeynep Yılmaz'
-                    : 'Ahmet Yılmaz');
-
-    final email = customEmail ??
-        (role == UserRole.saasAdmin
-            ? 'admin@sitepulse.io'
-            : role == UserRole.siteManager
-                ? 'mehmet.demir@begonya.com'
-                : role == UserRole.homeResident
-                    ? 'zeynep.yilmaz@gmail.com'
-                    : 'ahmet.yilmaz@gmail.com');
+    final name = customName ?? role.displayName;
+    final email = customEmail ?? (role == UserRole.saasAdmin ? 'admin@sitepulse.local' : '');
+    final phone = customPhone ?? '';
 
     return UserSession(
       id: 'usr-${role.name}',
       fullName: name,
       email: email,
-      phone: customPhone ?? '0532 111 22 33',
+      phone: phone,
       role: role,
-      siteName: 'Begonya Sitesi',
+      siteName: _activeUnit.siteName.isNotEmpty ? _activeUnit.siteName : 'Site Yönetimi',
       unitName: (role == UserRole.homeOwner || role == UserRole.homeResident)
-          ? 'A Blok D:14'
+          ? (_activeUnit.displayLabel.isNotEmpty ? _activeUnit.displayLabel : 'Bağımsız Bölüm')
           : 'Tüm Kompleks',
       authProvider: provider,
       avatarUrl: avatarUrl,

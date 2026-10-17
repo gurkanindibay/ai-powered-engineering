@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/auth_models.dart';
 import '../theme/app_theme.dart';
@@ -16,8 +17,22 @@ class _LoginScreenState extends State<LoginScreen> {
   SiteAdminActivePath _selectedAdminPath = SiteAdminActivePath.managerCockpit;
   bool _showManualLogin = false;
 
-  final _emailController = TextEditingController(text: 'mehmet.demir@begonya.com');
-  final _passwordController = TextEditingController(text: 'Password123');
+  bool get _shouldShowDemoPersonas => !kReleaseMode || widget.controller.isTestMode;
+
+  late final TextEditingController _emailController;
+  late final TextEditingController _passwordController;
+
+  @override
+  void initState() {
+    super.initState();
+    _showManualLogin = !_shouldShowDemoPersonas;
+    _emailController = TextEditingController(
+      text: _shouldShowDemoPersonas ? 'mehmet.demir@begonya.com' : '',
+    );
+    _passwordController = TextEditingController(
+      text: _shouldShowDemoPersonas ? 'Password123' : '',
+    );
+  }
 
   @override
   void dispose() {
@@ -117,9 +132,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: AppColors.accentCyan.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Text(
-                            'AI-Powered Engineering Demo',
-                            style: TextStyle(
+                          child: Text(
+                            _shouldShowDemoPersonas ? 'AI-Powered Engineering Demo' : 'SitePulse Portal',
+                            style: const TextStyle(
                               color: AppColors.accentCyan,
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -140,7 +155,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Test etmek istediğiniz kullanıcı rolünü seçerek doğrudan ilgili deneyim akışına (flow) giriş yapabilirsiniz.',
+                      _shouldShowDemoPersonas
+                          ? 'Test etmek istediğiniz kullanıcı rolünü seçerek doğrudan ilgili deneyim akışına (flow) giriş yapabilirsiniz.'
+                          : 'Site yönetim ve sakin portalına erişmek için lütfen kayıtlı e-posta adresiniz veya Google hesabınızla giriş yapınız.',
                       style: TextStyle(
                         color: AppColors.textSecondary(context),
                         fontSize: 13,
@@ -151,72 +168,74 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              const SizedBox(height: 24),
+              if (_shouldShowDemoPersonas) ...[
+                const SizedBox(height: 24),
 
-              // Title for Personas
-              Row(
-                children: [
-                  const Icon(Icons.badge_outlined, color: AppColors.accentCyan, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Test Kullanıcıları ile Hızlı Giriş',
-                    style: TextStyle(
-                      color: AppColors.textPrimary(context),
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                // Title for Personas
+                Row(
+                  children: [
+                    const Icon(Icons.badge_outlined, color: AppColors.accentCyan, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Test Kullanıcıları ile Hızlı Giriş',
+                      style: TextStyle(
+                        color: AppColors.textPrimary(context),
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
+                  ],
+                ),
+                const SizedBox(height: 12),
 
-              // 1. SaaS Platform Admin Card
-              _buildPersonaCard(
-                title: 'SaaS Platform Admin',
-                subtitle: 'Platform geneli tüm siteleri yönetme, yeni site açılışı ve geçici şifre yenileme',
-                name: 'SaaS Süper Yönetici',
-                email: 'admin@sitepulse.io',
-                badgeText: 'Platform Geneli',
-                badgeColor: AppColors.accentPurple,
-                icon: Icons.hub,
-                buttonText: 'SaaS Paneline Gir',
-                onLogin: () => widget.controller.loginAs(role: UserRole.saasAdmin),
-              ),
+                // 1. SaaS Platform Admin Card
+                _buildPersonaCard(
+                  title: 'SaaS Platform Admin',
+                  subtitle: 'Platform geneli tüm siteleri yönetme, yeni site açılışı ve geçici şifre yenileme',
+                  name: 'SaaS Süper Yönetici',
+                  email: 'admin@sitepulse.io',
+                  badgeText: 'Platform Geneli',
+                  badgeColor: AppColors.accentPurple,
+                  icon: Icons.hub,
+                  buttonText: 'SaaS Paneline Gir',
+                  onLogin: () => widget.controller.loginAs(role: UserRole.saasAdmin),
+                ),
 
-              const SizedBox(height: 14),
+                const SizedBox(height: 14),
 
-              // 2. Site Manager Card with Path Selector
-              _buildSiteManagerCard(),
+                // 2. Site Manager Card with Path Selector
+                _buildSiteManagerCard(),
 
-              const SizedBox(height: 14),
+                const SizedBox(height: 14),
 
-              // 3. Home Owner Card
-              _buildPersonaCard(
-                title: 'Kat Maliki (Ev Sahibi)',
-                subtitle: 'A Blok D:14 aidat ödemesi, sanal IBAN ile FAST, hane davet linki üretme',
-                name: 'Ahmet Yılmaz',
-                email: 'ahmet.yilmaz@begonya.com',
-                badgeText: 'A Blok D:14',
-                badgeColor: AppColors.accentGreen,
-                icon: Icons.home,
-                buttonText: 'Kat Maliki Olarak Gir',
-                onLogin: () => widget.controller.loginAs(role: UserRole.homeOwner),
-              ),
+                // 3. Home Owner Card
+                _buildPersonaCard(
+                  title: 'Kat Maliki (Ev Sahibi)',
+                  subtitle: 'A Blok D:14 aidat ödemesi, sanal IBAN ile FAST, hane davet linki üretme',
+                  name: 'Ahmet Yılmaz',
+                  email: 'ahmet.yilmaz@begonya.com',
+                  badgeText: 'A Blok D:14',
+                  badgeColor: AppColors.accentGreen,
+                  icon: Icons.home,
+                  buttonText: 'Kat Maliki Olarak Gir',
+                  onLogin: () => widget.controller.loginAs(role: UserRole.homeOwner),
+                ),
 
-              const SizedBox(height: 14),
+                const SizedBox(height: 14),
 
-              // 4. Home Resident Card
-              _buildPersonaCard(
-                title: 'Ev Sakini (Aile / Kiracı)',
-                subtitle: 'A Blok D:14 aidat görüntüleme ve kredi kartı ile ödeme (yönetim ve davet yetkileri kısıtlı)',
-                name: 'Zeynep Yılmaz',
-                email: 'zeynep.yilmaz@gmail.com',
-                badgeText: 'A Blok D:14 (Kısıtlı)',
-                badgeColor: AppColors.accentOrange,
-                icon: Icons.person_outline,
-                buttonText: 'Ev Sakini Olarak Gir',
-                onLogin: () => widget.controller.loginAs(role: UserRole.homeResident),
-              ),
+                // 4. Home Resident Card
+                _buildPersonaCard(
+                  title: 'Ev Sakini (Aile / Kiracı)',
+                  subtitle: 'A Blok D:14 aidat görüntüleme ve kredi kartı ile ödeme (yönetim ve davet yetkileri kısıtlı)',
+                  name: 'Zeynep Yılmaz',
+                  email: 'zeynep.yilmaz@gmail.com',
+                  badgeText: 'A Blok D:14 (Kısıtlı)',
+                  badgeColor: AppColors.accentOrange,
+                  icon: Icons.person_outline,
+                  buttonText: 'Ev Sakini Olarak Gir',
+                  onLogin: () => widget.controller.loginAs(role: UserRole.homeResident),
+                ),
+              ],
 
               const SizedBox(height: 24),
 
@@ -229,42 +248,43 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: Column(
                   children: [
-                    InkWell(
-                      onTap: () {
-                        setState(() {
-                          _showManualLogin = !_showManualLogin;
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(16),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.lock_open_rounded, size: 18, color: AppColors.accentCyan),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Standart Giriş (E-posta / Google)',
-                                  style: TextStyle(
-                                    color: AppColors.textPrimary(context),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
+                    if (_shouldShowDemoPersonas)
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _showManualLogin = !_showManualLogin;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.lock_open_rounded, size: 18, color: AppColors.accentCyan),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Standart Giriş (E-posta / Google)',
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary(context),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            Icon(
-                              _showManualLogin ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                              color: AppColors.textSecondary(context),
-                            ),
-                          ],
+                                ],
+                              ),
+                              Icon(
+                                _showManualLogin ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                color: AppColors.textSecondary(context),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    if (_showManualLogin) ...[
-                      const Divider(height: 1),
+                    if (_showManualLogin || !_shouldShowDemoPersonas) ...[
+                      if (_shouldShowDemoPersonas) const Divider(height: 1),
                       Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(

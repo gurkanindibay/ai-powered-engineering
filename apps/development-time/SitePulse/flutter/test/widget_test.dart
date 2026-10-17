@@ -5,10 +5,17 @@ import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/main.dart';
 import 'package:sitepulse/ui/components/payment_checkout_dialog.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
+import 'test_fixtures.dart';
+
+DashboardController _createTestController({bool startAuthenticated = false}) {
+  final controller = DashboardController(startAuthenticated: startAuthenticated);
+  controller.loadTestFixtures();
+  return controller;
+}
 
 void main() {
   testWidgets('SitePulseApp renders LoginScreen when unauthenticated and displays test personas', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: false);
+    final controller = _createTestController(startAuthenticated: false);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -23,7 +30,7 @@ void main() {
   });
 
   testWidgets('Selecting Site Admin shows dual path options and logging in as Kat Maliki enters own flat view', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: false);
+    final controller = _createTestController(startAuthenticated: false);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -63,7 +70,7 @@ void main() {
   });
 
   testWidgets('Logging in as Site Admin with Cockpit path displays complex collection cockpit', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: false);
+    final controller = _createTestController(startAuthenticated: false);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -78,12 +85,12 @@ void main() {
     expect(controller.isAuthenticated, isTrue);
     expect(controller.siteAdminPath, SiteAdminActivePath.managerCockpit);
     expect(find.text('Eylül 2026 Tahsilat Durumu'), findsOneWidget);
-    expect(find.text('%80 Tahsil Edildi'), findsOneWidget);
+    expect(find.text('₺0 Borç — Güncel'), findsOneWidget);
     expect(find.text('Onay Bekleyen Başvurular'), findsOneWidget);
   });
 
   testWidgets('SitePulseApp renders Home Owner dashboard cleanly without Virtual IBAN cluttering home screen', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: true);
+    final controller = _createTestController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -99,7 +106,7 @@ void main() {
   });
 
   testWidgets('Tapping Hemen Öde opens PaymentCheckoutDialog with method selection between Card and Virtual IBAN', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: true);
+    final controller = _createTestController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -152,7 +159,7 @@ void main() {
   });
 
   testWidgets('Tapping Duyurular and Talep / Arıza action buttons opens respective dialogs', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: true);
+    final controller = _createTestController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -185,7 +192,7 @@ void main() {
   });
 
   testWidgets('Tapping Dekontlar action button opens receipts dialog aligned with account transactions and allows opening receipt detail', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: true);
+    final controller = _createTestController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -216,7 +223,7 @@ void main() {
   });
 
   testWidgets('Tapping Hesap Özeti button when debt is zero and advance is present opens dynamic account balance summary dialog', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: true);
+    final controller = _createTestController(startAuthenticated: true);
     // Pay off debt and load advance
     controller.recordHomeownerPayment(
       block: 'A',
@@ -249,7 +256,7 @@ void main() {
   });
 
   testWidgets('SitePulseApp switches to Site Manager view and displays collection cockpit', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: true);
+    final controller = _createTestController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -259,13 +266,13 @@ void main() {
 
     expect(find.text('Site Yöneticisi'), findsWidgets);
     expect(find.text('Eylül 2026 Tahsilat Durumu'), findsOneWidget);
-    expect(find.text('%80 Tahsil Edildi'), findsOneWidget);
+    expect(find.text('₺0 Borç — Güncel'), findsOneWidget);
     expect(find.text('Onay Bekleyen Başvurular'), findsOneWidget);
     expect(find.text('Daire Aidat Takibi'), findsOneWidget);
   });
 
   testWidgets('SitePulseApp switches to SaaS SuperAdmin view and displays platform tenants', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: true);
+    final controller = _createTestController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -281,7 +288,7 @@ void main() {
   });
 
   testWidgets('SitePulseApp toggles theme mode between Dark and Light correctly', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: true);
+    final controller = _createTestController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -304,7 +311,7 @@ void main() {
   });
 
   testWidgets('SitePulseApp opens Yeni Site dialog, submits and closes popup cleanly', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: true);
+    final controller = _createTestController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -349,7 +356,7 @@ void main() {
   });
 
   testWidgets('SitePulseApp allows deleting an action-free site with confirmation dialog', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: true);
+    final controller = _createTestController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 
@@ -385,7 +392,7 @@ void main() {
   });
 
   testWidgets('SitePulseApp allows renewing temporary management password with confirmation dialog', (WidgetTester tester) async {
-    final controller = DashboardController(startAuthenticated: true);
+    final controller = _createTestController(startAuthenticated: true);
     await tester.pumpWidget(SitePulseApp(controller: controller));
     await tester.pumpAndSettle();
 

@@ -60,99 +60,153 @@ impl AppStateInner {
             kuveyt_turk_client_secret: std::env::var("KT_CLIENT_SECRET").ok(),
             auto_scheduler_enabled: false,
         };
-        inner.seed();
+        inner.seed_system_lookups();
+        if Self::should_seed_test_fixtures() {
+            inner.seed_test_fixtures();
+        }
         inner
     }
 
-    pub fn seed(&mut self) {
-        // Seed Begonya Sitesi
-        self.sites.push(Site {
-            id: "site-1".to_string(),
-            name: "Begonya Sitesi".to_string(),
-            address: "Ataşehir, Begonya Sok. No:14, İstanbul".to_string(),
-            slug: "begonya-sitesi".to_string(),
-            status: "ACTIVE".to_string(),
-            plan_type: "PREMIUM".to_string(),
-            license_end_date: NaiveDate::from_ymd_opt(2027, 9, 1).unwrap(),
-        });
+    /// Strictly verifies whether the backend is executing in a production environment
+    pub fn is_production() -> bool {
+        if let Ok(env) = std::env::var("APP_ENV").or_else(|_| std::env::var("ENVIRONMENT")) {
+            let lower = env.to_ascii_lowercase();
+            if lower == "production" || lower == "prod" || lower == "live" {
+                return true;
+            }
+        }
+        false
+    }
 
-        self.sites.push(Site {
-            id: "site-2".to_string(),
-            name: "Kardelen Rezidans".to_string(),
-            address: "Çankaya, Kardelen Cad. No:8, Ankara".to_string(),
-            slug: "kardelen-rezidans".to_string(),
-            status: "ACTIVE".to_string(),
-            plan_type: "STANDARD".to_string(),
-            license_end_date: NaiveDate::from_ymd_opt(2027, 10, 15).unwrap(),
-        });
+    /// Determines whether test fixtures should be seeded into memory
+    pub fn should_seed_test_fixtures() -> bool {
+        // Strict guard: NEVER seed test fixtures in production under any circumstances
+        if Self::is_production() {
+            return false;
+        }
+        // 1. Explicit environment variable
+        if let Ok(val) = std::env::var("SITEPULSE_SEED_TEST_DATA") {
+            return val == "true" || val == "1";
+        }
+        // 2. Active test runner detection (cargo test)
+        if let Ok(exe) = std::env::current_exe() {
+            let exe_str = exe.to_string_lossy();
+            if exe_str.contains("/deps/integration_tests")
+                || exe_str.contains("/deps/sitepulse_backend")
+                || exe_str.ends_with("test")
+            {
+                return true;
+            }
+        }
+        cfg!(test)
+    }
+
+    /// Essential system lookups and root administrator identity required for platform operation.
+    /// Production-safe: contains ZERO mock sites, ZERO flats, and ZERO debts.
+    pub fn seed_system_lookups(&mut self) {
+        if !self.users.iter().any(|u| u.id == "usr-saas-root" || u.id == "usr-saas-admin-1") {
+            self.users.push(User {
+                id: "usr-saas-admin-1".to_string(),
+                site_id: "site-1".to_string(),
+                full_name: "SaaS Platform Admin".to_string(),
+                email: "admin@sitepulse.io".to_string(),
+                phone: "+90 532 999 0000".to_string(),
+                password_hash: Some("ARGON2_HASH_admin123".to_string()),
+                role: Role::SaasAdmin,
+                must_change_password: false,
+                auth_provider: "LOCAL".to_string(),
+                google_sub: None,
+                avatar_url: None,
+                created_at: Utc::now(),
+            });
+        }
+    }
+
+    /// Isolated development/test fixtures (Begonya Sitesi, test units, test debts).
+    /// Used only in test suites or when SITEPULSE_SEED_TEST_DATA=true.
+    pub fn seed_test_fixtures(&mut self) {
+        // Seed Begonya Sitesi
+        if !self.sites.iter().any(|s| s.id == "site-1") {
+            self.sites.push(Site {
+                id: "site-1".to_string(),
+                name: "Begonya Sitesi".to_string(),
+                address: "Ataşehir, Begonya Sok. No:14, İstanbul".to_string(),
+                slug: "begonya-sitesi".to_string(),
+                status: "ACTIVE".to_string(),
+                plan_type: "PREMIUM".to_string(),
+                license_end_date: NaiveDate::from_ymd_opt(2027, 9, 1).unwrap(),
+            });
+        }
+
+        if !self.sites.iter().any(|s| s.id == "site-2") {
+            self.sites.push(Site {
+                id: "site-2".to_string(),
+                name: "Kardelen Rezidans".to_string(),
+                address: "Çankaya, Kardelen Cad. No:8, Ankara".to_string(),
+                slug: "kardelen-rezidans".to_string(),
+                status: "ACTIVE".to_string(),
+                plan_type: "STANDARD".to_string(),
+                license_end_date: NaiveDate::from_ymd_opt(2027, 10, 15).unwrap(),
+            });
+        }
 
         // Seed Users
         // 1. Site Manager (Mehmet Demir)
-        self.users.push(User {
-            id: "usr-site-manager-1".to_string(),
-            site_id: "site-1".to_string(),
-            full_name: "Mehmet Demir".to_string(),
-            email: "mehmet.demir@begonya.com".to_string(),
-            phone: "+90 532 100 2030".to_string(),
-            password_hash: Some("ARGON2_HASH_mehmet123".to_string()),
-            role: Role::SiteManager,
-            must_change_password: false,
-            auth_provider: "LOCAL".to_string(),
-            google_sub: None,
-            avatar_url: None,
-            created_at: Utc::now(),
-        });
+        if !self.users.iter().any(|u| u.id == "usr-site-manager-1") {
+            self.users.push(User {
+                id: "usr-site-manager-1".to_string(),
+                site_id: "site-1".to_string(),
+                full_name: "Mehmet Demir".to_string(),
+                email: "mehmet.demir@begonya.com".to_string(),
+                phone: "+90 532 100 2030".to_string(),
+                password_hash: Some("ARGON2_HASH_mehmet123".to_string()),
+                role: Role::SiteManager,
+                must_change_password: false,
+                auth_provider: "LOCAL".to_string(),
+                google_sub: None,
+                avatar_url: None,
+                created_at: Utc::now(),
+            });
+        }
 
         // 2. Home Owner (Ahmet Yılmaz)
-        self.users.push(User {
-            id: "usr-home-owner-1".to_string(),
-            site_id: "site-1".to_string(),
-            full_name: "Ahmet Yılmaz".to_string(),
-            email: "ahmet.yilmaz@begonya.com".to_string(),
-            phone: "+90 532 111 22 33".to_string(),
-            password_hash: Some("ARGON2_HASH_ahmet123".to_string()),
-            role: Role::HomeOwner,
-            must_change_password: false,
-            auth_provider: "LOCAL".to_string(),
-            google_sub: None,
-            avatar_url: None,
-            created_at: Utc::now(),
-        });
-
-        // 3. SaaS Admin
-        self.users.push(User {
-            id: "usr-saas-admin-1".to_string(),
-            site_id: "site-1".to_string(),
-            full_name: "SaaS Platform Admin".to_string(),
-            email: "admin@sitepulse.io".to_string(),
-            phone: "+90 532 999 0000".to_string(),
-            password_hash: Some("ARGON2_HASH_admin123".to_string()),
-            role: Role::SaasAdmin,
-            must_change_password: false,
-            auth_provider: "LOCAL".to_string(),
-            google_sub: None,
-            avatar_url: None,
-            created_at: Utc::now(),
-        });
+        if !self.users.iter().any(|u| u.id == "usr-home-owner-1") {
+            self.users.push(User {
+                id: "usr-home-owner-1".to_string(),
+                site_id: "site-1".to_string(),
+                full_name: "Ahmet Yılmaz".to_string(),
+                email: "ahmet.yilmaz@begonya.com".to_string(),
+                phone: "+90 532 111 22 33".to_string(),
+                password_hash: Some("ARGON2_HASH_ahmet123".to_string()),
+                role: Role::HomeOwner,
+                must_change_password: false,
+                auth_provider: "LOCAL".to_string(),
+                google_sub: None,
+                avatar_url: None,
+                created_at: Utc::now(),
+            });
+        }
 
         // Seed Unit A Blok D:14 (id: d-14)
-        let seeded_virtual_iban = VirtualIbanService::generate_virtual_iban(
-            VirtualIbanService::KUVEYT_TURK_BANK_CODE,
-            "site-1",
-            "A",
-            14,
-        );
-        self.units.push(IndependentUnit {
-            id: "d-14".to_string(),
-            site_id: "site-1".to_string(),
-            block_id: "A".to_string(),
-            unit_number: 14,
-            floor: 4,
-            land_share: 24,
-            owner_user_id: Some("usr-home-owner-1".to_string()),
-            tenant_user_id: None,
-            virtual_iban: Some(seeded_virtual_iban),
-        });
+        if !self.units.iter().any(|u| u.id == "d-14") {
+            let seeded_virtual_iban = VirtualIbanService::generate_virtual_iban(
+                VirtualIbanService::KUVEYT_TURK_BANK_CODE,
+                "site-1",
+                "A",
+                14,
+            );
+            self.units.push(IndependentUnit {
+                id: "d-14".to_string(),
+                site_id: "site-1".to_string(),
+                block_id: "A".to_string(),
+                unit_number: 14,
+                floor: 4,
+                land_share: 24,
+                owner_user_id: Some("usr-home-owner-1".to_string()),
+                tenant_user_id: None,
+                virtual_iban: Some(seeded_virtual_iban),
+            });
+        }
 
         // Seed initial matching criteria for unit d-14 (Ahmet Yılmaz)
         self.unit_payer_names.insert(
@@ -169,31 +223,35 @@ impl AppStateInner {
         );
 
         // Seed September 2026 Dues (₺1400 overdue 10 days)
-        self.dues.push(DuesLiability {
-            id: "b-101".to_string(),
-            unit_id: "d-14".to_string(),
-            period: "Eylül 2026".to_string(),
-            principal_amount: Decimal::from_str_exact("1400.00").unwrap(),
-            delay_penalty: Decimal::ZERO,
-            total_amount: Decimal::from_str_exact("1400.00").unwrap(),
-            due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
-            status: DebtStatus::Pending,
-        });
+        if !self.dues.iter().any(|d| d.id == "b-101") {
+            self.dues.push(DuesLiability {
+                id: "b-101".to_string(),
+                unit_id: "d-14".to_string(),
+                period: "Eylül 2026".to_string(),
+                principal_amount: Decimal::from_str_exact("1400.00").unwrap(),
+                delay_penalty: Decimal::ZERO,
+                total_amount: Decimal::from_str_exact("1400.00").unwrap(),
+                due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
+                status: DebtStatus::Pending,
+            });
+        }
 
         // Seed pending registration
-        self.pending_registrations.push(PendingRegistrationResponse {
-            request_id: "req-seed-01".to_string(),
-            site_id: "site-1".to_string(),
-            block: "B Blok".to_string(),
-            unit_no: 18,
-            floor: 5,
-            full_name: "Kerem Yılmaz".to_string(),
-            email: "kerem.yilmaz@gmail.com".to_string(),
-            phone: "+90 533 111 22 33".to_string(),
-            is_resident: true,
-            status: "PENDING".to_string(),
-            submitted_at: Utc::now(),
-        });
+        if !self.pending_registrations.iter().any(|r| r.request_id == "req-seed-01") {
+            self.pending_registrations.push(PendingRegistrationResponse {
+                request_id: "req-seed-01".to_string(),
+                site_id: "site-1".to_string(),
+                block: "B Blok".to_string(),
+                unit_no: 18,
+                floor: 5,
+                full_name: "Kerem Yılmaz".to_string(),
+                email: "kerem.yilmaz@gmail.com".to_string(),
+                phone: "+90 533 111 22 33".to_string(),
+                is_resident: true,
+                status: "PENDING".to_string(),
+                submitted_at: Utc::now(),
+            });
+        }
 
         // Seed household member
         self.unit_members.insert(
@@ -209,19 +267,48 @@ impl AppStateInner {
         );
 
         // Seed Bank Account for Begonya Sitesi (site-1)
-        self.site_bank_accounts.push(SiteBankAccount {
-            id: "sba-site-1-kt".to_string(),
-            site_id: "site-1".to_string(),
-            bank_code: "KUVEYT_TURK".to_string(),
-            bank_name: "Kuveyt Türk Katılım Bankası".to_string(),
-            iban: "TR620020500009863791600001".to_string(),
-            account_holder: "Begonya Sitesi Yönetimi".to_string(),
-            statement_format: "EXCEL".to_string(),
-            is_active: true,
-            configured_by: Some("usr-site-manager-1".to_string()),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        });
+        if !self.site_bank_accounts.iter().any(|b| b.id == "sba-site-1-kt") {
+            self.site_bank_accounts.push(SiteBankAccount {
+                id: "sba-site-1-kt".to_string(),
+                site_id: "site-1".to_string(),
+                bank_code: "KUVEYT_TURK".to_string(),
+                bank_name: "Kuveyt Türk Katılım Bankası".to_string(),
+                iban: "TR620020500009863791600001".to_string(),
+                account_holder: "Begonya Sitesi Yönetimi".to_string(),
+                statement_format: "EXCEL".to_string(),
+                is_active: true,
+                configured_by: Some("usr-site-manager-1".to_string()),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            });
+        }
+    }
+
+    /// Backward compatibility alias for seed_test_fixtures
+    #[allow(dead_code)]
+    pub fn seed(&mut self) {
+        self.seed_test_fixtures();
+    }
+
+    /// Completely wipes all user, site, flat, dues, and transaction data, restoring system to clean slate
+    pub fn clear_all_data(&mut self) {
+        self.sites.clear();
+        self.users.clear();
+        self.units.clear();
+        self.dues.clear();
+        self.pending_registrations.clear();
+        self.unit_members.clear();
+        self.unit_invite_tokens.clear();
+        self.site_invite_tokens.clear();
+        self.reconciliation_queue.clear();
+        self.site_bank_accounts.clear();
+        self.advance_payments.clear();
+        self.homeowner_payments.clear();
+        self.remembered_sender_ibans.clear();
+        self.sender_iban_metadata.clear();
+        self.unit_payer_names.clear();
+        self.auto_scheduler_enabled = false;
+        self.seed_system_lookups();
     }
 
     pub fn reset_all_payments_and_balances(&mut self) {
@@ -233,27 +320,32 @@ impl AppStateInner {
         // 100% clean slate: ₺0.00 debt
         self.dues.clear();
 
-        // Reset remembered sender IBANs
+        // Reset remembered sender IBANs and payer names
         self.remembered_sender_ibans.clear();
-        self.remembered_sender_ibans.insert(
-            "TR120006200000000000000001".to_string(),
-            "d-14".to_string(),
-        );
         self.sender_iban_metadata.clear();
-        self.sender_iban_metadata.insert(
-            "TR120006200000000000000001".to_string(),
-            (Some("Garanti BBVA - Maaş Hesabı".to_string()), Some("Garanti BBVA".to_string())),
-        );
-
-        // Reset unit payer names
         self.unit_payer_names.clear();
-        self.unit_payer_names.insert(
-            "d-14".to_string(),
-            vec!["Ahmet Yılmaz".to_string(), "Zeynep Kaya".to_string()],
-        );
     }
 
     pub fn accrue_test_due(&mut self) {
+        if !self.units.iter().any(|u| u.id == "d-14") {
+            let seeded_virtual_iban = VirtualIbanService::generate_virtual_iban(
+                VirtualIbanService::KUVEYT_TURK_BANK_CODE,
+                "site-1",
+                "A",
+                14,
+            );
+            self.units.push(IndependentUnit {
+                id: "d-14".to_string(),
+                site_id: "site-1".to_string(),
+                block_id: "A".to_string(),
+                unit_number: 14,
+                floor: 4,
+                land_share: 24,
+                owner_user_id: Some("usr-home-owner-1".to_string()),
+                tenant_user_id: None,
+                virtual_iban: Some(seeded_virtual_iban),
+            });
+        }
         if !self.dues.iter().any(|d| d.unit_id == "d-14" && d.period == "Eylül 2026") {
             self.dues.push(DuesLiability {
                 id: "b-101".to_string(),
@@ -273,6 +365,24 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(RwLock::new(AppStateInner::new())),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn new_empty() -> Self {
+        let mut inner = AppStateInner::new();
+        inner.clear_all_data();
+        Self {
+            inner: Arc::new(RwLock::new(inner)),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn new_with_test_fixtures() -> Self {
+        let mut inner = AppStateInner::new();
+        inner.seed_test_fixtures();
+        Self {
+            inner: Arc::new(RwLock::new(inner)),
         }
     }
 }

@@ -23,7 +23,7 @@ pub use kuveyt_turk_service::{
 pub use mt940_engine::Mt940Engine;
 pub use reconciliation_service::ReconciliationService;
 pub use registration_approval_service::RegistrationApprovalService;
-pub use saas_tenant_service::SaasTenantService;
+pub use saas_tenant_service::{to_slug, SaasTenantService};
 pub use site_admin_service::SiteAdminService;
 pub use site_bank_account_service::SiteBankAccountService;
 pub use virtual_iban_service::VirtualIbanService;

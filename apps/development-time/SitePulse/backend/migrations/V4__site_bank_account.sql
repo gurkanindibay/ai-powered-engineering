@@ -21,17 +21,3 @@ CREATE TABLE IF NOT EXISTS site_bank_accounts (
 
 CREATE INDEX IF NOT EXISTS idx_site_bank_account_site ON site_bank_accounts (site_id);
 CREATE INDEX IF NOT EXISTS idx_site_bank_account_active ON site_bank_accounts (site_id, is_active);
-
--- Seed: Begonya Sitesi uses Kuveyt Türk (XLSX statement format)
-INSERT INTO site_bank_accounts (id, site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by)
-VALUES (
-    'sba-site-1-kt',
-    'site-1',
-    'KUVEYT_TURK',
-    'Kuveyt Türk Katılım Bankası',
-    'TR620020500009863791600001',
-    'Begonya Sitesi Yönetimi',
-    'EXCEL',
-    TRUE,
-    'usr-site-manager-1'
-) ON CONFLICT DO NOTHING;

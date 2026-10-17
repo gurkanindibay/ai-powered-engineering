@@ -114,12 +114,19 @@ impl SaasTenantService {
                     .iter()
                     .find(|u| u.site_id == site.id && u.role == Role::SiteManager);
 
-                let default_units = if site.id == "site-1" { 24 } else { 16 };
-                let default_dues = if site.id == "site-1" {
-                    Decimal::from_str_exact("96000.00").unwrap()
-                } else {
-                    Decimal::from_str_exact("64000.00").unwrap()
-                };
+                let total_units = inner.units.iter().filter(|u| u.site_id == site.id).count();
+                let site_unit_ids: std::collections::HashSet<&str> = inner
+                    .units
+                    .iter()
+                    .filter(|u| u.site_id == site.id)
+                    .map(|u| u.id.as_str())
+                    .collect();
+                let monthly_dues_volume: Decimal = inner
+                    .dues
+                    .iter()
+                    .filter(|d| site_unit_ids.contains(d.unit_id.as_str()))
+                    .map(|d| d.principal_amount)
+                    .sum();
 
                 SaasSiteSummaryDto {
                     site_id: site.id.clone(),
@@ -129,8 +136,8 @@ impl SaasTenantService {
                     status: site.status.clone(),
                     plan_type: site.plan_type.clone(),
                     license_end_date: site.license_end_date,
-                    total_units: default_units,
-                    monthly_dues_volume: default_dues,
+                    total_units: total_units as i32,
+                    monthly_dues_volume,
                     primary_manager_name: primary_manager
                         .map(|m| m.full_name.clone())
                         .unwrap_or_else(|| "Unassigned".to_string()),
@@ -261,7 +268,7 @@ impl SaasTenantService {
     }
 }
 
-fn to_slug(input: &str) -> String {
+pub fn to_slug(input: &str) -> String {
     let s = input
         .to_lowercase()
         .replace('ı', "i")

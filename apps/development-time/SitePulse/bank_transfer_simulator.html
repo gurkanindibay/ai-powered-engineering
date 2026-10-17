@@ -454,6 +454,164 @@
       background: rgba(59, 130, 246, 0.15);
       color: var(--accent-blue);
     }
+
+    /* Modal Backdrop & Dialog */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(5px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      max-width: 580px;
+      width: 100%;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      overflow: hidden;
+      animation: modalFadeIn 0.2s ease-out;
+    }
+
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.96) translateY(-10px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .modal-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-card-subtle);
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-main);
+    }
+
+    .modal-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px;
+      border-radius: 6px;
+    }
+
+    .modal-close-btn:hover {
+      color: var(--accent-red);
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .modal-body {
+      padding: 22px 24px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal-footer {
+      padding: 14px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      background: var(--bg-card-subtle);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 9px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .btn-primary-action {
+      background: var(--primary);
+      border: none;
+      color: #0A0B0E;
+      padding: 9px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn-primary-action:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-toolbar {
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid transparent;
+    }
+
+    .btn-toolbar:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.15);
+    }
+
+    .units-table-card {
+      margin-top: 24px;
+    }
+
+    .copy-chip {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      padding: 3px 6px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 10.5px;
+      transition: all 0.15s;
+    }
+
+    .copy-chip:hover {
+      background: rgba(0, 210, 180, 0.15);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
   </style>
 </head>
 <body>
@@ -468,14 +626,20 @@
           <div class="test-banner-sub">Bu sayfa SitePulse uygulamasının bir parçası değildir; harici internet bankacılığı transferlerini ve anlık FAST webhook çağrılarını test etmek için geliştirilmiş test arayüzüdür.</div>
         </div>
       </div>
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <button id="btn-reset-demo" onclick="resetAllDemoData()" style="color: #F87171; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); padding: 7px 12px; border-radius: 8px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 5px;">
+      <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <button id="btn-new-site" onclick="openNewSiteModal()" class="btn-toolbar" style="color: #00D2B4; background: rgba(0, 210, 180, 0.15); border-color: rgba(0, 210, 180, 0.35);">
+          <span>🏢</span> Yeni Site Kaydı
+        </button>
+        <button id="btn-provision-12" onclick="openProvision12UnitsModal()" class="btn-toolbar" style="color: #A78BFA; background: rgba(167, 139, 250, 0.15); border-color: rgba(167, 139, 250, 0.35);">
+          <span>👥</span> 12 Haneli Site & Sakinleri Kur
+        </button>
+        <button id="btn-reset-demo" onclick="resetAllDemoData()" class="btn-toolbar" style="color: #F87171; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.35);">
           <span>🔄</span> Tümünü Sıfırla (₺0 Borç)
         </button>
-        <button id="btn-accrue-due" onclick="accrueTestDue()" style="color: #FBBF24; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.35); padding: 7px 12px; border-radius: 8px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 5px;">
+        <button id="btn-accrue-due" onclick="accrueTestDue()" class="btn-toolbar" style="color: #FBBF24; background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.35);">
           <span>➕</span> ₺1.400 Aidat Borcu Ekle
         </button>
-        <button id="btn-accrue-period" onclick="accrueNewPeriodDialog()" style="color: #60A5FA; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.35); padding: 7px 12px; border-radius: 8px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 5px;">
+        <button id="btn-accrue-period" onclick="accrueNewPeriodDialog()" class="btn-toolbar" style="color: #60A5FA; background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.35);">
           <span>📅</span> Yeni Dönem Tahakkuku
         </button>
         <a href="http://localhost:9090" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 11.5px; font-weight: 700; background: rgba(0, 210, 180, 0.12); padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(0, 210, 180, 0.3);">SitePulse'ı Aç ↗</a>
@@ -496,10 +660,24 @@
 
     <div class="grid-layout">
       <!-- Left Column: Transfer Form -->
-      <div class="card">
+      <div class="card" id="transfer-card-section">
         <div class="card-title">
           <span>Para Transferi Bilgileri</span>
           <span style="font-size: 11.5px; color: var(--text-muted); font-weight: normal;">FAST 7/24 Anlık Takas</span>
+        </div>
+
+        <!-- Target Flat Selector -->
+        <div class="form-group" style="background: rgba(0, 210, 180, 0.05); border: 1px solid rgba(0, 210, 180, 0.2); border-radius: 12px; padding: 12px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="color: var(--primary); margin-bottom: 0;">🎯 Test Edilecek Daireyi Seç</label>
+            <span id="units-badge" style="font-size: 11px; background: rgba(0, 210, 180, 0.2); color: var(--primary); padding: 2px 7px; border-radius: 4px; font-weight: 700;">Yükleniyor...</span>
+          </div>
+          <select id="target-unit-select" class="form-select font-mono" onchange="onSelectUnit(this.value)">
+            <option value="">-- Daireler Yükleniyor... --</option>
+          </select>
+          <div class="input-hint" style="margin-top: 6px; font-size: 11px;">
+            💡 <em>Bir daire seçtiğinizde Sanal IBAN, Kat Maliki adı, gönderici IBAN'ı ve borç bilgisi forma otomatik doldurulur.</em>
+          </div>
         </div>
 
         <!-- Mode Tabs -->
@@ -684,16 +862,450 @@
         </table>
       </div>
     </div>
+
+    <!-- 12-Units Directory Table Card -->
+    <div class="card units-table-card">
+      <div class="card-title">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span>📋 Sitedeki Daireler & Sanal IBAN'lar (12 Daire Sakin Tablosu)</span>
+          <span id="units-table-count" style="font-size: 11px; background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); padding: 2px 8px; border-radius: 6px; font-weight: 700;">0 Daire</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn-toolbar" onclick="openProvision12UnitsModal()" style="color: #A78BFA; background: rgba(167, 139, 250, 0.12); border-color: rgba(167, 139, 250, 0.3);">
+            <span>➕</span> 12 Daire & Sakin Kur
+          </button>
+          <button type="button" class="btn-toolbar" onclick="loadUnitsSummary()" style="color: var(--text-muted); background: rgba(255, 255, 255, 0.05); border-color: var(--border);">
+            <span>🔄</span> Tabloyu Yenile
+          </button>
+        </div>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Daire No</th>
+              <th>Blok / Kat</th>
+              <th>Kat Maliki / Sakin</th>
+              <th>E-posta / Telefon</th>
+              <th>Tahsisli Kuveyt Türk Sanal IBAN</th>
+              <th>Aidat Borcu</th>
+              <th>Avans Bakiyesi</th>
+              <th>İşlem</th>
+            </tr>
+          </thead>
+          <tbody id="units-table-tbody">
+            <tr>
+              <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">Yükleniyor veya henüz daire kaydı yapılmadı. Yukarıdaki <strong>"12 Haneli Site & Sakinleri Kur"</strong> butonuna tıklayarak oluşturabilirsiniz.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Yeni Site Kaydı -->
+  <div class="modal-overlay" id="modal-new-site">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span>🏢</span> Yeni Site ve Yönetici Kaydı
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeNewSiteModal()">✕</button>
+      </div>
+      <form onsubmit="submitNewSite(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Site / Apartman Adı</label>
+            <input type="text" id="ns-site-name" class="form-input" value="Begonya Sitesi" required placeholder="Örn: Kardelen Sitesi">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Site Adresi</label>
+            <input type="text" id="ns-site-address" class="form-input" value="Ataşehir, Begonya Sok. No:14, İstanbul" required>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Yönetici Adı Soyadı</label>
+              <input type="text" id="ns-admin-name" class="form-input" value="Kemal Güven" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Yönetici E-posta</label>
+              <input type="email" id="ns-admin-email" class="form-input" value="yonetici@begonya.com" required>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Yönetici Telefon</label>
+              <input type="text" id="ns-admin-phone" class="form-input" value="+90 532 555 0100" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">SaaS Paket Tipi</label>
+              <select id="ns-plan-type" class="form-select">
+                <option value="PREMIUM" selected>PREMIUM (Tam Erişim)</option>
+                <option value="STANDARD">STANDARD</option>
+                <option value="BASIC">BASIC</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-hint" style="background: rgba(0, 210, 180, 0.08); padding: 10px; border-radius: 8px; border: 1px solid rgba(0, 210, 180, 0.2);">
+            ℹ️ <strong>Otomatik Provizyon:</strong> Site kaydedildiğinde sistem otomatik olarak yönetici hesabı oluşturur ve geçici şifre atar.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" onclick="closeNewSiteModal()">İptal</button>
+          <button type="submit" class="btn-primary-action" id="btn-submit-new-site">
+            <span>🏢</span> Siteyi Kaydet
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: 12 Haneli Site & Sakin Hızlı Kurulum -->
+  <div class="modal-overlay" id="modal-provision-units">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span>👥</span> 12 Haneli Site Sakinleri Hızlı Kaydı
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeProvision12UnitsModal()">✕</button>
+      </div>
+      <form onsubmit="submitProvisionUnits(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Hedef Site</label>
+            <select id="pu-site-select" class="form-select" required>
+              <option value="">Yükleniyor...</option>
+            </select>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Blok Adı</label>
+              <input type="text" id="pu-block-name" class="form-input" value="A Blok" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Daire Sayısı</label>
+              <input type="number" min="1" max="24" id="pu-units-count" class="form-input font-mono" value="12" required>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Aylık Aidat (₺)</label>
+              <input type="number" step="0.01" min="100" id="pu-monthly-dues" class="form-input font-mono" value="1400.00" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Aidat Dönemi</label>
+              <input type="text" id="pu-period" class="form-input" value="Ekim 2026" required>
+            </div>
+          </div>
+          <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+            <input type="checkbox" id="pu-accrue-initial" checked style="width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer;">
+            <label for="pu-accrue-initial" style="font-size: 13px; color: var(--text-main); cursor: pointer; user-select: none;">
+              İlk ay aidat borcunu (12 daire için toplam ₺16.800) anında tahakkuk ettir
+            </label>
+          </div>
+          <div class="input-hint" style="background: rgba(167, 139, 250, 0.08); padding: 10px; border-radius: 8px; border: 1px solid rgba(167, 139, 250, 0.2);">
+            ⚡ <strong>12 Daire Provizyonu:</strong>
+            <ul style="margin-left: 18px; margin-top: 4px; line-height: 1.5;">
+              <li>12 adet bağımsız bölüm (D:1 - D:12) oluşturulur.</li>
+              <li>Her daireye özel, algoritma doğrulamalı <strong>Kuveyt Türk Sanal IBAN</strong> tahsis edilir.</li>
+              <li>12 adet gerçekçi kat maliki profili, e-posta ve telefon eşleştirilir.</li>
+              <li>Otomatik FAST testi için her daireye hatırlanan gönderici IBAN atanır.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" onclick="closeProvision12UnitsModal()">İptal</button>
+          <button type="submit" class="btn-primary-action" id="btn-submit-provision">
+            <span>⚡</span> 12 Daire ve Sakinleri Oluştur
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script>
     const BACKEND_URL = 'http://localhost:8080';
     let currentMethod = 'VIBAN';
     const localHistory = [];
+    let unitsList = [];
+    let currentSelectedUnitId = '';
+    let currentSelectedSiteId = '';
+    let availableSites = [];
 
     // Predefined IBANs
-    const VIRTUAL_IBAN = 'TR41 0020 5042 1399 1067 0000 14';
+    let VIRTUAL_IBAN = 'TR41 0020 5042 1399 1067 0000 14';
     const REGULAR_IBAN = 'TR62 0020 5000 0986 3791 6000 01';
+
+    function formatIbanDisplay(raw) {
+      if (!raw) return '';
+      const clean = raw.replace(/\s+/g, '').toUpperCase();
+      return clean.match(/.{1,4}/g)?.join(' ') || raw;
+    }
+
+    // Modal Controls
+    function openNewSiteModal() {
+      document.getElementById('modal-new-site').classList.add('active');
+    }
+    function closeNewSiteModal() {
+      document.getElementById('modal-new-site').classList.remove('active');
+    }
+
+    async function openProvision12UnitsModal() {
+      document.getElementById('modal-provision-units').classList.add('active');
+      await loadSitesForModal();
+    }
+    function closeProvision12UnitsModal() {
+      document.getElementById('modal-provision-units').classList.remove('active');
+    }
+
+    async function loadSitesForModal() {
+      const select = document.getElementById('pu-site-select');
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/saas/sites`);
+        if (res.ok) {
+          const sites = await res.json();
+          availableSites = sites;
+          if (sites.length > 0) {
+            select.innerHTML = sites.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join('');
+          } else {
+            select.innerHTML = `<option value="site-1">Begonya Sitesi (Varsayılan)</option>`;
+          }
+        } else {
+          select.innerHTML = `<option value="site-1">Begonya Sitesi (Varsayılan)</option>`;
+        }
+      } catch (e) {
+        select.innerHTML = `<option value="site-1">Begonya Sitesi (Varsayılan)</option>`;
+      }
+    }
+
+    async function submitNewSite(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-new-site');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> Kaydediliyor...';
+
+      const payload = {
+        site_name: document.getElementById('ns-site-name').value.trim(),
+        address: document.getElementById('ns-site-address').value.trim(),
+        site_admin_full_name: document.getElementById('ns-admin-name').value.trim(),
+        site_admin_email: document.getElementById('ns-admin-email').value.trim(),
+        site_admin_phone: document.getElementById('ns-admin-phone').value.trim(),
+        plan_type: document.getElementById('ns-plan-type').value
+      };
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/saas/sites`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || (typeof data === 'string' ? data : 'Kayıt başarısız'));
+
+        closeNewSiteModal();
+        let alertMsg = `🎉 YENİ SİTE BAŞARIYLA KAYDEDİLDİ!\n\n`;
+        alertMsg += `• Site Adı: ${data.site_name}\n`;
+        alertMsg += `• Site ID: ${data.site_id}\n`;
+        alertMsg += `• Yönetici E-posta: ${data.admin_email}\n`;
+        alertMsg += `• Geçici Yönetici Şifresi: ${data.temporary_password}\n\n`;
+        alertMsg += `Şimdi bu site için 12 dairenin ve sakinlerinin kaydını başlatabilirsiniz!`;
+        alert(alertMsg);
+
+        // Offer to immediately provision 12 flats for this new site
+        if (confirm(`'${data.site_name}' için 12 daire ve sakinlerini (Sanal IBAN'ları ile birlikte) hemen oluşturmak ister misiniz?`)) {
+          openProvision12UnitsModal();
+          setTimeout(() => {
+            const puSelect = document.getElementById('pu-site-select');
+            puSelect.innerHTML = `<option value="${data.site_id}" selected>${data.site_name} (${data.site_id})</option>` + puSelect.innerHTML;
+            puSelect.value = data.site_id;
+          }, 200);
+        }
+      } catch (err) {
+        alert('Site kaydı hatası: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🏢</span> Siteyi Kaydet';
+      }
+    }
+
+    async function submitProvisionUnits(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-provision');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> 12 Daire Oluşturuluyor...';
+
+      const siteId = document.getElementById('pu-site-select').value;
+      const blockName = document.getElementById('pu-block-name').value.trim();
+      const count = parseInt(document.getElementById('pu-units-count').value || '12', 10);
+      const dues = parseFloat(document.getElementById('pu-monthly-dues').value || '1400.00');
+      const period = document.getElementById('pu-period').value.trim();
+      const accrueInitial = document.getElementById('pu-accrue-initial').checked;
+
+      const payload = {
+        site_id: siteId,
+        block: blockName,
+        units_count: count,
+        monthly_dues: dues.toFixed(2),
+        accrue_initial_dues: accrueInitial,
+        period: period
+      };
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/system/provision-site-units`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Provizyon başarısız');
+
+        closeProvision12UnitsModal();
+
+        let alertMsg = `✅ 12 DAİRE & SAKİN BAŞARIYLA OLUŞTURULDU!\n\n`;
+        alertMsg += `• Site: ${data.site_name}\n`;
+        alertMsg += `• Oluşturulan Daire: ${data.units_count} Adet (D:1 - D:${data.units_count})\n`;
+        alertMsg += `• Blok: ${blockName}\n`;
+        alertMsg += `• Daire Başı Aidat: ₺${dues.toFixed(2)}\n`;
+        alertMsg += `• Toplam Aylık Hacim: ₺${data.total_monthly_dues_volume}\n\n`;
+        alertMsg += `Tüm dairelere benzersiz Kuveyt Türk Sanal IBAN tahsis edildi ve simülatöre yüklendi.`;
+        alert(alertMsg);
+
+        await loadUnitsSummary();
+      } catch (err) {
+        alert('Daire provizyonu sırasında hata oluştu: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>⚡</span> 12 Daire ve Sakinleri Oluştur';
+      }
+    }
+
+    async function loadUnitsSummary() {
+      const select = document.getElementById('target-unit-select');
+      const badge = document.getElementById('units-badge');
+      const tableCount = document.getElementById('units-table-count');
+      const tbody = document.getElementById('units-table-tbody');
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/system/units-summary`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const units = await res.json();
+        unitsList = units;
+
+        if (units.length === 0) {
+          select.innerHTML = '<option value="">⚠️ Kayıtlı daire yok - Yukarıdan "12 Haneli Site & Sakinleri Kur" yapın</option>';
+          badge.innerText = '0 Daire';
+          tableCount.innerText = '0 Daire';
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
+            Sistemde henüz kayıtlı daire bulunmuyor.<br>
+            <button onclick="openProvision12UnitsModal()" class="btn-primary-action" style="margin: 12px auto 0; font-size: 12px; padding: 6px 14px;">
+              <span>👥</span> 12 Haneli Site & Sakinleri Hemen Oluştur
+            </button>
+          </td></tr>`;
+          return;
+        }
+
+        badge.innerText = `${units.length} Daire Aktif`;
+        tableCount.innerText = `${units.length} Daire`;
+
+        // Populate Dropdown
+        select.innerHTML = units.map(u => {
+          const debt = parseFloat(u.current_debt || '0');
+          const debtText = debt > 0 ? `₺${debt.toFixed(2)} Borç` : 'Borç Yok';
+          return `<option value="${u.unit_id}">${u.block} D:${u.unit_number} — ${u.resident_name} (${debtText})</option>`;
+        }).join('');
+
+        // Populate Table
+        tbody.innerHTML = units.map(u => {
+          const debt = parseFloat(u.current_debt || '0');
+          const advance = parseFloat(u.advance_balance || '0');
+          const formattedIban = formatIbanDisplay(u.virtual_iban);
+          return `
+            <tr>
+              <td><span style="font-weight: 700; color: var(--text-main);">D:${u.unit_number}</span></td>
+              <td><span class="tag-method tag-regular">${u.block} • Kat ${u.floor}</span></td>
+              <td><div style="font-weight: 600; color: var(--text-main);">${u.resident_name}</div></td>
+              <td style="font-size: 11px; color: var(--text-muted);">${u.email}</td>
+              <td class="font-mono" style="font-size: 11.5px; color: var(--primary);">
+                ${formattedIban}
+                <button type="button" class="copy-chip" onclick="copyToClipboard('${u.virtual_iban}', this)">📋 Kopyala</button>
+              </td>
+              <td class="font-mono" style="font-weight: 700; color: ${debt > 0 ? 'var(--accent-red)' : 'var(--accent-green)'};">
+                ${debt > 0 ? `₺${debt.toFixed(2)}` : '₺0,00'}
+              </td>
+              <td class="font-mono" style="font-weight: 700; color: ${advance > 0 ? 'var(--accent-green)' : 'var(--text-muted)'};">
+                ${advance > 0 ? `+₺${advance.toFixed(2)}` : '₺0,00'}
+              </td>
+              <td>
+                <button type="button" class="btn-toolbar" onclick="selectUnitById('${u.unit_id}')" style="color: var(--primary); background: rgba(0, 210, 180, 0.12); border-color: rgba(0, 210, 180, 0.3); font-size: 11px;">
+                  ⚡ Seç & Gönder
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        // If no unit is currently selected, pick first
+        if (!currentSelectedUnitId || !units.some(u => u.unit_id === currentSelectedUnitId)) {
+          selectUnitById(units[0].unit_id);
+        } else {
+          select.value = currentSelectedUnitId;
+        }
+      } catch (err) {
+        console.error('loadUnitsSummary error:', err);
+        select.innerHTML = '<option value="">Daire listesi yüklenemedi</option>';
+        badge.innerText = 'Hata';
+      }
+    }
+
+    function selectUnitById(unitId) {
+      const select = document.getElementById('target-unit-select');
+      if (select) select.value = unitId;
+      onSelectUnit(unitId);
+
+      // Scroll to transfer section smoothly
+      const targetCard = document.getElementById('transfer-card-section');
+      if (targetCard) {
+        targetCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function onSelectUnit(unitId) {
+      if (!unitId) return;
+      currentSelectedUnitId = unitId;
+      const unit = unitsList.find(u => u.unit_id === unitId);
+      if (!unit) return;
+
+      currentSelectedSiteId = unit.site_id;
+      VIRTUAL_IBAN = formatIbanDisplay(unit.virtual_iban);
+
+      // Update Form Inputs
+      if (currentMethod === 'VIBAN') {
+        document.getElementById('recipient-iban').value = VIRTUAL_IBAN;
+        document.getElementById('label-recipient-iban').innerText = `Alıcı Sanal IBAN (${unit.block} D:${unit.unit_number})`;
+        document.getElementById('recipient-name').value = `${unit.site_name} - ${unit.block} D:${unit.unit_number} Sanal Hesabı`;
+      }
+      document.getElementById('sender-name').value = unit.resident_name;
+      document.getElementById('sender-iban').value = formatIbanDisplay(unit.sender_iban || 'TR110006200000000000000001');
+
+      const debt = parseFloat(unit.current_debt || '0');
+      document.getElementById('transfer-amount').value = debt > 0 ? debt.toFixed(2) : '1400.00';
+      document.getElementById('transfer-desc').value = `${unit.block} D:${unit.unit_number} Ekim 2026 Aidat FAST Ödemesi`;
+
+      // Update Right-Hand Live Panel
+      document.getElementById('live-unit-name').innerText = `${unit.block} D:${unit.unit_number} • ${unit.site_name}`;
+      fetchLiveResidentStatus(unit.unit_id, unit.site_id);
+    }
+
+    function copyToClipboard(text, btnElem) {
+      navigator.clipboard.writeText(text).then(() => {
+        if (btnElem) {
+          const orig = btnElem.innerText;
+          btnElem.innerText = '✓ Kopyalandı!';
+          setTimeout(() => { btnElem.innerText = orig; }, 1500);
+        }
+      });
+    }
 
     function switchMethod(method) {
       currentMethod = method;
@@ -705,24 +1317,28 @@
       const hintIban = document.getElementById('hint-recipient-iban');
       const descInput = document.getElementById('transfer-desc');
 
+      const unit = unitsList.find(u => u.unit_id === currentSelectedUnitId);
+      const unitLabel = unit ? `${unit.block} D:${unit.unit_number}` : 'A Blok D:14';
+      const siteName = unit ? unit.site_name : 'Begonya Sitesi';
+
       if (method === 'VIBAN') {
         tabViban.classList.add('active');
         tabRegular.classList.remove('active');
-        labelIban.innerText = 'Alıcı Sanal IBAN (A Blok D:14)';
+        labelIban.innerText = `Alıcı Sanal IBAN (${unitLabel})`;
         recipientIban.value = VIRTUAL_IBAN;
-        recipientName.value = 'Begonya Sitesi - A Blok D:14 Sanal Hesabı';
-        hintIban.innerHTML = '<strong>Sanal IBAN Prensibi:</strong> Bu IBAN doğrudan A Blok D:14 dairesine aittir. Açıklamaya gerek kalmadan %100 doğrulukla sisteme işlenir.';
-        if (!descInput.value || descInput.value.includes('Site Ana Hesabı')) {
-          descInput.value = 'Ekim 2026 Aidat FAST Ödemesi';
+        recipientName.value = `${siteName} - ${unitLabel} Sanal Hesabı`;
+        hintIban.innerHTML = `<strong>Sanal IBAN Prensibi:</strong> Bu IBAN doğrudan ${unitLabel} dairesine aittir. Açıklamaya gerek kalmadan %100 doğrulukla sisteme işlenir.`;
+        if (!descInput.value || descInput.value.includes('Site Yönetim Hesabı')) {
+          descInput.value = `${unitLabel} Ekim 2026 Aidat FAST Ödemesi`;
         }
       } else {
         tabRegular.classList.add('active');
         tabViban.classList.remove('active');
         labelIban.innerText = 'Alıcı Standart Site IBAN\'ı (Site Yönetim Hesabı)';
         recipientIban.value = REGULAR_IBAN;
-        recipientName.value = 'Begonya Sitesi Yönetimi (Kuveyt Türk)';
-        hintIban.innerHTML = '<strong>Genel IBAN Prensibi:</strong> Tüm site sakinleri aynı genel IBAN\'a ödeme yapar. Eşleştirmenin sağlanması için açıklamaya mutlaka <strong>A Blok D:14</strong> yazılmalıdır.';
-        descInput.value = 'A Blok D:14 Ekim 2026 Aidatı';
+        recipientName.value = `${siteName} Yönetimi (Kuveyt Türk)`;
+        hintIban.innerHTML = `<strong>Genel IBAN Prensibi:</strong> Tüm site sakinleri aynı genel IBAN\'a ödeme yapar. Eşleştirmenin sağlanması için açıklamaya mutlaka <strong>${unitLabel}</strong> yazılmalıdır.`;
+        descInput.value = `${unitLabel} Ekim 2026 Aidatı`;
       }
     }
 
@@ -734,9 +1350,11 @@
       document.getElementById('transfer-desc').value = val;
     }
 
-    async function fetchLiveResidentStatus() {
+    async function fetchLiveResidentStatus(unitId, siteId) {
+      const targetUnitId = unitId || currentSelectedUnitId || 'd-1';
+      const targetSiteId = siteId || currentSelectedSiteId || 'site-1';
       try {
-        const res = await fetch(`${BACKEND_URL}/api/v1/residents/d-14/dashboard?site_id=site-1`);
+        const res = await fetch(`${BACKEND_URL}/api/v1/residents/${targetUnitId}/dashboard?site_id=${targetSiteId}`);
         if (!res.ok) throw new Error('Backend HTTP ' + res.status);
         const data = await res.json();
 
@@ -747,7 +1365,10 @@
         document.getElementById('live-total-debt').className = debt > 0 ? 'resident-val red' : 'resident-val green';
 
         document.getElementById('live-advance-balance').innerText = advance > 0 ? `+₺${advance.toFixed(2)}` : '₺0,00';
-        document.getElementById('live-virtual-iban').innerText = data.virtual_iban || VIRTUAL_IBAN;
+        document.getElementById('live-virtual-iban').innerText = formatIbanDisplay(data.virtual_iban || VIRTUAL_IBAN);
+        if (data.site_title) {
+          document.getElementById('live-unit-name').innerText = data.site_title;
+        }
       } catch (err) {
         console.error('fetchLiveResidentStatus error:', err);
         document.getElementById('live-total-debt').innerText = 'Bağlantı Hatası';
@@ -766,6 +1387,7 @@
         if (!res.ok) throw new Error('Backend HTTP ' + res.status);
         const data = await res.json();
         alert('✅ ' + data.message + '\n\nEkranınız artık ₺0,00 Borç ve 0 Hareket durumundadır.');
+        await loadUnitsSummary();
         await fetchLiveResidentStatus();
         const resultContainer = document.getElementById('result-container');
         if (resultContainer) {
@@ -783,7 +1405,8 @@
         });
         if (!res.ok) throw new Error('Backend HTTP ' + res.status);
         const data = await res.json();
-        alert('✅ ' + data.message + '\n\nArtık A Blok D:14 için ₺1.400,00 aidat borcu ödenmeyi bekliyor.');
+        alert('✅ ' + data.message + '\n\nArtık ilgili daire için ₺1.400,00 aidat borcu ödenmeyi bekliyor.');
+        await loadUnitsSummary();
         await fetchLiveResidentStatus();
       } catch (err) {
         alert('Aidat borcu ekleme sırasında hata oluştu: ' + err.message);
@@ -803,7 +1426,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            site_id: 'site-1',
+            site_id: currentSelectedSiteId || 'site-1',
             period: period.trim(),
             amount: parseFloat(amountStr).toFixed(2),
             due_date: '2026-11-15'
@@ -824,6 +1447,7 @@
           msg += data.message;
           alert(msg);
         }
+        await loadUnitsSummary();
         await fetchLiveResidentStatus();
       } catch (err) {
         alert('Dönem tahakkuku sırasında hata oluştu: ' + err.message);
@@ -925,7 +1549,8 @@
             });
           }
 
-          // Refresh live status
+          // Refresh live status & units summary
+          await loadUnitsSummary();
           await fetchLiveResidentStatus();
         } else {
           receiptCard.className = 'receipt-card error';
@@ -996,8 +1621,8 @@
     }
 
     // Initialize
-    window.addEventListener('DOMContentLoaded', () => {
-      fetchLiveResidentStatus();
+    window.addEventListener('DOMContentLoaded', async () => {
+      await loadUnitsSummary();
     });
   </script>
 </body>

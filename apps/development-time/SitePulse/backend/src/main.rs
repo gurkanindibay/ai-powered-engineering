@@ -120,6 +120,10 @@ async fn main() {
         // System Reset & Test Data Fixtures
         .route("/api/v1/system/reset-demo-data", post(handlers::reset_demo_data))
         .route("/api/v1/system/accrue-test-due", post(handlers::accrue_test_due))
+        .route("/api/v1/system/seed-test-fixtures", post(handlers::seed_test_fixtures))
+        .route("/api/v1/system/clear-all-data", post(handlers::clear_all_data))
+        .route("/api/v1/system/provision-site-units", post(handlers::provision_site_units))
+        .route("/api/v1/system/units-summary", get(handlers::get_units_summary))
         .layer(cors)
         .with_state(state.clone());
 

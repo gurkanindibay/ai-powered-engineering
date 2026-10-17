@@ -253,9 +253,10 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           Builder(
             builder: (ctx) {
               final activeAccount = widget.controller.siteBankAccount;
-              final bankName = activeAccount?.bankName ?? 'Kuveyt Türk Katılım Bankası';
-              final iban = activeAccount?.iban ?? 'TR62 0020 5000 0986 3791 6000 01';
-              final holder = activeAccount?.accountHolder ?? 'Begonya Sitesi Yönetimi';
+              final isTest = widget.controller.isTestMode;
+              final bankName = activeAccount?.bankName ?? (isTest ? 'Kuveyt Türk Katılım Bankası' : 'Banka Hesabı Tanımlanmadı');
+              final iban = activeAccount?.iban ?? (isTest ? 'TR62 0020 5000 0986 3791 6000 01' : '-');
+              final holder = activeAccount?.accountHolder ?? (isTest ? 'Begonya Sitesi Yönetimi' : widget.controller.siteName);
               final formatStr = activeAccount?.statementFormat ?? 'EXCEL';
 
               Color formatColor = AppColors.accentGreen;
@@ -1826,9 +1827,10 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
   void _showChangeBankAccountDialog(BuildContext context) {
     final isDark = AppColors.isDark(context);
     final currentAccount = widget.controller.siteBankAccount;
+    final isTest = widget.controller.isTestMode;
     SupportedBank selectedBank = currentAccount?.supportedBank ?? SupportedBank.kuveytTurk;
-    final ibanController = TextEditingController(text: currentAccount?.iban ?? 'TR620020500009863791600001');
-    final holderController = TextEditingController(text: currentAccount?.accountHolder ?? 'Begonya Sitesi Yönetimi');
+    final ibanController = TextEditingController(text: currentAccount?.iban ?? (isTest ? 'TR620020500009863791600001' : ''));
+    final holderController = TextEditingController(text: currentAccount?.accountHolder ?? (isTest ? 'Begonya Sitesi Yönetimi' : widget.controller.siteName));
     String? dialogError;
 
     showDialog(

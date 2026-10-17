@@ -4,6 +4,7 @@ import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/ui/components/dues_management_view.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_screen.dart';
+import 'test_fixtures.dart';
 
 void main() {
   group('Dues Management Dedicated Tab & Unmatched Bank Pool Tests', () {
@@ -11,6 +12,7 @@ void main() {
 
     setUp(() {
       controller = DashboardController(startAuthenticated: true);
+      controller.loadTestFixtures();
       controller.switchSessionRole(UserRole.siteManager);
     });
 

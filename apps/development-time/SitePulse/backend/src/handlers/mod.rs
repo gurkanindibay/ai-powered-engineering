@@ -51,8 +51,15 @@ pub fn apply_advance_payments_offset(
         // FIFO: Sort by due_date ascending
         unpaid_indices.sort_by_key(|&i| inner.dues[i].due_date);
 
-        let unit_block = inner.units.iter().find(|u| u.id == u_id).map(|u| u.block_id.clone()).unwrap_or_else(|| "A".to_string());
-        let unit_number = inner.units.iter().find(|u| u.id == u_id).map(|u| u.unit_number).unwrap_or(1);
+        let unit_block = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.block_id.clone()).unwrap_or_else(|| "A".to_string());
+        let unit_number = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.unit_number).unwrap_or(1);
+        let unit_resident_name = inner
+            .units
+            .iter()
+            .find(|u| u.id == *u_id)
+            .and_then(|u| u.owner_user_id.as_ref())
+            .and_then(|uid| inner.users.iter().find(|user| &user.id == uid))
+            .map(|user| user.full_name.clone());
 
         for idx in unpaid_indices {
             if *advance <= Decimal::ZERO {
@@ -88,7 +95,7 @@ pub fn apply_advance_payments_offset(
                         matched_unit_id: Some(u_id.clone()),
                         matched_block: Some(unit_block.clone()),
                         matched_unit_number: Some(unit_number),
-                        matched_resident_name: Some("Ahmet Yılmaz".to_string()),
+                        matched_resident_name: unit_resident_name.clone(),
                         confidence_score: 100,
                         matched_due_id: Some(due_id),
                         outstanding_balance: Some(due_amount),
@@ -123,7 +130,7 @@ pub fn apply_advance_payments_offset(
                         matched_unit_id: Some(u_id.clone()),
                         matched_block: Some(unit_block.clone()),
                         matched_unit_number: Some(unit_number),
-                        matched_resident_name: Some("Ahmet Yılmaz".to_string()),
+                        matched_resident_name: unit_resident_name.clone(),
                         confidence_score: 100,
                         matched_due_id: Some(due_id),
                         outstanding_balance: Some(partial),
@@ -316,7 +323,13 @@ pub async fn get_resident_dashboard(
         })
         .collect();
 
-    let site_title = format!("Begonya Sitesi • {} Blok D:{}", unit.block_id, unit.unit_number);
+    let site_name = inner
+        .sites
+        .iter()
+        .find(|s| s.id == unit.site_id)
+        .map(|s| s.name.clone())
+        .unwrap_or_else(|| "Site".to_string());
+    let site_title = format!("{} • {} Blok D:{}", site_name, unit.block_id, unit.unit_number);
     let advance_payment = inner
         .advance_payments
         .get(&unit_id)
@@ -867,7 +880,7 @@ pub async fn get_unit_matching_criteria(
         .as_ref()
         .and_then(|uid| inner.users.iter().find(|u| &u.id == uid))
         .map(|u| u.full_name.clone())
-        .unwrap_or_else(|| "Ahmet Yılmaz".to_string());
+        .unwrap_or_default();
 
     let mut remembered = Vec::new();
     for (iban, u_id) in &inner.remembered_sender_ibans {
@@ -1354,6 +1367,12 @@ pub async fn handle_bank_incoming_webhook(
         }
     });
 
+    let matched_resident_name = unit
+        .owner_user_id
+        .as_ref()
+        .and_then(|uid| inner.users.iter().find(|u| &u.id == uid))
+        .map(|u| u.full_name.clone());
+
     inner.reconciliation_queue.push(ReconciliationMatch {
         match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
         transaction: BankTransactionItem {
@@ -1369,7 +1388,7 @@ pub async fn handle_bank_incoming_webhook(
         matched_unit_id: Some(unit.id.clone()),
         matched_block: Some(unit.block_id.clone()),
         matched_unit_number: Some(unit.unit_number),
-        matched_resident_name: Some("Ahmet Yılmaz".to_string()),
+        matched_resident_name,
         confidence_score: 100,
         matched_due_id: None,
         outstanding_balance: Some(cleared_amount),
@@ -1774,6 +1793,15 @@ pub async fn get_homeowner_payments(
 pub async fn reset_demo_data(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    if crate::state::AppStateInner::is_production() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "status": "ERROR",
+                "message": "Demo veri sıfırlama işlemi canlı (production) ortamında güvenlik nedeniyle engellenmiştir."
+            })),
+        );
+    }
     let mut inner = state.inner.write().await;
     inner.reset_all_payments_and_balances();
     (
@@ -1793,6 +1821,15 @@ pub async fn reset_demo_data(
 pub async fn accrue_test_due(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    if crate::state::AppStateInner::is_production() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "status": "ERROR",
+                "message": "Test aidatı tahakkuk ettirme işlemi canlı (production) ortamında güvenlik nedeniyle engellenmiştir."
+            })),
+        );
+    }
     let mut inner = state.inner.write().await;
     inner.accrue_test_due();
     (
@@ -1805,6 +1842,309 @@ pub async fn accrue_test_due(
             "active_debt": "1400.00"
         })),
     )
+}
+
+/// Explicitly loads test fixtures on demand (development/testing environments only)
+pub async fn seed_test_fixtures(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if crate::state::AppStateInner::is_production() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "status": "ERROR",
+                "message": "Test verisi yükleme işlemi canlı (production) ortamında güvenlik nedeniyle engellenmiştir."
+            })),
+        );
+    }
+    let mut inner = state.inner.write().await;
+    inner.seed_test_fixtures();
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "SUCCESS",
+            "message": "Test verileri (Begonya Sitesi, test sakinleri, aidat borçları) başarıyla yüklendi.",
+            "sites_count": inner.sites.len(),
+            "users_count": inner.users.len(),
+            "units_count": inner.units.len(),
+            "dues_count": inner.dues.len()
+        })),
+    )
+}
+
+/// Clears all business data (sites, users, units, dues, transactions) leaving only system lookups
+pub async fn clear_all_data(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let mut inner = state.inner.write().await;
+    inner.clear_all_data();
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "SUCCESS",
+            "message": "Tüm site, kullanıcı, daire, aidat ve hareket verileri temizlendi. Sistem sıfırlandı.",
+            "sites_count": inner.sites.len(),
+            "users_count": inner.users.len(),
+            "units_count": inner.units.len(),
+            "dues_count": inner.dues.len()
+        })),
+    )
+}
+
+/// Dynamically provisions a residential site with N units (default: 12),
+/// allocated Virtual IBANs, realistic resident profiles, matching criteria, and optional monthly dues.
+pub async fn provision_site_units(
+    State(state): State<AppState>,
+    Json(payload): Json<ProvisionSiteUnitsRequest>,
+) -> impl IntoResponse {
+    if crate::state::AppStateInner::is_production() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "status": "ERROR",
+                "message": "Test site & sakin provizyon işlemi canlı (production) ortamında güvenlik nedeniyle engellenmiştir."
+            })),
+        );
+    }
+
+    let block_name = payload.block.clone().unwrap_or_else(|| "A Blok".to_string());
+    let units_count = payload.units_count.unwrap_or(12).clamp(1, 48);
+    let monthly_dues = payload.monthly_dues.unwrap_or_else(|| Decimal::from_str_exact("1400.00").unwrap());
+    let accrue_dues = payload.accrue_initial_dues.unwrap_or(true);
+    let dues_period = payload.period.clone().unwrap_or_else(|| "Ekim 2026".to_string());
+
+    let mut inner = state.inner.write().await;
+
+    // 1. Resolve or register target site
+    let site_id = if let Some(ref s_id) = payload.site_id {
+        if inner.sites.iter().any(|s| &s.id == s_id) {
+            s_id.clone()
+        } else {
+            let s_name = payload.site_name.clone().unwrap_or_else(|| "Yeni Yaşam Sitesi".to_string());
+            let slug = crate::services::to_slug(&s_name);
+            inner.sites.push(Site {
+                id: s_id.clone(),
+                name: s_name.clone(),
+                address: "Ataşehir, İstanbul".to_string(),
+                slug,
+                status: "ACTIVE".to_string(),
+                plan_type: "PREMIUM".to_string(),
+                license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
+            });
+            s_id.clone()
+        }
+    } else if let Some(ref s_name) = payload.site_name {
+        let s_id = format!("site-{}", &uuid::Uuid::new_v4().to_string()[..8]);
+        let slug = crate::services::to_slug(s_name);
+        inner.sites.push(Site {
+            id: s_id.clone(),
+            name: s_name.clone(),
+            address: "Kadıköy, İstanbul".to_string(),
+            slug,
+            status: "ACTIVE".to_string(),
+            plan_type: "PREMIUM".to_string(),
+            license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
+        });
+        s_id
+    } else if let Some(first_site) = inner.sites.first() {
+        first_site.id.clone()
+    } else {
+        let s_id = "site-1".to_string();
+        inner.sites.push(Site {
+            id: s_id.clone(),
+            name: "Begonya Sitesi".to_string(),
+            address: "Ataşehir, Begonya Sok. No:14, İstanbul".to_string(),
+            slug: "begonya-sitesi".to_string(),
+            status: "ACTIVE".to_string(),
+            plan_type: "PREMIUM".to_string(),
+            license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
+        });
+        s_id
+    };
+
+    let site_name = inner.sites.iter().find(|s| s.id == site_id).map(|s| s.name.clone()).unwrap_or_else(|| "Site".to_string());
+
+    // 2. Sample 12 Turkish resident names
+    let sample_names = [
+        "Ahmet Yılmaz",
+        "Ayşe Demir",
+        "Mehmet Öztürk",
+        "Fatma Kaya",
+        "Canan Çelik",
+        "Burak Şahin",
+        "Emre Yıldız",
+        "Gamze Arslan",
+        "Hakan Aydın",
+        "İrem Koç",
+        "Kemal Güven",
+        "Leyla Aksoy",
+    ];
+
+    let mut provisioned_dtos = Vec::new();
+    let site_slug = crate::services::to_slug(&site_name);
+
+    for i in 1..=units_count {
+        let unit_id = format!("d-{}", i);
+        let unit_number = i as i32;
+        let floor = ((i - 1) / 4 + 1) as i32;
+        let name_idx = (i - 1) % sample_names.len();
+        let resident_name = sample_names[name_idx].to_string();
+        let email = format!("daire{}@{}.com", i, site_slug);
+        let phone = format!("+90 532 555 {:04}", i + 100);
+
+        let virtual_iban = VirtualIbanService::generate_virtual_iban(
+            VirtualIbanService::KUVEYT_TURK_BANK_CODE,
+            &site_id,
+            &block_name,
+            unit_number,
+        );
+
+        let user_id = format!("usr-{}-{}", &site_id, i);
+
+        // Add or update resident user
+        if let Some(existing_user) = inner.users.iter_mut().find(|u| u.id == user_id) {
+            existing_user.full_name = resident_name.clone();
+            existing_user.email = email.clone();
+            existing_user.phone = phone.clone();
+        } else {
+            inner.users.push(User {
+                id: user_id.clone(),
+                site_id: site_id.clone(),
+                full_name: resident_name.clone(),
+                email: email.clone(),
+                phone: phone.clone(),
+                password_hash: Some("ARGON2_HASH_123456".to_string()),
+                role: Role::HomeOwner,
+                must_change_password: false,
+                auth_provider: "LOCAL".to_string(),
+                google_sub: None,
+                avatar_url: None,
+                created_at: Utc::now(),
+            });
+        }
+
+        // Add or update independent flat
+        if let Some(existing_unit) = inner.units.iter_mut().find(|u| u.id == unit_id) {
+            existing_unit.site_id = site_id.clone();
+            existing_unit.block_id = block_name.clone();
+            existing_unit.unit_number = unit_number;
+            existing_unit.floor = floor;
+            existing_unit.owner_user_id = Some(user_id.clone());
+            existing_unit.virtual_iban = Some(virtual_iban.clone());
+        } else {
+            inner.units.push(IndependentUnit {
+                id: unit_id.clone(),
+                site_id: site_id.clone(),
+                block_id: block_name.clone(),
+                unit_number,
+                floor,
+                land_share: 24,
+                owner_user_id: Some(user_id.clone()),
+                tenant_user_id: None,
+                virtual_iban: Some(virtual_iban.clone()),
+            });
+        }
+
+        // Matching criteria & sender IBAN
+        inner.unit_payer_names.insert(unit_id.clone(), vec![resident_name.clone()]);
+        let sample_sender_iban = format!("TR{:02}000620000000000000{:04}", (i % 80) + 10, i);
+        inner.remembered_sender_ibans.insert(sample_sender_iban.clone(), unit_id.clone());
+        inner.sender_iban_metadata.insert(
+            sample_sender_iban.clone(),
+            (Some(format!("Garanti BBVA - {}", resident_name)), Some("Garanti BBVA".to_string())),
+        );
+
+        // Optional dues accrual
+        if accrue_dues {
+            let due_id = format!("b-{}-{}", unit_id, crate::services::to_slug(&dues_period));
+            if !inner.dues.iter().any(|d| d.id == due_id) {
+                inner.dues.push(DuesLiability {
+                    id: due_id,
+                    unit_id: unit_id.clone(),
+                    period: dues_period.clone(),
+                    principal_amount: monthly_dues,
+                    delay_penalty: Decimal::ZERO,
+                    total_amount: monthly_dues,
+                    due_date: Utc::now().date_naive() + chrono::Days::new(15),
+                    status: DebtStatus::Pending,
+                });
+            }
+        }
+
+        let current_debt: Decimal = inner.dues.iter()
+            .filter(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid)
+            .map(|d| d.total_amount)
+            .sum();
+        let advance = inner.advance_payments.get(&unit_id).copied().unwrap_or(Decimal::ZERO);
+
+        provisioned_dtos.push(ProvisionedUnitDto {
+            unit_id,
+            unit_number,
+            block: block_name.clone(),
+            floor,
+            resident_name,
+            email,
+            phone,
+            virtual_iban,
+            current_debt,
+            advance_balance: advance,
+            sender_iban: sample_sender_iban,
+        });
+    }
+
+    let total_volume = monthly_dues * Decimal::from(units_count);
+
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(ProvisionSiteUnitsResponse {
+            status: "SUCCESS".to_string(),
+            message: format!("{} için {} daire ve sakin kaydı başarıyla oluşturuldu.", site_name, units_count),
+            site_id,
+            site_name,
+            units_count,
+            total_monthly_dues_volume: total_volume,
+            units: provisioned_dtos,
+        }).unwrap()),
+    )
+}
+
+/// Returns a summary list of all units in the system for testing & simulator dropdowns
+pub async fn get_units_summary(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let inner = state.inner.read().await;
+    let mut result = Vec::new();
+
+    for unit in &inner.units {
+        let site_name = inner.sites.iter().find(|s| s.id == unit.site_id).map(|s| s.name.clone()).unwrap_or_else(|| "Site".to_string());
+        let resident_name = unit.owner_user_id.as_ref().and_then(|uid| {
+            inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone())
+        }).unwrap_or_else(|| format!("Daire Sakini {}", unit.unit_number));
+        let email = unit.owner_user_id.as_ref().and_then(|uid| {
+            inner.users.iter().find(|u| &u.id == uid).map(|u| u.email.clone())
+        }).unwrap_or_default();
+        let current_debt: Decimal = inner.dues.iter()
+            .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+            .map(|d| d.total_amount)
+            .sum();
+        let advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
+
+        result.push(serde_json::json!({
+            "unit_id": unit.id,
+            "site_id": unit.site_id,
+            "site_name": site_name,
+            "block": unit.block_id,
+            "unit_number": unit.unit_number,
+            "floor": unit.floor,
+            "resident_name": resident_name,
+            "email": email,
+            "virtual_iban": unit.virtual_iban.clone().unwrap_or_default(),
+            "current_debt": current_debt.to_string(),
+            "advance_balance": advance.to_string()
+        }));
+    }
+
+    (StatusCode::OK, Json(result))
 }
 
 

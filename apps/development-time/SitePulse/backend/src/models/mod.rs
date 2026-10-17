@@ -881,3 +881,40 @@ pub struct AddSenderIbanRequest {
 pub struct UpdatePayerNamesRequest {
     pub payer_names: Vec<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProvisionSiteUnitsRequest {
+    pub site_id: Option<String>,
+    pub site_name: Option<String>,
+    pub block: Option<String>,
+    pub units_count: Option<usize>,
+    pub monthly_dues: Option<Decimal>,
+    pub accrue_initial_dues: Option<bool>,
+    pub period: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProvisionedUnitDto {
+    pub unit_id: String,
+    pub unit_number: i32,
+    pub block: String,
+    pub floor: i32,
+    pub resident_name: String,
+    pub email: String,
+    pub phone: String,
+    pub virtual_iban: String,
+    pub current_debt: Decimal,
+    pub advance_balance: Decimal,
+    pub sender_iban: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProvisionSiteUnitsResponse {
+    pub status: String,
+    pub message: String,
+    pub site_id: String,
+    pub site_name: String,
+    pub units_count: usize,
+    pub total_monthly_dues_volume: Decimal,
+    pub units: Vec<ProvisionedUnitDto>,
+}

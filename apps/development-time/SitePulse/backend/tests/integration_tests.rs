@@ -1610,3 +1610,58 @@ async fn when_reset_demo_data_invoked_then_payments_and_dues_are_restored_to_cle
     }
 }
 
+#[tokio::test]
+async fn when_provisioning_12_units_for_site_then_creates_residents_and_virtual_ibans() {
+    use axum::response::IntoResponse;
+    use sitepulse_backend::models::ProvisionSiteUnitsRequest;
+
+    let state = AppState::new();
+
+    let req = ProvisionSiteUnitsRequest {
+        site_id: None,
+        site_name: Some("Kardelen Sitesi".to_string()),
+        block: Some("A Blok".to_string()),
+        units_count: Some(12),
+        monthly_dues: Some(rust_decimal::Decimal::from_str_exact("1500.00").unwrap()),
+        accrue_initial_dues: Some(true),
+        period: Some("Kasım 2026".to_string()),
+    };
+
+    let resp = sitepulse_backend::handlers::provision_site_units(
+        axum::extract::State(state.clone()),
+        axum::Json(req),
+    ).await.into_response();
+
+    assert_eq!(resp.status(), axum::http::StatusCode::OK);
+
+    // Verify state
+    {
+        let inner = state.inner.read().await;
+        let site = inner.sites.iter().find(|s| s.name == "Kardelen Sitesi").expect("Site should be created");
+        assert_eq!(site.status, "ACTIVE");
+
+        // Verify 12 units were created
+        let site_units: Vec<_> = inner.units.iter().filter(|u| u.site_id == site.id).collect();
+        assert_eq!(site_units.len(), 12);
+
+        // Check unit 1
+        let u1 = site_units.iter().find(|u| u.unit_number == 1).unwrap();
+        assert!(u1.virtual_iban.as_ref().unwrap().starts_with("TR"));
+        assert_eq!(u1.virtual_iban.as_ref().unwrap().len(), 26);
+
+        // Check unit 12
+        let u12 = site_units.iter().find(|u| u.unit_number == 12).unwrap();
+        assert!(u12.virtual_iban.as_ref().unwrap().starts_with("TR"));
+
+        // Check dues accrued
+        let dues: Vec<_> = inner.dues.iter().filter(|d| d.period == "Kasım 2026").collect();
+        assert_eq!(dues.len(), 12);
+        assert_eq!(dues[0].total_amount, rust_decimal::Decimal::from_str_exact("1500.00").unwrap());
+    }
+
+    let summary_resp = sitepulse_backend::handlers::get_units_summary(
+        axum::extract::State(state.clone()),
+    ).await.into_response();
+    assert_eq!(summary_resp.status(), axum::http::StatusCode::OK);
+}
+

@@ -99,6 +99,17 @@ class ApartmentUnit {
   final String? virtualIban;
   final Decimal? advancePayment;
 
+  static const empty = ApartmentUnit(
+    id: '',
+    siteName: '',
+    block: '',
+    unitNo: 0,
+    floor: 0,
+    landShare: 0,
+    ownerName: '',
+    tenantName: '',
+  );
+
   const ApartmentUnit({
     required this.id,
     required this.siteName,
@@ -122,6 +133,8 @@ class ApartmentUnit {
   String get kiraciAdi => tenantName;
   Decimal get avansBakiye => advancePayment ?? Decimal.zero;
   bool get hasAdvancePayment => (advancePayment ?? Decimal.zero) > Decimal.zero;
+  String get displayLabel => block.isNotEmpty && unitNo > 0 ? '$block Blok D:$unitNo' : '';
+  String get unitNumber => unitNo > 0 ? unitNo.toString() : '';
 
   ApartmentUnit copyWith({
     String? id,
@@ -199,14 +212,14 @@ class ComplexCollectionSummary {
     Decimal? totalExpected,
     Decimal? totalCollected,
     Decimal? totalOverdueWithInterest,
-    this.paidUnitsCount = 18,
-    this.overdueUnitsCount = 6,
-    this.totalUnitsCount = 24,
-  })  : totalExpected = totalExpected ?? Decimal.parse('120000.00'),
-        totalCollected = totalCollected ?? Decimal.parse('96000.00'),
-        totalOverdueWithInterest = totalOverdueWithInterest ?? Decimal.parse('24423.33');
+    this.paidUnitsCount = 0,
+    this.overdueUnitsCount = 0,
+    this.totalUnitsCount = 0,
+  })  : totalExpected = totalExpected ?? Decimal.zero,
+        totalCollected = totalCollected ?? Decimal.zero,
+        totalOverdueWithInterest = totalOverdueWithInterest ?? Decimal.zero;
 
-  factory ComplexCollectionSummary.zero({int totalUnitsCount = 12}) => ComplexCollectionSummary(
+  factory ComplexCollectionSummary.zero({int totalUnitsCount = 0}) => ComplexCollectionSummary(
         totalExpected: Decimal.zero,
         totalCollected: Decimal.zero,
         totalOverdueWithInterest: Decimal.zero,

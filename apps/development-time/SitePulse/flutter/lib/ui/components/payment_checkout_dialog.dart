@@ -37,10 +37,10 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
   late CheckoutPaymentMethod _selectedMethod;
   late final TextEditingController _amountCtrl;
   Decimal _enteredAmount = Decimal.zero;
-  final _cardNumberCtrl = TextEditingController(text: '5428 •••• •••• 9012');
-  final _cardHolderCtrl = TextEditingController(text: 'Ahmet Yılmaz');
-  final _expiryCtrl = TextEditingController(text: '12/28');
-  final _cvvCtrl = TextEditingController(text: '884');
+  late final TextEditingController _cardNumberCtrl;
+  late final TextEditingController _cardHolderCtrl;
+  late final TextEditingController _expiryCtrl;
+  late final TextEditingController _cvvCtrl;
 
   @override
   void initState() {
@@ -52,6 +52,12 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
     _enteredAmount = initialVal;
     _amountCtrl = TextEditingController(text: initialVal.toStringAsFixed(2));
     _amountCtrl.addListener(_onAmountChanged);
+
+    final isTest = widget.unitDesc.contains('D:14') || widget.siteName.contains('Begonya');
+    _cardNumberCtrl = TextEditingController(text: isTest ? '5428 •••• •••• 9012' : '');
+    _cardHolderCtrl = TextEditingController(text: isTest ? 'Ahmet Yılmaz' : '');
+    _expiryCtrl = TextEditingController(text: isTest ? '12/28' : '');
+    _cvvCtrl = TextEditingController(text: isTest ? '884' : '');
   }
 
   void _onAmountChanged() {

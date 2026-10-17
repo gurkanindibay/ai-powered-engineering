@@ -7,6 +7,7 @@ import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/ui/components/bank_statement_reconciliation_page.dart';
 import 'package:sitepulse/ui/components/manual_unit_assignment_page.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
+import 'test_fixtures.dart';
 
 void main() {
   group('Bank Statement Parser & Automated Reconciliation Tests (STORY-07-02)', () {
@@ -14,6 +15,7 @@ void main() {
 
     setUp(() {
       controller = DashboardController(startAuthenticated: true);
+      controller.loadTestFixtures();
       controller.switchSessionRole(UserRole.siteManager);
     });
 

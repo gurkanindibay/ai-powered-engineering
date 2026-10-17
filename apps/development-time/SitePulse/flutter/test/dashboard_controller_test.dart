@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
+import 'test_fixtures.dart';
 
 void main() {
   group('DashboardController Unit & Integration Tests', () {
@@ -10,6 +11,7 @@ void main() {
 
     setUp(() {
       controller = DashboardController();
+      controller.loadTestFixtures();
     });
 
     test('when initialized, then default role is homeOwner with Begonya Sitesi unit scope', () {
