@@ -475,6 +475,9 @@
         <button id="btn-accrue-due" onclick="accrueTestDue()" style="color: #FBBF24; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.35); padding: 7px 12px; border-radius: 8px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 5px;">
           <span>➕</span> ₺1.400 Aidat Borcu Ekle
         </button>
+        <button id="btn-accrue-period" onclick="accrueNewPeriodDialog()" style="color: #60A5FA; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.35); padding: 7px 12px; border-radius: 8px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 5px;">
+          <span>📅</span> Yeni Dönem Tahakkuku
+        </button>
         <a href="http://localhost:9090" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 11.5px; font-weight: 700; background: rgba(0, 210, 180, 0.12); padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(0, 210, 180, 0.3);">SitePulse'ı Aç ↗</a>
       </div>
     </div>
@@ -784,6 +787,46 @@
         await fetchLiveResidentStatus();
       } catch (err) {
         alert('Aidat borcu ekleme sırasında hata oluştu: ' + err.message);
+      }
+    }
+
+    async function accrueNewPeriodDialog() {
+      const defaultPeriod = "Kasım 2026";
+      const period = prompt("Yeni tahakkuk ettirilecek aidat dönemini giriniz (Örn: Kasım 2026, Aralık 2026, Ocak 2027):", defaultPeriod);
+      if (!period || !period.trim()) return;
+
+      const amountStr = prompt(`'${period.trim()}' dönemi için daire başı aidat tutarını giriniz (₺):`, "1400.00");
+      if (!amountStr || isNaN(parseFloat(amountStr)) || parseFloat(amountStr) <= 0) return;
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/dues/accrue-period`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            site_id: 'site-1',
+            period: period.trim(),
+            amount: parseFloat(amountStr).toFixed(2),
+            due_date: '2026-11-15'
+          })
+        });
+        if (!res.ok) throw new Error('Backend HTTP ' + res.status);
+        const data = await res.json();
+        
+        if (data.already_accrued) {
+          alert(`ℹ️ MÜKERRER TAHAKKUK ENGELLENDİ\n\n${data.message}`);
+        } else {
+          let msg = `✅ YENİ DÖNEM TAHAKKUKU TAMAMLANDI!\n\n`;
+          msg += `• Dönem: ${data.period}\n`;
+          msg += `• Tahakkuk Eden Daire Sayısı: ${data.newly_accrued_units_count}\n`;
+          msg += `• Toplam Tahakkuk: ₺${data.total_amount_accrued}\n`;
+          msg += `• Avanstan Otomatik Mahsup: ₺${data.total_amount_offset_from_advance}\n`;
+          msg += `• Avansla Kapanan Daire: ${data.auto_settled_units_count}\n\n`;
+          msg += data.message;
+          alert(msg);
+        }
+        await fetchLiveResidentStatus();
+      } catch (err) {
+        alert('Dönem tahakkuku sırasında hata oluştu: ' + err.message);
       }
     }
 
