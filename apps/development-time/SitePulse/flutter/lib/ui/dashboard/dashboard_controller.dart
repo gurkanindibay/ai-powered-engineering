@@ -182,9 +182,12 @@ class DashboardController extends ChangeNotifier {
   }
 
   ComplexCollectionSummary get currentMonthSummary {
+    if (_collectionSummary.totalExpected == Decimal.zero) {
+      return _collectionSummary;
+    }
     final list = _monthlyFlats[_selectedDuesMonth] ?? _flatsList;
-    int paid = list.where((f) => f.isPaid).length;
-    int overdue = list.where((f) => !f.isPaid).length;
+    int paid = list.where((f) => f.isPaid && f.amountDue > Decimal.zero).length;
+    int overdue = list.where((f) => !f.isPaid && f.amountDue > Decimal.zero).length;
     Decimal collected = Decimal.zero;
     Decimal remaining = Decimal.zero;
     for (final f in list) {
@@ -653,11 +656,29 @@ class DashboardController extends ChangeNotifier {
       advancePayment: Decimal.zero,
     );
     _duesList = [];
+    _managerDuesList = [];
     _reconciliationQueue.clear();
     _accountTransactions = [];
+    _sentHostMessages.clear();
+    _reconciliationSuccessMessage = null;
+    _pendingRegistrations.clear();
+
+    // Reset site manager & flats list to pristine zero-debt state!
+    _flatsList = _flatsList.map((f) => f.copyWith(
+      amountDue: Decimal.zero,
+      isPaid: true,
+      daysOverdue: 0,
+      paidDateStr: null,
+    )).toList();
+    _monthlyFlats.clear();
+
+    _collectionSummary = ComplexCollectionSummary.zero(
+      totalUnitsCount: _flatsList.length,
+    );
 
     await fetchResidentDashboard('d-14');
     await fetchUnitMatchingCriteria('d-14');
+    await fetchReconciliationQueue();
     notifyListeners();
     return true;
   }
@@ -712,8 +733,19 @@ class DashboardController extends ChangeNotifier {
                   : (data['is_overdue'] == true ? DebtStatus.overdue : DebtStatus.pending),
             );
           }).toList();
-        } else if (totalDebt <= Decimal.zero) {
+        } else {
           _duesList = [];
+          _managerDuesList = [];
+          _flatsList = _flatsList.map((f) => f.copyWith(
+            amountDue: Decimal.zero,
+            isPaid: true,
+            daysOverdue: 0,
+            paidDateStr: null,
+          )).toList();
+          _monthlyFlats.clear();
+          _collectionSummary = ComplexCollectionSummary.zero(
+            totalUnitsCount: _flatsList.length,
+          );
         }
 
         final txList = data['transactions'] as List<dynamic>?;
@@ -736,20 +768,25 @@ class DashboardController extends ChangeNotifier {
       final response = await http.get(url).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
         final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>?;
-        if (list != null && list.isNotEmpty) {
-          final liveItems = list.map((item) => ReconciliationQueueItem.fromJson(item as Map<String, dynamic>)).toList();
-          bool added = false;
-          for (final liveItem in liveItems) {
-            final exists = _reconciliationQueue.any((q) =>
-                q.matchId == liveItem.matchId ||
-                q.transaction.transactionId == liveItem.transaction.transactionId);
-            if (!exists) {
-              _reconciliationQueue.insert(0, liveItem);
-              added = true;
-            }
-          }
-          if (added) {
+        if (list != null) {
+          if (list.isEmpty) {
+            _reconciliationQueue.clear();
             notifyListeners();
+          } else {
+            final liveItems = list.map((item) => ReconciliationQueueItem.fromJson(item as Map<String, dynamic>)).toList();
+            bool added = false;
+            for (final liveItem in liveItems) {
+              final exists = _reconciliationQueue.any((q) =>
+                  q.matchId == liveItem.matchId ||
+                  q.transaction.transactionId == liveItem.transaction.transactionId);
+              if (!exists) {
+                _reconciliationQueue.insert(0, liveItem);
+                added = true;
+              }
+            }
+            if (added) {
+              notifyListeners();
+            }
           }
         }
       }

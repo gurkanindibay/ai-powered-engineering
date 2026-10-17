@@ -364,7 +364,7 @@ void main() {
       );
       expect(controller.activeUnit.advancePayment, greaterThan(Decimal.zero));
 
-      // Reset for clean slate: 0 debt, 0 advance, 0 transactions
+      // Reset for clean slate: 0 debt, 0 advance, 0 transactions, 0 site manager overdue/debt
       final result = await controller.resetAllDemoData();
       expect(result, isTrue);
       expect(controller.activeUnit.advancePayment, Decimal.zero);
@@ -373,9 +373,19 @@ void main() {
       expect(controller.accountTransactions, isEmpty);
       expect(controller.primaryDues.toplamTutar, Decimal.zero);
 
+      // Verify site manager cockpit & dues management numbers are completely reset to 0
+      expect(controller.collectionSummary.totalExpected, Decimal.zero);
+      expect(controller.collectionSummary.totalCollected, Decimal.zero);
+      expect(controller.collectionSummary.totalOverdueAmount, Decimal.zero);
+      expect(controller.collectionSummary.overdueUnitsCount, 0);
+      expect(controller.flatsList.every((f) => f.amountDue == Decimal.zero), isTrue);
+
       // Test accruing test due on demand
       final accrueResult = await controller.accrueTestDue();
       expect(accrueResult, isTrue);
+
+      // Clean up backend to ensure live demo state remains pristine 0
+      await controller.resetAllDemoData();
     });
   });
 }

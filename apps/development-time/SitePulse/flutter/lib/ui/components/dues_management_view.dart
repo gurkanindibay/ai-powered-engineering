@@ -759,6 +759,16 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
+                OutlinedButton.icon(
+                  onPressed: () => widget.controller.resetAllDemoData(),
+                  icon: const Icon(Icons.refresh, size: 16, color: AppColors.accentRed),
+                  label: const Text('Sıfırla (₺0)', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.accentRed),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
               ],
             ),
           ],
@@ -801,7 +811,9 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '%${summary.collectionPercentage} Tahsil Edildi',
+                      summary.totalExpected == Decimal.zero
+                          ? '₺0 Borç — Güncel'
+                          : '%${summary.collectionPercentage} Tahsil Edildi',
                       style: const TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -827,7 +839,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: LinearProgressIndicator(
-                  value: summary.collectionPercentage / 100.0,
+                  value: summary.totalExpected == Decimal.zero ? 0.0 : summary.collectionPercentage / 100.0,
                   backgroundColor: AppColors.card(context),
                   valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accentGreen),
                   minHeight: 6,
@@ -1160,7 +1172,9 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  flat.isPaid ? 'ÖDENDİ (${flat.paidDateStr ?? "Banka"})' : '${flat.daysOverdue} Gün Gecikti',
+                  flat.isPaid
+                      ? (flat.amountDue == Decimal.zero ? 'BORÇ YOK' : 'ÖDENDİ (${flat.paidDateStr ?? "Banka"})')
+                      : '${flat.daysOverdue} Gün Gecikti',
                   style: TextStyle(
                     color: flat.isPaid ? AppColors.accentGreen : AppColors.accentRed,
                     fontSize: 10,

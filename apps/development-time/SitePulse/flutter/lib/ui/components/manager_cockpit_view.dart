@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:decimal/decimal.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
@@ -57,7 +58,7 @@ class ManagerCockpitView extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Eylül 2026 Tahsilat Durumu',
+                    '${controller.selectedDuesMonth} Tahsilat Durumu',
                     style: TextStyle(
                       color: AppColors.textSecondary(context),
                       fontSize: 13,
@@ -71,7 +72,9 @@ class ManagerCockpitView extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '%${summary.collectionPercentage} Tahsil Edildi',
+                      summary.totalExpected == Decimal.zero
+                          ? '₺0 Borç — Güncel'
+                          : '%${summary.collectionPercentage} Tahsil Edildi',
                       style: const TextStyle(
                         color: AppColors.accentGreen,
                         fontSize: 12,
@@ -108,7 +111,7 @@ class ManagerCockpitView extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: LinearProgressIndicator(
-                  value: summary.collectionPercentage / 100.0,
+                  value: summary.totalExpected == Decimal.zero ? 0.0 : summary.collectionPercentage / 100.0,
                   backgroundColor: AppColors.card(context),
                   valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accentGreen),
                   minHeight: 8,
@@ -123,6 +126,28 @@ class ManagerCockpitView extends StatelessWidget {
                   _buildMetricTile(context, 'Geciken', '${summary.overdueUnitsCount}', color: AppColors.accentRed),
                   _buildMetricTile(context, 'Kalan Borç', '₺${summary.totalOverdueAmount.toStringAsFixed(0)}', color: AppColors.accentOrange),
                 ],
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: InkWell(
+                  onTap: () => controller.resetAllDemoData(),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.refresh, size: 12, color: AppColors.accentRed),
+                        SizedBox(width: 4),
+                        Text(
+                          'Verileri Sıfırla (₺0 Borç)',
+                          style: TextStyle(color: AppColors.accentRed, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -507,7 +532,7 @@ class ManagerCockpitView extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 flat.isPaid
-                    ? 'Ödendi (${flat.paidDateStr ?? 'Tamam'})'
+                    ? (flat.amountDue == Decimal.zero ? 'Borç Yok' : 'Ödendi (${flat.paidDateStr ?? 'Tamam'})')
                     : '${flat.daysOverdue} Gün Gecikme',
                 style: TextStyle(
                   color: flat.isPaid ? AppColors.accentGreen : AppColors.accentRed,
