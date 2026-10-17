@@ -20,7 +20,7 @@ class ManagerCockpitView extends StatelessWidget {
   Widget build(BuildContext context) {
     final summary = controller.collectionSummary;
     final pendingList = controller.pendingRegistrations;
-    final flats = controller.flatsList;
+    final flats = controller.currentMonthFlats;
     final isDark = AppColors.isDark(context);
 
     return Column(

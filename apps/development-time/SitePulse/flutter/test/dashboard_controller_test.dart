@@ -387,6 +387,30 @@ void main() {
       // Clean up backend to ensure live demo state remains pristine 0
       await controller.resetAllDemoData();
     });
+
+    test('when accruing a new month after reset, preserves exactly 12 flats and accurate dues calculation without defaulting to 24 units or 96000 collected', () async {
+      await controller.resetAllDemoData();
+      expect(controller.collectionSummary.totalUnitsCount, 12);
+      expect(controller.collectionSummary.totalExpected, Decimal.zero);
+      expect(controller.collectionSummary.totalCollected, Decimal.zero);
+
+      // Accrue for Haziran 2026 with 1400.00
+      await controller.accrueMonthlyDues(
+        period: 'Haziran 2026',
+        amount: Decimal.parse('1400.00'),
+      );
+
+      expect(controller.selectedDuesMonth, 'Haziran 2026');
+      expect(controller.collectionSummary.totalUnitsCount, 12);
+      expect(controller.collectionSummary.totalExpected, Decimal.parse('16800.00')); // 12 units * 1400
+      expect(controller.collectionSummary.totalCollected, Decimal.zero);
+      expect(controller.collectionSummary.totalOverdueAmount, Decimal.parse('16800.00'));
+      expect(controller.collectionSummary.paidUnitsCount, 0);
+      expect(controller.collectionSummary.overdueUnitsCount, 12);
+
+      // Clean up after test
+      await controller.resetAllDemoData();
+    });
   });
 }
 

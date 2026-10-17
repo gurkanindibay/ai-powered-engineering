@@ -206,7 +206,7 @@ class ComplexCollectionSummary {
         totalCollected = totalCollected ?? Decimal.parse('96000.00'),
         totalOverdueWithInterest = totalOverdueWithInterest ?? Decimal.parse('24423.33');
 
-  factory ComplexCollectionSummary.zero({int totalUnitsCount = 0}) => ComplexCollectionSummary(
+  factory ComplexCollectionSummary.zero({int totalUnitsCount = 12}) => ComplexCollectionSummary(
         totalExpected: Decimal.zero,
         totalCollected: Decimal.zero,
         totalOverdueWithInterest: Decimal.zero,

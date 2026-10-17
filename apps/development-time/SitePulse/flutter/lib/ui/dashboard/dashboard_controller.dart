@@ -133,7 +133,7 @@ class DashboardController extends ChangeNotifier {
   UnitInviteInfo? get unitInviteInfo => _unitInviteInfo;
 
   // Manager state
-  late ComplexCollectionSummary _collectionSummary;
+  ComplexCollectionSummary _collectionSummary = ComplexCollectionSummary();
   ComplexCollectionSummary get collectionSummary => _collectionSummary;
 
   List<FlatPaymentStatus> _flatsList = [];
@@ -167,8 +167,34 @@ class DashboardController extends ChangeNotifier {
   void setSelectedDuesMonth(String month) {
     if (_selectedDuesMonth != month) {
       _selectedDuesMonth = month;
+      if (_monthlyFlats.containsKey(month) || _collectionSummary.totalExpected == Decimal.zero) {
+        _syncCollectionSummaryForMonth(month);
+      }
       notifyListeners();
     }
+  }
+
+  void _syncCollectionSummaryForMonth(String month) {
+    final list = _monthlyFlats[month] ?? _flatsList;
+    int paid = list.where((f) => f.isPaid && f.amountDue > Decimal.zero).length;
+    int overdue = list.where((f) => !f.isPaid && f.amountDue > Decimal.zero).length;
+    Decimal collected = Decimal.zero;
+    Decimal remaining = Decimal.zero;
+    for (final f in list) {
+      if (f.isPaid) {
+        collected += f.amountDue;
+      } else {
+        remaining += f.amountDue;
+      }
+    }
+    _collectionSummary = ComplexCollectionSummary(
+      totalExpected: collected + remaining,
+      totalCollected: collected,
+      totalOverdueWithInterest: remaining,
+      paidUnitsCount: paid,
+      overdueUnitsCount: overdue,
+      totalUnitsCount: list.length,
+    );
   }
 
   List<FlatPaymentStatus> get currentMonthFlats {
@@ -182,9 +208,6 @@ class DashboardController extends ChangeNotifier {
   }
 
   ComplexCollectionSummary get currentMonthSummary {
-    if (_collectionSummary.totalExpected == Decimal.zero) {
-      return _collectionSummary;
-    }
     final list = _monthlyFlats[_selectedDuesMonth] ?? _flatsList;
     int paid = list.where((f) => f.isPaid && f.amountDue > Decimal.zero).length;
     int overdue = list.where((f) => !f.isPaid && f.amountDue > Decimal.zero).length;
@@ -837,10 +860,13 @@ class DashboardController extends ChangeNotifier {
           _monthlyFlats[period] = _flatsList.map<FlatPaymentStatus>((f) {
             final isSettled = f.id == _activeUnit.id && autoSettled > 0;
             return f.copyWith(
+              amountDue: dueAmount,
               isPaid: isSettled,
               daysOverdue: 0,
             );
           }).toList();
+          _flatsList = List<FlatPaymentStatus>.from(_monthlyFlats[period]!);
+          _syncCollectionSummaryForMonth(period);
         }
 
         notifyListeners();
@@ -857,6 +883,18 @@ class DashboardController extends ChangeNotifier {
         _availableDuesMonths.insert(0, period);
       }
       _selectedDuesMonth = period;
+      if (!_monthlyFlats.containsKey(period)) {
+        _monthlyFlats[period] = _flatsList.map<FlatPaymentStatus>((f) {
+          final isSettled = f.id == _activeUnit.id && _activeUnit.hasAdvancePayment;
+          return f.copyWith(
+            amountDue: dueAmount,
+            isPaid: isSettled,
+            daysOverdue: 0,
+          );
+        }).toList();
+        _flatsList = List<FlatPaymentStatus>.from(_monthlyFlats[period]!);
+      }
+      _syncCollectionSummaryForMonth(period);
       notifyListeners();
       return {
         'site_id': siteId,
