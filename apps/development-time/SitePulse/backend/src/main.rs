@@ -124,6 +124,8 @@ async fn main() {
         .route("/api/v1/system/clear-all-data", post(handlers::clear_all_data))
         .route("/api/v1/system/provision-site-units", post(handlers::provision_site_units))
         .route("/api/v1/system/units-summary", get(handlers::get_units_summary))
+        .route("/api/v1/system/site-payments", get(handlers::get_site_payments))
+        .route("/api/v1/site-admin/overview", get(handlers::get_site_overview))
         .layer(cors)
         .with_state(state.clone());
 

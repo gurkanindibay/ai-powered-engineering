@@ -49,7 +49,7 @@ void main() {
       final session = controller.userSession;
       expect(session.role, UserRole.homeOwner);
       expect(session.authProvider, AuthProvider.google);
-      expect(session.fullName, 'Ahmet Yılmaz (Google)');
+      expect(session.fullName, 'Google Kullanıcısı');
     });
 
     test('when register new site, then provisions credentials and adds site to tenant list', () {

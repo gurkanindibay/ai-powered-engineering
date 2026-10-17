@@ -16,6 +16,7 @@ class DashboardController extends ChangeNotifier {
   DashboardController({
     CalculateDuesUseCase? calculateDuesUseCase,
     bool startAuthenticated = false,
+    this.isTestMode = false,
   })  : _calculateDuesUseCase = calculateDuesUseCase ?? CalculateDuesUseCase(),
         _isAuthenticated = startAuthenticated {
     _initData();
@@ -56,7 +57,9 @@ class DashboardController extends ChangeNotifier {
           ? _managerUnit
           : _activeUnit;
   ApartmentUnit get activeDaire => activeUnit;
-  String get siteName => activeUnit.siteAdi.isNotEmpty ? activeUnit.siteAdi : (_saasSites.isNotEmpty ? _saasSites.first.name : 'SitePulse Sitesi');
+  String get siteName => activeUnit.siteAdi.isNotEmpty
+      ? activeUnit.siteAdi
+      : (_currentManagedSite?.name ?? (_saasSites.isNotEmpty ? _saasSites.first.name : ''));
 
   List<DuesLiability> _duesList = [];
   List<DuesLiability> _managerDuesList = [];
@@ -113,16 +116,13 @@ class DashboardController extends ChangeNotifier {
   String get flatFilter => _flatFilter;
 
   // Monthly Dues State
-  String _selectedDuesMonth = 'Eylül 2026';
+  String _selectedDuesMonth = 'Ekim 2026';
   String get selectedDuesMonth => _selectedDuesMonth;
 
   List<String> get availableDuesMonths => _availableDuesMonths;
-  final List<String> _availableDuesMonths = [
+  List<String> _availableDuesMonths = [
     'Ekim 2026',
     'Eylül 2026',
-    'Ağustos 2026',
-    'Temmuz 2026',
-    'Haziran 2026',
   ];
 
   final Map<String, List<FlatPaymentStatus>> _monthlyFlats = {};
@@ -130,9 +130,11 @@ class DashboardController extends ChangeNotifier {
   void setSelectedDuesMonth(String month) {
     if (_selectedDuesMonth != month) {
       _selectedDuesMonth = month;
-      if (_monthlyFlats.containsKey(month) || _collectionSummary.totalExpected == Decimal.zero) {
+      if (_monthlyFlats.containsKey(month) && _monthlyFlats[month]!.isNotEmpty) {
+        _flatsList = List<FlatPaymentStatus>.from(_monthlyFlats[month]!);
         _syncCollectionSummaryForMonth(month);
       }
+      fetchSiteManagerOverview(siteId: _currentManagedSite?.id, period: month);
       notifyListeners();
     }
   }
@@ -143,7 +145,9 @@ class DashboardController extends ChangeNotifier {
     int overdue = list.where((f) => !f.isPaid && f.amountDue > Decimal.zero).length;
     Decimal collected = Decimal.zero;
     Decimal remaining = Decimal.zero;
+    Decimal advanceTotal = Decimal.zero;
     for (final f in list) {
+      advanceTotal += f.advanceBalance;
       if (f.isPaid) {
         collected += f.amountDue;
       } else {
@@ -154,6 +158,7 @@ class DashboardController extends ChangeNotifier {
       totalExpected: collected + remaining,
       totalCollected: collected,
       totalOverdueWithInterest: remaining,
+      totalAdvanceBalance: advanceTotal,
       paidUnitsCount: paid,
       overdueUnitsCount: overdue,
       totalUnitsCount: list.length,
@@ -176,7 +181,9 @@ class DashboardController extends ChangeNotifier {
     int overdue = list.where((f) => !f.isPaid && f.amountDue > Decimal.zero).length;
     Decimal collected = Decimal.zero;
     Decimal remaining = Decimal.zero;
+    Decimal advanceTotal = Decimal.zero;
     for (final f in list) {
+      advanceTotal += f.advanceBalance;
       if (f.isPaid) {
         collected += f.amountDue;
       } else {
@@ -187,6 +194,7 @@ class DashboardController extends ChangeNotifier {
       totalExpected: collected + remaining,
       totalCollected: collected,
       totalOverdueWithInterest: remaining,
+      totalAdvanceBalance: advanceTotal,
       paidUnitsCount: paid,
       overdueUnitsCount: overdue,
       totalUnitsCount: list.length,
@@ -207,9 +215,15 @@ class DashboardController extends ChangeNotifier {
   ProvisionedHomeOwnerCredentials? _provisionedHomeOwner;
   ProvisionedHomeOwnerCredentials? get provisionedHomeOwner => _provisionedHomeOwner;
 
-  // SaaS Admin state
+  // SaaS Admin & Managed Site state
   List<TenantSiteItem> _saasSites = [];
   List<TenantSiteItem> get saasSites => _saasSites;
+
+  TenantSiteItem? _currentManagedSite;
+  TenantSiteItem? get currentManagedSite => _currentManagedSite;
+
+  List<TenantSiteItem> _managedSitesList = [];
+  List<TenantSiteItem> get managedSitesList => _managedSitesList;
 
   ProvisionedSiteCredentials? _provisionedCredentials;
   ProvisionedSiteCredentials? get provisionedCredentials => _provisionedCredentials;
@@ -251,6 +265,8 @@ class DashboardController extends ChangeNotifier {
     _flatsList = [];
     _pendingRegistrations = [];
     _saasSites = [];
+    _managedSitesList = [];
+    _currentManagedSite = null;
     _unitResidents = [];
     _monthlyFlats.clear();
     _reconciliationQueue = [];
@@ -258,8 +274,12 @@ class DashboardController extends ChangeNotifier {
     _collectionSummary = ComplexCollectionSummary.zero();
     _matchingCriteria = null;
 
-    fetchResidentDashboard();
-    fetchReconciliationQueue();
+    if (_activeUnit.id.isNotEmpty) {
+      fetchResidentDashboard();
+    }
+    if (_currentManagedSite?.id.isNotEmpty == true) {
+      fetchReconciliationQueue();
+    }
   }
 
   @visibleForTesting
@@ -294,6 +314,11 @@ class DashboardController extends ChangeNotifier {
   }
 
   @visibleForTesting
+  void setSelectedDuesMonthForTesting(String month) {
+    _selectedDuesMonth = month;
+  }
+
+  @visibleForTesting
   void setPendingRegistrationsForTesting(List<RegistrationRequestItem> items) {
     _pendingRegistrations = List.from(items);
     notifyListeners();
@@ -302,6 +327,17 @@ class DashboardController extends ChangeNotifier {
   @visibleForTesting
   void setSaasSitesForTesting(List<TenantSiteItem> sites) {
     _saasSites = List.from(sites);
+    if (sites.isNotEmpty) {
+      _managedSitesList = List.from(sites);
+      _currentManagedSite = sites.first;
+    }
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setManagedSitesForTesting(TenantSiteItem current, List<TenantSiteItem> sites) {
+    _currentManagedSite = current;
+    _managedSitesList = List.from(sites);
     notifyListeners();
   }
 
@@ -356,10 +392,12 @@ class DashboardController extends ChangeNotifier {
   UnitMatchingCriteria? _matchingCriteria;
   UnitMatchingCriteria? get matchingCriteria => _matchingCriteria;
 
-  Future<void> fetchUnitMatchingCriteria([String unitId = 'd-14']) async {
+  Future<void> fetchUnitMatchingCriteria([String? unitId]) async {
+    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
+    if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     try {
       final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-      final url = Uri.parse('http://$host:8080/api/v1/residents/$unitId/matching-criteria');
+      final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria');
       final response = await http.get(url).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -375,12 +413,14 @@ class DashboardController extends ChangeNotifier {
     required String iban,
     String? label,
     String? bankName,
-    String unitId = 'd-14',
+    String? unitId,
   }) async {
+    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
+    if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     final clean = iban.replaceAll(' ', '').toUpperCase();
     try {
       final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-      final url = Uri.parse('http://$host:8080/api/v1/residents/$unitId/matching-criteria/ibans');
+      final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria/ibans');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -416,12 +456,14 @@ class DashboardController extends ChangeNotifier {
 
   Future<void> deleteSenderIbanFromUnit({
     required String iban,
-    String unitId = 'd-14',
+    String? unitId,
   }) async {
+    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
+    if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     final clean = iban.replaceAll(' ', '').toUpperCase();
     try {
       final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-      final url = Uri.parse('http://$host:8080/api/v1/residents/$unitId/matching-criteria/ibans/$clean');
+      final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria/ibans/$clean');
       final response = await http.delete(url).timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
@@ -443,11 +485,13 @@ class DashboardController extends ChangeNotifier {
 
   Future<void> updateUnitPayerNames({
     required List<String> names,
-    String unitId = 'd-14',
+    String? unitId,
   }) async {
+    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
+    if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     try {
       final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-      final url = Uri.parse('http://$host:8080/api/v1/residents/$unitId/matching-criteria/payer-names');
+      final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria/payer-names');
       final response = await http.put(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -502,14 +546,19 @@ class DashboardController extends ChangeNotifier {
       totalUnitsCount: _flatsList.length,
     );
 
-    await fetchResidentDashboard('d-14');
-    await fetchUnitMatchingCriteria('d-14');
-    await fetchReconciliationQueue();
+    if (_activeUnit.id.isNotEmpty) {
+      await fetchResidentDashboard(_activeUnit.id);
+      await fetchUnitMatchingCriteria(_activeUnit.id);
+    }
+    if (_currentManagedSite?.id.isNotEmpty == true) {
+      await fetchReconciliationQueue(_currentManagedSite!.id);
+    }
     notifyListeners();
     return true;
   }
 
-  Future<bool> accrueTestDue([String unitId = 'd-14']) async {
+  Future<bool> accrueTestDue([String? unitId]) async {
+    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
     try {
       final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
       final url = Uri.parse('http://$host:8080/api/v1/system/accrue-test-due');
@@ -518,16 +567,20 @@ class DashboardController extends ChangeNotifier {
       debugPrint('accrueTestDue remote error: $e');
     }
 
-    await fetchResidentDashboard(unitId);
+    if (effectiveUnitId != null && effectiveUnitId.isNotEmpty) {
+      await fetchResidentDashboard(effectiveUnitId);
+    }
     notifyListeners();
     return true;
   }
 
-  Future<void> fetchResidentDashboard([String unitId = 'd-14']) async {
-    fetchUnitMatchingCriteria(unitId);
+  Future<void> fetchResidentDashboard([String? unitId]) async {
+    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
+    if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
+    fetchUnitMatchingCriteria(effectiveUnitId);
     try {
       final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-      final url = Uri.parse('http://$host:8080/api/v1/residents/$unitId/dashboard');
+      final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/dashboard');
       final response = await http.get(url).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -547,13 +600,13 @@ class DashboardController extends ChangeNotifier {
             final item = d as Map<String, dynamic>;
             final isItemPaid = item['status'] == 'PAID';
             return DuesLiability(
-              id: item['id'] as String? ?? 'b-101',
-              unitId: unitId,
-              period: item['period'] as String? ?? 'Eylül 2026',
-              principalAmount: Decimal.tryParse(item['principal_amount']?.toString() ?? '1400.00') ?? Decimal.parse('1400.00'),
+              id: item['id'] as String? ?? '',
+              unitId: effectiveUnitId,
+              period: item['period'] as String? ?? '',
+              principalAmount: Decimal.tryParse(item['principal_amount']?.toString() ?? '0') ?? Decimal.zero,
               delayPenalty: isItemPaid ? Decimal.zero : (Decimal.tryParse(item['delay_penalty']?.toString() ?? '0') ?? Decimal.zero),
               totalAmount: isItemPaid ? Decimal.zero : (Decimal.tryParse(item['total_amount']?.toString() ?? '0') ?? Decimal.zero),
-              dueDate: DateTime.tryParse(item['due_date']?.toString() ?? '2026-09-15') ?? DateTime(2026, 9, 15),
+              dueDate: DateTime.tryParse(item['due_date']?.toString() ?? '') ?? DateTime.now(),
               status: isItemPaid
                   ? DebtStatus.paid
                   : (data['is_overdue'] == true ? DebtStatus.overdue : DebtStatus.pending),
@@ -581,25 +634,35 @@ class DashboardController extends ChangeNotifier {
 
         notifyListeners();
       }
-      fetchReconciliationQueue();
+      if (_currentManagedSite?.id.isNotEmpty == true) {
+        fetchReconciliationQueue(_currentManagedSite!.id);
+      }
     } catch (e) {
       debugPrint('Dashboard live sync offline fallback: $e');
     }
   }
 
-  Future<void> fetchReconciliationQueue([String siteId = 'site-1']) async {
+  Future<void> fetchReconciliationQueue([String? siteId]) async {
+    String? effectiveSiteId = siteId ?? (_currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : (_saasSites.isNotEmpty ? _saasSites.first.id : null)));
+    if (effectiveSiteId == null || effectiveSiteId.isEmpty) {
+      if (!isTestMode) {
+        await fetchSiteManagerOverview();
+        effectiveSiteId = _currentManagedSite?.id;
+      }
+    }
+    if (effectiveSiteId == null || effectiveSiteId.isEmpty) return;
     try {
       final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-      final url = Uri.parse('http://$host:8080/api/v1/bank/statements/reconciliation-queue?site_id=$siteId');
+      final url = Uri.parse('http://$host:8080/api/v1/bank/statements/reconciliation-queue?site_id=$effectiveSiteId');
       final response = await http.get(url).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
         final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>?;
         if (list != null) {
-          if (list.isEmpty) {
-            _reconciliationQueue.clear();
+          final liveItems = list.map((item) => ReconciliationQueueItem.fromJson(item as Map<String, dynamic>)).toList();
+          if (!isTestMode) {
+            _reconciliationQueue = liveItems;
             notifyListeners();
           } else {
-            final liveItems = list.map((item) => ReconciliationQueueItem.fromJson(item as Map<String, dynamic>)).toList();
             bool added = false;
             for (final liveItem in liveItems) {
               final exists = _reconciliationQueue.any((q) =>
@@ -621,16 +684,156 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
+  Future<void> fetchSiteManagerOverview({String? siteId, String? period}) async {
+    if (isTestMode) return;
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final queryParams = <String, String>{};
+      if (siteId != null && siteId.isNotEmpty) {
+        queryParams['site_id'] = siteId;
+      }
+      if (period != null && period.isNotEmpty) {
+        queryParams['period'] = period;
+      }
+
+      final uri = Uri.http('$host:8080', '/api/v1/site-admin/overview', queryParams);
+      final response = await http.get(uri).timeout(const Duration(seconds: 2));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+
+        final fetchedSiteId = data['site_id'] as String? ?? (_currentManagedSite?.id ?? '');
+        final fetchedSiteName = data['site_name'] as String? ?? (_currentManagedSite?.name ?? '');
+        final address = data['address'] as String? ?? '';
+        final managerName = data['manager_name'] as String? ?? '';
+        final managerEmail = data['manager_email'] as String? ?? '';
+        final city = data['city'] as String? ?? (_currentManagedSite?.city ?? '');
+
+        final summaryJson = data['summary'] as Map<String, dynamic>?;
+        final totalUnitsCount = (summaryJson?['total_units_count'] as num?)?.toInt() ?? _flatsList.length;
+
+        _currentManagedSite = TenantSiteItem(
+          id: fetchedSiteId,
+          name: fetchedSiteName,
+          city: city,
+          address: address,
+          status: 'ACTIVE',
+          planType: 'STANDARD',
+          totalUnits: totalUnitsCount,
+          monthlyCollectionVolume: Decimal.tryParse(summaryJson?['total_expected']?.toString() ?? '0') ?? Decimal.zero,
+          adminName: managerName,
+          adminEmail: managerEmail,
+          adminPhone: '',
+          actionCount: 0,
+        );
+
+        final sitesJson = data['available_sites'] as List<dynamic>?;
+        if (sitesJson != null && sitesJson.isNotEmpty) {
+          _managedSitesList = sitesJson.map((s) {
+            final item = s as Map<String, dynamic>;
+            return TenantSiteItem(
+              id: item['id'] as String? ?? '',
+              name: item['name'] as String? ?? '',
+              city: item['city'] as String? ?? '',
+              address: item['address'] as String? ?? '',
+              status: 'ACTIVE',
+              planType: 'STANDARD',
+              totalUnits: (item['total_units'] as num?)?.toInt() ?? 0,
+              monthlyCollectionVolume: Decimal.zero,
+              adminName: '',
+              adminEmail: '',
+              adminPhone: '',
+              actionCount: 0,
+            );
+          }).toList();
+        }
+
+        final periodsJson = data['available_periods'] as List<dynamic>?;
+        if (periodsJson != null && periodsJson.isNotEmpty) {
+          _availableDuesMonths.clear();
+          for (final p in periodsJson) {
+            final periodStr = p.toString();
+            if (!_availableDuesMonths.contains(periodStr)) {
+              _availableDuesMonths.add(periodStr);
+            }
+          }
+        }
+
+        final selPeriod = data['selected_period'] as String?;
+        if (selPeriod != null && selPeriod.isNotEmpty) {
+          _selectedDuesMonth = selPeriod;
+        }
+
+        Decimal totalAdvanceFromFlats = Decimal.zero;
+        final flatsJson = data['flats'] as List<dynamic>?;
+        if (flatsJson != null) {
+          _flatsList = flatsJson.map((f) {
+            final item = f as Map<String, dynamic>;
+            final adv = Decimal.tryParse(item['advance_balance']?.toString() ?? '0') ?? Decimal.zero;
+            totalAdvanceFromFlats += adv;
+            return FlatPaymentStatus(
+              id: item['id'] as String? ?? '',
+              block: item['block'] as String? ?? '',
+              unitNo: (item['unit_no'] as num?)?.toInt() ?? 0,
+              residentName: item['resident_name'] as String? ?? '',
+              amountDue: Decimal.tryParse(item['amount_due']?.toString() ?? '0') ?? Decimal.zero,
+              advanceBalance: adv,
+              daysOverdue: (item['days_overdue'] as num?)?.toInt() ?? 0,
+              isPaid: item['is_paid'] as bool? ?? false,
+              paidDateStr: item['paid_date_str'] as String?,
+            );
+          }).toList();
+          _monthlyFlats[_selectedDuesMonth] = List.from(_flatsList);
+        }
+
+        if (summaryJson != null) {
+          final backendAdvance = Decimal.tryParse(summaryJson['total_advance_balance']?.toString() ?? '0') ?? Decimal.zero;
+          final effectiveAdvance = backendAdvance > Decimal.zero ? backendAdvance : totalAdvanceFromFlats;
+          _collectionSummary = ComplexCollectionSummary(
+            totalExpected: Decimal.tryParse(summaryJson['total_expected']?.toString() ?? '0') ?? Decimal.zero,
+            totalCollected: Decimal.tryParse(summaryJson['total_collected']?.toString() ?? '0') ?? Decimal.zero,
+            totalOverdueWithInterest: Decimal.tryParse(summaryJson['total_overdue_with_interest']?.toString() ?? '0') ?? Decimal.zero,
+            totalAdvanceBalance: effectiveAdvance,
+            paidUnitsCount: (summaryJson['paid_units_count'] as num?)?.toInt() ?? 0,
+            overdueUnitsCount: (summaryJson['overdue_units_count'] as num?)?.toInt() ?? 0,
+            totalUnitsCount: totalUnitsCount,
+          );
+        }
+
+        if (fetchedSiteId.isNotEmpty) {
+          await fetchReconciliationQueue(fetchedSiteId);
+        }
+
+        if (_userSession.role == UserRole.siteManager) {
+          _userSession = _userSession.copyWith(
+            siteName: fetchedSiteName,
+            fullName: managerName.isNotEmpty ? managerName : _userSession.fullName,
+            email: managerEmail.isNotEmpty ? managerEmail : _userSession.email,
+          );
+        }
+
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('fetchSiteManagerOverview offline fallback: $e');
+    }
+  }
+
+  Future<void> changeManagedSite(String siteId) async {
+    await fetchSiteManagerOverview(siteId: siteId, period: _selectedDuesMonth);
+  }
+
   Future<Map<String, dynamic>> accrueMonthlyDues({
     required String period,
-    String siteId = 'site-1',
+    String? siteId,
     Decimal? amount,
     DateTime? dueDate,
   }) async {
+    final effectiveSiteId = siteId ?? (_currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : ''));
     final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
     final url = Uri.parse('http://$host:8080/api/v1/dues/accrue-period');
     final dueAmount = amount ?? Decimal.parse('1400.00');
-    final dt = dueDate ?? DateTime(2026, 10, 15);
+    final dt = dueDate ?? DateTime.now();
     final formattedDueDate =
         "${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
 
@@ -639,7 +842,7 @@ class DashboardController extends ChangeNotifier {
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'site_id': siteId,
+          'site_id': effectiveSiteId,
           'period': period,
           'amount': dueAmount.toString(),
           'due_date': formattedDueDate,
@@ -650,7 +853,10 @@ class DashboardController extends ChangeNotifier {
         final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
 
         // Refresh resident dashboard state
-        await fetchResidentDashboard(_activeUnit.id);
+        if (_activeUnit.id.isNotEmpty) {
+          await fetchResidentDashboard(_activeUnit.id);
+        }
+        await fetchSiteManagerOverview(siteId: effectiveSiteId, period: period);
 
         if (!_availableDuesMonths.contains(period)) {
           _availableDuesMonths.insert(0, period);
@@ -700,7 +906,7 @@ class DashboardController extends ChangeNotifier {
       _syncCollectionSummaryForMonth(period);
       notifyListeners();
       return {
-        'site_id': siteId,
+        'site_id': effectiveSiteId,
         'period': period,
         'total_units_accrued': _flatsList.length,
         'newly_accrued_units_count': _flatsList.length,
@@ -733,6 +939,20 @@ class DashboardController extends ChangeNotifier {
     _userSession = _createSession(role, provider ?? _userSession.authProvider);
     if (role == UserRole.siteManager && adminPath != null) {
       _siteAdminPath = adminPath;
+    }
+    if (role == UserRole.siteManager) {
+      fetchSiteManagerOverview(siteId: _currentManagedSite?.id, period: _selectedDuesMonth);
+    } else if (role == UserRole.homeOwner || role == UserRole.homeResident) {
+      if (_activeUnit.id.isNotEmpty) {
+        fetchResidentDashboard(_activeUnit.id);
+      } else if (!isTestMode) {
+        fetchSiteManagerOverview().then((_) {
+          final firstUnit = _flatsList.isNotEmpty ? _flatsList.first : null;
+          if (firstUnit != null && firstUnit.id.isNotEmpty) {
+            fetchResidentDashboard(firstUnit.id);
+          }
+        });
+      }
     }
     notifyListeners();
   }
@@ -793,8 +1013,8 @@ class DashboardController extends ChangeNotifier {
     _userSession = _createSession(
       role,
       AuthProvider.google,
-      customName: isTestMode ? 'Ahmet Yılmaz (Google)' : 'Google Kullanıcısı',
-      customEmail: isTestMode ? 'ahmet.yilmaz@gmail.com' : 'user@gmail.com',
+      customName: 'Google Kullanıcısı',
+      customEmail: 'user@gmail.com',
       avatarUrl: 'https://lh3.googleusercontent.com/a/google-user-icon',
     );
     _isAuthenticated = true;
@@ -1043,7 +1263,7 @@ class DashboardController extends ChangeNotifier {
 
     _siteBankAccount = SiteBankAccount(
       id: 'sba-${DateTime.now().millisecondsSinceEpoch}',
-      siteId: 'site-1',
+      siteId: _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : ''),
       bankCode: bank.code,
       bankName: bank.displayName,
       iban: cleanIban,
@@ -1266,6 +1486,11 @@ class DashboardController extends ChangeNotifier {
     return true;
   }
 
+  static String cleanBlock(String? b) =>
+      (b ?? '').replaceAll(RegExp(r'\s*blok\b', caseSensitive: false), '').trim().toUpperCase();
+
+  static bool isSameBlock(String? b1, String? b2) => cleanBlock(b1) == cleanBlock(b2);
+
   ReconciliationQueueItem _matchTransactionToRoster({
     required String description,
     required Decimal amount,
@@ -1301,11 +1526,11 @@ class DashboardController extends ChangeNotifier {
     FlatPaymentStatus? candidateFlat;
     if (matchedUnitNo != null) {
       for (final f in _flatsList) {
-        if (f.unitNo == matchedUnitNo && (matchedBlock == null || f.block == matchedBlock)) {
+        if (f.unitNo == matchedUnitNo && (matchedBlock == null || isSameBlock(f.block, matchedBlock))) {
           candidateFlat = f;
           matchedBlock ??= f.block;
           matchedResidentName = f.residentName;
-          matchedUnitId = f.unitNo == 14 ? 'd-14' : 'd-${f.unitNo}';
+          matchedUnitId = f.id.isNotEmpty ? f.id : 'd-${f.unitNo}';
           break;
         }
       }
@@ -1335,7 +1560,7 @@ class DashboardController extends ChangeNotifier {
           matchedBlock = f.block;
           matchedUnitNo = f.unitNo;
           matchedResidentName = f.residentName;
-          matchedUnitId = f.unitNo == 14 ? 'd-14' : 'd-${f.unitNo}';
+          matchedUnitId = f.id.isNotEmpty ? f.id : 'd-${f.unitNo}';
           break;
         }
       }
@@ -1434,7 +1659,7 @@ class DashboardController extends ChangeNotifier {
     final target = _reconciliationQueue[idx];
     FlatPaymentStatus? candidateFlat;
     for (final f in _flatsList) {
-      if (f.unitNo == unitNo && f.block == block) {
+      if (f.unitNo == unitNo && isSameBlock(f.block, block)) {
         candidateFlat = f;
         break;
       }
@@ -1444,12 +1669,12 @@ class DashboardController extends ChangeNotifier {
     final amtMatch = (balance != null && target.transaction.amount == balance);
 
     final updated = target.copyWith(
-      matchedUnitId: candidateFlat != null ? (unitNo == 14 ? 'd-14' : 'd-$unitNo') : 'd-$unitNo',
+      matchedUnitId: candidateFlat?.id.isNotEmpty == true ? candidateFlat!.id : 'd-$unitNo',
       matchedBlock: block,
       matchedUnitNumber: unitNo,
       matchedResidentName: candidateFlat?.residentName ?? 'Daire $unitNo',
       confidenceScore: 100,
-      matchedDueId: 'b-101',
+      matchedDueId: candidateFlat != null ? 'due-$unitNo' : '',
       outstandingBalance: balance,
       amountMatchesBalance: amtMatch,
       status: 'ONAY_BEKLIYOR',
@@ -1460,11 +1685,11 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void confirmReconciliation(
+  Future<void> confirmReconciliation(
     List<String> matchIds, {
     String? optionalHostMessage,
     bool rememberSenderIban = true,
-  }) {
+  }) async {
     if (matchIds.isEmpty) return;
 
     Decimal totalCleared = Decimal.zero;
@@ -1476,7 +1701,7 @@ class DashboardController extends ChangeNotifier {
         updatedQueue.add(item.copyWith(status: 'ONAYLANDI'));
         _processedTransactionIds.add(item.transaction.transactionId);
         if (item.matchedUnitNumber != null) {
-          _processedUnitKeys.add('${item.matchedBlock ?? "A"}_${item.matchedUnitNumber}');
+          _processedUnitKeys.add('${cleanBlock(item.matchedBlock)}_${item.matchedUnitNumber}');
         }
 
         // Persist remembered sender IBAN for future automatic payments matching
@@ -1510,21 +1735,24 @@ class DashboardController extends ChangeNotifier {
         if (item.matchedUnitNumber != null) {
           final flatIndex = _flatsList.indexWhere((f) =>
               f.unitNo == item.matchedUnitNumber &&
-              (item.matchedBlock == null || f.block == item.matchedBlock));
+              (item.matchedBlock == null || isSameBlock(f.block, item.matchedBlock)));
 
           if (flatIndex != -1) {
             final flat = _flatsList[flatIndex];
             final paymentAmount = item.transaction.amount;
 
-            if (!flat.isPaid) {
+            if (!flat.isPaid && flat.amountDue > Decimal.zero) {
+              final cleared = paymentAmount >= flat.amountDue ? flat.amountDue : paymentAmount;
+              final surplus = paymentAmount > flat.amountDue ? paymentAmount - flat.amountDue : Decimal.zero;
+
               _flatsList[flatIndex] = flat.copyWith(
                 isPaid: true,
                 daysOverdue: 0,
                 paidDateStr: 'Banka Ekstresi',
+                advanceBalance: flat.advanceBalance + surplus,
               );
               totalCleared += paymentAmount;
-              if (paymentAmount > flat.amountDue) {
-                final surplus = paymentAmount - flat.amountDue;
+              if (surplus > Decimal.zero) {
                 _creditUnitAdvance(item.matchedBlock ?? flat.block, flat.unitNo, surplus);
               }
 
@@ -1533,7 +1761,8 @@ class DashboardController extends ChangeNotifier {
                 overdueUnitsCount: _collectionSummary.overdueUnitsCount > 0
                     ? _collectionSummary.overdueUnitsCount - 1
                     : 0,
-                totalCollected: _collectionSummary.totalCollected + paymentAmount,
+                totalCollected: _collectionSummary.totalCollected + cleared,
+                totalAdvanceBalance: _collectionSummary.totalAdvanceBalance + surplus,
                 totalOverdueWithInterest: _collectionSummary.totalOverdueAmount > flat.amountDue
                     ? _collectionSummary.totalOverdueAmount - flat.amountDue
                     : Decimal.zero,
@@ -1541,7 +1770,33 @@ class DashboardController extends ChangeNotifier {
             } else {
               // Flat has NO debt (already paid or zero debt): match entire payment as advance payment!
               totalCleared += paymentAmount;
+              _flatsList[flatIndex] = flat.copyWith(
+                advanceBalance: flat.advanceBalance + paymentAmount,
+              );
               _creditUnitAdvance(item.matchedBlock ?? flat.block, flat.unitNo, paymentAmount);
+              _collectionSummary = _collectionSummary.copyWith(
+                totalAdvanceBalance: _collectionSummary.totalAdvanceBalance + paymentAmount,
+              );
+            }
+          }
+
+          // Also update _monthlyFlats across ALL cached monthly maps
+          for (final monthKey in _monthlyFlats.keys) {
+            final monthList = _monthlyFlats[monthKey];
+            if (monthList != null) {
+              final mIdx = monthList.indexWhere((f) =>
+                  f.unitNo == item.matchedUnitNumber &&
+                  (item.matchedBlock == null || isSameBlock(f.block, item.matchedBlock)));
+              if (mIdx != -1) {
+                final mf = monthList[mIdx];
+                if (!mf.isPaid) {
+                  monthList[mIdx] = mf.copyWith(
+                    isPaid: true,
+                    daysOverdue: 0,
+                    paidDateStr: 'Banka Ekstresi',
+                  );
+                }
+              }
             }
           }
         }
@@ -1560,6 +1815,36 @@ class DashboardController extends ChangeNotifier {
     _reconciliationSuccessMessage =
         '₺${totalCleared.toStringAsFixed(2)} tutarındaki banka aidat transferi başarıyla onaylandı$messageNote$ibanNote.';
     notifyListeners();
+
+    // Dispatch to Rust Backend to persist reconciliation settlement
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/bank/statements/confirm-reconciliation');
+      final payload = {
+        'site_id': _currentManagedSite?.id ?? _activeUnit.siteId,
+        'match_ids': matchIds,
+        'optional_message': optionalHostMessage,
+        'remember_sender_iban': rememberSenderIban,
+      };
+      await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(payload),
+      ).timeout(const Duration(seconds: 4));
+    } catch (e) {
+      debugPrint('Confirm reconciliation backend error: $e');
+    }
+
+    // Refresh live site overview from backend
+    try {
+      await fetchSiteManagerOverview(
+        siteId: _currentManagedSite?.id,
+        period: _selectedDuesMonth,
+      );
+      await fetchReconciliationQueue(_currentManagedSite?.id ?? _activeUnit.siteId);
+    } catch (e) {
+      debugPrint('Overview refresh after reconciliation error: $e');
+    }
   }
 
   Future<void> _persistRememberedSenderIban({
@@ -1574,7 +1859,7 @@ class DashboardController extends ChangeNotifier {
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'site_id': 'site-1',
+          'site_id': _currentManagedSite?.id ?? _activeUnit.siteId,
           'unit_id': unitId,
           'sender_iban': senderIban,
           'sender_name': senderName,
@@ -1604,7 +1889,7 @@ class DashboardController extends ChangeNotifier {
     String paymentMethod = 'CREDIT_CARD',
     String? note,
   }) async {
-    final flatIndex = _flatsList.indexWhere((f) => f.unitNo == unitNo && f.block == block);
+    final flatIndex = _flatsList.indexWhere((f) => f.unitNo == unitNo && isSameBlock(f.block, block));
     Decimal clearedDebt = Decimal.zero;
     Decimal advanceCredit = Decimal.zero;
 
@@ -1614,28 +1899,46 @@ class DashboardController extends ChangeNotifier {
         if (amount >= flat.amountDue) {
           clearedDebt = flat.amountDue;
           advanceCredit = amount - flat.amountDue;
-          _flatsList[flatIndex] = flat.copyWith(
+          final updated = flat.copyWith(
             isPaid: true,
             daysOverdue: 0,
+            advanceBalance: flat.advanceBalance + advanceCredit,
             paidDateStr: paymentMethod == 'CREDIT_CARD' ? 'Kredi Kartı (3D Secure)' : 'FAST / Havale',
           );
+          _flatsList[flatIndex] = updated;
           _collectionSummary = _collectionSummary.copyWith(
             paidUnitsCount: _collectionSummary.paidUnitsCount + 1,
             overdueUnitsCount: _collectionSummary.overdueUnitsCount > 0 ? _collectionSummary.overdueUnitsCount - 1 : 0,
             totalCollected: _collectionSummary.totalCollected + clearedDebt,
+            totalAdvanceBalance: _collectionSummary.totalAdvanceBalance + advanceCredit,
             totalOverdueWithInterest: _collectionSummary.totalOverdueAmount > clearedDebt
                 ? _collectionSummary.totalOverdueAmount - clearedDebt
                 : Decimal.zero,
           );
+
+          for (final monthList in _monthlyFlats.values) {
+            final mIdx = monthList.indexWhere((f) => f.unitNo == unitNo && isSameBlock(f.block, block));
+            if (mIdx != -1) {
+              monthList[mIdx] = updated;
+            }
+          }
         } else {
           clearedDebt = amount;
-          _flatsList[flatIndex] = flat.copyWith(amountDue: flat.amountDue - amount);
+          final updated = flat.copyWith(amountDue: flat.amountDue - amount);
+          _flatsList[flatIndex] = updated;
           _collectionSummary = _collectionSummary.copyWith(
             totalCollected: _collectionSummary.totalCollected + amount,
             totalOverdueWithInterest: _collectionSummary.totalOverdueAmount > amount
                 ? _collectionSummary.totalOverdueAmount - amount
                 : Decimal.zero,
           );
+
+          for (final monthList in _monthlyFlats.values) {
+            final mIdx = monthList.indexWhere((f) => f.unitNo == unitNo && isSameBlock(f.block, block));
+            if (mIdx != -1) {
+              monthList[mIdx] = updated;
+            }
+          }
         }
       } else {
         // No debt: full amount is advance payment
@@ -1700,7 +2003,7 @@ class DashboardController extends ChangeNotifier {
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'site_id': 'site-1',
+          'site_id': _activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : (_currentManagedSite?.id ?? ''),
           'unit_id': _activeUnit.id,
           'block': block,
           'unit_no': unitNo,
@@ -1712,6 +2015,12 @@ class DashboardController extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         await fetchResidentDashboard(_activeUnit.id);
+        if (_currentManagedSite?.id.isNotEmpty == true || _userSession.role == UserRole.siteManager) {
+          await fetchSiteManagerOverview(
+            siteId: _currentManagedSite?.id,
+            period: _selectedDuesMonth,
+          );
+        }
       }
     } catch (e) {
       debugPrint('recordHomeownerPayment backend sync: $e');
@@ -1773,13 +2082,19 @@ class DashboardController extends ChangeNotifier {
     final email = customEmail ?? (role == UserRole.saasAdmin ? 'admin@sitepulse.local' : '');
     final phone = customPhone ?? '';
 
+    final resolvedSiteName = (role == UserRole.siteManager && _currentManagedSite != null && _currentManagedSite!.name.isNotEmpty)
+        ? _currentManagedSite!.name
+        : (_activeUnit.siteName.isNotEmpty
+            ? _activeUnit.siteName
+            : (_saasSites.isNotEmpty ? _saasSites.first.name : ''));
+
     return UserSession(
       id: 'usr-${role.name}',
       fullName: name,
       email: email,
       phone: phone,
       role: role,
-      siteName: _activeUnit.siteName.isNotEmpty ? _activeUnit.siteName : 'Site Yönetimi',
+      siteName: resolvedSiteName,
       unitName: (role == UserRole.homeOwner || role == UserRole.homeResident)
           ? (_activeUnit.displayLabel.isNotEmpty ? _activeUnit.displayLabel : 'Bağımsız Bölüm')
           : 'Tüm Kompleks',

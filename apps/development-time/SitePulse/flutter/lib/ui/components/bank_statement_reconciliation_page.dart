@@ -64,14 +64,17 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
   void initState() {
     super.initState();
     _textController.text = BankStatementReconciliationPage.sampleGarantiExcel;
-    // Auto-parse default sample on open after the initial build frame
-    // to prevent notifyListeners() from triggering setState() during widget mount
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      widget.controller.parseBankStatement(BankStatementReconciliationPage.sampleGarantiExcel);
-      setState(() {
-        _selectAllPending();
-      });
+      await widget.controller.fetchReconciliationQueue();
+      if (widget.controller.reconciliationQueue.isEmpty || widget.controller.isTestMode) {
+        widget.controller.parseBankStatement(BankStatementReconciliationPage.sampleGarantiExcel);
+      }
+      if (mounted) {
+        setState(() {
+          _selectAllPending();
+        });
+      }
     });
   }
 
@@ -256,7 +259,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
               final isTest = widget.controller.isTestMode;
               final bankName = activeAccount?.bankName ?? (isTest ? 'Kuveyt Türk Katılım Bankası' : 'Banka Hesabı Tanımlanmadı');
               final iban = activeAccount?.iban ?? (isTest ? 'TR62 0020 5000 0986 3791 6000 01' : '-');
-              final holder = activeAccount?.accountHolder ?? (isTest ? 'Begonya Sitesi Yönetimi' : widget.controller.siteName);
+              final holder = activeAccount?.accountHolder ?? (widget.controller.siteName.isNotEmpty ? '${widget.controller.siteName} Yönetimi' : 'Site Yönetimi');
               final formatStr = activeAccount?.statementFormat ?? 'EXCEL';
 
               Color formatColor = AppColors.accentGreen;
@@ -1233,29 +1236,31 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
       );
 
       // Confirm reconciliation with optional message to host and remember sender IBAN preference
-      widget.controller.confirmReconciliation(
+      await widget.controller.confirmReconciliation(
         [item.matchId],
         optionalHostMessage: sendMsg ? msgText : null,
         rememberSenderIban: rememberIban,
       );
 
+      if (!mounted) return;
       setState(() {
         _selectedMatchIds.remove(item.matchId);
       });
 
-      if (mounted) {
-        final msgNote = (sendMsg && msgText != null && msgText.trim().isNotEmpty)
-            ? ' Ev sahibine (${selectedFlat.residentName}) bilgilendirme mesajı iletildi.'
-            : '';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${item.transaction.senderName ?? "İşlem"} -> ${selectedFlat.block} Blok D:${selectedFlat.unitNo} (${selectedFlat.residentName}) ile eşleştirildi ve onaylandı!$msgNote',
-            ),
-            backgroundColor: AppColors.accentGreen,
+      final flatDesc = selectedFlat.block.contains('Blok')
+          ? '${selectedFlat.block} D:${selectedFlat.unitNo}'
+          : '${selectedFlat.block} Blok D:${selectedFlat.unitNo}';
+      final msgNote = (sendMsg && msgText != null && msgText.trim().isNotEmpty)
+          ? ' Ev sahibine (${selectedFlat.residentName}) bilgilendirme mesajı iletildi.'
+          : '';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${item.transaction.senderName ?? "İşlem"} -> $flatDesc (${selectedFlat.residentName}) ile eşleştirildi ve onaylandı!$msgNote',
           ),
-        );
-      }
+          backgroundColor: AppColors.accentGreen,
+        ),
+      );
     }
   }
 
@@ -1471,10 +1476,11 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     );
 
     if (confirmed == true && mounted) {
-      widget.controller.confirmReconciliation(
+      await widget.controller.confirmReconciliation(
         [item.matchId],
         optionalHostMessage: sendMessage ? messageController.text.trim() : null,
       );
+      if (!mounted) return;
       setState(() {
         _selectedMatchIds.remove(item.matchId);
       });
@@ -1716,10 +1722,11 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     );
 
     if (confirmed == true && mounted) {
-      widget.controller.confirmReconciliation(
+      await widget.controller.confirmReconciliation(
         _selectedMatchIds.toList(),
         optionalHostMessage: sendMessage ? messageController.text.trim() : null,
       );
+      if (!mounted) return;
       setState(() {
         _selectedMatchIds.clear();
       });
@@ -1830,7 +1837,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     final isTest = widget.controller.isTestMode;
     SupportedBank selectedBank = currentAccount?.supportedBank ?? SupportedBank.kuveytTurk;
     final ibanController = TextEditingController(text: currentAccount?.iban ?? (isTest ? 'TR620020500009863791600001' : ''));
-    final holderController = TextEditingController(text: currentAccount?.accountHolder ?? (isTest ? 'Begonya Sitesi Yönetimi' : widget.controller.siteName));
+    final holderController = TextEditingController(text: currentAccount?.accountHolder ?? (widget.controller.siteName.isNotEmpty ? '${widget.controller.siteName} Yönetimi' : ''));
     String? dialogError;
 
     showDialog(
@@ -2025,7 +2032,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                           fontSize: 13,
                         ),
                         decoration: InputDecoration(
-                          hintText: 'Örn. Begonya Sitesi Yönetimi',
+                          hintText: 'Örn. Site Yönetimi',
                           hintStyle: TextStyle(color: AppColors.textSecondary(context).withOpacity(0.5)),
                           filled: true,
                           fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),

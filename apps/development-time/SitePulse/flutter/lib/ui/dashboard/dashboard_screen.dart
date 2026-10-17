@@ -147,6 +147,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: TextStyle(fontSize: 10, color: AppColors.textSecondary(context), fontWeight: FontWeight.w500),
               ),
             ),
+            if (session.role == UserRole.siteManager && session.siteName.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentCyan.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.apartment, size: 12, color: AppColors.accentCyan),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          session.siteName,
+                          style: const TextStyle(fontSize: 11, color: AppColors.accentCyan, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
         actions: [
@@ -322,7 +349,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Site Yönetim Paneli',
+                      '${widget.controller.userSession.siteName} Yönetimi',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

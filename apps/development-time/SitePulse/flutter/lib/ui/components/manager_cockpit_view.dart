@@ -26,6 +26,124 @@ class ManagerCockpitView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 0. Managed Site Banner & Multi-Site Switcher
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.accentCyan.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.apartment,
+                  color: AppColors.accentCyan,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            controller.userSession.siteName,
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentCyan.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${controller.currentManagedSite?.totalUnits ?? controller.flatsList.length} Daire',
+                            style: const TextStyle(
+                              color: AppColors.accentCyan,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      controller.currentManagedSite?.address.isNotEmpty == true
+                          ? controller.currentManagedSite!.address
+                          : 'Yönetilen Site',
+                      style: TextStyle(
+                        color: AppColors.textSecondary(context),
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (controller.managedSitesList.length > 1) ...[
+                PopupMenuButton<String>(
+                  tooltip: 'Site Değiştir',
+                  icon: const Icon(Icons.swap_horiz, color: AppColors.accentCyan),
+                  onSelected: (siteId) {
+                    controller.changeManagedSite(siteId);
+                  },
+                  itemBuilder: (context) {
+                    return controller.managedSitesList.map((site) {
+                      return PopupMenuItem<String>(
+                        value: site.id,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.apartment,
+                              size: 16,
+                              color: site.id == controller.currentManagedSite?.id
+                                  ? AppColors.accentCyan
+                                  : AppColors.textSecondary(context),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                site.name,
+                                style: TextStyle(
+                                  fontWeight: site.id == controller.currentManagedSite?.id
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList();
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
         // 1. Tahsilat Özeti Card
         Container(
           decoration: BoxDecoration(
@@ -57,26 +175,70 @@ class ManagerCockpitView extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '${controller.selectedDuesMonth} Tahsilat Durumu',
-                    style: TextStyle(
-                      color: AppColors.textSecondary(context),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                  PopupMenuButton<String>(
+                    tooltip: 'Dönem Seç',
+                    onSelected: (month) {
+                      controller.setSelectedDuesMonth(month);
+                    },
+                    itemBuilder: (context) => controller.availableDuesMonths.map((m) {
+                      return PopupMenuItem<String>(
+                        value: m,
+                        child: Row(
+                          children: [
+                            if (m == controller.selectedDuesMonth)
+                              const Icon(Icons.check, size: 16, color: AppColors.accentCyan)
+                            else
+                              const SizedBox(width: 16),
+                            const SizedBox(width: 8),
+                            Text(m),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${controller.selectedDuesMonth} Tahsilat Durumu',
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_drop_down, size: 18, color: AppColors.accentCyan),
+                        ],
+                      ),
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppColors.accentGreen.withOpacity(0.15),
+                      color: summary.totalExpected == Decimal.zero && summary.totalAdvanceBalance > Decimal.zero
+                          ? AppColors.accentCyan.withOpacity(0.15)
+                          : AppColors.accentGreen.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       summary.totalExpected == Decimal.zero
-                          ? '₺0 Borç — Güncel'
+                          ? (summary.totalAdvanceBalance > Decimal.zero
+                              ? '₺${summary.totalAdvanceBalance.toStringAsFixed(0)} Avans Mevcut'
+                              : '₺0 Borç — Güncel')
                           : '%${summary.collectionPercentage} Tahsil Edildi',
-                      style: const TextStyle(
-                        color: AppColors.accentGreen,
+                      style: TextStyle(
+                        color: summary.totalExpected == Decimal.zero && summary.totalAdvanceBalance > Decimal.zero
+                            ? AppColors.accentCyan
+                            : AppColors.accentGreen,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -105,6 +267,32 @@ class ManagerCockpitView extends StatelessWidget {
                       fontSize: 18,
                     ),
                   ),
+                  if (summary.totalAdvanceBalance > Decimal.zero) ...[
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentCyan.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.accentCyan.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.account_balance_wallet, size: 14, color: AppColors.accentCyan),
+                          const SizedBox(width: 5),
+                          Text(
+                            '+₺${summary.totalAdvanceBalance.toStringAsFixed(0)} Avans',
+                            style: const TextStyle(
+                              color: AppColors.accentCyan,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 14),
@@ -125,29 +313,9 @@ class ManagerCockpitView extends StatelessWidget {
                   _buildMetricTile(context, 'Ödeyen', '${summary.paidUnitsCount}', color: AppColors.accentGreen),
                   _buildMetricTile(context, 'Geciken', '${summary.overdueUnitsCount}', color: AppColors.accentRed),
                   _buildMetricTile(context, 'Kalan Borç', '₺${summary.totalOverdueAmount.toStringAsFixed(0)}', color: AppColors.accentOrange),
+                  if (summary.totalAdvanceBalance > Decimal.zero)
+                    _buildMetricTile(context, 'Toplam Avans', '₺${summary.totalAdvanceBalance.toStringAsFixed(0)}', color: AppColors.accentCyan),
                 ],
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: InkWell(
-                  onTap: () => controller.resetAllDemoData(),
-                  borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(Icons.refresh, size: 12, color: AppColors.accentRed),
-                        SizedBox(width: 4),
-                        Text(
-                          'Verileri Sıfırla (₺0 Borç)',
-                          style: TextStyle(color: AppColors.accentRed, fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               ),
             ],
           ),
@@ -486,7 +654,7 @@ class ManagerCockpitView extends StatelessWidget {
                 ),
                 child: Center(
                   child: Text(
-                    '${flat.block}${flat.unitNo}',
+                    flat.shortLabel,
                     style: TextStyle(
                       color: flat.isPaid ? AppColors.accentGreen : AppColors.accentRed,
                       fontSize: 12,
@@ -508,7 +676,7 @@ class ManagerCockpitView extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${flat.block} Blok D:${flat.unitNo}',
+                    flat.flatDesc,
                     style: TextStyle(
                       color: AppColors.textSecondary(context),
                       fontSize: 11,
@@ -522,20 +690,28 @@ class ManagerCockpitView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '₺${flat.amountDue.toStringAsFixed(2)}',
+                flat.hasAdvanceBalance && flat.amountDue == Decimal.zero
+                    ? '+₺${flat.advanceBalance.toStringAsFixed(2)}'
+                    : '₺${flat.amountDue.toStringAsFixed(2)}',
                 style: TextStyle(
-                  color: AppColors.textPrimary(context),
+                  color: flat.hasAdvanceBalance && flat.amountDue == Decimal.zero
+                      ? AppColors.accentGreen
+                      : AppColors.textPrimary(context),
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
-                flat.isPaid
-                    ? (flat.amountDue == Decimal.zero ? 'Borç Yok' : 'Ödendi (${flat.paidDateStr ?? 'Tamam'})')
-                    : '${flat.daysOverdue} Gün Gecikme',
+                flat.hasAdvanceBalance
+                    ? (flat.isPaid && flat.amountDue > Decimal.zero
+                        ? 'Ödendi (+₺${flat.advanceBalance.toStringAsFixed(2)} Avans)'
+                        : '+₺${flat.advanceBalance.toStringAsFixed(2)} Avans Bakiyesi')
+                    : (flat.isPaid
+                        ? (flat.amountDue == Decimal.zero ? 'Borç Yok' : 'Ödendi (${flat.paidDateStr ?? 'Tamam'})')
+                        : '${flat.daysOverdue} Gün Gecikme'),
                 style: TextStyle(
-                  color: flat.isPaid ? AppColors.accentGreen : AppColors.accentRed,
+                  color: flat.isPaid || flat.hasAdvanceBalance ? AppColors.accentGreen : AppColors.accentRed,
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
                 ),

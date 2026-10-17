@@ -17,6 +17,7 @@ class PaymentCheckoutDialog extends StatefulWidget {
   final String unitDesc;
   final String virtualIban;
   final CheckoutPaymentMethod initialMethod;
+  final bool isTest;
   final void Function(Decimal amount) onPaymentSuccess;
 
   const PaymentCheckoutDialog({
@@ -24,8 +25,9 @@ class PaymentCheckoutDialog extends StatefulWidget {
     required this.dues,
     required this.siteName,
     required this.unitDesc,
-    this.virtualIban = 'TR12 0006 2000 0000 0000 0014',
+    this.virtualIban = '',
     this.initialMethod = CheckoutPaymentMethod.card,
+    this.isTest = false,
     required this.onPaymentSuccess,
   });
 
@@ -53,7 +55,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
     _amountCtrl = TextEditingController(text: initialVal.toStringAsFixed(2));
     _amountCtrl.addListener(_onAmountChanged);
 
-    final isTest = widget.unitDesc.contains('D:14') || widget.siteName.contains('Begonya');
+    final isTest = widget.isTest;
     _cardNumberCtrl = TextEditingController(text: isTest ? '5428 •••• •••• 9012' : '');
     _cardHolderCtrl = TextEditingController(text: isTest ? 'Ahmet Yılmaz' : '');
     _expiryCtrl = TextEditingController(text: isTest ? '12/28' : '');

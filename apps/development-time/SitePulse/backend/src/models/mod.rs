@@ -918,3 +918,58 @@ pub struct ProvisionSiteUnitsResponse {
     pub total_monthly_dues_volume: Decimal,
     pub units: Vec<ProvisionedUnitDto>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SiteOverviewQuery {
+    pub site_id: Option<String>,
+    pub period: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SiteSummaryBriefDto {
+    pub id: String,
+    pub name: String,
+    pub address: String,
+    pub total_units: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SiteCollectionSummaryDto {
+    pub total_expected: Decimal,
+    pub total_collected: Decimal,
+    pub total_overdue_with_interest: Decimal,
+    pub total_advance_balance: Decimal,
+    pub paid_units_count: usize,
+    pub overdue_units_count: usize,
+    pub total_units_count: usize,
+    pub collection_percentage: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SiteFlatStatusDto {
+    pub id: String,
+    pub block: String,
+    pub unit_no: i32,
+    pub resident_name: String,
+    pub amount_due: Decimal,
+    pub days_overdue: i32,
+    pub is_paid: bool,
+    pub paid_date_str: Option<String>,
+    pub virtual_iban: Option<String>,
+    pub advance_balance: Decimal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SiteOverviewResponse {
+    pub site_id: String,
+    pub site_name: String,
+    pub address: String,
+    pub manager_name: String,
+    pub manager_email: String,
+    pub selected_period: String,
+    pub available_periods: Vec<String>,
+    pub available_sites: Vec<SiteSummaryBriefDto>,
+    pub summary: SiteCollectionSummaryDto,
+    pub flats: Vec<SiteFlatStatusDto>,
+}
+

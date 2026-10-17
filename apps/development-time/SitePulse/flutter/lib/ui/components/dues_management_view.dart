@@ -371,10 +371,11 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
                         final ids = matchedItems.map((m) => m.matchId).toList();
-                        widget.controller.confirmReconciliation(ids);
                         Navigator.pop(ctx);
+                        await widget.controller.confirmReconciliation(ids);
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('${matchedItems.length} dairenin aidat tahsilatı onaylandı!'),
@@ -461,20 +462,23 @@ class _DuesManagementViewState extends State<DuesManagementView> {
         unitNo: selectedFlat.unitNo,
       );
       // Auto confirm if manager chooses with optional message to host and remember sender IBAN
-      widget.controller.confirmReconciliation(
+      await widget.controller.confirmReconciliation(
         [item.matchId],
         optionalHostMessage: sendMsg ? msgText : null,
         rememberSenderIban: rememberIban,
       );
 
       if (mounted) {
+        final flatDesc = selectedFlat.block.contains('Blok')
+            ? '${selectedFlat.block} D:${selectedFlat.unitNo}'
+            : '${selectedFlat.block} Blok D:${selectedFlat.unitNo}';
         final msgNote = (sendMsg && msgText != null && msgText.trim().isNotEmpty)
             ? ' Ev sahibine (${selectedFlat.residentName}) bilgilendirme mesajı iletildi.'
             : '';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${item.transaction.senderName ?? "İşlem"} -> ${selectedFlat.block} Blok D:${selectedFlat.unitNo} (${selectedFlat.residentName}) ile eşleştirildi ve onaylandı!$msgNote',
+              '${item.transaction.senderName ?? "İşlem"} -> $flatDesc (${selectedFlat.residentName}) ile eşleştirildi ve onaylandı!$msgNote',
             ),
             backgroundColor: AppColors.accentGreen,
           ),
@@ -672,6 +676,27 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 0. Site Management Title
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              const Icon(Icons.apartment, size: 20, color: AppColors.accentCyan),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${widget.controller.userSession.siteName} • Aidat ve Tahsilat Yönetimi',
+                  style: TextStyle(
+                    color: AppColors.textPrimary(context),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
         // 1. Header: Month Selector & Upload Button
         Wrap(
           alignment: WrapAlignment.spaceBetween,
@@ -756,16 +781,6 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     backgroundColor: AppColors.accentCyan,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => widget.controller.resetAllDemoData(),
-                  icon: const Icon(Icons.refresh, size: 16, color: AppColors.accentRed),
-                  label: const Text('Sıfırla (₺0)', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold)),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppColors.accentRed),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),

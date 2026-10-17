@@ -6,6 +6,7 @@ import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 class TestFixtures {
   static const defaultResidentUnit = ApartmentUnit(
     id: 'd-14',
+    siteId: 'site-1',
     siteName: 'Begonya Sitesi',
     block: 'A',
     unitNo: 14,
@@ -18,6 +19,7 @@ class TestFixtures {
 
   static const managerUnit = ApartmentUnit(
     id: 'd-1',
+    siteId: 'site-1',
     siteName: 'Begonya Sitesi',
     block: 'B',
     unitNo: 1,
@@ -272,6 +274,7 @@ extension DashboardControllerTestFixtures on DashboardController {
     setSiteBankAccountForTesting(TestFixtures.siteBankAccount);
     setUnitResidentsForTesting(TestFixtures.managerResidents);
     setManagerResidentsForTesting(TestFixtures.managerResidents);
+    setSelectedDuesMonthForTesting('Eylül 2026');
     switchSessionRole(UserRole.homeOwner);
   }
 }

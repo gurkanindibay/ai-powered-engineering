@@ -76,8 +76,10 @@ impl ReconciliationService {
         if matched_unit.is_none() {
             let extracted_unit = Self::extract_block_and_flat(desc);
             if let Some((ref blk, unit_no)) = extracted_unit {
+                let clean_blk = blk.replace("Blok", "").replace("blok", "").trim().to_uppercase();
                 matched_unit = units.iter().find(|u| {
-                    u.block_id.eq_ignore_ascii_case(blk) && u.unit_number == unit_no
+                    let u_blk = u.block_id.replace("Blok", "").replace("blok", "").trim().to_uppercase();
+                    (u_blk == clean_blk || u.block_id.eq_ignore_ascii_case(blk)) && u.unit_number == unit_no
                 });
             }
 

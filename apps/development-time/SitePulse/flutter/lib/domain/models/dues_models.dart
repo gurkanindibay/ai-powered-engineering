@@ -89,6 +89,7 @@ typedef AidatBorcu = DuesLiability;
 
 class ApartmentUnit {
   final String id;
+  final String siteId;
   final String siteName;
   final String block;
   final int unitNo;
@@ -101,6 +102,7 @@ class ApartmentUnit {
 
   static const empty = ApartmentUnit(
     id: '',
+    siteId: '',
     siteName: '',
     block: '',
     unitNo: 0,
@@ -112,6 +114,7 @@ class ApartmentUnit {
 
   const ApartmentUnit({
     required this.id,
+    this.siteId = '',
     required this.siteName,
     required this.block,
     required this.unitNo,
@@ -138,6 +141,7 @@ class ApartmentUnit {
 
   ApartmentUnit copyWith({
     String? id,
+    String? siteId,
     String? siteName,
     String? block,
     int? unitNo,
@@ -150,6 +154,7 @@ class ApartmentUnit {
   }) {
     return ApartmentUnit(
       id: id ?? this.id,
+      siteId: siteId ?? this.siteId,
       siteName: siteName ?? this.siteName,
       block: block ?? this.block,
       unitNo: unitNo ?? this.unitNo,
@@ -204,6 +209,7 @@ class ComplexCollectionSummary {
   final Decimal totalExpected;
   final Decimal totalCollected;
   final Decimal totalOverdueWithInterest;
+  final Decimal totalAdvanceBalance;
   final int paidUnitsCount;
   final int overdueUnitsCount;
   final int totalUnitsCount;
@@ -212,17 +218,20 @@ class ComplexCollectionSummary {
     Decimal? totalExpected,
     Decimal? totalCollected,
     Decimal? totalOverdueWithInterest,
+    Decimal? totalAdvanceBalance,
     this.paidUnitsCount = 0,
     this.overdueUnitsCount = 0,
     this.totalUnitsCount = 0,
   })  : totalExpected = totalExpected ?? Decimal.zero,
         totalCollected = totalCollected ?? Decimal.zero,
-        totalOverdueWithInterest = totalOverdueWithInterest ?? Decimal.zero;
+        totalOverdueWithInterest = totalOverdueWithInterest ?? Decimal.zero,
+        totalAdvanceBalance = totalAdvanceBalance ?? Decimal.zero;
 
   factory ComplexCollectionSummary.zero({int totalUnitsCount = 0}) => ComplexCollectionSummary(
         totalExpected: Decimal.zero,
         totalCollected: Decimal.zero,
         totalOverdueWithInterest: Decimal.zero,
+        totalAdvanceBalance: Decimal.zero,
         paidUnitsCount: 0,
         overdueUnitsCount: 0,
         totalUnitsCount: totalUnitsCount,
@@ -241,6 +250,7 @@ class ComplexCollectionSummary {
     Decimal? totalExpected,
     Decimal? totalCollected,
     Decimal? totalOverdueWithInterest,
+    Decimal? totalAdvanceBalance,
     int? paidUnitsCount,
     int? overdueUnitsCount,
     int? totalUnitsCount,
@@ -249,6 +259,7 @@ class ComplexCollectionSummary {
       totalExpected: totalExpected ?? this.totalExpected,
       totalCollected: totalCollected ?? this.totalCollected,
       totalOverdueWithInterest: totalOverdueWithInterest ?? this.totalOverdueWithInterest,
+      totalAdvanceBalance: totalAdvanceBalance ?? this.totalAdvanceBalance,
       paidUnitsCount: paidUnitsCount ?? this.paidUnitsCount,
       overdueUnitsCount: overdueUnitsCount ?? this.overdueUnitsCount,
       totalUnitsCount: totalUnitsCount ?? this.totalUnitsCount,
@@ -262,22 +273,32 @@ class FlatPaymentStatus {
   final int unitNo;
   final String residentName;
   final Decimal amountDue;
+  final Decimal advanceBalance;
   final int daysOverdue;
   final bool isPaid;
   final String? paidDateStr;
 
-  const FlatPaymentStatus({
+  FlatPaymentStatus({
     required this.id,
     required this.block,
     required this.unitNo,
     required this.residentName,
     required this.amountDue,
+    Decimal? advanceBalance,
     required this.daysOverdue,
     required this.isPaid,
     this.paidDateStr,
-  });
+  }) : advanceBalance = advanceBalance ?? Decimal.zero;
 
-  String get flatDesc => '$block Blok D:$unitNo';
+  bool get hasAdvanceBalance => advanceBalance > Decimal.zero;
+
+  String get shortLabel {
+    final match = RegExp(r'[a-zA-Z0-9]').firstMatch(block);
+    final letter = match != null ? block.substring(match.start, match.end).toUpperCase() : (block.isNotEmpty ? block[0].toUpperCase() : 'A');
+    return '$letter$unitNo';
+  }
+
+  String get flatDesc => block.contains('Blok') ? '$block D:$unitNo' : '$block Blok D:$unitNo';
 
   FlatPaymentStatus copyWith({
     String? id,
@@ -285,6 +306,7 @@ class FlatPaymentStatus {
     int? unitNo,
     String? residentName,
     Decimal? amountDue,
+    Decimal? advanceBalance,
     int? daysOverdue,
     bool? isPaid,
     String? paidDateStr,
@@ -295,6 +317,7 @@ class FlatPaymentStatus {
       unitNo: unitNo ?? this.unitNo,
       residentName: residentName ?? this.residentName,
       amountDue: amountDue ?? this.amountDue,
+      advanceBalance: advanceBalance ?? this.advanceBalance,
       daysOverdue: daysOverdue ?? this.daysOverdue,
       isPaid: isPaid ?? this.isPaid,
       paidDateStr: paidDateStr ?? this.paidDateStr,
@@ -548,7 +571,8 @@ class ReconciliationQueueItem {
 
   String get matchedUnitDesc {
     if (matchedBlock != null && matchedUnitNumber != null) {
-      return '$matchedBlock Blok D:$matchedUnitNumber';
+      final clean = matchedBlock!.replaceAll(RegExp(r'\s*blok\b', caseSensitive: false), '').trim();
+      return '$clean Blok D:$matchedUnitNumber';
     }
     return 'Belirlenemedi';
   }

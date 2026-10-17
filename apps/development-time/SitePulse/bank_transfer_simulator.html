@@ -683,7 +683,10 @@
         <!-- Mode Tabs -->
         <div class="transfer-tabs">
           <button type="button" class="tab-btn active" id="tab-viban" onclick="switchMethod('VIBAN')">
-            <span>🔷</span> Daireye Özel Sanal IBAN
+            <span>🔷</span> Daireye Özel Sanal IBAN (Virtual Account)
+          </button>
+          <button type="button" class="tab-btn" id="tab-card" onclick="switchMethod('CARD')">
+            <span>💳</span> Kredi Kartı ile Online Ödeme
           </button>
           <button type="button" class="tab-btn" id="tab-regular" onclick="switchMethod('REGULAR')">
             <span>🏛️</span> Site Yönetimi Genel IBAN'ı
@@ -691,28 +694,55 @@
         </div>
 
         <form id="transfer-form" onsubmit="executeBankTransfer(event)">
-          <!-- Recipient IBAN -->
-          <div class="form-group">
-            <label class="form-label" id="label-recipient-iban">Alıcı Sanal IBAN (A Blok D:14)</label>
-            <input type="text" id="recipient-iban" class="form-input font-mono" value="TR41 0020 5042 1399 1067 0000 14" required>
-            <div class="input-hint" id="hint-recipient-iban">
-              <strong>Sanal IBAN Prensibi:</strong> Bu IBAN yalnızca A Blok D:14 nolu daireye tahsis edilmiştir. Açıklama yazmasanız bile banka webhook'u işlemi %100 güvenle ilgili daireyle eşleştirir.
+          <!-- Recipient IBAN Section (Hidden in CARD mode) -->
+          <div id="section-iban-fields">
+            <div class="form-group">
+              <label class="form-label" id="label-recipient-iban">Alıcı Sanal IBAN (A Blok D:14)</label>
+              <input type="text" id="recipient-iban" class="form-input font-mono" value="TR41 0020 5042 1399 1067 0000 14">
+              <div class="input-hint" id="hint-recipient-iban">
+                <strong>Sanal IBAN Prensibi:</strong> Bu IBAN yalnızca seçili daireye tahsis edilmiş benzersiz sanal hesaptır. FAST / EFT / Havale ile doğrudan buraya aktarılır.
+              </div>
+            </div>
+
+            <!-- Recipient Name -->
+            <div class="form-group">
+              <label class="form-label">Alıcı Hesap Ünvanı</label>
+              <input type="text" id="recipient-name" class="form-input" value="Begonya Sitesi - A Blok D:14 Sanal Hesabı" readonly style="opacity: 0.8;">
             </div>
           </div>
 
-          <!-- Recipient Name -->
-          <div class="form-group">
-            <label class="form-label">Alıcı Hesap Ünvanı</label>
-            <input type="text" id="recipient-name" class="form-input" value="Begonya Sitesi - A Blok D:14 Sanal Hesabı" readonly style="opacity: 0.8;">
+          <!-- Credit Card Input Section (Visible only in CARD mode) -->
+          <div id="section-card-fields" style="display: none; background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <span style="font-size: 12px; font-weight: 700; color: #60A5FA;">💳 Sanal POS & 3D Secure Kart Bilgileri</span>
+              <span style="font-size: 10.5px; background: rgba(59, 130, 246, 0.15); color: #60A5FA; padding: 2px 7px; border-radius: 4px; font-weight: 700;">256-Bit SSL Test POS</span>
+            </div>
+            <div class="form-group" style="margin-bottom: 10px;">
+              <label class="form-label">Kart Numarası</label>
+              <input type="text" id="card-number" class="form-input font-mono" value="5528 7900 1234 4242" placeholder="**** **** **** ****">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">Son Kullanma (AA/YY)</label>
+                <input type="text" id="card-expiry" class="form-input font-mono" value="12/28" placeholder="AA/YY">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label">CVC / CVV</label>
+                <input type="text" id="card-cvv" class="form-input font-mono" value="321" placeholder="321">
+              </div>
+            </div>
+            <div class="input-hint" style="margin-top: 8px;">
+              🔒 <em>Bu işlem SitePulse Online Kart Ödeme Altyapısı (<code>POST /api/v1/payments/record</code>) üzerinden doğrudan tahakkukları kapatır.</em>
+            </div>
           </div>
 
           <!-- Sender Info -->
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
-              <label class="form-label">Gönderen Adı Soyadı</label>
+              <label class="form-label" id="label-sender-name">Gönderen / Kart Sahibi</label>
               <input type="text" id="sender-name" class="form-input" value="Ahmet Yılmaz" required>
             </div>
-            <div class="form-group">
+            <div class="form-group" id="group-sender-iban">
               <label class="form-label">Gönderen IBAN</label>
               <input type="text" id="sender-iban" class="form-input font-mono" value="TR12 0006 2000 0000 0000 0001">
             </div>
@@ -902,6 +932,97 @@
         </table>
       </div>
     </div>
+
+    <!-- All Site Payments Card with Site Selector -->
+    <div class="card" id="all-site-payments-card" style="margin-top: 24px;">
+      <div class="card-title" style="flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span>💳 Sitedeki Tüm Ödemeler (Banka, FAST, Kredi Kartı & Sanal Hesap)</span>
+          <span id="site-payments-count-badge" style="font-size: 11px; background: rgba(0, 210, 180, 0.15); color: var(--primary); padding: 2px 8px; border-radius: 6px; font-weight: 700;">0 Ödeme</span>
+        </div>
+        
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <label for="payments-site-select" style="font-size: 12px; color: var(--text-muted); font-weight: 600;">İlgili Siteyi Seç:</label>
+            <select id="payments-site-select" class="form-select font-mono" style="padding: 6px 12px; font-size: 12px; min-width: 220px; height: auto;" onchange="onSitePaymentsChange(this.value)">
+              <option value="site-1">Begonya Sitesi (site-1)</option>
+            </select>
+          </div>
+          <button type="button" class="btn-toolbar" onclick="refreshSitePayments()" style="color: var(--primary); background: rgba(0, 210, 180, 0.12); border-color: rgba(0, 210, 180, 0.3);">
+            <span>🔄</span> Ödemeleri Yenile
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Metrics for Selected Site -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 18px; padding: 14px; background: var(--bg-card-subtle); border-radius: 12px; border: 1px solid var(--border);">
+        <div>
+          <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">TOPLAM TAHSİLAT (KASAYA GİREN)</div>
+          <div id="sp-metric-collected" style="font-size: 18px; font-weight: 800; color: var(--primary); margin-top: 4px;">₺0,00</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">💳 KREDİ KARTI TAHSİLAT</div>
+          <div id="sp-metric-card" style="font-size: 18px; font-weight: 800; color: #A78BFA; margin-top: 4px;">₺0,00</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">🔷 FAST & SANAL HESAP</div>
+          <div id="sp-metric-fast" style="font-size: 18px; font-weight: 800; color: var(--accent-green); margin-top: 4px;">₺0,00</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">TOPLAM AVANS BAKİYESİ</div>
+          <div id="sp-metric-advance" style="font-size: 18px; font-weight: 800; color: #60A5FA; margin-top: 4px;">₺0,00</div>
+        </div>
+        <div>
+          <div style="font-size: 11px; color: var(--text-muted); font-weight: 600;">TOPLAM İŞLEM SAYISI</div>
+          <div id="sp-metric-txns" style="font-size: 18px; font-weight: 800; color: var(--text-main); margin-top: 4px;">0 Adet</div>
+        </div>
+      </div>
+
+      <!-- Search & Channel Filter -->
+      <div style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <button type="button" class="btn-toolbar channel-filter-btn" id="filter-btn-all" onclick="setChannelFilter('ALL')" style="color: var(--text-main); background: rgba(255, 255, 255, 0.12); border-color: var(--primary);">
+            Tüm Kanallar
+          </button>
+          <button type="button" class="btn-toolbar channel-filter-btn" id="filter-btn-card" onclick="setChannelFilter('CREDIT_CARD')" style="color: #A78BFA; background: rgba(167, 139, 250, 0.1); border-color: rgba(167, 139, 250, 0.3);">
+            💳 Kredi Kartı
+          </button>
+          <button type="button" class="btn-toolbar channel-filter-btn" id="filter-btn-viban" onclick="setChannelFilter('VIBAN')" style="color: var(--primary); background: rgba(0, 210, 180, 0.1); border-color: rgba(0, 210, 180, 0.3);">
+            🔷 Sanal Hesap / IBAN
+          </button>
+          <button type="button" class="btn-toolbar channel-filter-btn" id="filter-btn-fast" onclick="setChannelFilter('FAST')" style="color: var(--accent-green); background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
+            ⚡ FAST Transfer
+          </button>
+          <button type="button" class="btn-toolbar channel-filter-btn" id="filter-btn-bank" onclick="setChannelFilter('BANK_TRANSFER')" style="color: var(--accent-blue); background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3);">
+            🏛️ Havale / EFT
+          </button>
+        </div>
+        <input type="text" id="payments-search-input" placeholder="🔍 Daire, Sakin, Dekont veya Sanal Hesap ile ara..." class="form-input" style="max-width: 360px; font-size: 12px; padding: 7px 12px;" oninput="filterSitePaymentsTable()">
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>İşlem Tarihi</th>
+              <th>Daire No</th>
+              <th>Kat Maliki / Sakin</th>
+              <th>Ödeme Kanalı & Yöntemi</th>
+              <th>Tahsisli Sanal Hesap No (Virtual Account)</th>
+              <th>Ödenen Tutar</th>
+              <th>Borç / Avans Dağılımı</th>
+              <th>Dekont / Txn ID</th>
+              <th>Durum</th>
+            </tr>
+          </thead>
+          <tbody id="site-payments-tbody">
+            <tr>
+              <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 24px;">Yükleniyor...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- Modal: Yeni Site Kaydı -->
@@ -1032,6 +1153,9 @@
     let currentSelectedUnitId = '';
     let currentSelectedSiteId = '';
     let availableSites = [];
+    let currentPaymentsSiteId = 'site-1';
+    let rawSitePayments = [];
+    let currentChannelFilter = 'ALL';
 
     // Predefined IBANs
     let VIRTUAL_IBAN = 'TR41 0020 5042 1399 1067 0000 14';
@@ -1067,7 +1191,11 @@
           const sites = await res.json();
           availableSites = sites;
           if (sites.length > 0) {
-            select.innerHTML = sites.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join('');
+            select.innerHTML = sites.map(s => {
+              const id = s.site_id || s.id || 'site-1';
+              const name = s.site_name || s.name || 'Site';
+              return `<option value="${id}">${name} (${id})</option>`;
+            }).join('');
           } else {
             select.innerHTML = `<option value="site-1">Begonya Sitesi (Varsayılan)</option>`;
           }
@@ -1076,6 +1204,38 @@
         }
       } catch (e) {
         select.innerHTML = `<option value="site-1">Begonya Sitesi (Varsayılan)</option>`;
+      }
+    }
+
+    async function loadSitesForPayments() {
+      const select = document.getElementById('payments-site-select');
+      if (!select) return;
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/saas/sites`);
+        if (res.ok) {
+          const sites = await res.json();
+          availableSites = sites;
+          if (sites.length > 0) {
+            select.innerHTML = sites.map(s => {
+              const id = s.site_id || s.id || 'site-1';
+              const name = s.site_name || s.name || 'Site';
+              return `<option value="${id}">${name} (${id})</option>`;
+            }).join('');
+            if (!sites.some(s => (s.site_id || s.id) === currentPaymentsSiteId) || currentPaymentsSiteId === 'undefined') {
+              currentPaymentsSiteId = sites[0].site_id || sites[0].id || 'site-1';
+            }
+            select.value = currentPaymentsSiteId;
+          } else {
+            select.innerHTML = `<option value="site-1">Begonya Sitesi (site-1)</option>`;
+            currentPaymentsSiteId = 'site-1';
+          }
+        } else {
+          select.innerHTML = `<option value="site-1">Begonya Sitesi (site-1)</option>`;
+          currentPaymentsSiteId = 'site-1';
+        }
+      } catch (e) {
+        select.innerHTML = `<option value="site-1">Begonya Sitesi (site-1)</option>`;
+        currentPaymentsSiteId = 'site-1';
       }
     }
 
@@ -1277,6 +1437,12 @@
       if (!unit) return;
 
       currentSelectedSiteId = unit.site_id;
+      if (unit.site_id && unit.site_id !== currentPaymentsSiteId) {
+        currentPaymentsSiteId = unit.site_id;
+        const pSelect = document.getElementById('payments-site-select');
+        if (pSelect) pSelect.value = currentPaymentsSiteId;
+        refreshSitePayments();
+      }
       VIRTUAL_IBAN = formatIbanDisplay(unit.virtual_iban);
 
       // Update Form Inputs
@@ -1290,7 +1456,11 @@
 
       const debt = parseFloat(unit.current_debt || '0');
       document.getElementById('transfer-amount').value = debt > 0 ? debt.toFixed(2) : '1400.00';
-      document.getElementById('transfer-desc').value = `${unit.block} D:${unit.unit_number} Ekim 2026 Aidat FAST Ödemesi`;
+      if (currentMethod === 'CARD') {
+        document.getElementById('transfer-desc').value = `${unit.block} D:${unit.unit_number} Kredi Kartı Aidat Ödemesi`;
+      } else {
+        document.getElementById('transfer-desc').value = `${unit.block} D:${unit.unit_number} Ekim 2026 Aidat FAST Ödemesi`;
+      }
 
       // Update Right-Hand Live Panel
       document.getElementById('live-unit-name').innerText = `${unit.block} D:${unit.unit_number} • ${unit.site_name}`;
@@ -1310,7 +1480,14 @@
     function switchMethod(method) {
       currentMethod = method;
       const tabViban = document.getElementById('tab-viban');
+      const tabCard = document.getElementById('tab-card');
       const tabRegular = document.getElementById('tab-regular');
+      const sectionIban = document.getElementById('section-iban-fields');
+      const sectionCard = document.getElementById('section-card-fields');
+      const groupSenderIban = document.getElementById('group-sender-iban');
+      const labelSenderName = document.getElementById('label-sender-name');
+      const submitBtn = document.getElementById('submit-btn');
+
       const recipientIban = document.getElementById('recipient-iban');
       const recipientName = document.getElementById('recipient-name');
       const labelIban = document.getElementById('label-recipient-iban');
@@ -1321,24 +1498,46 @@
       const unitLabel = unit ? `${unit.block} D:${unit.unit_number}` : 'A Blok D:14';
       const siteName = unit ? unit.site_name : 'Begonya Sitesi';
 
-      if (method === 'VIBAN') {
-        tabViban.classList.add('active');
-        tabRegular.classList.remove('active');
-        labelIban.innerText = `Alıcı Sanal IBAN (${unitLabel})`;
-        recipientIban.value = VIRTUAL_IBAN;
-        recipientName.value = `${siteName} - ${unitLabel} Sanal Hesabı`;
-        hintIban.innerHTML = `<strong>Sanal IBAN Prensibi:</strong> Bu IBAN doğrudan ${unitLabel} dairesine aittir. Açıklamaya gerek kalmadan %100 doğrulukla sisteme işlenir.`;
-        if (!descInput.value || descInput.value.includes('Site Yönetim Hesabı')) {
+      if (tabViban) tabViban.classList.remove('active');
+      if (tabCard) tabCard.classList.remove('active');
+      if (tabRegular) tabRegular.classList.remove('active');
+
+      if (method === 'CARD') {
+        if (tabCard) tabCard.classList.add('active');
+        if (sectionIban) sectionIban.style.display = 'none';
+        if (sectionCard) sectionCard.style.display = 'block';
+        if (groupSenderIban) groupSenderIban.style.display = 'none';
+        if (labelSenderName) labelSenderName.innerText = 'Kart Sahibi Adı Soyadı';
+        if (submitBtn) submitBtn.innerHTML = '<span>💳</span> Kredi Kartı ile Güvenli Öde';
+        if (descInput) descInput.value = `${unitLabel} Kredi Kartı ile Aidat Ödemesi`;
+      } else if (method === 'VIBAN') {
+        if (tabViban) tabViban.classList.add('active');
+        if (sectionIban) sectionIban.style.display = 'block';
+        if (sectionCard) sectionCard.style.display = 'none';
+        if (groupSenderIban) groupSenderIban.style.display = 'block';
+        if (labelSenderName) labelSenderName.innerText = 'Gönderen / Hesap Sahibi';
+        if (submitBtn) submitBtn.innerHTML = '<span>⚡</span> FAST Transferini Gerçekleştir';
+
+        if (labelIban) labelIban.innerText = `Alıcı Sanal IBAN (${unitLabel})`;
+        if (recipientIban) recipientIban.value = VIRTUAL_IBAN;
+        if (recipientName) recipientName.value = `${siteName} - ${unitLabel} Sanal Hesabı`;
+        if (hintIban) hintIban.innerHTML = `<strong>Sanal IBAN Prensibi:</strong> Bu IBAN doğrudan ${unitLabel} dairesine aittir. Açıklamaya gerek kalmadan %100 doğrulukla sisteme işlenir.`;
+        if (descInput && (!descInput.value || descInput.value.includes('Site Yönetim Hesabı') || descInput.value.includes('Kredi Kartı'))) {
           descInput.value = `${unitLabel} Ekim 2026 Aidat FAST Ödemesi`;
         }
       } else {
-        tabRegular.classList.add('active');
-        tabViban.classList.remove('active');
-        labelIban.innerText = 'Alıcı Standart Site IBAN\'ı (Site Yönetim Hesabı)';
-        recipientIban.value = REGULAR_IBAN;
-        recipientName.value = `${siteName} Yönetimi (Kuveyt Türk)`;
-        hintIban.innerHTML = `<strong>Genel IBAN Prensibi:</strong> Tüm site sakinleri aynı genel IBAN\'a ödeme yapar. Eşleştirmenin sağlanması için açıklamaya mutlaka <strong>${unitLabel}</strong> yazılmalıdır.`;
-        descInput.value = `${unitLabel} Ekim 2026 Aidatı`;
+        if (tabRegular) tabRegular.classList.add('active');
+        if (sectionIban) sectionIban.style.display = 'block';
+        if (sectionCard) sectionCard.style.display = 'none';
+        if (groupSenderIban) groupSenderIban.style.display = 'block';
+        if (labelSenderName) labelSenderName.innerText = 'Gönderen / Hesap Sahibi';
+        if (submitBtn) submitBtn.innerHTML = '<span>🏛️</span> Havale / EFT Transferini Gerçekleştir';
+
+        if (labelIban) labelIban.innerText = 'Alıcı Standart Site IBAN\'ı (Site Yönetim Hesabı)';
+        if (recipientIban) recipientIban.value = REGULAR_IBAN;
+        if (recipientName) recipientName.value = `${siteName} Yönetimi (Kuveyt Türk)`;
+        if (hintIban) hintIban.innerHTML = `<strong>Genel IBAN Prensibi:</strong> Tüm site sakinleri aynı genel IBAN'a ödeme yapar. Eşleştirmenin sağlanması için açıklamaya mutlaka <strong>${unitLabel}</strong> yazılmalıdır.`;
+        if (descInput) descInput.value = `${unitLabel} Ekim 2026 Aidatı`;
       }
     }
 
@@ -1389,6 +1588,7 @@
         alert('✅ ' + data.message + '\n\nEkranınız artık ₺0,00 Borç ve 0 Hareket durumundadır.');
         await loadUnitsSummary();
         await fetchLiveResidentStatus();
+        await refreshSitePayments();
         const resultContainer = document.getElementById('result-container');
         if (resultContainer) {
           resultContainer.style.display = 'none';
@@ -1460,16 +1660,97 @@
       const resultContainer = document.getElementById('result-container');
       const receiptCard = document.getElementById('receipt-card');
 
-      const iban = document.getElementById('recipient-iban').value.trim();
       const amount = parseFloat(document.getElementById('transfer-amount').value || '0');
       const senderName = document.getElementById('sender-name').value.trim();
-      const senderIban = document.getElementById('sender-iban').value.trim();
       const desc = document.getElementById('transfer-desc').value.trim();
 
       if (amount <= 0) {
         alert('Lütfen geçerli bir transfer tutarı giriniz.');
         return;
       }
+
+      // Branch 1: Online Credit Card Checkout Simulation
+      if (currentMethod === 'CARD') {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span>⏳</span> Sanal POS ile Tahsil Ediliyor...';
+
+        const cardRef = 'CC-PAY-' + Math.floor(10000000 + Math.random() * 90000000);
+        const targetUnitId = currentSelectedUnitId || 'd-1';
+
+        const cardPayload = {
+          unit_id: targetUnitId,
+          amount: amount.toFixed(2),
+          payment_method: 'CREDIT_CARD',
+          reference_code: cardRef,
+          homeowner_name: senderName,
+          note: desc || 'Kredi Kartı ile Online Aidat Ödemesi'
+        };
+
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/v1/payments/record`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cardPayload)
+          });
+
+          const data = await response.json().catch(() => ({}));
+          resultContainer.style.display = 'block';
+
+          if (response.ok) {
+            receiptCard.className = 'receipt-card success';
+            document.getElementById('receipt-title').innerText = 'KREDİ KARTI ÖDEMESİ ONAYLANDI';
+            document.getElementById('receipt-badge').className = 'receipt-badge success';
+            document.getElementById('receipt-status-text').innerText = 'ONAYLANDI (3D POS)';
+
+            document.getElementById('res-txn-id').innerText = data.payment_id || cardRef;
+            document.getElementById('res-receipt-id').innerText = 'POS-' + cardRef;
+
+            const unit = unitsList.find(u => u.unit_id === (data.unit_id || targetUnitId));
+            const unitText = unit ? `${unit.block} D:${unit.unit_number}` : (data.unit_id || targetUnitId);
+            document.getElementById('res-matched-unit').innerText = `${unitText} (${senderName})`;
+            document.getElementById('res-cleared-amount').innerText = `₺${parseFloat(data.cleared_debt_amount || '0').toFixed(2)}`;
+            document.getElementById('res-advance-amount').innerText = `+₺${parseFloat(data.advance_payment_amount || '0').toFixed(2)}`;
+            document.getElementById('res-total-advance').innerText = `+₺${parseFloat(data.total_unit_advance_balance || '0').toFixed(2)}`;
+            document.getElementById('res-message').innerText = data.message || 'Kredi kartı tahsilatı başarıyla yapıldı.';
+
+            addHistoryRecord({
+              date: new Date().toLocaleTimeString(),
+              method: 'CARD',
+              iban: '💳 5528 **** 4242',
+              desc: desc || 'Online Kredi Kartı',
+              amount: `₺${amount.toFixed(2)}`,
+              status: 'BAŞARILI',
+              result: `₺${parseFloat(data.cleared_debt_amount || '0').toFixed(2)} borç kapandı, ₺${parseFloat(data.total_unit_advance_balance || '0').toFixed(2)} güncel avans`
+            });
+
+            await loadUnitsSummary();
+            await fetchLiveResidentStatus();
+            await refreshSitePayments();
+          } else {
+            receiptCard.className = 'receipt-card error';
+            document.getElementById('receipt-title').innerText = 'KART ÇEKİMİ BAŞARISIZ';
+            document.getElementById('receipt-badge').className = 'receipt-badge error';
+            document.getElementById('receipt-status-text').innerText = 'POS REDDİ';
+            document.getElementById('res-message').innerText = typeof data === 'string' ? data : (data.message || 'Kredi kartı işlemi tamamlanamadı.');
+          }
+        } catch (err) {
+          console.error('Credit card payment error:', err);
+          resultContainer.style.display = 'block';
+          receiptCard.className = 'receipt-card error';
+          document.getElementById('receipt-title').innerText = 'BAĞLANTI HATASI';
+          document.getElementById('receipt-badge').className = 'receipt-badge error';
+          document.getElementById('receipt-status-text').innerText = 'BAĞLANAMADI';
+          document.getElementById('res-message').innerText = 'Kart ödeme servisine erişilemedi.';
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span>💳</span> Kredi Kartı ile Güvenli Öde';
+        }
+        return;
+      }
+
+      // Branch 2: Bank Transfer / FAST Webhook
+      const iban = document.getElementById('recipient-iban').value.trim();
+      const senderIban = document.getElementById('sender-iban').value.trim();
 
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<span>⏳</span> FAST Ağına İletiliyor...';
@@ -1530,8 +1811,8 @@
             document.getElementById('receipt-status-text').innerText = data.status || 'ONAYLANDI';
 
             document.getElementById('res-txn-id').innerText = data.transaction_id || txnId;
-            document.getElementById('res-receipt-id').innerText = data.receipt_id || 'DKN-' + txnId;
-            document.getElementById('res-matched-unit').innerText = `${data.matched_block} Blok D:${data.matched_unit_number} (${data.matched_unit_id})`;
+            const blockStr = (data.matched_block || '').includes('Blok') ? data.matched_block : `${data.matched_block} Blok`;
+            document.getElementById('res-matched-unit').innerText = `${blockStr} D:${data.matched_unit_number} (${data.matched_unit_id})`;
             document.getElementById('res-cleared-amount').innerText = `₺${parseFloat(data.cleared_amount || '0').toFixed(2)}`;
             document.getElementById('res-advance-amount').innerText = `+₺${(amount - parseFloat(data.cleared_amount || '0')).toFixed(2)}`;
             document.getElementById('res-total-advance').innerText = `+₺${parseFloat(data.advance_payment || '0').toFixed(2)}`;
@@ -1552,6 +1833,7 @@
           // Refresh live status & units summary
           await loadUnitsSummary();
           await fetchLiveResidentStatus();
+          await refreshSitePayments();
         } else {
           receiptCard.className = 'receipt-card error';
           document.getElementById('receipt-title').innerText = 'TRANSFER EŞLEŞTİRİLEMEDİ';
@@ -1607,22 +1889,243 @@
         return;
       }
 
-      tbody.innerHTML = localHistory.map(item => `
-        <tr>
-          <td style="color: var(--text-muted); font-size: 11.5px;">${item.date}</td>
-          <td><span class="tag-method ${item.method === 'VIBAN' ? 'tag-viban' : 'tag-regular'}">${item.method === 'VIBAN' ? 'Sanal IBAN' : 'Genel IBAN'}</span></td>
-          <td class="font-mono" style="font-size: 11px;">${item.iban}</td>
-          <td>${item.desc}</td>
-          <td class="font-mono" style="font-weight: 700; color: var(--text-main);">${item.amount}</td>
-          <td><span style="color: ${item.status === 'BAŞARILI' ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: 700;">${item.status}</span></td>
-          <td style="font-size: 11.5px; color: var(--text-muted);">${item.result}</td>
-        </tr>
-      `).join('');
+      tbody.innerHTML = localHistory.map(item => {
+        let tagClass = 'tag-regular';
+        let methodLabel = 'Genel IBAN';
+        if (item.method === 'VIBAN') {
+          tagClass = 'tag-viban';
+          methodLabel = 'Sanal IBAN';
+        } else if (item.method === 'CARD') {
+          tagClass = 'tag-viban';
+          methodLabel = '💳 Kredi Kartı';
+        }
+        return `
+          <tr>
+            <td style="color: var(--text-muted); font-size: 11.5px;">${item.date}</td>
+            <td><span class="tag-method ${tagClass}">${methodLabel}</span></td>
+            <td class="font-mono" style="font-size: 11px;">${item.iban}</td>
+            <td>${item.desc}</td>
+            <td class="font-mono" style="font-weight: 700; color: var(--text-main);">${item.amount}</td>
+            <td><span style="color: ${item.status === 'BAŞARILI' ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: 700;">${item.status}</span></td>
+            <td style="font-size: 11.5px; color: var(--text-muted);">${item.result}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function onSitePaymentsChange(siteId) {
+      if (!siteId) return;
+      currentPaymentsSiteId = siteId;
+      await refreshSitePayments();
+    }
+
+    function setChannelFilter(channel) {
+      currentChannelFilter = channel;
+      const buttons = document.querySelectorAll('.channel-filter-btn');
+      buttons.forEach(btn => {
+        btn.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+      });
+      const activeBtnId = channel === 'ALL' ? 'filter-btn-all'
+        : channel === 'CREDIT_CARD' ? 'filter-btn-card'
+        : channel === 'VIBAN' ? 'filter-btn-viban'
+        : channel === 'FAST' ? 'filter-btn-fast'
+        : 'filter-btn-bank';
+      const activeBtn = document.getElementById(activeBtnId);
+      if (activeBtn) {
+        activeBtn.style.borderColor = 'var(--primary)';
+      }
+      filterSitePaymentsTable();
+    }
+
+    async function refreshSitePayments() {
+      const tbody = document.getElementById('site-payments-tbody');
+      const badge = document.getElementById('site-payments-count-badge');
+      const metricCollected = document.getElementById('sp-metric-collected');
+      const metricCard = document.getElementById('sp-metric-card');
+      const metricFast = document.getElementById('sp-metric-fast');
+      const metricAdvance = document.getElementById('sp-metric-advance');
+      const metricTxns = document.getElementById('sp-metric-txns');
+
+      if (!tbody) return;
+
+      try {
+        const effectiveSiteId = (currentPaymentsSiteId && currentPaymentsSiteId !== 'undefined') ? currentPaymentsSiteId : 'site-1';
+        const res = await fetch(`${BACKEND_URL}/api/v1/system/site-payments?site_id=${encodeURIComponent(effectiveSiteId)}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        const coll = parseFloat(data.total_collected || '0');
+        const adv = parseFloat(data.total_advance_balance || '0');
+
+        let cardVolume = 0;
+        let fastVibanVolume = 0;
+
+        (data.payments || []).forEach(p => {
+          const amt = parseFloat(p.amount || '0');
+          const ch = (p.payment_channel || '').toUpperCase();
+          if (ch.includes('CARD') || ch.includes('KART')) {
+            cardVolume += amt;
+          } else if (ch.includes('VIBAN') || ch.includes('FAST') || ch.includes('VIRTUAL')) {
+            fastVibanVolume += amt;
+          }
+        });
+
+        if (metricCollected) metricCollected.innerText = `₺${coll.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        if (metricCard) metricCard.innerText = `₺${cardVolume.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        if (metricFast) metricFast.innerText = `₺${fastVibanVolume.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        if (metricAdvance) metricAdvance.innerText = `₺${adv.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        if (metricTxns) metricTxns.innerText = `${data.payments_count || 0} Adet`;
+        if (badge) badge.innerText = `${data.payments_count || 0} Ödeme`;
+
+        rawSitePayments = data.payments || [];
+        filterSitePaymentsTable();
+      } catch (err) {
+        console.error('refreshSitePayments error:', err);
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--accent-red); padding: 20px;">Ödeme kayıtları yüklenirken hata oluştu: ${err.message}</td></tr>`;
+      }
+    }
+
+    function filterSitePaymentsTable() {
+      const searchInput = document.getElementById('payments-search-input');
+      const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+
+      let filtered = rawSitePayments;
+
+      if (currentChannelFilter && currentChannelFilter !== 'ALL') {
+        filtered = filtered.filter(p => {
+          const ch = (p.payment_channel || '').toUpperCase();
+          if (currentChannelFilter === 'CREDIT_CARD') {
+            return ch.includes('CARD') || ch.includes('KART');
+          }
+          if (currentChannelFilter === 'VIBAN') {
+            return ch.includes('VIBAN') || ch.includes('VIRTUAL');
+          }
+          if (currentChannelFilter === 'FAST') {
+            return ch.includes('FAST');
+          }
+          if (currentChannelFilter === 'BANK_TRANSFER') {
+            return ch.includes('BANK') || ch.includes('HAVALE') || ch.includes('EFT');
+          }
+          return true;
+        });
+      }
+
+      if (query) {
+        filtered = filtered.filter(p => {
+          const name = (p.resident_name || '').toLowerCase();
+          const unit = (p.unit_number ? `d:${p.unit_number}` : '').toLowerCase();
+          const flat = (p.flat_label || '').toLowerCase();
+          const block = (p.block || '').toLowerCase();
+          const receipt = (p.receipt_number || p.reference_no || '').toLowerCase();
+          const txn = (p.transaction_id || '').toLowerCase();
+          const desc = (p.description || '').toLowerCase();
+          const vIban = (p.virtual_iban || '').toLowerCase();
+          const chLabel = (p.payment_channel_label || '').toLowerCase();
+          return name.includes(query) || unit.includes(query) || flat.includes(query) || block.includes(query) ||
+                 receipt.includes(query) || txn.includes(query) || desc.includes(query) || vIban.includes(query) || chLabel.includes(query);
+        });
+      }
+      renderSitePaymentsTable(filtered);
+    }
+
+    function renderSitePaymentsTable(list) {
+      const tbody = document.getElementById('site-payments-tbody');
+      if (!tbody) return;
+
+      if (!list || list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 28px;">
+          Seçili site ve filtre kriteri için henüz ödeme kaydı bulunmuyor.<br>
+          <span style="font-size: 11.5px; color: var(--text-muted);">Yukarıdaki formu kullanarak Sanal IBAN, Kredi Kartı veya FAST transferi gönderebilirsiniz.</span>
+        </td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = list.map(item => {
+        const amt = parseFloat(item.amount || '0');
+        const unitLabel = item.unit_number ? `D:${item.unit_number}` : (item.flat_label || 'Eşleşmemiş');
+        const blockLabel = item.block || '';
+        const resident = item.resident_name || item.sender_name || 'Bilinmiyor';
+        const receiptNo = item.receipt_number || item.reference_no || item.match_id || '-';
+        const txnId = item.transaction_id || '-';
+        const notes = item.notes || item.description || '-';
+        const isAdvance = !!item.is_advance;
+        const isUnmatched = item.status === 'ESLESTIRILEMEDI' || !item.unit_id;
+
+        // Payment Channel Badge
+        const ch = (item.payment_channel || '').toUpperCase();
+        let channelBadgeStyle = 'background: rgba(0, 210, 180, 0.15); color: var(--primary);';
+        let channelIcon = '🔷';
+        let channelTitle = item.payment_channel_label || 'Sanal IBAN (Virtual Account)';
+
+        if (ch.includes('CARD') || ch.includes('KART')) {
+          channelBadgeStyle = 'background: rgba(167, 139, 250, 0.15); color: #A78BFA;';
+          channelIcon = '💳';
+          channelTitle = 'Kredi Kartı (Online)';
+        } else if (ch.includes('FAST')) {
+          channelBadgeStyle = 'background: rgba(16, 185, 129, 0.15); color: var(--accent-green);';
+          channelIcon = '⚡';
+          channelTitle = 'FAST 7/24 Anlık Takas';
+        } else if (isUnmatched) {
+          channelBadgeStyle = 'background: rgba(239, 68, 68, 0.15); color: var(--accent-red);';
+          channelIcon = '❓';
+          channelTitle = 'Eşleşmeyen Transfer';
+        } else if (ch.includes('BANK') || ch.includes('HAVALE') || ch.includes('EFT')) {
+          channelBadgeStyle = 'background: rgba(59, 130, 246, 0.15); color: var(--accent-blue);';
+          channelIcon = '🏛️';
+          channelTitle = 'Banka Havale / EFT';
+        }
+
+        const formattedVIban = item.virtual_iban ? formatIbanDisplay(item.virtual_iban) : null;
+
+        return `
+          <tr>
+            <td style="color: var(--text-muted); font-size: 11.5px; white-space: nowrap;">${item.date || '-'}</td>
+            <td>
+              <span style="font-weight: 700; color: var(--text-main);">${unitLabel}</span>
+              ${blockLabel ? `<span class="tag-method tag-regular" style="margin-left: 4px; font-size: 10px;">${blockLabel}</span>` : ''}
+            </td>
+            <td>
+              <div style="font-weight: 600; color: var(--text-main);">${resident}</div>
+              <div style="font-size: 10.5px; color: var(--text-muted); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.description || ''}">${item.description || '-'}</div>
+            </td>
+            <td>
+              <span class="tag-method" style="${channelBadgeStyle} font-size: 11px; padding: 3px 8px;">
+                ${channelIcon} ${channelTitle}
+              </span>
+            </td>
+            <td class="font-mono" style="font-size: 11px;">
+              ${formattedVIban ? `
+                <span style="color: var(--primary); font-weight: 600;">${formattedVIban}</span>
+                <button type="button" class="copy-chip" onclick="copyToClipboard('${item.virtual_iban}', this)" style="margin-left: 4px;">📋</button>
+              ` : '<span style="color: var(--text-muted); font-style: italic;">Tahsis Edilmedi</span>'}
+            </td>
+            <td class="font-mono" style="font-weight: 800; color: var(--primary); font-size: 13.5px; white-space: nowrap;">
+              ₺${amt.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+            <td style="font-size: 11.5px;">
+              <span style="color: ${isAdvance ? '#60A5FA' : (isUnmatched ? 'var(--accent-orange)' : 'var(--accent-green)')}; font-weight: 600;">
+                ${notes}
+              </span>
+            </td>
+            <td class="font-mono" style="font-size: 11px;">
+              <span style="color: var(--text-main); font-weight: 600;">${receiptNo}</span>
+              <div style="font-size: 10px; color: var(--text-muted);">${txnId}</div>
+            </td>
+            <td>
+              <span style="color: ${item.status === 'ONAYLANDI' ? 'var(--accent-green)' : (item.status === 'ESLESTIRILEMEDI' ? 'var(--accent-red)' : 'var(--accent-orange)')}; font-weight: 700; font-size: 11.5px;">
+                ● ${item.status === 'ONAYLANDI' ? 'Onaylandı' : (item.status === 'ESLESTIRILEMEDI' ? 'Eşleşmedi' : item.status)}
+              </span>
+            </td>
+          </tr>
+        `;
+      }).join('');
     }
 
     // Initialize
     window.addEventListener('DOMContentLoaded', async () => {
+      await loadSitesForPayments();
       await loadUnitsSummary();
+      await refreshSitePayments();
     });
   </script>
 </body>

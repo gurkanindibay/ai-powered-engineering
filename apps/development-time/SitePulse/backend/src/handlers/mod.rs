@@ -754,32 +754,58 @@ pub async fn confirm_reconciliation(
     let mut cleared_dues: Vec<String> = Vec::new();
     let mut advance_credits: Vec<(String, Decimal)> = Vec::new();
 
+    // Step 1: Update queue items and collect details to process
+    let mut to_process = Vec::new();
     for match_id in &payload.match_ids {
         if let Some(m) = inner.reconciliation_queue.iter_mut().find(|m| m.match_id == *match_id) {
             m.status = ReconciliationStatus::Approved;
             m.status_code = ReconciliationStatus::Approved.as_str().to_string();
 
             if let Some(ref unit_id) = m.matched_unit_id {
-                updated_unit_ids.push(unit_id.clone());
-                let txn_amount = m.transaction.amount;
-
-                if let Some(ref due_id) = m.matched_due_id {
-                    cleared_dues.push(due_id.clone());
-                    let due_balance = m.outstanding_balance.unwrap_or(txn_amount);
-                    if txn_amount > due_balance {
-                        let surplus = txn_amount - due_balance;
-                        advance_credits.push((unit_id.clone(), surplus));
-                    }
-                } else {
-                    // No debt: full payment is matched as advance payment!
-                    advance_credits.push((unit_id.clone(), txn_amount));
-                }
-
-                total_amount_cleared += txn_amount;
-                confirmed_count += 1;
-                confirmed_matches.push(m.clone());
+                to_process.push((
+                    unit_id.clone(),
+                    m.transaction.amount,
+                    m.matched_due_id.clone(),
+                    m.outstanding_balance,
+                    m.transaction.description.clone(),
+                    m.clone(),
+                ));
             }
         }
+    }
+
+    // Step 2: Now resolve dues and advance credits without holding borrow on queue
+    for (unit_id, txn_amount, matched_due_id, outstanding_bal, desc, m_clone) in to_process {
+        updated_unit_ids.push(unit_id.clone());
+
+        if let Some(ref due_id) = matched_due_id {
+            cleared_dues.push(due_id.clone());
+            let due_balance = outstanding_bal.unwrap_or(txn_amount);
+            if txn_amount > due_balance {
+                let surplus = txn_amount - due_balance;
+                advance_credits.push((unit_id.clone(), surplus));
+            }
+        } else {
+            let desc_lower = desc.to_lowercase();
+            let matching_unpaid_due = inner.dues.iter()
+                .find(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid && desc_lower.contains(&d.period.to_lowercase()))
+                .or_else(|| inner.dues.iter().find(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid))
+                .map(|d| (d.id.clone(), d.total_amount));
+
+            if let Some((due_id, due_balance)) = matching_unpaid_due {
+                cleared_dues.push(due_id);
+                if txn_amount > due_balance {
+                    let surplus = txn_amount - due_balance;
+                    advance_credits.push((unit_id.clone(), surplus));
+                }
+            } else {
+                advance_credits.push((unit_id.clone(), txn_amount));
+            }
+        }
+
+        total_amount_cleared += txn_amount;
+        confirmed_count += 1;
+        confirmed_matches.push(m_clone);
     }
 
     // Now update dues liabilities without overlapping borrow
@@ -794,6 +820,9 @@ pub async fn confirm_reconciliation(
         let entry = inner.advance_payments.entry(unit_id).or_insert(Decimal::ZERO);
         *entry += amount;
     }
+
+    // Auto-offset any available advance against pending debts
+    apply_advance_payments_offset(&mut inner, None);
 
     // Process site manager's preference to remember sender IBANs for future payments
     let mut remembered_ibans_count = 0;
@@ -1157,8 +1186,10 @@ pub async fn handle_bank_incoming_webhook(
         if unit_index.is_none() {
             let desc = payload.description.as_deref().unwrap_or("");
             if let Some((ref blk, unit_no)) = ReconciliationService::extract_block_and_flat(desc) {
+                let clean_blk = blk.replace("Blok", "").replace("blok", "").trim().to_uppercase();
                 unit_index = inner.units.iter().position(|u| {
-                    u.block_id.eq_ignore_ascii_case(blk) && u.unit_number == unit_no
+                    let u_blk = u.block_id.replace("Blok", "").replace("blok", "").trim().to_uppercase();
+                    (u_blk == clean_blk || u.block_id.eq_ignore_ascii_case(blk)) && u.unit_number == unit_no
                 });
                 if unit_index.is_some() {
                     match_mechanism = "Regular IBAN & Narrative Matching (Açıklama Ayrıştırması)";
@@ -1290,7 +1321,16 @@ pub async fn handle_bank_incoming_webhook(
     let mut cleared_amount = Decimal::ZERO;
     let mut remaining_payment = payload.amount;
 
-    if let Some(due) = inner.dues.iter_mut().find(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid) {
+    // Check if narrative mentions a specific period
+    let desc_str = payload.description.as_deref().unwrap_or("").to_lowercase();
+    let target_due_idx = inner.dues.iter().position(|d| {
+        d.unit_id == unit.id && d.status != DebtStatus::Paid && desc_str.contains(&d.period.to_lowercase())
+    }).or_else(|| {
+        inner.dues.iter().position(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+    });
+
+    if let Some(idx) = target_due_idx {
+        let due = &mut inner.dues[idx];
         if remaining_payment >= due.total_amount {
             due.status = DebtStatus::Paid;
             cleared_period = Some(due.period.clone());
@@ -1309,7 +1349,10 @@ pub async fn handle_bank_incoming_webhook(
     if remaining_payment > Decimal::ZERO {
         *unit_advance += remaining_payment;
     }
-    let total_advance = *unit_advance;
+
+    // Also auto-offset any advance against remaining unpaid dues
+    apply_advance_payments_offset(&mut inner, Some(&unit.id));
+    let total_advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
 
     // 4. Calculate remaining debt
     let remaining_debt: Decimal = inner
@@ -1322,25 +1365,31 @@ pub async fn handle_bank_incoming_webhook(
     // 5. Generate immutable receipt and append to reconciliation queue
     let receipt_id = format!("DKN-2026-{}", Uuid::new_v4().simple());
 
+    let unit_block_desc = if unit.block_id.contains("Blok") {
+        unit.block_id.clone()
+    } else {
+        format!("{} Blok", unit.block_id)
+    };
+
     let message = if let Some(ref period) = cleared_period {
         if remaining_payment > Decimal::ZERO {
             format!(
-                "₺{} dues settlement cleared for {} (Unit {} Blok D:{}). Surplus of ₺{} credited as advance payment (Avans Bakiye: ₺{}).",
-                cleared_amount, period, unit.block_id, unit.unit_number, remaining_payment, total_advance
+                "₺{} dues settlement cleared for {} (Unit {} D:{}). Surplus of ₺{} credited as advance payment (Avans Bakiye: ₺{}).",
+                cleared_amount, period, unit_block_desc, unit.unit_number, remaining_payment, total_advance
             )
         } else {
             format!(
-                "₺{} dues settlement successfully cleared and matched to unit {} Blok D:{} via {}.",
+                "₺{} dues settlement successfully cleared and matched to unit {} D:{} via {}.",
                 cleared_amount,
-                unit.block_id,
+                unit_block_desc,
                 unit.unit_number,
                 match_mechanism
             )
         }
     } else {
         format!(
-            "No outstanding dues for unit {} Blok D:{}. Full payment of ₺{} credited as advance payment (Avans Bakiye: ₺{}) via {}.",
-            unit.block_id,
+            "No outstanding dues for unit {} D:{}. Full payment of ₺{} credited as advance payment (Avans Bakiye: ₺{}) via {}.",
+            unit_block_desc,
             unit.unit_number,
             payload.amount,
             total_advance,
@@ -1622,7 +1671,7 @@ pub async fn record_homeowner_payment(
         created_at: Utc::now(),
     };
 
-    let resident_name = inner.users.iter().find(|u| u.id == unit.id).map(|u| u.full_name.clone());
+    let resident_name = record.homeowner_name.clone();
 
     inner.homeowner_payments.push(record);
 
@@ -2071,6 +2120,9 @@ pub async fn provision_site_units(
             }
         }
 
+        // Auto-offset against any pre-existing advance balance for this unit
+        apply_advance_payments_offset(&mut inner, Some(&unit_id));
+
         let current_debt: Decimal = inner.dues.iter()
             .filter(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid)
             .map(|d| d.total_amount)
@@ -2145,6 +2197,431 @@ pub async fn get_units_summary(
     }
 
     (StatusCode::OK, Json(result))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SitePaymentsQuery {
+    pub site_id: Option<String>,
+}
+
+/// Returns all incoming bank/FAST payments and reconciliation records for a given site
+pub async fn get_site_payments(
+    State(state): State<AppState>,
+    Query(query): Query<SitePaymentsQuery>,
+) -> impl IntoResponse {
+    let inner = state.inner.read().await;
+
+    // 1. Resolve site
+    let site = if let Some(ref s_id) = query.site_id {
+        if s_id != "undefined" && !s_id.is_empty() {
+            inner.sites.iter().find(|s| &s.id == s_id).cloned().or_else(|| inner.sites.first().cloned())
+        } else {
+            inner.sites.first().cloned()
+        }
+    } else {
+        inner.sites.first().cloned()
+    };
+
+    let site_id = site.as_ref().map(|s| s.id.clone()).unwrap_or_else(|| "site-1".to_string());
+    let site_name = site.as_ref().map(|s| s.name.clone()).unwrap_or_else(|| "Begonya Sitesi".to_string());
+
+    // 2. Units in this site
+    let site_units: Vec<_> = inner.units.iter().filter(|u| u.site_id == site_id).collect();
+    let site_unit_ids: Vec<String> = site_units.iter().map(|u| u.id.clone()).collect();
+
+    let total_advance: Decimal = site_units
+        .iter()
+        .map(|u| inner.advance_payments.get(&u.id).copied().unwrap_or(Decimal::ZERO))
+        .sum();
+
+    // 3. Collect payments from reconciliation_queue and homeowner_payments for units of this site
+    let mut payments = Vec::new();
+    let mut total_collected = Decimal::ZERO;
+
+    for item in inner.reconciliation_queue.iter().rev() {
+        let is_site_item = if let Some(ref u_id) = item.matched_unit_id {
+            site_unit_ids.contains(u_id) || site_unit_ids.is_empty()
+        } else {
+            // Include unmatched or general transactions
+            true
+        };
+
+        if is_site_item {
+            total_collected += item.transaction.amount;
+            let flat_label = if let (Some(ref b), Some(u_num)) = (&item.matched_block, item.matched_unit_number) {
+                if b.contains("Blok") {
+                    format!("{} D:{}", b, u_num)
+                } else {
+                    format!("{} Blok D:{}", b, u_num)
+                }
+            } else {
+                "Daire Belirlenemedi".to_string()
+            };
+
+            let is_advance = item.notes.as_deref().unwrap_or("").contains("avans")
+                || item.notes.as_deref().unwrap_or("").contains("Avans");
+
+            // Look up unit's virtual account number (Virtual IBAN)
+            let virtual_iban = item.matched_unit_id.as_ref().and_then(|uid| {
+                inner.units.iter().find(|u| &u.id == uid).and_then(|u| u.virtual_iban.clone())
+            });
+
+            // Check if there is a linked homeowner payment to detect exact method (e.g. CREDIT_CARD)
+            let linked_hp = inner.homeowner_payments.iter().find(|hp| {
+                hp.id == item.transaction.transaction_id
+                    || hp.reference_code.as_deref() == Some(&item.transaction.transaction_id)
+            });
+
+            let desc_upper = item.transaction.description.to_uppercase();
+            let txn_upper = item.transaction.transaction_id.to_uppercase();
+
+            let (payment_channel, payment_channel_label) = if let Some(hp) = linked_hp {
+                let m = hp.payment_method.to_uppercase();
+                if m.contains("CARD") || m.contains("KART") {
+                    ("CREDIT_CARD", "Kredi Kartı (Online)")
+                } else if m.contains("VIBAN") || m.contains("VIRTUAL") {
+                    ("VIRTUAL_IBAN", "Sanal IBAN (Virtual Account)")
+                } else if m.contains("FAST") {
+                    ("FAST", "FAST 7/24 Anlık Takas")
+                } else {
+                    ("BANK_TRANSFER", "Banka Havale / EFT")
+                }
+            } else if desc_upper.contains("KART")
+                || desc_upper.contains("CARD")
+                || txn_upper.contains("CC")
+                || txn_upper.contains("CARD")
+            {
+                ("CREDIT_CARD", "Kredi Kartı (Online)")
+            } else if desc_upper.contains("SANAL IBAN")
+                || desc_upper.contains("VIRTUAL")
+                || txn_upper.contains("VIBAN")
+            {
+                ("VIRTUAL_IBAN", "Sanal IBAN (Virtual Account)")
+            } else if txn_upper.contains("FAST") || desc_upper.contains("FAST") {
+                ("FAST", "FAST 7/24 Anlık Takas")
+            } else if item.status == ReconciliationStatus::Unmatched {
+                ("UNMATCHED", "Eşleşmeyen Transfer")
+            } else {
+                ("BANK_TRANSFER", "Banka Havale / EFT")
+            };
+
+            let resolved_resident_name = item.matched_resident_name.clone()
+                .or_else(|| item.transaction.sender_name.clone())
+                .or_else(|| {
+                    item.matched_unit_id.as_ref().and_then(|uid| {
+                        inner.units.iter().find(|u| &u.id == uid)
+                            .and_then(|u| u.owner_user_id.as_ref())
+                            .and_then(|owner_id| inner.users.iter().find(|user| &user.id == owner_id))
+                            .map(|user| user.full_name.clone())
+                    })
+                })
+                .unwrap_or_else(|| "Bilinmiyor".to_string());
+
+            payments.push(serde_json::json!({
+                "match_id": item.match_id,
+                "transaction_id": item.transaction.transaction_id,
+                "date": item.transaction.date.to_string(),
+                "unit_id": item.matched_unit_id,
+                "block": item.matched_block,
+                "unit_number": item.matched_unit_number,
+                "flat_label": flat_label,
+                "resident_name": resolved_resident_name,
+                "amount": item.transaction.amount.to_string(),
+                "currency": item.transaction.currency,
+                "description": item.transaction.description,
+                "sender_name": item.transaction.sender_name,
+                "sender_iban": item.transaction.sender_iban,
+                "virtual_iban": virtual_iban,
+                "payment_channel": payment_channel,
+                "payment_channel_label": payment_channel_label,
+                "status": item.status.as_str(),
+                "status_code": item.status_code,
+                "notes": item.notes,
+                "confidence_score": item.confidence_score,
+                "is_advance": is_advance,
+                "reference_no": item.transaction.reference_no,
+            }));
+        }
+    }
+
+    // Also include any direct homeowner payments for units of this site that might not be in reconciliation_queue
+    for hp in inner.homeowner_payments.iter().rev() {
+        if site_unit_ids.contains(&hp.unit_id) {
+            let already_included = payments.iter().any(|p| {
+                p.get("transaction_id").and_then(|t| t.as_str()) == Some(&hp.id)
+                    || (hp.reference_code.is_some() && p.get("transaction_id").and_then(|t| t.as_str()) == hp.reference_code.as_deref())
+            });
+
+            if !already_included {
+                total_collected += hp.amount;
+                let unit = inner.units.iter().find(|u| u.id == hp.unit_id);
+                let flat_label = if hp.block_id.contains("Blok") {
+                    format!("{} D:{}", hp.block_id, hp.unit_number)
+                } else {
+                    format!("{} Blok D:{}", hp.block_id, hp.unit_number)
+                };
+
+                let resident_name = hp.homeowner_name.clone().unwrap_or_else(|| {
+                    unit.and_then(|u| u.owner_user_id.as_ref())
+                        .and_then(|uid| inner.users.iter().find(|user| &user.id == uid))
+                        .map(|user| user.full_name.clone())
+                        .unwrap_or_else(|| "Bilinmiyor".to_string())
+                });
+
+                let virtual_iban = unit.and_then(|u| u.virtual_iban.clone());
+                let is_advance = hp.advance_credit_amount > Decimal::ZERO;
+
+                let payment_channel = hp.payment_method.clone();
+                let payment_channel_label = if payment_channel.to_uppercase().contains("CARD") || payment_channel.to_uppercase().contains("KART") {
+                    "Kredi Kartı (Online)".to_string()
+                } else if payment_channel.to_uppercase().contains("VIBAN") || payment_channel.to_uppercase().contains("VIRTUAL") {
+                    "Sanal IBAN (Virtual Account)".to_string()
+                } else if payment_channel.to_uppercase().contains("FAST") {
+                    "FAST 7/24 Anlık Takas".to_string()
+                } else {
+                    "Banka Havale / EFT".to_string()
+                };
+
+                payments.push(serde_json::json!({
+                    "match_id": format!("MATCH-HP-{}", hp.id),
+                    "transaction_id": hp.id.clone(),
+                    "date": hp.created_at.date_naive().to_string(),
+                    "unit_id": Some(hp.unit_id.clone()),
+                    "block": Some(hp.block_id.clone()),
+                    "unit_number": Some(hp.unit_number),
+                    "flat_label": flat_label,
+                    "resident_name": resident_name.clone(),
+                    "amount": hp.amount.to_string(),
+                    "currency": "TRY",
+                    "description": hp.note.clone().unwrap_or_else(|| format!("{} ile Aidat Ödemesi", payment_channel_label)),
+                    "sender_name": Some(resident_name),
+                    "sender_iban": Option::<String>::None,
+                    "virtual_iban": virtual_iban,
+                    "payment_channel": payment_channel,
+                    "payment_channel_label": payment_channel_label,
+                    "status": "ONAYLANDI",
+                    "status_code": "ONAYLANDI",
+                    "notes": hp.note,
+                    "confidence_score": 100,
+                    "is_advance": is_advance,
+                    "reference_no": hp.reference_code.clone().or_else(|| Some(hp.id.clone())),
+                }));
+            }
+        }
+    }
+
+    let payments_count = payments.len();
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "site_id": site_id,
+        "site_name": site_name,
+        "total_units_count": site_units.len(),
+        "total_collected": total_collected.to_string(),
+        "total_advance_balance": total_advance.to_string(),
+        "payments_count": payments_count,
+        "payments": payments
+    })))
+}
+
+/// Returns the comprehensive overview for the Site Manager:
+/// Managed site details, collection summary, available periods, and list of flats with dues status.
+pub async fn get_site_overview(
+    State(state): State<AppState>,
+    Query(query): Query<crate::models::SiteOverviewQuery>,
+) -> impl IntoResponse {
+    let mut inner = state.inner.write().await;
+    apply_advance_payments_offset(&mut inner, None);
+
+    // 1. Resolve site
+    let site = if let Some(ref s_id) = query.site_id {
+        inner.sites.iter().find(|s| &s.id == s_id).cloned()
+    } else {
+        inner.sites.iter()
+            .find(|s| inner.units.iter().filter(|u| u.site_id == s.id).count() >= 12)
+            .or_else(|| inner.sites.iter().find(|s| inner.units.iter().any(|u| u.site_id == s.id)))
+            .or_else(|| inner.sites.first())
+            .cloned()
+    }.unwrap_or_else(|| {
+        let default_site = Site {
+            id: "site-1".to_string(),
+            name: "Begonya Sitesi".to_string(),
+            address: "Ataşehir, Begonya Sok. No:14, İstanbul".to_string(),
+            slug: "begonya-sitesi".to_string(),
+            status: "ACTIVE".to_string(),
+            plan_type: "PREMIUM".to_string(),
+            license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
+        };
+        inner.sites.push(default_site.clone());
+        default_site
+    });
+
+    let site_id = site.id.clone();
+    let site_name = site.name.clone();
+    let address = site.address.clone();
+
+    // 2. Resolve manager name & email
+    let (manager_name, manager_email) = inner.users.iter()
+        .find(|u| u.site_id == site_id && (u.role == Role::SiteManager || u.email.contains("yonetici") || u.email.contains("manager")))
+        .map(|u| (u.full_name.clone(), u.email.clone()))
+        .unwrap_or_else(|| ("Mehmet Demir".to_string(), "mehmet.demir@begonya.com".to_string()));
+
+    // 3. Collect available periods for this site's units
+    let mut available_periods: Vec<String> = Vec::new();
+    let site_unit_ids: Vec<String> = inner.units.iter()
+        .filter(|u| u.site_id == site_id)
+        .map(|u| u.id.clone())
+        .collect();
+
+    for due in &inner.dues {
+        if (site_unit_ids.contains(&due.unit_id) || site_unit_ids.is_empty()) && !available_periods.contains(&due.period) {
+            available_periods.push(due.period.clone());
+        }
+    }
+
+    fn period_sort_key(period: &str) -> (i32, u32) {
+        let parts: Vec<&str> = period.split_whitespace().collect();
+        if parts.len() == 2 {
+            let month_idx = match parts[0].to_lowercase().as_str() {
+                "ocak" => 1,
+                "şubat" | "subat" => 2,
+                "mart" => 3,
+                "nisan" => 4,
+                "mayıs" | "mayis" => 5,
+                "haziran" => 6,
+                "temmuz" => 7,
+                "ağustos" | "agustos" => 8,
+                "eylül" | "eylul" => 9,
+                "ekim" => 10,
+                "kasım" | "kasim" => 11,
+                "aralık" | "aralik" => 12,
+                _ => 0,
+            };
+            let year = parts[1].parse::<i32>().unwrap_or(0);
+            (year, month_idx)
+        } else {
+            (0, 0)
+        }
+    }
+
+    available_periods.sort_by(|a, b| period_sort_key(b).cmp(&period_sort_key(a)));
+
+    if available_periods.is_empty() {
+        available_periods.push("Ekim 2026".to_string());
+        available_periods.push("Eylül 2026".to_string());
+    }
+
+    let selected_period = query.period.unwrap_or_else(|| {
+        available_periods.first().cloned().unwrap_or_else(|| "Ekim 2026".to_string())
+    });
+
+    // 4. Available sites list for site switcher
+    let available_sites: Vec<crate::models::SiteSummaryBriefDto> = inner.sites.iter().map(|s| {
+        let count = inner.units.iter().filter(|u| u.site_id == s.id).count();
+        crate::models::SiteSummaryBriefDto {
+            id: s.id.clone(),
+            name: s.name.clone(),
+            address: s.address.clone(),
+            total_units: count,
+        }
+    }).collect();
+
+    // 5. Gather flats for this site
+    let matching_units: Vec<_> = {
+        let filtered: Vec<_> = inner.units.iter().filter(|u| u.site_id == site_id).cloned().collect();
+        if filtered.is_empty() {
+            inner.units.clone()
+        } else {
+            filtered
+        }
+    };
+
+    let mut flats = Vec::new();
+    let mut total_expected = Decimal::ZERO;
+    let mut total_collected = Decimal::ZERO;
+    let mut total_overdue = Decimal::ZERO;
+    let mut total_advance = Decimal::ZERO;
+    let mut paid_count = 0;
+    let mut overdue_count = 0;
+
+    for unit in &matching_units {
+        let resident_name = unit.owner_user_id.as_ref().and_then(|uid| {
+            inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone())
+        }).unwrap_or_else(|| format!("Daire Sakini {}", unit.unit_number));
+
+        // Find due for this unit in the selected period
+        let due_opt = inner.dues.iter().find(|d| d.unit_id == unit.id && d.period == selected_period);
+        let advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
+        total_advance += advance;
+
+        let (amount_due, is_paid, days_overdue, paid_date_str) = if let Some(due) = due_opt {
+            let is_p = due.status == DebtStatus::Paid;
+            let days_o = if due.status == DebtStatus::Overdue { 15 } else { 0 };
+            let p_date = if is_p { Some("Ödendi".to_string()) } else { None };
+            (due.total_amount, is_p, days_o, p_date)
+        } else {
+            (Decimal::ZERO, true, 0, None)
+        };
+
+        if amount_due > Decimal::ZERO {
+            total_expected += amount_due;
+            if is_paid {
+                total_collected += amount_due;
+                paid_count += 1;
+            } else {
+                total_overdue += amount_due;
+                overdue_count += 1;
+            }
+        }
+
+        flats.push(crate::models::SiteFlatStatusDto {
+            id: unit.id.clone(),
+            block: unit.block_id.clone(),
+            unit_no: unit.unit_number,
+            resident_name,
+            amount_due,
+            days_overdue,
+            is_paid,
+            paid_date_str,
+            virtual_iban: unit.virtual_iban.clone(),
+            advance_balance: advance,
+        });
+    }
+
+    flats.sort_by_key(|f| (f.block.clone(), f.unit_no));
+
+    let total_units_count = flats.len();
+    let collection_percentage = if total_expected > Decimal::ZERO {
+        let ratio = (total_collected / total_expected) * Decimal::from(100);
+        ratio.to_string().split('.').next().unwrap_or("0").parse::<u32>().unwrap_or(0)
+    } else {
+        100
+    };
+
+    let summary = crate::models::SiteCollectionSummaryDto {
+        total_expected,
+        total_collected,
+        total_overdue_with_interest: total_overdue,
+        total_advance_balance: total_advance,
+        paid_units_count: paid_count,
+        overdue_units_count: overdue_count,
+        total_units_count,
+        collection_percentage,
+    };
+
+    let response = crate::models::SiteOverviewResponse {
+        site_id,
+        site_name,
+        address,
+        manager_name,
+        manager_email,
+        selected_period,
+        available_periods,
+        available_sites,
+        summary,
+        flats,
+    };
+
+    (StatusCode::OK, Json(serde_json::to_value(response).unwrap()))
 }
 
 

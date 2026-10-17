@@ -613,7 +613,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                               Text(
-                                'Begonya Sitesi genel tahsilat, sakin onayları ve blok yönetimi',
+                                'Site genel tahsilat, sakin onayları ve blok yönetimi',
                                 style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
                               ),
                             ],

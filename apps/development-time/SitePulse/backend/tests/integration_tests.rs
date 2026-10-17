@@ -1663,5 +1663,18 @@ async fn when_provisioning_12_units_for_site_then_creates_residents_and_virtual_
         axum::extract::State(state.clone()),
     ).await.into_response();
     assert_eq!(summary_resp.status(), axum::http::StatusCode::OK);
+
+    // Test get_site_overview
+    let overview_query = sitepulse_backend::models::SiteOverviewQuery {
+        site_id: None,
+        period: Some("Kasım 2026".to_string()),
+    };
+    let overview_resp = sitepulse_backend::handlers::get_site_overview(
+        axum::extract::State(state.clone()),
+        axum::extract::Query(overview_query),
+    ).await.into_response();
+
+    assert_eq!(overview_resp.status(), axum::http::StatusCode::OK);
 }
+
 
