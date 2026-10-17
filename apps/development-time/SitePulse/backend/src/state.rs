@@ -35,9 +35,10 @@ pub struct AppStateInner {
     pub unit_payer_names: HashMap<String, Vec<String>>,
     pub kuveyt_turk_client_id: Option<String>,
     pub kuveyt_turk_client_secret: Option<String>,
+    pub auto_scheduler_enabled: bool,
 }
 
-impl AppState {
+impl AppStateInner {
     pub fn new() -> Self {
         let mut inner = AppStateInner {
             sites: Vec::new(),
@@ -57,10 +58,15 @@ impl AppState {
             unit_payer_names: HashMap::new(),
             kuveyt_turk_client_id: std::env::var("KT_CLIENT_ID").ok(),
             kuveyt_turk_client_secret: std::env::var("KT_CLIENT_SECRET").ok(),
+            auto_scheduler_enabled: false,
         };
+        inner.seed();
+        inner
+    }
 
+    pub fn seed(&mut self) {
         // Seed Begonya Sitesi
-        inner.sites.push(Site {
+        self.sites.push(Site {
             id: "site-1".to_string(),
             name: "Begonya Sitesi".to_string(),
             address: "Ataşehir, Begonya Sok. No:14, İstanbul".to_string(),
@@ -70,7 +76,7 @@ impl AppState {
             license_end_date: NaiveDate::from_ymd_opt(2027, 9, 1).unwrap(),
         });
 
-        inner.sites.push(Site {
+        self.sites.push(Site {
             id: "site-2".to_string(),
             name: "Kardelen Rezidans".to_string(),
             address: "Çankaya, Kardelen Cad. No:8, Ankara".to_string(),
@@ -82,7 +88,7 @@ impl AppState {
 
         // Seed Users
         // 1. Site Manager (Mehmet Demir)
-        inner.users.push(User {
+        self.users.push(User {
             id: "usr-site-manager-1".to_string(),
             site_id: "site-1".to_string(),
             full_name: "Mehmet Demir".to_string(),
@@ -98,7 +104,7 @@ impl AppState {
         });
 
         // 2. Home Owner (Ahmet Yılmaz)
-        inner.users.push(User {
+        self.users.push(User {
             id: "usr-home-owner-1".to_string(),
             site_id: "site-1".to_string(),
             full_name: "Ahmet Yılmaz".to_string(),
@@ -114,7 +120,7 @@ impl AppState {
         });
 
         // 3. SaaS Admin
-        inner.users.push(User {
+        self.users.push(User {
             id: "usr-saas-admin-1".to_string(),
             site_id: "site-1".to_string(),
             full_name: "SaaS Platform Admin".to_string(),
@@ -136,7 +142,7 @@ impl AppState {
             "A",
             14,
         );
-        inner.units.push(IndependentUnit {
+        self.units.push(IndependentUnit {
             id: "d-14".to_string(),
             site_id: "site-1".to_string(),
             block_id: "A".to_string(),
@@ -149,21 +155,21 @@ impl AppState {
         });
 
         // Seed initial matching criteria for unit d-14 (Ahmet Yılmaz)
-        inner.unit_payer_names.insert(
+        self.unit_payer_names.insert(
             "d-14".to_string(),
             vec!["Ahmet Yılmaz".to_string(), "Zeynep Kaya".to_string()],
         );
-        inner.remembered_sender_ibans.insert(
+        self.remembered_sender_ibans.insert(
             "TR120006200000000000000001".to_string(),
             "d-14".to_string(),
         );
-        inner.sender_iban_metadata.insert(
+        self.sender_iban_metadata.insert(
             "TR120006200000000000000001".to_string(),
             (Some("Garanti BBVA - Maaş Hesabı".to_string()), Some("Garanti BBVA".to_string())),
         );
 
         // Seed September 2026 Dues (₺1400 overdue 10 days)
-        inner.dues.push(DuesLiability {
+        self.dues.push(DuesLiability {
             id: "b-101".to_string(),
             unit_id: "d-14".to_string(),
             period: "Eylül 2026".to_string(),
@@ -175,7 +181,7 @@ impl AppState {
         });
 
         // Seed pending registration
-        inner.pending_registrations.push(PendingRegistrationResponse {
+        self.pending_registrations.push(PendingRegistrationResponse {
             request_id: "req-seed-01".to_string(),
             site_id: "site-1".to_string(),
             block: "B Blok".to_string(),
@@ -190,7 +196,7 @@ impl AppState {
         });
 
         // Seed household member
-        inner.unit_members.insert(
+        self.unit_members.insert(
             "d-14".to_string(),
             vec![UnitMemberDto {
                 resident_id: "usr-ahmet-14".to_string(),
@@ -203,7 +209,7 @@ impl AppState {
         );
 
         // Seed Bank Account for Begonya Sitesi (site-1)
-        inner.site_bank_accounts.push(SiteBankAccount {
+        self.site_bank_accounts.push(SiteBankAccount {
             id: "sba-site-1-kt".to_string(),
             site_id: "site-1".to_string(),
             bank_code: "KUVEYT_TURK".to_string(),
@@ -216,9 +222,58 @@ impl AppState {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         });
+    }
 
-        Self {
-            inner: Arc::new(RwLock::new(inner)),
+    pub fn reset_all_payments_and_balances(&mut self) {
+        self.auto_scheduler_enabled = false;
+        self.advance_payments.clear();
+        self.homeowner_payments.clear();
+        self.reconciliation_queue.clear();
+
+        // 100% clean slate: ₺0.00 debt
+        self.dues.clear();
+
+        // Reset remembered sender IBANs
+        self.remembered_sender_ibans.clear();
+        self.remembered_sender_ibans.insert(
+            "TR120006200000000000000001".to_string(),
+            "d-14".to_string(),
+        );
+        self.sender_iban_metadata.clear();
+        self.sender_iban_metadata.insert(
+            "TR120006200000000000000001".to_string(),
+            (Some("Garanti BBVA - Maaş Hesabı".to_string()), Some("Garanti BBVA".to_string())),
+        );
+
+        // Reset unit payer names
+        self.unit_payer_names.clear();
+        self.unit_payer_names.insert(
+            "d-14".to_string(),
+            vec!["Ahmet Yılmaz".to_string(), "Zeynep Kaya".to_string()],
+        );
+    }
+
+    pub fn accrue_test_due(&mut self) {
+        if !self.dues.iter().any(|d| d.unit_id == "d-14" && d.period == "Eylül 2026") {
+            self.dues.push(DuesLiability {
+                id: "b-101".to_string(),
+                unit_id: "d-14".to_string(),
+                period: "Eylül 2026".to_string(),
+                principal_amount: Decimal::from_str_exact("1400.00").unwrap(),
+                delay_penalty: Decimal::ZERO,
+                total_amount: Decimal::from_str_exact("1400.00").unwrap(),
+                due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
+                status: DebtStatus::Pending,
+            });
         }
     }
 }
+
+impl AppState {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(AppStateInner::new())),
+        }
+    }
+}
+

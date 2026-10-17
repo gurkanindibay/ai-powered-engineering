@@ -1,6 +1,7 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
+import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 
 void main() {
@@ -353,6 +354,30 @@ void main() {
       expect(afterNames.registeredPayerNames.length, 3);
       expect(afterNames.registeredPayerNames, contains('Ali Yılmaz'));
     });
+
+    test('when resetAllDemoData invoked, clears advance payments, dues, and transactions for a clean slate', () async {
+      // First credit advance payment and mark due as paid
+      controller.recordHomeownerPayment(
+        block: 'A',
+        unitNo: 14,
+        amount: Decimal.parse('3000.00'),
+      );
+      expect(controller.activeUnit.advancePayment, greaterThan(Decimal.zero));
+
+      // Reset for clean slate: 0 debt, 0 advance, 0 transactions
+      final result = await controller.resetAllDemoData();
+      expect(result, isTrue);
+      expect(controller.activeUnit.advancePayment, Decimal.zero);
+      expect(controller.reconciliationQueue, isEmpty);
+      expect(controller.duesList, isEmpty);
+      expect(controller.accountTransactions, isEmpty);
+      expect(controller.primaryDues.toplamTutar, Decimal.zero);
+
+      // Test accruing test due on demand
+      final accrueResult = await controller.accrueTestDue();
+      expect(accrueResult, isTrue);
+    });
   });
 }
+
 

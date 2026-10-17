@@ -597,8 +597,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: AppColors.border(context), width: 1),
           ),
-          child: Column(
-            children: transactions.asMap().entries.map((entry) {
+          child: transactions.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(Icons.history_toggle_off, color: AppColors.textSecondary(context), size: 36),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Henüz bir hesap hareketi bulunmuyor',
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Yapılan aidat tahakkukları veya banka transferleri burada listelenir.',
+                          style: TextStyle(color: AppColors.textSecondary(context).withValues(alpha: 0.8), fontSize: 11),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Column(
+                  children: transactions.asMap().entries.map((entry) {
               final index = entry.key;
               final item = entry.value;
               final color = item.isCredit ? const Color(0xFF10B981) : const Color(0xFFEF4444);

@@ -104,7 +104,19 @@ class DashboardController extends ChangeNotifier {
     }
     return _duesList;
   }
-  DuesLiability? get primaryDues => duesList.isNotEmpty ? duesList.first : null;
+  DuesLiability get primaryDues => duesList.isNotEmpty
+      ? duesList.first
+      : DuesLiability(
+          id: 'due-clean',
+          unitId: activeUnit.id,
+          period: 'Eylül 2026',
+          principalAmount: Decimal.zero,
+          delayPenalty: Decimal.zero,
+          totalAmount: Decimal.zero,
+          dueDate: DateTime(2026, 9, 15),
+          daysOverdue: 0,
+          status: DebtStatus.paid,
+        );
 
   List<AccountTransactionItem> _accountTransactions = [];
   List<AccountTransactionItem> get accountTransactions => _accountTransactions;
@@ -628,6 +640,42 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> resetAllDemoData() async {
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/system/reset-demo-data');
+      await http.post(url).timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('resetAllDemoData remote error: $e');
+    }
+
+    _activeUnit = _activeUnit.copyWith(
+      advancePayment: Decimal.zero,
+    );
+    _duesList = [];
+    _reconciliationQueue.clear();
+    _accountTransactions = [];
+
+    await fetchResidentDashboard('d-14');
+    await fetchUnitMatchingCriteria('d-14');
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> accrueTestDue([String unitId = 'd-14']) async {
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/system/accrue-test-due');
+      await http.post(url).timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('accrueTestDue remote error: $e');
+    }
+
+    await fetchResidentDashboard(unitId);
+    notifyListeners();
+    return true;
+  }
+
   Future<void> fetchResidentDashboard([String unitId = 'd-14']) async {
     fetchUnitMatchingCriteria(unitId);
     try {
@@ -665,44 +713,12 @@ class DashboardController extends ChangeNotifier {
             );
           }).toList();
         } else if (totalDebt <= Decimal.zero) {
-          _duesList = _duesList.map((d) => d.copyWith(
-            status: DebtStatus.paid,
-            totalAmount: Decimal.zero,
-            delayPenalty: Decimal.zero,
-            daysOverdue: 0,
-          )).toList();
+          _duesList = [];
         }
 
         final txList = data['transactions'] as List<dynamic>?;
-        if (txList != null && txList.isNotEmpty) {
+        if (txList != null) {
           _accountTransactions = txList.map((t) => AccountTransactionItem.fromJson(t as Map<String, dynamic>)).toList();
-        } else if (advance > Decimal.zero || totalDebt <= Decimal.zero) {
-          _accountTransactions = [
-            AccountTransactionItem(
-              id: 'tx-live-fast',
-              title: 'FAST ile Aidat Ödemesi',
-              subtitle: 'Eylül 2026 aidatı ödendi • ₺60,67 avans bakiyenize aktarıldı',
-              amount: Decimal.parse('1460.67'),
-              date: 'Bugün',
-              isCredit: true,
-            ),
-            AccountTransactionItem(
-              id: 'tx-1',
-              title: 'Ağustos 2026 Aidatı',
-              subtitle: 'Kredi Kartı ile Ödendi',
-              amount: Decimal.parse('1400.00'),
-              date: '15.08.2026 10:20',
-              isCredit: true,
-            ),
-            AccountTransactionItem(
-              id: 'tx-2',
-              title: 'Demirbaş Katılım Payı',
-              subtitle: 'Yönetim Hesabına Transfer',
-              amount: Decimal.parse('500.00'),
-              date: '02.08.2026 16:45',
-              isCredit: true,
-            ),
-          ];
         }
 
         notifyListeners();

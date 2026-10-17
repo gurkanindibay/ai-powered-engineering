@@ -352,24 +352,6 @@ pub async fn get_resident_dashboard(
         });
     }
 
-    // 3. Historical baseline transactions
-    transactions.push(AccountTransactionDto {
-        id: "tx-hist-01".to_string(),
-        title: "Ağustos 2026 Aidatı".to_string(),
-        subtitle: "Kredi Kartı ile Ödendi".to_string(),
-        amount: Decimal::from_str_exact("1400.00").unwrap(),
-        date: "15.08.2026".to_string(),
-        is_credit: true,
-    });
-    transactions.push(AccountTransactionDto {
-        id: "tx-hist-02".to_string(),
-        title: "Demirbaş Katılım Payı".to_string(),
-        subtitle: "Yönetim Hesabına Transfer".to_string(),
-        amount: Decimal::from_str_exact("500.00").unwrap(),
-        date: "02.08.2026".to_string(),
-        is_credit: true,
-    });
-
     let response = ResidentDashboardDto {
         unit_id: unit.id,
         site_title,
@@ -1786,6 +1768,43 @@ pub async fn get_homeowner_payments(
 ) -> impl IntoResponse {
     let inner = state.inner.read().await;
     (StatusCode::OK, Json(inner.homeowner_payments.clone()))
+}
+
+/// Resets all payments, advance balances, reconciliation items, and dues back to a 100% clean state (₺0.00 debt, 0 transactions)
+pub async fn reset_demo_data(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let mut inner = state.inner.write().await;
+    inner.reset_all_payments_and_balances();
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "SUCCESS",
+            "message": "Tüm ödeme, borç, avans ve hesap hareketleri sıfırlandı. Sistem tertemiz başlangıç durumuna (₺0,00 Borç, 0 Hareket) döndürüldü.",
+            "unit_id": "d-14",
+            "active_debt": "0.00",
+            "advance_payment": "0.00",
+            "transactions_count": 0
+        })),
+    )
+}
+
+/// Accrues a single test monthly due (Eylül 2026: ₺1.400,00) for d-14 to test payment clearing
+pub async fn accrue_test_due(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let mut inner = state.inner.write().await;
+    inner.accrue_test_due();
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "SUCCESS",
+            "message": "A Blok D:14 için Eylül 2026 Aidat Borcu (₺1.400,00) tahakkuk ettirildi.",
+            "unit_id": "d-14",
+            "period": "Eylül 2026",
+            "active_debt": "1400.00"
+        })),
+    )
 }
 
 

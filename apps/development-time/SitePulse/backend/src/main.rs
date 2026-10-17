@@ -117,6 +117,9 @@ async fn main() {
         .route("/api/v1/payments/record", post(handlers::record_homeowner_payment))
         .route("/api/v1/payments/match-all", post(handlers::match_all_homeowner_payments))
         .route("/api/v1/payments/homeowner-records", get(handlers::get_homeowner_payments))
+        // System Reset & Test Data Fixtures
+        .route("/api/v1/system/reset-demo-data", post(handlers::reset_demo_data))
+        .route("/api/v1/system/accrue-test-due", post(handlers::accrue_test_due))
         .layer(cors)
         .with_state(state.clone());
 

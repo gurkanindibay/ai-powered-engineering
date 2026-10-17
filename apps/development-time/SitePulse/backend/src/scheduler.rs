@@ -114,6 +114,15 @@ pub async fn start_automated_dues_accrual_scheduler(state: AppState) {
     loop {
         ticker.tick().await;
 
+        let is_enabled = {
+            let inner = state.inner.read().await;
+            inner.auto_scheduler_enabled
+        };
+
+        if !is_enabled {
+            continue;
+        }
+
         let today = Utc::now().date_naive();
         let (sites_accrued, units_accrued) = run_periodic_accrual_for_all_sites(&state, today).await;
 

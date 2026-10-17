@@ -1554,3 +1554,59 @@ async fn when_homeowner_manages_matching_criteria_then_criteria_can_be_viewed_ad
 
     assert!(!after_delete.remembered_ibans.iter().any(|i| i.sender_iban == "TR770006400000112233445566"));
 }
+
+#[tokio::test]
+async fn when_reset_demo_data_invoked_then_payments_and_dues_are_restored_to_clean_slate() {
+    let state = AppState::new();
+
+    // 1. Process a payment that pays off September dues and creates advance payment
+    let webhook_req = sitepulse_backend::models::BankIncomingWebhookRequest {
+        transaction_id: "TXN-RESET-TEST-01".to_string(),
+        virtual_iban: "TR410020504213991067000014".to_string(),
+        amount: rust_decimal::Decimal::from_str_exact("2000.00").unwrap(),
+        currency: Some("TRY".to_string()),
+        sender_name: Some("Ahmet Yılmaz".to_string()),
+        sender_iban: Some("TR120006200000000000000001".to_string()),
+        description: Some("Aidat".to_string()),
+        signature: None,
+    };
+
+    let (status, _) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        axum::Json(webhook_req),
+    )
+    .await
+    .expect("Payment should process");
+
+    assert_eq!(status, axum::http::StatusCode::OK);
+
+    // Verify state has advance payment and paid due
+    {
+        let inner = state.inner.read().await;
+        assert_eq!(inner.advance_payments.get("d-14").copied(), Some(rust_decimal::Decimal::from_str_exact("600.00").unwrap()));
+        let due = inner.dues.iter().find(|d| d.id == "b-101").unwrap();
+        assert_eq!(due.status, sitepulse_backend::models::DebtStatus::Paid);
+    }
+
+    // 2. Invoke reset_demo_data
+    let _ = sitepulse_backend::handlers::reset_demo_data(axum::extract::State(state.clone())).await;
+
+    // 3. Verify clean slate restored (0 debt, 0 transactions, 0 advance)
+    {
+        let inner = state.inner.read().await;
+        assert!(inner.advance_payments.is_empty());
+        assert!(inner.homeowner_payments.is_empty());
+        assert!(inner.reconciliation_queue.is_empty());
+        assert!(inner.dues.is_empty());
+    }
+
+    // 4. Test accrue_test_due creates ₺1400 due on demand
+    let _ = sitepulse_backend::handlers::accrue_test_due(axum::extract::State(state.clone())).await;
+    {
+        let inner = state.inner.read().await;
+        let due = inner.dues.iter().find(|d| d.id == "b-101").unwrap();
+        assert_eq!(due.status, sitepulse_backend::models::DebtStatus::Pending);
+        assert_eq!(due.total_amount, rust_decimal::Decimal::from_str_exact("1400.00").unwrap());
+    }
+}
+
