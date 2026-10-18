@@ -23,8 +23,14 @@ rm -f "$SITEPULSE_ROOT/flutter/.dart_tool/package_config.json.lock" 2>/dev/null 
 sleep 1
 echo "  ✔ Development ports freed."
 
-# 2. Launch High-Performance Rust Backend Service (Axum 0.7 + Tokio)
-echo "▶ [2/4] Starting Rust Backend API on port 8080..."
+# 2. Start PostgreSQL 16 & Adminer database containers
+echo "▶ [2/5] Starting PostgreSQL 16 Database & Adminer Web Client..."
+bash "$SCRIPT_DIR/dev-db-up.sh" || {
+    echo "  [WARN] Could not auto-start database containers. You can run 'sudo ./dev-db-up.sh' manually."
+}
+
+# 3. Launch High-Performance Rust Backend Service (Axum 0.7 + Tokio)
+echo "▶ [3/5] Starting Rust Backend API on port 8080..."
 cd "$SITEPULSE_ROOT/backend"
 if [ -f ".env" ]; then
     set -a

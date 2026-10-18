@@ -16,14 +16,20 @@ fuser -k -9 9091/tcp > /dev/null 2>&1 || true
 sleep 1
 echo "  [OK] All ports freed."
 
-# 2. Start Prototype Web Server on port 9091 in background
+# 2. Start PostgreSQL 16 & Adminer database containers
+echo "▶ Starting PostgreSQL 16 Database & Adminer Web Client..."
+bash "$SCRIPT_DIR/dev-db-up.sh" || {
+    echo "  [WARN] Could not auto-start database containers. You can run 'sudo ./dev-db-up.sh' manually."
+}
+
+# 3. Start Prototype Web Server on port 9091 in background
 echo "▶ Starting Prototype server on port 9091 (background)..."
 nohup python3 -m http.server 9091 --directory "$SITEPULSE_ROOT" > /tmp/sitepulse-prototype.log 2>&1 &
 disown 2>/dev/null || true
 echo "  [OK] Prototype server active: http://localhost:9091/mvp_ux_prototype.html"
 echo "  [OK] Bank & FAST Simulator:   http://localhost:9091/bank_transfer_simulator.html"
 
-# 3. Start Rust Backend on port 8080 in background
+# 4. Start Rust Backend on port 8080 in background
 echo "▶ Starting Rust Backend API on port 8080 (background)..."
 nohup bash "$SCRIPT_DIR/run-backend.sh" > /tmp/sitepulse-backend.log 2>&1 &
 disown 2>/dev/null || true
@@ -35,6 +41,6 @@ echo "▶ Seeding settled Virtual IBAN demo state..."
 bash "$SCRIPT_DIR/test-virtual-iban-e2e.sh" > /dev/null 2>&1 || true
 echo "  [OK] Demo settlement & advance balance seeded."
 
-# 4. Launch Flutter Web in foreground
+# 5. Launch Flutter Web in foreground
 echo "▶ Starting Flutter client on port 9090..."
 exec "$SCRIPT_DIR/run-flutter.sh" web
