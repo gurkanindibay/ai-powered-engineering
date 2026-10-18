@@ -1,0 +1,23 @@
+-- V4: Site Bank Account Configuration (English Schema Standard)
+-- Allows a site manager to configure exactly one active bank account per site.
+-- The bank determines the payment file format used during statement ingestion.
+
+CREATE TABLE IF NOT EXISTS site_bank_accounts (
+    id              VARCHAR(36) PRIMARY KEY,
+    site_id         VARCHAR(36) NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    bank_code       VARCHAR(50) NOT NULL,       -- e.g. 'KUVEYT_TURK', 'IS_BANKASI', 'ZIRAAT'
+    bank_name       VARCHAR(120) NOT NULL,      -- Human-readable display name
+    iban            VARCHAR(34) NOT NULL,       -- TR + 24 digits (IBAN standard)
+    account_holder  VARCHAR(120) NOT NULL,      -- Name on the account (site legal name or manager)
+    statement_format VARCHAR(30) NOT NULL,      -- 'EXCEL', 'CSV', 'MT940' – auto-set from bank_code
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    configured_by   VARCHAR(36) REFERENCES users(id),
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    -- A site may have at most one active bank account at any time
+    CONSTRAINT uq_site_active_bank UNIQUE (site_id, is_active) DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE INDEX IF NOT EXISTS idx_site_bank_account_site ON site_bank_accounts (site_id);
+CREATE INDEX IF NOT EXISTS idx_site_bank_account_active ON site_bank_accounts (site_id, is_active);
