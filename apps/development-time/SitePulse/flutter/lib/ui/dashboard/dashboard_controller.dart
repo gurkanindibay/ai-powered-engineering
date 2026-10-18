@@ -264,7 +264,36 @@ class DashboardController extends ChangeNotifier {
     _managerDuesList = [];
     _flatsList = [];
     _pendingRegistrations = [];
-    _saasSites = [];
+    _saasSites = [
+      TenantSiteItem(
+        id: 'site-1',
+        name: 'Begonya Sitesi',
+        city: 'İstanbul',
+        address: 'Ataşehir, Begonya Sok. No:14, İstanbul',
+        status: 'ACTIVE',
+        planType: 'PREMIUM',
+        totalUnits: 12,
+        monthlyCollectionVolume: Decimal.parse('17528.00'),
+        adminName: 'Mehmet Demir',
+        adminEmail: 'mehmet.demir@begonya.com',
+        adminPhone: '+90 532 100 2030',
+        actionCount: 12,
+      ),
+      TenantSiteItem(
+        id: 'site-2',
+        name: 'Kardelen Rezidans',
+        city: 'Ankara',
+        address: 'Çankaya, Kardelen Cad. No:8, Ankara',
+        status: 'ACTIVE',
+        planType: 'STANDARD',
+        totalUnits: 24,
+        monthlyCollectionVolume: Decimal.parse('35000.00'),
+        adminName: 'Ahmet Karaca',
+        adminEmail: 'yonetim@kardelen.com',
+        adminPhone: '+90 532 200 3040',
+        actionCount: 24,
+      ),
+    ];
     _managedSitesList = [];
     _currentManagedSite = null;
     _unitResidents = [];
@@ -823,6 +852,42 @@ class DashboardController extends ChangeNotifier {
     await fetchSiteManagerOverview(siteId: siteId, period: _selectedDuesMonth);
   }
 
+  Future<void> fetchSaasSites() async {
+    if (isTestMode) return;
+    try {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/saas/sites');
+      final response = await http.get(url).timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
+        if (data.isNotEmpty) {
+          _saasSites = data.map<TenantSiteItem>((item) {
+            final addr = item['address']?.toString() ?? '';
+            final city = addr.contains(',') ? addr.split(',').last.trim() : 'İstanbul';
+            return TenantSiteItem(
+              id: item['site_id'] as String? ?? '',
+              name: item['site_name'] as String? ?? '',
+              city: city,
+              address: addr,
+              status: item['status'] as String? ?? 'ACTIVE',
+              planType: item['plan_type'] as String? ?? 'STANDARD',
+              totalUnits: (item['total_units'] as num?)?.toInt() ?? 0,
+              monthlyCollectionVolume: Decimal.tryParse(item['monthly_dues_volume']?.toString() ?? '0') ?? Decimal.zero,
+              adminName: item['primary_manager_name'] as String? ?? 'Yönetici Atanmadı',
+              adminEmail: item['primary_manager_email'] as String? ?? '',
+              adminPhone: item['primary_manager_phone'] as String? ?? '',
+              actionCount: (item['total_units'] as num?)?.toInt() ?? 0,
+            );
+          }).toList();
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('fetchSaasSites error: $e');
+    }
+  }
+
   Future<Map<String, dynamic>> accrueMonthlyDues({
     required String period,
     String? siteId,
@@ -940,7 +1005,9 @@ class DashboardController extends ChangeNotifier {
     if (role == UserRole.siteManager && adminPath != null) {
       _siteAdminPath = adminPath;
     }
-    if (role == UserRole.siteManager) {
+    if (role == UserRole.saasAdmin) {
+      fetchSaasSites();
+    } else if (role == UserRole.siteManager) {
       fetchSiteManagerOverview(siteId: _currentManagedSite?.id, period: _selectedDuesMonth);
     } else if (role == UserRole.homeOwner || role == UserRole.homeResident) {
       if (_activeUnit.id.isNotEmpty) {
@@ -965,6 +1032,9 @@ class DashboardController extends ChangeNotifier {
     switchSessionRole(role, provider: provider, adminPath: adminPath);
     _isAuthenticated = true;
     _authMessage = '${role.displayName} olarak giriş yapıldı.';
+    if (role == UserRole.saasAdmin) {
+      fetchSaasSites();
+    }
     notifyListeners();
   }
 

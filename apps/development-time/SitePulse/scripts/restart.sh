@@ -37,6 +37,7 @@ if [ -f ".env" ]; then
     source .env
     set +a
 fi
+export SITEPULSE_SEED_TEST_DATA=true
 nohup "$CARGO_BIN" run --release > /tmp/sitepulse-backend.log 2>&1 &
 BACKEND_PID=$!
 disown $BACKEND_PID 2>/dev/null || true

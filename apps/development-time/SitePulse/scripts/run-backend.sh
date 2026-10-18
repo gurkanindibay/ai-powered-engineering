@@ -46,4 +46,5 @@ if [ -f ".env" ]; then
     source .env
     set +a
 fi
+export SITEPULSE_SEED_TEST_DATA=true
 "$CARGO_BIN" run --release
