@@ -95,7 +95,15 @@ impl SiteBankAccountService {
                 existing.updated_at = now;
             }
         }
-        inner.site_bank_accounts.push(new_account);
+        inner.site_bank_accounts.push(new_account.clone());
+
+        if let Some(ref pool) = self.state.pool {
+            let pool = pool.clone();
+            let acc = new_account.clone();
+            tokio::spawn(async move {
+                let _ = crate::db::save_site_bank_account(&pool, &acc).await;
+            });
+        }
 
         Ok(response)
     }

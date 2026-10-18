@@ -14,6 +14,7 @@ use crate::services::VirtualIbanService;
 #[derive(Clone)]
 pub struct AppState {
     pub inner: Arc<RwLock<AppStateInner>>,
+    pub pool: Option<deadpool_postgres::Pool>,
 }
 
 pub struct AppStateInner {
@@ -362,9 +363,18 @@ impl AppStateInner {
 }
 
 impl AppState {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             inner: Arc::new(RwLock::new(AppStateInner::new())),
+            pool: None,
+        }
+    }
+
+    pub fn with_pool(pool: Option<deadpool_postgres::Pool>) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(AppStateInner::new())),
+            pool,
         }
     }
 
@@ -374,6 +384,7 @@ impl AppState {
         inner.clear_all_data();
         Self {
             inner: Arc::new(RwLock::new(inner)),
+            pool: None,
         }
     }
 
@@ -383,6 +394,7 @@ impl AppState {
         inner.seed_test_fixtures();
         Self {
             inner: Arc::new(RwLock::new(inner)),
+            pool: None,
         }
     }
 }

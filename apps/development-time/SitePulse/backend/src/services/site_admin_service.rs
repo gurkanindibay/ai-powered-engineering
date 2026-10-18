@@ -61,7 +61,15 @@ impl SiteAdminService {
             avatar_url: None,
             created_at: Utc::now(),
         };
-        inner.users.push(resident_user);
+        inner.users.push(resident_user.clone());
+
+        if let Some(ref pool) = self.state.pool {
+            let pool = pool.clone();
+            let u = resident_user.clone();
+            tokio::spawn(async move {
+                let _ = crate::db::save_user(&pool, &u).await;
+            });
+        }
 
         let unit_id = format!("unit-{}", &Uuid::new_v4().to_string()[..8]);
 

@@ -49,7 +49,7 @@ SET config_value = EXCLUDED.config_value,
 -- Note: In production deployments, change admin password immediately upon first login.
 INSERT INTO users (id, site_id, full_name, email, phone, password_hash, role, must_change_password)
 VALUES (
-    'usr-saas-root',
+    1,
     NULL,
     'SaaS Platform Admin',
     'admin@sitepulse.io',

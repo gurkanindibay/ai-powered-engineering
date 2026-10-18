@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/ui/components/bank_statement_reconciliation_page.dart';
@@ -17,6 +18,13 @@ void main() {
       controller = DashboardController(startAuthenticated: true);
       controller.loadTestFixtures();
       controller.switchSessionRole(UserRole.siteManager);
+    });
+
+    tearDownAll(() async {
+      try {
+        final url = Uri.parse('http://localhost:8080/api/v1/system/reset-demo-data');
+        await http.post(url).timeout(const Duration(seconds: 2));
+      } catch (_) {}
     });
 
     test('when parsing turkish bank excel line then identifies unit A Blok D:14 with 100 percent confidence and exact amount', () {

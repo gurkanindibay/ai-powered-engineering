@@ -66,7 +66,7 @@ impl SaasTenantService {
             plan_type: plan.clone(),
             license_end_date: license_end,
         };
-        inner.sites.push(new_site);
+        inner.sites.push(new_site.clone());
 
         let temp_pass = generate_secure_temporary_password();
         let password_hash = format!("ARGON2_HASH_{}", &temp_pass);
@@ -86,7 +86,17 @@ impl SaasTenantService {
             avatar_url: None,
             created_at: Utc::now(),
         };
-        inner.users.push(admin_user);
+        inner.users.push(admin_user.clone());
+
+        if let Some(ref pool) = self.state.pool {
+            let pool = pool.clone();
+            let s = new_site.clone();
+            let u = admin_user.clone();
+            tokio::spawn(async move {
+                let _ = crate::db::save_site(&pool, &s).await;
+                let _ = crate::db::save_user(&pool, &u).await;
+            });
+        }
 
         Ok(SiteRegistrationResponse {
             site_id,
@@ -218,6 +228,14 @@ impl SaasTenantService {
         // Purge unactivated tenant admin user(s) created for this site
         inner.users.retain(|u| u.site_id != site_id || u.role == Role::SaasAdmin);
 
+        if let Some(ref pool) = self.state.pool {
+            let pool = pool.clone();
+            let s_id = site_id.to_string();
+            tokio::spawn(async move {
+                let _ = crate::db::delete_site(&pool, &s_id).await;
+            });
+        }
+
         Ok(())
     }
 
@@ -246,13 +264,21 @@ impl SaasTenantService {
         let admin_user_id;
         let admin_full_name;
         let admin_email;
-        {
+        let updated_user = {
             let user = &mut inner.users[user_idx];
             user.password_hash = Some(password_hash);
             user.must_change_password = true;
             admin_user_id = user.id.clone();
             admin_full_name = user.full_name.clone();
             admin_email = user.email.clone();
+            user.clone()
+        };
+
+        if let Some(ref pool) = self.state.pool {
+            let pool = pool.clone();
+            tokio::spawn(async move {
+                let _ = crate::db::save_user(&pool, &updated_user).await;
+            });
         }
 
         Ok(SiteAdminPasswordResetResponse {

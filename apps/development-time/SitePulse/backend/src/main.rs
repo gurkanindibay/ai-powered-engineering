@@ -1,3 +1,4 @@
+mod db;
 mod handlers;
 mod models;
 mod scheduler;
@@ -21,7 +22,17 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let state = AppState::new();
+    let pool = db::create_pool();
+    let state = AppState::with_pool(pool.clone());
+
+    if let Some(ref p) = pool {
+        if let Err(e) = db::init_db(p).await {
+            tracing::warn!("PostgreSQL initialization notice: {}", e);
+        } else {
+            let mut inner = state.inner.write().await;
+            db::load_all_from_db(p, &mut inner).await;
+        }
+    }
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -119,6 +130,7 @@ async fn main() {
         .route("/api/v1/payments/homeowner-records", get(handlers::get_homeowner_payments))
         // System Reset & Test Data Fixtures
         .route("/api/v1/system/reset-demo-data", post(handlers::reset_demo_data))
+        .route("/api/v1/system/recreate-db", post(handlers::recreate_db))
         .route("/api/v1/system/accrue-test-due", post(handlers::accrue_test_due))
         .route("/api/v1/system/seed-test-fixtures", post(handlers::seed_test_fixtures))
         .route("/api/v1/system/clear-all-data", post(handlers::clear_all_data))

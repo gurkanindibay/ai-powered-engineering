@@ -809,8 +809,8 @@ pub async fn confirm_reconciliation(
     }
 
     // Now update dues liabilities without overlapping borrow
-    for due_id in cleared_dues {
-        if let Some(due) = inner.dues.iter_mut().find(|d| d.id == due_id) {
+    for due_id in &cleared_dues {
+        if let Some(due) = inner.dues.iter_mut().find(|d| d.id == *due_id) {
             due.status = DebtStatus::Paid;
         }
     }
@@ -851,6 +851,41 @@ pub async fn confirm_reconciliation(
     } else {
         None
     };
+
+    if let Some(ref pool) = state.pool {
+        let pool = pool.clone();
+        let matches_to_save: Vec<(String, Option<String>, Option<String>, Decimal, Option<String>, String)> = confirmed_matches
+            .iter()
+            .map(|m| {
+                (
+                    format!("txn-{}", Uuid::new_v4().simple()),
+                    m.matched_due_id.clone(),
+                    m.matched_unit_id.clone(),
+                    m.transaction.amount,
+                    m.transaction.reference_no.clone(),
+                    m.transaction.description.clone(),
+                )
+            })
+            .collect();
+        let cleared = cleared_dues.clone();
+        tokio::spawn(async move {
+            for (txn_id, due_id, unit_id, amt, ref_no, desc) in matches_to_save {
+                let _ = crate::db::save_collection_transaction(
+                    &pool,
+                    &txn_id,
+                    due_id.as_deref(),
+                    unit_id.as_deref(),
+                    "BANK_STATEMENT",
+                    amt,
+                    ref_no.as_deref(),
+                    Some(&desc),
+                ).await;
+            }
+            for d_id in cleared {
+                let _ = crate::db::update_due_liability(&pool, &d_id, "PAID", Decimal::ZERO).await;
+            }
+        });
+    }
 
     Ok((
         StatusCode::OK,
@@ -1186,9 +1221,9 @@ pub async fn handle_bank_incoming_webhook(
         if unit_index.is_none() {
             let desc = payload.description.as_deref().unwrap_or("");
             if let Some((ref blk, unit_no)) = ReconciliationService::extract_block_and_flat(desc) {
-                let clean_blk = blk.replace("Blok", "").replace("blok", "").trim().to_uppercase();
+                let clean_blk = blk.to_uppercase().replace("BLOK", "").replace("BLOCK", "").replace(['-', '_', ' '], "");
                 unit_index = inner.units.iter().position(|u| {
-                    let u_blk = u.block_id.replace("Blok", "").replace("blok", "").trim().to_uppercase();
+                    let u_blk = u.block_id.to_uppercase().replace("BLOK", "").replace("BLOCK", "").replace(['-', '_', ' '], "");
                     (u_blk == clean_blk || u.block_id.eq_ignore_ascii_case(blk)) && u.unit_number == unit_no
                 });
                 if unit_index.is_some() {
@@ -1328,6 +1363,7 @@ pub async fn handle_bank_incoming_webhook(
     }).or_else(|| {
         inner.dues.iter().position(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
     });
+    let target_due_id = target_due_idx.map(|idx| inner.dues[idx].id.clone());
 
     if let Some(idx) = target_due_idx {
         let due = &mut inner.dues[idx];
@@ -1353,6 +1389,37 @@ pub async fn handle_bank_incoming_webhook(
     // Also auto-offset any advance against remaining unpaid dues
     apply_advance_payments_offset(&mut inner, Some(&unit.id));
     let total_advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
+
+    // Persist to PostgreSQL database (STORY-05-01 / Financial Ledger)
+    if let Some(ref pool) = state.pool {
+        let pool = pool.clone();
+        let txn_id = format!("txn-{}", Uuid::new_v4().simple());
+        let due_id = target_due_id.clone();
+        let unit_id = unit.id.clone();
+        let amount = payload.amount;
+        let ref_code = payload.transaction_id.clone();
+        let desc = payload.description.clone().unwrap_or_else(|| format!("FAST Bank Transfer: {}", unit_id));
+        tokio::spawn(async move {
+            let _ = crate::db::save_collection_transaction(
+                &pool,
+                &txn_id,
+                due_id.as_deref(),
+                Some(&unit_id),
+                "BANK_TRANSFER",
+                amount,
+                Some(&ref_code),
+                Some(&desc),
+            ).await;
+            if let Some(ref d_id) = due_id {
+                let _ = crate::db::update_due_liability(
+                    &pool,
+                    d_id,
+                    "PAID",
+                    amount,
+                ).await;
+            }
+        });
+    }
 
     // 4. Calculate remaining debt
     let remaining_debt: Decimal = inner
@@ -1511,6 +1578,21 @@ pub async fn accrue_monthly_dues(
             total_amount_accrued += payload.amount;
             newly_accrued_units_count += 1;
         }
+    }
+
+    if let Some(ref pool) = state.pool {
+        let pool = pool.clone();
+        let dues_to_save: Vec<DuesLiability> = inner
+            .dues
+            .iter()
+            .filter(|d| d.period == payload.period)
+            .cloned()
+            .collect();
+        tokio::spawn(async move {
+            for due in dues_to_save {
+                let _ = crate::db::save_due_liability(&pool, &due).await;
+            }
+        });
     }
 
     if newly_accrued_units_count == 0 {
@@ -1674,6 +1756,40 @@ pub async fn record_homeowner_payment(
     let resident_name = record.homeowner_name.clone();
 
     inner.homeowner_payments.push(record);
+
+    if let Some(ref pool) = state.pool {
+        let pool = pool.clone();
+        let txn_id = format!("txn-{}", Uuid::new_v4().simple());
+        let unit_id = unit.id.clone();
+        let amount = payload.amount;
+        let ref_code = payload.reference_code.clone();
+        let note = payload.note.clone();
+        let matched_due_id = inner
+            .dues
+            .iter()
+            .find(|d| d.unit_id == unit_id && d.status == DebtStatus::Paid)
+            .map(|d| d.id.clone());
+        tokio::spawn(async move {
+            let _ = crate::db::save_collection_transaction(
+                &pool,
+                &txn_id,
+                matched_due_id.as_deref(),
+                Some(&unit_id),
+                "ONLINE_PAYMENT",
+                amount,
+                ref_code.as_deref(),
+                note.as_deref(),
+            ).await;
+            if let Some(ref d_id) = matched_due_id {
+                let _ = crate::db::update_due_liability(
+                    &pool,
+                    d_id,
+                    "PAID",
+                    amount,
+                ).await;
+            }
+        });
+    }
 
     // Also record in reconciliation_queue as an approved digital receipt
     let receipt_id = format!("RCP-{}", Uuid::new_v4().simple());
@@ -1851,8 +1967,14 @@ pub async fn reset_demo_data(
             })),
         );
     }
+    if let Some(ref pool) = state.pool {
+        let _ = crate::db::reset_db_to_seed_data(pool).await;
+    }
     let mut inner = state.inner.write().await;
     inner.reset_all_payments_and_balances();
+    if let Some(ref pool) = state.pool {
+        crate::db::load_all_from_db(pool, &mut inner).await;
+    }
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -1925,13 +2047,61 @@ pub async fn seed_test_fixtures(
 pub async fn clear_all_data(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    if let Some(ref pool) = state.pool {
+        let _ = crate::db::reset_db_to_seed_data(pool).await;
+    }
     let mut inner = state.inner.write().await;
     inner.clear_all_data();
+    if let Some(ref pool) = state.pool {
+        crate::db::load_all_from_db(pool, &mut inner).await;
+    }
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "status": "SUCCESS",
             "message": "Tüm site, kullanıcı, daire, aidat ve hareket verileri temizlendi. Sistem sıfırlandı.",
+            "sites_count": inner.sites.len(),
+            "users_count": inner.users.len(),
+            "units_count": inner.units.len(),
+            "dues_count": inner.dues.len()
+        })),
+    )
+}
+
+/// Drops all tables, recreates schema with auto-increment BIGINT identity, and seeds fresh initial state
+pub async fn recreate_db(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if crate::state::AppStateInner::is_production() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "status": "ERROR",
+                "message": "Veritabanını sıfırdan oluşturma işlemi canlı ortamda güvenlik nedeniyle engellenmiştir."
+            })),
+        );
+    }
+    if let Some(ref pool) = state.pool {
+        if let Err(e) = crate::db::recreate_db_schema_and_seed(pool).await {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "status": "ERROR",
+                    "message": format!("Veritabanı sıfırlanamadı: {}", e)
+                })),
+            );
+        }
+    }
+    let mut inner = state.inner.write().await;
+    inner.reset_all_payments_and_balances();
+    if let Some(ref pool) = state.pool {
+        crate::db::load_all_from_db(pool, &mut inner).await;
+    }
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "SUCCESS",
+            "message": "Tüm tablolar başarıyla silindi, yeniden oluşturuldu ve başlangıç verileriyle yüklendi.",
             "sites_count": inner.sites.len(),
             "users_count": inner.users.len(),
             "units_count": inner.units.len(),
@@ -2141,6 +2311,20 @@ pub async fn provision_site_units(
             current_debt,
             advance_balance: advance,
             sender_iban: sample_sender_iban,
+        });
+    }
+
+    if let Some(ref pool) = state.pool {
+        let pool = pool.clone();
+        let units_to_save: Vec<IndependentUnit> = inner.units.clone();
+        let dues_to_save: Vec<DuesLiability> = inner.dues.clone();
+        tokio::spawn(async move {
+            for u in units_to_save {
+                let _ = crate::db::save_unit(&pool, &u).await;
+            }
+            for d in dues_to_save {
+                let _ = crate::db::save_due_liability(&pool, &d).await;
+            }
         });
     }
 
@@ -2514,25 +2698,42 @@ pub async fn get_site_overview(
         available_periods.first().cloned().unwrap_or_else(|| "Ekim 2026".to_string())
     });
 
-    // 4. Available sites list for site switcher
-    let available_sites: Vec<crate::models::SiteSummaryBriefDto> = inner.sites.iter().map(|s| {
-        let count = inner.units.iter().filter(|u| u.site_id == s.id).count();
-        crate::models::SiteSummaryBriefDto {
-            id: s.id.clone(),
-            name: s.name.clone(),
-            address: s.address.clone(),
-            total_units: count,
+    // 4. Available sites list for site switcher (deduplicated by name)
+    let mut available_sites: Vec<crate::models::SiteSummaryBriefDto> = Vec::new();
+    for s in &inner.sites {
+        if !available_sites.iter().any(|existing| existing.name == s.name) {
+            let count = inner.units.iter().filter(|u| u.site_id == s.id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&s.id)).count();
+            available_sites.push(crate::models::SiteSummaryBriefDto {
+                id: s.id.clone(),
+                name: s.name.clone(),
+                address: s.address.clone(),
+                total_units: count,
+            });
         }
-    }).collect();
+    }
 
-    // 5. Gather flats for this site
+    // 5. Gather flats for this site (deduplicated by block and unit_number)
     let matching_units: Vec<_> = {
-        let filtered: Vec<_> = inner.units.iter().filter(|u| u.site_id == site_id).cloned().collect();
-        if filtered.is_empty() {
-            inner.units.clone()
-        } else {
-            filtered
+        let mut seen_units = std::collections::HashSet::new();
+        let mut deduped = Vec::new();
+        for u in &inner.units {
+            let matches_site = u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&site_id);
+            if matches_site {
+                let clean_blk = crate::db::parse_id_to_i64(&u.block_id).map(|b| b.to_string()).unwrap_or_else(|| u.block_id.clone());
+                if seen_units.insert((clean_blk, u.unit_number)) {
+                    deduped.push(u.clone());
+                }
+            }
         }
+        if deduped.is_empty() {
+            for u in &inner.units {
+                let clean_blk = crate::db::parse_id_to_i64(&u.block_id).map(|b| b.to_string()).unwrap_or_else(|| u.block_id.clone());
+                if seen_units.insert((clean_blk, u.unit_number)) {
+                    deduped.push(u.clone());
+                }
+            }
+        }
+        deduped
     };
 
     let mut flats = Vec::new();
@@ -2546,6 +2747,8 @@ pub async fn get_site_overview(
     for unit in &matching_units {
         let resident_name = unit.owner_user_id.as_ref().and_then(|uid| {
             inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone())
+        }).or_else(|| {
+            inner.unit_payer_names.get(&unit.id).and_then(|names| names.first().cloned())
         }).unwrap_or_else(|| format!("Daire Sakini {}", unit.unit_number));
 
         // Find due for this unit in the selected period
@@ -2573,9 +2776,12 @@ pub async fn get_site_overview(
             }
         }
 
+        let clean = unit.block_id.to_uppercase().replace("BLOK", "").replace(['-', '_', ' '], "").trim().to_string();
+        let effective_block = if clean.is_empty() { unit.block_id.clone() } else { clean };
+
         flats.push(crate::models::SiteFlatStatusDto {
             id: unit.id.clone(),
-            block: unit.block_id.clone(),
+            block: effective_block,
             unit_no: unit.unit_number,
             resident_name,
             amount_due,

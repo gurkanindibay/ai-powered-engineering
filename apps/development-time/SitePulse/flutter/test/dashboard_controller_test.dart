@@ -1,5 +1,6 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
@@ -12,6 +13,13 @@ void main() {
     setUp(() {
       controller = DashboardController();
       controller.loadTestFixtures();
+    });
+
+    tearDownAll(() async {
+      try {
+        final url = Uri.parse('http://localhost:8080/api/v1/system/reset-demo-data');
+        await http.post(url).timeout(const Duration(seconds: 2));
+      } catch (_) {}
     });
 
     test('when initialized, then default role is homeOwner with Begonya Sitesi unit scope', () {
