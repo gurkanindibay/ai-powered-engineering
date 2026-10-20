@@ -168,11 +168,16 @@ void main() {
       expect(find.text('Zero-Approval (Sıfır Onaylı) Akıllı Eşleştirici', findRichText: true).evaluate().isNotEmpty ||
           find.textContaining('Sıfır Onaylı').evaluate().isNotEmpty, isTrue);
 
-      // Verify preset chips
-      expect(find.text('Garanti BBVA'), findsOneWidget);
-      expect(find.text('İş Bankası CSV'), findsOneWidget);
-      expect(find.text('SWIFT MT940'), findsOneWidget);
+      // Enter statement line into text field and trigger parse
+      await tester.enterText(
+        find.byType(TextField),
+        'HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33',
+      );
+      await tester.ensureVisible(find.text('Ekstre Ayrıştır & Daireleri Eşleştir'));
+      await tester.tap(find.text('Ekstre Ayrıştır & Daireleri Eşleştir'));
+      await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('A Blok D:14'));
       // Verify parsed match item
       expect(find.text('A Blok D:14'), findsOneWidget);
       expect(find.text('%100 Güven'), findsOneWidget);

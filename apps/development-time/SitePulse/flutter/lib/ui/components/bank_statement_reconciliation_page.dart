@@ -10,40 +10,6 @@ import 'manual_unit_assignment_page.dart';
 class BankStatementReconciliationPage extends StatefulWidget {
   final DashboardController controller;
 
-  static const String sampleGarantiExcel =
-      'HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33';
-
-  static const String sampleKuveytTurkExcel =
-      '01.07.2026;A07MY;Para Transferi, Gönderen: ALAETTİN ÇELİK  , Alıcı: GÜRKAN İNDİBAY, Ödeme Türü:  Diğer Ödeme Türleri;1.320,00;TL\n'
-      '01.07.2026;A03JZ;Para Transferi, Gönderen: MUSTAFA RÜZGAR  , Alıcı: GÜRKAN İNDİBAY, Ödeme Türü:  Diğer Ödeme Türleri;660,00;TL\n'
-      '13.07.2026;A045C;Para Transferi, Gönderen: MUSTAFA BURAK TÜRKMEN  , Alıcı: GÜRKAN İNDİBAY, Ödeme Türü:  Diğer Ödeme Türleri;1.000,00;TL\n'
-      '13.07.2026;A0475;Para Transferi, Gönderen: MUSTAFA RÜZGAR  , Alıcı: GÜRKAN İNDİBAY, Ödeme Türü:  Diğer Ödeme Türleri;715,00;TL\n'
-      '13.07.2026;ADS09;sait - Gönderen:SAİT ŞENER, Alıcı:gürkan indibay, FAST Para Transferi;715,00;TL\n'
-      '14.07.2026;A00A0;Cami çikolata - Para Transferi, Gönderen: SERVET KARACA  , Alıcı: GÜRKAN İNDİBAY;715,00;TL\n'
-      '17.09.2026;A01YN;Para Transferi, Gönderen: HASAN İNDİBAY  , Alıcı: GÜRKAN İNDİBAY, Ödeme Türü:  Diğer Ödeme Türleri;28.000,00;TL\n'
-      '18.09.2026;AKVJW;Gönderen:GÜRKAN İNDİBAY, Alıcı:Abdullah haidari, FAST Para Transferi;-20.000,00;TL';
-
-  static const String sampleIsBankExcel =
-      '06/08/2026-21:06:38,06/08/2026,Bankamatik,500,500,AD,Para Yatırma,EFEKTİF YATAN 6500********57 62.KART HESABINA PARA YATIRMA,,,,,,21348010002120260806210638613\n'
-      '02/08/2026-07:55:32,03/08/2026,Bankamatik,1000,1000,AD,Para Yatırma,EFEKTİF YATAN 6500********57 62.KART HESABINA PARA YATIRMA,,,,,,21348010002120260802075532281\n'
-      '06/08/2026-21:07:50,06/08/2026,İşCep,-500,0,0S,Havale,MİDAS MENKUL DEĞERLER ANONİM ŞİRKETİ*GÜRKAN İNDİBAY tarafından aktarılan,,,,,,21348010002120260806210750091\n'
-      '02/08/2026-07:56:51,02/08/2026,İşCep,-1000,0,0S,Havale,MİDAS MENKUL DEĞERLER ANONİM ŞİRKETİ*GÜRKAN İNDİBAY tarafından aktarılan,,,,,,21348010002120260802075651398';
-
-  static const String sampleIsBankCsv =
-      'Tarih;Açıklama;Tutar;Para Birimi\n'
-      '15.09.2026;HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT;1.423,33;TL\n'
-      '16.09.2026;EFT - MEHMET DEMIR B BLOK NO:1 AIDAT;1.200,00;TL';
-
-  static const String sampleSwiftMt940 =
-      ':20:STARTMR\n'
-      ':25:TR120006200000000000001001\n'
-      ':28C:00001/001\n'
-      ':60F:C260901TRY50000,00\n'
-      ':61:2609150915CR1423,33NTRFNONREF//TXN77889\n'
-      ':86:HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT\n'
-      ':62F:C260930TRY51423,33\n'
-      '-';
-
   const BankStatementReconciliationPage({
     super.key,
     required this.controller,
@@ -56,20 +22,14 @@ class BankStatementReconciliationPage extends StatefulWidget {
 class _BankStatementReconciliationPageState extends State<BankStatementReconciliationPage> {
   final TextEditingController _textController = TextEditingController();
   final Set<String> _selectedMatchIds = {};
-  String _activePreset = 'Garanti BBVA';
   String _filterStatus = 'ALL'; // 'ALL', 'MATCHED', 'UNMATCHED', 'GIDER'
-
 
   @override
   void initState() {
     super.initState();
-    _textController.text = BankStatementReconciliationPage.sampleGarantiExcel;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await widget.controller.fetchReconciliationQueue();
-      if (widget.controller.reconciliationQueue.isEmpty || widget.controller.isTestMode) {
-        widget.controller.parseBankStatement(BankStatementReconciliationPage.sampleGarantiExcel);
-      }
       if (mounted) {
         setState(() {
           _selectAllPending();
@@ -93,42 +53,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     super.dispose();
   }
 
-  void _applyPreset(String name, String content) {
-    setState(() {
-      _activePreset = name;
-      _textController.text = content;
-    });
-    final success = widget.controller.parseBankStatement(content);
-    if (!success) {
-      setState(() {
-        _selectedMatchIds.clear();
-      });
-      if (mounted && widget.controller.bankStatementError != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.controller.bankStatementError!,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: AppColors.accentRed,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-      return;
-    }
-    setState(() {
-      _selectAllPending();
-    });
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -478,7 +403,6 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                         return;
                       }
                       setState(() {
-                        _activePreset = picked.name;
                         _textController.text = '${picked.name} yüklendi (${widget.controller.reconciliationQueue.length} hareket ayrıştırıldı)';
                         _selectAllPending();
                       });
@@ -507,34 +431,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
 
           const SizedBox(height: 16),
 
-          // 3. Preset Selectors
-          Text(
-            'Hızlı Test & Örnek Ekstre Formatları',
-            style: TextStyle(
-              color: AppColors.textPrimary(context),
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildPresetChip('Garanti BBVA', BankStatementReconciliationPage.sampleGarantiExcel),
-                const SizedBox(width: 8),
-                _buildPresetChip('Kuveyt Türk (.xlsx)', BankStatementReconciliationPage.sampleKuveytTurkExcel),
-                const SizedBox(width: 8),
-                _buildPresetChip('İş Bankası (.xls)', BankStatementReconciliationPage.sampleIsBankExcel),
-                const SizedBox(width: 8),
-                _buildPresetChip('İş Bankası CSV', BankStatementReconciliationPage.sampleIsBankCsv),
-                const SizedBox(width: 8),
-                _buildPresetChip('SWIFT MT940', BankStatementReconciliationPage.sampleSwiftMt940),
-              ],
-            ),
-          ),
 
-          const SizedBox(height: 14),
 
           // 3. Text Area
           Container(
@@ -881,7 +778,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
               child: Center(
                 child: Text(
                   queue.isEmpty
-                      ? 'Ayrıştırılmış işlem bulunmuyor. Yukarıdaki formatlardan birini seçerek "Ayrıştır & Eşleştir" butonuna basınız.'
+                      ? 'Henüz bekleyen veya işlenmiş banka hareketi bulunmuyor. Ekstre metnini alana yapıştırabilir veya dosya yükleyebilirsiniz.'
                       : 'Seçili filtreye uygun işlem bulunmuyor.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
@@ -897,31 +794,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     );
   }
 
-  Widget _buildPresetChip(String name, String content) {
-    final isSelected = _activePreset == name;
-    return InkWell(
-      onTap: () => _applyPreset(name, content),
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.accentCyan.withOpacity(0.15) : AppColors.surface(context),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? AppColors.accentCyan : AppColors.border(context),
-          ),
-        ),
-        child: Text(
-          name,
-          style: TextStyle(
-            color: isSelected ? AppColors.accentCyan : AppColors.textSecondary(context),
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
-    );
-  }
+
 
   Widget _buildQueueItemCard(BuildContext context, ReconciliationQueueItem item) {
     final isDark = AppColors.isDark(context);
@@ -2087,18 +1960,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                               );
                               if (success) {
                                 Navigator.of(dialogCtx).pop();
-                                setState(() {
-                                  // Update active sample according to newly selected bank
-                                  if (selectedBank.statementFormat == 'MT940') {
-                                    _applyPreset('SWIFT MT940', BankStatementReconciliationPage.sampleSwiftMt940);
-                                  } else if (selectedBank == SupportedBank.kuveytTurk) {
-                                    _applyPreset('Kuveyt Türk (.xlsx)', BankStatementReconciliationPage.sampleKuveytTurkExcel);
-                                  } else if (selectedBank == SupportedBank.isBankasi) {
-                                    _applyPreset('İş Bankası CSV', BankStatementReconciliationPage.sampleIsBankCsv);
-                                  } else {
-                                    _applyPreset('Garanti BBVA', BankStatementReconciliationPage.sampleGarantiExcel);
-                                  }
-                                });
+
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(

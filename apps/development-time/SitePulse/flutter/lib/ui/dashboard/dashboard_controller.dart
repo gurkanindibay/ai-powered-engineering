@@ -116,14 +116,11 @@ class DashboardController extends ChangeNotifier {
   String get flatFilter => _flatFilter;
 
   // Monthly Dues State
-  String _selectedDuesMonth = 'Ekim 2026';
+  String _selectedDuesMonth = '';
   String get selectedDuesMonth => _selectedDuesMonth;
 
   List<String> get availableDuesMonths => _availableDuesMonths;
-  List<String> _availableDuesMonths = [
-    'Ekim 2026',
-    'Eylül 2026',
-  ];
+  List<String> _availableDuesMonths = [];
 
   final Map<String, List<FlatPaymentStatus>> _monthlyFlats = {};
 
@@ -782,11 +779,11 @@ class DashboardController extends ChangeNotifier {
         }
 
         final periodsJson = data['available_periods'] as List<dynamic>?;
+        _availableDuesMonths.clear();
         if (periodsJson != null && periodsJson.isNotEmpty) {
-          _availableDuesMonths.clear();
           for (final p in periodsJson) {
             final periodStr = p.toString();
-            if (!_availableDuesMonths.contains(periodStr)) {
+            if (periodStr.isNotEmpty && !_availableDuesMonths.contains(periodStr)) {
               _availableDuesMonths.add(periodStr);
             }
           }
@@ -795,6 +792,10 @@ class DashboardController extends ChangeNotifier {
         final selPeriod = data['selected_period'] as String?;
         if (selPeriod != null && selPeriod.isNotEmpty) {
           _selectedDuesMonth = selPeriod;
+        } else if (_availableDuesMonths.isNotEmpty) {
+          _selectedDuesMonth = _availableDuesMonths.first;
+        } else {
+          _selectedDuesMonth = '';
         }
 
         Decimal totalAdvanceFromFlats = Decimal.zero;
@@ -1741,7 +1742,10 @@ class DashboardController extends ChangeNotifier {
         : null;
 
     final bool isTxnAlreadyProcessed = _processedTransactionIds.contains(rawId);
-    final bool isFlatAlreadyPaid = candidateFlat != null && candidateFlat.isPaid;
+    final bool isFlatAlreadyPaid = candidateFlat != null &&
+        candidateFlat.isPaid &&
+        candidateFlat.paidDateStr != null &&
+        candidateFlat.paidDateStr!.isNotEmpty;
     final bool isUnitAlreadyProcessed = unitKey != null && _processedUnitKeys.contains(unitKey);
     final bool isAlreadyUploaded = isTxnAlreadyProcessed || isFlatAlreadyPaid || isUnitAlreadyProcessed;
 
@@ -1757,13 +1761,15 @@ class DashboardController extends ChangeNotifier {
       amountMatchesBalance = true;
     } else if (candidateFlat != null) {
       outstandingBalance = candidateFlat.amountDue;
-      matchedDueId = 'b-101';
+      matchedDueId = outstandingBalance > Decimal.zero ? 'b-101' : null;
       amountMatchesBalance = (amount == outstandingBalance);
       confidence = amountMatchesBalance ? 100 : 90;
       status = confidence >= 70 ? 'ONAY_BEKLIYOR' : 'ESLESTIRILEMEDI';
-      notes = amountMatchesBalance
-          ? 'Aidat borcuyla (%5 KMK gecikme tazminatı dahil) birebir eşleşti'
-          : 'Daire ve sakin tespit edildi';
+      notes = outstandingBalance == Decimal.zero
+          ? 'Aktif aidat borcu bulunmuyor • ₺$amount tutarındaki ödeme avans bakiyesi (Avans Bakiye) olarak eşleştirildi.'
+          : (amountMatchesBalance
+              ? 'Aidat borcuyla (%5 KMK gecikme tazminatı dahil) birebir eşleşti'
+              : 'Daire ve sakin tespit edildi');
     } else {
       confidence = 0;
       status = 'ESLESTIRILEMEDI';

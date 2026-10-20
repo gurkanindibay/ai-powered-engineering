@@ -36,10 +36,11 @@ disown 2>/dev/null || true
 echo "  [OK] Backend active: http://localhost:8080/api/v1/health"
 sleep 2
 
-# Seed Virtual IBAN Payment & Advance Balance for Resident Ahmet Yılmaz (A Blok D:14)
-echo "▶ Seeding settled Virtual IBAN demo state..."
-bash "$SCRIPT_DIR/test-virtual-iban-e2e.sh" > /dev/null 2>&1 || true
-echo "  [OK] Demo settlement & advance balance seeded."
+if [ "${SEED_DEMO_TRANSACTIONS:-false}" = "true" ]; then
+    echo "▶ Seeding settled Virtual IBAN demo state (SEED_DEMO_TRANSACTIONS=true)..."
+    bash "$SCRIPT_DIR/test-virtual-iban-e2e.sh" > /dev/null 2>&1 || true
+    echo "  [OK] Demo settlement & advance balance seeded."
+fi
 
 # 5. Launch Flutter Web in foreground
 echo "▶ Starting Flutter client on port 9090..."

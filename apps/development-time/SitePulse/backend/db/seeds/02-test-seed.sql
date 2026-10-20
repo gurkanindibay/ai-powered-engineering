@@ -82,12 +82,7 @@ SET iban = EXCLUDED.iban,
     account_holder = EXCLUDED.account_holder,
     is_active = EXCLUDED.is_active;
 
--- 6. Test Dues Liabilities (September 2026 dues)
-INSERT INTO dues_liabilities (id, unit_id, period, principal_amount, due_date, status, delay_penalty) 
-VALUES 
-    ('borc-101', 'd-14', 'September 2026', 1400.00, '2026-09-15', 'OVERDUE', 23.33),
-    ('borc-102', 'd-03', 'September 2026', 1100.00, '2026-09-30', 'PENDING', 0.00)
-ON CONFLICT (id) DO UPDATE
-SET principal_amount = EXCLUDED.principal_amount,
-    status = EXCLUDED.status,
-    delay_penalty = EXCLUDED.delay_penalty;
+-- 6. Dues Liabilities & Transactions (Clean Slate: 0 debts, 0 transactions, 0 periods)
+TRUNCATE TABLE collection_transactions RESTART IDENTITY CASCADE;
+TRUNCATE TABLE dues_liabilities RESTART IDENTITY CASCADE;
+

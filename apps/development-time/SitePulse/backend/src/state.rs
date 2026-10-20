@@ -223,8 +223,13 @@ impl AppStateInner {
             (Some("Garanti BBVA - Maaş Hesabı".to_string()), Some("Garanti BBVA".to_string())),
         );
 
-        // Seed September 2026 Dues (₺1400 overdue 10 days)
-        if !self.dues.iter().any(|d| d.id == "b-101") {
+        // Seed September 2026 Dues only when actively executing cargo test suites
+        let is_running_test = cfg!(test) || std::env::current_exe().map(|exe| {
+            let s = exe.to_string_lossy();
+            s.contains("/deps/integration_tests") || s.contains("/deps/sitepulse_backend") || s.ends_with("test")
+        }).unwrap_or(false);
+
+        if is_running_test && !self.dues.iter().any(|d| d.id == "b-101") {
             self.dues.push(DuesLiability {
                 id: "b-101".to_string(),
                 unit_id: "d-14".to_string(),

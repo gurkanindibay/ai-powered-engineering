@@ -2689,13 +2689,8 @@ pub async fn get_site_overview(
 
     available_periods.sort_by(|a, b| period_sort_key(b).cmp(&period_sort_key(a)));
 
-    if available_periods.is_empty() {
-        available_periods.push("Ekim 2026".to_string());
-        available_periods.push("Eylül 2026".to_string());
-    }
-
     let selected_period = query.period.unwrap_or_else(|| {
-        available_periods.first().cloned().unwrap_or_else(|| "Ekim 2026".to_string())
+        available_periods.first().cloned().unwrap_or_default()
     });
 
     // 4. Available sites list for site switcher (deduplicated by name)

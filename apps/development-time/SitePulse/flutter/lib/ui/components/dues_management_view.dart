@@ -40,6 +40,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
   void _nextMonth() {
     final months = widget.controller.availableDuesMonths;
+    if (months.isEmpty) return;
     final currentIdx = months.indexOf(widget.controller.selectedDuesMonth);
     if (currentIdx > 0) {
       widget.controller.setSelectedDuesMonth(months[currentIdx - 1]);
@@ -48,6 +49,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
   void _prevMonth() {
     final months = widget.controller.availableDuesMonths;
+    if (months.isEmpty) return;
     final currentIdx = months.indexOf(widget.controller.selectedDuesMonth);
     if (currentIdx != -1 && currentIdx < months.length - 1) {
       widget.controller.setSelectedDuesMonth(months[currentIdx + 1]);
@@ -92,33 +94,6 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     }
   }
 
-  void _handlePresetUpload(String name, String content) {
-    final success = widget.controller.parseBankStatement(content);
-    if (!success) {
-      if (mounted && widget.controller.bankStatementError != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.controller.bankStatementError!,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: AppColors.accentRed,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-      return;
-    }
-    _showImportSummaryModal(name);
-  }
 
   void _showImportOptionsDialog() {
     final isDark = AppColors.isDark(context);
@@ -175,39 +150,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     _handleFileUpload();
                   },
                 ),
-                const Divider(),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentGreen.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.receipt_long, color: AppColors.accentGreen),
-                  ),
-                  title: const Text('Kuveyt Türk Test Ekstresi Yükle', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('8 gerçek hareket (Alaettin Çelik, Sait Şener, vb.)'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _handlePresetUpload('Kuveyt Türk (.xlsx)', BankStatementReconciliationPage.sampleKuveytTurkExcel);
-                  },
-                ),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentOrange.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.credit_card, color: AppColors.accentOrange),
-                  ),
-                  title: const Text('İş Bankası Test Ekstresi Yükle', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('4 ATM ve virman hareketi'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _handlePresetUpload('İş Bankası (.xls)', BankStatementReconciliationPage.sampleIsBankExcel);
-                  },
-                ),
+
               ],
             ),
           ),
@@ -720,14 +663,29 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     onPressed: _prevMonth,
                   ),
                   PopupMenuButton<String>(
-                    initialValue: selectedMonth,
-                    onSelected: (m) => widget.controller.setSelectedDuesMonth(m),
-                    itemBuilder: (ctx) => widget.controller.availableDuesMonths.map((m) {
-                      return PopupMenuItem<String>(
-                        value: m,
-                        child: Text(m, style: TextStyle(fontWeight: m == selectedMonth ? FontWeight.bold : FontWeight.normal)),
-                      );
-                    }).toList(),
+                    initialValue: selectedMonth.isNotEmpty ? selectedMonth : null,
+                    onSelected: (m) {
+                      if (m.isNotEmpty) {
+                        widget.controller.setSelectedDuesMonth(m);
+                      }
+                    },
+                    itemBuilder: (ctx) {
+                      if (widget.controller.availableDuesMonths.isEmpty) {
+                        return [
+                          const PopupMenuItem<String>(
+                            value: '',
+                            enabled: false,
+                            child: Text('Henüz aidat dönemi yok'),
+                          ),
+                        ];
+                      }
+                      return widget.controller.availableDuesMonths.map((m) {
+                        return PopupMenuItem<String>(
+                          value: m,
+                          child: Text(m, style: TextStyle(fontWeight: m == selectedMonth ? FontWeight.bold : FontWeight.normal)),
+                        );
+                      }).toList();
+                    },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                       child: Row(
@@ -735,7 +693,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                           const Icon(Icons.calendar_month_outlined, size: 16, color: AppColors.accentCyan),
                           const SizedBox(width: 6),
                           Text(
-                            selectedMonth,
+                            selectedMonth.isNotEmpty ? selectedMonth : 'Henüz Aidat Dönemi Yok',
                             style: TextStyle(
                               color: AppColors.textPrimary(context),
                               fontSize: 14,

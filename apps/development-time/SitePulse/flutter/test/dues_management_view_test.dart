@@ -114,17 +114,7 @@ void main() {
 
       // Verify import options sheet appears
       expect(find.text('Banka Ekstresi / Excel İçe Aktar'), findsOneWidget);
-      expect(find.text('Kuveyt Türk Test Ekstresi Yükle'), findsOneWidget);
-
-      // Tap on Kuveyt Türk test preset
-      await tester.tap(find.text('Kuveyt Türk Test Ekstresi Yükle'));
-      await tester.pumpAndSettle();
-
-      // Verify intermediate result modal appears with breakdown
-      expect(find.text('İçe Aktarma Ara Sonucu'), findsOneWidget);
-      expect(find.textContaining('Eşleşen Daireler'), findsOneWidget);
-      expect(find.textContaining('Eşleşemeyen'), findsOneWidget);
-      expect(find.textContaining('Eşleşenleri Onayla & Kaydet'), findsOneWidget);
+      expect(find.text('Cihazdan Dosya Seç (.xlsx, .xls, .csv)'), findsOneWidget);
     });
 
     testWidgets('DuesManagementView opens Toplu Aidat Tahakkuku confirmation dialog with duplicate prevention note', (tester) async {
