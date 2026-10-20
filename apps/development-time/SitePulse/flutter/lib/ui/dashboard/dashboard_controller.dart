@@ -1549,7 +1549,7 @@ class DashboardController extends ChangeNotifier {
 
       if (m61 != null && m86 != null) {
         final amtStr = m61.group(2)!.replaceAll(',', '.');
-        final amt = Decimal.tryParse(amtStr) ?? Decimal.parse('1423.33');
+        final amt = Decimal.tryParse(amtStr) ?? Decimal.zero;
         final narrative = m86.group(1)!.replaceAll('\n', ' ').trim();
 
         final matchItem = _matchTransactionToRoster(

@@ -2030,12 +2030,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showAddResidentDialog() {
-    final blockCtrl = TextEditingController(text: 'B Blok');
-    final unitCtrl = TextEditingController(text: '20');
+    final blockCtrl = TextEditingController();
+    final unitCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
-    final duesCtrl = TextEditingController(text: '1400.00');
+    final duesCtrl = TextEditingController();
 
     AppFullscreenPage.push(
       context: context,
@@ -2082,7 +2082,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ownerName: ownerName,
                   email: emailCtrl.text.trim(),
                   phone: phoneCtrl.text.trim(),
-                  duesAmount: Decimal.tryParse(duesCtrl.text.trim()) ?? Decimal.parse('1400.00'),
+                  duesAmount: Decimal.tryParse(duesCtrl.text.trim()) ?? Decimal.zero,
                 );
               },
               style: ElevatedButton.styleFrom(
