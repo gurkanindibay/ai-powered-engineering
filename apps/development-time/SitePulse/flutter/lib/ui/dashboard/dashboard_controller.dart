@@ -261,36 +261,7 @@ class DashboardController extends ChangeNotifier {
     _managerDuesList = [];
     _flatsList = [];
     _pendingRegistrations = [];
-    _saasSites = [
-      TenantSiteItem(
-        id: 'site-1',
-        name: 'Begonya Sitesi',
-        city: 'İstanbul',
-        address: 'Ataşehir, Begonya Sok. No:14, İstanbul',
-        status: 'ACTIVE',
-        planType: 'PREMIUM',
-        totalUnits: 12,
-        monthlyCollectionVolume: Decimal.parse('17528.00'),
-        adminName: 'Mehmet Demir',
-        adminEmail: 'mehmet.demir@begonya.com',
-        adminPhone: '+90 532 100 2030',
-        actionCount: 12,
-      ),
-      TenantSiteItem(
-        id: 'site-2',
-        name: 'Kardelen Rezidans',
-        city: 'Ankara',
-        address: 'Çankaya, Kardelen Cad. No:8, Ankara',
-        status: 'ACTIVE',
-        planType: 'STANDARD',
-        totalUnits: 24,
-        monthlyCollectionVolume: Decimal.parse('35000.00'),
-        adminName: 'Ahmet Karaca',
-        adminEmail: 'yonetim@kardelen.com',
-        adminPhone: '+90 532 200 3040',
-        actionCount: 24,
-      ),
-    ];
+    _saasSites = [];
     _managedSitesList = [];
     _currentManagedSite = null;
     _unitResidents = [];
@@ -1761,7 +1732,7 @@ class DashboardController extends ChangeNotifier {
       amountMatchesBalance = true;
     } else if (candidateFlat != null) {
       outstandingBalance = candidateFlat.amountDue;
-      matchedDueId = outstandingBalance > Decimal.zero ? 'b-101' : null;
+      matchedDueId = outstandingBalance > Decimal.zero ? candidateFlat.id : null;
       amountMatchesBalance = (amount == outstandingBalance);
       confidence = amountMatchesBalance ? 100 : 90;
       status = confidence >= 70 ? 'ONAY_BEKLIYOR' : 'ESLESTIRILEMEDI';

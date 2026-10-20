@@ -17,9 +17,16 @@ class ProfileRoleSheet extends StatefulWidget {
 }
 
 class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
-  final _emailController = TextEditingController(text: 'ahmet.yilmaz@gmail.com');
-  final _passwordController = TextEditingController(text: '••••••••');
+  late final TextEditingController _emailController;
+  late final TextEditingController _passwordController;
   bool _showLoginForm = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(text: widget.controller.userSession.email);
+    _passwordController = TextEditingController();
+  }
 
   @override
   void dispose() {

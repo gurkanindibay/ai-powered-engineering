@@ -24,13 +24,18 @@ impl HomeResidentInvitationService {
     ) -> UnitInviteLinkResponse {
         let inner = self.state.inner.read().await;
         let unit = inner.units.iter().find(|u| u.id == unit_id);
+        let site_slug = unit
+            .as_ref()
+            .and_then(|u| inner.sites.iter().find(|s| s.id == u.site_id))
+            .map(|s| s.slug.clone())
+            .unwrap_or_else(|| "site".to_string());
 
         let building = unit
             .map(|u| format!("{} Blok", u.block_id))
-            .unwrap_or_else(|| "A Blok".to_string());
+            .unwrap_or_else(|| "Bağımsız Bölüm".to_string());
         let unit_number = unit
             .map(|u| u.unit_number.to_string())
-            .unwrap_or_else(|| "14".to_string());
+            .unwrap_or_else(|| unit_id.to_string());
 
         let token_part: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
@@ -39,8 +44,8 @@ impl HomeResidentInvitationService {
             .collect();
         let token = format!("SP-HANE-{}", token_part.to_uppercase());
         let invite_url = format!(
-            "https://sitepulse.app/join/begonya-sitesi/units/{}?token={}",
-            unit_id, token
+            "https://sitepulse.app/join/{}/units/{}?token={}",
+            site_slug, unit_id, token
         );
         let expires_at = Utc::now() + chrono::Days::new(7);
 

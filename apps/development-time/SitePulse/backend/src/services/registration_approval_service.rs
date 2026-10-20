@@ -22,10 +22,10 @@ impl RegistrationApprovalService {
         let site = inner.sites.iter().find(|s| s.id == site_id);
         let site_name = site
             .map(|s| s.name.clone())
-            .unwrap_or_else(|| "Begonya Sitesi".to_string());
+            .unwrap_or_else(|| format!("Site {}", site_id));
         let slug = site
             .map(|s| s.slug.clone())
-            .unwrap_or_else(|| "begonya-sitesi".to_string());
+            .unwrap_or_else(|| crate::services::to_slug(site_id));
 
         let token_part: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)

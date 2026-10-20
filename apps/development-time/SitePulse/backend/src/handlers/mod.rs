@@ -2406,8 +2406,8 @@ pub async fn get_site_payments(
         inner.sites.first().cloned()
     };
 
-    let site_id = site.as_ref().map(|s| s.id.clone()).unwrap_or_else(|| "site-1".to_string());
-    let site_name = site.as_ref().map(|s| s.name.clone()).unwrap_or_else(|| "Begonya Sitesi".to_string());
+    let site_id = site.as_ref().map(|s| s.id.clone()).unwrap_or_else(|| query.site_id.clone().unwrap_or_default());
+    let site_name = site.as_ref().map(|s| s.name.clone()).unwrap_or_default();
 
     // 2. Units in this site
     let site_units: Vec<_> = inner.units.iter().filter(|u| u.site_id == site_id).collect();
@@ -2625,29 +2625,17 @@ pub async fn get_site_overview(
             .or_else(|| inner.sites.iter().find(|s| inner.units.iter().any(|u| u.site_id == s.id)))
             .or_else(|| inner.sites.first())
             .cloned()
-    }.unwrap_or_else(|| {
-        let default_site = Site {
-            id: "site-1".to_string(),
-            name: "Begonya Sitesi".to_string(),
-            address: "Ataşehir, Begonya Sok. No:14, İstanbul".to_string(),
-            slug: "begonya-sitesi".to_string(),
-            status: "ACTIVE".to_string(),
-            plan_type: "PREMIUM".to_string(),
-            license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
-        };
-        inner.sites.push(default_site.clone());
-        default_site
-    });
+    };
 
-    let site_id = site.id.clone();
-    let site_name = site.name.clone();
-    let address = site.address.clone();
+    let site_id = site.as_ref().map(|s| s.id.clone()).unwrap_or_default();
+    let site_name = site.as_ref().map(|s| s.name.clone()).unwrap_or_default();
+    let address = site.as_ref().map(|s| s.address.clone()).unwrap_or_default();
 
     // 2. Resolve manager name & email
     let (manager_name, manager_email) = inner.users.iter()
-        .find(|u| u.site_id == site_id && (u.role == Role::SiteManager || u.email.contains("yonetici") || u.email.contains("manager")))
+        .find(|u| !site_id.is_empty() && u.site_id == site_id && (u.role == Role::SiteManager || u.email.contains("yonetici") || u.email.contains("manager")))
         .map(|u| (u.full_name.clone(), u.email.clone()))
-        .unwrap_or_else(|| ("Mehmet Demir".to_string(), "mehmet.demir@begonya.com".to_string()));
+        .unwrap_or_else(|| ("Site Yöneticisi".to_string(), String::new()));
 
     // 3. Collect available periods for this site's units
     let mut available_periods: Vec<String> = Vec::new();
