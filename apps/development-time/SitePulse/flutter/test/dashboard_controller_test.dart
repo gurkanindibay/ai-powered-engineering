@@ -93,6 +93,7 @@ void main() {
       );
 
       expect(controller.flatsList.length, initialFlatsCount + 1);
+      expect(controller.currentMonthFlats.any((f) => f.residentName == 'Caner Yurt'), isTrue);
       final creds = controller.provisionedHomeOwner;
       expect(creds, isNotNull);
       expect(creds?.ownerName, 'Caner Yurt');

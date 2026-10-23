@@ -9,11 +9,13 @@ import 'bank_statement_reconciliation_page.dart';
 class ManagerCockpitView extends StatelessWidget {
   final DashboardController controller;
   final VoidCallback onAddResidentTap;
+  final VoidCallback? onManageHouseTypesTap;
 
   const ManagerCockpitView({
     super.key,
     required this.controller,
     required this.onAddResidentTap,
+    this.onManageHouseTypesTap,
   });
 
   @override
@@ -412,10 +414,14 @@ class ManagerCockpitView extends StatelessWidget {
         const SizedBox(height: 24),
 
         // 2. Onay Bekleyen Sakin Başvuruları
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          runSpacing: 8,
+          spacing: 8,
           children: [
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   'Onay Bekleyen Başvurular',
@@ -439,13 +445,28 @@ class ManagerCockpitView extends StatelessWidget {
                 ),
               ],
             ),
-            TextButton.icon(
-              onPressed: onAddResidentTap,
-              icon: const Icon(Icons.add, size: 16, color: AppColors.accentCyan),
-              label: const Text(
-                'Manuel Sakin Ekle',
-                style: TextStyle(color: AppColors.accentCyan, fontSize: 12),
-              ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                if (onManageHouseTypesTap != null)
+                  TextButton.icon(
+                    onPressed: onManageHouseTypesTap,
+                    icon: const Icon(Icons.home_work_outlined, size: 16, color: AppColors.accentPurple),
+                    label: const Text(
+                      'Konut Tipleri & Tarifeler',
+                      style: TextStyle(color: AppColors.accentPurple, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                TextButton.icon(
+                  onPressed: onAddResidentTap,
+                  icon: const Icon(Icons.add, size: 16, color: AppColors.accentCyan),
+                  label: const Text(
+                    'Manuel Sakin Ekle',
+                    style: TextStyle(color: AppColors.accentCyan, fontSize: 12),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -460,11 +481,27 @@ class ManagerCockpitView extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.border(context)),
             ),
-            child: Center(
-              child: Text(
-                'Onay bekleyen başvuru bulunmuyor.',
-                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
-              ),
+            child: Row(
+              children: [
+                const Icon(Icons.how_to_reg_outlined, color: AppColors.accentCyan, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Onay Bekleyen Başvuru Bulunmuyor',
+                        style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Kat malikleri davet bağlantısıyla başvurduğunda burada listelenir. Doğrudan sakin kaydetmek için "Manuel Sakin Ekle" butonunu kullanabilirsiniz.',
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           )
         else
@@ -498,8 +535,158 @@ class ManagerCockpitView extends StatelessWidget {
 
         const SizedBox(height: 12),
 
-        ...flats.map((flat) => _buildFlatStatusCard(context, flat)),
+        if (flats.isEmpty)
+          _buildZeroDataFlatsGuidance(context)
+        else
+          ...flats.map((flat) => _buildFlatStatusCard(context, flat)),
       ],
+    );
+  }
+
+  Widget _buildZeroDataFlatsGuidance(BuildContext context) {
+    final hasNoPeriods = controller.availableDuesMonths.isEmpty;
+    final hasNoFlats = controller.flatsList.isEmpty;
+    final hasNoSite = controller.currentManagedSite == null && controller.managedSitesList.isEmpty;
+
+    if (hasNoSite) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surface(context),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border(context)),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.apartment_outlined, size: 36, color: AppColors.accentOrange),
+            const SizedBox(height: 8),
+            Text(
+              'Yönetilen Site Bulunmuyor',
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Sistemde henüz kayıtlı bir site bulunmuyor. Yönetici kokpitini kullanmak için lütfen yeni bir site tanımlayınız.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (hasNoPeriods) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surface(context),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.accentCyan.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.event_busy_outlined, size: 36, color: AppColors.accentCyan),
+            const SizedBox(height: 8),
+            Text(
+              'Aidat Takibi İçin Dönem Bulunmuyor',
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Sitenizde daire bazlı aidat borçlarını ve ödeme durumlarını takip edebilmek için öncelikle "Aidat Yönetimi" sekmesinden bir aidat dönemi oluşturmanız gerekmektedir.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (hasNoFlats) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surface(context),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.accentOrange.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.people_outline, size: 36, color: AppColors.accentOrange),
+            const SizedBox(height: 8),
+            Text(
+              'Kayıtlı Kat Maliki / Daire Yok',
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Bu sitede henüz kayıtlı kat maliki veya daire bulunmuyor. "Manuel Sakin Ekle" butonu ile daire ve kat maliki ekleyebilirsiniz.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                if (onManageHouseTypesTap != null)
+                  OutlinedButton.icon(
+                    onPressed: onManageHouseTypesTap,
+                    icon: const Icon(Icons.home_work_outlined, size: 16, color: AppColors.accentPurple),
+                    label: const Text('Konut Tipleri & Tarifeler'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.accentPurple,
+                      side: const BorderSide(color: AppColors.accentPurple),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ElevatedButton.icon(
+                  onPressed: onAddResidentTap,
+                  icon: const Icon(Icons.person_add_alt_1, size: 16),
+                  label: const Text('Manuel Sakin Ekle'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.filter_list_off, size: 36, color: AppColors.textSecondary(context)),
+          const SizedBox(height: 8),
+          Text(
+            'Filtreye Uygun Daire Yok',
+            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Seçtiğiniz filtre (${controller.flatFilter}) kriterine uygun daire bulunmuyor.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: () => controller.setFlatFilter('ALL'),
+            child: const Text('Tüm Daireleri Göster', style: TextStyle(color: AppColors.accentCyan)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -676,7 +863,9 @@ class ManagerCockpitView extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    flat.flatDesc,
+                    flat.houseType != null && flat.houseType!.isNotEmpty
+                        ? '${flat.flatDesc} • ${flat.houseType}'
+                        : flat.flatDesc,
                     style: TextStyle(
                       color: AppColors.textSecondary(context),
                       fontSize: 11,

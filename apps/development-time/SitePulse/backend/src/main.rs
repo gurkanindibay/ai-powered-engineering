@@ -28,10 +28,9 @@ async fn main() {
     if let Some(ref p) = pool {
         if let Err(e) = db::init_db(p).await {
             tracing::warn!("PostgreSQL initialization notice: {}", e);
-        } else {
-            let mut inner = state.inner.write().await;
-            db::load_all_from_db(p, &mut inner).await;
         }
+        let mut inner = state.inner.write().await;
+        db::load_all_from_db(p, &mut inner).await;
     }
 
     let cors = CorsLayer::new()
@@ -61,6 +60,14 @@ async fn main() {
         .route(
             "/api/v1/site-admin/home-owners",
             get(handlers::get_home_owners).post(handlers::register_home_owner),
+        )
+        .route(
+            "/api/v1/site-admin/house-types",
+            get(handlers::get_house_types).post(handlers::create_house_type),
+        )
+        .route(
+            "/api/v1/site-admin/house-types/:id",
+            delete(handlers::delete_house_type),
         )
         // Self-Registration & Approval Queue
         .route("/api/v1/registration/invite-link", get(handlers::generate_registration_link))
@@ -133,6 +140,7 @@ async fn main() {
         .route("/api/v1/system/recreate-db", post(handlers::recreate_db))
         .route("/api/v1/system/accrue-test-due", post(handlers::accrue_test_due))
         .route("/api/v1/system/seed-test-fixtures", post(handlers::seed_test_fixtures))
+        .route("/api/v1/system/seed-test-data", post(handlers::seed_test_fixtures))
         .route("/api/v1/system/clear-all-data", post(handlers::clear_all_data))
         .route("/api/v1/system/provision-site-units", post(handlers::provision_site_units))
         .route("/api/v1/system/units-summary", get(handlers::get_units_summary))

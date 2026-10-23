@@ -145,6 +145,8 @@ pub struct IndependentUnit {
     pub tenant_user_id: Option<String>,
     #[serde(default)]
     pub virtual_iban: Option<String>,
+    #[serde(default)]
+    pub house_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -338,6 +340,24 @@ pub struct SaasGlobalStatsDto {
 
 // Site Admin DTOs
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HouseTypeTariff {
+    pub id: String,
+    pub site_id: String,
+    pub type_name: String,
+    pub dues_amount: Decimal,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateHouseTypeRequest {
+    pub type_name: String,
+    pub dues_amount: Decimal,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterHomeOwnerRequest {
     pub block: String,
     pub unit_no: i32,
@@ -347,6 +367,8 @@ pub struct RegisterHomeOwnerRequest {
     pub phone: String,
     pub land_share: Option<String>,
     pub monthly_dues: Option<Decimal>,
+    #[serde(default)]
+    pub house_type: Option<String>,
     pub is_resident: bool,
 }
 
@@ -362,6 +384,8 @@ pub struct HomeOwnerResponse {
     pub phone: String,
     pub land_share: String,
     pub monthly_dues: Decimal,
+    #[serde(default)]
+    pub house_type: Option<String>,
     pub is_resident: bool,
     pub temporary_password: Option<String>,
     pub must_change_password: bool,
@@ -957,6 +981,8 @@ pub struct SiteFlatStatusDto {
     pub paid_date_str: Option<String>,
     pub virtual_iban: Option<String>,
     pub advance_balance: Decimal,
+    #[serde(default)]
+    pub house_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -971,5 +997,7 @@ pub struct SiteOverviewResponse {
     pub available_sites: Vec<SiteSummaryBriefDto>,
     pub summary: SiteCollectionSummaryDto,
     pub flats: Vec<SiteFlatStatusDto>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guidance: Option<String>,
 }
 

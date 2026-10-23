@@ -277,6 +277,7 @@ class FlatPaymentStatus {
   final int daysOverdue;
   final bool isPaid;
   final String? paidDateStr;
+  final String? houseType;
 
   FlatPaymentStatus({
     required this.id,
@@ -288,6 +289,7 @@ class FlatPaymentStatus {
     required this.daysOverdue,
     required this.isPaid,
     this.paidDateStr,
+    this.houseType,
   }) : advanceBalance = advanceBalance ?? Decimal.zero;
 
   bool get hasAdvanceBalance => advanceBalance > Decimal.zero;
@@ -310,6 +312,7 @@ class FlatPaymentStatus {
     int? daysOverdue,
     bool? isPaid,
     String? paidDateStr,
+    String? houseType,
   }) {
     return FlatPaymentStatus(
       id: id ?? this.id,
@@ -321,7 +324,44 @@ class FlatPaymentStatus {
       daysOverdue: daysOverdue ?? this.daysOverdue,
       isPaid: isPaid ?? this.isPaid,
       paidDateStr: paidDateStr ?? this.paidDateStr,
+      houseType: houseType ?? this.houseType,
     );
+  }
+}
+
+class HouseTypeTariff {
+  final String id;
+  final String siteId;
+  final String typeName;
+  final Decimal duesAmount;
+  final String? description;
+
+  HouseTypeTariff({
+    required this.id,
+    required this.siteId,
+    required this.typeName,
+    required this.duesAmount,
+    this.description,
+  });
+
+  factory HouseTypeTariff.fromJson(Map<String, dynamic> json) {
+    return HouseTypeTariff(
+      id: json['id']?.toString() ?? '',
+      siteId: json['site_id']?.toString() ?? '',
+      typeName: json['type_name']?.toString() ?? '',
+      duesAmount: Decimal.tryParse(json['dues_amount']?.toString() ?? '0') ?? Decimal.zero,
+      description: json['description'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'site_id': siteId,
+      'type_name': typeName,
+      'dues_amount': duesAmount.toString(),
+      'description': description,
+    };
   }
 }
 
@@ -452,6 +492,7 @@ class ProvisionedHomeOwnerCredentials {
   final String temporaryPassword;
   final bool isResident;
   final Decimal duesAmount;
+  final String? houseType;
 
   const ProvisionedHomeOwnerCredentials({
     required this.block,
@@ -462,6 +503,7 @@ class ProvisionedHomeOwnerCredentials {
     required this.temporaryPassword,
     required this.isResident,
     required this.duesAmount,
+    this.houseType,
   });
 }
 

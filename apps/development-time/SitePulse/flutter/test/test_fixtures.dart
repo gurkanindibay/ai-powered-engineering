@@ -277,4 +277,30 @@ extension DashboardControllerTestFixtures on DashboardController {
     setSelectedDuesMonthForTesting('Eylül 2026');
     switchSessionRole(UserRole.homeOwner);
   }
+
+  void loadZeroDataFixtures({
+    UserRole role = UserRole.siteManager,
+    bool includeSite = true,
+  }) {
+    isTestMode = true;
+    clearAllDataForTesting();
+    if (includeSite) {
+      final zeroSite = TenantSiteItem(
+        id: 'site-zero-1',
+        name: 'Begonya Sitesi',
+        city: 'İstanbul',
+        address: 'Ataşehir, İstanbul',
+        status: 'ACTIVE',
+        planType: 'STANDARD',
+        totalUnits: 0,
+        monthlyCollectionVolume: Decimal.zero,
+        adminName: 'Site Yöneticisi',
+        adminEmail: 'yonetici@begonya.com',
+        adminPhone: '+90 532 111 22 33',
+        actionCount: 0,
+      );
+      setManagedSitesForTesting(zeroSite, [zeroSite]);
+    }
+    switchSessionRole(role);
+  }
 }

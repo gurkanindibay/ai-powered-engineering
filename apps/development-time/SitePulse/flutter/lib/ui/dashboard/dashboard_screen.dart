@@ -430,21 +430,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     switch (widget.controller.userRole) {
       case UserRole.homeOwner:
       case UserRole.homeResident:
+        final hasNoUnit = widget.controller.activeUnit.id.isEmpty;
+        if (hasNoUnit) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildNoHomeownerGuidanceCard(),
+              const SizedBox(height: 18),
+              _buildHesapHareketleriSection(),
+            ],
+          );
+        }
         final dues = widget.controller.primaryDues;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (dues != null)
-              HeroBalanceCard(
-                dues: dues,
-                siteName: widget.controller.activeUnit.siteAdi,
-                unitName: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
-                isOffline: widget.controller.isOffline,
-                advancePayment: widget.controller.activeUnit.advancePayment,
-                virtualIban: widget.controller.activeUnit.virtualIban,
-                onPayPressed: () => _showPaymentDialog(dues),
-                onDetailPressed: () => _showDuesDetailDialog(dues),
-              ),
+            HeroBalanceCard(
+              dues: dues,
+              siteName: widget.controller.activeUnit.siteAdi,
+              unitName: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+              isOffline: widget.controller.isOffline,
+              advancePayment: widget.controller.activeUnit.advancePayment,
+              virtualIban: widget.controller.activeUnit.virtualIban,
+              onPayPressed: () => _showPaymentDialog(dues),
+              onDetailPressed: () => _showDuesDetailDialog(dues),
+            ),
             const SizedBox(height: 16),
             ResidentActionsRow(
               isOwner: widget.controller.userRole == UserRole.homeOwner,
@@ -466,22 +476,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case UserRole.siteManager:
         final currentPath = widget.controller.siteAdminPath;
         if (currentPath == SiteAdminActivePath.myFlatOwner) {
+          final hasNoUnit = widget.controller.activeUnit.id.isEmpty;
+          if (hasNoUnit) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSiteManagerPathSwitcher(),
+                _buildNoHomeownerGuidanceCard(),
+                const SizedBox(height: 18),
+                _buildHesapHareketleriSection(),
+              ],
+            );
+          }
           final dues = widget.controller.primaryDues;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildSiteManagerPathSwitcher(),
-              if (dues != null)
-                HeroBalanceCard(
-                  dues: dues,
-                  siteName: widget.controller.activeUnit.siteAdi,
-                  unitName: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
-                  isOffline: widget.controller.isOffline,
-                  advancePayment: widget.controller.activeUnit.advancePayment,
-                  virtualIban: widget.controller.activeUnit.virtualIban,
-                  onPayPressed: () => _showPaymentDialog(dues),
-                  onDetailPressed: () => _showDuesDetailDialog(dues),
-                ),
+              HeroBalanceCard(
+                dues: dues,
+                siteName: widget.controller.activeUnit.siteAdi,
+                unitName: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+                isOffline: widget.controller.isOffline,
+                advancePayment: widget.controller.activeUnit.advancePayment,
+                virtualIban: widget.controller.activeUnit.virtualIban,
+                onPayPressed: () => _showPaymentDialog(dues),
+                onDetailPressed: () => _showDuesDetailDialog(dues),
+              ),
               const SizedBox(height: 16),
               ResidentActionsRow(
                 isOwner: true,
@@ -508,6 +529,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ManagerCockpitView(
                 controller: widget.controller,
                 onAddResidentTap: _showAddResidentDialog,
+                onManageHouseTypesTap: _showManageHouseTypesDialog,
               ),
             ],
           );
@@ -520,6 +542,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
           onResetPasswordTap: _confirmResetAdminPassword,
         );
     }
+  }
+
+  Widget _buildNoHomeownerGuidanceCard() {
+    final isDark = AppColors.isDark(context);
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.accentOrange.withOpacity(0.35)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppColors.accentOrange.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.home_work_outlined, size: 30, color: AppColors.accentOrange),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Tanımlı Daireniz Bulunmuyor',
+            style: TextStyle(
+              color: AppColors.textPrimary(context),
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'SitePulse hesabınıza henüz bir daire kaydı atanmamıştır. Site yöneticinizden WhatsApp/SMS davet bağlantısı alarak veya bina yönetiminizle iletişime geçerek dairenizi tanımlatabilirsiniz.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surface(context),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border(context)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('💡', style: TextStyle(fontSize: 14)),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Daireniz tanımlandığında adınıza tahakkuk eden aidatlar, Sanal IBAN ve hesap hareketleriniz burada listelenir.',
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSecondaryTabContent(bool isHomeRole) {
@@ -572,6 +660,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ManagerCockpitView(
               controller: widget.controller,
               onAddResidentTap: _showAddResidentDialog,
+              onManageHouseTypesTap: _showManageHouseTypesDialog,
             ),
           ],
         );
@@ -2035,145 +2124,651 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
-    final duesCtrl = TextEditingController();
+
+    // Default to first house type if available (e.g. 2+1 or 3+1)
+    final houseTypes = widget.controller.houseTypes;
+    String? selectedHouseType = houseTypes.isNotEmpty ? houseTypes.first.typeName : null;
+    String? emailError;
+    String? phoneError;
+    String? generalError;
 
     AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppFullscreenPage(
-        title: 'Yeni Daire / Sakin Ekle',
-        subtitle: 'Siteye bağımsız bölüm ve malik/kiracı kaydı',
-        icon: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.accentGreen.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Icon(Icons.person_add_alt_1, color: AppColors.accentGreen, size: 20),
-        ),
-        bottomBar: AppFullscreenPage.buildBottomBar(
-          context: ctx,
-          children: [
-            OutlinedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                side: BorderSide(color: AppColors.border(context)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final currentHouseTypes = widget.controller.houseTypes;
+          // Ensure selectedHouseType is valid
+          if (selectedHouseType == null && currentHouseTypes.isNotEmpty) {
+            selectedHouseType = currentHouseTypes.first.typeName;
+          }
+          final currentTariff = currentHouseTypes.cast<HouseTypeTariff?>().firstWhere(
+            (t) => t?.typeName == selectedHouseType,
+            orElse: () => null,
+          );
+
+          return AppFullscreenPage(
+            title: 'Yeni Daire / Sakin Ekle',
+            subtitle: 'Siteye bağımsız bölüm ve malik kaydı (Konut tipine göre aidat)',
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accentGreen.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+              child: const Icon(Icons.person_add_alt_1, color: AppColors.accentGreen, size: 20),
             ),
-            ElevatedButton(
-              onPressed: () {
-                final ownerName = nameCtrl.text.trim();
-                final unitText = unitCtrl.text.trim();
-                if (ownerName.isEmpty || unitText.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Lütfen Sakin Ad Soyad ve Daire No alanlarını doldurunuz.'),
-                      backgroundColor: Colors.redAccent,
+            bottomBar: AppFullscreenPage.buildBottomBar(
+              context: ctx,
+              children: [
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(color: AppColors.border(context)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setDialogState(() {
+                      emailError = null;
+                      phoneError = null;
+                      generalError = null;
+                    });
+
+                    final ownerName = nameCtrl.text.trim();
+                    final unitText = unitCtrl.text.trim();
+                    final emailText = emailCtrl.text.trim();
+                    final phoneText = phoneCtrl.text.trim();
+
+                    if (ownerName.isEmpty || unitText.isEmpty) {
+                      setDialogState(() {
+                        generalError = 'Lütfen Sakin Ad Soyad ve Daire No alanlarını doldurunuz.';
+                      });
+                      return;
+                    }
+
+                    final parsedUnit = int.tryParse(unitText);
+                    if (parsedUnit == null || parsedUnit <= 0) {
+                      setDialogState(() {
+                        generalError = 'Lütfen geçerli bir Daire No giriniz.';
+                      });
+                      return;
+                    }
+
+                    if (selectedHouseType == null || selectedHouseType!.isEmpty) {
+                      setDialogState(() {
+                        generalError = 'Lütfen daire için bir Konut Tipi (örn: 2+1, 3+1) seçiniz.';
+                      });
+                      return;
+                    }
+
+                    // Email validation
+                    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+                    if (emailText.isEmpty || !emailRegex.hasMatch(emailText)) {
+                      setDialogState(() {
+                        emailError = 'Geçerli bir e-posta adresi giriniz (örn: sakin@site.com)';
+                      });
+                      return;
+                    }
+
+                    // Phone validation
+                    final cleanPhone = phoneText.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+                    final phoneRegex = RegExp(r'^\+?[0-9]{10,13}$');
+                    if (cleanPhone.isEmpty || !phoneRegex.hasMatch(cleanPhone)) {
+                      setDialogState(() {
+                        phoneError = 'Geçerli bir telefon numarası giriniz (örn: 0555 123 45 67)';
+                      });
+                      return;
+                    }
+
+                    Navigator.pop(ctx);
+                    widget.controller.registerHomeOwner(
+                      block: blockCtrl.text.trim(),
+                      unitNo: parsedUnit,
+                      ownerName: ownerName,
+                      email: emailText,
+                      phone: phoneText,
+                      houseType: selectedHouseType,
+                      duesAmount: currentTariff?.duesAmount ?? Decimal.zero,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Kaydet & Şifre Üret', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (generalError != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
                     ),
-                  );
-                  return;
-                }
-                Navigator.pop(ctx);
-                widget.controller.registerHomeOwner(
-                  block: blockCtrl.text.trim(),
-                  unitNo: int.tryParse(unitText) ?? 1,
-                  ownerName: ownerName,
-                  email: emailCtrl.text.trim(),
-                  phone: phoneCtrl.text.trim(),
-                  duesAmount: Decimal.tryParse(duesCtrl.text.trim()) ?? Decimal.zero,
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentGreen,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Kaydet & Şifre Üret', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            generalError!,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                TextField(
+                  controller: blockCtrl,
+                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'Blok (örn: A Blok)',
+                    labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                    filled: true,
+                    fillColor: AppColors.card(context),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: unitCtrl,
+                  keyboardType: TextInputType.number,
+                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'Daire No',
+                    labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                    filled: true,
+                    fillColor: AppColors.card(context),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameCtrl,
+                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'Ad Soyad',
+                    labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                    filled: true,
+                    fillColor: AppColors.card(context),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'E-posta (Doğrulama zorunlu)',
+                    errorText: emailError,
+                    labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                    filled: true,
+                    fillColor: AppColors.card(context),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'Telefon (Doğrulama zorunlu)',
+                    errorText: phoneError,
+                    labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                    filled: true,
+                    fillColor: AppColors.card(context),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.card(context),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border(context)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.home_work_outlined, size: 18, color: AppColors.accentCyan),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Konut Tipi (Daire Tipi)',
+                                style: TextStyle(
+                                  color: AppColors.textPrimary(context),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              await _showManageHouseTypesDialog();
+                              setDialogState(() {});
+                            },
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(50, 24),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              '+ Tarifeleri Yönet',
+                              style: TextStyle(color: AppColors.accentPurple, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        value: currentHouseTypes.any((t) => t.typeName == selectedHouseType)
+                            ? selectedHouseType
+                            : (currentHouseTypes.isNotEmpty ? currentHouseTypes.first.typeName : null),
+                        items: currentHouseTypes.map((ht) {
+                          return DropdownMenuItem<String>(
+                            value: ht.typeName,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  ht.typeName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary(context),
+                                  ),
+                                ),
+                                Text(
+                                  '₺${ht.duesAmount} / ay',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.accentGreen,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            selectedHouseType = val;
+                          });
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Konut tipi seçiniz',
+                          hintStyle: TextStyle(color: AppColors.textSecondary(context)),
+                          filled: true,
+                          fillColor: AppColors.surface(context),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentCyan.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline, size: 16, color: AppColors.accentCyan),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                currentTariff != null
+                                    ? 'Aylık Aidat: ₺${currentTariff.duesAmount} (${currentTariff.typeName} tarifesine göre otomatik tahakkuk edilir).'
+                                    : 'Aylık aidat, seçtiğiniz konut tipinin tarifesine göre sisteme otomatik işlenir.',
+                                style: TextStyle(
+                                  color: AppColors.textPrimary(context),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Column(
-          children: [
-            TextField(
-              controller: blockCtrl,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Blok (örn: A Blok)',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showManageHouseTypesDialog() async {
+    await AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final houseTypes = widget.controller.houseTypes;
+
+          return AppFullscreenPage(
+            title: 'Konut Tipleri & Aidat Tarifeleri',
+            subtitle: '${widget.controller.userSession.siteName} için daire tipi bazlı aidat tutarları',
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accentPurple.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
               ),
+              child: const Icon(Icons.home_work_outlined, color: AppColors.accentPurple, size: 20),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: unitCtrl,
-              keyboardType: TextInputType.number,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Daire No',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            actions: [
+              IconButton(
+                tooltip: 'Yeni Konut Tipi Ekle',
+                icon: const Icon(Icons.add_circle, color: AppColors.accentPurple, size: 26),
+                onPressed: () => _showEditHouseTypeDialog(null, setDialogState),
               ),
+            ],
+            bottomBar: AppFullscreenPage.buildBottomBar(
+              context: ctx,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () => _showEditHouseTypeDialog(null, setDialogState),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Yeni Konut Tipi Ekle', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: nameCtrl,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Ad Soyad',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            child: houseTypes.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.home_work_outlined, size: 48, color: AppColors.textSecondary(context)),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Tanımlı Konut Tipi Yok',
+                            style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Yeni Konut Tipi Ekle butonuyla 1+1, 2+1, 3+1 gibi tipler ve aylık aidatlarını belirleyebilirsiniz.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: houseTypes.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final item = houseTypes[index];
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.card(context),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.border(context)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentPurple.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                item.typeName,
+                                style: const TextStyle(
+                                  color: AppColors.accentPurple,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Aylık Aidat: ',
+                                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
+                                      ),
+                                      Text(
+                                        '₺${item.duesAmount}',
+                                        style: const TextStyle(
+                                          color: AppColors.accentGreen,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (item.description != null && item.description!.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      item.description!,
+                                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, size: 18),
+                              tooltip: 'Düzenle',
+                              onPressed: () => _showEditHouseTypeDialog(item, setDialogState),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                              tooltip: 'Sil',
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (c) => AlertDialog(
+                                    title: const Text('Tarifeyi Sil'),
+                                    content: Text('${item.typeName} tarifesini silmek istediğinize emin misiniz?'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(c, true),
+                                        child: const Text('Sil', style: TextStyle(color: Colors.redAccent)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await widget.controller.deleteHouseType(item.id);
+                                  setDialogState(() {});
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditHouseTypeDialog(HouseTypeTariff? item, StateSetter parentSetState) {
+    final typeNameCtrl = TextEditingController(text: item?.typeName ?? '');
+    final duesCtrl = TextEditingController(text: item != null ? item.duesAmount.toString() : '');
+    final descCtrl = TextEditingController(text: item?.description ?? '');
+    String? errorText;
+
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AppFullscreenPage(
+            title: item == null ? 'Yeni Konut Tipi Tanımla' : 'Konut Tipini Düzenle',
+            subtitle: 'Daire tipi ve aylık aidat bedeli',
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accentPurple.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
               ),
+              child: const Icon(Icons.edit_note, color: AppColors.accentPurple, size: 20),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'E-posta',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
+            bottomBar: AppFullscreenPage.buildBottomBar(
+              context: ctx,
+              children: [
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(color: AppColors.border(context)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final typeName = typeNameCtrl.text.trim();
+                    final duesText = duesCtrl.text.trim();
+                    final parsedDues = Decimal.tryParse(duesText);
+
+                    if (typeName.isEmpty) {
+                      setDialogState(() {
+                        errorText = 'Lütfen Konut Tipi adını giriniz (örn: 2+1, 3+1).';
+                      });
+                      return;
+                    }
+
+                    if (parsedDues == null || parsedDues <= Decimal.zero) {
+                      setDialogState(() {
+                        errorText = 'Lütfen geçerli bir aylık aidat tutarı giriniz.';
+                      });
+                      return;
+                    }
+
+                    final success = await widget.controller.saveHouseType(
+                      typeName: typeName,
+                      duesAmount: parsedDues,
+                      description: descCtrl.text.trim().isNotEmpty ? descCtrl.text.trim() : null,
+                    );
+
+                    if (success) {
+                      Navigator.pop(ctx);
+                      parentSetState(() {});
+                    } else {
+                      setDialogState(() {
+                        errorText = 'Tarife kaydedilemedi. Lütfen tekrar deneyiniz.';
+                      });
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Kaydet', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneCtrl,
-              keyboardType: TextInputType.phone,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Telefon',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
+            child: Column(
+              children: [
+                if (errorText != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            errorText!,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                TextField(
+                  controller: typeNameCtrl,
+                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'Konut Tipi (örn: 1+1, 2+1, 3+1, Dublex)',
+                    labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                    filled: true,
+                    fillColor: AppColors.card(context),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: duesCtrl,
+                  keyboardType: TextInputType.number,
+                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'Aylık Aidat Tutarı (TL)',
+                    labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                    filled: true,
+                    fillColor: AppColors.card(context),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descCtrl,
+                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'Açıklama (Opsiyonel)',
+                    labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                    filled: true,
+                    fillColor: AppColors.card(context),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: duesCtrl,
-              keyboardType: TextInputType.number,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Aylık Aidat Tutarı (TL)',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

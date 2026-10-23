@@ -87,7 +87,7 @@ class HeroBalanceCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  siteName,
+                  siteName.isNotEmpty ? siteName : 'Site Tanımsız',
                   style: TextStyle(
                     color: AppColors.textPrimary(context),
                     fontSize: 12,
@@ -98,7 +98,7 @@ class HeroBalanceCard extends StatelessWidget {
                 const Text('🇹🇷', style: TextStyle(fontSize: 11)),
                 const SizedBox(width: 5),
                 Text(
-                  unitName,
+                  unitName.trim().isNotEmpty && !unitName.endsWith('D:0') ? unitName : 'Daire Tanımsız',
                   style: TextStyle(
                     color: AppColors.textSecondary(context),
                     fontSize: 12,
@@ -190,6 +190,34 @@ class HeroBalanceCard extends StatelessWidget {
                 ],
               ),
             )
+          else if (dues.donem.isEmpty || debtDouble <= 0)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.verified_outlined, size: 13, color: Color(0xFF10B981)),
+                  SizedBox(width: 4),
+                  Text(
+                    'Aktif Aidat Borcu Bulunmuyor',
+                    style: TextStyle(
+                      color: Color(0xFF10B981),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            )
           else
             Container(
               padding:
@@ -211,6 +239,33 @@ class HeroBalanceCard extends StatelessWidget {
                 ),
               ),
             ),
+          if ((dues.donem.isEmpty || debtDouble <= 0) && !hasAdvance) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF141417) : const Color(0xFFF1F3F5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border(context)),
+              ),
+              child: Row(
+                children: [
+                  const Text('💡', style: TextStyle(fontSize: 13)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Yönetim tarafından adınıza tahakkuk ettirilmiş aktif bir aidat borcu bulunmamaktadır. Gelecek dönemler için Sanal IBAN veya kredi kartınızla avans bakiye yükleyebilirsiniz.',
+                      style: TextStyle(
+                        color: AppColors.textSecondary(context),
+                        fontSize: 11,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
 
           // ── Dual Balance Breakdown Strip (Borç & Avans) ────────────────
@@ -424,6 +479,7 @@ class _IbanRow extends StatelessWidget {
   const _IbanRow({required this.iban, required this.context});
 
   void _copyIban() {
+    if (iban.trim().isEmpty) return;
     Clipboard.setData(ClipboardData(text: iban.replaceAll(' ', '')));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -436,26 +492,35 @@ class _IbanRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext ctx) {
+    final hasIban = iban.trim().isNotEmpty;
     return GestureDetector(
-      onTap: _copyIban,
+      onTap: hasIban ? _copyIban : null,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            'Daire IBAN: $iban',
-            style: TextStyle(
-              color: AppColors.textSecondary(ctx),
-              fontSize: 10.5,
-              fontFamily: 'monospace',
-              letterSpacing: 0.3,
-            ),
-          ),
-          const SizedBox(width: 5),
           Icon(
-            Icons.copy_outlined,
+            hasIban ? Icons.account_balance_outlined : Icons.info_outline,
             size: 13,
             color: AppColors.textSecondary(ctx),
           ),
+          const SizedBox(width: 5),
+          Text(
+            hasIban ? 'Daire IBAN: $iban' : 'Sanal IBAN henüz tahsis edilmedi',
+            style: TextStyle(
+              color: AppColors.textSecondary(ctx),
+              fontSize: 10.5,
+              fontFamily: hasIban ? 'monospace' : null,
+              letterSpacing: hasIban ? 0.3 : 0,
+            ),
+          ),
+          if (hasIban) ...[
+            const SizedBox(width: 5),
+            Icon(
+              Icons.copy_outlined,
+              size: 13,
+              color: AppColors.textSecondary(ctx),
+            ),
+          ],
         ],
       ),
     );

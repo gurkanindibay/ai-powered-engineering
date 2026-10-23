@@ -105,6 +105,7 @@ async fn when_registering_home_owner_then_provisions_user_with_resident_password
         phone: "+90 532 444 5566".to_string(),
         land_share: Some("1/24".to_string()),
         monthly_dues: Some(Decimal::from_str_exact("1400.00").unwrap()),
+        house_type: Some("2+1".to_string()),
         is_resident: true,
     };
 
@@ -128,6 +129,7 @@ async fn when_duplicate_email_for_home_owner_then_throws_exception() {
         phone: "+90 532 111 22 33".to_string(),
         land_share: None,
         monthly_dues: None,
+        house_type: Some("3+1".to_string()),
         is_resident: true,
     };
 
@@ -827,6 +829,7 @@ async fn when_statement_contains_virtual_iban_then_matches_flat_with_100_percent
         owner_user_id: Some("usr-1".to_string()),
         tenant_user_id: None,
         virtual_iban: Some("TR410020504213991067000014".to_string()),
+        house_type: Some("2+1".to_string()),
     }];
 
     let dues = vec![DuesLiability {
@@ -1202,6 +1205,7 @@ async fn when_homeowner_records_payment_with_no_debt_then_matches_as_advance_pay
             owner_user_id: None,
             tenant_user_id: None,
             virtual_iban: None,
+            house_type: Some("2+1".to_string()),
         });
     }
 
@@ -1282,6 +1286,7 @@ async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_
             owner_user_id: None,
             tenant_user_id: None,
             virtual_iban: None,
+            house_type: Some("2+1".to_string()),
         });
 
         // Payment 1 for d-14 (has debt ₺1400) of ₺1400
@@ -1676,5 +1681,191 @@ async fn when_provisioning_12_units_for_site_then_creates_residents_and_virtual_
 
     assert_eq!(overview_resp.status(), axum::http::StatusCode::OK);
 }
+
+#[tokio::test]
+async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
+    let state = AppState::new();
+
+    // 1. Test completely empty state (Zero Site, Zero Units, Zero Dues, Zero Payments)
+    {
+        let mut inner = state.inner.write().await;
+        inner.sites.clear();
+        inner.units.clear();
+        inner.dues.clear();
+        inner.reconciliation_queue.clear();
+        inner.homeowner_payments.clear();
+        inner.advance_payments.clear();
+    }
+
+    let empty_overview_resp = sitepulse_backend::handlers::get_site_overview(
+        axum::extract::State(state.clone()),
+        axum::extract::Query(sitepulse_backend::models::SiteOverviewQuery {
+            site_id: None,
+            period: None,
+        }),
+    ).await.into_response();
+
+    assert_eq!(empty_overview_resp.status(), axum::http::StatusCode::OK);
+
+    // Call get_site_payments with zero data
+    let empty_payments_resp = sitepulse_backend::handlers::get_site_payments(
+        axum::extract::State(state.clone()),
+        axum::extract::Query(sitepulse_backend::handlers::SitePaymentsQuery {
+            site_id: None,
+        }),
+    ).await.into_response();
+
+    assert_eq!(empty_payments_resp.status(), axum::http::StatusCode::OK);
+
+    // 2. Test Site exists, but Zero Homeowners / Units
+    {
+        let mut inner = state.inner.write().await;
+        inner.sites.push(sitepulse_backend::models::Site {
+            id: "site-zero-units".to_string(),
+            name: "Lale Konutları".to_string(),
+            address: "Kadıköy, İstanbul".to_string(),
+            slug: "lale-konutlari".to_string(),
+            status: "ACTIVE".to_string(),
+            plan_type: "STANDARD".to_string(),
+            license_end_date: chrono::NaiveDate::from_ymd_opt(2027, 12, 31).unwrap(),
+        });
+    }
+
+    let zero_units_resp = sitepulse_backend::handlers::get_site_overview(
+        axum::extract::State(state.clone()),
+        axum::extract::Query(sitepulse_backend::models::SiteOverviewQuery {
+            site_id: Some("site-zero-units".to_string()),
+            period: None,
+        }),
+    ).await.into_response();
+
+    assert_eq!(zero_units_resp.status(), axum::http::StatusCode::OK);
+
+    // 3. Test Site & Units exist, but Zero Periodic Dues
+    {
+        let mut inner = state.inner.write().await;
+        inner.units.push(sitepulse_backend::models::IndependentUnit {
+            id: "unit-z1".to_string(),
+            site_id: "site-zero-units".to_string(),
+            block_id: "A".to_string(),
+            unit_number: 1,
+            floor: 1,
+            land_share: 10,
+            owner_user_id: None,
+            tenant_user_id: None,
+            virtual_iban: None,
+            house_type: Some("2+1".to_string()),
+        });
+    }
+
+    let zero_dues_resp = sitepulse_backend::handlers::get_site_overview(
+        axum::extract::State(state.clone()),
+        axum::extract::Query(sitepulse_backend::models::SiteOverviewQuery {
+            site_id: Some("site-zero-units".to_string()),
+            period: None,
+        }),
+    ).await.into_response();
+
+    assert_eq!(zero_dues_resp.status(), axum::http::StatusCode::OK);
+}
+
+#[tokio::test]
+async fn when_invalid_email_or_phone_then_registration_rejected_with_validation_error() {
+    let state = AppState::new();
+    let service = SiteAdminService::new(state);
+
+    // 1. Invalid email (no @ or domain)
+    let invalid_email_req = RegisterHomeOwnerRequest {
+        block: "A Blok".to_string(),
+        unit_no: 5,
+        floor: 2,
+        owner_full_name: "Test Kişi".to_string(),
+        email: "gecersiz-eposta".to_string(),
+        phone: "05321112233".to_string(),
+        land_share: None,
+        monthly_dues: None,
+        house_type: Some("2+1".to_string()),
+        is_resident: true,
+    };
+    let res = service.register_home_owner("site-1", invalid_email_req).await;
+    assert!(res.is_err());
+    assert!(res.unwrap_err().contains("Geçerli bir e-posta"));
+
+    // 2. Invalid phone (too short or letters)
+    let invalid_phone_req = RegisterHomeOwnerRequest {
+        block: "A Blok".to_string(),
+        unit_no: 6,
+        floor: 2,
+        owner_full_name: "Test Kişi".to_string(),
+        email: "test.kisi@sitepulse.io".to_string(),
+        phone: "123".to_string(),
+        land_share: None,
+        monthly_dues: None,
+        house_type: Some("2+1".to_string()),
+        is_resident: true,
+    };
+    let res = service.register_home_owner("site-1", invalid_phone_req).await;
+    assert!(res.is_err());
+    assert!(res.unwrap_err().contains("Geçerli bir cep telefonu"));
+}
+
+#[tokio::test]
+async fn when_house_type_selected_then_sets_monthly_dues_from_tariff() {
+    let state = AppState::new();
+    let service = SiteAdminService::new(state);
+
+    // House type 3+1 has tariff 1800.00 TL in defaults
+    let req = RegisterHomeOwnerRequest {
+        block: "B Blok".to_string(),
+        unit_no: 9,
+        floor: 3,
+        owner_full_name: "Tarife Sakini".to_string(),
+        email: "tarife.sakini@sitepulse.io".to_string(),
+        phone: "05445556677".to_string(),
+        land_share: None,
+        monthly_dues: None, // No manual dues provided; should auto-resolve from 3+1
+        house_type: Some("3+1".to_string()),
+        is_resident: true,
+    };
+
+    let res = service.register_home_owner("site-1", req).await.expect("Registration should succeed");
+    assert_eq!(res.monthly_dues, Decimal::from_str_exact("1800.00").unwrap());
+    assert_eq!(res.house_type, Some("3+1".to_string()));
+}
+
+#[tokio::test]
+async fn when_managing_house_types_then_can_list_create_and_delete() {
+    let state = AppState::new();
+    let service = SiteAdminService::new(state);
+
+    // List default house types
+    let initial_types = service.get_house_types_for_site("site-1").await;
+    assert!(!initial_types.is_empty());
+    assert!(initial_types.iter().any(|h| h.type_name == "3+1"));
+
+    // Create a new house type
+    let new_type = service.create_or_update_house_type(
+        "site-1",
+        sitepulse_backend::models::CreateHouseTypeRequest {
+            type_name: "5+1 Villa".to_string(),
+            dues_amount: Decimal::from_str_exact("3500.00").unwrap(),
+            description: Some("Müstakil Girişli Villa".to_string()),
+        },
+    ).await.expect("Create house type should succeed");
+
+    assert_eq!(new_type.type_name, "5+1 Villa");
+    assert_eq!(new_type.dues_amount, Decimal::from_str_exact("3500.00").unwrap());
+
+    // Verify it is listed
+    let after_create = service.get_house_types_for_site("site-1").await;
+    assert!(after_create.iter().any(|h| h.type_name == "5+1 Villa"));
+
+    // Delete it
+    service.delete_house_type("site-1", &new_type.id).await.expect("Delete should succeed");
+    let after_delete = service.get_house_types_for_site("site-1").await;
+    assert!(!after_delete.iter().any(|h| h.id == new_type.id));
+}
+
+
 
 

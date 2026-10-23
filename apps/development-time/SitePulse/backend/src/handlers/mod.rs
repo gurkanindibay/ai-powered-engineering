@@ -276,6 +276,7 @@ pub async fn get_resident_dashboard(
                 owner_user_id: None,
                 tenant_user_id: None,
                 virtual_iban: Some(default_viban),
+                house_type: Some("2+1".to_string()),
             }
         });
 
@@ -522,6 +523,43 @@ pub async fn get_home_owners(
     let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
     let service = SiteAdminService::new(state);
     Json(service.get_home_owners_for_site(&site_id).await)
+}
+
+pub async fn get_house_types(
+    State(state): State<AppState>,
+    Query(q): Query<SiteIdParam>,
+) -> Json<Vec<crate::models::HouseTypeTariff>> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    Json(service.get_house_types_for_site(&site_id).await)
+}
+
+pub async fn create_house_type(
+    State(state): State<AppState>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<crate::models::CreateHouseTypeRequest>,
+) -> Result<(StatusCode, Json<crate::models::HouseTypeTariff>), (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    service
+        .create_or_update_house_type(&site_id, payload)
+        .await
+        .map(|res| (StatusCode::CREATED, Json(res)))
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+pub async fn delete_house_type(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    service
+        .delete_house_type(&site_id, &id)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
 // 5. Registration Approval Handlers
@@ -2028,13 +2066,20 @@ pub async fn seed_test_fixtures(
             })),
         );
     }
-    let mut inner = state.inner.write().await;
-    inner.seed_test_fixtures();
+    if let Some(ref pool) = state.pool {
+        let _ = crate::db::seed_test_data(pool).await;
+        let mut inner = state.inner.write().await;
+        crate::db::load_all_from_db(pool, &mut inner).await;
+    } else {
+        let mut inner = state.inner.write().await;
+        inner.seed_test_fixtures();
+    }
+    let inner = state.inner.read().await;
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "status": "SUCCESS",
-            "message": "Test verileri (Begonya Sitesi, test sakinleri, aidat borçları) başarıyla yüklendi.",
+            "message": "Test verileri (Begonya Sitesi, Kardelen Rezidans, test sakinleri ve daireler) başarıyla yüklendi.",
             "sites_count": inner.sites.len(),
             "users_count": inner.users.len(),
             "units_count": inner.units.len(),
@@ -2261,6 +2306,7 @@ pub async fn provision_site_units(
                 owner_user_id: Some(user_id.clone()),
                 tenant_user_id: None,
                 virtual_iban: Some(virtual_iban.clone()),
+                house_type: Some(if unit_number % 2 == 0 { "3+1".to_string() } else { "2+1".to_string() }),
             });
         }
 
@@ -2596,6 +2642,16 @@ pub async fn get_site_payments(
 
     let payments_count = payments.len();
 
+    let guidance = if site_id.is_empty() {
+        "Sistemde kayıtlı bir site bulunmuyor. Ödeme takibi için önce site oluşturunuz."
+    } else if site_units.is_empty() {
+        "Bu sitede henüz kayıtlı kat maliki veya daire bulunmuyor. Sanal IBAN ve FAST ödemeleri için kat maliki tanımlayınız."
+    } else if payments.is_empty() {
+        "Bu site için henüz gerçekleşmiş bir aidat ödemesi veya banka transferi bulunmuyor. Kat malikleri kendilerine tahsis edilen Sanal IBAN, FAST veya kredi kartı ile ödeme yapabilir."
+    } else {
+        ""
+    };
+
     (StatusCode::OK, Json(serde_json::json!({
         "site_id": site_id,
         "site_name": site_name,
@@ -2603,7 +2659,8 @@ pub async fn get_site_payments(
         "total_collected": total_collected.to_string(),
         "total_advance_balance": total_advance.to_string(),
         "payments_count": payments_count,
-        "payments": payments
+        "payments": payments,
+        "guidance": guidance
     })))
 }
 
@@ -2618,11 +2675,11 @@ pub async fn get_site_overview(
 
     // 1. Resolve site
     let site = if let Some(ref s_id) = query.site_id {
-        inner.sites.iter().find(|s| &s.id == s_id).cloned()
+        inner.sites.iter().find(|s| &s.id == s_id || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(s_id)).cloned()
     } else {
         inner.sites.iter()
-            .find(|s| inner.units.iter().filter(|u| u.site_id == s.id).count() >= 12)
-            .or_else(|| inner.sites.iter().find(|s| inner.units.iter().any(|u| u.site_id == s.id)))
+            .find(|s| inner.units.iter().filter(|u| u.site_id == s.id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&s.id)).count() >= 12)
+            .or_else(|| inner.sites.iter().find(|s| inner.units.iter().any(|u| u.site_id == s.id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&s.id))))
             .or_else(|| inner.sites.first())
             .cloned()
     };
@@ -2633,7 +2690,7 @@ pub async fn get_site_overview(
 
     // 2. Resolve manager name & email
     let (manager_name, manager_email) = inner.users.iter()
-        .find(|u| !site_id.is_empty() && u.site_id == site_id && (u.role == Role::SiteManager || u.email.contains("yonetici") || u.email.contains("manager")))
+        .find(|u| (!site_id.is_empty() && (u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&site_id))) && (u.role == Role::SiteManager || u.email.contains("yonetici") || u.email.contains("manager")))
         .map(|u| (u.full_name.clone(), u.email.clone()))
         .unwrap_or_else(|| ("Site Yöneticisi".to_string(), String::new()));
 
@@ -2759,8 +2816,16 @@ pub async fn get_site_overview(
             }
         }
 
-        let clean = unit.block_id.to_uppercase().replace("BLOK", "").replace(['-', '_', ' '], "").trim().to_string();
-        let effective_block = if clean.is_empty() { unit.block_id.clone() } else { clean };
+        let effective_block = match unit.block_id.as_str() {
+            "1" => "A".to_string(),
+            "2" => "B".to_string(),
+            "3" => "C".to_string(),
+            "4" => "D".to_string(),
+            _ => {
+                let clean = unit.block_id.to_uppercase().replace("BLOK", "").replace(['-', '_', ' '], "").trim().to_string();
+                if clean.is_empty() { unit.block_id.clone() } else { clean }
+            }
+        };
 
         flats.push(crate::models::SiteFlatStatusDto {
             id: unit.id.clone(),
@@ -2773,6 +2838,7 @@ pub async fn get_site_overview(
             paid_date_str,
             virtual_iban: unit.virtual_iban.clone(),
             advance_balance: advance,
+            house_type: unit.house_type.clone(),
         });
     }
 
@@ -2797,6 +2863,16 @@ pub async fn get_site_overview(
         collection_percentage,
     };
 
+    let guidance = if inner.sites.is_empty() {
+        Some("Sistemde kayıtlı bir site bulunmuyor. Yeni bir site ve blok yapısı oluşturarak başlayabilirsiniz.".to_string())
+    } else if matching_units.is_empty() {
+        Some("Bu sitede henüz kayıtlı daire veya kat maliki bulunmuyor. Sakin ekleme menüsünden dairelerinizi tanımlayabilirsiniz.".to_string())
+    } else if available_periods.is_empty() {
+        Some("Bu site için henüz bir aidat dönemi tahakkuk ettirilmemiş. 'Aidat Tahakkuk Ettir' işlemiyle ilk dönemi başlatabilirsiniz.".to_string())
+    } else {
+        None
+    };
+
     let response = crate::models::SiteOverviewResponse {
         site_id,
         site_name,
@@ -2808,6 +2884,7 @@ pub async fn get_site_overview(
         available_sites,
         summary,
         flats,
+        guidance,
     };
 
     (StatusCode::OK, Json(serde_json::to_value(response).unwrap()))

@@ -34,6 +34,7 @@ pub struct AppStateInner {
     pub remembered_sender_ibans: HashMap<String, String>,
     pub sender_iban_metadata: HashMap<String, (Option<String>, Option<String>)>,
     pub unit_payer_names: HashMap<String, Vec<String>>,
+    pub house_types: Vec<crate::models::HouseTypeTariff>,
     pub kuveyt_turk_client_id: Option<String>,
     pub kuveyt_turk_client_secret: Option<String>,
     pub auto_scheduler_enabled: bool,
@@ -57,6 +58,7 @@ impl AppStateInner {
             remembered_sender_ibans: HashMap::new(),
             sender_iban_metadata: HashMap::new(),
             unit_payer_names: HashMap::new(),
+            house_types: Vec::new(),
             kuveyt_turk_client_id: std::env::var("KT_CLIENT_ID").ok(),
             kuveyt_turk_client_secret: std::env::var("KT_CLIENT_SECRET").ok(),
             auto_scheduler_enabled: false,
@@ -120,6 +122,32 @@ impl AppStateInner {
                 avatar_url: None,
                 created_at: Utc::now(),
             });
+        }
+
+        if self.house_types.is_empty() {
+            let defaults = vec![
+                ("1+1", "1000.00", "1 Oda 1 Salon"),
+                ("2+1", "1400.00", "2 Oda 1 Salon"),
+                ("3+1", "1800.00", "3 Oda 1 Salon"),
+                ("4+1", "2200.00", "4 Oda 1 Salon"),
+                ("Dublex", "2500.00", "Çatı Dubleks / Bahçe Katı"),
+            ];
+            for (name, amount, desc) in defaults {
+                self.house_types.push(crate::models::HouseTypeTariff {
+                    id: format!("ht-{}", name.to_lowercase().replace('+', "_")),
+                    site_id: "site-1".to_string(),
+                    type_name: name.to_string(),
+                    dues_amount: Decimal::from_str_exact(amount).unwrap(),
+                    description: Some(desc.to_string()),
+                });
+                self.house_types.push(crate::models::HouseTypeTariff {
+                    id: format!("ht-1-{}", name.to_lowercase().replace('+', "_")),
+                    site_id: "1".to_string(),
+                    type_name: name.to_string(),
+                    dues_amount: Decimal::from_str_exact(amount).unwrap(),
+                    description: Some(desc.to_string()),
+                });
+            }
         }
     }
 
@@ -206,6 +234,7 @@ impl AppStateInner {
                 owner_user_id: Some("usr-home-owner-1".to_string()),
                 tenant_user_id: None,
                 virtual_iban: Some(seeded_virtual_iban),
+                house_type: Some("3+1".to_string()),
             });
         }
 
@@ -350,6 +379,7 @@ impl AppStateInner {
                 owner_user_id: Some("usr-home-owner-1".to_string()),
                 tenant_user_id: None,
                 virtual_iban: Some(seeded_virtual_iban),
+                house_type: Some("3+1".to_string()),
             });
         }
         if !self.dues.iter().any(|d| d.unit_id == "d-14" && d.period == "Eylül 2026") {
@@ -377,8 +407,12 @@ impl AppState {
     }
 
     pub fn with_pool(pool: Option<deadpool_postgres::Pool>) -> Self {
+        let mut inner = AppStateInner::new();
+        // Server with database pool starts clean and loads strictly from PostgreSQL
+        inner.clear_all_data();
+        inner.seed_system_lookups();
         Self {
-            inner: Arc::new(RwLock::new(AppStateInner::new())),
+            inner: Arc::new(RwLock::new(inner)),
             pool,
         }
     }
