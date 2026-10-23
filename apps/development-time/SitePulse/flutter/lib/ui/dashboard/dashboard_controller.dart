@@ -212,6 +212,12 @@ class DashboardController extends ChangeNotifier {
   ProvisionedHomeOwnerCredentials? _provisionedHomeOwner;
   ProvisionedHomeOwnerCredentials? get provisionedHomeOwner => _provisionedHomeOwner;
 
+  List<HomeOwnerItem> _homeOwners = [];
+  List<HomeOwnerItem> get homeOwners => _homeOwners;
+
+  bool _isLoadingHomeOwners = false;
+  bool get isLoadingHomeOwners => _isLoadingHomeOwners;
+
   // SaaS Admin & Managed Site state
   List<TenantSiteItem> _saasSites = [];
   List<TenantSiteItem> get saasSites => _saasSites;
@@ -1014,14 +1020,22 @@ class DashboardController extends ChangeNotifier {
         Decimal totalAdvanceFromFlats = Decimal.zero;
         final flatsJson = data['flats'] as List<dynamic>?;
         if (flatsJson != null) {
-          _flatsList = flatsJson.map((f) {
+          final seenKeys = <String>{};
+          final list = <FlatPaymentStatus>[];
+          for (final f in flatsJson) {
             final item = f as Map<String, dynamic>;
+            final b = (item['block'] as String? ?? '').toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
+            final u = (item['unit_no'] as num?)?.toInt() ?? 0;
+            final key = '$b-$u';
+            if (b.isNotEmpty && u > 0 && !seenKeys.add(key)) {
+              continue;
+            }
             final adv = Decimal.tryParse(item['advance_balance']?.toString() ?? '0') ?? Decimal.zero;
             totalAdvanceFromFlats += adv;
-            return FlatPaymentStatus(
+            list.add(FlatPaymentStatus(
               id: item['id'] as String? ?? '',
               block: item['block'] as String? ?? '',
-              unitNo: (item['unit_no'] as num?)?.toInt() ?? 0,
+              unitNo: u,
               residentName: item['resident_name'] as String? ?? '',
               amountDue: Decimal.tryParse(item['amount_due']?.toString() ?? '0') ?? Decimal.zero,
               advanceBalance: adv,
@@ -1029,8 +1043,9 @@ class DashboardController extends ChangeNotifier {
               isPaid: item['is_paid'] as bool? ?? false,
               paidDateStr: item['paid_date_str'] as String?,
               houseType: item['house_type'] as String?,
-            );
-          }).toList();
+            ));
+          }
+          _flatsList = list;
           _monthlyFlats[_selectedDuesMonth] = List.from(_flatsList);
         }
 
@@ -1052,6 +1067,7 @@ class DashboardController extends ChangeNotifier {
           await fetchReconciliationQueue(fetchedSiteId);
           await fetchHouseTypes(siteId: fetchedSiteId);
           await fetchBlocks(siteId: fetchedSiteId);
+          await fetchHomeOwners(siteId: fetchedSiteId);
         }
 
         if (_userSession.role == UserRole.siteManager) {
@@ -1545,13 +1561,13 @@ class DashboardController extends ChangeNotifier {
     );
     final dues = duesAmount ?? matchedTariff?.duesAmount ?? Decimal.parse('1400.00');
     final cleanBlock = block.replaceAll('Blok', '').trim();
+    final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     String tempPassword = 'SP-SAKIN-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}';
 
     if (!isTestMode) {
       try {
         final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-        final siteId = _currentManagedSite?.id ?? '1';
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners?site_id=$siteId');
+        final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
         final response = await http.post(
           url,
           headers: {'Content-Type': 'application/json'},
@@ -1574,7 +1590,8 @@ class DashboardController extends ChangeNotifier {
           if (data['temporary_password'] != null && data['temporary_password'].toString().isNotEmpty) {
             tempPassword = data['temporary_password'].toString();
           }
-          await fetchSiteManagerOverview(siteId: siteId, period: _selectedDuesMonth);
+          await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
+          await fetchHomeOwners(siteId: effectiveSiteId);
         } else {
           final errorBody = utf8.decode(response.bodyBytes);
           debugPrint('registerHomeOwner remote error: ${response.statusCode} - $errorBody');
@@ -1587,26 +1604,34 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
-    final newFlat = FlatPaymentStatus(
-      id: 'f-${DateTime.now().millisecondsSinceEpoch}',
-      block: cleanBlock,
-      unitNo: unitNo,
-      residentName: ownerName,
-      amountDue: dues,
-      daysOverdue: 0,
-      isPaid: false,
-      houseType: effectiveHouseType,
-    );
+    final bool alreadyPresent = _flatsList.any((f) {
+      final b1 = f.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
+      final b2 = cleanBlock.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
+      return f.unitNo == unitNo && b1 == b2 && f.residentName.trim().toLowerCase() == ownerName.trim().toLowerCase();
+    });
 
-    _flatsList = [newFlat, ..._flatsList];
-    if (_selectedDuesMonth.isNotEmpty) {
-      _monthlyFlats[_selectedDuesMonth] = [newFlat, ...(_monthlyFlats[_selectedDuesMonth] ?? [])];
+    if (!alreadyPresent) {
+      final newFlat = FlatPaymentStatus(
+        id: 'f-${DateTime.now().millisecondsSinceEpoch}',
+        block: cleanBlock,
+        unitNo: unitNo,
+        residentName: ownerName,
+        amountDue: dues,
+        daysOverdue: 0,
+        isPaid: false,
+        houseType: effectiveHouseType,
+      );
+
+      _flatsList = [newFlat, ..._flatsList];
+      if (_selectedDuesMonth.isNotEmpty) {
+        _monthlyFlats[_selectedDuesMonth] = [newFlat, ...(_monthlyFlats[_selectedDuesMonth] ?? [])];
+      }
+      _collectionSummary = _collectionSummary.copyWith(
+        totalUnitsCount: _collectionSummary.totalUnitsCount + 1,
+        overdueUnitsCount: _collectionSummary.overdueUnitsCount + 1,
+        totalExpected: _collectionSummary.totalExpected + dues,
+      );
     }
-    _collectionSummary = _collectionSummary.copyWith(
-      totalUnitsCount: _collectionSummary.totalUnitsCount + 1,
-      overdueUnitsCount: _collectionSummary.overdueUnitsCount + 1,
-      totalExpected: _collectionSummary.totalExpected + dues,
-    );
 
     _provisionedHomeOwner = ProvisionedHomeOwnerCredentials(
       block: block,
@@ -1619,12 +1644,177 @@ class DashboardController extends ChangeNotifier {
       duesAmount: dues,
       houseType: effectiveHouseType,
     );
+
+    // Also update _homeOwners list locally
+    final existingHoIndex = _homeOwners.indexWhere((h) {
+      final b1 = h.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
+      final b2 = cleanBlock.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
+      return h.unitNo == unitNo && b1 == b2;
+    });
+    final hoItem = HomeOwnerItem(
+      unitId: 'unit-$unitNo',
+      siteId: effectiveSiteId,
+      block: cleanBlock,
+      unitNo: unitNo,
+      floor: ((unitNo - 1) ~/ 4) + 1,
+      ownerFullName: ownerName,
+      email: email,
+      phone: phone,
+      landShare: '1/24',
+      monthlyDues: dues,
+      houseType: effectiveHouseType,
+      isResident: isResident,
+      temporaryPassword: tempPassword,
+      mustChangePassword: true,
+      createdAt: DateTime.now(),
+    );
+    if (existingHoIndex != -1) {
+      _homeOwners[existingHoIndex] = hoItem;
+    } else {
+      _homeOwners = [hoItem, ..._homeOwners];
+    }
+
     notifyListeners();
   }
 
   void clearProvisionedHomeOwner() {
     _provisionedHomeOwner = null;
     notifyListeners();
+  }
+
+  Future<void> fetchHomeOwners({String? siteId}) async {
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+    _isLoadingHomeOwners = true;
+
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
+        final response = await http.get(url).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200) {
+          final List<dynamic> list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+          final seenKeys = <String>{};
+          final result = <HomeOwnerItem>[];
+          for (final item in list) {
+            final ho = HomeOwnerItem.fromJson(item as Map<String, dynamic>);
+            final b = ho.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
+            final key = '$b-${ho.unitNo}';
+            if (b.isNotEmpty && ho.unitNo > 0 && !seenKeys.add(key)) {
+              continue; // deduplicate
+            }
+            result.add(ho);
+          }
+          _homeOwners = result;
+          _isLoadingHomeOwners = false;
+          notifyListeners();
+          return;
+        }
+      } catch (e) {
+        debugPrint('fetchHomeOwners network error: $e');
+      }
+    }
+
+    // In-memory or fallback sync from _flatsList
+    if (_homeOwners.isEmpty && _flatsList.isNotEmpty) {
+      final seenKeys = <String>{};
+      final fallbackList = <HomeOwnerItem>[];
+      for (final f in _flatsList) {
+        final b = f.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
+        final key = '$b-${f.unitNo}';
+        if (b.isNotEmpty && f.unitNo > 0 && !seenKeys.add(key)) {
+          continue;
+        }
+        fallbackList.add(HomeOwnerItem(
+          unitId: f.id,
+          siteId: effectiveSiteId,
+          block: f.block,
+          unitNo: f.unitNo,
+          floor: ((f.unitNo - 1) ~/ 4) + 1,
+          ownerFullName: f.residentName,
+          email: '${f.residentName.toLowerCase().replaceAll(' ', '.')}@example.com',
+          phone: '0555 123 4567',
+          landShare: '1/24',
+          monthlyDues: f.amountDue,
+          houseType: f.houseType,
+          isResident: true,
+          mustChangePassword: false,
+          createdAt: DateTime.now(),
+        ));
+      }
+      _homeOwners = fallbackList;
+    }
+    _isLoadingHomeOwners = false;
+    notifyListeners();
+  }
+
+  Future<bool> updateHomeOwner({
+    required String unitId,
+    required String fullName,
+    required String email,
+    required String phone,
+    String? houseType,
+    Decimal? monthlyDues,
+    String? landShare,
+    bool? isResident,
+  }) async {
+    final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners/$unitId?site_id=$effectiveSiteId');
+        final response = await http.put(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'owner_full_name': fullName,
+            'email': email,
+            'phone': phone,
+            'house_type': houseType,
+            if (monthlyDues != null) 'monthly_dues': monthlyDues.toString(),
+            if (landShare != null) 'land_share': landShare,
+            if (isResident != null) 'is_resident': isResident,
+          }),
+        ).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          await fetchHomeOwners(siteId: effectiveSiteId);
+          await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
+          notifyListeners();
+          return true;
+        } else {
+          final err = utf8.decode(response.bodyBytes);
+          debugPrint('updateHomeOwner failed: ${response.statusCode} - $err');
+        }
+      } catch (e) {
+        debugPrint('updateHomeOwner error: $e');
+      }
+    }
+
+    // In-memory update
+    final index = _homeOwners.indexWhere((h) => h.unitId == unitId || h.email.toLowerCase() == email.toLowerCase());
+    if (index != -1) {
+      _homeOwners[index] = _homeOwners[index].copyWith(
+        ownerFullName: fullName,
+        email: email,
+        phone: phone,
+        houseType: houseType,
+        monthlyDues: monthlyDues,
+        landShare: landShare,
+        isResident: isResident,
+      );
+    }
+    // Update matching flat in _flatsList
+    final flatIndex = _flatsList.indexWhere((f) => f.id == unitId || (index != -1 && f.unitNo == _homeOwners[index].unitNo));
+    if (flatIndex != -1) {
+      _flatsList[flatIndex] = _flatsList[flatIndex].copyWith(
+        residentName: fullName,
+        houseType: houseType,
+        amountDue: monthlyDues ?? _flatsList[flatIndex].amountDue,
+      );
+    }
+    notifyListeners();
+    return true;
   }
 
   Future<void> approveRegistration(String requestId) async {

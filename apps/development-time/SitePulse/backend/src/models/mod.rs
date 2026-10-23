@@ -394,6 +394,17 @@ pub struct RegisterHomeOwnerRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateHomeOwnerRequest {
+    pub owner_full_name: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub house_type: Option<String>,
+    pub monthly_dues: Option<Decimal>,
+    pub land_share: Option<String>,
+    pub is_resident: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HomeOwnerResponse {
     pub unit_id: String,
     pub site_id: String,

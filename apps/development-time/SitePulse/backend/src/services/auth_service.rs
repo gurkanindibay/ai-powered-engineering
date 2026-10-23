@@ -26,14 +26,29 @@ impl AuthService {
             return Err("Email and password are required.".to_string());
         }
 
-        let inner = self.state.inner.read().await;
         let email_norm = request.email.trim().to_lowercase();
+        let user_opt = {
+            let inner = self.state.inner.read().await;
+            inner
+                .users
+                .iter()
+                .find(|u| u.email.to_lowercase() == email_norm)
+                .cloned()
+        };
 
-        let user = inner
-            .users
-            .iter()
-            .find(|u| u.email.to_lowercase() == email_norm)
-            .ok_or_else(|| "Invalid email or password (kullanıcı adı veya şifre hatalı).".to_string())?;
+        let user = match user_opt {
+            Some(u) => u,
+            None => {
+                if let Some(ref pool) = self.state.pool {
+                    match crate::db::get_user_by_email(pool, &email_norm).await {
+                        Ok(Some(u)) => u,
+                        _ => return Err("Invalid email or password (kullanıcı adı veya şifre hatalı).".to_string()),
+                    }
+                } else {
+                    return Err("Invalid email or password (kullanıcı adı veya şifre hatalı).".to_string());
+                }
+            }
+        };
 
         let password_hash = user
             .password_hash
@@ -51,7 +66,7 @@ impl AuthService {
             return Err("Invalid email or password (kullanıcı adı veya şifre hatalı).".to_string());
         }
 
-        Ok(create_auth_response(user))
+        Ok(create_auth_response(&user))
     }
 
     pub async fn authenticate_with_google(
@@ -107,6 +122,14 @@ impl AuthService {
             new_user
         };
 
+        if let Some(ref pool) = self.state.pool {
+            let pool = pool.clone();
+            let u = user.clone();
+            tokio::spawn(async move {
+                let _ = crate::db::save_user(&pool, &u).await;
+            });
+        }
+
         Ok(create_auth_response(&user))
     }
 
@@ -154,16 +177,41 @@ impl AuthService {
         };
 
         inner.users.push(new_user.clone());
+
+        if let Some(ref pool) = self.state.pool {
+            let pool = pool.clone();
+            let u = new_user.clone();
+            tokio::spawn(async move {
+                let _ = crate::db::save_user(&pool, &u).await;
+            });
+        }
+
         Ok(create_auth_response(&new_user))
     }
 
     pub async fn get_current_profile(&self, user_id: &str) -> Result<UserProfileResponse, String> {
-        let inner = self.state.inner.read().await;
-        let user = inner
-            .users
-            .iter()
-            .find(|u| u.id == user_id)
-            .ok_or_else(|| format!("User not found: {}", user_id))?;
+        let user_opt = {
+            let inner = self.state.inner.read().await;
+            inner
+                .users
+                .iter()
+                .find(|u| u.id == user_id)
+                .cloned()
+        };
+
+        let user = match user_opt {
+            Some(u) => u,
+            None => {
+                if let Some(ref pool) = self.state.pool {
+                    match crate::db::get_user_by_id(pool, user_id).await {
+                        Ok(Some(u)) => u,
+                        _ => return Err(format!("User not found: {}", user_id)),
+                    }
+                } else {
+                    return Err(format!("User not found: {}", user_id));
+                }
+            }
+        };
 
         let permissions = Permission::permissions_for_role(user.role);
         let descriptions = permissions

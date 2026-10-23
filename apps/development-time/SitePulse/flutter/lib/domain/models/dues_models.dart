@@ -509,6 +509,120 @@ class ProvisionedHomeOwnerCredentials {
   });
 }
 
+class HomeOwnerItem {
+  final String unitId;
+  final String siteId;
+  final String block;
+  final int unitNo;
+  final int floor;
+  final String ownerFullName;
+  final String email;
+  final String phone;
+  final String landShare;
+  final Decimal monthlyDues;
+  final String? houseType;
+  final bool isResident;
+  final String? temporaryPassword;
+  final bool mustChangePassword;
+  final DateTime createdAt;
+
+  const HomeOwnerItem({
+    required this.unitId,
+    required this.siteId,
+    required this.block,
+    required this.unitNo,
+    required this.floor,
+    required this.ownerFullName,
+    required this.email,
+    required this.phone,
+    required this.landShare,
+    required this.monthlyDues,
+    this.houseType,
+    required this.isResident,
+    this.temporaryPassword,
+    required this.mustChangePassword,
+    required this.createdAt,
+  });
+
+  factory HomeOwnerItem.fromJson(Map<String, dynamic> json) {
+    return HomeOwnerItem(
+      unitId: json['unit_id']?.toString() ?? '',
+      siteId: json['site_id']?.toString() ?? '',
+      block: json['block']?.toString() ?? '',
+      unitNo: (json['unit_no'] as num?)?.toInt() ?? 0,
+      floor: (json['floor'] as num?)?.toInt() ?? 1,
+      ownerFullName: json['owner_full_name']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      landShare: json['land_share']?.toString() ?? '1/24',
+      monthlyDues: Decimal.tryParse(json['monthly_dues']?.toString() ?? '0') ?? Decimal.zero,
+      houseType: json['house_type']?.toString(),
+      isResident: json['is_resident'] as bool? ?? true,
+      temporaryPassword: json['temporary_password']?.toString(),
+      mustChangePassword: json['must_change_password'] as bool? ?? false,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+
+  HomeOwnerItem copyWith({
+    String? unitId,
+    String? siteId,
+    String? block,
+    int? unitNo,
+    int? floor,
+    String? ownerFullName,
+    String? email,
+    String? phone,
+    String? landShare,
+    Decimal? monthlyDues,
+    String? houseType,
+    bool? isResident,
+    String? temporaryPassword,
+    bool? mustChangePassword,
+    DateTime? createdAt,
+  }) {
+    return HomeOwnerItem(
+      unitId: unitId ?? this.unitId,
+      siteId: siteId ?? this.siteId,
+      block: block ?? this.block,
+      unitNo: unitNo ?? this.unitNo,
+      floor: floor ?? this.floor,
+      ownerFullName: ownerFullName ?? this.ownerFullName,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      landShare: landShare ?? this.landShare,
+      monthlyDues: monthlyDues ?? this.monthlyDues,
+      houseType: houseType ?? this.houseType,
+      isResident: isResident ?? this.isResident,
+      temporaryPassword: temporaryPassword ?? this.temporaryPassword,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'unit_id': unitId,
+      'site_id': siteId,
+      'block': block,
+      'unit_no': unitNo,
+      'floor': floor,
+      'owner_full_name': ownerFullName,
+      'email': email,
+      'phone': phone,
+      'land_share': landShare,
+      'monthly_dues': monthlyDues.toString(),
+      'house_type': houseType,
+      'is_resident': isResident,
+      'temporary_password': temporaryPassword,
+      'must_change_password': mustChangePassword,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+}
+
 class ApprovalSuccessInfo {
   final String fullName;
   final String flatDesc;

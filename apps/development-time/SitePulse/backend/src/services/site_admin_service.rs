@@ -423,8 +423,74 @@ impl SiteAdminService {
     }
 
     pub async fn get_home_owners_for_site(&self, site_id: &str) -> Vec<HomeOwnerResponse> {
+        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+
+        // 1. Try DB first if pool available
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                let query = r#"
+                    SELECT u.id as unit_id, u.site_id, b.block_name, u.unit_number, u.floor,
+                           p.full_name, p.email, p.phone, u.land_share, u.house_type,
+                           COALESCE((SELECT principal_amount FROM dues_liabilities WHERE unit_id = u.id ORDER BY id DESC LIMIT 1), 1400.00) as monthly_dues,
+                           COALESCE(usr.must_change_password, false) as must_change_password,
+                           COALESCE(usr.created_at, NOW()) as created_at
+                    FROM units u
+                    JOIN blocks b ON u.block_id = b.id
+                    JOIN persons p ON u.owner_person_id = p.id
+                    LEFT JOIN users usr ON LOWER(usr.email) = LOWER(p.email)
+                    WHERE u.site_id = $1
+                    ORDER BY b.block_name, u.unit_number
+                "#;
+                if let Ok(rows) = client.query(query, &[&site_numeric]).await {
+                    if !rows.is_empty() {
+                        let mut db_result = Vec::new();
+                        let mut seen = std::collections::HashSet::new();
+                        for r in rows {
+                            let block_name: String = r.get("block_name");
+                            let unit_no: i32 = r.get("unit_number");
+                            let clean_b = block_name
+                                .to_uppercase()
+                                .replace("BLOK", "")
+                                .replace(['-', '_', ' '], "")
+                                .trim()
+                                .to_string();
+                            if !seen.insert((clean_b, unit_no)) {
+                                continue;
+                            }
+                            let unit_id_val: i64 = r.get("unit_id");
+                            let floor_val: i32 = r.get("floor");
+                            let land_share_val: i32 = r.get("land_share");
+                            let dues_val: Decimal = r.get("monthly_dues");
+                            db_result.push(HomeOwnerResponse {
+                                unit_id: unit_id_val.to_string(),
+                                site_id: site_id.to_string(),
+                                block: block_name,
+                                unit_no,
+                                floor: floor_val,
+                                owner_full_name: r.get("full_name"),
+                                email: r.get("email"),
+                                phone: r.get("phone"),
+                                land_share: format!("{}/24", land_share_val),
+                                monthly_dues: dues_val,
+                                house_type: r.get("house_type"),
+                                is_resident: true,
+                                temporary_password: None,
+                                must_change_password: r.get("must_change_password"),
+                                created_at: r.get("created_at"),
+                            });
+                        }
+                        if !db_result.is_empty() {
+                            return db_result;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. In-memory fallback
         let inner = self.state.inner.read().await;
         let mut result = Vec::new();
+        let mut seen = std::collections::HashSet::new();
 
         for user in inner.users.iter().filter(|u| {
             (u.site_id == site_id
@@ -459,6 +525,16 @@ impl SiteAdminService {
                 (format!("unit-{}", user.id), "A Blok".to_string(), 1, 1)
             };
 
+            let clean_b = block
+                .to_uppercase()
+                .replace("BLOK", "")
+                .replace(['-', '_', ' '], "")
+                .trim()
+                .to_string();
+            if !seen.insert((clean_b, unit_no)) {
+                continue;
+            }
+
             let monthly_dues = inner
                 .dues
                 .iter()
@@ -486,6 +562,127 @@ impl SiteAdminService {
         }
 
         result
+    }
+
+    pub async fn update_home_owner(
+        &self,
+        site_id: &str,
+        unit_or_user_id: &str,
+        req: crate::models::UpdateHomeOwnerRequest,
+    ) -> Result<HomeOwnerResponse, String> {
+        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
+
+        // 1. If DB pool is available, update database
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                let unit_row_opt = if let Some(uid) = id_numeric {
+                    client
+                        .query_opt(
+                            "SELECT id, block_id, unit_number, floor, owner_person_id, house_type FROM units WHERE (id = $1 OR owner_person_id = $1) AND site_id = $2",
+                            &[&uid, &site_numeric],
+                        )
+                        .await
+                        .ok()
+                        .flatten()
+                } else {
+                    client
+                        .query_opt(
+                            "SELECT u.id, u.block_id, u.unit_number, u.floor, u.owner_person_id, u.house_type FROM units u JOIN persons p ON u.owner_person_id = p.id WHERE p.email = $1 AND u.site_id = $2",
+                            &[&unit_or_user_id, &site_numeric],
+                        )
+                        .await
+                        .ok()
+                        .flatten()
+                };
+
+                if let Some(u_row) = unit_row_opt {
+                    let u_id: i64 = u_row.get(0);
+                    let p_id: i64 = u_row.get(4);
+
+                    if let Some(ref name) = req.owner_full_name {
+                        let _ = client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[name, &p_id]).await;
+                        let _ = client.execute("UPDATE users SET full_name = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[name, &site_numeric, &p_id]).await;
+                    }
+                    if let Some(ref phone) = req.phone {
+                        let _ = client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[phone, &p_id]).await;
+                        let _ = client.execute("UPDATE users SET phone = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[phone, &site_numeric, &p_id]).await;
+                    }
+                    if let Some(ref email) = req.email {
+                        let email_norm = email.trim().to_lowercase();
+                        let _ = client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &p_id]).await;
+                        let _ = client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[&email_norm, &site_numeric, &p_id]).await;
+                    }
+                    if let Some(ref ht) = req.house_type {
+                        let _ = client.execute("UPDATE units SET house_type = $1 WHERE id = $2", &[ht, &u_id]).await;
+                    }
+                    if let Some(dues) = req.monthly_dues {
+                        let _ = client.execute(
+                            "UPDATE dues_liabilities SET principal_amount = $1 WHERE unit_id = $2 AND status = 'PENDING'",
+                            &[&dues, &u_id],
+                        ).await;
+                    }
+                }
+            }
+        }
+
+        // 2. Update in-memory state
+        let mut inner = self.state.inner.write().await;
+
+        let unit_idx = inner.units.iter().position(|u| {
+            u.id == unit_or_user_id
+                || u.owner_user_id.as_deref() == Some(unit_or_user_id)
+                || crate::db::parse_id_to_i64(&u.id) == id_numeric
+        });
+
+        let user_idx = inner.users.iter().position(|u| {
+            u.id == unit_or_user_id
+                || crate::db::parse_id_to_i64(&u.id) == id_numeric
+                || (unit_idx.is_some() && inner.units[unit_idx.unwrap()].owner_user_id.as_deref() == Some(&u.id))
+        });
+
+        if let Some(uidx) = unit_idx {
+            if let Some(ref ht) = req.house_type {
+                inner.units[uidx].house_type = Some(ht.clone());
+            }
+            if let Some(dues) = req.monthly_dues {
+                let unit_id = inner.units[uidx].id.clone();
+                for d in inner.dues.iter_mut().filter(|d| d.unit_id == unit_id && d.status == DebtStatus::Pending) {
+                    d.principal_amount = dues;
+                    d.total_amount = dues;
+                }
+            }
+        }
+
+        if let Some(usridx) = user_idx {
+            if let Some(ref name) = req.owner_full_name {
+                inner.users[usridx].full_name = name.clone();
+            }
+            if let Some(ref phone) = req.phone {
+                inner.users[usridx].phone = phone.clone();
+            }
+            if let Some(ref email) = req.email {
+                inner.users[usridx].email = email.trim().to_lowercase();
+            }
+        }
+
+        if let (Some(uidx), Some(ref name)) = (unit_idx, &req.owner_full_name) {
+            let unit_id = inner.units[uidx].id.clone();
+            inner.unit_payer_names.insert(unit_id, vec![name.clone()]);
+        }
+
+        drop(inner);
+
+        let all_owners = self.get_home_owners_for_site(site_id).await;
+        if let Some(updated) = all_owners.into_iter().find(|o| {
+            o.unit_id == unit_or_user_id
+                || crate::db::parse_id_to_i64(&o.unit_id) == id_numeric
+                || req.email.as_ref().map(|e| e.trim().eq_ignore_ascii_case(&o.email)).unwrap_or(false)
+        }) {
+            Ok(updated)
+        } else {
+            Err("Home owner updated but could not reload fresh state".to_string())
+        }
     }
 
     pub async fn get_house_types_for_site(&self, site_id: &str) -> Vec<crate::models::HouseTypeTariff> {
@@ -655,18 +852,29 @@ impl SiteAdminService {
     }
 
     pub async fn get_blocks_for_site(&self, site_id: &str) -> Vec<crate::models::BlockDto> {
-        let site_numeric = crate::db::parse_id_to_i64(site_id);
-        let inner = self.state.inner.read().await;
-        let mut list: Vec<crate::models::BlockDto> = inner
-            .blocks
-            .iter()
-            .filter(|b| {
-                b.site_id == site_id
-                    || (site_numeric.is_some()
-                        && crate::db::parse_id_to_i64(&b.site_id) == site_numeric)
-            })
-            .cloned()
-            .collect();
+        let mut list = Vec::new();
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(db_blocks) = crate::db::get_blocks_for_site_from_db(pool, site_id).await {
+                if !db_blocks.is_empty() {
+                    list = db_blocks;
+                }
+            }
+        }
+
+        if list.is_empty() {
+            let site_numeric = crate::db::parse_id_to_i64(site_id);
+            let inner = self.state.inner.read().await;
+            list = inner
+                .blocks
+                .iter()
+                .filter(|b| {
+                    b.site_id == site_id
+                        || (site_numeric.is_some()
+                            && crate::db::parse_id_to_i64(&b.site_id) == site_numeric)
+                })
+                .cloned()
+                .collect();
+        }
 
         if list.is_empty() {
             list = vec![

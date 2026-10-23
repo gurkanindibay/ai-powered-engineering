@@ -525,6 +525,21 @@ pub async fn get_home_owners(
     Json(service.get_home_owners_for_site(&site_id).await)
 }
 
+pub async fn update_home_owner(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<crate::models::UpdateHomeOwnerRequest>,
+) -> Result<Json<HomeOwnerResponse>, (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    service
+        .update_home_owner(&site_id, &id, payload)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
 pub async fn get_house_types(
     State(state): State<AppState>,
     Query(q): Query<SiteIdParam>,
@@ -929,6 +944,31 @@ pub async fn confirm_reconciliation(
             })
             .collect();
         let cleared = cleared_dues.clone();
+        let confirmed_status_updates: Vec<(String, String, Option<String>)> = confirmed_matches
+            .iter()
+            .map(|m| (m.match_id.clone(), m.status_code.clone(), m.notes.clone()))
+            .collect();
+        let updated_advances: Vec<(String, Decimal)> = updated_unit_ids
+            .iter()
+            .map(|uid| (uid.clone(), inner.advance_payments.get(uid).copied().unwrap_or(Decimal::ZERO)))
+            .collect();
+        let remembered_to_save: Vec<(String, String)> = if payload.remember_sender_iban == Some(true) {
+            confirmed_matches
+                .iter()
+                .filter_map(|m| {
+                    if let (Some(sender_iban), Some(unit_id)) = (&m.transaction.sender_iban, &m.matched_unit_id) {
+                        let clean = sender_iban.replace(' ', "").to_uppercase();
+                        if !clean.is_empty() {
+                            return Some((unit_id.clone(), clean));
+                        }
+                    }
+                    None
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         tokio::spawn(async move {
             for (txn_id, due_id, unit_id, amt, ref_no, desc) in matches_to_save {
                 let _ = crate::db::save_collection_transaction(
@@ -944,6 +984,21 @@ pub async fn confirm_reconciliation(
             }
             for d_id in cleared {
                 let _ = crate::db::update_due_liability(&pool, &d_id, "PAID", Decimal::ZERO).await;
+            }
+            for (match_id, status_code, notes) in confirmed_status_updates {
+                let _ = crate::db::update_reconciliation_status(
+                    &pool,
+                    &match_id,
+                    "Approved",
+                    &status_code,
+                    notes.as_deref(),
+                ).await;
+            }
+            for (uid, bal) in updated_advances {
+                let _ = crate::db::save_advance_balance(&pool, &uid, bal).await;
+            }
+            for (uid, iban) in remembered_to_save {
+                let _ = crate::db::save_remembered_sender_iban(&pool, &uid, &iban, None, None).await;
             }
         });
     }
@@ -978,6 +1033,16 @@ pub async fn remember_sender_iban(
     inner.remembered_sender_ibans.insert(clean.clone(), payload.unit_id.clone());
     if let Some(ref sender_name) = payload.sender_name {
         inner.sender_iban_metadata.insert(clean.clone(), (Some(sender_name.clone()), None));
+    }
+
+    if let Some(ref pool) = state.pool {
+        let pool = pool.clone();
+        let u_id = payload.unit_id.clone();
+        let s_iban = clean.clone();
+        let s_name = payload.sender_name.clone();
+        tokio::spawn(async move {
+            let _ = crate::db::save_remembered_sender_iban(&pool, &u_id, &s_iban, s_name.as_deref(), None).await;
+        });
     }
 
     Ok(Json(RememberSenderIbanResponse {
@@ -1062,7 +1127,18 @@ pub async fn add_unit_sender_iban(
         }
 
         inner.remembered_sender_ibans.insert(clean.clone(), unit_id.clone());
-        inner.sender_iban_metadata.insert(clean.clone(), (payload.label, payload.bank_name));
+        inner.sender_iban_metadata.insert(clean.clone(), (payload.label.clone(), payload.bank_name.clone()));
+    }
+
+    if let Some(ref pool) = state.pool {
+        let pool = pool.clone();
+        let u_id = unit_id.clone();
+        let s_iban = clean.clone();
+        let lbl = payload.label.clone();
+        let bnk = payload.bank_name.clone();
+        tokio::spawn(async move {
+            let _ = crate::db::save_remembered_sender_iban(&pool, &u_id, &s_iban, lbl.as_deref(), bnk.as_deref()).await;
+        });
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -1083,6 +1159,14 @@ pub async fn delete_unit_sender_iban(
         }
     }
 
+    if let Some(ref pool) = state.pool {
+        let pool = pool.clone();
+        let s_iban = clean.clone();
+        tokio::spawn(async move {
+            let _ = crate::db::delete_remembered_sender_iban(&pool, &s_iban).await;
+        });
+    }
+
     get_unit_matching_criteria(Path(unit_id), State(state)).await
 }
 
@@ -1091,19 +1175,29 @@ pub async fn update_unit_payer_names(
     State(state): State<AppState>,
     Json(payload): Json<UpdatePayerNamesRequest>,
 ) -> Result<Json<UnitMatchingCriteriaDto>, (StatusCode, String)> {
+    let cleaned_names: Vec<String> = payload
+        .payer_names
+        .into_iter()
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty())
+        .collect();
+
     {
         let mut inner = state.inner.write().await;
         if !inner.units.iter().any(|u| u.id == unit_id) {
             return Err((StatusCode::NOT_FOUND, format!("Unit '{}' not found", unit_id)));
         }
-        let cleaned_names: Vec<String> = payload
-            .payer_names
-            .into_iter()
-            .map(|n| n.trim().to_string())
-            .filter(|n| !n.is_empty())
-            .collect();
 
-        inner.unit_payer_names.insert(unit_id.clone(), cleaned_names);
+        inner.unit_payer_names.insert(unit_id.clone(), cleaned_names.clone());
+    }
+
+    if let Some(ref pool) = state.pool {
+        let pool = pool.clone();
+        let u_id = unit_id.clone();
+        let names = cleaned_names.clone();
+        tokio::spawn(async move {
+            let _ = crate::db::save_unit_payer_names(&pool, &u_id, &names).await;
+        });
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -1816,7 +1910,9 @@ pub async fn record_homeowner_payment(
 
     let resident_name = record.homeowner_name.clone();
 
-    inner.homeowner_payments.push(record);
+    inner.homeowner_payments.push(record.clone());
+
+    let receipt_id = format!("RCP-{}", Uuid::new_v4().simple());
 
     if let Some(ref pool) = state.pool {
         let pool = pool.clone();
@@ -1830,7 +1926,50 @@ pub async fn record_homeowner_payment(
             .iter()
             .find(|d| d.unit_id == unit_id && d.status == DebtStatus::Paid)
             .map(|d| d.id.clone());
+        let rec = record.clone();
+        let adv_bal = total_unit_advance;
+        let receipt_id_clone = receipt_id.clone();
+        let res_name_clone = resident_name.clone();
+        let msg_clone = message.clone();
+        let p_method = payload.payment_method.clone();
+        let is_card = p_method.to_uppercase().contains("CARD") || p_method.to_uppercase().contains("KART");
+
         tokio::spawn(async move {
+            let _ = crate::db::save_homeowner_payment(&pool, &rec).await;
+            let _ = crate::db::save_advance_balance(&pool, &unit_id, adv_bal).await;
+
+            let r_match = ReconciliationMatch {
+                match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
+                transaction: BankTransactionItem {
+                    transaction_id: ref_code.clone().unwrap_or_else(|| rec.id.clone()),
+                    date: Utc::now().date_naive(),
+                    amount,
+                    currency: "TRY".to_string(),
+                    description: note.clone().unwrap_or_else(|| {
+                        if is_card {
+                            "Kredi Kartı ile Aidat Ödemesi".to_string()
+                        } else {
+                            format!("{} ile Aidat Ödemesi", p_method)
+                        }
+                    }),
+                    sender_name: res_name_clone.clone(),
+                    sender_iban: None,
+                    reference_no: Some(receipt_id_clone),
+                },
+                matched_unit_id: Some(rec.unit_id.clone()),
+                matched_block: Some(rec.block_id.clone()),
+                matched_unit_number: Some(rec.unit_number),
+                matched_resident_name: res_name_clone,
+                confidence_score: 100,
+                matched_due_id: None,
+                outstanding_balance: Some(cleared_debt),
+                amount_matches_balance: cleared_debt == amount,
+                status: ReconciliationStatus::Approved,
+                status_code: ReconciliationStatus::Approved.as_str().to_string(),
+                notes: Some(msg_clone),
+            };
+            let _ = crate::db::save_reconciliation_match(&pool, &r_match).await;
+
             let _ = crate::db::save_collection_transaction(
                 &pool,
                 &txn_id,
@@ -1853,7 +1992,6 @@ pub async fn record_homeowner_payment(
     }
 
     // Also record in reconciliation_queue as an approved digital receipt
-    let receipt_id = format!("RCP-{}", Uuid::new_v4().simple());
     inner.reconciliation_queue.push(ReconciliationMatch {
         match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
         transaction: BankTransactionItem {
@@ -1989,6 +2127,28 @@ pub async fn match_all_homeowner_payments(
         inner.homeowner_payments[i].cleared_debt_amount = cleared;
         inner.homeowner_payments[i].advance_credit_amount = advance;
         total_processed += 1;
+    }
+
+    if let Some(ref pool) = state.pool {
+        let pool = pool.clone();
+        let updated_records: Vec<(String, String, Decimal, Decimal)> = inner
+            .homeowner_payments
+            .iter()
+            .filter(|p| site_unit_ids.contains(&p.unit_id))
+            .map(|p| (p.id.clone(), format!("{:?}", p.status), p.cleared_debt_amount, p.advance_credit_amount))
+            .collect();
+        let unit_advances: Vec<(String, Decimal)> = site_unit_ids
+            .iter()
+            .map(|uid| (uid.clone(), inner.advance_payments.get(uid).copied().unwrap_or(Decimal::ZERO)))
+            .collect();
+        tokio::spawn(async move {
+            for (pid, st, clr, adv) in updated_records {
+                let _ = crate::db::update_homeowner_payment_match(&pool, &pid, &st, clr, adv).await;
+            }
+            for (uid, bal) in unit_advances {
+                let _ = crate::db::save_advance_balance(&pool, &uid, bal).await;
+            }
+        });
     }
 
     Ok((
@@ -2779,10 +2939,23 @@ pub async fn get_site_overview(
     let matching_units: Vec<_> = {
         let mut seen_units = std::collections::HashSet::new();
         let mut deduped = Vec::new();
+        let normalize_block = |blk_id: &str| -> String {
+            match blk_id {
+                "1" | "blok-A" => "A".to_string(),
+                "2" | "blok-B" => "B".to_string(),
+                "3" | "blok-C" => "C".to_string(),
+                "4" | "blok-D" => "D".to_string(),
+                _ => {
+                    let clean = blk_id.to_uppercase().replace("BLOK", "").replace(['-', '_', ' '], "").trim().to_string();
+                    if clean.is_empty() { blk_id.to_string() } else { clean }
+                }
+            }
+        };
+
         for u in &inner.units {
             let matches_site = u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&site_id);
             if matches_site {
-                let clean_blk = crate::db::parse_id_to_i64(&u.block_id).map(|b| b.to_string()).unwrap_or_else(|| u.block_id.clone());
+                let clean_blk = normalize_block(&u.block_id);
                 if seen_units.insert((clean_blk, u.unit_number)) {
                     deduped.push(u.clone());
                 }
@@ -2790,7 +2963,7 @@ pub async fn get_site_overview(
         }
         if deduped.is_empty() {
             for u in &inner.units {
-                let clean_blk = crate::db::parse_id_to_i64(&u.block_id).map(|b| b.to_string()).unwrap_or_else(|| u.block_id.clone());
+                let clean_blk = normalize_block(&u.block_id);
                 if seen_units.insert((clean_blk, u.unit_number)) {
                     deduped.push(u.clone());
                 }

@@ -10,12 +10,14 @@ class ManagerCockpitView extends StatelessWidget {
   final DashboardController controller;
   final VoidCallback onAddResidentTap;
   final VoidCallback? onManageHouseTypesTap;
+  final VoidCallback? onManageHomeOwnersTap;
 
   const ManagerCockpitView({
     super.key,
     required this.controller,
     required this.onAddResidentTap,
     this.onManageHouseTypesTap,
+    this.onManageHomeOwnersTap,
   });
 
   @override
@@ -449,6 +451,15 @@ class ManagerCockpitView extends StatelessWidget {
               spacing: 8,
               runSpacing: 4,
               children: [
+                if (onManageHomeOwnersTap != null)
+                  TextButton.icon(
+                    onPressed: onManageHomeOwnersTap,
+                    icon: const Icon(Icons.people_alt_outlined, size: 16, color: AppColors.accentSky),
+                    label: const Text(
+                      'Sakinler & Malikler',
+                      style: TextStyle(color: AppColors.accentSky, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 if (onManageHouseTypesTap != null)
                   TextButton.icon(
                     onPressed: onManageHouseTypesTap,

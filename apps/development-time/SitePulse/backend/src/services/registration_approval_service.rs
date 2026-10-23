@@ -94,10 +94,47 @@ impl RegistrationApprovalService {
         };
 
         inner.pending_registrations.push(item.clone());
+        drop(inner);
+
+        if let Some(ref pool) = self.state.pool {
+            let _ = crate::db::save_pending_registration(pool, &item).await;
+        }
+
         Ok(item)
     }
 
     pub async fn get_pending_registrations(&self, site_id: &str) -> Vec<PendingRegistrationResponse> {
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                if let Ok(rows) = client
+                    .query(
+                        "SELECT request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident, status, submitted_at FROM pending_registrations WHERE site_id = $1 AND status = 'PENDING' ORDER BY submitted_at DESC",
+                        &[&site_id],
+                    )
+                    .await
+                {
+                    if !rows.is_empty() {
+                        return rows
+                            .into_iter()
+                            .map(|row| PendingRegistrationResponse {
+                                request_id: row.get(0),
+                                site_id: row.get(1),
+                                block: row.get(2),
+                                unit_no: row.get(3),
+                                floor: row.get(4),
+                                full_name: row.get(5),
+                                email: row.get(6),
+                                phone: row.get(7),
+                                is_resident: row.get(8),
+                                status: row.get(9),
+                                submitted_at: row.get::<_, Option<chrono::DateTime<chrono::Utc>>>(10).unwrap_or_else(chrono::Utc::now),
+                            })
+                            .collect();
+                    }
+                }
+            }
+        }
+
         let inner = self.state.inner.read().await;
         let mut list: Vec<_> = inner
             .pending_registrations
@@ -130,6 +167,10 @@ impl RegistrationApprovalService {
         let req = inner.pending_registrations[index].clone();
         inner.pending_registrations[index].status = "APPROVED".to_string();
         drop(inner); // drop write lock before doing DB operations
+
+        if let Some(ref pool) = self.state.pool {
+            let _ = crate::db::update_pending_registration_status(pool, request_id, "APPROVED").await;
+        }
 
         let temp_pass = generate_resident_temporary_password();
         let password_hash = format!("argon2id_hash_placeholder:{}", &temp_pass);
@@ -368,7 +409,14 @@ impl RegistrationApprovalService {
             .ok_or_else(|| format!("Registration request not found: {}", request_id))?;
 
         inner.pending_registrations[index].status = "REJECTED".to_string();
-        Ok(inner.pending_registrations[index].clone())
+        let result = inner.pending_registrations[index].clone();
+        drop(inner);
+
+        if let Some(ref pool) = self.state.pool {
+            let _ = crate::db::update_pending_registration_status(pool, request_id, "REJECTED").await;
+        }
+
+        Ok(result)
     }
 }
 

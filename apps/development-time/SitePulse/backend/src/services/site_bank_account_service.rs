@@ -24,6 +24,12 @@ impl SiteBankAccountService {
         &self,
         site_id: &str,
     ) -> Option<BankAccountConfigResponse> {
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(Some(account)) = crate::db::get_active_site_bank_account(pool, site_id).await {
+                return Some(Self::to_response(&account));
+            }
+        }
+
         let inner = self.state.inner.read().await;
         inner
             .site_bank_accounts

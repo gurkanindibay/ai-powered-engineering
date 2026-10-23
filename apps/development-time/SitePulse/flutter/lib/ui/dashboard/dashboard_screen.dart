@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
 import '../components/app_fullscreen_page.dart';
-import '../components/app_modal_sheet.dart';
 import '../components/dues_management_view.dart';
 import '../components/hero_balance_card.dart';
 import '../components/manager_cockpit_view.dart';
@@ -32,6 +31,8 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedTabIndex = 0;
+  String _homeOwnerSearchQuery = '';
+  String _homeOwnerBlockFilter = 'ALL';
   Timer? _liveSyncTimer;
 
   @override
@@ -39,6 +40,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     widget.controller.addListener(_onControllerUpdate);
     widget.controller.fetchResidentDashboard();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.controller.fetchHomeOwners();
+      }
+    });
     _liveSyncTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (mounted) {
         widget.controller.fetchResidentDashboard();
@@ -530,6 +536,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 controller: widget.controller,
                 onAddResidentTap: _showAddResidentDialog,
                 onManageHouseTypesTap: _showManageHouseTypesDialog,
+                onManageHomeOwnersTap: () {
+                  setState(() {
+                    _selectedTabIndex = 2;
+                  });
+                },
               ),
             ],
           );
@@ -653,17 +664,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         );
       } else {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSiteManagerPathSwitcher(),
-            ManagerCockpitView(
-              controller: widget.controller,
-              onAddResidentTap: _showAddResidentDialog,
-              onManageHouseTypesTap: _showManageHouseTypesDialog,
-            ),
-          ],
-        );
+        return _buildHomeOwnersManagementView();
       }
     } else {
       return SaasAdminView(
@@ -673,6 +674,707 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onResetPasswordTap: _confirmResetAdminPassword,
       );
     }
+  }
+
+  Widget _buildHomeOwnersManagementView() {
+    final isDark = AppColors.isDark(context);
+    final homeOwners = widget.controller.homeOwners;
+    final isLoading = widget.controller.isLoadingHomeOwners;
+
+    final rawBlocks = widget.controller.blocks;
+    final seenB = <String>{};
+    final availableBlocks = <String>[];
+    for (final b in rawBlocks) {
+      final t = b.trim();
+      if (t.isNotEmpty && seenB.add(t.toLowerCase())) {
+        availableBlocks.add(t);
+      }
+    }
+
+    final filtered = homeOwners.where((ho) {
+      if (_homeOwnerBlockFilter != 'ALL') {
+        final b1 = ho.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
+        final b2 = _homeOwnerBlockFilter.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
+        if (b1 != b2) return false;
+      }
+      if (_homeOwnerSearchQuery.isNotEmpty) {
+        final q = _homeOwnerSearchQuery.toLowerCase();
+        final matchName = ho.ownerFullName.toLowerCase().contains(q);
+        final matchUnit = ho.unitNo.toString().contains(q);
+        final matchPhone = ho.phone.toLowerCase().contains(q);
+        final matchEmail = ho.email.toLowerCase().contains(q);
+        final matchBlock = ho.block.toLowerCase().contains(q);
+        return matchName || matchUnit || matchPhone || matchEmail || matchBlock;
+      }
+      return true;
+    }).toList();
+
+    final totalCount = widget.controller.collectionSummary.totalUnitsCount > 0
+        ? widget.controller.collectionSummary.totalUnitsCount
+        : homeOwners.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSiteManagerPathSwitcher(),
+
+        // Header Card
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border(context)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.accentCyan.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.people_alt_outlined, color: AppColors.accentCyan, size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Kat Malikleri & Sakinler Yönetimi',
+                          style: TextStyle(
+                            color: AppColors.textPrimary(context),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${widget.controller.userSession.siteName} • Toplam $totalCount bağımsız bölüm (${homeOwners.length} kayıtlı)',
+                          style: TextStyle(
+                            color: AppColors.textSecondary(context),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _showAddResidentDialog,
+                    icon: const Icon(Icons.person_add_outlined, size: 16),
+                    label: const Text('Yeni Sakin Ekle'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accentCyan,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _showManageHouseTypesDialog,
+                    icon: const Icon(Icons.home_work_outlined, size: 16),
+                    label: const Text('Konut Tipleri & Tarifeler'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.accentPurple,
+                      side: const BorderSide(color: AppColors.accentPurple),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Search & Filter
+        TextField(
+          onChanged: (val) {
+            setState(() {
+              _homeOwnerSearchQuery = val.trim();
+            });
+          },
+          decoration: InputDecoration(
+            hintText: 'İsim, daire no, telefon veya e-posta ile ara...',
+            hintStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
+            prefixIcon: const Icon(Icons.search, size: 20),
+            suffixIcon: _homeOwnerSearchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () {
+                      setState(() {
+                        _homeOwnerSearchQuery = '';
+                      });
+                    },
+                  )
+                : null,
+            filled: true,
+            fillColor: AppColors.surface(context),
+            contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.border(context)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.border(context)),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // Block filter chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildBlockFilterChip('Tümü', 'ALL'),
+              ...availableBlocks.map((b) => _buildBlockFilterChip(b, b)),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // List of residents
+        if (isLoading)
+          const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+        else if (filtered.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.surface(context),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border(context)),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.person_off_outlined, size: 40, color: AppColors.textSecondary(context)),
+                const SizedBox(height: 8),
+                Text(
+                  _homeOwnerSearchQuery.isNotEmpty ? 'Aramaya Uygun Sakin Bulunamadı' : 'Kayıtlı Kat Maliki veya Sakin Yok',
+                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _homeOwnerSearchQuery.isNotEmpty
+                      ? 'Farklı bir arama terimi deneyebilir veya filtreyi temizleyebilirsiniz.'
+                      : '"Yeni Sakin Ekle" butonu ile daireye sakin ekleyebilirsiniz.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                ),
+              ],
+            ),
+          )
+        else
+          ...filtered.map((ho) => _buildHomeOwnerCard(ho)),
+      ],
+    );
+  }
+
+  Widget _buildBlockFilterChip(String label, String code) {
+    final isSelected = _homeOwnerBlockFilter == code;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (_) {
+          setState(() {
+            _homeOwnerBlockFilter = code;
+          });
+        },
+        selectedColor: AppColors.accentCyan.withOpacity(0.2),
+        checkmarkColor: AppColors.accentCyan,
+        labelStyle: TextStyle(
+          color: isSelected ? AppColors.accentCyan : AppColors.textSecondary(context),
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeOwnerCard(HomeOwnerItem ho) {
+    final cleanBlock = ho.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
+    final badgeLabel = cleanBlock.isNotEmpty ? '$cleanBlock${ho.unitNo}' : '${ho.unitNo}';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.accentCyan.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    badgeLabel,
+                    style: const TextStyle(
+                      color: AppColors.accentCyan,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            ho.ownerFullName,
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: (ho.isResident ? AppColors.accentGreen : AppColors.accentOrange).withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            ho.isResident ? 'Sakin' : 'Malik',
+                            style: TextStyle(
+                              color: ho.isResident ? AppColors.accentGreen : AppColors.accentOrange,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${ho.block} D:${ho.unitNo} • Kat ${ho.floor}${ho.houseType != null && ho.houseType!.isNotEmpty ? ' • ${ho.houseType}' : ''}',
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '₺${ho.monthlyDues.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      color: AppColors.textPrimary(context),
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'Aidat',
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.phone_outlined, size: 13, color: AppColors.textSecondary(context)),
+                        const SizedBox(width: 4),
+                        Text(
+                          ho.phone.isNotEmpty ? ho.phone : 'Telefon girilmemiş',
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(Icons.email_outlined, size: 13, color: AppColors.textSecondary(context)),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            ho.email.isNotEmpty ? ho.email : 'E-posta girilmemiş',
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _showEditHomeOwnerDialog(ho),
+                icon: const Icon(Icons.edit_outlined, size: 14),
+                label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.accentCyan,
+                  side: const BorderSide(color: AppColors.accentCyan),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditHomeOwnerDialog(HomeOwnerItem resident) {
+    final nameCtrl = TextEditingController(text: resident.ownerFullName);
+    final emailCtrl = TextEditingController(text: resident.email);
+    final phoneCtrl = TextEditingController(text: resident.phone);
+    final duesCtrl = TextEditingController(text: resident.monthlyDues.toStringAsFixed(2));
+    final landShareCtrl = TextEditingController(text: resident.landShare);
+
+    final houseTypes = widget.controller.houseTypes;
+    String? selectedHouseType = resident.houseType;
+    if (selectedHouseType == null && houseTypes.isNotEmpty) {
+      selectedHouseType = houseTypes.first.typeName;
+    }
+    bool isResident = resident.isResident;
+
+    String? nameError;
+    String? emailError;
+    String? phoneError;
+    String? generalError;
+    bool isSaving = false;
+
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AppFullscreenPage(
+            title: 'Sakin Bilgilerini Düzenle',
+            subtitle: '${resident.block} Daire ${resident.unitNo}',
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accentCyan.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.edit_note, color: AppColors.accentCyan, size: 20),
+            ),
+            bottomBar: AppFullscreenPage.buildBottomBar(
+              context: ctx,
+              children: [
+                OutlinedButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary(context),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('İptal'),
+                ),
+                ElevatedButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final name = nameCtrl.text.trim();
+                          final email = emailCtrl.text.trim();
+                          final phone = phoneCtrl.text.trim();
+
+                          bool hasError = false;
+                          String? newNameErr;
+                          String? newEmailErr;
+                          String? newPhoneErr;
+
+                          if (name.isEmpty) {
+                            newNameErr = 'Ad Soyad zorunludur.';
+                            hasError = true;
+                          }
+
+                          if (email.isEmpty) {
+                            newEmailErr = 'E-posta zorunludur.';
+                            hasError = true;
+                          } else {
+                            final emailRegex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w{2,}$');
+                            if (!emailRegex.hasMatch(email)) {
+                              newEmailErr = 'Geçerli bir e-posta adresi giriniz (ör. ad@site.com).';
+                              hasError = true;
+                            }
+                          }
+
+                          if (phone.isEmpty) {
+                            newPhoneErr = 'Telefon numarası zorunludur.';
+                            hasError = true;
+                          } else {
+                            final digitsOnly = phone.replaceAll(RegExp(r'\D'), '');
+                            if (digitsOnly.length < 10 || digitsOnly.length > 11) {
+                              newPhoneErr = 'Geçerli bir telefon numarası giriniz (10-11 hane).';
+                              hasError = true;
+                            }
+                          }
+
+                          if (hasError) {
+                            setDialogState(() {
+                              nameError = newNameErr;
+                              emailError = newEmailErr;
+                              phoneError = newPhoneErr;
+                            });
+                            return;
+                          }
+
+                          setDialogState(() {
+                            isSaving = true;
+                            generalError = null;
+                          });
+
+                          final dues = Decimal.tryParse(duesCtrl.text.replaceAll(',', '.')) ?? resident.monthlyDues;
+                          final success = await widget.controller.updateHomeOwner(
+                            unitId: resident.unitId,
+                            fullName: name,
+                            email: email,
+                            phone: phone,
+                            houseType: selectedHouseType,
+                            monthlyDues: dues,
+                            landShare: landShareCtrl.text.trim().isNotEmpty ? landShareCtrl.text.trim() : resident.landShare,
+                            isResident: isResident,
+                          );
+
+                          if (success && ctx.mounted) {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Sakin bilgileri başarıyla güncellendi.'),
+                                backgroundColor: AppColors.accentGreen,
+                              ),
+                            );
+                          } else {
+                            setDialogState(() {
+                              isSaving = false;
+                              generalError = 'Güncelleme sırasında hata oluştu. Lütfen tekrar deneyiniz.';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('Kaydet', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (generalError != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentRed.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.accentRed),
+                      ),
+                      child: Text(
+                        generalError!,
+                        style: const TextStyle(color: AppColors.accentRed, fontSize: 13),
+                      ),
+                    ),
+
+                  // Daire Bilgisi Readonly Card
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.card(context),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border(context)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.apartment, color: AppColors.accentCyan, size: 28),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${resident.block} Blok • Daire ${resident.unitNo}',
+                              style: TextStyle(
+                                color: AppColors.textPrimary(context),
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'Kat: ${resident.floor} • Arsa Payı: ${resident.landShare}',
+                              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Full Name
+                  Text('Ad Soyad *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'Örn: Murat Demir',
+                      errorText: nameError,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Phone
+                  Text('Telefon Numarası *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      hintText: 'Örn: 0555 123 4567',
+                      errorText: phoneError,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Email
+                  Text('E-posta Adresi *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      hintText: 'Örn: murat@example.com',
+                      errorText: emailError,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // House Type
+                  if (houseTypes.isNotEmpty) ...[
+                    Text('Konut Tipi (Daire Tipi)', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: houseTypes.any((ht) => ht.typeName == selectedHouseType)
+                          ? selectedHouseType
+                          : null,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                      hint: const Text('Konut Tipi Seçiniz'),
+                      items: houseTypes.map((ht) {
+                        return DropdownMenuItem<String>(
+                          value: ht.typeName,
+                          child: Text('${ht.typeName} (₺${ht.duesAmount.toStringAsFixed(2)})'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          selectedHouseType = val;
+                          final match = houseTypes.firstWhere((ht) => ht.typeName == val);
+                          duesCtrl.text = match.duesAmount.toStringAsFixed(2);
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
+                  // Monthly Dues
+                  Text('Aylık Aidat Tutarı (₺)', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: duesCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      hintText: '1000.00',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Resident / Owner Switch
+                  SwitchListTile(
+                    title: const Text('Bu dairede fiilen ikamet ediyor mu? (Kat Sakini)'),
+                    subtitle: Text(
+                      isResident ? 'Evet (Kat Sakini)' : 'Hayır (Sadece Kat Maliki)',
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                    ),
+                    value: isResident,
+                    activeThumbColor: AppColors.accentCyan,
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: (val) {
+                      setDialogState(() {
+                        isResident = val;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Widget _buildHesapHareketleriSection() {

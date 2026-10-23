@@ -62,6 +62,10 @@ async fn main() {
             get(handlers::get_home_owners).post(handlers::register_home_owner),
         )
         .route(
+            "/api/v1/site-admin/home-owners/:id",
+            put(handlers::update_home_owner),
+        )
+        .route(
             "/api/v1/site-admin/house-types",
             get(handlers::get_house_types).post(handlers::create_house_type),
         )

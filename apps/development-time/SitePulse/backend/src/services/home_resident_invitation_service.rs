@@ -73,6 +73,11 @@ impl HomeResidentInvitationService {
         inner_write
             .unit_invite_tokens
             .insert(token, response.clone());
+        drop(inner_write);
+
+        if let Some(ref pool) = self.state.pool {
+            let _ = crate::db::save_invitation_token(pool, &response).await;
+        }
 
         response
     }
@@ -127,20 +132,29 @@ impl HomeResidentInvitationService {
             avatar_url: None,
             created_at: Utc::now(),
         };
-        inner.users.push(resident_user);
+        inner.users.push(resident_user.clone());
+
+        let member_dto = UnitMemberDto {
+            resident_id: resident_id.clone(),
+            full_name: request.full_name.clone(),
+            relationship,
+            phone: request.phone.clone().unwrap_or_else(|| "-".to_string()),
+            email: email_norm.clone(),
+            is_owner: false,
+        };
 
         inner
             .unit_members
             .entry(unit_id.clone())
             .or_default()
-            .push(UnitMemberDto {
-                resident_id: resident_id.clone(),
-                full_name: request.full_name.clone(),
-                relationship,
-                phone: request.phone.clone().unwrap_or_else(|| "-".to_string()),
-                email: email_norm.clone(),
-                is_owner: false,
-            });
+            .push(member_dto.clone());
+
+        drop(inner);
+
+        if let Some(ref pool) = self.state.pool {
+            let _ = crate::db::save_user(pool, &resident_user).await;
+            let _ = crate::db::save_unit_member(pool, &unit_id, &member_dto).await;
+        }
 
         Ok(HomeResidentResponse {
             resident_id,
@@ -156,6 +170,32 @@ impl HomeResidentInvitationService {
     }
 
     pub async fn get_unit_members(&self, unit_id: &str) -> Vec<UnitMemberDto> {
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                if let Ok(rows) = client
+                    .query(
+                        "SELECT resident_id, full_name, relationship, phone, email, is_owner FROM unit_members WHERE unit_id = $1 ORDER BY id ASC",
+                        &[&unit_id],
+                    )
+                    .await
+                {
+                    if !rows.is_empty() {
+                        return rows
+                            .into_iter()
+                            .map(|r| UnitMemberDto {
+                                resident_id: r.get(0),
+                                full_name: r.get(1),
+                                relationship: r.get(2),
+                                phone: r.get::<_, Option<String>>(3).unwrap_or_default(),
+                                email: r.get::<_, Option<String>>(4).unwrap_or_default(),
+                                is_owner: r.get(5),
+                            })
+                            .collect();
+                    }
+                }
+            }
+        }
+
         let inner = self.state.inner.read().await;
         inner.unit_members.get(unit_id).cloned().unwrap_or_default()
     }
