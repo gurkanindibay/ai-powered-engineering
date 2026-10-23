@@ -2119,7 +2119,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showAddResidentDialog() {
-    final blockCtrl = TextEditingController();
+    final availableBlocks = widget.controller.blocks;
+    String? selectedBlock = availableBlocks.isNotEmpty ? availableBlocks.first : 'A Blok';
     final unitCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
@@ -2136,6 +2137,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final rawBlocks = widget.controller.blocks;
+          final seenBlocks = <String>{};
+          final currentBlocks = <String>[];
+          for (final b in rawBlocks) {
+            final trimmed = b.trim();
+            if (trimmed.isNotEmpty && seenBlocks.add(trimmed.toLowerCase())) {
+              currentBlocks.add(trimmed);
+            }
+          }
+          if (currentBlocks.isEmpty) {
+            currentBlocks.addAll(['A Blok', 'B Blok']);
+          }
+
+          if (selectedBlock == null || !currentBlocks.any((b) => b.toLowerCase() == selectedBlock!.toLowerCase())) {
+            selectedBlock = currentBlocks.first;
+          } else {
+            selectedBlock = currentBlocks.firstWhere((b) => b.toLowerCase() == selectedBlock!.toLowerCase());
+          }
+
           final currentHouseTypes = widget.controller.houseTypes;
           // Ensure selectedHouseType is valid
           if (selectedHouseType == null && currentHouseTypes.isNotEmpty) {
@@ -2197,6 +2217,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       return;
                     }
 
+                    if (selectedBlock == null || selectedBlock!.trim().isEmpty) {
+                      setDialogState(() {
+                        generalError = 'Lütfen bir blok seçiniz.';
+                      });
+                      return;
+                    }
+
                     if (selectedHouseType == null || selectedHouseType!.isEmpty) {
                       setDialogState(() {
                         generalError = 'Lütfen daire için bir Konut Tipi (örn: 2+1, 3+1) seçiniz.';
@@ -2225,7 +2252,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     Navigator.pop(ctx);
                     widget.controller.registerHomeOwner(
-                      block: blockCtrl.text.trim(),
+                      block: selectedBlock!,
                       unitNo: parsedUnit,
                       ownerName: ownerName,
                       email: emailText,
@@ -2270,16 +2297,82 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                 ],
-                TextField(
-                  controller: blockCtrl,
-                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                  decoration: InputDecoration(
-                    labelText: 'Blok (örn: A Blok)',
-                    labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                    filled: true,
-                    fillColor: AppColors.card(context),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        key: const Key('add_resident_block_dropdown'),
+                        value: currentBlocks.contains(selectedBlock) ? selectedBlock : (currentBlocks.isNotEmpty ? currentBlocks.first : null),
+                        dropdownColor: AppColors.card(context),
+                        style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                        decoration: InputDecoration(
+                          labelText: 'Blok Seçiniz',
+                          labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                          filled: true,
+                          fillColor: AppColors.card(context),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          prefixIcon: const Icon(Icons.apartment, size: 20, color: AppColors.accentCyan),
+                        ),
+                        items: currentBlocks.map((b) {
+                          return DropdownMenuItem<String>(
+                            value: b,
+                            child: Text(b, style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.w600)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedBlock = val;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Yeni Blok Tanımla',
+                      icon: const Icon(Icons.add_circle, color: AppColors.accentCyan),
+                      onPressed: () {
+                        final newBlockCtrl = TextEditingController();
+                        showDialog(
+                          context: context,
+                          builder: (dCtx) => AlertDialog(
+                            backgroundColor: AppColors.card(context),
+                            title: Text('Yeni Blok Tanımla', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16)),
+                            content: TextField(
+                              controller: newBlockCtrl,
+                              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                              decoration: InputDecoration(
+                                labelText: 'Blok Adı (örn: C Blok)',
+                                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                                border: const OutlineInputBorder(),
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(dCtx),
+                                child: const Text('İptal'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () async {
+                                  final nb = newBlockCtrl.text.trim();
+                                  if (nb.isNotEmpty) {
+                                    Navigator.pop(dCtx);
+                                    await widget.controller.saveBlock(blockName: nb);
+                                    setDialogState(() {
+                                      selectedBlock = nb;
+                                    });
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan),
+                                child: const Text('Ekle', style: TextStyle(color: Colors.white)),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -2780,6 +2873,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final adminNameCtrl = TextEditingController();
     final adminEmailCtrl = TextEditingController();
     final adminPhoneCtrl = TextEditingController();
+    final blocksCtrl = TextEditingController(text: 'A Blok, B Blok');
 
     AppFullscreenPage.push(
       context: context,
@@ -2819,6 +2913,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                   return;
                 }
+                final rawBlocks = blocksCtrl.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+                final blocks = rawBlocks.isNotEmpty ? rawBlocks : ['A Blok', 'B Blok'];
                 Navigator.pop(ctx);
                 widget.controller.registerNewSite(
                   name: siteName,
@@ -2827,6 +2923,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   adminName: adminName,
                   adminEmail: adminEmailCtrl.text.trim().isEmpty ? 'yonetici@sitepulse.internal' : adminEmailCtrl.text.trim(),
                   adminPhone: adminPhoneCtrl.text.trim().isEmpty ? '+90 532 000 00 00' : adminPhoneCtrl.text.trim(),
+                  blocks: blocks,
                 );
               },
               style: ElevatedButton.styleFrom(
@@ -2874,6 +2971,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 filled: true,
                 fillColor: AppColors.card(context),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('add_site_blocks_field'),
+              controller: blocksCtrl,
+              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Bloklar (Virgülle ayırarak giriniz: A Blok, B Blok)',
+                helperText: 'Sitede yer alan blokları belirleyin. Sakin eklerken bu bloklar seçilecektir.',
+                helperStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                filled: true,
+                fillColor: AppColors.card(context),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                prefixIcon: const Icon(Icons.domain, size: 20, color: AppColors.accentCyan),
               ),
             ),
             const SizedBox(height: 12),

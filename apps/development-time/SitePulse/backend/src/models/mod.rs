@@ -285,6 +285,8 @@ pub struct RegisterSiteRequest {
     pub site_admin_email: String,
     pub site_admin_phone: String,
     pub plan_type: Option<String>,
+    #[serde(default)]
+    pub blocks: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -300,6 +302,8 @@ pub struct SiteRegistrationResponse {
     pub temporary_password: String,
     pub must_change_password: bool,
     pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub blocks: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -328,6 +332,23 @@ pub struct SaasSiteSummaryDto {
     pub primary_manager_name: String,
     pub primary_manager_email: String,
     pub primary_manager_phone: String,
+    #[serde(default)]
+    pub blocks: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockDto {
+    pub id: String,
+    pub site_id: String,
+    pub block_name: String,
+    pub total_floors: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateBlockRequest {
+    pub block_name: String,
+    #[serde(default)]
+    pub total_floors: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

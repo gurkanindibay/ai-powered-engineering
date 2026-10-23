@@ -378,6 +378,7 @@ class TenantSiteItem {
   final String adminEmail;
   final String adminPhone;
   final int actionCount;
+  final List<String> blocks;
 
   const TenantSiteItem({
     required this.id,
@@ -392,6 +393,7 @@ class TenantSiteItem {
     required this.adminEmail,
     required this.adminPhone,
     this.actionCount = 0,
+    this.blocks = const ['A Blok', 'B Blok'],
   });
 
   /// Invariant: A site has actions if it has registered units, financial collection volume,

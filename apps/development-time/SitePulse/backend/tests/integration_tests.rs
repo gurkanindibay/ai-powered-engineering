@@ -61,12 +61,14 @@ async fn when_registering_new_site_then_provisions_site_and_manager_with_tempora
         site_admin_email: "kemal.sunal@yildizpark.com".to_string(),
         site_admin_phone: "+90 532 555 4433".to_string(),
         plan_type: Some("PREMIUM".to_string()),
+        blocks: Some(vec!["A Blok".to_string(), "B Blok".to_string()]),
     };
 
     let res = service.register_site(req).await.expect("Site registration failed");
     assert_eq!(res.site_name, "Yıldız Park Evleri");
     assert_eq!(res.slug, "yildiz-park-evleri");
     assert_eq!(res.admin_email, "kemal.sunal@yildizpark.com");
+    assert_eq!(res.blocks, vec!["A Blok", "B Blok"]);
     assert!(res.temporary_password.starts_with("SP-"));
     assert!(res.must_change_password);
 }
@@ -83,6 +85,7 @@ async fn when_duplicate_email_then_throws_exception() {
         site_admin_email: "mehmet.demir@begonya.com".to_string(), // duplicate seed email
         site_admin_phone: "+90 532 000 0000".to_string(),
         plan_type: None,
+        blocks: None,
     };
 
     let res = service.register_site(req).await;
@@ -323,6 +326,7 @@ async fn when_deleting_action_free_site_then_succeeds_and_removes_site() {
         site_admin_full_name: "Deniz Yılmaz".to_string(),
         site_admin_email: "deniz@nilufer.com".to_string(),
         site_admin_phone: "+90 532 999 1122".to_string(),
+        blocks: None,
     };
 
     let reg_res = service.register_site(reg_req).await.expect("Site registration failed");
@@ -1864,6 +1868,60 @@ async fn when_managing_house_types_then_can_list_create_and_delete() {
     service.delete_house_type("site-1", &new_type.id).await.expect("Delete should succeed");
     let after_delete = service.get_house_types_for_site("site-1").await;
     assert!(!after_delete.iter().any(|h| h.id == new_type.id));
+}
+
+#[tokio::test]
+async fn when_managing_blocks_then_can_list_and_create() {
+    let state = AppState::new();
+    let service = SiteAdminService::new(state.clone());
+
+    // List default blocks for site-1
+    let initial_blocks = service.get_blocks_for_site("site-1").await;
+    assert!(!initial_blocks.is_empty());
+    assert!(initial_blocks.iter().any(|b| b.block_name == "A Blok"));
+
+    // Create a new block
+    let new_block = service.create_or_update_block(
+        "site-1",
+        sitepulse_backend::models::CreateBlockRequest {
+            block_name: "C Blok".to_string(),
+            total_floors: Some(12),
+        },
+    ).await.expect("Create block should succeed");
+
+    assert_eq!(new_block.block_name, "C Blok");
+    assert_eq!(new_block.total_floors, 12);
+
+    // Verify it is listed
+    let after_create = service.get_blocks_for_site("site-1").await;
+    assert!(after_create.iter().any(|b| b.block_name == "C Blok"));
+}
+
+#[tokio::test]
+async fn when_registering_site_with_blocks_then_blocks_are_stored() {
+    let state = AppState::new();
+    let saas_service = SaasTenantService::new(state.clone());
+    let admin_service = SiteAdminService::new(state.clone());
+
+    let req = RegisterSiteRequest {
+        site_name: "Palmiye Sitesi".to_string(),
+        address: "Antalya".to_string(),
+        site_admin_full_name: "Ali Veli".to_string(),
+        site_admin_email: "ali@palmiye.com".to_string(),
+        site_admin_phone: "+90 532 111 2233".to_string(),
+        plan_type: Some("PREMIUM".to_string()),
+        blocks: Some(vec!["1. Blok".to_string(), "2. Blok".to_string(), "3. Blok".to_string()]),
+    };
+
+    let res = saas_service.register_site(req).await.expect("Register site should succeed");
+    assert_eq!(res.blocks, vec!["1. Blok", "2. Blok", "3. Blok"]);
+
+    // Check blocks available for that site
+    let site_blocks = admin_service.get_blocks_for_site(&res.site_id).await;
+    assert_eq!(site_blocks.len(), 3);
+    assert!(site_blocks.iter().any(|b| b.block_name == "1. Blok"));
+    assert!(site_blocks.iter().any(|b| b.block_name == "2. Blok"));
+    assert!(site_blocks.iter().any(|b| b.block_name == "3. Blok"));
 }
 
 

@@ -69,6 +69,10 @@ async fn main() {
             "/api/v1/site-admin/house-types/:id",
             delete(handlers::delete_house_type),
         )
+        .route(
+            "/api/v1/site-admin/blocks",
+            get(handlers::get_blocks).post(handlers::create_block),
+        )
         // Self-Registration & Approval Queue
         .route("/api/v1/registration/invite-link", get(handlers::generate_registration_link))
         .route("/api/v1/registration/submit/:slug", post(handlers::submit_self_registration))

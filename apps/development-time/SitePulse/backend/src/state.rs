@@ -35,6 +35,7 @@ pub struct AppStateInner {
     pub sender_iban_metadata: HashMap<String, (Option<String>, Option<String>)>,
     pub unit_payer_names: HashMap<String, Vec<String>>,
     pub house_types: Vec<crate::models::HouseTypeTariff>,
+    pub blocks: Vec<crate::models::BlockDto>,
     pub kuveyt_turk_client_id: Option<String>,
     pub kuveyt_turk_client_secret: Option<String>,
     pub auto_scheduler_enabled: bool,
@@ -59,6 +60,7 @@ impl AppStateInner {
             sender_iban_metadata: HashMap::new(),
             unit_payer_names: HashMap::new(),
             house_types: Vec::new(),
+            blocks: Vec::new(),
             kuveyt_turk_client_id: std::env::var("KT_CLIENT_ID").ok(),
             kuveyt_turk_client_secret: std::env::var("KT_CLIENT_SECRET").ok(),
             auto_scheduler_enabled: false,
@@ -146,6 +148,24 @@ impl AppStateInner {
                     type_name: name.to_string(),
                     dues_amount: Decimal::from_str_exact(amount).unwrap(),
                     description: Some(desc.to_string()),
+                });
+            }
+        }
+
+        if self.blocks.is_empty() {
+            let default_blocks = vec!["A Blok", "B Blok"];
+            for (idx, bname) in default_blocks.iter().enumerate() {
+                self.blocks.push(crate::models::BlockDto {
+                    id: (idx + 1).to_string(),
+                    site_id: "site-1".to_string(),
+                    block_name: bname.to_string(),
+                    total_floors: 10,
+                });
+                self.blocks.push(crate::models::BlockDto {
+                    id: format!("1-{}", idx + 1),
+                    site_id: "1".to_string(),
+                    block_name: bname.to_string(),
+                    total_floors: 10,
                 });
             }
         }
@@ -342,6 +362,8 @@ impl AppStateInner {
         self.remembered_sender_ibans.clear();
         self.sender_iban_metadata.clear();
         self.unit_payer_names.clear();
+        self.house_types.clear();
+        self.blocks.clear();
         self.auto_scheduler_enabled = false;
         self.seed_system_lookups();
     }

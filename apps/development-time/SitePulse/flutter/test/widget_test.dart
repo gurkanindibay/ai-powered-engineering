@@ -330,9 +330,9 @@ void main() {
 
     // Fill in required fields
     final textFields = find.byType(TextField);
-    expect(textFields, findsNWidgets(6));
+    expect(textFields, findsNWidgets(7));
     await tester.enterText(textFields.at(0), 'Nilüfer Sitesi');
-    await tester.enterText(textFields.at(3), 'Fatma Demir');
+    await tester.enterText(textFields.at(4), 'Fatma Demir');
 
     // Tap "Siteyi Kaydet & Yetkilendir"
     final submitBtn = find.text('Siteyi Kaydet & Yetkilendir');

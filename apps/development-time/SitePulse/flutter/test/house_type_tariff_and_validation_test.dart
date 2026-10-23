@@ -181,5 +181,107 @@ void main() {
       expect(find.text('Dublex'), findsOneWidget);
       expect(find.text('₺1800'), findsOneWidget);
     });
+
+    testWidgets('Manuel Sakin Ekle dialog presents blocks in dropdown and allows block selection', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1024, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      controller.setBlocksForTesting(['A Blok', 'B Blok', 'C Blok']);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DashboardScreen(controller: controller),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final addResidentBtn = find.text('Manuel Sakin Ekle').first;
+      await tester.tap(addResidentBtn);
+      await tester.pumpAndSettle();
+
+      // Verify that block dropdown is present instead of free-text field
+      final blockDropdown = find.byKey(const Key('add_resident_block_dropdown'));
+      expect(blockDropdown, findsOneWidget);
+
+      // Verify default selection or options
+      expect(find.text('A Blok'), findsWidgets);
+
+      // Tap dropdown to open options
+      await tester.tap(blockDropdown);
+      await tester.pumpAndSettle();
+
+      expect(find.text('B Blok'), findsWidgets);
+      expect(find.text('C Blok'), findsWidgets);
+
+      // Select B Blok
+      await tester.tap(find.text('B Blok').last);
+      await tester.pumpAndSettle();
+
+      // Fill in remaining fields
+      await tester.enterText(find.widgetWithText(TextField, 'Ad Soyad'), 'Zeynep Kaya');
+      await tester.enterText(find.widgetWithText(TextField, 'Daire No'), '12');
+      await tester.enterText(find.widgetWithText(TextField, 'E-posta (Doğrulama zorunlu)'), 'zeynep@kaya.com');
+      await tester.enterText(find.widgetWithText(TextField, 'Telefon (Doğrulama zorunlu)'), '0544 111 22 33');
+
+      final saveBtn = find.text('Kaydet & Şifre Üret');
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      // Dialog should close successfully
+      expect(find.text('Yeni Daire / Sakin Ekle'), findsNothing);
+    });
+
+    testWidgets('SaaS Add Site Dialog allows defining blocks list for new site', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1024, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      controller.switchSessionRole(UserRole.saasAdmin);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DashboardScreen(controller: controller),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find "Yeni Site Kaydet" button
+      final addSiteBtn = find.text('Yeni Site Kaydet');
+      expect(addSiteBtn, findsOneWidget);
+      await tester.tap(addSiteBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Yeni Site / Kompleks Kaydet'), findsOneWidget);
+
+      // Verify blocks field is present with default value
+      final blocksField = find.byKey(const Key('add_site_blocks_field'));
+      expect(blocksField, findsOneWidget);
+      expect(find.text('A Blok, B Blok'), findsOneWidget);
+
+      // Change blocks to 3 custom blocks
+      await tester.enterText(blocksField, '1. Blok, 2. Blok, 3. Blok');
+      await tester.enterText(find.widgetWithText(TextField, 'Site / Proje Adı'), 'Çamlıca Konakları');
+      await tester.enterText(find.widgetWithText(TextField, 'Yönetici Ad Soyad'), 'Serkan Çetin');
+      await tester.enterText(find.widgetWithText(TextField, 'Yönetici E-posta'), 'serkan@camlica.com');
+
+      final submitBtn = find.text('Siteyi Kaydet & Yetkilendir');
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      // Modal closed and new site registered with blocks
+      expect(find.text('Yeni Site / Kompleks Kaydet'), findsNothing);
+      expect(controller.saasSites.any((s) => s.name == 'Çamlıca Konakları'), isTrue);
+      final registered = controller.saasSites.firstWhere((s) => s.name == 'Çamlıca Konakları');
+      expect(registered.blocks, equals(['1. Blok', '2. Blok', '3. Blok']));
+
+      // Dismiss credentials dialog if open
+      if (find.text('Tamam').evaluate().isNotEmpty) {
+        await tester.tap(find.text('Tamam'));
+        await tester.pumpAndSettle();
+      }
+    });
   });
 }

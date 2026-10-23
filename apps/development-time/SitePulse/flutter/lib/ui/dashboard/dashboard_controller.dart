@@ -250,7 +250,16 @@ class DashboardController extends ChangeNotifier {
     HouseTypeTariff(id: '4', siteId: '1', typeName: '4+1', duesAmount: Decimal.parse('2200.00'), description: '4 Oda 1 Salon'),
     HouseTypeTariff(id: '5', siteId: '1', typeName: 'Dublex', duesAmount: Decimal.parse('2500.00'), description: 'Çatı Dubleks / Bahçe Katı'),
   ];
-  List<HouseTypeTariff> get houseTypes => _houseTypes;
+  List<HouseTypeTariff> get houseTypes {
+    final seen = <String>{};
+    final unique = <HouseTypeTariff>[];
+    for (final ht in _houseTypes) {
+      if (seen.add(ht.typeName.toLowerCase())) {
+        unique.add(ht);
+      }
+    }
+    return unique;
+  }
 
   @visibleForTesting
   void setHouseTypesForTesting(List<HouseTypeTariff> types) {
@@ -345,6 +354,104 @@ class DashboardController extends ChangeNotifier {
     }
     _houseTypes.removeWhere((h) => h.id == id);
     notifyListeners();
+    return true;
+  }
+
+  // Site Blocks
+  List<String> _blocks = ['A Blok', 'B Blok'];
+  List<String> get blocks {
+    final seen = <String>{};
+    final unique = <String>[];
+    for (final b in _blocks) {
+      final trimmed = b.trim();
+      if (trimmed.isNotEmpty && seen.add(trimmed.toLowerCase())) {
+        unique.add(trimmed);
+      }
+    }
+    return unique.isNotEmpty ? unique : const ['A Blok', 'B Blok'];
+  }
+
+  @visibleForTesting
+  void setBlocksForTesting(List<String> b) {
+    final seen = <String>{};
+    final unique = <String>[];
+    for (final item in b) {
+      final trimmed = item.trim();
+      if (trimmed.isNotEmpty && seen.add(trimmed.toLowerCase())) {
+        unique.add(trimmed);
+      }
+    }
+    _blocks = unique;
+    notifyListeners();
+  }
+
+  Future<void> fetchBlocks({String? siteId}) async {
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '1';
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/site-admin/blocks?site_id=$effectiveSiteId');
+        final response = await http.get(url).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200) {
+          final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+          final seen = <String>{};
+          final parsed = <String>[];
+          for (final item in list) {
+            final name = (item as Map<String, dynamic>)['block_name']?.toString().trim() ?? '';
+            if (name.isNotEmpty && seen.add(name.toLowerCase())) {
+              parsed.add(name);
+            }
+          }
+          if (parsed.isNotEmpty) {
+            _blocks = parsed;
+            notifyListeners();
+            return;
+          }
+        }
+      } catch (e) {
+        debugPrint('fetchBlocks error: $e');
+      }
+    }
+    if (_blocks.isEmpty) {
+      _blocks = ['A Blok', 'B Blok'];
+      notifyListeners();
+    }
+  }
+
+  Future<bool> saveBlock({
+    required String blockName,
+    int? totalFloors,
+    String? siteId,
+  }) async {
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '1';
+    final trimmed = blockName.trim();
+    if (trimmed.isEmpty) return false;
+
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/site-admin/blocks?site_id=$effectiveSiteId');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'block_name': trimmed,
+            'total_floors': totalFloors ?? 10,
+          }),
+        ).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          await fetchBlocks(siteId: effectiveSiteId);
+          return true;
+        }
+      } catch (e) {
+        debugPrint('saveBlock error: $e');
+      }
+    }
+    final existingIdx = _blocks.indexWhere((b) => b.toLowerCase() == trimmed.toLowerCase());
+    if (existingIdx == -1) {
+      _blocks.add(trimmed);
+      notifyListeners();
+    }
     return true;
   }
 
@@ -943,6 +1050,8 @@ class DashboardController extends ChangeNotifier {
 
         if (fetchedSiteId.isNotEmpty) {
           await fetchReconciliationQueue(fetchedSiteId);
+          await fetchHouseTypes(siteId: fetchedSiteId);
+          await fetchBlocks(siteId: fetchedSiteId);
         }
 
         if (_userSession.role == UserRole.siteManager) {
@@ -977,6 +1086,10 @@ class DashboardController extends ChangeNotifier {
           _saasSites = data.map<TenantSiteItem>((item) {
             final addr = item['address']?.toString() ?? '';
             final city = addr.contains(',') ? addr.split(',').last.trim() : 'İstanbul';
+            final blocksJson = item['blocks'] as List<dynamic>?;
+            final blocks = blocksJson != null && blocksJson.isNotEmpty
+                ? blocksJson.map((e) => e.toString()).toList()
+                : const ['A Blok', 'B Blok'];
             return TenantSiteItem(
               id: item['site_id'] as String? ?? '',
               name: item['site_name'] as String? ?? '',
@@ -990,6 +1103,7 @@ class DashboardController extends ChangeNotifier {
               adminEmail: item['primary_manager_email'] as String? ?? '',
               adminPhone: item['primary_manager_phone'] as String? ?? '',
               actionCount: (item['total_units'] as num?)?.toInt() ?? 0,
+              blocks: blocks,
             );
           }).toList();
           notifyListeners();
@@ -1263,7 +1377,7 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void registerNewSite({
+  Future<void> registerNewSite({
     required String name,
     required String city,
     required String address,
@@ -1271,9 +1385,65 @@ class DashboardController extends ChangeNotifier {
     required String adminEmail,
     required String adminPhone,
     String planType = 'STANDARD',
-  }) {
+    List<String>? blocks,
+  }) async {
+    final siteBlocks = (blocks != null && blocks.isNotEmpty) ? blocks : ['A Blok', 'B Blok'];
     final siteId = 'site-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
     final tempPassword = 'SP-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}-PASS';
+
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/saas/sites');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'site_name': name,
+            'address': '$address, $city',
+            'site_admin_full_name': adminName,
+            'site_admin_email': adminEmail,
+            'site_admin_phone': adminPhone,
+            'plan_type': planType,
+            'blocks': siteBlocks,
+          }),
+        ).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+          final createdSiteId = data['site_id']?.toString() ?? siteId;
+          final createdPassword = data['temporary_password']?.toString() ?? tempPassword;
+          final newSite = TenantSiteItem(
+            id: createdSiteId,
+            name: name,
+            city: city,
+            address: address,
+            status: 'ACTIVE',
+            planType: planType,
+            totalUnits: 0,
+            monthlyCollectionVolume: Decimal.zero,
+            adminName: adminName,
+            adminEmail: adminEmail,
+            adminPhone: adminPhone,
+            actionCount: 0,
+            blocks: siteBlocks,
+          );
+          _saasSites = [newSite, ..._saasSites];
+          _provisionedCredentials = ProvisionedSiteCredentials(
+            siteId: createdSiteId,
+            siteName: name,
+            adminName: adminName,
+            adminEmail: adminEmail,
+            temporaryPassword: createdPassword,
+            planType: planType,
+          );
+          notifyListeners();
+          return;
+        }
+      } catch (e) {
+        debugPrint('registerNewSite remote error: $e');
+      }
+    }
 
     final newSite = TenantSiteItem(
       id: siteId,
@@ -1288,6 +1458,7 @@ class DashboardController extends ChangeNotifier {
       adminEmail: adminEmail,
       adminPhone: adminPhone,
       actionCount: 0,
+      blocks: siteBlocks,
     );
 
     _saasSites = [newSite, ..._saasSites];

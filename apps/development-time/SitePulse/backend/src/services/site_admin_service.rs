@@ -653,6 +653,116 @@ impl SiteAdminService {
         inner.house_types.retain(|h| h.id != id);
         Ok(())
     }
+
+    pub async fn get_blocks_for_site(&self, site_id: &str) -> Vec<crate::models::BlockDto> {
+        let site_numeric = crate::db::parse_id_to_i64(site_id);
+        let inner = self.state.inner.read().await;
+        let mut list: Vec<crate::models::BlockDto> = inner
+            .blocks
+            .iter()
+            .filter(|b| {
+                b.site_id == site_id
+                    || (site_numeric.is_some()
+                        && crate::db::parse_id_to_i64(&b.site_id) == site_numeric)
+            })
+            .cloned()
+            .collect();
+
+        if list.is_empty() {
+            list = vec![
+                crate::models::BlockDto {
+                    id: "b-1".to_string(),
+                    site_id: site_id.to_string(),
+                    block_name: "A Blok".to_string(),
+                    total_floors: 10,
+                },
+                crate::models::BlockDto {
+                    id: "b-2".to_string(),
+                    site_id: site_id.to_string(),
+                    block_name: "B Blok".to_string(),
+                    total_floors: 10,
+                },
+            ];
+        }
+
+        // Strictly deduplicate by block_name
+        let mut unique_list: Vec<crate::models::BlockDto> = Vec::new();
+        for b in list {
+            if !unique_list
+                .iter()
+                .any(|u| u.block_name.eq_ignore_ascii_case(&b.block_name))
+            {
+                unique_list.push(b);
+            }
+        }
+        unique_list
+    }
+
+    pub async fn create_or_update_block(
+        &self,
+        site_id: &str,
+        request: crate::models::CreateBlockRequest,
+    ) -> Result<crate::models::BlockDto, String> {
+        let block_name = request.block_name.trim();
+        if block_name.is_empty() {
+            return Err("Blok adı boş olamaz (örn: A Blok).".to_string());
+        }
+        let total_floors = request.total_floors.unwrap_or(10);
+        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+
+        let mut id_str = format!("blk-{}", &Uuid::new_v4().to_string()[..8]);
+
+        if let Some(ref pool) = self.state.pool {
+            let client = pool.get().await.map_err(|e| format!("DB connection error: {}", e))?;
+            let existing = client
+                .query_opt(
+                    "SELECT id FROM blocks WHERE site_id = $1 AND LOWER(block_name) = LOWER($2)",
+                    &[&site_numeric, &block_name],
+                )
+                .await
+                .map_err(|e| format!("DB query error: {}", e))?;
+
+            if let Some(row) = existing {
+                let db_id: i64 = row.get(0);
+                id_str = db_id.to_string();
+                let _ = client
+                    .execute(
+                        "UPDATE blocks SET total_floors = $1 WHERE id = $2",
+                        &[&total_floors, &db_id],
+                    )
+                    .await;
+            } else {
+                let row = client
+                    .query_one(
+                        "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, $3) RETURNING id",
+                        &[&site_numeric, &block_name, &total_floors],
+                    )
+                    .await
+                    .map_err(|e| format!("DB insert error: {}", e))?;
+                let db_id: i64 = row.get(0);
+                id_str = db_id.to_string();
+            }
+        }
+
+        let block = crate::models::BlockDto {
+            id: id_str,
+            site_id: site_id.to_string(),
+            block_name: block_name.to_string(),
+            total_floors,
+        };
+
+        let mut inner = self.state.inner.write().await;
+        if let Some(pos) = inner.blocks.iter().position(|b| {
+            (b.site_id == site_id || crate::db::parse_id_to_i64(&b.site_id) == Some(site_numeric))
+                && b.block_name.eq_ignore_ascii_case(&block.block_name)
+        }) {
+            inner.blocks[pos] = block.clone();
+        } else {
+            inner.blocks.push(block.clone());
+        }
+
+        Ok(block)
+    }
 }
 
 fn generate_resident_temporary_password() -> String {

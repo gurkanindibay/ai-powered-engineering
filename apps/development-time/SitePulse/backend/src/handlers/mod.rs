@@ -562,6 +562,29 @@ pub async fn delete_house_type(
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
+pub async fn get_blocks(
+    State(state): State<AppState>,
+    Query(q): Query<SiteIdParam>,
+) -> Json<Vec<crate::models::BlockDto>> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    Json(service.get_blocks_for_site(&site_id).await)
+}
+
+pub async fn create_block(
+    State(state): State<AppState>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<crate::models::CreateBlockRequest>,
+) -> Result<(StatusCode, Json<crate::models::BlockDto>), (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    service
+        .create_or_update_block(&site_id, payload)
+        .await
+        .map(|res| (StatusCode::CREATED, Json(res)))
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
 // 5. Registration Approval Handlers
 pub async fn generate_registration_link(
     State(state): State<AppState>,

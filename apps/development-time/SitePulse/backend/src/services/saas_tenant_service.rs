@@ -88,13 +88,40 @@ impl SaasTenantService {
         };
         inner.users.push(admin_user.clone());
 
+        let blocks_list: Vec<String> = request
+            .blocks
+            .filter(|b| !b.is_empty())
+            .unwrap_or_else(|| vec!["A Blok".to_string(), "B Blok".to_string()]);
+
+        for (idx, bname) in blocks_list.iter().enumerate() {
+            inner.blocks.push(crate::models::BlockDto {
+                id: format!("blk-{}-{}", &site_id[..6.min(site_id.len())], idx + 1),
+                site_id: site_id.clone(),
+                block_name: bname.clone(),
+                total_floors: 10,
+            });
+        }
+
         if let Some(ref pool) = self.state.pool {
             let pool = pool.clone();
             let s = new_site.clone();
             let u = admin_user.clone();
+            let blist = blocks_list.clone();
+            let sid = site_id.clone();
             tokio::spawn(async move {
                 let _ = crate::db::save_site(&pool, &s).await;
                 let _ = crate::db::save_user(&pool, &u).await;
+                if let Ok(client) = pool.get().await {
+                    let numeric_site = crate::db::parse_id_to_i64(&sid).unwrap_or(1);
+                    for bname in blist {
+                        let _ = client
+                            .execute(
+                                "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10)",
+                                &[&numeric_site, &bname],
+                            )
+                            .await;
+                    }
+                }
             });
         }
 
@@ -110,6 +137,7 @@ impl SaasTenantService {
             temporary_password: temp_pass,
             must_change_password: true,
             created_at: Utc::now(),
+            blocks: blocks_list,
         })
     }
 
@@ -138,6 +166,18 @@ impl SaasTenantService {
                     .map(|d| d.principal_amount)
                     .sum();
 
+                let site_blocks: Vec<String> = inner
+                    .blocks
+                    .iter()
+                    .filter(|b| b.site_id == site.id || site.id.ends_with(&b.site_id))
+                    .map(|b| b.block_name.clone())
+                    .collect();
+                let blocks = if site_blocks.is_empty() {
+                    vec!["A Blok".to_string(), "B Blok".to_string()]
+                } else {
+                    site_blocks
+                };
+
                 SaasSiteSummaryDto {
                     site_id: site.id.clone(),
                     site_name: site.name.clone(),
@@ -157,6 +197,7 @@ impl SaasTenantService {
                     primary_manager_phone: primary_manager
                         .map(|m| m.phone.clone())
                         .unwrap_or_else(|| "-".to_string()),
+                    blocks,
                 }
             })
             .collect()
