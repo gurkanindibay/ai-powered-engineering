@@ -1973,3 +1973,42 @@ async fn when_managing_dues_periods_then_can_list_and_create_period_in_separate_
     assert_eq!(updated_periods.len(), initial_count + 1);
     assert!(updated_periods.iter().any(|p| p.period_name == "Kasım 2026"));
 }
+
+#[tokio::test]
+async fn when_managing_home_owners_then_can_delete_home_owner() {
+    let state = AppState::new();
+    let service = SiteAdminService::new(state.clone());
+
+    // 1. Register a test home owner to delete
+    let reg_req = RegisterHomeOwnerRequest {
+        block: "A Blok".to_string(),
+        unit_no: 88,
+        floor: 9,
+        owner_full_name: "Silinecek Malik".to_string(),
+        email: "silinecek@sitepulse.io".to_string(),
+        phone: "05554443322".to_string(),
+        land_share: None,
+        monthly_dues: Some(rust_decimal::Decimal::new(1400, 0)),
+        house_type: Some("2+1".to_string()),
+        is_resident: true,
+    };
+    let created = service.register_home_owner("site-1", reg_req).await.unwrap();
+
+    // 2. Call delete_home_owner handler
+    let q = sitepulse_backend::handlers::SiteIdParam {
+        site_id: Some("site-1".to_string()),
+    };
+    let status = sitepulse_backend::handlers::delete_home_owner(
+        axum::extract::State(state.clone()),
+        axum::extract::Path(created.unit_id.clone()),
+        axum::extract::Query(q),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+
+    // 3. Verify the unit is removed
+    let owners = service.get_home_owners_for_site("site-1").await;
+    assert!(!owners.iter().any(|o| o.unit_id == created.unit_id || o.email == "silinecek@sitepulse.io"));
+}

@@ -540,6 +540,20 @@ pub async fn update_home_owner(
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
+pub async fn delete_home_owner(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    service
+        .delete_home_owner(&site_id, &id)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
 pub async fn get_house_types(
     State(state): State<AppState>,
     Query(q): Query<SiteIdParam>,

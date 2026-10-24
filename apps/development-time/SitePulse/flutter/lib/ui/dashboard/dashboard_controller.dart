@@ -1880,6 +1880,56 @@ class DashboardController extends ChangeNotifier {
     return true;
   }
 
+  Future<bool> deleteHomeOwner({
+    required String unitId,
+    String? siteId,
+  }) async {
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners/$unitId?site_id=$effectiveSiteId');
+        final response = await http.delete(
+          url,
+          headers: {'Content-Type': 'application/json'},
+        ).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          await fetchHomeOwners(siteId: effectiveSiteId);
+          await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
+          notifyListeners();
+          return true;
+        } else {
+          final err = utf8.decode(response.bodyBytes);
+          debugPrint('deleteHomeOwner failed: ${response.statusCode} - $err');
+        }
+      } catch (e) {
+        debugPrint('deleteHomeOwner error: $e');
+      }
+    }
+
+    // In-memory removal (fallback and test mode)
+    final hoIndex = _homeOwners.indexWhere((h) => h.unitId == unitId);
+    int? unitNo;
+    String? block;
+    if (hoIndex != -1) {
+      unitNo = _homeOwners[hoIndex].unitNo;
+      block = _homeOwners[hoIndex].block;
+      _homeOwners.removeAt(hoIndex);
+    } else {
+      _homeOwners.removeWhere((h) => h.unitId == unitId);
+    }
+
+    _flatsList.removeWhere((f) => f.id == unitId || (unitNo != null && f.unitNo == unitNo && (block == null || f.block == block)));
+    for (final month in _monthlyFlats.keys) {
+      _monthlyFlats[month]?.removeWhere((f) => f.id == unitId || (unitNo != null && f.unitNo == unitNo && (block == null || f.block == block)));
+    }
+
+    notifyListeners();
+    return true;
+  }
+
   Future<void> approveRegistration(String requestId) async {
     final index = _pendingRegistrations.indexWhere((r) => r.id == requestId);
     if (index == -1) return;

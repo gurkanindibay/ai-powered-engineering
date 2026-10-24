@@ -130,6 +130,66 @@ void main() {
       }
       expect(find.text('Konut tipine bağlı'), findsOneWidget);
       expect(find.text('Aylık Aidat Tutarı'), findsOneWidget);
+
+      // Verify "Sil" button is present in the edit bottom bar
+      expect(find.byKey(const Key('edit_ho_delete_button')), findsOneWidget);
+    });
+
+    test('DashboardController deleteHomeOwner removes homeowner and matching flats locally', () async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      final initialCount = controller.homeOwners.length;
+      final target = controller.homeOwners.first;
+
+      final success = await controller.deleteHomeOwner(unitId: target.unitId);
+      expect(success, isTrue);
+
+      expect(controller.homeOwners.length, equals(initialCount - 1));
+      expect(controller.homeOwners.any((h) => h.unitId == target.unitId), isFalse);
+      expect(controller.flatsList.any((f) => f.id == target.unitId || f.unitNo == target.unitNo), isFalse);
+    });
+
+    testWidgets('Site Manager can delete home owner via delete button and confirmation modal', (tester) async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      final target = controller.homeOwners.first;
+
+      await tester.pumpWidget(MaterialApp(
+        home: DashboardScreen(controller: controller),
+      ));
+      await tester.pumpAndSettle();
+
+      // Go to Yönetim tab
+      final yonetimTab = find.text('Yönetim');
+      await tester.tap(yonetimTab);
+      await tester.pumpAndSettle();
+
+      // Find the delete icon button for this homeowner
+      final deleteBtn = find.byKey(Key('delete_ho_${target.unitId}'));
+      expect(deleteBtn, findsOneWidget);
+
+      // Tap delete button
+      await tester.tap(deleteBtn);
+      await tester.pumpAndSettle();
+
+      // Verify confirmation screen is shown
+      expect(find.text('Kat Malikini Sil'), findsOneWidget);
+      expect(find.text('Evet, Sil'), findsOneWidget);
+      expect(find.text('Vazgeç'), findsOneWidget);
+
+      // Confirm deletion
+      await tester.tap(find.text('Evet, Sil'));
+      await tester.pumpAndSettle();
+
+      // Verify success snackbar and removal from directory
+      expect(find.text('Kat maliki başarıyla silindi.'), findsOneWidget);
+      expect(controller.homeOwners.any((h) => h.unitId == target.unitId), isFalse);
     });
   });
 }

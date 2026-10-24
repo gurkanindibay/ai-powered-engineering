@@ -685,6 +685,138 @@ impl SiteAdminService {
         }
     }
 
+    pub async fn delete_home_owner(&self, site_id: &str, unit_or_user_id: &str) -> Result<(), String> {
+        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
+
+        // 1. If DB pool is available, delete from PostgreSQL
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                let unit_row_opt = if let Some(uid) = id_numeric {
+                    client
+                        .query_opt(
+                            "SELECT id, owner_person_id FROM units WHERE (id = $1 OR owner_person_id = $1) AND site_id = $2",
+                            &[&uid, &site_numeric],
+                        )
+                        .await
+                        .ok()
+                        .flatten()
+                } else {
+                    client
+                        .query_opt(
+                            "SELECT u.id, u.owner_person_id FROM units u JOIN persons p ON u.owner_person_id = p.id WHERE p.email = $1 AND u.site_id = $2",
+                            &[&unit_or_user_id, &site_numeric],
+                        )
+                        .await
+                        .ok()
+                        .flatten()
+                };
+
+                if let Some(u_row) = unit_row_opt {
+                    let u_id: i64 = u_row.get(0);
+                    let p_id: Option<i64> = u_row.get(1);
+                    let u_id_str = u_id.to_string();
+
+                    // Delete dependent records
+                    let _ = client.execute("DELETE FROM collection_transactions WHERE unit_id = $1 OR dues_liability_id IN (SELECT id FROM dues_liabilities WHERE unit_id = $1)", &[&u_id]).await;
+                    let _ = client.execute("DELETE FROM dues_liabilities WHERE unit_id = $1", &[&u_id]).await;
+                    let _ = client.execute("DELETE FROM unit_members WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
+                    let _ = client.execute("DELETE FROM advance_balances WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
+                    let _ = client.execute("DELETE FROM unit_sender_ibans WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
+                    let _ = client.execute("DELETE FROM unit_payer_names WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
+                    let _ = client.execute("DELETE FROM units WHERE id = $1", &[&u_id]).await;
+
+                    if let Some(person_id) = p_id {
+                        let other_units = client
+                            .query_one("SELECT COUNT(*) FROM units WHERE owner_person_id = $1", &[&person_id])
+                            .await
+                            .map(|r| r.get::<_, i64>(0))
+                            .unwrap_or(0);
+                        if other_units == 0 {
+                            let _ = client.execute("DELETE FROM users WHERE site_id = $1 AND email = (SELECT email FROM persons WHERE id = $2)", &[&site_numeric, &person_id]).await;
+                            let _ = client.execute("DELETE FROM persons WHERE id = $1", &[&person_id]).await;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. In-memory state cleanup
+        let mut inner = self.state.inner.write().await;
+
+        let target_units: Vec<IndependentUnit> = inner
+            .units
+            .iter()
+            .filter(|u| {
+                (u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric))
+                    && (u.id == unit_or_user_id
+                        || crate::db::parse_id_to_i64(&u.id) == id_numeric
+                        || u.owner_user_id.as_deref() == Some(unit_or_user_id)
+                        || u.owner_user_id.as_ref().and_then(|uid| crate::db::parse_id_to_i64(uid)) == id_numeric)
+            })
+            .cloned()
+            .collect();
+
+        if !target_units.is_empty() {
+            let target_unit_ids: Vec<String> = target_units.iter().map(|u| u.id.clone()).collect();
+            let target_unit_nos: Vec<i32> = target_units.iter().map(|u| u.unit_number).collect();
+            let target_owner_uids: Vec<String> = target_units
+                .iter()
+                .filter_map(|u| u.owner_user_id.clone())
+                .collect();
+
+            // Retain only unrelated units
+            inner.units.retain(|u| {
+                let matches_site = u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric);
+                if !matches_site {
+                    return true;
+                }
+                !(target_unit_ids.contains(&u.id) || target_unit_nos.contains(&u.unit_number))
+            });
+
+            // Clean dues
+            inner.dues.retain(|d| {
+                !target_unit_ids.contains(&d.unit_id)
+                    && !target_unit_nos.iter().any(|n| d.unit_id == format!("d-{}", n) || d.unit_id == n.to_string())
+            });
+
+            // Clean advance
+            for u_id in &target_unit_ids {
+                inner.advance_payments.remove(u_id);
+                inner.unit_members.remove(u_id);
+                inner.unit_payer_names.remove(u_id);
+                inner.unit_invite_tokens.remove(u_id);
+            }
+            for n in &target_unit_nos {
+                let leg_id = format!("d-{}", n);
+                inner.advance_payments.remove(&leg_id);
+                inner.unit_members.remove(&leg_id);
+                inner.unit_payer_names.remove(&leg_id);
+                inner.unit_invite_tokens.remove(&leg_id);
+            }
+
+            // Remove users if not owning other units
+            for owner_uid in &target_owner_uids {
+                let owns_other = inner.units.iter().any(|u| u.owner_user_id.as_deref() == Some(owner_uid));
+                if !owns_other {
+                    inner.users.retain(|u| &u.id != owner_uid);
+                }
+            }
+            Ok(())
+        } else {
+            // Also check if id is a user
+            if let Some(usridx) = inner.users.iter().position(|u| {
+                (u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric))
+                    && (u.id == unit_or_user_id || crate::db::parse_id_to_i64(&u.id) == id_numeric || u.email.eq_ignore_ascii_case(unit_or_user_id))
+            }) {
+                inner.users.remove(usridx);
+                Ok(())
+            } else {
+                Err(format!("Kat maliki / daire '{}' bulunamadı.", unit_or_user_id))
+            }
+        }
+    }
+
     pub async fn get_house_types_for_site(&self, site_id: &str) -> Vec<crate::models::HouseTypeTariff> {
         let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
 

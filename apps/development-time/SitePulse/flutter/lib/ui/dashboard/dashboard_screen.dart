@@ -1045,22 +1045,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-              OutlinedButton.icon(
-                onPressed: () => _showEditHomeOwnerDialog(ho),
-                icon: const Icon(Icons.edit_outlined, size: 14),
-                label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.accentCyan,
-                  side: const BorderSide(color: AppColors.accentCyan),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    key: Key('delete_ho_${ho.unitId}'),
+                    icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.accentRed),
+                    tooltip: 'Kat Malikini Sil',
+                    onPressed: () => _confirmDeleteHomeOwner(ho),
+                  ),
+                  const SizedBox(width: 4),
+                  OutlinedButton.icon(
+                    onPressed: () => _showEditHomeOwnerDialog(ho),
+                    icon: const Icon(Icons.edit_outlined, size: 14),
+                    label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.accentCyan,
+                      side: const BorderSide(color: AppColors.accentCyan),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  void _confirmDeleteHomeOwner(HomeOwnerItem resident, {BuildContext? parentCtx}) {
+    AppFullscreenPage.pushConfirmation(
+      context: context,
+      title: 'Kat Malikini Sil',
+      message: '${resident.ownerFullName} (${resident.block} Blok Daire ${resident.unitNo}) kaydını ve bağlı tüm aidat ve tahakkuk kayıtlarını silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.',
+      confirmLabel: 'Evet, Sil',
+      cancelLabel: 'Vazgeç',
+      confirmColor: AppColors.accentRed,
+      icon: Icons.delete_forever,
+      iconColor: AppColors.accentRed,
+    ).then((confirmed) async {
+      if (confirmed == true && mounted) {
+        final success = await widget.controller.deleteHomeOwner(unitId: resident.unitId);
+        if (mounted) {
+          if (success) {
+            if (parentCtx != null && parentCtx.mounted) {
+              Navigator.pop(parentCtx);
+            }
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Kat maliki başarıyla silindi.'),
+                backgroundColor: AppColors.accentGreen,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Kat maliki silinirken bir hata oluştu.'),
+                backgroundColor: AppColors.accentRed,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      }
+    });
   }
 
   void _showEditHomeOwnerDialog(HomeOwnerItem resident) {
@@ -1103,6 +1154,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             bottomBar: AppFullscreenPage.buildBottomBar(
               context: ctx,
               children: [
+                OutlinedButton.icon(
+                  key: const Key('edit_ho_delete_button'),
+                  onPressed: isSaving ? null : () => _confirmDeleteHomeOwner(resident, parentCtx: ctx),
+                  icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.accentRed),
+                  label: const Text('Sil', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.accentRed),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
                 OutlinedButton(
                   onPressed: isSaving ? null : () => Navigator.pop(ctx),
                   style: OutlinedButton.styleFrom(

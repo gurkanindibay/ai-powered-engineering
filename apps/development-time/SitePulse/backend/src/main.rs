@@ -63,7 +63,7 @@ async fn main() {
         )
         .route(
             "/api/v1/site-admin/home-owners/:id",
-            put(handlers::update_home_owner),
+            put(handlers::update_home_owner).delete(handlers::delete_home_owner),
         )
         .route(
             "/api/v1/site-admin/house-types",
