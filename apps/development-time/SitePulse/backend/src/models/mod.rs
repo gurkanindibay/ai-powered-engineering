@@ -134,6 +134,24 @@ pub struct AccrueDuesPeriodResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DuesPeriod {
+    pub id: String,
+    pub site_id: String,
+    pub period_name: String,
+    pub due_date: NaiveDate,
+    pub status: String, // "ACTIVE", "CLOSED", "DRAFT"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateDuesPeriodRequest {
+    pub site_id: String,
+    pub period_name: String,
+    pub due_date: NaiveDate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndependentUnit {
     pub id: String,
     pub site_id: String,

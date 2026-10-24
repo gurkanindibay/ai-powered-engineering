@@ -122,6 +122,14 @@ void main() {
       // Verify Edit Dialog / Page opened
       expect(find.text('Sakin Bilgilerini Düzenle'), findsOneWidget);
       expect(find.text('Kaydet'), findsOneWidget);
+
+      // Verify dues amount is NOT an editable TextField and is locked to house type
+      final allTextFields = tester.widgetList<TextField>(find.byType(TextField));
+      for (final tf in allTextFields) {
+        expect(tf.decoration?.hintText != '1000.00', isTrue, reason: 'Dues amount should not be an editable TextField');
+      }
+      expect(find.text('Konut tipine bağlı'), findsOneWidget);
+      expect(find.text('Aylık Aidat Tutarı'), findsOneWidget);
     });
   });
 }

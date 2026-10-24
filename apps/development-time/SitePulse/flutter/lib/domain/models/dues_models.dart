@@ -997,4 +997,45 @@ class UnitMatchingCriteria {
   }
 }
 
+class DuesPeriodItem {
+  final String id;
+  final String siteId;
+  final String periodName;
+  final DateTime dueDate;
+  final String status;
+  final DateTime? createdAt;
+
+  const DuesPeriodItem({
+    required this.id,
+    required this.siteId,
+    required this.periodName,
+    required this.dueDate,
+    this.status = 'ACTIVE',
+    this.createdAt,
+  });
+
+  factory DuesPeriodItem.fromJson(Map<String, dynamic> json) {
+    return DuesPeriodItem(
+      id: json['id']?.toString() ?? '',
+      siteId: json['site_id']?.toString() ?? '',
+      periodName: json['period_name']?.toString() ?? '',
+      dueDate: json['due_date'] != null
+          ? DateTime.tryParse(json['due_date'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      status: json['status']?.toString() ?? 'ACTIVE',
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'site_id': siteId,
+    'period_name': periodName,
+    'due_date': dueDate.toIso8601String().split('T').first,
+    'status': status,
+  };
+}
+
 

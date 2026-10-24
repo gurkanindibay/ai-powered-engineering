@@ -136,6 +136,10 @@ async fn main() {
         )
         // Periodic Dues Accrual & Automatic Advance Balance Offsetting
         .route(
+            "/api/v1/dues/periods",
+            get(handlers::list_dues_periods).post(handlers::create_dues_period),
+        )
+        .route(
             "/api/v1/dues/accrue-period",
             post(handlers::accrue_monthly_dues),
         )

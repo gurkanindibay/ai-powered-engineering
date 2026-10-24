@@ -1067,7 +1067,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final nameCtrl = TextEditingController(text: resident.ownerFullName);
     final emailCtrl = TextEditingController(text: resident.email);
     final phoneCtrl = TextEditingController(text: resident.phone);
-    final duesCtrl = TextEditingController(text: resident.monthlyDues.toStringAsFixed(2));
     final landShareCtrl = TextEditingController(text: resident.landShare);
 
     final houseTypes = widget.controller.houseTypes;
@@ -1075,6 +1074,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (selectedHouseType == null && houseTypes.isNotEmpty) {
       selectedHouseType = houseTypes.first.typeName;
     }
+    final initialTariff = houseTypes.where((ht) => ht.typeName == selectedHouseType).firstOrNull;
+    final initialDues = initialTariff?.duesAmount ?? resident.monthlyDues;
+    final duesCtrl = TextEditingController(text: initialDues.toStringAsFixed(2));
     bool isResident = resident.isResident;
 
     String? nameError;
@@ -1164,7 +1166,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             generalError = null;
                           });
 
-                          final dues = Decimal.tryParse(duesCtrl.text.replaceAll(',', '.')) ?? resident.monthlyDues;
+                          final selectedTariff = houseTypes.where((ht) => ht.typeName == selectedHouseType).firstOrNull;
+                          final dues = selectedTariff?.duesAmount ?? (Decimal.tryParse(duesCtrl.text.replaceAll(',', '.')) ?? resident.monthlyDues);
                           final success = await widget.controller.updateHomeOwner(
                             unitId: resident.unitId,
                             fullName: name,
@@ -1337,17 +1340,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 14),
                   ],
 
-                  // Monthly Dues
-                  Text('Aylık Aidat Tutarı (₺)', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                  // Monthly Dues (Non-editable, strictly governed by House Type tariff)
+                  Row(
+                    children: [
+                      Text('Aylık Aidat Tutarı', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentCyan.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.lock, size: 10, color: AppColors.accentCyan),
+                            SizedBox(width: 4),
+                            Text(
+                              'Konut tipine bağlı',
+                              style: TextStyle(
+                                color: AppColors.accentCyan,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 6),
-                  TextField(
-                    controller: duesCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      hintText: '1000.00',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface(context),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.border(context)),
                     ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.currency_lira, size: 18, color: AppColors.accentCyan),
+                        const SizedBox(width: 8),
+                        Text(
+                          '₺${duesCtrl.text}',
+                          style: TextStyle(
+                            color: AppColors.textPrimary(context),
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (selectedHouseType != null)
+                          Text(
+                            '$selectedHouseType Tarifesi',
+                            style: TextStyle(
+                              color: AppColors.textSecondary(context),
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Ödenecek aidat tutarı seçilen konut tipinin tarifesine göre sisteme otomatik işlenir.',
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
                   ),
 
                   const SizedBox(height: 14),

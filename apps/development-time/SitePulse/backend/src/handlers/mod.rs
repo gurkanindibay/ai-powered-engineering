@@ -1687,6 +1687,64 @@ pub async fn handle_bank_incoming_webhook(
     ))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct DuesPeriodsQuery {
+    pub site_id: Option<String>,
+}
+
+/// Returns the defined billing periods for a site from the separate dues_periods table
+pub async fn list_dues_periods(
+    State(state): State<AppState>,
+    Query(query): Query<DuesPeriodsQuery>,
+) -> Result<Json<Vec<DuesPeriod>>, (StatusCode, String)> {
+    let inner = state.inner.read().await;
+    let site_id = query.site_id.unwrap_or_else(|| "site-begonya".to_string());
+    let periods: Vec<DuesPeriod> = inner
+        .dues_periods
+        .iter()
+        .filter(|p| p.site_id == site_id || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&site_id))
+        .cloned()
+        .collect();
+    Ok(Json(periods))
+}
+
+/// Creates a new billing period for a site in the dues_periods table
+pub async fn create_dues_period(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateDuesPeriodRequest>,
+) -> Result<(StatusCode, Json<DuesPeriod>), (StatusCode, String)> {
+    let mut inner = state.inner.write().await;
+
+    // Check if period already exists
+    if let Some(existing) = inner.dues_periods.iter().find(|p| {
+        (p.site_id == payload.site_id || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&payload.site_id))
+            && p.period_name.eq_ignore_ascii_case(&payload.period_name)
+    }) {
+        return Ok((StatusCode::OK, Json(existing.clone())));
+    }
+
+    let new_period = DuesPeriod {
+        id: format!("PER-{}", Uuid::new_v4().simple()),
+        site_id: payload.site_id.clone(),
+        period_name: payload.period_name.clone(),
+        due_date: payload.due_date,
+        status: "ACTIVE".to_string(),
+        created_at: Some(chrono::Utc::now()),
+    };
+
+    inner.dues_periods.push(new_period.clone());
+
+    if let Some(ref pool) = state.pool {
+        let pool = pool.clone();
+        let p_save = new_period.clone();
+        tokio::spawn(async move {
+            let _ = crate::db::save_dues_period(&pool, &p_save).await;
+        });
+    }
+
+    Ok((StatusCode::CREATED, Json(new_period)))
+}
+
 // Periodic Dues Accrual & Automatic Advance Balance Offsetting
 pub async fn accrue_monthly_dues(
     State(state): State<AppState>,
@@ -1709,6 +1767,30 @@ pub async fn accrue_monthly_dues(
 
     let total_units_in_site = units_in_site.len();
 
+    // Ensure period is stored in the separate dues_periods table
+    let period_exists = inner.dues_periods.iter().any(|p| {
+        (p.site_id == payload.site_id || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&payload.site_id))
+            && p.period_name.eq_ignore_ascii_case(&payload.period)
+    });
+    if !period_exists {
+        let period_record = DuesPeriod {
+            id: format!("PER-{}", Uuid::new_v4().simple()),
+            site_id: payload.site_id.clone(),
+            period_name: payload.period.clone(),
+            due_date: payload.due_date,
+            status: "ACTIVE".to_string(),
+            created_at: Some(chrono::Utc::now()),
+        };
+        inner.dues_periods.push(period_record.clone());
+        if let Some(ref pool) = state.pool {
+            let pool = pool.clone();
+            let p_save = period_record.clone();
+            tokio::spawn(async move {
+                let _ = crate::db::save_dues_period(&pool, &p_save).await;
+            });
+        }
+    }
+
     // Invariant Guard: Prevent duplicate accrual for already-accrued units
     let mut newly_accrued_units_count = 0;
     let mut total_amount_accrued = Decimal::ZERO;
@@ -1719,18 +1801,33 @@ pub async fn accrue_monthly_dues(
             .iter()
             .any(|d| d.unit_id == unit.id && d.period == payload.period);
         if !already_exists {
+            let effective_amount = if payload.amount > Decimal::ZERO {
+                payload.amount
+            } else {
+                let unit_house_type = unit.house_type.as_deref().unwrap_or("2+1");
+                inner
+                    .house_types
+                    .iter()
+                    .find(|ht| {
+                        (ht.site_id == payload.site_id || crate::db::parse_id_to_i64(&ht.site_id) == crate::db::parse_id_to_i64(&payload.site_id))
+                            && ht.type_name.eq_ignore_ascii_case(unit_house_type)
+                    })
+                    .map(|ht| ht.dues_amount)
+                    .unwrap_or(Decimal::new(1400, 0))
+            };
+
             let due_id = format!("DUE-{}-{}", unit.id, Uuid::new_v4().simple());
             inner.dues.push(DuesLiability {
                 id: due_id,
                 unit_id: unit.id.clone(),
                 period: payload.period.clone(),
-                principal_amount: payload.amount,
+                principal_amount: effective_amount,
                 delay_penalty: Decimal::ZERO,
-                total_amount: payload.amount,
+                total_amount: effective_amount,
                 due_date: payload.due_date,
                 status: DebtStatus::Pending,
             });
-            total_amount_accrued += payload.amount;
+            total_amount_accrued += effective_amount;
             newly_accrued_units_count += 1;
         }
     }
@@ -2877,12 +2974,19 @@ pub async fn get_site_overview(
         .map(|u| (u.full_name.clone(), u.email.clone()))
         .unwrap_or_else(|| ("Site Yöneticisi".to_string(), String::new()));
 
-    // 3. Collect available periods for this site's units
+    // 3. Collect available periods for this site from dues_periods and dues
     let mut available_periods: Vec<String> = Vec::new();
     let site_unit_ids: Vec<String> = inner.units.iter()
-        .filter(|u| u.site_id == site_id)
+        .filter(|u| u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&site_id))
         .map(|u| u.id.clone())
         .collect();
+
+    for p in &inner.dues_periods {
+        if (p.site_id == site_id || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&site_id))
+            && !available_periods.contains(&p.period_name) {
+            available_periods.push(p.period_name.clone());
+        }
+    }
 
     for due in &inner.dues {
         if (site_unit_ids.contains(&due.unit_id) || site_unit_ids.is_empty()) && !available_periods.contains(&due.period) {

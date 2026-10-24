@@ -1924,6 +1924,52 @@ async fn when_registering_site_with_blocks_then_blocks_are_stored() {
     assert!(site_blocks.iter().any(|b| b.block_name == "3. Blok"));
 }
 
+#[tokio::test]
+async fn when_managing_dues_periods_then_can_list_and_create_period_in_separate_table() {
+    let state = AppState::new();
 
+    // 1. Initially check periods for site-1
+    let query = sitepulse_backend::handlers::DuesPeriodsQuery {
+        site_id: Some("site-1".to_string()),
+    };
+    let axum::Json(initial_periods) = sitepulse_backend::handlers::list_dues_periods(
+        axum::extract::State(state.clone()),
+        axum::extract::Query(query),
+    )
+    .await
+    .unwrap();
 
+    let initial_count = initial_periods.len();
 
+    // 2. Create a new billing period in the separate dues_periods table
+    let create_req = sitepulse_backend::models::CreateDuesPeriodRequest {
+        site_id: "site-1".to_string(),
+        period_name: "Kasım 2026".to_string(),
+        due_date: chrono::NaiveDate::from_ymd_opt(2026, 11, 15).unwrap(),
+    };
+
+    let (status, axum::Json(created_period)) = sitepulse_backend::handlers::create_dues_period(
+        axum::extract::State(state.clone()),
+        axum::Json(create_req),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    assert_eq!(created_period.period_name, "Kasım 2026");
+    assert_eq!(created_period.status, "ACTIVE");
+
+    // 3. Verify it is listed in list_dues_periods
+    let query2 = sitepulse_backend::handlers::DuesPeriodsQuery {
+        site_id: Some("site-1".to_string()),
+    };
+    let axum::Json(updated_periods) = sitepulse_backend::handlers::list_dues_periods(
+        axum::extract::State(state.clone()),
+        axum::extract::Query(query2),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(updated_periods.len(), initial_count + 1);
+    assert!(updated_periods.iter().any(|p| p.period_name == "Kasım 2026"));
+}

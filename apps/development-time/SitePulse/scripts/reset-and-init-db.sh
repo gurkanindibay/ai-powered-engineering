@@ -114,6 +114,7 @@ echo "▶ [1/4] Dropping existing database relations..."
 run_sql_stdin << 'EOF'
 DROP TABLE IF EXISTS collection_transactions CASCADE;
 DROP TABLE IF EXISTS dues_liabilities CASCADE;
+DROP TABLE IF EXISTS dues_periods CASCADE;
 DROP TABLE IF EXISTS site_bank_accounts CASCADE;
 DROP TABLE IF EXISTS units CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
@@ -146,7 +147,9 @@ echo "▶ [4/4] Enforcing clean dues ledger (ZERO site payment periods)..."
 run_sql_stdin << 'EOF'
 TRUNCATE TABLE collection_transactions RESTART IDENTITY CASCADE;
 TRUNCATE TABLE dues_liabilities RESTART IDENTITY CASCADE;
+TRUNCATE TABLE dues_periods RESTART IDENTITY CASCADE;
 
+SELECT setval(pg_get_serial_sequence('dues_periods', 'id'), 1, false);
 SELECT setval(pg_get_serial_sequence('dues_liabilities', 'id'), 1, false);
 SELECT setval(pg_get_serial_sequence('collection_transactions', 'id'), 1, false);
 EOF
