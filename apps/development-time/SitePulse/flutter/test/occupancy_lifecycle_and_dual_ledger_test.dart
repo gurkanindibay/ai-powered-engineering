@@ -138,5 +138,83 @@ void main() {
       // Check for presence of DashboardScreen
       expect(find.byType(DashboardScreen), findsOneWidget);
     });
+
+    testWidgets('Tapping history button opens Daire Sakin & İkamet Tarihçesi without layout assertion errors', (tester) async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DashboardScreen(controller: controller),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final yonetimTab = find.text('Yönetim');
+      expect(yonetimTab, findsOneWidget);
+      await tester.tap(yonetimTab);
+      await tester.pumpAndSettle();
+
+      final firstHo = controller.homeOwners.first;
+      final historyBtn = find.byKey(Key('history_ho_${firstHo.unitId}'));
+      expect(historyBtn, findsOneWidget);
+
+      await tester.tap(historyBtn);
+      await tester.pumpAndSettle();
+
+      // Verify the page opened cleanly
+      expect(find.text('Daire Sakin & İkamet Tarihçesi'), findsOneWidget);
+
+      // Verify closing the dialog
+      final closeBtn = find.text('Kapat');
+      expect(closeBtn, findsOneWidget);
+      await tester.tap(closeBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Daire Sakin & İkamet Tarihçesi'), findsNothing);
+    });
+
+    testWidgets('Tapping move-out button opens Sakin Ayrılışı page without layout assertion errors', (tester) async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DashboardScreen(controller: controller),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final yonetimTab = find.text('Yönetim');
+      expect(yonetimTab, findsOneWidget);
+      await tester.tap(yonetimTab);
+      await tester.pumpAndSettle();
+
+      final firstHo = controller.homeOwners.first;
+      final moveOutBtn = find.byKey(Key('move_out_ho_${firstHo.unitId}'));
+      expect(moveOutBtn, findsOneWidget);
+
+      await tester.tap(moveOutBtn);
+      await tester.pumpAndSettle();
+
+      // Verify the page opened cleanly
+      expect(find.text('Sakin Ayrılışı (Move-Out / Tahliye)'), findsOneWidget);
+
+      // Verify closing via Vazgeç
+      final cancelBtn = find.text('Vazgeç');
+      expect(cancelBtn, findsOneWidget);
+      await tester.tap(cancelBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sakin Ayrılışı (Move-Out / Tahliye)'), findsNothing);
+    });
   });
 }

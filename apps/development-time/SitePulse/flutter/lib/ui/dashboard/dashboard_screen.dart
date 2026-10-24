@@ -1095,18 +1095,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
+                    key: Key('history_ho_${ho.unitId}'),
                     icon: const Icon(Icons.history, size: 20, color: AppColors.accentCyan),
                     tooltip: 'İkamet & Sakin Tarihçesi',
                     onPressed: () => _showUnitOccupancyHistoryDialog(ho),
                   ),
                   if (!isVacant)
                     IconButton(
+                      key: Key('move_out_ho_${ho.unitId}'),
                       icon: const Icon(Icons.logout_outlined, size: 20, color: AppColors.accentOrange),
                       tooltip: 'Sakin Ayrılışı (Move-Out)',
                       onPressed: () => _showMoveOutDialog(ho),
                     )
                   else
                     IconButton(
+                      key: Key('move_in_ho_${ho.unitId}'),
                       icon: const Icon(Icons.person_add_alt, size: 20, color: AppColors.accentGreen),
                       tooltip: 'Yeni Sakin / Giriş (Move-In)',
                       onPressed: () => _showMoveInDialog(ho),
@@ -1139,10 +1142,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showUnitOccupancyHistoryDialog(HomeOwnerItem resident) {
+    final historyFuture = widget.controller.fetchOccupancyHistory(resident.unitId);
     AppFullscreenPage.push(
       context: context,
       builder: (ctx) => FutureBuilder<List<OccupancyHistoryItem>>(
-        future: widget.controller.fetchOccupancyHistory(resident.unitId),
+        future: historyFuture,
         builder: (context, snapshot) {
           final items = snapshot.data ?? [];
           final isLoading = snapshot.connectionState == ConnectionState.waiting;
@@ -1172,7 +1176,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
-            child: ListView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isLoading)
                   const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
@@ -1351,7 +1356,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
-            child: ListView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -1480,7 +1486,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
-            child: ListView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SegmentedButton<String>(
                   segments: const [
