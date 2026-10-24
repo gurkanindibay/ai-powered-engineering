@@ -25,7 +25,7 @@ impl Role {
     pub fn from_str_loose(s: &str) -> Self {
         match s.to_uppercase().as_str() {
             "HOME_OWNER" | "KAT_MALIKI" => Role::HomeOwner,
-            "HOME_RESIDENT" | "EV_SAKINI" | "RESIDENT" => Role::HomeResident,
+            "HOME_RESIDENT" | "EV_SAKINI" | "RESIDENT" | "KAT_SAKINI" | "TENANT" => Role::HomeResident,
             "SITE_MANAGER" | "YONETICI" => Role::SiteManager,
             "SAAS_ADMIN" | "ADMIN" => Role::SaasAdmin,
             _ => Role::HomeOwner,

@@ -1751,9 +1751,9 @@ class DashboardController extends ChangeNotifier {
           final result = <HomeOwnerItem>[];
           for (final item in list) {
             final ho = HomeOwnerItem.fromJson(item as Map<String, dynamic>);
-            final b = ho.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
-            final key = '$b-${ho.unitNo}';
-            if (b.isNotEmpty && ho.unitNo > 0 && !seenKeys.add(key)) {
+            final emailKey = ho.email.trim().toLowerCase();
+            final key = emailKey.isNotEmpty ? emailKey : '${ho.unitId}-${ho.ownerFullName.trim().toLowerCase()}';
+            if (!seenKeys.add(key)) {
               continue; // deduplicate
             }
             result.add(ho);

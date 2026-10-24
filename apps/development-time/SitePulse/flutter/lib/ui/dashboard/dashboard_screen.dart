@@ -913,7 +913,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildHomeOwnerCard(HomeOwnerItem ho) {
     final cleanBlock = ho.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
-    final badgeLabel = cleanBlock.isNotEmpty ? '$cleanBlock${ho.unitNo}' : '${ho.unitNo}';
+    final badgeLabel = ho.unitNo > 0
+        ? (cleanBlock.isNotEmpty ? '$cleanBlock${ho.unitNo}' : '${ho.unitNo}')
+        : (cleanBlock.isNotEmpty ? cleanBlock : 'KS');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -984,7 +986,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${ho.block} D:${ho.unitNo} • Kat ${ho.floor}${ho.houseType != null && ho.houseType!.isNotEmpty ? ' • ${ho.houseType}' : ''}',
+                      ho.unitNo > 0
+                          ? '${ho.block} D:${ho.unitNo} • Kat ${ho.floor}${ho.houseType != null && ho.houseType!.isNotEmpty ? ' • ${ho.houseType}' : ''}'
+                          : '${ho.block} • Daire Atanmadı',
                       style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     ),
                   ],

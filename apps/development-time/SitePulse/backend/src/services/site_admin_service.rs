@@ -429,51 +429,71 @@ impl SiteAdminService {
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
                 let query = r#"
-                    SELECT u.id as unit_id, u.site_id, b.block_name, u.unit_number, u.floor,
-                           p.full_name, p.email, p.phone, u.land_share, u.house_type,
-                           COALESCE((SELECT principal_amount FROM dues_liabilities WHERE unit_id = u.id ORDER BY id DESC LIMIT 1), 1400.00) as monthly_dues,
-                           COALESCE(usr.must_change_password, false) as must_change_password,
-                           COALESCE(usr.created_at, NOW()) as created_at
-                    FROM units u
-                    JOIN blocks b ON u.block_id = b.id
-                    JOIN persons p ON u.owner_person_id = p.id
+                    SELECT 
+                        COALESCE(u.id::text, 'p-' || p.id::text) as unit_id,
+                        COALESCE(u.site_id, $1) as site_id,
+                        COALESCE(b.block_name, 'A Blok') as block_name,
+                        COALESCE(u.unit_number, 0) as unit_number,
+                        COALESCE(u.floor, 1) as floor,
+                        p.full_name,
+                        COALESCE(p.email, '') as email,
+                        COALESCE(p.phone, '') as phone,
+                        COALESCE(u.land_share, 24) as land_share,
+                        u.house_type,
+                        COALESCE((SELECT principal_amount FROM dues_liabilities WHERE unit_id = u.id ORDER BY id DESC LIMIT 1), 1400.00) as monthly_dues,
+                        COALESCE(usr.must_change_password, false) as must_change_password,
+                        COALESCE(usr.created_at, NOW()) as created_at,
+                        CASE 
+                            WHEN u.tenant_person_id = p.id THEN true
+                            WHEN p.person_type IN ('KAT_SAKINI', 'TENANT', 'RESIDENT') THEN true
+                            WHEN u.tenant_person_id IS NULL THEN true
+                            ELSE false
+                        END as is_resident
+                    FROM persons p
+                    LEFT JOIN units u ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id)
+                    LEFT JOIN blocks b ON u.block_id = b.id
                     LEFT JOIN users usr ON LOWER(usr.email) = LOWER(p.email)
-                    WHERE u.site_id = $1
-                    ORDER BY b.block_name, u.unit_number
+                    WHERE (u.site_id = $1 OR (u.site_id IS NULL AND (usr.site_id = $1 OR usr.site_id IS NULL)))
+                    ORDER BY b.block_name NULLS LAST, u.unit_number NULLS LAST, p.full_name
                 "#;
                 if let Ok(rows) = client.query(query, &[&site_numeric]).await {
                     if !rows.is_empty() {
                         let mut db_result = Vec::new();
                         let mut seen = std::collections::HashSet::new();
                         for r in rows {
+                            let email: String = r.get("email");
+                            let full_name: String = r.get("full_name");
                             let block_name: String = r.get("block_name");
                             let unit_no: i32 = r.get("unit_number");
-                            let clean_b = block_name
-                                .to_uppercase()
-                                .replace("BLOK", "")
-                                .replace(['-', '_', ' '], "")
-                                .trim()
-                                .to_string();
-                            if !seen.insert((clean_b, unit_no)) {
+                            let unit_id_val: String = r.get("unit_id");
+
+                            let clean_email = email.trim().to_lowercase();
+                            let dedup_key = if !clean_email.is_empty() {
+                                clean_email
+                            } else {
+                                format!("{}-{}-{}", block_name, unit_no, full_name.to_lowercase())
+                            };
+                            if !seen.insert(dedup_key) {
                                 continue;
                             }
-                            let unit_id_val: i64 = r.get("unit_id");
                             let floor_val: i32 = r.get("floor");
                             let land_share_val: i32 = r.get("land_share");
                             let dues_val: Decimal = r.get("monthly_dues");
+                            let is_resident: bool = r.get("is_resident");
+
                             db_result.push(HomeOwnerResponse {
-                                unit_id: unit_id_val.to_string(),
+                                unit_id: unit_id_val,
                                 site_id: site_id.to_string(),
                                 block: block_name,
                                 unit_no,
                                 floor: floor_val,
-                                owner_full_name: r.get("full_name"),
-                                email: r.get("email"),
+                                owner_full_name: full_name,
+                                email,
                                 phone: r.get("phone"),
                                 land_share: format!("{}/24", land_share_val),
                                 monthly_dues: dues_val,
                                 house_type: r.get("house_type"),
-                                is_resident: true,
+                                is_resident,
                                 temporary_password: None,
                                 must_change_password: r.get("must_change_password"),
                                 created_at: r.get("created_at"),
@@ -525,13 +545,12 @@ impl SiteAdminService {
                 (format!("unit-{}", user.id), "A Blok".to_string(), 1, 1)
             };
 
-            let clean_b = block
-                .to_uppercase()
-                .replace("BLOK", "")
-                .replace(['-', '_', ' '], "")
-                .trim()
-                .to_string();
-            if !seen.insert((clean_b, unit_no)) {
+            let dedup_key = if !user.email.trim().is_empty() {
+                user.email.trim().to_lowercase()
+            } else {
+                format!("{}-{}", user.id, user.full_name.to_lowercase())
+            };
+            if !seen.insert(dedup_key) {
                 continue;
             }
 
@@ -554,7 +573,7 @@ impl SiteAdminService {
                 land_share: "1/24".to_string(),
                 monthly_dues,
                 house_type: matching_unit.and_then(|u| u.house_type.clone()),
-                is_resident: true,
+                is_resident: user.role == Role::HomeResident || matching_unit.map(|u| u.tenant_user_id.is_none()).unwrap_or(true),
                 temporary_password: None,
                 must_change_password: user.must_change_password,
                 created_at: user.created_at,

@@ -1,0 +1,1 @@
+../apps/development-time/SitePulse/scripts/db-verify.sh
