@@ -525,6 +525,14 @@ class HomeOwnerItem {
   final String? temporaryPassword;
   final bool mustChangePassword;
   final DateTime createdAt;
+  final String occupancyStatus;
+  final String? tenantFullName;
+  final String? tenantEmail;
+  final String? tenantPhone;
+  final Decimal? _operationalDuesBalance;
+  Decimal get operationalDuesBalance => _operationalDuesBalance ?? Decimal.zero;
+  final Decimal? _capitalDuesBalance;
+  Decimal get capitalDuesBalance => _capitalDuesBalance ?? Decimal.zero;
 
   const HomeOwnerItem({
     required this.unitId,
@@ -542,7 +550,14 @@ class HomeOwnerItem {
     this.temporaryPassword,
     required this.mustChangePassword,
     required this.createdAt,
-  });
+    this.occupancyStatus = 'OWNER_OCCUPIED',
+    this.tenantFullName,
+    this.tenantEmail,
+    this.tenantPhone,
+    Decimal? operationalDuesBalance,
+    Decimal? capitalDuesBalance,
+  }) : _operationalDuesBalance = operationalDuesBalance,
+       _capitalDuesBalance = capitalDuesBalance;
 
   factory HomeOwnerItem.fromJson(Map<String, dynamic> json) {
     return HomeOwnerItem(
@@ -563,6 +578,12 @@ class HomeOwnerItem {
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
+      occupancyStatus: json['occupancy_status']?.toString() ?? 'OWNER_OCCUPIED',
+      tenantFullName: json['tenant_full_name']?.toString(),
+      tenantEmail: json['tenant_email']?.toString(),
+      tenantPhone: json['tenant_phone']?.toString(),
+      operationalDuesBalance: Decimal.tryParse(json['operational_dues_balance']?.toString() ?? '0') ?? Decimal.zero,
+      capitalDuesBalance: Decimal.tryParse(json['capital_dues_balance']?.toString() ?? '0') ?? Decimal.zero,
     );
   }
 
@@ -582,6 +603,12 @@ class HomeOwnerItem {
     String? temporaryPassword,
     bool? mustChangePassword,
     DateTime? createdAt,
+    String? occupancyStatus,
+    String? tenantFullName,
+    String? tenantEmail,
+    String? tenantPhone,
+    Decimal? operationalDuesBalance,
+    Decimal? capitalDuesBalance,
   }) {
     return HomeOwnerItem(
       unitId: unitId ?? this.unitId,
@@ -599,6 +626,12 @@ class HomeOwnerItem {
       temporaryPassword: temporaryPassword ?? this.temporaryPassword,
       mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       createdAt: createdAt ?? this.createdAt,
+      occupancyStatus: occupancyStatus ?? this.occupancyStatus,
+      tenantFullName: tenantFullName ?? this.tenantFullName,
+      tenantEmail: tenantEmail ?? this.tenantEmail,
+      tenantPhone: tenantPhone ?? this.tenantPhone,
+      operationalDuesBalance: operationalDuesBalance ?? this.operationalDuesBalance,
+      capitalDuesBalance: capitalDuesBalance ?? this.capitalDuesBalance,
     );
   }
 
@@ -619,9 +652,68 @@ class HomeOwnerItem {
       'temporary_password': temporaryPassword,
       'must_change_password': mustChangePassword,
       'created_at': createdAt.toIso8601String(),
+      'occupancy_status': occupancyStatus,
+      'tenant_full_name': tenantFullName,
+      'tenant_email': tenantEmail,
+      'tenant_phone': tenantPhone,
+      'operational_dues_balance': operationalDuesBalance.toString(),
+      'capital_dues_balance': capitalDuesBalance.toString(),
     };
   }
 }
+
+class OccupancyHistoryItem {
+  final int id;
+  final int unitId;
+  final int personId;
+  final String personName;
+  final String? personPhone;
+  final String? personEmail;
+  final String role;
+  final String startDate;
+  final String? endDate;
+  final bool isActive;
+  final Decimal exitBalance;
+  final String? notes;
+  final DateTime createdAt;
+
+  const OccupancyHistoryItem({
+    required this.id,
+    required this.unitId,
+    required this.personId,
+    required this.personName,
+    this.personPhone,
+    this.personEmail,
+    required this.role,
+    required this.startDate,
+    this.endDate,
+    required this.isActive,
+    required this.exitBalance,
+    this.notes,
+    required this.createdAt,
+  });
+
+  factory OccupancyHistoryItem.fromJson(Map<String, dynamic> json) {
+    return OccupancyHistoryItem(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      unitId: (json['unit_id'] as num?)?.toInt() ?? 0,
+      personId: (json['person_id'] as num?)?.toInt() ?? 0,
+      personName: json['person_name']?.toString() ?? '',
+      personPhone: json['person_phone']?.toString(),
+      personEmail: json['person_email']?.toString(),
+      role: json['role']?.toString() ?? 'TENANT',
+      startDate: json['start_date']?.toString() ?? '',
+      endDate: json['end_date']?.toString(),
+      isActive: json['is_active'] as bool? ?? false,
+      exitBalance: Decimal.tryParse(json['exit_balance']?.toString() ?? '0') ?? Decimal.zero,
+      notes: json['notes']?.toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+}
+
 
 class ApprovalSuccessInfo {
   final String fullName;

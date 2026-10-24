@@ -25,52 +25,49 @@ Use this skill whenever you need to:
 
 ## Tool Execution
 
-The database verification tool is located at:
-- `apps/development-time/SitePulse/scripts/db-verify.sh`
-- Root symlink: `scripts/db-verify.sh`
+The primary database verification tool is a Python CLI located at:
+- `apps/development-time/SitePulse/scripts/db_verify.py`
+- Root symlink: `scripts/db_verify.py`
 
-### Available Commands
+### Available Commands (Python CLI)
 
 1. **Query Database (Tabular):**
    ```bash
-   ./scripts/db-verify.sh query "SELECT id, full_name, email, person_type FROM persons;"
+   ./scripts/db_verify.py query "SELECT id, full_name, email, person_type FROM persons;"
    ```
 
-2. **Query Database (JSON Output for JSON processing):**
+2. **Query Database (JSON Output for script pipelines):**
    ```bash
-   ./scripts/db-verify.sh query-json "SELECT id, full_name, email, person_type FROM persons;"
+   ./scripts/db_verify.py query-json "SELECT id, full_name, email, person_type FROM persons;"
    ```
 
 3. **List All Tables & Record Counts:**
    ```bash
-   ./scripts/db-verify.sh tables
+   ./scripts/db_verify.py tables
+   # For JSON:
+   ./scripts/db_verify.py --json tables
    ```
 
 4. **Inspect Table Schema & Sample Rows:**
    ```bash
-   ./scripts/db-verify.sh inspect persons
-   ./scripts/db-verify.sh inspect units
-   ./scripts/db-verify.sh inspect dues_liabilities
+   ./scripts/db_verify.py inspect persons
+   ./scripts/db_verify.py inspect units
+   ./scripts/db_verify.py inspect dues_liabilities
    ```
 
 5. **List Residents & Home Owners for a Site:**
    ```bash
-   ./scripts/db-verify.sh residents [site_id]
-   # Example:
-   ./scripts/db-verify.sh residents 1
+   ./scripts/db_verify.py residents 1
    ```
 
 6. **Full Database Health & Integrity Verification Report:**
    ```bash
-   ./scripts/db-verify.sh verify [site_id]
-   # Example:
-   ./scripts/db-verify.sh verify 1
+   ./scripts/db_verify.py verify 1
    ```
-   Checks:
-   - Core entity counts (sites, blocks, units, persons, users, periods, dues, transactions).
-   - Financial balances (total accrued dues, paid amounts, penalties, status counts).
-   - Integrity & orphan checks (orphaned units, orphaned dues, orphaned members).
-   - Virtual IBAN allocations per unit with owner/tenant mapping.
+   Outputs:
+   - Core entity counts (sites, blocks, units, persons, users, periods, dues, collections).
+   - Financial totals (principal accrued, paid, remaining, penalties, status counts).
+   - Foreign key & orphan audits (units missing owners, orphaned dues, orphaned members).
 
 ## Environment Details
 - **Docker Container:** `sitepulse-postgres`

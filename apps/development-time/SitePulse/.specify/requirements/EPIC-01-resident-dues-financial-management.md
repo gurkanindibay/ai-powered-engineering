@@ -19,7 +19,7 @@ Provides residents of managed complexes with full transparency into their financ
 ### STORY-01-01: High-Precision Domain Money & Dues Value Objects
 - **Status:** `COMPLETED`
 - **Task Ref:** `task-01`
-- **Description:** Implement immutable domain value objects (`Money`, `AidatBorcu`, `Daire`, `Kisi`) using arbitrary-precision arithmetic (`Decimal` in Dart, `rust_decimal::Decimal` in Rust). Floating-point types (`float`, `double`, `f32`, `f64`) are strictly prohibited to prevent financial rounding drift.
+- **Description:** Implement immutable domain value objects (`Money`, `DuesLiability`, `Unit`, `Person`) using arbitrary-precision arithmetic (`Decimal` in Dart, `rust_decimal::Decimal` in Rust). Categorize dues liabilities into `OPERATIONAL_DUES` (operational expenses incurred by resident) and `CAPITAL_DUES` (capital improvement expenses incurred by owner). Floating-point types (`float`, `double`, `f32`, `f64`) are strictly prohibited to prevent financial rounding drift.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Preserve kuruş-level precision in dues calculation
@@ -45,7 +45,7 @@ Provides residents of managed complexes with full transparency into their financ
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Calculate 10-day overdue statutory delay penalty
-    Given an unpaid aidat of ₺1.400,00 that is 10 days past due
+    Given an unpaid operational dues liability of ₺1.400,00 that is 10 days past due
     When the delay compensation calculator executes
     Then the calculated delay penalty is exactly ₺23,33
     And the total liability displayed is ₺1.423,33

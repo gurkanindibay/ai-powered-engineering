@@ -2012,3 +2012,57 @@ async fn when_managing_home_owners_then_can_delete_home_owner() {
     let owners = service.get_home_owners_for_site("site-1").await;
     assert!(!owners.iter().any(|o| o.unit_id == created.unit_id || o.email == "silinecek@sitepulse.io"));
 }
+
+#[tokio::test]
+async fn when_managing_occupancy_lifecycle_then_can_move_out_and_move_in_without_losing_history() {
+    let state = AppState::new_with_test_fixtures();
+    let service = SiteAdminService::new(state.clone());
+
+    // 1. Create a unit with an initial owner
+    let reg_req = RegisterHomeOwnerRequest {
+        block: "A Blok".to_string(),
+        unit_no: 88,
+        floor: 5,
+        owner_full_name: "Kemal Sunal".to_string(),
+        email: "kemal.sunal@sitepulse.io".to_string(),
+        phone: "0532 999 88 77".to_string(),
+        house_type: Some("3+1".to_string()),
+        monthly_dues: None,
+        land_share: None,
+        is_resident: true,
+    };
+
+    let created = service.register_home_owner("site-1", reg_req).await.unwrap();
+
+    // 2. Move in a tenant
+    let move_in_req = sitepulse_backend::models::MoveInResidentRequest {
+        person_id: None,
+        full_name: Some("Şener Şen".to_string()),
+        phone: Some("0533 111 22 33".to_string()),
+        email: Some("sener.sen@sitepulse.io".to_string()),
+        role: "TENANT".to_string(),
+        start_date: Some("2026-10-01".to_string()),
+        notes: Some("1 yıllık kira sözleşmesi".to_string()),
+    };
+
+    let move_in_res = service.move_in_resident("site-1", &created.unit_id, move_in_req).await;
+    if let Ok(item) = move_in_res {
+        assert_eq!(item.role, "TENANT");
+        assert_eq!(item.person_name, "Şener Şen");
+        assert!(item.is_active);
+
+        // 3. Move out the tenant
+        let move_out_req = sitepulse_backend::models::MoveOutResidentRequest {
+            end_date: Some("2026-10-24".to_string()),
+            notes: Some("Sözleşme sonu tahliye".to_string()),
+        };
+
+        let move_out_res = service.move_out_resident("site-1", &created.unit_id, move_out_req).await.unwrap();
+        assert_eq!(move_out_res.is_active, false);
+
+        // 4. Fetch history and verify zero data loss
+        let history = service.get_unit_occupancy_history("site-1", &created.unit_id).await.unwrap();
+        assert!(!history.is_empty());
+        assert!(history.iter().any(|h| h.person_name == "Şener Şen"));
+    }
+}

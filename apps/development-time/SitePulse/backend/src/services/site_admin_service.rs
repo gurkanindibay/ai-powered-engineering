@@ -1,4 +1,4 @@
-use chrono::{Datelike, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use rand::{distributions::Alphanumeric, Rng};
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -419,6 +419,12 @@ impl SiteAdminService {
             temporary_password: Some(temp_pass),
             must_change_password: true,
             created_at: Utc::now(),
+            occupancy_status: Some(if request.is_resident { "OWNER_OCCUPIED".to_string() } else { "VACANT".to_string() }),
+            tenant_full_name: None,
+            tenant_email: None,
+            tenant_phone: None,
+            operational_dues_balance: Some(Decimal::ZERO),
+            capital_dues_balance: Some(Decimal::ZERO),
         })
     }
 
@@ -430,31 +436,36 @@ impl SiteAdminService {
             if let Ok(client) = pool.get().await {
                 let query = r#"
                     SELECT 
-                        COALESCE(u.id::text, 'p-' || p.id::text) as unit_id,
-                        COALESCE(u.site_id, $1) as site_id,
+                        u.id::text as unit_id,
+                        u.site_id as site_id,
                         COALESCE(b.block_name, 'A Blok') as block_name,
                         COALESCE(u.unit_number, 0) as unit_number,
                         COALESCE(u.floor, 1) as floor,
-                        p.full_name,
-                        COALESCE(p.email, '') as email,
-                        COALESCE(p.phone, '') as phone,
+                        COALESCE(po.full_name, 'Kat Maliki Tanımlanmamış') as full_name,
+                        COALESCE(po.email, '') as email,
+                        COALESCE(po.phone, '') as phone,
                         COALESCE(u.land_share, 24) as land_share,
                         u.house_type,
                         COALESCE((SELECT principal_amount FROM dues_liabilities WHERE unit_id = u.id ORDER BY id DESC LIMIT 1), 1400.00) as monthly_dues,
                         COALESCE(usr.must_change_password, false) as must_change_password,
                         COALESCE(usr.created_at, NOW()) as created_at,
+                        COALESCE(u.occupancy_status, 'OWNER_OCCUPIED') as occupancy_status,
+                        pt.full_name as tenant_full_name,
+                        pt.email as tenant_email,
+                        pt.phone as tenant_phone,
+                        COALESCE((SELECT SUM(principal_amount + delay_penalty - paid_amount) FROM dues_liabilities WHERE unit_id = u.id AND status != 'PAID' AND (expense_type = 'OPERATIONAL_DUES' OR debtor_type = 'TENANT')), 0.00) as operational_dues_balance,
+                        COALESCE((SELECT SUM(principal_amount + delay_penalty - paid_amount) FROM dues_liabilities WHERE unit_id = u.id AND status != 'PAID' AND (expense_type = 'CAPITAL_DUES' OR debtor_type = 'OWNER')), 0.00) as capital_dues_balance,
                         CASE 
-                            WHEN u.tenant_person_id = p.id THEN true
-                            WHEN p.person_type IN ('KAT_SAKINI', 'TENANT', 'RESIDENT') THEN true
-                            WHEN u.tenant_person_id IS NULL THEN true
-                            ELSE false
+                            WHEN u.tenant_person_id IS NOT NULL THEN false
+                            ELSE true
                         END as is_resident
-                    FROM persons p
-                    LEFT JOIN units u ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id)
+                    FROM units u
                     LEFT JOIN blocks b ON u.block_id = b.id
-                    LEFT JOIN users usr ON LOWER(usr.email) = LOWER(p.email)
-                    WHERE (u.site_id = $1 OR (u.site_id IS NULL AND (usr.site_id = $1 OR usr.site_id IS NULL)))
-                    ORDER BY b.block_name NULLS LAST, u.unit_number NULLS LAST, p.full_name
+                    LEFT JOIN persons po ON u.owner_person_id = po.id
+                    LEFT JOIN persons pt ON u.tenant_person_id = pt.id
+                    LEFT JOIN users usr ON LOWER(usr.email) = LOWER(po.email)
+                    WHERE u.site_id = $1
+                    ORDER BY b.block_name, u.unit_number
                 "#;
                 if let Ok(rows) = client.query(query, &[&site_numeric]).await {
                     if !rows.is_empty() {
@@ -480,6 +491,12 @@ impl SiteAdminService {
                             let land_share_val: i32 = r.get("land_share");
                             let dues_val: Decimal = r.get("monthly_dues");
                             let is_resident: bool = r.get("is_resident");
+                            let occ_status: String = r.get("occupancy_status");
+                            let t_name: Option<String> = r.get("tenant_full_name");
+                            let t_email: Option<String> = r.get("tenant_email");
+                            let t_phone: Option<String> = r.get("tenant_phone");
+                            let op_balance: Decimal = r.get("operational_dues_balance");
+                            let cap_balance: Decimal = r.get("capital_dues_balance");
 
                             db_result.push(HomeOwnerResponse {
                                 unit_id: unit_id_val,
@@ -497,6 +514,12 @@ impl SiteAdminService {
                                 temporary_password: None,
                                 must_change_password: r.get("must_change_password"),
                                 created_at: r.get("created_at"),
+                                occupancy_status: Some(occ_status),
+                                tenant_full_name: t_name,
+                                tenant_email: t_email,
+                                tenant_phone: t_phone,
+                                operational_dues_balance: Some(op_balance),
+                                capital_dues_balance: Some(cap_balance),
                             });
                         }
                         if !db_result.is_empty() {
@@ -577,6 +600,12 @@ impl SiteAdminService {
                 temporary_password: None,
                 must_change_password: user.must_change_password,
                 created_at: user.created_at,
+                occupancy_status: Some("OWNER_OCCUPIED".to_string()),
+                tenant_full_name: None,
+                tenant_email: None,
+                tenant_phone: None,
+                operational_dues_balance: Some(Decimal::ZERO),
+                capital_dues_balance: Some(Decimal::ZERO),
             });
         }
 
@@ -1121,6 +1150,325 @@ impl SiteAdminService {
         }
 
         Ok(block)
+    }
+
+    pub async fn move_out_resident(
+        &self,
+        site_id: &str,
+        unit_id: &str,
+        req: crate::models::MoveOutResidentRequest,
+    ) -> Result<crate::models::OccupancyHistoryItem, String> {
+        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let unit_numeric = crate::db::parse_id_to_i64(unit_id)
+            .or_else(|| {
+                if unit_id.starts_with("unit-") {
+                    unit_id.strip_prefix("unit-").and_then(|s| s.parse::<i64>().ok())
+                } else if unit_id.starts_with("d-") {
+                    unit_id.strip_prefix("d-").and_then(|s| s.parse::<i64>().ok())
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| format!("Invalid unit ID: {}", unit_id))?;
+
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                // Find unit
+                let unit_row = client
+                    .query_opt(
+                        "SELECT id, owner_person_id, tenant_person_id, occupancy_status FROM units WHERE id = $1 AND site_id = $2",
+                        &[&unit_numeric, &site_numeric],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .ok_or_else(|| format!("Unit {} not found for site {}", unit_id, site_id))?;
+
+                let owner_id: Option<i64> = unit_row.get(1);
+                let tenant_id: Option<i64> = unit_row.get(2);
+
+                let target_person_id = tenant_id.or(owner_id).ok_or_else(|| "Unit has no occupant to move out".to_string())?;
+                let occ_role = if tenant_id.is_some() { "TENANT" } else { "OWNER" };
+
+                // Calculate exit balance: unpaid liabilities for this unit
+                let exit_balance: Decimal = client
+                    .query_one(
+                        r#"
+                        SELECT COALESCE(SUM(principal_amount + delay_penalty - paid_amount), 0.00)
+                        FROM dues_liabilities
+                        WHERE unit_id = $1 AND status != 'PAID'
+                        "#,
+                        &[&unit_numeric],
+                    )
+                    .await
+                    .map(|r| r.get(0))
+                    .unwrap_or(Decimal::ZERO);
+
+                let notes_val = req.notes.clone();
+
+                // Check if active record exists in unit_occupancies
+                let active_occ = client
+                    .query_opt(
+                        "SELECT id FROM unit_occupancies WHERE unit_id = $1 AND person_id = $2 AND is_active = true ORDER BY id DESC LIMIT 1",
+                        &[&unit_numeric, &target_person_id],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                let occ_id: i64 = if let Some(row) = active_occ {
+                    let id: i64 = row.get(0);
+                    let _ = client
+                        .execute(
+                            "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE, exit_balance = $1, notes = COALESCE($2, notes) WHERE id = $3",
+                            &[&exit_balance, &notes_val, &id],
+                        )
+                        .await;
+                    id
+                } else {
+                    let row = client
+                        .query_one(
+                            r#"
+                            INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, end_date, is_active, exit_balance, notes)
+                            VALUES ($1, $2, $3, CURRENT_DATE - INTERVAL '30 days', CURRENT_DATE, false, $4, $5)
+                            RETURNING id
+                            "#,
+                            &[&unit_numeric, &target_person_id, &occ_role, &exit_balance, &notes_val],
+                        )
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    row.get(0)
+                };
+
+                // Update unit status to VACANT and clear tenant_person_id if tenant moved out
+                if tenant_id.is_some() {
+                    let _ = client
+                        .execute(
+                            "UPDATE units SET tenant_person_id = NULL, occupancy_status = 'VACANT' WHERE id = $1",
+                            &[&unit_numeric],
+                        )
+                        .await;
+                } else {
+                    let _ = client
+                        .execute(
+                            "UPDATE units SET occupancy_status = 'VACANT' WHERE id = $1",
+                            &[&unit_numeric],
+                        )
+                        .await;
+                }
+
+                // Fetch person details
+                let person_row = client
+                    .query_one("SELECT full_name, phone, email FROM persons WHERE id = $1", &[&target_person_id])
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                return Ok(crate::models::OccupancyHistoryItem {
+                    id: occ_id,
+                    unit_id: unit_numeric,
+                    person_id: target_person_id,
+                    person_name: person_row.get(0),
+                    person_phone: person_row.get(1),
+                    person_email: person_row.get(2),
+                    role: occ_role.to_string(),
+                    start_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                    end_date: Some(chrono::Utc::now().format("%Y-%m-%d").to_string()),
+                    is_active: false,
+                    exit_balance,
+                    notes: notes_val,
+                    created_at: chrono::Utc::now(),
+                });
+            }
+        }
+
+        Err("Database connection unavailable".to_string())
+    }
+
+    pub async fn move_in_resident(
+        &self,
+        site_id: &str,
+        unit_id: &str,
+        req: crate::models::MoveInResidentRequest,
+    ) -> Result<crate::models::OccupancyHistoryItem, String> {
+        let _site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let unit_numeric = crate::db::parse_id_to_i64(unit_id)
+            .or_else(|| {
+                if unit_id.starts_with("unit-") {
+                    unit_id.strip_prefix("unit-").and_then(|s| s.parse::<i64>().ok())
+                } else if unit_id.starts_with("d-") {
+                    unit_id.strip_prefix("d-").and_then(|s| s.parse::<i64>().ok())
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| format!("Invalid unit ID: {}", unit_id))?;
+
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                // Resolve or create person
+                let person_id: i64 = if let Some(pid) = req.person_id {
+                    pid
+                } else if let Some(ref email) = req.email {
+                    let clean_email = email.trim().to_lowercase();
+                    let existing = client
+                        .query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&clean_email])
+                        .await
+                        .ok()
+                        .flatten();
+                    if let Some(p) = existing {
+                        p.get(0)
+                    } else {
+                        let full_name = req.full_name.clone().unwrap_or_else(|| "New Resident".to_string());
+                        let phone = req.phone.clone();
+                        let p_role = req.role.to_uppercase();
+                        let p_type = if p_role == "TENANT" { "KAT_SAKINI" } else { "KAT_MALIKI" };
+                        let row = client
+                            .query_one(
+                                "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, $4) RETURNING id",
+                                &[&full_name, &phone, &clean_email, &p_type],
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        row.get(0)
+                    }
+                } else {
+                    return Err("Either person_id or email must be provided".to_string());
+                };
+
+                // Close any existing active occupancy for this unit
+                let _ = client
+                    .execute(
+                        "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE WHERE unit_id = $1 AND is_active = true",
+                        &[&unit_numeric],
+                    )
+                    .await;
+
+                let occ_role = if req.role.to_uppercase() == "TENANT" { "TENANT" } else { "OWNER" };
+                let occ_status = if occ_role == "TENANT" { "TENANT_OCCUPIED" } else { "OWNER_OCCUPIED" };
+
+                // Insert into unit_occupancies
+                let notes_val = req.notes.clone();
+                let occ_row = client
+                    .query_one(
+                        r#"
+                        INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
+                        VALUES ($1, $2, $3, CURRENT_DATE, true, 0.00, $4)
+                        RETURNING id, start_date::text, created_at
+                        "#,
+                        &[&unit_numeric, &person_id, &occ_role, &notes_val],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                let occ_id: i64 = occ_row.get(0);
+                let start_date_str: String = occ_row.get(1);
+                let created_at: DateTime<Utc> = occ_row.get(2);
+
+                // Update unit
+                if occ_role == "TENANT" {
+                    let _ = client
+                        .execute(
+                            "UPDATE units SET tenant_person_id = $1, occupancy_status = $2 WHERE id = $3",
+                            &[&person_id, &occ_status, &unit_numeric],
+                        )
+                        .await;
+                } else {
+                    let _ = client
+                        .execute(
+                            "UPDATE units SET owner_person_id = $1, occupancy_status = $2 WHERE id = $3",
+                            &[&person_id, &occ_status, &unit_numeric],
+                        )
+                        .await;
+                }
+
+                // Fetch person details
+                let person_row = client
+                    .query_one("SELECT full_name, phone, email FROM persons WHERE id = $1", &[&person_id])
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                return Ok(crate::models::OccupancyHistoryItem {
+                    id: occ_id,
+                    unit_id: unit_numeric,
+                    person_id,
+                    person_name: person_row.get(0),
+                    person_phone: person_row.get(1),
+                    person_email: person_row.get(2),
+                    role: occ_role.to_string(),
+                    start_date: start_date_str,
+                    end_date: None,
+                    is_active: true,
+                    exit_balance: Decimal::ZERO,
+                    notes: notes_val,
+                    created_at,
+                });
+            }
+        }
+
+        Err("Database connection unavailable".to_string())
+    }
+
+    pub async fn get_unit_occupancy_history(
+        &self,
+        _site_id: &str,
+        unit_id: &str,
+    ) -> Result<Vec<crate::models::OccupancyHistoryItem>, String> {
+        let unit_numeric = crate::db::parse_id_to_i64(unit_id)
+            .or_else(|| {
+                if unit_id.starts_with("unit-") {
+                    unit_id.strip_prefix("unit-").and_then(|s| s.parse::<i64>().ok())
+                } else if unit_id.starts_with("d-") {
+                    unit_id.strip_prefix("d-").and_then(|s| s.parse::<i64>().ok())
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| format!("Invalid unit ID: {}", unit_id))?;
+
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                let query = r#"
+                    SELECT 
+                        uo.id,
+                        uo.unit_id,
+                        uo.person_id,
+                        p.full_name,
+                        p.phone,
+                        p.email,
+                        uo.occupancy_type,
+                        uo.start_date::text,
+                        uo.end_date::text,
+                        uo.is_active,
+                        uo.exit_balance,
+                        uo.notes,
+                        uo.created_at
+                    FROM unit_occupancies uo
+                    JOIN persons p ON uo.person_id = p.id
+                    WHERE uo.unit_id = $1
+                    ORDER BY uo.start_date DESC, uo.id DESC
+                "#;
+                if let Ok(rows) = client.query(query, &[&unit_numeric]).await {
+                    let items = rows
+                        .into_iter()
+                        .map(|r| crate::models::OccupancyHistoryItem {
+                            id: r.get(0),
+                            unit_id: r.get(1),
+                            person_id: r.get(2),
+                            person_name: r.get(3),
+                            person_phone: r.get(4),
+                            person_email: r.get(5),
+                            role: r.get(6),
+                            start_date: r.get(7),
+                            end_date: r.get(8),
+                            is_active: r.get(9),
+                            exit_balance: r.get(10),
+                            notes: r.get(11),
+                            created_at: r.get(12),
+                        })
+                        .collect();
+                    return Ok(items);
+                }
+            }
+        }
+        Ok(Vec::new())
     }
 }
 

@@ -917,6 +917,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? (cleanBlock.isNotEmpty ? '$cleanBlock${ho.unitNo}' : '${ho.unitNo}')
         : (cleanBlock.isNotEmpty ? cleanBlock : 'KS');
 
+    final isTenant = ho.occupancyStatus == 'TENANT_OCCUPIED' || (ho.tenantFullName != null && ho.tenantFullName!.isNotEmpty);
+    final isVacant = ho.occupancyStatus == 'VACANT';
+
+    final displayName = isTenant
+        ? (ho.tenantFullName ?? 'Kiracı')
+        : (isVacant ? 'Boş Daire' : ho.ownerFullName);
+
+    final statusLabel = isTenant
+        ? 'Kiracı'
+        : (isVacant ? 'Boş' : 'Malik');
+
+    final statusColor = isTenant
+        ? AppColors.accentGreen
+        : (isVacant ? AppColors.accentOrange : AppColors.accentCyan);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -934,14 +949,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.accentCyan.withOpacity(0.12),
+                  color: statusColor.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: Text(
                     badgeLabel,
-                    style: const TextStyle(
-                      color: AppColors.accentCyan,
+                    style: TextStyle(
+                      color: statusColor,
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                     ),
@@ -957,7 +972,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         Flexible(
                           child: Text(
-                            ho.ownerFullName,
+                            displayName,
                             style: TextStyle(
                               color: AppColors.textPrimary(context),
                               fontSize: 15,
@@ -970,13 +985,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: (ho.isResident ? AppColors.accentGreen : AppColors.accentOrange).withOpacity(0.12),
+                            color: statusColor.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            ho.isResident ? 'Sakin' : 'Malik',
+                            statusLabel,
                             style: TextStyle(
-                              color: ho.isResident ? AppColors.accentGreen : AppColors.accentOrange,
+                              color: statusColor,
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
                             ),
@@ -991,6 +1006,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           : '${ho.block} • Daire Atanmadı',
                       style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     ),
+                    if (isTenant && ho.ownerFullName.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Ev Sahibi: ${ho.ownerFullName} • ${ho.phone.isNotEmpty ? ho.phone : 'Tel Yok'}',
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontStyle: FontStyle.italic),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1006,9 +1029,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   Text(
-                    'Aidat',
+                    'Aidat (Operational)',
                     style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
                   ),
+                  if (ho.capitalDuesBalance > Decimal.zero) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      '₺${ho.capitalDuesBalance.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: AppColors.accentOrange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Demirbaş (Capital)',
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 9),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -1027,7 +1065,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Icon(Icons.phone_outlined, size: 13, color: AppColors.textSecondary(context)),
                         const SizedBox(width: 4),
                         Text(
-                          ho.phone.isNotEmpty ? ho.phone : 'Telefon girilmemiş',
+                          isTenant
+                              ? (ho.tenantPhone != null && ho.tenantPhone!.isNotEmpty ? ho.tenantPhone! : ho.phone)
+                              : (ho.phone.isNotEmpty ? ho.phone : 'Telefon girilmemiş'),
                           style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
                         ),
                       ],
@@ -1039,7 +1079,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
-                            ho.email.isNotEmpty ? ho.email : 'E-posta girilmemiş',
+                            isTenant
+                                ? (ho.tenantEmail != null && ho.tenantEmail!.isNotEmpty ? ho.tenantEmail! : ho.email)
+                                : (ho.email.isNotEmpty ? ho.email : 'E-posta girilmemiş'),
                             style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -1052,6 +1094,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  IconButton(
+                    icon: const Icon(Icons.history, size: 20, color: AppColors.accentCyan),
+                    tooltip: 'İkamet & Sakin Tarihçesi',
+                    onPressed: () => _showUnitOccupancyHistoryDialog(ho),
+                  ),
+                  if (!isVacant)
+                    IconButton(
+                      icon: const Icon(Icons.logout_outlined, size: 20, color: AppColors.accentOrange),
+                      tooltip: 'Sakin Ayrılışı (Move-Out)',
+                      onPressed: () => _showMoveOutDialog(ho),
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.person_add_alt, size: 20, color: AppColors.accentGreen),
+                      tooltip: 'Yeni Sakin / Giriş (Move-In)',
+                      onPressed: () => _showMoveInDialog(ho),
+                    ),
                   IconButton(
                     key: Key('delete_ho_${ho.unitId}'),
                     icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.accentRed),
@@ -1066,7 +1125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.accentCyan,
                       side: const BorderSide(color: AppColors.accentCyan),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
@@ -1075,6 +1134,407 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _showUnitOccupancyHistoryDialog(HomeOwnerItem resident) {
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => FutureBuilder<List<OccupancyHistoryItem>>(
+        future: widget.controller.fetchOccupancyHistory(resident.unitId),
+        builder: (context, snapshot) {
+          final items = snapshot.data ?? [];
+          final isLoading = snapshot.connectionState == ConnectionState.waiting;
+
+          return AppFullscreenPage(
+            title: 'Daire Sakin & İkamet Tarihçesi',
+            subtitle: '${resident.block} Daire ${resident.unitNo} • Tarihsel Hareket Kayıtları',
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accentCyan.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.history_edu, color: AppColors.accentCyan, size: 20),
+            ),
+            bottomBar: AppFullscreenPage.buildBottomBar(
+              context: ctx,
+              children: [
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary(context),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Kapat'),
+                ),
+              ],
+            ),
+            child: ListView(
+              children: [
+                if (isLoading)
+                  const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+                else if (items.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface(context),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.border(context)),
+                    ),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(Icons.person_off_outlined, size: 40, color: AppColors.textSecondary(context)),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Henüz Kayıtlı Sakin Değişikliği Yok',
+                            style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Mevcut sakin: ${resident.ownerFullName}',
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  ...items.map((h) => Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface(context),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: h.isActive ? AppColors.accentGreen : AppColors.border(context),
+                        width: h.isActive ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              h.role.toUpperCase() == 'TENANT' ? Icons.key_outlined : Icons.home_outlined,
+                              size: 18,
+                              color: h.role.toUpperCase() == 'TENANT' ? AppColors.accentGreen : AppColors.accentCyan,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                h.personName,
+                                style: TextStyle(
+                                  color: AppColors.textPrimary(context),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: (h.isActive ? AppColors.accentGreen : AppColors.textSecondary(context)).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                h.isActive ? 'Aktif' : 'Ayrıldı',
+                                style: TextStyle(
+                                  color: h.isActive ? AppColors.accentGreen : AppColors.textSecondary(context),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${h.role.toUpperCase() == 'TENANT' ? 'Kiracı (Tenant)' : 'Kat Maliki (Owner)'} • Giriş: ${h.startDate}${h.endDate != null ? ' • Çıkış: ${h.endDate}' : ''}',
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                        ),
+                        if (h.exitBalance > Decimal.zero) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Kapanış Bakiyesi: ₺${h.exitBalance.toStringAsFixed(2)} Borç',
+                            style: const TextStyle(color: AppColors.accentRed, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                        if (h.notes != null && h.notes!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Not: ${h.notes}',
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontStyle: FontStyle.italic),
+                          ),
+                        ],
+                      ],
+                    ),
+                  )),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showMoveOutDialog(HomeOwnerItem resident) {
+    final notesCtrl = TextEditingController();
+    bool isSaving = false;
+    String? errorMsg;
+
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AppFullscreenPage(
+            title: 'Sakin Ayrılışı (Move-Out / Tahliye)',
+            subtitle: '${resident.block} Daire ${resident.unitNo} • ${resident.tenantFullName ?? resident.ownerFullName}',
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accentOrange.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.logout, color: AppColors.accentOrange, size: 20),
+            ),
+            bottomBar: AppFullscreenPage.buildBottomBar(
+              context: ctx,
+              children: [
+                OutlinedButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary(context),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Vazgeç'),
+                ),
+                FilledButton.icon(
+                  onPressed: isSaving ? null : () async {
+                    setDialogState(() {
+                      isSaving = true;
+                      errorMsg = null;
+                    });
+                    final ok = await widget.controller.moveOutResident(
+                      resident.unitId,
+                      notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
+                    );
+                    if (ok && ctx.mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Sakin ayrılışı kaydedildi. Daire boş durumuna getirildi.'),
+                          backgroundColor: AppColors.accentGreen,
+                        ),
+                      );
+                    } else if (ctx.mounted) {
+                      setDialogState(() {
+                        isSaving = false;
+                        errorMsg = 'İşlem gerçekleştirilemedi.';
+                      });
+                    }
+                  },
+                  icon: isSaving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.check, size: 16),
+                  label: const Text('Tahliyeyi Onayla'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.accentOrange,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
+            child: ListView(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentOrange.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.accentOrange.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Sakin Ayrılış Bilgilendirmesi',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.accentOrange),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Bu işlem sakinin oturumunu kapatır ve daireyi "BOŞ" statüsüne alır. Sakine ait geçmiş ödemeler ve borç kayıtları tarihçede korunur, silinmez.',
+                        style: TextStyle(fontSize: 12, color: AppColors.textPrimary(context)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: notesCtrl,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Ayrılış Notu / Açıklama (Opsiyonel)',
+                    hintText: 'Örn: Kira sözleşmesi bitti, anahtar teslim alındı.',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                if (errorMsg != null) ...[
+                  const SizedBox(height: 8),
+                  Text(errorMsg!, style: const TextStyle(color: AppColors.accentRed, fontSize: 12)),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showMoveInDialog(HomeOwnerItem resident) {
+    final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    String selectedRole = 'TENANT';
+    bool isSaving = false;
+    String? errorMsg;
+
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AppFullscreenPage(
+            title: 'Yeni Sakin / Giriş (Move-In)',
+            subtitle: '${resident.block} Daire ${resident.unitNo}',
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accentGreen.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.person_add_alt_1, color: AppColors.accentGreen, size: 20),
+            ),
+            bottomBar: AppFullscreenPage.buildBottomBar(
+              context: ctx,
+              children: [
+                OutlinedButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary(context),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Vazgeç'),
+                ),
+                FilledButton.icon(
+                  onPressed: isSaving ? null : () async {
+                    if (nameCtrl.text.trim().isEmpty || emailCtrl.text.trim().isEmpty) {
+                      setDialogState(() {
+                        errorMsg = 'Ad Soyad ve E-posta alanları zorunludur.';
+                      });
+                      return;
+                    }
+                    setDialogState(() {
+                      isSaving = true;
+                      errorMsg = null;
+                    });
+                    final ok = await widget.controller.moveInResident(
+                      resident.unitId,
+                      role: selectedRole,
+                      fullName: nameCtrl.text.trim(),
+                      email: emailCtrl.text.trim(),
+                      phone: phoneCtrl.text.trim().isNotEmpty ? phoneCtrl.text.trim() : null,
+                      notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
+                    );
+                    if (ok && ctx.mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Yeni sakin başarıyla eklendi ve oturum başlatıldı.'),
+                          backgroundColor: AppColors.accentGreen,
+                        ),
+                      );
+                    } else if (ctx.mounted) {
+                      setDialogState(() {
+                        isSaving = false;
+                        errorMsg = 'Kayıt işlemi başarısız oldu.';
+                      });
+                    }
+                  },
+                  icon: isSaving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.save, size: 16),
+                  label: const Text('Kaydet & Girişi Başlat'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.accentGreen,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
+            child: ListView(
+              children: [
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'TENANT', label: Text('Kiracı (Tenant)'), icon: Icon(Icons.key)),
+                    ButtonSegment(value: 'OWNER', label: Text('Kat Maliki (Owner)'), icon: Icon(Icons.home)),
+                  ],
+                  selected: {selectedRole},
+                  onSelectionChanged: (val) {
+                    setDialogState(() {
+                      selectedRole = val.first;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Sakin Adı Soyadı *',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: emailCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'E-posta Adresi *',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Telefon Numarası',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: notesCtrl,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: 'Not / Sözleşme Detayı (Opsiyonel)',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                if (errorMsg != null) ...[
+                  const SizedBox(height: 8),
+                  Text(errorMsg!, style: const TextStyle(color: AppColors.accentRed, fontSize: 12)),
+                ],
+              ],
+            ),
+          );
+        },
       ),
     );
   }

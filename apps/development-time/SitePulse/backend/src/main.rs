@@ -66,6 +66,18 @@ async fn main() {
             put(handlers::update_home_owner).delete(handlers::delete_home_owner),
         )
         .route(
+            "/api/v1/site-admin/units/:id/move-out",
+            post(handlers::move_out_resident),
+        )
+        .route(
+            "/api/v1/site-admin/units/:id/move-in",
+            post(handlers::move_in_resident),
+        )
+        .route(
+            "/api/v1/site-admin/units/:id/occupancy-history",
+            get(handlers::get_unit_occupancy_history),
+        )
+        .route(
             "/api/v1/site-admin/house-types",
             get(handlers::get_house_types).post(handlers::create_house_type),
         )

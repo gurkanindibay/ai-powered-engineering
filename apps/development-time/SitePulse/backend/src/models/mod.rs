@@ -422,6 +422,80 @@ pub struct UpdateHomeOwnerRequest {
     pub is_resident: Option<bool>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum OccupancyStatus {
+    OwnerOccupied,
+    TenantOccupied,
+    Vacant,
+}
+
+impl Default for OccupancyStatus {
+    fn default() -> Self {
+        OccupancyStatus::OwnerOccupied
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ExpenseType {
+    OperationalDues,
+    CapitalDues,
+}
+
+impl Default for ExpenseType {
+    fn default() -> Self {
+        ExpenseType::OperationalDues
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DebtorType {
+    Tenant,
+    Owner,
+}
+
+impl Default for DebtorType {
+    fn default() -> Self {
+        DebtorType::Tenant
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MoveOutResidentRequest {
+    pub end_date: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MoveInResidentRequest {
+    pub person_id: Option<i64>,
+    pub full_name: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub role: String, // "TENANT" or "OWNER"
+    pub start_date: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OccupancyHistoryItem {
+    pub id: i64,
+    pub unit_id: i64,
+    pub person_id: i64,
+    pub person_name: String,
+    pub person_phone: Option<String>,
+    pub person_email: Option<String>,
+    pub role: String,
+    pub start_date: String,
+    pub end_date: Option<String>,
+    pub is_active: bool,
+    pub exit_balance: Decimal,
+    pub notes: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HomeOwnerResponse {
     pub unit_id: String,
@@ -440,6 +514,18 @@ pub struct HomeOwnerResponse {
     pub temporary_password: Option<String>,
     pub must_change_password: bool,
     pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub occupancy_status: Option<String>,
+    #[serde(default)]
+    pub tenant_full_name: Option<String>,
+    #[serde(default)]
+    pub tenant_email: Option<String>,
+    #[serde(default)]
+    pub tenant_phone: Option<String>,
+    #[serde(default)]
+    pub operational_dues_balance: Option<Decimal>,
+    #[serde(default)]
+    pub capital_dues_balance: Option<Decimal>,
 }
 
 // Registration Approval DTOs

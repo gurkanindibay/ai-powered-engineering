@@ -1930,6 +1930,110 @@ class DashboardController extends ChangeNotifier {
     return true;
   }
 
+  Future<bool> moveOutResident(String unitId, {String? notes}) async {
+    final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/site-admin/units/$unitId/move-out?site_id=$effectiveSiteId');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'notes': notes}),
+        ).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          await fetchHomeOwners(siteId: effectiveSiteId);
+          return true;
+        }
+      } catch (e) {
+        debugPrint('moveOutResident error: $e');
+      }
+    }
+    // Fallback locally
+    final idx = _homeOwners.indexWhere((h) => h.unitId == unitId);
+    if (idx != -1) {
+      _homeOwners[idx] = _homeOwners[idx].copyWith(
+        occupancyStatus: 'VACANT',
+        tenantFullName: null,
+        tenantEmail: null,
+        tenantPhone: null,
+      );
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> moveInResident(
+    String unitId, {
+    required String role,
+    required String fullName,
+    required String email,
+    String? phone,
+    String? notes,
+  }) async {
+    final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/site-admin/units/$unitId/move-in?site_id=$effectiveSiteId');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'role': role,
+            'full_name': fullName,
+            'email': email,
+            'phone': phone,
+            'notes': notes,
+          }),
+        ).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          await fetchHomeOwners(siteId: effectiveSiteId);
+          return true;
+        }
+      } catch (e) {
+        debugPrint('moveInResident error: $e');
+      }
+    }
+    // Fallback locally
+    final idx = _homeOwners.indexWhere((h) => h.unitId == unitId);
+    if (idx != -1) {
+      final isTenant = role.toUpperCase() == 'TENANT';
+      _homeOwners[idx] = _homeOwners[idx].copyWith(
+        occupancyStatus: isTenant ? 'TENANT_OCCUPIED' : 'OWNER_OCCUPIED',
+        tenantFullName: isTenant ? fullName : null,
+        tenantEmail: isTenant ? email : null,
+        tenantPhone: isTenant ? phone : null,
+        ownerFullName: !isTenant ? fullName : _homeOwners[idx].ownerFullName,
+      );
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  Future<List<OccupancyHistoryItem>> fetchOccupancyHistory(String unitId) async {
+    final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/site-admin/units/$unitId/occupancy-history?site_id=$effectiveSiteId');
+        final response = await http.get(url).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          final List<dynamic> list = jsonDecode(response.body);
+          return list.map((item) => OccupancyHistoryItem.fromJson(item)).toList();
+        }
+      } catch (e) {
+        debugPrint('fetchOccupancyHistory error: $e');
+      }
+    }
+    return [];
+  }
+
   Future<void> approveRegistration(String requestId) async {
     final index = _pendingRegistrations.indexWhere((r) => r.id == requestId);
     if (index == -1) return;

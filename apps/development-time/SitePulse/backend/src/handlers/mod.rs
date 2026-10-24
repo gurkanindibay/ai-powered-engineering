@@ -554,6 +554,50 @@ pub async fn delete_home_owner(
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
+pub async fn move_out_resident(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<crate::models::MoveOutResidentRequest>,
+) -> Result<Json<crate::models::OccupancyHistoryItem>, (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    service
+        .move_out_resident(&site_id, &id, payload)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+pub async fn move_in_resident(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<crate::models::MoveInResidentRequest>,
+) -> Result<Json<crate::models::OccupancyHistoryItem>, (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    service
+        .move_in_resident(&site_id, &id, payload)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+pub async fn get_unit_occupancy_history(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+) -> Result<Json<Vec<crate::models::OccupancyHistoryItem>>, (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    service
+        .get_unit_occupancy_history(&site_id, &id)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
 pub async fn get_house_types(
     State(state): State<AppState>,
     Query(q): Query<SiteIdParam>,
