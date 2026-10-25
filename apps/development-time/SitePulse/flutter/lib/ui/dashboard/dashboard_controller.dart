@@ -215,6 +215,9 @@ class DashboardController extends ChangeNotifier {
   List<HomeOwnerItem> _homeOwners = [];
   List<HomeOwnerItem> get homeOwners => _homeOwners;
 
+  final Map<String, List<OccupancyHistoryItem>> _localOccupancyHistory = {};
+  Map<String, List<OccupancyHistoryItem>> get localOccupancyHistory => _localOccupancyHistory;
+
   bool _isLoadingHomeOwners = false;
   bool get isLoadingHomeOwners => _isLoadingHomeOwners;
 
@@ -1607,6 +1610,7 @@ class DashboardController extends ChangeNotifier {
     String? houseType,
     Decimal? duesAmount,
     bool isResident = true,
+    String role = 'OWNER',
   }) async {
     final effectiveHouseType = houseType ?? '2+1';
     final matchedTariff = _houseTypes.cast<HouseTypeTariff?>().firstWhere(
@@ -1636,6 +1640,7 @@ class DashboardController extends ChangeNotifier {
             'monthly_dues': dues.toString(),
             'house_type': effectiveHouseType,
             'is_resident': isResident,
+            'role': role,
           }),
         ).timeout(const Duration(seconds: 4));
 
@@ -1658,33 +1663,38 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
-    final bool alreadyPresent = _flatsList.any((f) {
-      final b1 = f.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
-      final b2 = cleanBlock.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
-      return f.unitNo == unitNo && b1 == b2 && f.residentName.trim().toLowerCase() == ownerName.trim().toLowerCase();
-    });
+    final isTenant = role.toUpperCase() == 'TENANT';
+    final isResidentRole = role.toUpperCase() == 'RESIDENT';
 
-    if (!alreadyPresent) {
-      final newFlat = FlatPaymentStatus(
-        id: 'f-${DateTime.now().millisecondsSinceEpoch}',
-        block: cleanBlock,
-        unitNo: unitNo,
-        residentName: ownerName,
-        amountDue: dues,
-        daysOverdue: 0,
-        isPaid: false,
-        houseType: effectiveHouseType,
-      );
+    if (!isResidentRole) {
+      final bool alreadyPresent = _flatsList.any((f) {
+        final b1 = f.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
+        final b2 = cleanBlock.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
+        return f.unitNo == unitNo && b1 == b2 && f.residentName.trim().toLowerCase() == ownerName.trim().toLowerCase();
+      });
 
-      _flatsList = [newFlat, ..._flatsList];
-      if (_selectedDuesMonth.isNotEmpty) {
-        _monthlyFlats[_selectedDuesMonth] = [newFlat, ...(_monthlyFlats[_selectedDuesMonth] ?? [])];
+      if (!alreadyPresent) {
+        final newFlat = FlatPaymentStatus(
+          id: 'f-${DateTime.now().millisecondsSinceEpoch}',
+          block: cleanBlock,
+          unitNo: unitNo,
+          residentName: ownerName,
+          amountDue: dues,
+          daysOverdue: 0,
+          isPaid: false,
+          houseType: effectiveHouseType,
+        );
+
+        _flatsList = [newFlat, ..._flatsList];
+        if (_selectedDuesMonth.isNotEmpty) {
+          _monthlyFlats[_selectedDuesMonth] = [newFlat, ...(_monthlyFlats[_selectedDuesMonth] ?? [])];
+        }
+        _collectionSummary = _collectionSummary.copyWith(
+          totalUnitsCount: _collectionSummary.totalUnitsCount + 1,
+          overdueUnitsCount: _collectionSummary.overdueUnitsCount + 1,
+          totalExpected: _collectionSummary.totalExpected + dues,
+        );
       }
-      _collectionSummary = _collectionSummary.copyWith(
-        totalUnitsCount: _collectionSummary.totalUnitsCount + 1,
-        overdueUnitsCount: _collectionSummary.overdueUnitsCount + 1,
-        totalExpected: _collectionSummary.totalExpected + dues,
-      );
     }
 
     _provisionedHomeOwner = ProvisionedHomeOwnerCredentials(
@@ -1705,15 +1715,77 @@ class DashboardController extends ChangeNotifier {
       final b2 = cleanBlock.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
       return h.unitNo == unitNo && b1 == b2;
     });
+
+    final String targetUnitId = existingHoIndex != -1 ? _homeOwners[existingHoIndex].unitId : 'unit-$unitNo';
+
+    // If unit already had an occupant and we're registering a new OWNER or TENANT, archive old occupant to history
+    if (existingHoIndex != -1 && !isResidentRole) {
+      final old = _homeOwners[existingHoIndex];
+      final currentHist = _localOccupancyHistory.putIfAbsent(targetUnitId, () => []);
+      if (currentHist.isEmpty) {
+        final prevName = old.tenantFullName ?? old.ownerFullName;
+        final prevRole = old.tenantFullName != null ? 'TENANT' : 'OWNER';
+        currentHist.add(OccupancyHistoryItem(
+          id: DateTime.now().millisecondsSinceEpoch - 1000,
+          unitId: int.tryParse(targetUnitId.replaceAll(RegExp(r'[^0-9]'), '')) ?? unitNo,
+          personId: 101,
+          personName: prevName,
+          personEmail: old.tenantEmail ?? old.email,
+          personPhone: old.tenantPhone ?? old.phone,
+          role: prevRole,
+          startDate: '2026-01-01',
+          endDate: DateTime.now().toIso8601String().split('T').first,
+          isActive: false,
+          exitBalance: Decimal.zero,
+          notes: 'Devir / Yeni taşınma',
+          createdAt: DateTime.now().subtract(const Duration(days: 90)),
+        ));
+      } else {
+        _localOccupancyHistory[targetUnitId] = currentHist.map((h) {
+          if (h.isActive) {
+            return h.copyWith(
+              isActive: false,
+              endDate: DateTime.now().toIso8601String().split('T').first,
+            );
+          }
+          return h;
+        }).toList();
+      }
+
+      _localOccupancyHistory[targetUnitId]!.insert(0, OccupancyHistoryItem(
+        id: DateTime.now().millisecondsSinceEpoch,
+        unitId: int.tryParse(targetUnitId.replaceAll(RegExp(r'[^0-9]'), '')) ?? unitNo,
+        personId: 102,
+        personName: ownerName,
+        personPhone: phone,
+        personEmail: email,
+        role: role,
+        startDate: DateTime.now().toIso8601String().split('T').first,
+        endDate: null,
+        isActive: true,
+        exitBalance: Decimal.zero,
+        notes: isResident ? 'Aktif İkamet' : 'Mülk Sahibi (İkamet Etmiyor)',
+        createdAt: DateTime.now(),
+      ));
+    }
+
     final hoItem = HomeOwnerItem(
-      unitId: 'unit-$unitNo',
+      unitId: targetUnitId,
       siteId: effectiveSiteId,
       block: cleanBlock,
       unitNo: unitNo,
       floor: ((unitNo - 1) ~/ 4) + 1,
-      ownerFullName: ownerName,
+      ownerFullName: existingHoIndex != -1 && isTenant
+          ? _homeOwners[existingHoIndex].ownerFullName
+          : (isTenant ? 'Bilinmeyen Malik' : ownerName),
+      tenantFullName: isTenant
+          ? ownerName
+          : (existingHoIndex != -1 && !isResidentRole ? null : (existingHoIndex != -1 ? _homeOwners[existingHoIndex].tenantFullName : null)),
+      occupancyStatus: isTenant ? 'TENANT_OCCUPIED' : (isResident ? 'OWNER_OCCUPIED' : 'VACANT'),
       email: email,
       phone: phone,
+      tenantEmail: isTenant ? email : null,
+      tenantPhone: isTenant ? phone : null,
       landShare: '1/24',
       monthlyDues: dues,
       houseType: effectiveHouseType,
@@ -1723,9 +1795,37 @@ class DashboardController extends ChangeNotifier {
       createdAt: DateTime.now(),
     );
     if (existingHoIndex != -1) {
-      _homeOwners[existingHoIndex] = hoItem;
+      if (isResidentRole) {
+        final existingHo = _homeOwners[existingHoIndex];
+        final newMember = UnitResidentMember(
+          id: 'usr-res-${DateTime.now().millisecondsSinceEpoch}',
+          fullName: ownerName,
+          relationship: 'Ev Sakini',
+          phone: phone,
+          email: email,
+          isOwner: false,
+        );
+        final updatedResidents = List<UnitResidentMember>.from(existingHo.householdResidents)..add(newMember);
+        _homeOwners[existingHoIndex] = existingHo.copyWith(
+          householdResidents: updatedResidents,
+        );
+      } else {
+        _homeOwners[existingHoIndex] = hoItem;
+      }
     } else {
-      _homeOwners = [hoItem, ..._homeOwners];
+      if (isResidentRole) {
+        final newMember = UnitResidentMember(
+          id: 'usr-res-${DateTime.now().millisecondsSinceEpoch}',
+          fullName: ownerName,
+          relationship: 'Ev Sakini',
+          phone: phone,
+          email: email,
+          isOwner: false,
+        );
+        _homeOwners = [hoItem.copyWith(householdResidents: [newMember]), ..._homeOwners];
+      } else {
+        _homeOwners = [hoItem, ..._homeOwners];
+      }
     }
 
     notifyListeners();
@@ -1751,10 +1851,10 @@ class DashboardController extends ChangeNotifier {
           final result = <HomeOwnerItem>[];
           for (final item in list) {
             final ho = HomeOwnerItem.fromJson(item as Map<String, dynamic>);
-            final emailKey = ho.email.trim().toLowerCase();
-            final key = emailKey.isNotEmpty ? emailKey : '${ho.unitId}-${ho.ownerFullName.trim().toLowerCase()}';
+            final b = ho.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
+            final key = '$b-${ho.unitNo}';
             if (!seenKeys.add(key)) {
-              continue; // deduplicate
+              continue; // deduplicate by unit
             }
             result.add(ho);
           }
@@ -1959,6 +2059,19 @@ class DashboardController extends ChangeNotifier {
         tenantEmail: null,
         tenantPhone: null,
       );
+      final currentHist = _localOccupancyHistory[unitId];
+      if (currentHist != null) {
+        _localOccupancyHistory[unitId] = currentHist.map((h) {
+          if (h.isActive) {
+            return h.copyWith(
+              isActive: false,
+              endDate: DateTime.now().toIso8601String().split('T').first,
+              notes: notes,
+            );
+          }
+          return h;
+        }).toList();
+      }
       notifyListeners();
       return true;
     }
@@ -2009,6 +2122,34 @@ class DashboardController extends ChangeNotifier {
         tenantPhone: isTenant ? phone : null,
         ownerFullName: !isTenant ? fullName : _homeOwners[idx].ownerFullName,
       );
+
+      final currentHist = _localOccupancyHistory.putIfAbsent(unitId, () => []);
+      _localOccupancyHistory[unitId] = currentHist.map((h) {
+        if (h.isActive) {
+          return h.copyWith(
+            isActive: false,
+            endDate: DateTime.now().toIso8601String().split('T').first,
+          );
+        }
+        return h;
+      }).toList();
+
+      _localOccupancyHistory[unitId]!.insert(0, OccupancyHistoryItem(
+        id: DateTime.now().millisecondsSinceEpoch,
+        unitId: int.tryParse(unitId.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0,
+        personId: 105,
+        personName: fullName,
+        personPhone: phone,
+        personEmail: email,
+        role: role,
+        startDate: DateTime.now().toIso8601String().split('T').first,
+        endDate: null,
+        isActive: true,
+        exitBalance: Decimal.zero,
+        notes: notes,
+        createdAt: DateTime.now(),
+      ));
+
       notifyListeners();
       return true;
     }
@@ -2025,13 +2166,16 @@ class DashboardController extends ChangeNotifier {
 
         if (response.statusCode == 200) {
           final List<dynamic> list = jsonDecode(response.body);
-          return list.map((item) => OccupancyHistoryItem.fromJson(item)).toList();
+          final items = list.map((item) => OccupancyHistoryItem.fromJson(item)).toList();
+          if (items.isNotEmpty) {
+            return items;
+          }
         }
       } catch (e) {
         debugPrint('fetchOccupancyHistory error: $e');
       }
     }
-    return [];
+    return _localOccupancyHistory[unitId] ?? [];
   }
 
   Future<void> approveRegistration(String requestId) async {

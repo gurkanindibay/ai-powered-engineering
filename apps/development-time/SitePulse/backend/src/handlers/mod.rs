@@ -3143,8 +3143,12 @@ pub async fn get_site_overview(
     let mut overdue_count = 0;
 
     for unit in &matching_units {
-        let resident_name = unit.owner_user_id.as_ref().and_then(|uid| {
+        let resident_name = unit.tenant_user_id.as_ref().and_then(|uid| {
             inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone())
+        }).or_else(|| {
+            unit.owner_user_id.as_ref().and_then(|uid| {
+                inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone())
+            })
         }).or_else(|| {
             inner.unit_payer_names.get(&unit.id).and_then(|names| names.first().cloned())
         }).unwrap_or_else(|| format!("Daire Sakini {}", unit.unit_number));

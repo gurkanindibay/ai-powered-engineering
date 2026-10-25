@@ -146,6 +146,9 @@ impl SiteAdminService {
         let mut person_numeric_id = 0i64;
         let mut block_numeric_id = 1i64;
         let mut unit_numeric_id = 0i64;
+        let req_role = request.role.as_deref().unwrap_or("OWNER").to_uppercase();
+        let is_tenant = req_role == "TENANT";
+        let is_resident_only = req_role == "RESIDENT";
 
         // 2. Persist to PostgreSQL if pool is available
         if let Some(ref pool) = self.state.pool {
@@ -227,36 +230,176 @@ impl SiteAdminService {
                 .map_err(|e| format!("Failed to insert user: {}", e))?;
             user_numeric_id = user_row.get(0);
 
-            // Insert or update unit
-            let unit_row = client
-                .query_one(
-                    r#"
-                    INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, virtual_iban, house_type)
-                    VALUES ($1, $2, $3, $4, 1, $5, $6, $7)
-                    ON CONFLICT (block_id, unit_number) DO UPDATE SET
-                        site_id = EXCLUDED.site_id,
-                        floor = EXCLUDED.floor,
-                        owner_person_id = EXCLUDED.owner_person_id,
-                        virtual_iban = EXCLUDED.virtual_iban,
-                        house_type = EXCLUDED.house_type
-                    RETURNING id
-                    "#,
-                    &[
-                        &block_numeric_id,
-                        &site_numeric_id,
-                        &request.unit_no,
-                        &effective_floor,
-                        &person_numeric_id,
-                        &viban,
-                        &effective_house_type,
-                    ],
+            // Check if unit already exists
+            let existing_unit_opt = client
+                .query_opt(
+                    "SELECT id, owner_person_id, tenant_person_id, occupancy_status FROM units WHERE block_id = $1 AND unit_number = $2",
+                    &[&block_numeric_id, &request.unit_no],
                 )
                 .await
-                .map_err(|e| format!("Failed to insert unit: {}", e))?;
-            unit_numeric_id = unit_row.get(0);
+                .map_err(|e| format!("DB query error: {}", e))?;
 
-            // Insert due liability if dues > 0
-            if monthly_dues > Decimal::ZERO {
+            if let Some(existing_unit) = existing_unit_opt {
+                unit_numeric_id = existing_unit.get("id");
+                let prev_owner: Option<i64> = existing_unit.get("owner_person_id");
+                let prev_tenant: Option<i64> = existing_unit.get("tenant_person_id");
+
+                if is_resident_only {
+                    let _ = client
+                        .execute(
+                            r#"
+                            INSERT INTO unit_members (unit_id, resident_id, full_name, relationship, phone, email, is_owner, created_at)
+                            VALUES ($1, $2, $3, 'Ev Sakini', $4, $5, false, CURRENT_TIMESTAMP)
+                            "#,
+                            &[
+                                &unit_numeric_id.to_string(),
+                                &user_numeric_id.to_string(),
+                                &request.owner_full_name,
+                                &request.phone,
+                                &email_norm,
+                            ],
+                        )
+                        .await;
+                } else {
+                    // Check active occupancy in unit_occupancies
+                    let active_occ_row = client
+                        .query_opt(
+                            "SELECT id FROM unit_occupancies WHERE unit_id = $1 AND is_active = true",
+                            &[&unit_numeric_id],
+                        )
+                        .await
+                        .ok()
+                        .flatten();
+
+                    if let Some(occ_row) = active_occ_row {
+                        let occ_id: i64 = occ_row.get(0);
+                        let _ = client
+                            .execute(
+                                "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE, notes = COALESCE(notes, '') || ' • Ayrıldı (Yeni sakin devri)' WHERE id = $1",
+                                &[&occ_id],
+                            )
+                            .await;
+                    } else if let Some(prev_pid) = prev_tenant.or(prev_owner) {
+                        // Legacy occupant was not in unit_occupancies; archive it now so history is preserved
+                        let prev_role = if prev_tenant.is_some() { "TENANT" } else { "OWNER" };
+                        let _ = client
+                            .execute(
+                                r#"
+                                INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, end_date, is_active, exit_balance, notes)
+                                VALUES ($1, $2, $3, CURRENT_DATE - INTERVAL '6 months', CURRENT_DATE, false, 0.00, 'Önceki sakin (Yeni kayıt ile devredildi)')
+                                "#,
+                                &[&unit_numeric_id, &prev_pid, &prev_role],
+                            )
+                            .await;
+                    }
+
+                    // Insert new occupant into unit_occupancies
+                    let new_occ_type = if is_tenant { "TENANT" } else { "OWNER" };
+                    let new_occ_status = if is_tenant { "TENANT_OCCUPIED" } else if request.is_resident { "OWNER_OCCUPIED" } else { "VACANT" };
+                    if is_tenant || request.is_resident {
+                        let _ = client
+                            .execute(
+                                r#"
+                                INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
+                                VALUES ($1, $2, $3, CURRENT_DATE, true, 0.00, $4)
+                                "#,
+                                &[&unit_numeric_id, &person_numeric_id, &new_occ_type, &Some(format!("Yeni {} girişi", if is_tenant { "kiracı" } else { "malik" }))],
+                            )
+                            .await;
+                    }
+
+                    // Update unit with new occupant
+                    if is_tenant {
+                        let _ = client
+                            .execute(
+                                r#"
+                                UPDATE units SET
+                                    tenant_person_id = $1,
+                                    occupancy_status = $2,
+                                    house_type = COALESCE($3, house_type),
+                                    virtual_iban = COALESCE(virtual_iban, $4)
+                                WHERE id = $5
+                                "#,
+                                &[&person_numeric_id, &new_occ_status, &effective_house_type, &viban, &unit_numeric_id],
+                            )
+                            .await;
+                    } else {
+                        let _ = client
+                            .execute(
+                                r#"
+                                UPDATE units SET
+                                    owner_person_id = $1,
+                                    tenant_person_id = CASE WHEN $2 = true THEN NULL ELSE tenant_person_id END,
+                                    occupancy_status = $3,
+                                    house_type = COALESCE($4, house_type),
+                                    virtual_iban = COALESCE(virtual_iban, $5)
+                                WHERE id = $6
+                                "#,
+                                &[&person_numeric_id, &request.is_resident, &new_occ_status, &effective_house_type, &viban, &unit_numeric_id],
+                            )
+                            .await;
+                    }
+                }
+            } else {
+                // New Unit
+                let occ_status = if is_tenant { "TENANT_OCCUPIED" } else if request.is_resident { "OWNER_OCCUPIED" } else { "VACANT" };
+                let owner_pid = if is_tenant { None } else { Some(person_numeric_id) };
+                let tenant_pid = if is_tenant { Some(person_numeric_id) } else { None };
+
+                let unit_row = client
+                    .query_one(
+                        r#"
+                        INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, virtual_iban, house_type, occupancy_status)
+                        VALUES ($1, $2, $3, $4, 1, $5, $6, $7, $8, $9)
+                        RETURNING id
+                        "#,
+                        &[
+                            &block_numeric_id,
+                            &site_numeric_id,
+                            &request.unit_no,
+                            &effective_floor,
+                            &owner_pid,
+                            &tenant_pid,
+                            &viban,
+                            &effective_house_type,
+                            &occ_status,
+                        ],
+                    )
+                    .await
+                    .map_err(|e| format!("Failed to insert unit: {}", e))?;
+                unit_numeric_id = unit_row.get(0);
+                if is_resident_only {
+                    let _ = client
+                        .execute(
+                            r#"
+                            INSERT INTO unit_members (unit_id, resident_id, full_name, relationship, phone, email, is_owner, created_at)
+                            VALUES ($1, $2, $3, 'Ev Sakini', $4, $5, false, CURRENT_TIMESTAMP)
+                            "#,
+                            &[
+                                &unit_numeric_id.to_string(),
+                                &user_numeric_id.to_string(),
+                                &request.owner_full_name,
+                                &request.phone,
+                                &email_norm,
+                            ],
+                        )
+                        .await;
+                } else if is_tenant || request.is_resident {
+                    let occ_type = if is_tenant { "TENANT" } else { "OWNER" };
+                    let _ = client
+                        .execute(
+                            r#"
+                            INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
+                            VALUES ($1, $2, $3, CURRENT_DATE, true, 0.00, 'İlk sakin kaydı')
+                            "#,
+                            &[&unit_numeric_id, &person_numeric_id, &occ_type],
+                        )
+                        .await;
+                }
+            }
+
+            // Insert due liability if dues > 0 and NOT co-resident
+            if !is_resident_only && monthly_dues > Decimal::ZERO {
                 let now = Utc::now();
                 let month_name = match now.month() {
                     1 => "Ocak",
@@ -325,52 +468,104 @@ impl SiteAdminService {
             format!("blok-{}", effective_clean_block)
         };
 
-        let unit = IndependentUnit {
-            id: unit_id.clone(),
-            site_id: site_id.to_string(),
-            block_id: block_id_str,
-            unit_number: request.unit_no,
-            floor: effective_floor,
-            land_share: 1,
-            owner_user_id: Some(user_id.clone()),
-            tenant_user_id: None,
-            virtual_iban: Some(viban),
-            house_type: effective_house_type.clone(),
-        };
-
-        // Insert or update in-memory unit
-        if let Some(pos) = inner
-            .units
-            .iter()
-            .position(|u| u.id == unit.id || (u.site_id == unit.site_id && u.unit_number == unit.unit_number))
-        {
-            inner.units[pos] = unit.clone();
+        if is_resident_only {
+            let member_dto = crate::models::UnitMemberDto {
+                resident_id: user_id.clone(),
+                full_name: request.owner_full_name.clone(),
+                relationship: "Ev Sakini".to_string(),
+                phone: request.phone.clone(),
+                email: email_norm.clone(),
+                is_owner: false,
+            };
+            inner.unit_members.entry(unit_id.clone()).or_default().push(member_dto.clone());
+            if unit_numeric_id > 0 {
+                inner.unit_members.entry(unit_numeric_id.to_string()).or_default().push(member_dto.clone());
+            }
+            inner.unit_members.entry(request.unit_no.to_string()).or_default().push(member_dto.clone());
+            inner.unit_members.entry(format!("unit-{}", request.unit_no)).or_default().push(member_dto.clone());
+            inner.unit_members.entry(format!("d-{}", request.unit_no)).or_default().push(member_dto);
         } else {
-            inner.units.push(unit.clone());
+            let existing_unit_pos = inner.units.iter().position(|u| u.id == unit_id || (u.site_id == site_id && u.unit_number == request.unit_no));
+            let existing_owner_id = existing_unit_pos.and_then(|p| inner.units[p].owner_user_id.clone());
+            let existing_tenant_id = existing_unit_pos.and_then(|p| inner.units[p].tenant_user_id.clone());
+
+            let unit = IndependentUnit {
+                id: unit_id.clone(),
+                site_id: site_id.to_string(),
+                block_id: block_id_str,
+                unit_number: request.unit_no,
+                floor: effective_floor,
+                land_share: 1,
+                owner_user_id: if is_tenant { existing_owner_id } else { Some(user_id.clone()) },
+                tenant_user_id: if is_tenant { Some(user_id.clone()) } else { if request.is_resident { None } else { existing_tenant_id } },
+                virtual_iban: Some(viban),
+                house_type: effective_house_type.clone(),
+            };
+
+            // Insert or update in-memory unit
+            if let Some(pos) = existing_unit_pos {
+                inner.units[pos] = unit.clone();
+            } else {
+                inner.units.push(unit.clone());
+            }
+
+            // Add legacy alias for unit
+            let legacy_unit_id = format!("d-{}", request.unit_no);
+            if !inner.units.iter().any(|u| u.id == legacy_unit_id) {
+                let mut leg = unit.clone();
+                leg.id = legacy_unit_id.clone();
+                inner.units.push(leg);
+            }
+
+            // Register unit payer names
+            inner
+                .unit_payer_names
+                .entry(unit.id.clone())
+                .or_default()
+                .push(request.owner_full_name.clone());
+            inner
+                .unit_payer_names
+                .entry(legacy_unit_id)
+                .or_default()
+                .push(request.owner_full_name.clone());
         }
 
-        // Add legacy alias for unit
-        let legacy_unit_id = format!("d-{}", request.unit_no);
-        if !inner.units.iter().any(|u| u.id == legacy_unit_id) {
-            let mut leg = unit.clone();
-            leg.id = legacy_unit_id.clone();
-            inner.units.push(leg);
+        if !is_resident_only {
+            let occ_type = if is_tenant { "TENANT" } else { "OWNER" };
+            let history_key = unit_id.clone();
+            let history_list = inner.unit_occupancies.entry(history_key).or_default();
+            for item in history_list.iter_mut() {
+                if item.is_active {
+                    item.is_active = false;
+                    item.end_date = Some(Utc::now().date_naive().to_string());
+                    item.notes = Some(format!("{} • Ayrıldı (Yeni sakin devri)", item.notes.as_deref().unwrap_or("")));
+                }
+            }
+            if is_tenant || request.is_resident {
+                history_list.push(crate::models::OccupancyHistoryItem {
+                    id: (history_list.len() + 1) as i64,
+                    unit_id: unit_numeric_id,
+                    person_id: person_numeric_id,
+                    person_name: request.owner_full_name.clone(),
+                    person_phone: Some(request.phone.clone()),
+                    person_email: Some(email_norm.clone()),
+                    role: occ_type.to_string(),
+                    start_date: Utc::now().date_naive().to_string(),
+                    end_date: None,
+                    is_active: true,
+                    exit_balance: Decimal::ZERO,
+                    notes: Some(format!("Yeni {} kaydı", if is_tenant { "kiracı" } else { "malik" })),
+                    created_at: Utc::now(),
+                });
+            }
+            let cloned = history_list.clone();
+            inner.unit_occupancies.insert(request.unit_no.to_string(), cloned.clone());
+            inner.unit_occupancies.insert(format!("unit-{}", request.unit_no), cloned.clone());
+            inner.unit_occupancies.insert(format!("d-{}", request.unit_no), cloned);
         }
 
-        // Register unit payer names
-        inner
-            .unit_payer_names
-            .entry(unit.id.clone())
-            .or_default()
-            .push(request.owner_full_name.clone());
-        inner
-            .unit_payer_names
-            .entry(legacy_unit_id)
-            .or_default()
-            .push(request.owner_full_name.clone());
-
-        // Also add due liability in memory if > 0
-        if monthly_dues > Decimal::ZERO {
+        // Also add due liability in memory if > 0 and NOT a co-resident
+        if !is_resident_only && monthly_dues > Decimal::ZERO {
             let period = inner.dues.first().map(|d| d.period.clone()).unwrap_or_else(|| {
                 let now = Utc::now();
                 let month_name = match now.month() {
@@ -392,8 +587,8 @@ impl SiteAdminService {
             });
 
             inner.dues.push(DuesLiability {
-                id: format!("DUE-{}-{}", unit.id, Uuid::new_v4().simple()),
-                unit_id: unit.id.clone(),
+                id: format!("DUE-{}-{}", unit_id, Uuid::new_v4().simple()),
+                unit_id: unit_id.clone(),
                 period,
                 principal_amount: monthly_dues,
                 delay_penalty: Decimal::ZERO,
@@ -402,6 +597,19 @@ impl SiteAdminService {
                 status: DebtStatus::Pending,
             });
         }
+
+        let household = if is_resident_only {
+            vec![crate::models::UnitMemberDto {
+                resident_id: user_id.clone(),
+                full_name: request.owner_full_name.clone(),
+                relationship: "Ev Sakini".to_string(),
+                phone: request.phone.clone(),
+                email: email_norm.clone(),
+                is_owner: false,
+            }]
+        } else {
+            Vec::new()
+        };
 
         Ok(HomeOwnerResponse {
             unit_id,
@@ -425,6 +633,7 @@ impl SiteAdminService {
             tenant_phone: None,
             operational_dues_balance: Some(Decimal::ZERO),
             capital_dues_balance: Some(Decimal::ZERO),
+            household_residents: household,
         })
     }
 
@@ -467,6 +676,28 @@ impl SiteAdminService {
                     WHERE u.site_id = $1
                     ORDER BY b.block_name, u.unit_number
                 "#;
+                let mut household_map: std::collections::HashMap<String, Vec<crate::models::UnitMemberDto>> = std::collections::HashMap::new();
+                if let Ok(m_rows) = client
+                    .query(
+                        "SELECT unit_id, resident_id, full_name, relationship, COALESCE(phone, ''), COALESCE(email, ''), is_owner FROM unit_members ORDER BY id ASC",
+                        &[],
+                    )
+                    .await
+                {
+                    for mr in m_rows {
+                        let u_id: String = mr.get(0);
+                        let mem = crate::models::UnitMemberDto {
+                            resident_id: mr.get(1),
+                            full_name: mr.get(2),
+                            relationship: mr.get(3),
+                            phone: mr.get(4),
+                            email: mr.get(5),
+                            is_owner: mr.get(6),
+                        };
+                        household_map.entry(u_id).or_default().push(mem);
+                    }
+                }
+
                 if let Ok(rows) = client.query(query, &[&site_numeric]).await {
                     if !rows.is_empty() {
                         let mut db_result = Vec::new();
@@ -478,12 +709,7 @@ impl SiteAdminService {
                             let unit_no: i32 = r.get("unit_number");
                             let unit_id_val: String = r.get("unit_id");
 
-                            let clean_email = email.trim().to_lowercase();
-                            let dedup_key = if !clean_email.is_empty() {
-                                clean_email
-                            } else {
-                                format!("{}-{}-{}", block_name, unit_no, full_name.to_lowercase())
-                            };
+                            let dedup_key = format!("{}-{}", block_name, unit_no);
                             if !seen.insert(dedup_key) {
                                 continue;
                             }
@@ -497,6 +723,17 @@ impl SiteAdminService {
                             let t_phone: Option<String> = r.get("tenant_phone");
                             let op_balance: Decimal = r.get("operational_dues_balance");
                             let cap_balance: Decimal = r.get("capital_dues_balance");
+
+                            let mut household = household_map.get(&unit_id_val).cloned().unwrap_or_default();
+                            if household.is_empty() {
+                                household = household_map.get(&unit_no.to_string()).cloned().unwrap_or_default();
+                            }
+                            if household.is_empty() {
+                                household = household_map.get(&format!("d-{}", unit_no)).cloned().unwrap_or_default();
+                            }
+                            if household.is_empty() {
+                                household = household_map.get(&format!("unit-{}", unit_no)).cloned().unwrap_or_default();
+                            }
 
                             db_result.push(HomeOwnerResponse {
                                 unit_id: unit_id_val,
@@ -520,6 +757,7 @@ impl SiteAdminService {
                                 tenant_phone: t_phone,
                                 operational_dues_balance: Some(op_balance),
                                 capital_dues_balance: Some(cap_balance),
+                                household_residents: household,
                             });
                         }
                         if !db_result.is_empty() {
@@ -568,11 +806,7 @@ impl SiteAdminService {
                 (format!("unit-{}", user.id), "A Blok".to_string(), 1, 1)
             };
 
-            let dedup_key = if !user.email.trim().is_empty() {
-                user.email.trim().to_lowercase()
-            } else {
-                format!("{}-{}", user.id, user.full_name.to_lowercase())
-            };
+            let dedup_key = format!("{}-{}", block, unit_no);
             if !seen.insert(dedup_key) {
                 continue;
             }
@@ -583,6 +817,15 @@ impl SiteAdminService {
                 .find(|d| d.unit_id == unit_id)
                 .map(|d| d.principal_amount)
                 .unwrap_or_else(|| Decimal::from_str_exact("1400.00").unwrap());
+
+            let household = inner
+                .unit_members
+                .get(&unit_id)
+                .cloned()
+                .or_else(|| inner.unit_members.get(&unit_no.to_string()).cloned())
+                .or_else(|| inner.unit_members.get(&format!("d-{}", unit_no)).cloned())
+                .or_else(|| inner.unit_members.get(&format!("unit-{}", unit_no)).cloned())
+                .unwrap_or_default();
 
             result.push(HomeOwnerResponse {
                 unit_id,
@@ -606,6 +849,7 @@ impl SiteAdminService {
                 tenant_phone: None,
                 operational_dues_balance: Some(Decimal::ZERO),
                 capital_dues_balance: Some(Decimal::ZERO),
+                household_residents: household,
             });
         }
 
@@ -1463,10 +1707,23 @@ impl SiteAdminService {
                             notes: r.get(11),
                             created_at: r.get(12),
                         })
-                        .collect();
-                    return Ok(items);
+                        .collect::<Vec<_>>();
+                    if !items.is_empty() {
+                        return Ok(items);
+                    }
                 }
             }
+        }
+
+        let inner = self.state.inner.read().await;
+        if let Some(items) = inner
+            .unit_occupancies
+            .get(unit_id)
+            .or_else(|| inner.unit_occupancies.get(&unit_numeric.to_string()))
+            .or_else(|| inner.unit_occupancies.get(&format!("unit-{}", unit_numeric)))
+            .or_else(|| inner.unit_occupancies.get(&format!("d-{}", unit_numeric)))
+        {
+            return Ok(items.clone());
         }
         Ok(Vec::new())
     }

@@ -700,11 +700,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (_homeOwnerSearchQuery.isNotEmpty) {
         final q = _homeOwnerSearchQuery.toLowerCase();
         final matchName = ho.ownerFullName.toLowerCase().contains(q);
+        final matchTenant = (ho.tenantFullName ?? '').toLowerCase().contains(q);
+        final matchResidents = ho.householdResidents.any((r) =>
+            r.fullName.toLowerCase().contains(q) ||
+            r.phone.toLowerCase().contains(q) ||
+            r.email.toLowerCase().contains(q));
         final matchUnit = ho.unitNo.toString().contains(q);
-        final matchPhone = ho.phone.toLowerCase().contains(q);
-        final matchEmail = ho.email.toLowerCase().contains(q);
+        final matchPhone = ho.phone.toLowerCase().contains(q) || (ho.tenantPhone ?? '').toLowerCase().contains(q);
+        final matchEmail = ho.email.toLowerCase().contains(q) || (ho.tenantEmail ?? '').toLowerCase().contains(q);
         final matchBlock = ho.block.toLowerCase().contains(q);
-        return matchName || matchUnit || matchPhone || matchEmail || matchBlock;
+        return matchName || matchTenant || matchResidents || matchUnit || matchPhone || matchEmail || matchBlock;
       }
       return true;
     }).toList();
@@ -772,6 +777,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 runSpacing: 8,
                 children: [
                   ElevatedButton.icon(
+                    key: const Key('add_resident_btn'),
                     onPressed: _showAddResidentDialog,
                     icon: const Icon(Icons.person_add_outlined, size: 16),
                     label: const Text('Yeni Sakin Ekle'),
@@ -1136,6 +1142,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
+          if (ho.householdResidents.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.background(context),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border(context).withOpacity(0.6)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.group_outlined, size: 14, color: AppColors.accentCyan),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Hane Sakinleri / Birlikte Yaşayanlar (${ho.householdResidents.length})',
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ...ho.householdResidents.map((m) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: AppColors.accentCyan,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${m.fullName} • ${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
+                            style: TextStyle(
+                              color: AppColors.textSecondary(context),
+                              fontSize: 11,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -3422,6 +3485,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Default to first house type if available (e.g. 2+1 or 3+1)
     final houseTypes = widget.controller.houseTypes;
     String? selectedHouseType = houseTypes.isNotEmpty ? houseTypes.first.typeName : null;
+    String selectedRole = 'OWNER';
+    bool isResidentOwner = true;
     String? emailError;
     String? phoneError;
     String? generalError;
@@ -3461,7 +3526,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           return AppFullscreenPage(
             title: 'Yeni Daire / Sakin Ekle',
-            subtitle: 'Siteye bağımsız bölüm ve malik kaydı (Konut tipine göre aidat)',
+            subtitle: 'Siteye bağımsız bölüm ve sakin kaydı (Rol, konut tipi ve aidat)',
             icon: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
@@ -3483,7 +3548,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     setDialogState(() {
                       emailError = null;
                       phoneError = null;
@@ -3543,8 +3608,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       return;
                     }
 
+                    // Check if unit already has an occupant:
+                    // If adding a new OWNER or TENANT (not RESIDENT), confirm moving/archiving the older occupant!
+                    if (selectedRole != 'RESIDENT') {
+                      final cleanB = selectedBlock!.replaceAll('Blok', '').trim();
+                      final existing = widget.controller.homeOwners.cast<HomeOwnerItem?>().firstWhere(
+                        (h) {
+                          if (h == null) return false;
+                          final b1 = h.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
+                          final b2 = cleanB.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
+                          return h.unitNo == parsedUnit && b1 == b2;
+                        },
+                        orElse: () => null,
+                      );
+
+                      if (existing != null) {
+                        final existingName = existing.tenantFullName ?? existing.ownerFullName;
+                        final roleLabel = selectedRole == 'OWNER' ? 'Kat Maliki' : 'Kiracı';
+                        final confirmed = await AppFullscreenPage.pushConfirmation(
+                          context: ctx,
+                          title: 'Yeni $roleLabel Atama Onayı',
+                          message: '${selectedBlock!} Daire $parsedUnit için halihazırda kayıtlı sakin: "$existingName".\n\n'
+                                   'Yeni $roleLabel atandığında mevcut sakin tahliye edilmiş olarak geçmişe arşivlenecek ve yeni $roleLabel aktif sakin olarak sisteme işlenecektir.\n\n'
+                                   'Bu işlemi onaylıyor musunuz?',
+                          confirmLabel: 'Evet, Yeni $roleLabel Ata',
+                          cancelLabel: 'Vazgeç',
+                          confirmColor: AppColors.accentCyan,
+                          icon: Icons.swap_horiz_rounded,
+                          iconColor: AppColors.accentCyan,
+                        );
+
+                        if (confirmed != true) {
+                          return;
+                        }
+                      }
+                    }
+
+                    if (!ctx.mounted) return;
                     Navigator.pop(ctx);
-                    widget.controller.registerHomeOwner(
+                    await widget.controller.registerHomeOwner(
                       block: selectedBlock!,
                       unitNo: parsedUnit,
                       ownerName: ownerName,
@@ -3552,6 +3654,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       phone: phoneText,
                       houseType: selectedHouseType,
                       duesAmount: currentTariff?.duesAmount ?? Decimal.zero,
+                      isResident: selectedRole == 'OWNER' ? isResidentOwner : true,
+                      role: selectedRole,
                     );
                   },
                   style: ElevatedButton.styleFrom(
@@ -3590,6 +3694,136 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                 ],
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface(context),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border(context)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.badge_outlined, size: 18, color: AppColors.accentCyan),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Kişi Rolü & Statüsü',
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<String>(
+                          key: const Key('add_resident_role_selector'),
+                          segments: const [
+                            ButtonSegment<String>(
+                              value: 'OWNER',
+                              label: Text('Kat Maliki'),
+                              icon: Icon(Icons.vpn_key_outlined, size: 16),
+                            ),
+                            ButtonSegment<String>(
+                              value: 'TENANT',
+                              label: Text('Kiracı'),
+                              icon: Icon(Icons.key, size: 16),
+                            ),
+                            ButtonSegment<String>(
+                              value: 'RESIDENT',
+                              label: Text('Ev Sakini'),
+                              icon: Icon(Icons.family_restroom, size: 16),
+                            ),
+                          ],
+                          selected: {selectedRole},
+                          onSelectionChanged: (newSelection) {
+                            setDialogState(() {
+                              selectedRole = newSelection.first;
+                            });
+                          },
+                        ),
+                      ),
+                      if (selectedRole == 'OWNER') ...[
+                        const SizedBox(height: 8),
+                        Material(
+                          color: Colors.transparent,
+                          child: SwitchListTile(
+                            key: const Key('add_resident_is_resident_switch'),
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                            title: Text(
+                              'Dairede kendisi ikamet ediyor mu?',
+                              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                            subtitle: Text(
+                              isResidentOwner
+                                  ? 'Malik oturuyor (Fiili sakin olarak aidat sorumlusu)'
+                                  : 'Evde oturmuyor (Yalnızca mülk sahibi / demirbaş sorumlusu)',
+                              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            ),
+                            value: isResidentOwner,
+                            activeThumbColor: AppColors.accentGreen,
+                            onChanged: (val) {
+                              setDialogState(() {
+                                isResidentOwner = val;
+                              });
+                            },
+                          ),
+                        ),
+                      ] else if (selectedRole == 'TENANT') ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentGreen.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline, size: 15, color: AppColors.accentGreen),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Kiracı olarak kaydedilir. Aidat (işletme) borçları kiracıya, demirbaş (yatırım) borçları kat malikine yansıtılır.',
+                                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else if (selectedRole == 'RESIDENT') ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentPurple.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.accentPurple.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.family_restroom, size: 15, color: AppColors.accentPurple),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Hane sakini olarak eklenir. Kat maliki ve kiracı kaydını değiştirmez, taşınma onayı gerekmez.',
+                                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
                 Row(
                   children: [
                     Expanded(
@@ -3686,6 +3920,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                   decoration: InputDecoration(
                     labelText: 'Ad Soyad',
+                    helperText: selectedRole == 'OWNER'
+                        ? 'Kat Maliki'
+                        : (selectedRole == 'TENANT' ? 'Kiracı' : 'Ev Sakini'),
                     labelStyle: TextStyle(color: AppColors.textSecondary(context)),
                     filled: true,
                     fillColor: AppColors.card(context),

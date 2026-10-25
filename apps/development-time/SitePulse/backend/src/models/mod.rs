@@ -409,6 +409,8 @@ pub struct RegisterHomeOwnerRequest {
     #[serde(default)]
     pub house_type: Option<String>,
     pub is_resident: bool,
+    #[serde(default)]
+    pub role: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -526,6 +528,8 @@ pub struct HomeOwnerResponse {
     pub operational_dues_balance: Option<Decimal>,
     #[serde(default)]
     pub capital_dues_balance: Option<Decimal>,
+    #[serde(default)]
+    pub household_residents: Vec<UnitMemberDto>,
 }
 
 // Registration Approval DTOs

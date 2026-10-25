@@ -770,7 +770,22 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
                 house_type,
             };
 
-            // Register unit payer names
+            // Register unit payer names (tenant takes precedence as primary resident payer if present, else owner)
+            let primary_pid = tenant_person_id.or(owner_person_id);
+            if let Some(p_id) = primary_pid {
+                let p_str = p_id.to_string();
+                let legacy_p = format!("kisi-0{}", p_id);
+                if let Some(p) = state.users.iter().find(|u| u.id == p_str || u.id == legacy_p) {
+                    let entry = state.unit_payer_names.entry(unit.id.clone()).or_default();
+                    if !entry.contains(&p.full_name) {
+                        entry.insert(0, p.full_name.clone());
+                    }
+                    let legacy_entry = state.unit_payer_names.entry(format!("d-{}", unit_number)).or_default();
+                    if !legacy_entry.contains(&p.full_name) {
+                        legacy_entry.insert(0, p.full_name.clone());
+                    }
+                }
+            }
             if let Some(o_id) = owner_person_id {
                 let o_str = o_id.to_string();
                 let legacy_o = format!("kisi-0{}", o_id);
@@ -1159,7 +1174,20 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
             };
             let list = state.unit_members.entry(unit_id.clone()).or_default();
             if !list.iter().any(|m| m.resident_id == member.resident_id) {
-                list.push(member);
+                list.push(member.clone());
+            }
+            let clean_num: String = unit_id.chars().filter(|c| c.is_ascii_digit()).collect();
+            if !clean_num.is_empty() {
+                let d_key = format!("d-{}", clean_num);
+                let u_key = format!("unit-{}", clean_num);
+                let list_d = state.unit_members.entry(d_key).or_default();
+                if !list_d.iter().any(|m| m.resident_id == member.resident_id) {
+                    list_d.push(member.clone());
+                }
+                let list_u = state.unit_members.entry(u_key).or_default();
+                if !list_u.iter().any(|m| m.resident_id == member.resident_id) {
+                    list_u.push(member.clone());
+                }
             }
         }
         info!("Loaded unit members for {} units from PostgreSQL", state.unit_members.len());

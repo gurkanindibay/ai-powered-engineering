@@ -216,5 +216,192 @@ void main() {
 
       expect(find.text('Sakin Ayrılışı (Move-Out / Tahliye)'), findsNothing);
     });
+
+    testWidgets('Adding new tenant to existing unit shows confirmation modal and preserves older occupant in history', (tester) async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      final initialHo = controller.homeOwners.first;
+      final existingName = initialHo.tenantFullName ?? initialHo.ownerFullName;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DashboardScreen(controller: controller),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final yonetimTab = find.text('Yönetim');
+      await tester.tap(yonetimTab);
+      await tester.pumpAndSettle();
+
+      // Tap "Yeni Sakin Ekle"
+      final addBtn = find.byKey(const Key('add_resident_btn'));
+      expect(addBtn, findsOneWidget);
+      await tester.tap(addBtn);
+      await tester.pumpAndSettle();
+
+      // Form opens: verify role selector is present
+      final roleSelector = find.byKey(const Key('add_resident_role_selector'));
+      expect(roleSelector, findsOneWidget);
+      expect(find.descendant(of: roleSelector, matching: find.text('Kat Maliki')), findsOneWidget);
+      expect(find.descendant(of: roleSelector, matching: find.text('Kiracı')), findsOneWidget);
+      expect(find.descendant(of: roleSelector, matching: find.text('Ev Sakini')), findsOneWidget);
+
+      // Select "Kiracı"
+      await tester.tap(find.descendant(of: roleSelector, matching: find.text('Kiracı')));
+      await tester.pumpAndSettle();
+
+      // Enter unit number matching existing unit
+      final textFields = find.byType(TextField);
+      await tester.enterText(textFields.at(0), initialHo.unitNo.toString());
+      await tester.enterText(textFields.at(1), 'Mehmet Öz');
+      await tester.enterText(textFields.at(2), 'mehmet@example.com');
+      await tester.enterText(textFields.at(3), '05559876543');
+      await tester.pumpAndSettle();
+
+      // Submit form
+      final submitBtn = find.text('Kaydet & Şifre Üret');
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      // Confirmation modal MUST be shown because unit is already occupied and role is Kiracı!
+      expect(find.text('Yeni Kiracı Atama Onayı'), findsOneWidget);
+      expect(find.textContaining('halihazırda kayıtlı sakin: "$existingName"'), findsOneWidget);
+
+      // Confirm assignment
+      final confirmBtn = find.text('Evet, Yeni Kiracı Ata');
+      expect(confirmBtn, findsOneWidget);
+      await tester.tap(confirmBtn);
+      await tester.pumpAndSettle();
+
+      // Modal closed, unit updated
+      final updatedHo = controller.homeOwners.firstWhere((h) => h.unitId == initialHo.unitId);
+      expect(updatedHo.tenantFullName, 'Mehmet Öz');
+
+      // Now open history for this unit:
+      final history = await controller.fetchOccupancyHistory(initialHo.unitId);
+      expect(history.length, greaterThanOrEqualTo(2));
+      expect(history.any((h) => h.personName == 'Mehmet Öz' && h.isActive), isTrue);
+      expect(history.any((h) => h.personName == existingName && !h.isActive), isTrue);
+    });
+
+    testWidgets('Adding RESIDENT to existing unit does NOT show move-out confirmation modal', (tester) async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      final initialHo = controller.homeOwners.first;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DashboardScreen(controller: controller),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final yonetimTab = find.text('Yönetim');
+      await tester.tap(yonetimTab);
+      await tester.pumpAndSettle();
+
+      // Tap "Yeni Sakin Ekle"
+      final addBtn = find.byKey(const Key('add_resident_btn'));
+      await tester.tap(addBtn);
+      await tester.pumpAndSettle();
+
+      // Select "Ev Sakini"
+      await tester.tap(find.text('Ev Sakini'));
+      await tester.pumpAndSettle();
+
+      // Explanatory banner visible
+      expect(find.textContaining('Hane sakini olarak eklenir'), findsOneWidget);
+
+      // Enter unit number matching existing unit
+      final textFields = find.byType(TextField);
+      await tester.enterText(textFields.at(0), initialHo.unitNo.toString());
+      await tester.enterText(textFields.at(1), 'Ali Kaya');
+      await tester.enterText(textFields.at(2), 'ali@example.com');
+      await tester.enterText(textFields.at(3), '05553332211');
+      await tester.pumpAndSettle();
+
+      // Submit form
+      final submitBtn = find.text('Kaydet & Şifre Üret');
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      // Confirmation modal MUST NOT be shown for RESIDENT!
+      expect(find.text('Yeni Kat Maliki Atama Onayı'), findsNothing);
+      expect(find.text('Yeni Kiracı Atama Onayı'), findsNothing);
+    });
+
+    testWidgets('Adding RESIDENT to unit attaches them to householdResidents and does NOT add separate flat in Aidat Takibi', (tester) async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      final initialFlatsCount = controller.flatsList.length;
+      final targetHo = controller.homeOwners.firstWhere((h) => h.block.contains('A') && h.unitNo == 14, orElse: () => controller.homeOwners.firstWhere((h) => h.block.contains('A')));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DashboardScreen(controller: controller),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final yonetimTab = find.text('Yönetim');
+      await tester.tap(yonetimTab);
+      await tester.pumpAndSettle();
+
+      // Tap "Yeni Sakin Ekle"
+      final addBtn = find.byKey(const Key('add_resident_btn'));
+      await tester.tap(addBtn);
+      await tester.pumpAndSettle();
+
+      // Select "Ev Sakini"
+      await tester.tap(find.text('Ev Sakini'));
+      await tester.pumpAndSettle();
+
+      // Fill form with co-resident "Sakin Kardeş"
+      final textFields = find.byType(TextField);
+      await tester.enterText(textFields.at(0), targetHo.unitNo.toString());
+      await tester.enterText(textFields.at(1), 'Sakin Kardeş');
+      await tester.enterText(textFields.at(2), 'sakin@example.com');
+      await tester.enterText(textFields.at(3), '05559998877');
+      await tester.pumpAndSettle();
+
+      // Submit form
+      final submitBtn = find.text('Kaydet & Şifre Üret');
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      // Dismiss provisioned credentials dialog if displayed
+      final tamamBtn = find.text('Tamam');
+      if (tamamBtn.evaluate().isNotEmpty) {
+        await tester.tap(tamamBtn);
+        await tester.pumpAndSettle();
+      }
+
+      // Verify that co-resident was NOT added to flatsList (Aidat Takibi ledger)
+      expect(controller.flatsList.length, equals(initialFlatsCount));
+
+      // Verify co-resident is attached under householdResidents on targetHo
+      final updatedHo = controller.homeOwners.firstWhere((h) => h.unitId == targetHo.unitId);
+      expect(updatedHo.householdResidents.any((r) => r.fullName == 'Sakin Kardeş'), isTrue);
+
+      // Verify co-resident is rendered on unit card in Sakinler & Malikler screen
+      expect(find.textContaining('Hane Sakinleri / Birlikte Yaşayanlar'), findsOneWidget);
+      expect(find.textContaining('Sakin Kardeş'), findsOneWidget);
+    });
   });
 }

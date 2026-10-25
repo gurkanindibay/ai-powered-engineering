@@ -414,11 +414,37 @@ class UnitResidentMember {
     required this.id,
     required this.fullName,
     required this.relationship,
-    required this.phone,
-    required this.email,
-    required this.isOwner,
-    required this.permissionScope,
+    this.phone = '',
+    this.email = '',
+    this.isOwner = false,
+    this.permissionScope = 'Sakin Yetkisi',
   });
+
+  String get residentId => id;
+
+  factory UnitResidentMember.fromJson(Map<String, dynamic> json) {
+    return UnitResidentMember(
+      id: json['resident_id']?.toString() ?? json['id']?.toString() ?? '',
+      fullName: json['full_name']?.toString() ?? json['fullName']?.toString() ?? '',
+      relationship: json['relationship']?.toString() ?? 'Ev Sakini',
+      phone: json['phone']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      isOwner: json['is_owner'] as bool? ?? json['isOwner'] as bool? ?? false,
+      permissionScope: json['permission_scope']?.toString() ?? json['permissionScope']?.toString() ?? 'Sakin Yetkisi',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'resident_id': id,
+      'full_name': fullName,
+      'relationship': relationship,
+      'phone': phone,
+      'email': email,
+      'is_owner': isOwner,
+      'permission_scope': permissionScope,
+    };
+  }
 }
 
 class UnitInviteInfo {
@@ -529,6 +555,7 @@ class HomeOwnerItem {
   final String? tenantFullName;
   final String? tenantEmail;
   final String? tenantPhone;
+  final List<UnitResidentMember> householdResidents;
   final Decimal? _operationalDuesBalance;
   Decimal get operationalDuesBalance => _operationalDuesBalance ?? Decimal.zero;
   final Decimal? _capitalDuesBalance;
@@ -554,6 +581,7 @@ class HomeOwnerItem {
     this.tenantFullName,
     this.tenantEmail,
     this.tenantPhone,
+    this.householdResidents = const [],
     Decimal? operationalDuesBalance,
     Decimal? capitalDuesBalance,
   }) : _operationalDuesBalance = operationalDuesBalance,
@@ -582,6 +610,10 @@ class HomeOwnerItem {
       tenantFullName: json['tenant_full_name']?.toString(),
       tenantEmail: json['tenant_email']?.toString(),
       tenantPhone: json['tenant_phone']?.toString(),
+      householdResidents: (json['household_residents'] as List<dynamic>?)
+              ?.map((m) => UnitResidentMember.fromJson(m as Map<String, dynamic>))
+              .toList() ??
+          const [],
       operationalDuesBalance: Decimal.tryParse(json['operational_dues_balance']?.toString() ?? '0') ?? Decimal.zero,
       capitalDuesBalance: Decimal.tryParse(json['capital_dues_balance']?.toString() ?? '0') ?? Decimal.zero,
     );
@@ -607,6 +639,7 @@ class HomeOwnerItem {
     String? tenantFullName,
     String? tenantEmail,
     String? tenantPhone,
+    List<UnitResidentMember>? householdResidents,
     Decimal? operationalDuesBalance,
     Decimal? capitalDuesBalance,
   }) {
@@ -630,6 +663,7 @@ class HomeOwnerItem {
       tenantFullName: tenantFullName ?? this.tenantFullName,
       tenantEmail: tenantEmail ?? this.tenantEmail,
       tenantPhone: tenantPhone ?? this.tenantPhone,
+      householdResidents: householdResidents ?? this.householdResidents,
       operationalDuesBalance: operationalDuesBalance ?? this.operationalDuesBalance,
       capitalDuesBalance: capitalDuesBalance ?? this.capitalDuesBalance,
     );
@@ -656,6 +690,7 @@ class HomeOwnerItem {
       'tenant_full_name': tenantFullName,
       'tenant_email': tenantEmail,
       'tenant_phone': tenantPhone,
+      'household_residents': householdResidents.map((m) => m.toJson()).toList(),
       'operational_dues_balance': operationalDuesBalance.toString(),
       'capital_dues_balance': capitalDuesBalance.toString(),
     };
@@ -710,6 +745,38 @@ class OccupancyHistoryItem {
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
+    );
+  }
+
+  OccupancyHistoryItem copyWith({
+    int? id,
+    int? unitId,
+    int? personId,
+    String? personName,
+    String? personPhone,
+    String? personEmail,
+    String? role,
+    String? startDate,
+    String? endDate,
+    bool? isActive,
+    Decimal? exitBalance,
+    String? notes,
+    DateTime? createdAt,
+  }) {
+    return OccupancyHistoryItem(
+      id: id ?? this.id,
+      unitId: unitId ?? this.unitId,
+      personId: personId ?? this.personId,
+      personName: personName ?? this.personName,
+      personPhone: personPhone ?? this.personPhone,
+      personEmail: personEmail ?? this.personEmail,
+      role: role ?? this.role,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      isActive: isActive ?? this.isActive,
+      exitBalance: exitBalance ?? this.exitBalance,
+      notes: notes ?? this.notes,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }

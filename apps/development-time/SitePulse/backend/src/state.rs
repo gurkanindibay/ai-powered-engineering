@@ -40,6 +40,7 @@ pub struct AppStateInner {
     pub kuveyt_turk_client_id: Option<String>,
     pub kuveyt_turk_client_secret: Option<String>,
     pub auto_scheduler_enabled: bool,
+    pub unit_occupancies: HashMap<String, Vec<crate::models::OccupancyHistoryItem>>,
 }
 
 impl AppStateInner {
@@ -66,6 +67,7 @@ impl AppStateInner {
             kuveyt_turk_client_id: std::env::var("KT_CLIENT_ID").ok(),
             kuveyt_turk_client_secret: std::env::var("KT_CLIENT_SECRET").ok(),
             auto_scheduler_enabled: false,
+            unit_occupancies: HashMap::new(),
         };
         inner.seed_system_lookups();
         if Self::should_seed_test_fixtures() {
@@ -273,6 +275,41 @@ impl AppStateInner {
             "TR120006200000000000000001".to_string(),
             (Some("Garanti BBVA - Maaş Hesabı".to_string()), Some("Garanti BBVA".to_string())),
         );
+
+        let initial_history = vec![
+            crate::models::OccupancyHistoryItem {
+                id: 1,
+                unit_id: 14,
+                person_id: 1,
+                person_name: "Ahmet Yılmaz".to_string(),
+                person_phone: Some("+90 532 111 22 33".to_string()),
+                person_email: Some("ahmet.yilmaz@begonya.com".to_string()),
+                role: "OWNER".to_string(),
+                start_date: "2025-01-01".to_string(),
+                end_date: Some("2026-01-01".to_string()),
+                is_active: false,
+                exit_balance: Decimal::ZERO,
+                notes: Some("Ev sahibi taşındı, kiraya verildi".to_string()),
+                created_at: Utc::now(),
+            },
+            crate::models::OccupancyHistoryItem {
+                id: 2,
+                unit_id: 14,
+                person_id: 2,
+                person_name: "Zeynep Kaya".to_string(),
+                person_phone: Some("+90 542 333 44 55".to_string()),
+                person_email: Some("zeynep@example.com".to_string()),
+                role: "TENANT".to_string(),
+                start_date: "2026-01-01".to_string(),
+                end_date: None,
+                is_active: true,
+                exit_balance: Decimal::ZERO,
+                notes: Some("Aktif kiracı (Zeynep Kaya)".to_string()),
+                created_at: Utc::now(),
+            },
+        ];
+        self.unit_occupancies.insert("d-14".to_string(), initial_history.clone());
+        self.unit_occupancies.insert("14".to_string(), initial_history);
 
         // Seed September 2026 Dues only when actively executing cargo test suites
         let is_running_test = cfg!(test) || std::env::current_exe().map(|exe| {

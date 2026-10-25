@@ -110,6 +110,7 @@ async fn when_registering_home_owner_then_provisions_user_with_resident_password
         monthly_dues: Some(Decimal::from_str_exact("1400.00").unwrap()),
         house_type: Some("2+1".to_string()),
         is_resident: true,
+        role: None,
     };
 
     let res = service.register_home_owner("site-1", req).await.expect("Registration failed");
@@ -134,6 +135,7 @@ async fn when_duplicate_email_for_home_owner_then_throws_exception() {
         monthly_dues: None,
         house_type: Some("3+1".to_string()),
         is_resident: true,
+        role: None,
     };
 
     let res = service.register_home_owner("site-1", req).await;
@@ -1790,6 +1792,7 @@ async fn when_invalid_email_or_phone_then_registration_rejected_with_validation_
         monthly_dues: None,
         house_type: Some("2+1".to_string()),
         is_resident: true,
+        role: None,
     };
     let res = service.register_home_owner("site-1", invalid_email_req).await;
     assert!(res.is_err());
@@ -1807,6 +1810,7 @@ async fn when_invalid_email_or_phone_then_registration_rejected_with_validation_
         monthly_dues: None,
         house_type: Some("2+1".to_string()),
         is_resident: true,
+        role: None,
     };
     let res = service.register_home_owner("site-1", invalid_phone_req).await;
     assert!(res.is_err());
@@ -1830,6 +1834,7 @@ async fn when_house_type_selected_then_sets_monthly_dues_from_tariff() {
         monthly_dues: None, // No manual dues provided; should auto-resolve from 3+1
         house_type: Some("3+1".to_string()),
         is_resident: true,
+        role: None,
     };
 
     let res = service.register_home_owner("site-1", req).await.expect("Registration should succeed");
@@ -1991,6 +1996,7 @@ async fn when_managing_home_owners_then_can_delete_home_owner() {
         monthly_dues: Some(rust_decimal::Decimal::new(1400, 0)),
         house_type: Some("2+1".to_string()),
         is_resident: true,
+        role: None,
     };
     let created = service.register_home_owner("site-1", reg_req).await.unwrap();
 
@@ -2030,6 +2036,7 @@ async fn when_managing_occupancy_lifecycle_then_can_move_out_and_move_in_without
         monthly_dues: None,
         land_share: None,
         is_resident: true,
+        role: None,
     };
 
     let created = service.register_home_owner("site-1", reg_req).await.unwrap();
@@ -2065,4 +2072,137 @@ async fn when_managing_occupancy_lifecycle_then_can_move_out_and_move_in_without
         assert!(!history.is_empty());
         assert!(history.iter().any(|h| h.person_name == "Şener Şen"));
     }
+}
+
+#[tokio::test]
+async fn when_registering_new_owner_or_tenant_to_existing_unit_then_archives_previous_occupant_in_history() {
+    let state = AppState::new();
+    let service = sitepulse_backend::services::SiteAdminService::new(state.clone());
+
+    // 1. Register initial owner
+    let req1 = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        block: "C Blok".to_string(),
+        unit_no: 10,
+        floor: 2,
+        owner_full_name: "Kemal Sunal".to_string(),
+        phone: "0555 111 22 33".to_string(),
+        email: "kemal.sunal@sitepulse.io".to_string(),
+        land_share: None,
+        monthly_dues: None,
+        house_type: None,
+        is_resident: true,
+        role: Some("OWNER".to_string()),
+    };
+    let owner = service.register_home_owner("site-1", req1).await.unwrap();
+
+    // Verify initial occupancy history has Kemal Sunal as active
+    let hist1 = service.get_unit_occupancy_history("site-1", &owner.unit_id).await.unwrap();
+    assert_eq!(hist1.len(), 1);
+    assert_eq!(hist1[0].person_name, "Kemal Sunal");
+    assert!(hist1[0].is_active);
+
+    // 2. Register a new tenant to the same unit
+    let req2 = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        block: "C Blok".to_string(),
+        unit_no: 10,
+        floor: 2,
+        owner_full_name: "Halit Akçatepe".to_string(),
+        phone: "0555 222 33 44".to_string(),
+        email: "halit@sitepulse.io".to_string(),
+        land_share: None,
+        monthly_dues: None,
+        house_type: None,
+        is_resident: true,
+        role: Some("TENANT".to_string()),
+    };
+    let tenant = service.register_home_owner("site-1", req2).await.unwrap();
+    assert_eq!(tenant.unit_id, owner.unit_id);
+
+    // 3. Verify history now has 2 entries: Kemal Sunal is inactive (archived), Halit Akçatepe is active
+    let hist2 = service.get_unit_occupancy_history("site-1", &owner.unit_id).await.unwrap();
+    assert_eq!(hist2.len(), 2);
+    let previous = hist2.iter().find(|h| h.person_name == "Kemal Sunal").unwrap();
+    assert!(!previous.is_active);
+    assert!(previous.end_date.is_some());
+
+    let current = hist2.iter().find(|h| h.person_name == "Halit Akçatepe").unwrap();
+    assert!(current.is_active);
+    assert_eq!(current.role, "TENANT");
+}
+
+#[tokio::test]
+async fn when_registering_co_resident_then_attached_to_household_and_does_not_alter_dues_primary_payer() {
+    let state = AppState::new();
+    let service = SiteAdminService::new(state.clone());
+
+    // 1. Register owner for unit 14
+    let owner_req = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        block: "A Blok".to_string(),
+        unit_no: 14,
+        floor: 4,
+        owner_full_name: "Yeni Ev Sahibi".to_string(),
+        phone: "0531 111 22 33".to_string(),
+        email: "evsahibi14@sitepulse.io".to_string(),
+        land_share: None,
+        monthly_dues: Some(Decimal::from(1400)),
+        house_type: Some("2+1".to_string()),
+        is_resident: false,
+        role: Some("OWNER".to_string()),
+    };
+    service.register_home_owner("site-1", owner_req).await.unwrap();
+
+    // 2. Register tenant (primary contact living there)
+    let tenant_req = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        block: "A Blok".to_string(),
+        unit_no: 14,
+        floor: 4,
+        owner_full_name: "Canan Can".to_string(),
+        phone: "0533 111 22 33".to_string(),
+        email: "canan14@sitepulse.io".to_string(),
+        land_share: None,
+        monthly_dues: None,
+        house_type: None,
+        is_resident: true,
+        role: Some("TENANT".to_string()),
+    };
+    service.register_home_owner("site-1", tenant_req).await.unwrap();
+
+    // 3. Register co-resident (Ev Sakini) to unit 14
+    let resident_req = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        block: "A Blok".to_string(),
+        unit_no: 14,
+        floor: 4,
+        owner_full_name: "Sakin Kardeş".to_string(),
+        phone: "0531 465 65 65".to_string(),
+        email: "sakin14@sitepulse.io".to_string(),
+        land_share: None,
+        monthly_dues: None,
+        house_type: None,
+        is_resident: true,
+        role: Some("RESIDENT".to_string()),
+    };
+    service.register_home_owner("site-1", resident_req).await.unwrap();
+
+    // 4. Verify in get_home_owners_for_site:
+    // Unit 14 has owner, tenant, and household_residents containing "Sakin Kardeş"
+    let owners = service.get_home_owners_for_site("site-1").await;
+    let u14 = owners.iter().find(|o| o.unit_no == 14).expect("Unit 14 must exist");
+    assert!(u14.household_residents.iter().any(|m| m.full_name == "Sakin Kardeş" && m.relationship == "Ev Sakini"));
+
+    // 5. Verify in get_site_overview:
+    // Flat in overview shows Canan Can as primary resident_name (NOT Sakin Kardeş, and not duplicated)
+    let overview_resp = sitepulse_backend::handlers::get_site_overview(
+        axum::extract::State(state.clone()),
+        axum::extract::Query(sitepulse_backend::models::SiteOverviewQuery {
+            site_id: Some("site-1".to_string()),
+            period: None,
+        }),
+    ).await.into_response();
+    assert_eq!(overview_resp.status(), axum::http::StatusCode::OK);
+
+    let overview_body = axum::body::to_bytes(overview_resp.into_body(), usize::MAX).await.unwrap();
+    let overview_json: serde_json::Value = serde_json::from_slice(&overview_body).unwrap();
+    let flats = overview_json["flats"].as_array().expect("flats must be array");
+    let f14 = flats.iter().find(|f| f["unit_no"] == 14).expect("Flat 14 must be in overview");
+    assert_eq!(f14["resident_name"], "Canan Can");
 }
