@@ -743,6 +743,20 @@ pub async fn get_unit_members(
     Json(service.get_unit_members(&unit_id).await)
 }
 
+pub async fn delete_unit_member(
+    State(state): State<AppState>,
+    Path((unit_id, resident_id)): Path<(String, String)>,
+    Query(q): Query<SiteIdParam>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    service
+        .delete_unit_member(&site_id, &unit_id, &resident_id)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
 // 7. Health Check
 pub async fn health_check() -> impl IntoResponse {
     (

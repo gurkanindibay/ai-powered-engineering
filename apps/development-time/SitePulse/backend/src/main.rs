@@ -102,6 +102,7 @@ async fn main() {
         )
         .route("/api/v1/home-residents/register", post(handlers::register_home_resident))
         .route("/api/v1/home-residents/members/:unit_id", get(handlers::get_unit_members))
+        .route("/api/v1/home-residents/members/:unit_id/:resident_id", delete(handlers::delete_unit_member))
         // Bank Statement Ingestion & Automated Reconciliation (STORY-07-02)
         .route("/api/v1/bank/statements/parse", post(handlers::parse_bank_statement))
         .route("/api/v1/bank/statements/reconciliation-queue", get(handlers::get_reconciliation_queue))

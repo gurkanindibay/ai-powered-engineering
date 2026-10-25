@@ -871,7 +871,7 @@ impl SiteAdminService {
                 let unit_row_opt = if let Some(uid) = id_numeric {
                     client
                         .query_opt(
-                            "SELECT id, block_id, unit_number, floor, owner_person_id, house_type FROM units WHERE (id = $1 OR owner_person_id = $1) AND site_id = $2",
+                            "SELECT id, block_id, unit_number, floor, owner_person_id, tenant_person_id, house_type FROM units WHERE (id = $1 OR owner_person_id = $1 OR tenant_person_id = $1) AND site_id = $2",
                             &[&uid, &site_numeric],
                         )
                         .await
@@ -880,7 +880,7 @@ impl SiteAdminService {
                 } else {
                     client
                         .query_opt(
-                            "SELECT u.id, u.block_id, u.unit_number, u.floor, u.owner_person_id, u.house_type FROM units u JOIN persons p ON u.owner_person_id = p.id WHERE p.email = $1 AND u.site_id = $2",
+                            "SELECT u.id, u.block_id, u.unit_number, u.floor, u.owner_person_id, u.tenant_person_id, u.house_type FROM units u JOIN persons p ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id) WHERE p.email = $1 AND u.site_id = $2",
                             &[&unit_or_user_id, &site_numeric],
                         )
                         .await
@@ -890,21 +890,49 @@ impl SiteAdminService {
 
                 if let Some(u_row) = unit_row_opt {
                     let u_id: i64 = u_row.get(0);
-                    let p_id: i64 = u_row.get(4);
+                    let p_id: Option<i64> = u_row.get(4);
+                    let t_id: Option<i64> = u_row.get(5);
 
-                    if let Some(ref name) = req.owner_full_name {
-                        let _ = client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[name, &p_id]).await;
-                        let _ = client.execute("UPDATE users SET full_name = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[name, &site_numeric, &p_id]).await;
+                    if req.remove_tenant == Some(true) {
+                        if let Some(tenant_person_id) = t_id {
+                            let _ = client.execute(
+                                "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE WHERE unit_id = $1 AND person_id = $2 AND is_active = true",
+                                &[&u_id, &tenant_person_id],
+                            ).await;
+                        }
+                        let _ = client.execute("UPDATE units SET tenant_person_id = NULL, occupancy_status = 'VACANT' WHERE id = $1", &[&u_id]).await;
+                    } else if let Some(tenant_person_id) = t_id {
+                        if let Some(ref t_name) = req.tenant_full_name {
+                            let _ = client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[t_name, &tenant_person_id]).await;
+                            let _ = client.execute("UPDATE users SET full_name = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[t_name, &site_numeric, &tenant_person_id]).await;
+                        }
+                        if let Some(ref t_phone) = req.tenant_phone {
+                            let _ = client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[t_phone, &tenant_person_id]).await;
+                            let _ = client.execute("UPDATE users SET phone = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[t_phone, &site_numeric, &tenant_person_id]).await;
+                        }
+                        if let Some(ref t_email) = req.tenant_email {
+                            let email_norm = t_email.trim().to_lowercase();
+                            let _ = client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &tenant_person_id]).await;
+                            let _ = client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[&email_norm, &site_numeric, &tenant_person_id]).await;
+                        }
                     }
-                    if let Some(ref phone) = req.phone {
-                        let _ = client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[phone, &p_id]).await;
-                        let _ = client.execute("UPDATE users SET phone = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[phone, &site_numeric, &p_id]).await;
+
+                    if let Some(owner_person_id) = p_id {
+                        if let Some(ref name) = req.owner_full_name {
+                            let _ = client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[name, &owner_person_id]).await;
+                            let _ = client.execute("UPDATE users SET full_name = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[name, &site_numeric, &owner_person_id]).await;
+                        }
+                        if let Some(ref phone) = req.phone {
+                            let _ = client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[phone, &owner_person_id]).await;
+                            let _ = client.execute("UPDATE users SET phone = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[phone, &site_numeric, &owner_person_id]).await;
+                        }
+                        if let Some(ref email) = req.email {
+                            let email_norm = email.trim().to_lowercase();
+                            let _ = client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &owner_person_id]).await;
+                            let _ = client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[&email_norm, &site_numeric, &owner_person_id]).await;
+                        }
                     }
-                    if let Some(ref email) = req.email {
-                        let email_norm = email.trim().to_lowercase();
-                        let _ = client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &p_id]).await;
-                        let _ = client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[&email_norm, &site_numeric, &p_id]).await;
-                    }
+
                     if let Some(ref ht) = req.house_type {
                         let _ = client.execute("UPDATE units SET house_type = $1 WHERE id = $2", &[ht, &u_id]).await;
                     }
@@ -933,7 +961,30 @@ impl SiteAdminService {
                 || (unit_idx.is_some() && inner.units[unit_idx.unwrap()].owner_user_id.as_deref() == Some(&u.id))
         });
 
+        let tenant_user_idx = if let Some(uidx) = unit_idx {
+            if let Some(ref tuid) = inner.units[uidx].tenant_user_id {
+                inner.users.iter().position(|u| &u.id == tuid)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         if let Some(uidx) = unit_idx {
+            if req.remove_tenant == Some(true) {
+                inner.units[uidx].tenant_user_id = None;
+            } else if let Some(t_idx) = tenant_user_idx {
+                if let Some(ref t_name) = req.tenant_full_name {
+                    inner.users[t_idx].full_name = t_name.clone();
+                }
+                if let Some(ref t_email) = req.tenant_email {
+                    inner.users[t_idx].email = t_email.trim().to_lowercase();
+                }
+                if let Some(ref t_phone) = req.tenant_phone {
+                    inner.users[t_idx].phone = t_phone.clone();
+                }
+            }
             if let Some(ref ht) = req.house_type {
                 inner.units[uidx].house_type = Some(ht.clone());
             }
@@ -970,6 +1021,7 @@ impl SiteAdminService {
             o.unit_id == unit_or_user_id
                 || crate::db::parse_id_to_i64(&o.unit_id) == id_numeric
                 || req.email.as_ref().map(|e| e.trim().eq_ignore_ascii_case(&o.email)).unwrap_or(false)
+                || (req.tenant_email.as_ref().map(|e| o.tenant_email.as_ref().map(|te| te.trim().eq_ignore_ascii_case(e)).unwrap_or(false)).unwrap_or(false))
         }) {
             Ok(updated)
         } else {
@@ -987,7 +1039,7 @@ impl SiteAdminService {
                 let unit_row_opt = if let Some(uid) = id_numeric {
                     client
                         .query_opt(
-                            "SELECT id, owner_person_id FROM units WHERE (id = $1 OR owner_person_id = $1) AND site_id = $2",
+                            "SELECT id, owner_person_id, tenant_person_id FROM units WHERE (id = $1 OR owner_person_id = $1 OR tenant_person_id = $1) AND site_id = $2",
                             &[&uid, &site_numeric],
                         )
                         .await
@@ -996,7 +1048,7 @@ impl SiteAdminService {
                 } else {
                     client
                         .query_opt(
-                            "SELECT u.id, u.owner_person_id FROM units u JOIN persons p ON u.owner_person_id = p.id WHERE p.email = $1 AND u.site_id = $2",
+                            "SELECT u.id, u.owner_person_id, u.tenant_person_id FROM units u JOIN persons p ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id) WHERE p.email = $1 AND u.site_id = $2",
                             &[&unit_or_user_id, &site_numeric],
                         )
                         .await
@@ -1007,26 +1059,36 @@ impl SiteAdminService {
                 if let Some(u_row) = unit_row_opt {
                     let u_id: i64 = u_row.get(0);
                     let p_id: Option<i64> = u_row.get(1);
+                    let t_id: Option<i64> = u_row.get(2);
                     let u_id_str = u_id.to_string();
 
-                    // Delete dependent records
+                    // Delete dependent records safely adhering to foreign key hierarchy
                     let _ = client.execute("DELETE FROM collection_transactions WHERE unit_id = $1 OR dues_liability_id IN (SELECT id FROM dues_liabilities WHERE unit_id = $1)", &[&u_id]).await;
                     let _ = client.execute("DELETE FROM dues_liabilities WHERE unit_id = $1", &[&u_id]).await;
+                    let _ = client.execute("DELETE FROM unit_occupancies WHERE unit_id = $1", &[&u_id]).await;
                     let _ = client.execute("DELETE FROM unit_members WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
                     let _ = client.execute("DELETE FROM advance_balances WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
                     let _ = client.execute("DELETE FROM unit_sender_ibans WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
                     let _ = client.execute("DELETE FROM unit_payer_names WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
                     let _ = client.execute("DELETE FROM units WHERE id = $1", &[&u_id]).await;
 
-                    if let Some(person_id) = p_id {
-                        let other_units = client
-                            .query_one("SELECT COUNT(*) FROM units WHERE owner_person_id = $1", &[&person_id])
-                            .await
-                            .map(|r| r.get::<_, i64>(0))
-                            .unwrap_or(0);
-                        if other_units == 0 {
-                            let _ = client.execute("DELETE FROM users WHERE site_id = $1 AND email = (SELECT email FROM persons WHERE id = $2)", &[&site_numeric, &person_id]).await;
-                            let _ = client.execute("DELETE FROM persons WHERE id = $1", &[&person_id]).await;
+                    // Clean up person and user if no other units or occupancies exist
+                    for person_opt in &[p_id, t_id] {
+                        if let Some(person_id) = person_opt {
+                            let other_units = client
+                                .query_one("SELECT COUNT(*) FROM units WHERE owner_person_id = $1 OR tenant_person_id = $1", &[person_id])
+                                .await
+                                .map(|r| r.get::<_, i64>(0))
+                                .unwrap_or(0);
+                            let other_occ = client
+                                .query_one("SELECT COUNT(*) FROM unit_occupancies WHERE person_id = $1", &[person_id])
+                                .await
+                                .map(|r| r.get::<_, i64>(0))
+                                .unwrap_or(0);
+                            if other_units == 0 && other_occ == 0 {
+                                let _ = client.execute("DELETE FROM users WHERE site_id = $1 AND email = (SELECT email FROM persons WHERE id = $2)", &[&site_numeric, person_id]).await;
+                                let _ = client.execute("DELETE FROM persons WHERE id = $1", &[person_id]).await;
+                            }
                         }
                     }
                 }
@@ -1107,6 +1169,25 @@ impl SiteAdminService {
                 Err(format!("Kat maliki / daire '{}' bulunamadı.", unit_or_user_id))
             }
         }
+    }
+
+    pub async fn delete_unit_member(&self, _site_id: &str, unit_id: &str, resident_id: &str) -> Result<(), String> {
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                let _ = client.execute(
+                    "DELETE FROM unit_members WHERE (unit_id = $1 OR unit_id = $2) AND (resident_id = $3 OR full_name = $3 OR id::text = $3)",
+                    &[&unit_id, &format!("d-{}", unit_id), &resident_id],
+                ).await;
+            }
+        }
+
+        let mut inner = self.state.inner.write().await;
+        for key in &[unit_id.to_string(), format!("d-{}", unit_id), format!("unit-{}", unit_id)] {
+            if let Some(members) = inner.unit_members.get_mut(key) {
+                members.retain(|m| m.resident_id != resident_id && m.full_name != resident_id);
+            }
+        }
+        Ok(())
     }
 
     pub async fn get_house_types_for_site(&self, site_id: &str) -> Vec<crate::models::HouseTypeTariff> {

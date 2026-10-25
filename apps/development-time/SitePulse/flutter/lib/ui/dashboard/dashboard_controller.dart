@@ -1903,15 +1903,20 @@ class DashboardController extends ChangeNotifier {
 
   Future<bool> updateHomeOwner({
     required String unitId,
-    required String fullName,
-    required String email,
-    required String phone,
+    String? fullName,
+    String? email,
+    String? phone,
+    String? tenantFullName,
+    String? tenantEmail,
+    String? tenantPhone,
+    bool? removeTenant,
     String? houseType,
     Decimal? monthlyDues,
     String? landShare,
     bool? isResident,
+    String? siteId,
   }) async {
-    final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
 
     // Dues is strictly dependent on the selected house type tariff
     Decimal? effectiveDues = monthlyDues;
@@ -1930,17 +1935,21 @@ class DashboardController extends ChangeNotifier {
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
-            'owner_full_name': fullName,
-            'email': email,
-            'phone': phone,
-            'house_type': houseType,
+            if (fullName != null) 'owner_full_name': fullName,
+            if (email != null) 'email': email,
+            if (phone != null) 'phone': phone,
+            if (tenantFullName != null) 'tenant_full_name': tenantFullName,
+            if (tenantEmail != null) 'tenant_email': tenantEmail,
+            if (tenantPhone != null) 'tenant_phone': tenantPhone,
+            if (removeTenant != null) 'remove_tenant': removeTenant,
+            if (houseType != null) 'house_type': houseType,
             if (effectiveDues != null) 'monthly_dues': effectiveDues.toString(),
             if (landShare != null) 'land_share': landShare,
             if (isResident != null) 'is_resident': isResident,
           }),
         ).timeout(const Duration(seconds: 4));
 
-        if (response.statusCode == 200) {
+        if (response.statusCode == 200 || response.statusCode == 204) {
           await fetchHomeOwners(siteId: effectiveSiteId);
           await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
           notifyListeners();
@@ -1955,12 +1964,17 @@ class DashboardController extends ChangeNotifier {
     }
 
     // In-memory update
-    final index = _homeOwners.indexWhere((h) => h.unitId == unitId || h.email.toLowerCase() == email.toLowerCase());
+    final index = _homeOwners.indexWhere((h) => h.unitId == unitId || (email != null && h.email.toLowerCase() == email.toLowerCase()));
     if (index != -1) {
       _homeOwners[index] = _homeOwners[index].copyWith(
-        ownerFullName: fullName,
-        email: email,
-        phone: phone,
+        ownerFullName: fullName ?? _homeOwners[index].ownerFullName,
+        email: email ?? _homeOwners[index].email,
+        phone: phone ?? _homeOwners[index].phone,
+        tenantFullName: tenantFullName,
+        tenantEmail: tenantEmail,
+        tenantPhone: tenantPhone,
+        clearTenant: removeTenant == true,
+        occupancyStatus: removeTenant == true ? 'VACANT' : (tenantFullName != null ? 'TENANT_OCCUPIED' : _homeOwners[index].occupancyStatus),
         houseType: houseType,
         monthlyDues: effectiveDues,
         landShare: landShare,
@@ -1970,8 +1984,11 @@ class DashboardController extends ChangeNotifier {
     // Update matching flat in _flatsList
     final flatIndex = _flatsList.indexWhere((f) => f.id == unitId || (index != -1 && f.unitNo == _homeOwners[index].unitNo));
     if (flatIndex != -1) {
+      final activeResident = removeTenant == true
+          ? (_homeOwners[index].isResident ? _homeOwners[index].ownerFullName : 'Boş Daire')
+          : (tenantFullName ?? _homeOwners[index].tenantFullName ?? fullName ?? _flatsList[flatIndex].residentName);
       _flatsList[flatIndex] = _flatsList[flatIndex].copyWith(
-        residentName: fullName,
+        residentName: activeResident,
         houseType: houseType,
         amountDue: effectiveDues ?? _flatsList[flatIndex].amountDue,
       );
@@ -1995,7 +2012,7 @@ class DashboardController extends ChangeNotifier {
           headers: {'Content-Type': 'application/json'},
         ).timeout(const Duration(seconds: 4));
 
-        if (response.statusCode == 200) {
+        if (response.statusCode == 200 || response.statusCode == 204) {
           await fetchHomeOwners(siteId: effectiveSiteId);
           await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
           notifyListeners();
@@ -2027,6 +2044,38 @@ class DashboardController extends ChangeNotifier {
     }
 
     notifyListeners();
+    return true;
+  }
+
+  Future<bool> deleteHouseholdMember({
+    required String unitId,
+    required String residentId,
+    String? siteId,
+  }) async {
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/home-residents/members/$unitId/$residentId?site_id=$effectiveSiteId');
+        final response = await http.delete(url).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200 || response.statusCode == 204) {
+          await fetchHomeOwners(siteId: effectiveSiteId);
+          notifyListeners();
+          return true;
+        }
+      } catch (e) {
+        debugPrint('deleteHouseholdMember error: $e');
+      }
+    }
+
+    // In-memory update
+    final hoIndex = _homeOwners.indexWhere((h) => h.unitId == unitId);
+    if (hoIndex != -1) {
+      final updatedResidents = _homeOwners[hoIndex].householdResidents.where((m) => m.id != residentId && m.fullName != residentId).toList();
+      _homeOwners[hoIndex] = _homeOwners[hoIndex].copyWith(householdResidents: updatedResidents);
+      notifyListeners();
+    }
     return true;
   }
 

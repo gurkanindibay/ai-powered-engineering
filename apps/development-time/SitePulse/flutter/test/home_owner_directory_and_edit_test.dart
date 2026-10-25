@@ -191,5 +191,247 @@ void main() {
       expect(find.text('Kat maliki başarıyla silindi.'), findsOneWidget);
       expect(controller.homeOwners.any((h) => h.unitId == target.unitId), isFalse);
     });
+
+    test('DashboardController updateHomeOwner updates tenant and homeowner independently', () async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      // Inject a tenant-occupied unit
+      final tenantUnit = HomeOwnerItem(
+        unitId: 'unit-tenant-test',
+        siteId: 'site-1',
+        block: 'A',
+        unitNo: 14,
+        floor: 4,
+        ownerFullName: 'Yeni Ev Sahibi 2',
+        email: 'owner@example.com',
+        phone: '0531 456 4545',
+        tenantFullName: 'Canan Can',
+        tenantEmail: 'canan@example.com',
+        tenantPhone: '0533 111 22 33',
+        occupancyStatus: 'TENANT_OCCUPIED',
+        landShare: '1/24',
+        monthlyDues: Decimal.parse('1500.00'),
+        houseType: '3+1',
+        isResident: false,
+        mustChangePassword: false,
+        createdAt: DateTime.now(),
+        householdResidents: const [
+          UnitResidentMember(
+            id: 'mem-1',
+            fullName: 'Sakin Kardeş',
+            relationship: 'Kardeşi',
+            phone: '0533 999 88 77',
+          ),
+        ],
+      );
+      controller.homeOwners.add(tenantUnit);
+
+      final success = await controller.updateHomeOwner(
+        unitId: 'unit-tenant-test',
+        fullName: 'Yeni Ev Sahibi 2',
+        email: 'owner@example.com',
+        phone: '0531 456 4545',
+        tenantFullName: 'Canan Can Güncellendi',
+        tenantEmail: 'canan.guncel@example.com',
+        tenantPhone: '0533 222 33 44',
+      );
+
+      expect(success, isTrue);
+      final updated = controller.homeOwners.firstWhere((h) => h.unitId == 'unit-tenant-test');
+      expect(updated.tenantFullName, equals('Canan Can Güncellendi'));
+      expect(updated.tenantEmail, equals('canan.guncel@example.com'));
+      expect(updated.tenantPhone, equals('0533 222 33 44'));
+      expect(updated.ownerFullName, equals('Yeni Ev Sahibi 2'));
+    });
+
+    test('DashboardController updateHomeOwner with removeTenant clears tenant', () async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      final tenantUnit = HomeOwnerItem(
+        unitId: 'unit-tenant-clear-test',
+        siteId: 'site-1',
+        block: 'A',
+        unitNo: 15,
+        floor: 4,
+        ownerFullName: 'Yeni Ev Sahibi 2',
+        email: 'owner@example.com',
+        phone: '0531 456 4545',
+        tenantFullName: 'Canan Can',
+        occupancyStatus: 'TENANT_OCCUPIED',
+        landShare: '1/24',
+        monthlyDues: Decimal.parse('1500.00'),
+        houseType: '3+1',
+        isResident: false,
+        mustChangePassword: false,
+        createdAt: DateTime.now(),
+      );
+      controller.homeOwners.add(tenantUnit);
+
+      final success = await controller.updateHomeOwner(
+        unitId: 'unit-tenant-clear-test',
+        removeTenant: true,
+      );
+
+      expect(success, isTrue);
+      final updated = controller.homeOwners.firstWhere((h) => h.unitId == 'unit-tenant-clear-test');
+      expect(updated.tenantFullName, isNull);
+      expect(updated.occupancyStatus, equals('VACANT'));
+    });
+
+    test('DashboardController deleteHouseholdMember removes member from unit', () async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      final unitWithMember = HomeOwnerItem(
+        unitId: 'unit-member-test',
+        siteId: 'site-1',
+        block: 'B',
+        unitNo: 8,
+        floor: 2,
+        ownerFullName: 'Mehmet Yılmaz',
+        email: 'mehmet@example.com',
+        phone: '0532 111 22 33',
+        occupancyStatus: 'OWNER_OCCUPIED',
+        landShare: '1/24',
+        monthlyDues: Decimal.parse('1200.00'),
+        isResident: true,
+        mustChangePassword: false,
+        createdAt: DateTime.now(),
+        householdResidents: const [
+          UnitResidentMember(
+            id: 'mem-101',
+            fullName: 'Sakin Kardeş',
+            relationship: 'Kardeşi',
+          ),
+        ],
+      );
+      controller.homeOwners.add(unitWithMember);
+
+      final success = await controller.deleteHouseholdMember(
+        unitId: 'unit-member-test',
+        residentId: 'mem-101',
+      );
+
+      expect(success, isTrue);
+      final updated = controller.homeOwners.firstWhere((h) => h.unitId == 'unit-member-test');
+      expect(updated.householdResidents.any((m) => m.id == 'mem-101'), isFalse);
+    });
+
+    testWidgets('Site Manager editing a tenant-occupied unit sees both Tenant and Homeowner fields with correct values', (tester) async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      final tenantUnit = HomeOwnerItem(
+        unitId: 'unit-ui-tenant-14',
+        siteId: 'site-1',
+        block: 'A',
+        unitNo: 14,
+        floor: 4,
+        ownerFullName: 'Yeni Ev Sahibi 2',
+        email: 'owner@example.com',
+        phone: '0531 456 4545',
+        tenantFullName: 'Canan Can',
+        tenantEmail: 'canan@example.com',
+        tenantPhone: '0533 111 22 33',
+        occupancyStatus: 'TENANT_OCCUPIED',
+        landShare: '1/24',
+        monthlyDues: Decimal.parse('1500.00'),
+        houseType: '3+1',
+        isResident: false,
+        mustChangePassword: false,
+        createdAt: DateTime.now(),
+      );
+      controller.homeOwners.insert(0, tenantUnit);
+
+      await tester.pumpWidget(MaterialApp(
+        home: DashboardScreen(controller: controller),
+      ));
+      await tester.pumpAndSettle();
+
+      // Go to Yönetim tab
+      await tester.tap(find.text('Yönetim'));
+      await tester.pumpAndSettle();
+
+      // Verify card displays tenant Canan Can and owner Yeni Ev Sahibi 2
+      expect(find.text('Canan Can'), findsOneWidget);
+      expect(find.textContaining('Yeni Ev Sahibi 2'), findsOneWidget);
+
+      // Tap Düzenle on this card
+      final editBtn = find.text('Düzenle').first;
+      await tester.tap(editBtn);
+      await tester.pumpAndSettle();
+
+      // Verify edit page displays both sections
+      expect(find.text('Kiracı (Fiilen İkamet Eden Sakin)'), findsOneWidget);
+      expect(find.text('Kat Maliki (Ev Sahibi) Bilgileri'), findsOneWidget);
+
+      // Verify fields have initial values
+      final tenantNameField = tester.widget<TextField>(find.byKey(const Key('tenant_name_field')));
+      expect(tenantNameField.controller?.text, equals('Canan Can'));
+
+      final ownerNameField = tester.widget<TextField>(find.byKey(const Key('owner_name_field')));
+      expect(ownerNameField.controller?.text, equals('Yeni Ev Sahibi 2'));
+
+      // Verify quick move-out option in tenant section
+      expect(find.text('Kiracıyı Daireden Çıkar (Move-Out)'), findsOneWidget);
+    });
+
+    testWidgets('Site Manager clicking delete on tenant unit sees options to remove tenant or delete entire unit', (tester) async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      final tenantUnit = HomeOwnerItem(
+        unitId: 'unit-ui-tenant-delete-test',
+        siteId: 'site-1',
+        block: 'A',
+        unitNo: 14,
+        floor: 4,
+        ownerFullName: 'Yeni Ev Sahibi 2',
+        email: 'owner@example.com',
+        phone: '0531 456 4545',
+        tenantFullName: 'Canan Can',
+        occupancyStatus: 'TENANT_OCCUPIED',
+        landShare: '1/24',
+        monthlyDues: Decimal.parse('1500.00'),
+        houseType: '3+1',
+        isResident: false,
+        mustChangePassword: false,
+        createdAt: DateTime.now(),
+      );
+      controller.homeOwners.insert(0, tenantUnit);
+
+      await tester.pumpWidget(MaterialApp(
+        home: DashboardScreen(controller: controller),
+      ));
+      await tester.pumpAndSettle();
+
+      // Go to Yönetim tab
+      await tester.tap(find.text('Yönetim'));
+      await tester.pumpAndSettle();
+
+      // Tap delete on this unit
+      final deleteBtn = find.byKey(const Key('delete_ho_unit-ui-tenant-delete-test'));
+      await tester.tap(deleteBtn);
+      await tester.pumpAndSettle();
+
+      // Verify option choices are displayed
+      expect(find.text('Sakin / Daire Silme Seçenekleri'), findsOneWidget);
+      expect(find.text('Sadece Kiracıyı Çıkar / Sil'), findsOneWidget);
+      expect(find.text('Tüm Daireyi ve Kat Malikini Sil'), findsOneWidget);
+      expect(find.byKey(const Key('remove_tenant_only_button')), findsOneWidget);
+      expect(find.byKey(const Key('delete_entire_home_owner_button')), findsOneWidget);
+    });
   });
 }

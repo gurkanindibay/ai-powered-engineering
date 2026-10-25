@@ -1192,6 +1192,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        IconButton(
+                          key: Key('delete_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
+                          icon: const Icon(Icons.close, size: 14, color: AppColors.accentRed),
+                          tooltip: '${m.fullName} kaydını sil',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _confirmDeleteHouseholdMember(ho, m),
+                        ),
                       ],
                     ),
                   )),
@@ -1609,7 +1617,266 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _confirmDeleteHouseholdMember(HomeOwnerItem ho, UnitResidentMember member) {
+    AppFullscreenPage.pushConfirmation(
+      context: context,
+      title: 'Hane Sakinini Sil',
+      message: '${member.fullName} (${member.relationship}) adlı hane sakini kaydını ${ho.block} Blok Daire ${ho.unitNo} listesinden silmek istediğinize emin misiniz?',
+      confirmLabel: 'Evet, Sil',
+      cancelLabel: 'Vazgeç',
+      confirmColor: AppColors.accentRed,
+      icon: Icons.person_remove_outlined,
+      iconColor: AppColors.accentRed,
+    ).then((confirmed) async {
+      if (confirmed == true && mounted) {
+        final success = await widget.controller.deleteHouseholdMember(
+          unitId: ho.unitId,
+          residentId: member.id.isNotEmpty ? member.id : member.fullName,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(success ? 'Hane sakini başarıyla silindi.' : 'Hane sakini silinirken bir hata oluştu.'),
+              backgroundColor: success ? AppColors.accentGreen : AppColors.accentRed,
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  void _showDeleteTenantOrOwnerOptions(HomeOwnerItem resident, {BuildContext? parentCtx}) {
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => AppFullscreenPage(
+        title: 'Sakin / Daire Silme Seçenekleri',
+        subtitle: '${resident.block} Daire ${resident.unitNo} • Kiracılı Daire',
+        icon: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.accentRed.withOpacity(0.12),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.delete_sweep, color: AppColors.accentRed, size: 20),
+        ),
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            OutlinedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textSecondary(context),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Vazgeç'),
+            ),
+          ],
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Bu dairede fiilen ikamet eden bir kiracı (${resident.tenantFullName ?? 'Kiracı'}) bulunmaktadır. Lütfen gerçekleştirmek istediğiniz işlemi seçiniz:',
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, height: 1.5),
+              ),
+              const SizedBox(height: 20),
+
+              // Option 1: Remove Tenant only
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.card(context),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.accentOrange.withOpacity(0.4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentOrange.withOpacity(0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.person_remove, color: AppColors.accentOrange, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Sadece Kiracıyı Çıkar / Sil',
+                                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Kiracı: ${resident.tenantFullName ?? 'Bilinmiyor'}',
+                                style: const TextStyle(color: AppColors.accentOrange, fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Kiracının ikamet kaydını sonlandırır ve daireyi "Boş" duruma getirir. Kat maliki (${resident.ownerFullName}) ve daire kaydı korunur.',
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        key: const Key('remove_tenant_only_button'),
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          final success = await widget.controller.updateHomeOwner(
+                            unitId: resident.unitId,
+                            removeTenant: true,
+                          );
+                          if (mounted) {
+                            if (success) {
+                              if (parentCtx != null && parentCtx.mounted) {
+                                Navigator.pop(parentCtx);
+                              }
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Kiracı daireden başarıyla çıkarıldı. Daire boş duruma getirildi.'),
+                                  backgroundColor: AppColors.accentGreen,
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Kiracı çıkarılırken bir hata oluştu.'),
+                                  backgroundColor: AppColors.accentRed,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.logout, size: 16),
+                        label: const Text('Kiracıyı Daireden Çıkar'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accentOrange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Option 2: Delete entire flat and homeowner
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.card(context),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.accentRed.withOpacity(0.4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentRed.withOpacity(0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.delete_forever, color: AppColors.accentRed, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Tüm Daireyi ve Kat Malikini Sil',
+                                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Malik: ${resident.ownerFullName}',
+                                style: const TextStyle(color: AppColors.accentRed, fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Daireyi, kat malikini, kiracıyı ve bağlı tüm aidat ve tahakkuk kayıtlarını sistemden tamamen siler. Bu işlem geri alınamaz.',
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        key: const Key('delete_entire_home_owner_button'),
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          final success = await widget.controller.deleteHomeOwner(unitId: resident.unitId);
+                          if (mounted) {
+                            if (success) {
+                              if (parentCtx != null && parentCtx.mounted) {
+                                Navigator.pop(parentCtx);
+                              }
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Kat maliki ve daire başarıyla silindi.'),
+                                  backgroundColor: AppColors.accentGreen,
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Silme işlemi sırasında bir hata oluştu.'),
+                                  backgroundColor: AppColors.accentRed,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.delete_forever, size: 16, color: AppColors.accentRed),
+                        label: const Text('Daireyi ve Kat Malikini Tamamen Sil', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppColors.accentRed),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _confirmDeleteHomeOwner(HomeOwnerItem resident, {BuildContext? parentCtx}) {
+    final isTenant = resident.occupancyStatus == 'TENANT_OCCUPIED' || (resident.tenantFullName != null && resident.tenantFullName!.isNotEmpty);
+
+    if (isTenant) {
+      _showDeleteTenantOrOwnerOptions(resident, parentCtx: parentCtx);
+      return;
+    }
+
     AppFullscreenPage.pushConfirmation(
       context: context,
       title: 'Kat Malikini Sil',
@@ -1648,10 +1915,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  void _confirmRemoveTenantFromEdit(HomeOwnerItem resident, BuildContext editCtx) {
+    AppFullscreenPage.pushConfirmation(
+      context: context,
+      title: 'Kiracıyı Daireden Çıkar',
+      message: '${resident.tenantFullName ?? 'Kiracı'} adlı sakinin ${resident.block} Blok Daire ${resident.unitNo} kaydından çıkarılmasını ve dairenin boş durumuna getirilmesini onaylıyor musunuz?',
+      confirmLabel: 'Evet, Çıkar',
+      cancelLabel: 'Vazgeç',
+      confirmColor: AppColors.accentOrange,
+      icon: Icons.logout,
+      iconColor: AppColors.accentOrange,
+    ).then((confirmed) async {
+      if (confirmed == true && mounted) {
+        final success = await widget.controller.updateHomeOwner(
+          unitId: resident.unitId,
+          removeTenant: true,
+        );
+        if (mounted) {
+          if (success) {
+            if (editCtx.mounted) {
+              Navigator.pop(editCtx);
+            }
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Kiracı başarıyla çıkarıldı. Daire boş duruma getirildi.'),
+                backgroundColor: AppColors.accentGreen,
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Kiracı çıkarılırken bir hata oluştu.'),
+                backgroundColor: AppColors.accentRed,
+              ),
+            );
+          }
+        }
+      }
+    });
+  }
+
   void _showEditHomeOwnerDialog(HomeOwnerItem resident) {
-    final nameCtrl = TextEditingController(text: resident.ownerFullName);
-    final emailCtrl = TextEditingController(text: resident.email);
-    final phoneCtrl = TextEditingController(text: resident.phone);
+    final isTenant = resident.occupancyStatus == 'TENANT_OCCUPIED' || (resident.tenantFullName != null && resident.tenantFullName!.isNotEmpty);
+
+    final ownerNameCtrl = TextEditingController(text: resident.ownerFullName);
+    final ownerEmailCtrl = TextEditingController(text: resident.email);
+    final ownerPhoneCtrl = TextEditingController(text: resident.phone);
+
+    final tenantNameCtrl = TextEditingController(text: resident.tenantFullName ?? '');
+    final tenantEmailCtrl = TextEditingController(text: resident.tenantEmail ?? '');
+    final tenantPhoneCtrl = TextEditingController(text: resident.tenantPhone ?? '');
+
     final landShareCtrl = TextEditingController(text: resident.landShare);
 
     final houseTypes = widget.controller.houseTypes;
@@ -1664,9 +1978,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final duesCtrl = TextEditingController(text: initialDues.toStringAsFixed(2));
     bool isResident = resident.isResident;
 
-    String? nameError;
-    String? emailError;
-    String? phoneError;
+    String? ownerNameError;
+    String? ownerEmailError;
+    String? ownerPhoneError;
+    String? tenantNameError;
+    String? tenantEmailError;
+    String? tenantPhoneError;
     String? generalError;
     bool isSaving = false;
 
@@ -1676,7 +1993,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (context, setDialogState) {
           return AppFullscreenPage(
             title: 'Sakin Bilgilerini Düzenle',
-            subtitle: '${resident.block} Daire ${resident.unitNo}',
+            subtitle: '${resident.block} Daire ${resident.unitNo} • ${isTenant ? 'Kiracılı Daire' : 'Malik İkameti'}',
             icon: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
@@ -1712,47 +2029,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onPressed: isSaving
                       ? null
                       : () async {
-                          final name = nameCtrl.text.trim();
-                          final email = emailCtrl.text.trim();
-                          final phone = phoneCtrl.text.trim();
+                          final oName = ownerNameCtrl.text.trim();
+                          final oEmail = ownerEmailCtrl.text.trim();
+                          final oPhone = ownerPhoneCtrl.text.trim();
+                          final tName = tenantNameCtrl.text.trim();
+                          final tEmail = tenantEmailCtrl.text.trim();
+                          final tPhone = tenantPhoneCtrl.text.trim();
 
+                          final emailRegex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w{2,}$');
                           bool hasError = false;
-                          String? newNameErr;
-                          String? newEmailErr;
-                          String? newPhoneErr;
+                          String? newOwnerNameErr;
+                          String? newOwnerEmailErr;
+                          String? newOwnerPhoneErr;
+                          String? newTenantNameErr;
+                          String? newTenantEmailErr;
+                          String? newTenantPhoneErr;
 
-                          if (name.isEmpty) {
-                            newNameErr = 'Ad Soyad zorunludur.';
-                            hasError = true;
-                          }
-
-                          if (email.isEmpty) {
-                            newEmailErr = 'E-posta zorunludur.';
-                            hasError = true;
-                          } else {
-                            final emailRegex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w{2,}$');
-                            if (!emailRegex.hasMatch(email)) {
-                              newEmailErr = 'Geçerli bir e-posta adresi giriniz (ör. ad@site.com).';
+                          if (isTenant) {
+                            if (tName.isEmpty) {
+                              newTenantNameErr = 'Kiracı Ad Soyad zorunludur.';
+                              hasError = true;
+                            }
+                            if (tEmail.isEmpty) {
+                              newTenantEmailErr = 'Kiracı e-posta zorunludur.';
+                              hasError = true;
+                            } else if (!emailRegex.hasMatch(tEmail)) {
+                              newTenantEmailErr = 'Geçerli bir e-posta adresi giriniz.';
+                              hasError = true;
+                            }
+                            final tDigits = tPhone.replaceAll(RegExp(r'\D'), '');
+                            if (tPhone.isEmpty) {
+                              newTenantPhoneErr = 'Kiracı telefon numarası zorunludur.';
+                              hasError = true;
+                            } else if (tDigits.length < 10 || tDigits.length > 11) {
+                              newTenantPhoneErr = 'Geçerli bir telefon numarası giriniz (10-11 hane).';
                               hasError = true;
                             }
                           }
 
-                          if (phone.isEmpty) {
-                            newPhoneErr = 'Telefon numarası zorunludur.';
+                          if (oName.isEmpty) {
+                            newOwnerNameErr = isTenant ? 'Ev Sahibi Ad Soyad zorunludur.' : 'Ad Soyad zorunludur.';
                             hasError = true;
-                          } else {
-                            final digitsOnly = phone.replaceAll(RegExp(r'\D'), '');
-                            if (digitsOnly.length < 10 || digitsOnly.length > 11) {
-                              newPhoneErr = 'Geçerli bir telefon numarası giriniz (10-11 hane).';
-                              hasError = true;
-                            }
+                          }
+                          if (oEmail.isEmpty) {
+                            newOwnerEmailErr = isTenant ? 'Ev Sahibi e-posta zorunludur.' : 'E-posta zorunludur.';
+                            hasError = true;
+                          } else if (!emailRegex.hasMatch(oEmail)) {
+                            newOwnerEmailErr = 'Geçerli bir e-posta adresi giriniz.';
+                            hasError = true;
+                          }
+                          final oDigits = oPhone.replaceAll(RegExp(r'\D'), '');
+                          if (oPhone.isEmpty) {
+                            newOwnerPhoneErr = isTenant ? 'Ev Sahibi telefon numarası zorunludur.' : 'Telefon numarası zorunludur.';
+                            hasError = true;
+                          } else if (oDigits.length < 10 || oDigits.length > 11) {
+                            newOwnerPhoneErr = 'Geçerli bir telefon numarası giriniz (10-11 hane).';
+                            hasError = true;
                           }
 
                           if (hasError) {
                             setDialogState(() {
-                              nameError = newNameErr;
-                              emailError = newEmailErr;
-                              phoneError = newPhoneErr;
+                              ownerNameError = newOwnerNameErr;
+                              ownerEmailError = newOwnerEmailErr;
+                              ownerPhoneError = newOwnerPhoneErr;
+                              tenantNameError = newTenantNameErr;
+                              tenantEmailError = newTenantEmailErr;
+                              tenantPhoneError = newTenantPhoneErr;
                             });
                             return;
                           }
@@ -1766,9 +2108,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           final dues = selectedTariff?.duesAmount ?? (Decimal.tryParse(duesCtrl.text.replaceAll(',', '.')) ?? resident.monthlyDues);
                           final success = await widget.controller.updateHomeOwner(
                             unitId: resident.unitId,
-                            fullName: name,
-                            email: email,
-                            phone: phone,
+                            fullName: oName,
+                            email: oEmail,
+                            phone: oPhone,
+                            tenantFullName: isTenant ? tName : null,
+                            tenantEmail: isTenant ? tEmail : null,
+                            tenantPhone: isTenant ? tPhone : null,
                             houseType: selectedHouseType,
                             monthlyDues: dues,
                             landShare: landShareCtrl.text.trim().isNotEmpty ? landShareCtrl.text.trim() : resident.landShare,
@@ -1850,7 +2195,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                             ),
                             Text(
-                              'Kat: ${resident.floor} • Arsa Payı: ${resident.landShare}',
+                              'Kat: ${resident.floor} • Arsa Payı: ${resident.landShare} • ${isTenant ? 'Kiracılı Daire' : (resident.occupancyStatus == 'VACANT' ? 'Boş Daire' : 'Malik İkameti')}',
                               style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                             ),
                           ],
@@ -1859,52 +2204,254 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  // Full Name
-                  Text('Ad Soyad *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'Örn: Murat Demir',
-                      errorText: nameError,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  if (isTenant) ...[
+                    // Kiracı Section
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 18),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.card(context),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.accentGreen.withOpacity(0.35)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentGreen.withOpacity(0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.person, color: AppColors.accentGreen, size: 16),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Kiracı (Fiilen İkamet Eden Sakin)',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary(context),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentGreen.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'Kiracı',
+                                  style: TextStyle(
+                                    color: AppColors.accentGreen,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text('Kiracı Ad Soyad *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            key: const Key('tenant_name_field'),
+                            controller: tenantNameCtrl,
+                            decoration: InputDecoration(
+                              hintText: 'Örn: Canan Can',
+                              errorText: tenantNameError,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text('Kiracı Telefon Numarası *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            key: const Key('tenant_phone_field'),
+                            controller: tenantPhoneCtrl,
+                            keyboardType: TextInputType.phone,
+                            decoration: InputDecoration(
+                              hintText: 'Örn: 0533 111 22 33',
+                              errorText: tenantPhoneError,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text('Kiracı E-posta Adresi *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            key: const Key('tenant_email_field'),
+                            controller: tenantEmailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: InputDecoration(
+                              hintText: 'Örn: canan@example.com',
+                              errorText: tenantEmailError,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: isSaving ? null : () => _confirmRemoveTenantFromEdit(resident, ctx),
+                              icon: const Icon(Icons.logout, size: 14, color: AppColors.accentOrange),
+                              label: const Text(
+                                'Kiracıyı Daireden Çıkar (Move-Out)',
+                                style: TextStyle(color: AppColors.accentOrange, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 14),
-
-                  // Phone
-                  Text('Telefon Numarası *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: phoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    decoration: InputDecoration(
-                      hintText: 'Örn: 0555 123 4567',
-                      errorText: phoneError,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    // Kat Maliki (Ev Sahibi) Section
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 18),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.card(context),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.accentCyan.withOpacity(0.35)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentCyan.withOpacity(0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.vpn_key, color: AppColors.accentCyan, size: 16),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Kat Maliki (Ev Sahibi) Bilgileri',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary(context),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentCyan.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'Ev Sahibi',
+                                  style: TextStyle(
+                                    color: AppColors.accentCyan,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text('Ev Sahibi Ad Soyad *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            key: const Key('owner_name_field'),
+                            controller: ownerNameCtrl,
+                            decoration: InputDecoration(
+                              hintText: 'Örn: Murat Demir',
+                              errorText: ownerNameError,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text('Ev Sahibi Telefon Numarası *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            key: const Key('owner_phone_field'),
+                            controller: ownerPhoneCtrl,
+                            keyboardType: TextInputType.phone,
+                            decoration: InputDecoration(
+                              hintText: 'Örn: 0555 123 4567',
+                              errorText: ownerPhoneError,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text('Ev Sahibi E-posta Adresi *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            key: const Key('owner_email_field'),
+                            controller: ownerEmailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: InputDecoration(
+                              hintText: 'Örn: murat@example.com',
+                              errorText: ownerEmailError,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  // Email
-                  Text('E-posta Adresi *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      hintText: 'Örn: murat@example.com',
-                      errorText: emailError,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ] else ...[
+                    // Kat Maliki (Non-tenant case)
+                    Text('Ad Soyad *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: ownerNameCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'Örn: Murat Demir',
+                        errorText: ownerNameError,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 14),
+                    const SizedBox(height: 14),
+
+                    Text('Telefon Numarası *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: ownerPhoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        hintText: 'Örn: 0555 123 4567',
+                        errorText: ownerPhoneError,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    Text('E-posta Adresi *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: ownerEmailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        hintText: 'Örn: murat@example.com',
+                        errorText: ownerEmailError,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
+                  ],
 
                   // House Type
                   if (houseTypes.isNotEmpty) ...[
@@ -2006,22 +2553,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                   const SizedBox(height: 14),
 
-                  // Resident / Owner Switch
-                  SwitchListTile(
-                    title: const Text('Bu dairede fiilen ikamet ediyor mu? (Kat Sakini)'),
-                    subtitle: Text(
-                      isResident ? 'Evet (Kat Sakini)' : 'Hayır (Sadece Kat Maliki)',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                  if (!isTenant) ...[
+                    // Resident / Owner Switch
+                    SwitchListTile(
+                      title: const Text('Bu dairede fiilen ikamet ediyor mu? (Kat Sakini)'),
+                      subtitle: Text(
+                        isResident ? 'Evet (Kat Sakini)' : 'Hayır (Sadece Kat Maliki)',
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                      ),
+                      value: isResident,
+                      activeThumbColor: AppColors.accentCyan,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          isResident = val;
+                        });
+                      },
                     ),
-                    value: isResident,
-                    activeThumbColor: AppColors.accentCyan,
-                    contentPadding: EdgeInsets.zero,
-                    onChanged: (val) {
-                      setDialogState(() {
-                        isResident = val;
-                      });
-                    },
-                  ),
+                  ],
                 ],
               ),
             ),
