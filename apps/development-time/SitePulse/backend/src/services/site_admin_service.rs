@@ -149,6 +149,11 @@ impl SiteAdminService {
         let req_role = request.role.as_deref().unwrap_or("OWNER").to_uppercase();
         let is_tenant = req_role == "TENANT";
         let is_resident_only = req_role == "RESIDENT";
+        let has_explicit_tenant = request
+            .tenant_full_name
+            .as_ref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
 
         // 2. Persist to PostgreSQL if pool is available
         if let Some(ref pool) = self.state.pool {
@@ -230,6 +235,50 @@ impl SiteAdminService {
                 .map_err(|e| format!("Failed to insert user: {}", e))?;
             user_numeric_id = user_row.get(0);
 
+            // Handle optional explicit tenant when registered together with owner
+            let mut explicit_tenant_person_id: Option<i64> = None;
+
+            if has_explicit_tenant {
+                let t_name = request.tenant_full_name.as_deref().unwrap_or("").trim();
+                let t_phone = request.tenant_phone.as_deref().unwrap_or("").trim();
+                let t_email_norm = request.tenant_email.as_deref().unwrap_or("").trim().to_lowercase();
+
+                let existing_t_person = if !t_email_norm.is_empty() {
+                    client.query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&t_email_norm]).await.ok().flatten()
+                } else {
+                    None
+                };
+
+                let t_pid: i64 = if let Some(row) = existing_t_person {
+                    row.get(0)
+                } else {
+                    let row = client
+                        .query_one(
+                            "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, 'KAT_SAKINI') RETURNING id",
+                            &[&t_name, &t_phone, &t_email_norm],
+                        )
+                        .await
+                        .map_err(|e| format!("Failed to insert tenant person: {}", e))?;
+                    row.get(0)
+                };
+                explicit_tenant_person_id = Some(t_pid);
+
+                if !t_email_norm.is_empty() {
+                    let existing_t_user = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&t_email_norm]).await.ok().flatten();
+                    if existing_t_user.is_none() {
+                        let _ = client
+                            .execute(
+                                r#"
+                                INSERT INTO users (site_id, full_name, email, phone, password_hash, role, must_change_password)
+                                VALUES ($1, $2, $3, $4, $5, 'HOME_RESIDENT', TRUE)
+                                "#,
+                                &[&site_numeric_id, &t_name, &t_email_norm, &t_phone, &password_hash],
+                            )
+                            .await;
+                    }
+                }
+            }
+
             // Check if unit already exists
             let existing_unit_opt = client
                 .query_opt(
@@ -294,22 +343,41 @@ impl SiteAdminService {
                     }
 
                     // Insert new occupant into unit_occupancies
-                    let new_occ_type = if is_tenant { "TENANT" } else { "OWNER" };
-                    let new_occ_status = if is_tenant { "TENANT_OCCUPIED" } else if request.is_resident { "OWNER_OCCUPIED" } else { "VACANT" };
-                    if is_tenant || request.is_resident {
-                        let _ = client
-                            .execute(
-                                r#"
-                                INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
-                                VALUES ($1, $2, $3, CURRENT_DATE, true, 0.00, $4)
-                                "#,
-                                &[&unit_numeric_id, &person_numeric_id, &new_occ_type, &Some(format!("Yeni {} girişi", if is_tenant { "kiracı" } else { "malik" }))],
-                            )
-                            .await;
+                    let new_occ_type = if has_explicit_tenant || is_tenant { "TENANT" } else { "OWNER" };
+                    let new_occ_status = if has_explicit_tenant || is_tenant { "TENANT_OCCUPIED" } else if request.is_resident { "OWNER_OCCUPIED" } else { "VACANT" };
+                    let active_occ_pid = if has_explicit_tenant { explicit_tenant_person_id } else { Some(person_numeric_id) };
+
+                    if has_explicit_tenant || is_tenant || request.is_resident {
+                        if let Some(occ_pid) = active_occ_pid {
+                            let _ = client
+                                .execute(
+                                    r#"
+                                    INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
+                                    VALUES ($1, $2, $3, CURRENT_DATE, true, 0.00, $4)
+                                    "#,
+                                    &[&unit_numeric_id, &occ_pid, &new_occ_type, &Some(format!("Yeni {} girişi", if has_explicit_tenant || is_tenant { "kiracı" } else { "malik" }))],
+                                )
+                                .await;
+                        }
                     }
 
                     // Update unit with new occupant
-                    if is_tenant {
+                    if has_explicit_tenant {
+                        let _ = client
+                            .execute(
+                                r#"
+                                UPDATE units SET
+                                    owner_person_id = $1,
+                                    tenant_person_id = $2,
+                                    occupancy_status = 'TENANT_OCCUPIED',
+                                    house_type = COALESCE($3, house_type),
+                                    virtual_iban = COALESCE(virtual_iban, $4)
+                                WHERE id = $5
+                                "#,
+                                &[&person_numeric_id, &explicit_tenant_person_id, &effective_house_type, &viban, &unit_numeric_id],
+                            )
+                            .await;
+                    } else if is_tenant {
                         let _ = client
                             .execute(
                                 r#"
@@ -342,9 +410,15 @@ impl SiteAdminService {
                 }
             } else {
                 // New Unit
-                let occ_status = if is_tenant { "TENANT_OCCUPIED" } else if request.is_resident { "OWNER_OCCUPIED" } else { "VACANT" };
-                let owner_pid = if is_tenant { None } else { Some(person_numeric_id) };
-                let tenant_pid = if is_tenant { Some(person_numeric_id) } else { None };
+                let occ_status = if has_explicit_tenant || is_tenant {
+                    "TENANT_OCCUPIED"
+                } else if request.is_resident {
+                    "OWNER_OCCUPIED"
+                } else {
+                    "VACANT"
+                };
+                let owner_pid = if is_tenant && !has_explicit_tenant { None } else { Some(person_numeric_id) };
+                let tenant_pid = if has_explicit_tenant { explicit_tenant_person_id } else if is_tenant { Some(person_numeric_id) } else { None };
 
                 let unit_row = client
                     .query_one(
@@ -384,6 +458,18 @@ impl SiteAdminService {
                             ],
                         )
                         .await;
+                } else if has_explicit_tenant {
+                    if let Some(t_pid) = explicit_tenant_person_id {
+                        let _ = client
+                            .execute(
+                                r#"
+                                INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
+                                VALUES ($1, $2, 'TENANT', CURRENT_DATE, true, 0.00, 'İlk kiracı kaydı')
+                                "#,
+                                &[&unit_numeric_id, &t_pid],
+                            )
+                            .await;
+                    }
                 } else if is_tenant || request.is_resident {
                     let occ_type = if is_tenant { "TENANT" } else { "OWNER" };
                     let _ = client
@@ -446,7 +532,7 @@ impl SiteAdminService {
             full_name: request.owner_full_name.clone(),
             email: email_norm.clone(),
             phone: request.phone.clone(),
-            password_hash: Some(password_hash),
+            password_hash: Some(password_hash.clone()),
             role: Role::HomeResident,
             must_change_password: true,
             auth_provider: "LOCAL".to_string(),
@@ -489,6 +575,27 @@ impl SiteAdminService {
             let existing_owner_id = existing_unit_pos.and_then(|p| inner.units[p].owner_user_id.clone());
             let existing_tenant_id = existing_unit_pos.and_then(|p| inner.units[p].tenant_user_id.clone());
 
+            let mut explicit_tenant_user_id_in_mem: Option<String> = None;
+            if has_explicit_tenant {
+                let tid = format!("usr-tenant-{}", &Uuid::new_v4().to_string()[..8]);
+                let tenant_user = User {
+                    id: tid.clone(),
+                    site_id: site_id.to_string(),
+                    full_name: request.tenant_full_name.clone().unwrap_or_default(),
+                    email: request.tenant_email.clone().unwrap_or_default().trim().to_lowercase(),
+                    phone: request.tenant_phone.clone().unwrap_or_default(),
+                    password_hash: Some(password_hash.clone()),
+                    role: Role::HomeResident,
+                    must_change_password: true,
+                    auth_provider: "LOCAL".to_string(),
+                    google_sub: None,
+                    avatar_url: None,
+                    created_at: Utc::now(),
+                };
+                inner.users.push(tenant_user);
+                explicit_tenant_user_id_in_mem = Some(tid);
+            }
+
             let unit = IndependentUnit {
                 id: unit_id.clone(),
                 site_id: site_id.to_string(),
@@ -496,8 +603,16 @@ impl SiteAdminService {
                 unit_number: request.unit_no,
                 floor: effective_floor,
                 land_share: 1,
-                owner_user_id: if is_tenant { existing_owner_id } else { Some(user_id.clone()) },
-                tenant_user_id: if is_tenant { Some(user_id.clone()) } else { if request.is_resident { None } else { existing_tenant_id } },
+                owner_user_id: if is_tenant && !has_explicit_tenant { existing_owner_id } else { Some(user_id.clone()) },
+                tenant_user_id: if has_explicit_tenant {
+                    explicit_tenant_user_id_in_mem
+                } else if is_tenant {
+                    Some(user_id.clone())
+                } else if request.is_resident {
+                    None
+                } else {
+                    existing_tenant_id
+                },
                 virtual_iban: Some(viban),
                 house_type: effective_house_type.clone(),
             };
@@ -525,13 +640,26 @@ impl SiteAdminService {
                 .push(request.owner_full_name.clone());
             inner
                 .unit_payer_names
-                .entry(legacy_unit_id)
+                .entry(legacy_unit_id.clone())
                 .or_default()
                 .push(request.owner_full_name.clone());
+
+            if let Some(ref t_name) = request.tenant_full_name {
+                inner
+                    .unit_payer_names
+                    .entry(unit.id.clone())
+                    .or_default()
+                    .push(t_name.clone());
+                inner
+                    .unit_payer_names
+                    .entry(legacy_unit_id)
+                    .or_default()
+                    .push(t_name.clone());
+            }
         }
 
         if !is_resident_only {
-            let occ_type = if is_tenant { "TENANT" } else { "OWNER" };
+            let occ_type = if has_explicit_tenant || is_tenant { "TENANT" } else { "OWNER" };
             let history_key = unit_id.clone();
             let history_list = inner.unit_occupancies.entry(history_key).or_default();
             for item in history_list.iter_mut() {
@@ -541,7 +669,23 @@ impl SiteAdminService {
                     item.notes = Some(format!("{} • Ayrıldı (Yeni sakin devri)", item.notes.as_deref().unwrap_or("")));
                 }
             }
-            if is_tenant || request.is_resident {
+            if has_explicit_tenant {
+                history_list.push(crate::models::OccupancyHistoryItem {
+                    id: (history_list.len() + 1) as i64,
+                    unit_id: unit_numeric_id,
+                    person_id: 202,
+                    person_name: request.tenant_full_name.clone().unwrap_or_default(),
+                    person_phone: request.tenant_phone.clone(),
+                    person_email: request.tenant_email.clone(),
+                    role: "TENANT".to_string(),
+                    start_date: Utc::now().date_naive().to_string(),
+                    end_date: None,
+                    is_active: true,
+                    exit_balance: Decimal::ZERO,
+                    notes: Some("Yeni kiracı kaydı".to_string()),
+                    created_at: Utc::now(),
+                });
+            } else if is_tenant || request.is_resident {
                 history_list.push(crate::models::OccupancyHistoryItem {
                     id: (history_list.len() + 1) as i64,
                     unit_id: unit_numeric_id,
@@ -1175,7 +1319,7 @@ impl SiteAdminService {
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
                 let _ = client.execute(
-                    "DELETE FROM unit_members WHERE (unit_id = $1 OR unit_id = $2) AND (resident_id = $3 OR full_name = $3 OR id::text = $3)",
+                    "DELETE FROM unit_members WHERE (unit_id = $1 OR unit_id = $2 OR unit_id = (SELECT unit_number::text FROM units WHERE id::text = $1) OR unit_id = (SELECT id::text FROM units WHERE unit_number::text = $1)) AND (resident_id = $3 OR full_name = $3 OR id::text = $3)",
                     &[&unit_id, &format!("d-{}", unit_id), &resident_id],
                 ).await;
             }
@@ -1185,6 +1329,41 @@ impl SiteAdminService {
         for key in &[unit_id.to_string(), format!("d-{}", unit_id), format!("unit-{}", unit_id)] {
             if let Some(members) = inner.unit_members.get_mut(key) {
                 members.retain(|m| m.resident_id != resident_id && m.full_name != resident_id);
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn update_unit_member(
+        &self,
+        _site_id: &str,
+        unit_id: &str,
+        resident_id: &str,
+        full_name: &str,
+        phone: &str,
+        email: &str,
+        relationship: &str,
+    ) -> Result<(), String> {
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                let _ = client.execute(
+                    "UPDATE unit_members SET full_name = $1, phone = $2, email = $3, relationship = $4 WHERE (unit_id = $5 OR unit_id = $6 OR unit_id = (SELECT unit_number::text FROM units WHERE id::text = $5) OR unit_id = (SELECT id::text FROM units WHERE unit_number::text = $5)) AND (resident_id = $7 OR full_name = $7 OR id::text = $7)",
+                    &[&full_name, &phone, &email, &relationship, &unit_id, &format!("d-{}", unit_id), &resident_id],
+                ).await;
+            }
+        }
+
+        let mut inner = self.state.inner.write().await;
+        for key in &[unit_id.to_string(), format!("d-{}", unit_id), format!("unit-{}", unit_id)] {
+            if let Some(members) = inner.unit_members.get_mut(key) {
+                for m in members.iter_mut() {
+                    if m.resident_id == resident_id || m.full_name == resident_id {
+                        m.full_name = full_name.to_string();
+                        m.phone = phone.to_string();
+                        m.email = email.to_string();
+                        m.relationship = relationship.to_string();
+                    }
+                }
             }
         }
         Ok(())

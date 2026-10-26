@@ -757,6 +757,39 @@ pub async fn delete_unit_member(
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct UpdateUnitMemberRequest {
+    pub full_name: String,
+    pub phone: String,
+    pub email: String,
+    #[serde(default)]
+    pub relationship: Option<String>,
+}
+
+pub async fn update_unit_member(
+    State(state): State<AppState>,
+    Path((unit_id, resident_id)): Path<(String, String)>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<UpdateUnitMemberRequest>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    let relationship = payload.relationship.unwrap_or_else(|| "Ev Sakini".to_string());
+    service
+        .update_unit_member(
+            &site_id,
+            &unit_id,
+            &resident_id,
+            &payload.full_name,
+            &payload.phone,
+            &payload.email,
+            &relationship,
+        )
+        .await
+        .map(|_| StatusCode::OK)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
 // 7. Health Check
 pub async fn health_check() -> impl IntoResponse {
     (

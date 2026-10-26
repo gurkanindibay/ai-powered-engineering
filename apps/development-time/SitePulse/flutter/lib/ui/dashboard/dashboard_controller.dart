@@ -1607,10 +1607,14 @@ class DashboardController extends ChangeNotifier {
     required String ownerName,
     required String email,
     required String phone,
+    String? tenantFullName,
+    String? tenantEmail,
+    String? tenantPhone,
     String? houseType,
     Decimal? duesAmount,
     bool isResident = true,
     String role = 'OWNER',
+    String? relationship,
   }) async {
     final effectiveHouseType = houseType ?? '2+1';
     final matchedTariff = _houseTypes.cast<HouseTypeTariff?>().firstWhere(
@@ -1636,6 +1640,9 @@ class DashboardController extends ChangeNotifier {
             'owner_full_name': ownerName,
             'email': email,
             'phone': phone,
+            'tenant_full_name': tenantFullName,
+            'tenant_email': tenantEmail,
+            'tenant_phone': tenantPhone,
             'land_share': '1/24',
             'monthly_dues': dues.toString(),
             'house_type': effectiveHouseType,
@@ -1769,23 +1776,30 @@ class DashboardController extends ChangeNotifier {
       ));
     }
 
+    final hasExplicitTenant = tenantFullName != null && tenantFullName.trim().isNotEmpty;
+    final effectiveIsTenant = isTenant || hasExplicitTenant;
+
     final hoItem = HomeOwnerItem(
       unitId: targetUnitId,
       siteId: effectiveSiteId,
       block: cleanBlock,
       unitNo: unitNo,
       floor: ((unitNo - 1) ~/ 4) + 1,
-      ownerFullName: existingHoIndex != -1 && isTenant
-          ? _homeOwners[existingHoIndex].ownerFullName
-          : (isTenant ? 'Bilinmeyen Malik' : ownerName),
-      tenantFullName: isTenant
+      ownerFullName: hasExplicitTenant
           ? ownerName
-          : (existingHoIndex != -1 && !isResidentRole ? null : (existingHoIndex != -1 ? _homeOwners[existingHoIndex].tenantFullName : null)),
-      occupancyStatus: isTenant ? 'TENANT_OCCUPIED' : (isResident ? 'OWNER_OCCUPIED' : 'VACANT'),
+          : (existingHoIndex != -1 && isTenant
+              ? _homeOwners[existingHoIndex].ownerFullName
+              : (isTenant ? 'Bilinmeyen Malik' : ownerName)),
+      tenantFullName: hasExplicitTenant
+          ? tenantFullName
+          : (isTenant
+              ? ownerName
+              : (existingHoIndex != -1 && !isResidentRole ? null : (existingHoIndex != -1 ? _homeOwners[existingHoIndex].tenantFullName : null))),
+      occupancyStatus: effectiveIsTenant ? 'TENANT_OCCUPIED' : (isResident ? 'OWNER_OCCUPIED' : 'VACANT'),
       email: email,
       phone: phone,
-      tenantEmail: isTenant ? email : null,
-      tenantPhone: isTenant ? phone : null,
+      tenantEmail: hasExplicitTenant ? tenantEmail : (isTenant ? email : null),
+      tenantPhone: hasExplicitTenant ? tenantPhone : (isTenant ? phone : null),
       landShare: '1/24',
       monthlyDues: dues,
       houseType: effectiveHouseType,
@@ -1800,7 +1814,7 @@ class DashboardController extends ChangeNotifier {
         final newMember = UnitResidentMember(
           id: 'usr-res-${DateTime.now().millisecondsSinceEpoch}',
           fullName: ownerName,
-          relationship: 'Ev Sakini',
+          relationship: relationship ?? 'Ev Sakini',
           phone: phone,
           email: email,
           isOwner: false,
@@ -1817,7 +1831,7 @@ class DashboardController extends ChangeNotifier {
         final newMember = UnitResidentMember(
           id: 'usr-res-${DateTime.now().millisecondsSinceEpoch}',
           fullName: ownerName,
-          relationship: 'Ev Sakini',
+          relationship: relationship ?? 'Ev Sakini',
           phone: phone,
           email: email,
           isOwner: false,
@@ -2073,6 +2087,61 @@ class DashboardController extends ChangeNotifier {
     final hoIndex = _homeOwners.indexWhere((h) => h.unitId == unitId);
     if (hoIndex != -1) {
       final updatedResidents = _homeOwners[hoIndex].householdResidents.where((m) => m.id != residentId && m.fullName != residentId).toList();
+      _homeOwners[hoIndex] = _homeOwners[hoIndex].copyWith(householdResidents: updatedResidents);
+      notifyListeners();
+    }
+    return true;
+  }
+
+  Future<bool> updateHouseholdMember({
+    required String unitId,
+    required String residentId,
+    required String fullName,
+    required String phone,
+    required String email,
+    required String relationship,
+  }) async {
+    final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/home-residents/members/$unitId/$residentId?site_id=$effectiveSiteId');
+        final response = await http.put(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'full_name': fullName,
+            'phone': phone,
+            'email': email,
+            'relationship': relationship,
+          }),
+        ).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200 || response.statusCode == 204) {
+          await fetchHomeOwners(siteId: effectiveSiteId);
+          notifyListeners();
+          return true;
+        }
+      } catch (e) {
+        debugPrint('updateHouseholdMember error: $e');
+      }
+    }
+
+    // In-memory update
+    final hoIndex = _homeOwners.indexWhere((h) => h.unitId == unitId);
+    if (hoIndex != -1) {
+      final updatedResidents = _homeOwners[hoIndex].householdResidents.map((m) {
+        if (m.id == residentId || m.fullName == residentId) {
+          return UnitResidentMember(
+            id: m.id,
+            fullName: fullName,
+            relationship: relationship,
+            phone: phone,
+            email: email,
+            isOwner: m.isOwner,
+          );
+        }
+        return m;
+      }).toList();
       _homeOwners[hoIndex] = _homeOwners[hoIndex].copyWith(householdResidents: updatedResidents);
       notifyListeners();
     }

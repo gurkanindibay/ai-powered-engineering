@@ -404,6 +404,12 @@ pub struct RegisterHomeOwnerRequest {
     pub owner_full_name: String,
     pub email: String,
     pub phone: String,
+    #[serde(default)]
+    pub tenant_full_name: Option<String>,
+    #[serde(default)]
+    pub tenant_email: Option<String>,
+    #[serde(default)]
+    pub tenant_phone: Option<String>,
     pub land_share: Option<String>,
     pub monthly_dues: Option<Decimal>,
     #[serde(default)]
