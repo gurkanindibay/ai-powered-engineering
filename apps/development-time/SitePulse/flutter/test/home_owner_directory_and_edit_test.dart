@@ -433,5 +433,107 @@ void main() {
       expect(find.byKey(const Key('remove_tenant_only_button')), findsOneWidget);
       expect(find.byKey(const Key('delete_entire_home_owner_button')), findsOneWidget);
     });
+
+    testWidgets('Rented unit has separate card tabs for Sakinler and Kat Maliki, and allows direct resident editing', (tester) async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      final tenantUnit = HomeOwnerItem(
+        unitId: 'unit-dual-tab-test',
+        siteId: 'site-1',
+        block: 'A',
+        unitNo: 14,
+        floor: 4,
+        ownerFullName: 'Yeni Ev Sahibi 2',
+        email: 'owner@example.com',
+        phone: '+90 531 456 4545',
+        tenantFullName: 'Canan Can',
+        tenantEmail: 'canan@example.com',
+        tenantPhone: '+90 533 111 22 33',
+        occupancyStatus: 'TENANT_OCCUPIED',
+        landShare: '1/24',
+        monthlyDues: Decimal.parse('1500.00'),
+        houseType: '3+1',
+        isResident: false,
+        mustChangePassword: false,
+        createdAt: DateTime.now(),
+        householdResidents: const [
+          UnitResidentMember(
+            id: 'mem-1',
+            fullName: 'Sakin Kardeş',
+            relationship: 'Kardeşi',
+            phone: '+90 533 999 88 77',
+          ),
+        ],
+      );
+      controller.homeOwners.insert(0, tenantUnit);
+
+      await tester.pumpWidget(MaterialApp(
+        home: DashboardScreen(controller: controller),
+      ));
+      await tester.pumpAndSettle();
+
+      // Go to Yönetim tab
+      await tester.tap(find.text('Yönetim'));
+      await tester.pumpAndSettle();
+
+      // Verify card has dual tabs
+      final residentsTab = find.byKey(const Key('tab_residents_unit-dual-tab-test'));
+      final ownerTab = find.byKey(const Key('tab_owner_unit-dual-tab-test'));
+      expect(residentsTab, findsOneWidget);
+      expect(ownerTab, findsOneWidget);
+
+      // By default, Sakinler tab is active
+      expect(find.text('Fiilen İkamet Eden Kiracı (Birincil Muhatap)'), findsOneWidget);
+      expect(find.byKey(const Key('edit_residents_unit-dual-tab-test')), findsOneWidget);
+      expect(find.byKey(const Key('add_resident_to_unit-dual-tab-test')), findsOneWidget);
+
+      // Switch to Kat Maliki tab
+      await tester.tap(ownerTab);
+      await tester.pumpAndSettle();
+
+      // Verify Kat Maliki view
+      expect(find.text('Kat Maliki (Daire Mülk Sahibi)'), findsOneWidget);
+      expect(find.byKey(const Key('edit_owner_unit-dual-tab-test')), findsOneWidget);
+
+      // Switch back to Sakinler tab
+      await tester.tap(residentsTab);
+      await tester.pumpAndSettle();
+      expect(find.text('Fiilen İkamet Eden Kiracı (Birincil Muhatap)'), findsOneWidget);
+
+      // Tap Sakinleri Düzenle button to open resident editing modal
+      final editResidentsBtn = find.byKey(const Key('edit_residents_unit-dual-tab-test'));
+      await tester.ensureVisible(editResidentsBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(editResidentsBtn);
+      await tester.pumpAndSettle();
+
+      // Verify modal opened with Sakinler tab active
+      expect(find.text('Sakin Bilgilerini Düzenle'), findsOneWidget);
+      expect(find.byKey(const Key('dialog_tab_residents')), findsOneWidget);
+      expect(find.byKey(const Key('dialog_tab_owner')), findsOneWidget);
+      expect(find.byKey(const Key('dialog_tab_all')), findsOneWidget);
+
+      // Modify tenant phone with Turkish +90 format and save
+      final tenantPhoneField = find.byKey(const Key('tenant_phone_field'));
+      expect(tenantPhoneField, findsOneWidget);
+      await tester.enterText(tenantPhoneField, '+90 533 888 77 66');
+
+      final tenantNameField = find.byKey(const Key('tenant_name_field'));
+      await tester.enterText(tenantNameField, 'Canan Can Düzenlendi');
+
+      // Tap Kaydet
+      await tester.tap(find.text('Kaydet'));
+      await tester.pumpAndSettle();
+
+      // Verify success snackbar and updated details in controller
+      expect(find.text('Sakin bilgileri başarıyla güncellendi.'), findsOneWidget);
+      final updatedUnit = controller.homeOwners.firstWhere((h) => h.unitId == 'unit-dual-tab-test');
+      expect(updatedUnit.tenantFullName, equals('Canan Can Düzenlendi'));
+      expect(updatedUnit.tenantPhone, equals('+90 533 888 77 66'));
+    });
   });
 }
+

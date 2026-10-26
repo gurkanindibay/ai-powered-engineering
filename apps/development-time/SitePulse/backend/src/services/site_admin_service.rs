@@ -1056,8 +1056,32 @@ impl SiteAdminService {
                         }
                         if let Some(ref t_email) = req.tenant_email {
                             let email_norm = t_email.trim().to_lowercase();
+                            let prev_email: Option<String> = client.query_opt("SELECT email FROM persons WHERE id = $1", &[&tenant_person_id]).await.ok().flatten().map(|r| r.get(0));
                             let _ = client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &tenant_person_id]).await;
-                            let _ = client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[&email_norm, &site_numeric, &tenant_person_id]).await;
+                            if let Some(ref pe) = prev_email {
+                                let _ = client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND LOWER(email) = LOWER($3)", &[&email_norm, &site_numeric, pe]).await;
+                            }
+                        }
+                    } else if let Some(ref t_name) = req.tenant_full_name {
+                        if !t_name.trim().is_empty() {
+                            let t_email = req.tenant_email.clone().unwrap_or_else(|| format!("tenant.{}@example.com", u_id)).trim().to_lowercase();
+                            let t_phone = req.tenant_phone.clone().unwrap_or_default();
+                            let row_res = client.query_one(
+                                "INSERT INTO persons (full_name, phone, email, person_type) 
+                                 VALUES ($1, $2, $3, 'KAT_SAKINI') 
+                                 ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, phone = EXCLUDED.phone 
+                                 RETURNING id",
+                                &[&t_name, &t_phone, &t_email],
+                            ).await;
+                            if let Ok(r) = row_res {
+                                let new_t_id: i64 = r.get(0);
+                                let _ = client.execute("UPDATE units SET tenant_person_id = $1, occupancy_status = 'TENANT_OCCUPIED' WHERE id = $2", &[&new_t_id, &u_id]).await;
+                                let _ = client.execute(
+                                    "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, created_at)
+                                     VALUES ($1, $2, 'TENANT', CURRENT_DATE, true, NOW())",
+                                    &[&u_id, &new_t_id],
+                                ).await;
+                            }
                         }
                     }
 
@@ -1072,8 +1096,11 @@ impl SiteAdminService {
                         }
                         if let Some(ref email) = req.email {
                             let email_norm = email.trim().to_lowercase();
+                            let prev_email: Option<String> = client.query_opt("SELECT email FROM persons WHERE id = $1", &[&owner_person_id]).await.ok().flatten().map(|r| r.get(0));
                             let _ = client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &owner_person_id]).await;
-                            let _ = client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[&email_norm, &site_numeric, &owner_person_id]).await;
+                            if let Some(ref pe) = prev_email {
+                                let _ = client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND LOWER(email) = LOWER($3)", &[&email_norm, &site_numeric, pe]).await;
+                            }
                         }
                     }
 
@@ -1127,6 +1154,27 @@ impl SiteAdminService {
                 }
                 if let Some(ref t_phone) = req.tenant_phone {
                     inner.users[t_idx].phone = t_phone.clone();
+                }
+            } else if let Some(ref t_name) = req.tenant_full_name {
+                if !t_name.trim().is_empty() {
+                    let new_uid = format!("usr-t-{}", inner.users.len() + 1);
+                    let email = req.tenant_email.clone().unwrap_or_else(|| format!("tenant.{}@example.com", inner.users.len() + 1));
+                    let phone = req.tenant_phone.clone().unwrap_or_default();
+                    inner.users.push(crate::models::User {
+                        id: new_uid.clone(),
+                        full_name: t_name.clone(),
+                        email,
+                        phone,
+                        password_hash: None,
+                        role: crate::models::Role::HomeResident,
+                        site_id: site_id.to_string(),
+                        must_change_password: true,
+                        auth_provider: "LOCAL".to_string(),
+                        google_sub: None,
+                        avatar_url: None,
+                        created_at: chrono::Utc::now(),
+                    });
+                    inner.units[uidx].tenant_user_id = Some(new_uid);
                 }
             }
             if let Some(ref ht) = req.house_type {

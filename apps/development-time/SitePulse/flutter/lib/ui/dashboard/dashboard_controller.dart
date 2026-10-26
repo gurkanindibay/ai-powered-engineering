@@ -2148,6 +2148,62 @@ class DashboardController extends ChangeNotifier {
     return true;
   }
 
+  Future<bool> addHouseholdMember({
+    required String unitId,
+    required String block,
+    required int unitNo,
+    required String fullName,
+    required String phone,
+    required String email,
+    required String relationship,
+  }) async {
+    final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'block': block,
+            'unit_no': unitNo,
+            'floor': ((unitNo - 1) ~/ 4) + 1,
+            'owner_full_name': fullName,
+            'email': email,
+            'phone': phone,
+            'role': 'RESIDENT',
+            'relationship': relationship,
+          }),
+        ).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          await fetchHomeOwners(siteId: effectiveSiteId);
+          notifyListeners();
+          return true;
+        }
+      } catch (e) {
+        debugPrint('addHouseholdMember error: $e');
+      }
+    }
+
+    // In-memory update
+    final hoIndex = _homeOwners.indexWhere((h) => h.unitId == unitId);
+    if (hoIndex != -1) {
+      final newMember = UnitResidentMember(
+        id: 'mem-${DateTime.now().millisecondsSinceEpoch}',
+        fullName: fullName,
+        relationship: relationship,
+        phone: phone,
+        email: email,
+        isOwner: false,
+      );
+      final updatedResidents = List<UnitResidentMember>.from(_homeOwners[hoIndex].householdResidents)..add(newMember);
+      _homeOwners[hoIndex] = _homeOwners[hoIndex].copyWith(householdResidents: updatedResidents);
+      notifyListeners();
+    }
+    return true;
+  }
+
   Future<bool> moveOutResident(String unitId, {String? notes}) async {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
