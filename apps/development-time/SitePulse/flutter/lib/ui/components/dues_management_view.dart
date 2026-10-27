@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import 'app_fullscreen_page.dart';
 import 'bank_statement_reconciliation_page.dart';
 import 'manual_unit_assignment_page.dart';
+import '../residents/owners_residents_module_page.dart';
 
 class DuesManagementView extends StatefulWidget {
   final DashboardController controller;
@@ -1006,6 +1007,46 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Referral Button to Owners & Residents Module
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: InkWell(
+            key: const Key('dues_to_residents_module_btn'),
+            onTap: () {
+              AppFullscreenPage.push(
+                context: context,
+                builder: (_) => OwnersResidentsModulePage(controller: widget.controller),
+              );
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.accentCyan.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.accentCyan.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: const [
+                  Icon(Icons.people_alt_outlined, size: 16, color: AppColors.accentCyan),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Kat Malikleri & Sakinler Yönetim Modülü',
+                      style: TextStyle(
+                        color: AppColors.accentCyan,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward_ios, size: 12, color: AppColors.accentCyan),
+                ],
+              ),
+            ),
+          ),
+        ),
+
         // Filter Chips & Search Bar
         Row(
           children: [
@@ -1362,6 +1403,34 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                   ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              InkWell(
+                key: Key('dues_flat_resident_module_${flat.id}'),
+                onTap: () {
+                  AppFullscreenPage.push(
+                    context: context,
+                    builder: (_) => OwnersResidentsModulePage(
+                      controller: widget.controller,
+                      initialUnitId: flat.id,
+                    ),
+                  );
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.person_search, size: 12, color: AppColors.accentCyan),
+                    SizedBox(width: 2),
+                    Text(
+                      'Sakin Modülü →',
+                      style: TextStyle(
+                        color: AppColors.accentCyan,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

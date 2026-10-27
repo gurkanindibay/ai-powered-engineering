@@ -1980,33 +1980,74 @@ class DashboardController extends ChangeNotifier {
     // In-memory update
     final index = _homeOwners.indexWhere((h) => h.unitId == unitId || (email != null && h.email.toLowerCase() == email.toLowerCase()));
     if (index != -1) {
-      _homeOwners[index] = _homeOwners[index].copyWith(
-        ownerFullName: fullName ?? _homeOwners[index].ownerFullName,
-        email: email ?? _homeOwners[index].email,
-        phone: phone ?? _homeOwners[index].phone,
+      final current = _homeOwners[index];
+      final targetIsResident = isResident ?? current.isResident;
+      final targetOccupancy = removeTenant == true
+          ? (targetIsResident ? 'OWNER_OCCUPIED' : 'VACANT')
+          : (tenantFullName != null
+              ? 'TENANT_OCCUPIED'
+              : (isResident != null ? (isResident ? 'OWNER_OCCUPIED' : 'VACANT') : current.occupancyStatus));
+
+      _homeOwners[index] = current.copyWith(
+        ownerFullName: fullName ?? current.ownerFullName,
+        email: email ?? current.email,
+        phone: phone ?? current.phone,
         tenantFullName: tenantFullName,
         tenantEmail: tenantEmail,
         tenantPhone: tenantPhone,
         clearTenant: removeTenant == true,
-        occupancyStatus: removeTenant == true ? 'VACANT' : (tenantFullName != null ? 'TENANT_OCCUPIED' : _homeOwners[index].occupancyStatus),
+        occupancyStatus: targetOccupancy,
         houseType: houseType,
         monthlyDues: effectiveDues,
         landShare: landShare,
         isResident: isResident,
+        clearPrimaryResponsible: removeTenant == true && current.primaryResponsibleRole == 'TENANT',
       );
     }
     // Update matching flat in _flatsList
     final flatIndex = _flatsList.indexWhere((f) => f.id == unitId || (index != -1 && f.unitNo == _homeOwners[index].unitNo));
     if (flatIndex != -1) {
+      final targetIsResident = isResident ?? (index != -1 ? _homeOwners[index].isResident : false);
       final activeResident = removeTenant == true
-          ? (_homeOwners[index].isResident ? _homeOwners[index].ownerFullName : 'Boş Daire')
-          : (tenantFullName ?? _homeOwners[index].tenantFullName ?? fullName ?? _flatsList[flatIndex].residentName);
+          ? (targetIsResident ? (fullName ?? (index != -1 ? _homeOwners[index].ownerFullName : _flatsList[flatIndex].residentName)) : 'Boş Daire')
+          : (tenantFullName ?? (index != -1 ? _homeOwners[index].tenantFullName : null) ?? fullName ?? _flatsList[flatIndex].residentName);
       _flatsList[flatIndex] = _flatsList[flatIndex].copyWith(
         residentName: activeResident,
         houseType: houseType,
         amountDue: effectiveDues ?? _flatsList[flatIndex].amountDue,
       );
     }
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> setPrimaryResponsibleResident({
+    required String unitId,
+    required String residentName,
+    required String role,
+    String? phone,
+    String? email,
+    String? siteId,
+  }) async {
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+
+    final index = _homeOwners.indexWhere((h) => h.unitId == unitId);
+    if (index != -1) {
+      _homeOwners[index] = _homeOwners[index].copyWith(
+        primaryResponsibleName: residentName,
+        primaryResponsibleRole: role,
+        primaryResponsiblePhone: phone,
+        primaryResponsibleEmail: email,
+      );
+    }
+
+    final flatIndex = _flatsList.indexWhere((f) => f.id == unitId || (index != -1 && f.unitNo == _homeOwners[index].unitNo));
+    if (flatIndex != -1) {
+      _flatsList[flatIndex] = _flatsList[flatIndex].copyWith(
+        residentName: residentName,
+      );
+    }
+
     notifyListeners();
     return true;
   }

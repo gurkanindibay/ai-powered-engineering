@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
 import 'app_fullscreen_page.dart';
 import 'bank_statement_reconciliation_page.dart';
+import '../residents/owners_residents_module_page.dart';
 
 class ManagerCockpitView extends StatelessWidget {
   final DashboardController controller;
@@ -408,6 +409,95 @@ class ManagerCockpitView extends StatelessWidget {
                   ),
                 ),
                 const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.accentCyan),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Owners & Residents Module Quick Action Card
+        InkWell(
+          key: const Key('quick_action_residents_module'),
+          onTap: () {
+            AppFullscreenPage.push(
+              context: context,
+              builder: (_) => OwnersResidentsModulePage(controller: controller),
+            );
+          },
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: AppColors.accentPurple.withOpacity(0.5),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.accentPurple.withOpacity(0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentPurple.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.people_alt, color: AppColors.accentPurple, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Kat Malikleri & Sakinler Modülü',
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentPurple.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Özel Modül',
+                              style: TextStyle(
+                                color: AppColors.accentPurple,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Daire sakinleri, kiracılar, hane halkı ve aktif sorumluları tek merkezden yönetin.',
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.accentPurple),
               ],
             ),
           ),

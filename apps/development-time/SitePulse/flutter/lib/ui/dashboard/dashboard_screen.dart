@@ -14,6 +14,7 @@ import '../components/resident_actions_row.dart';
 import '../components/saas_admin_view.dart';
 import '../components/unit_matching_criteria_card.dart';
 import '../components/virtual_iban_card.dart';
+import '../residents/owners_residents_module_page.dart';
 import '../theme/app_theme.dart';
 import 'dashboard_controller.dart';
 
@@ -770,6 +771,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                   ),
+                  OutlinedButton.icon(
+                    key: const Key('open_owners_residents_module'),
+                    onPressed: () {
+                      AppFullscreenPage.push(
+                        context: context,
+                        builder: (_) => OwnersResidentsModulePage(controller: widget.controller),
+                      );
+                    },
+                    icon: const Icon(Icons.dashboard_customize_outlined, size: 14),
+                    label: const Text('Özel Modül', style: TextStyle(fontSize: 11)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.accentCyan,
+                      side: const BorderSide(color: AppColors.accentCyan),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      minimumSize: const Size(0, 32),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -806,7 +825,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
         // Search & Filter
         TextField(
@@ -1236,15 +1255,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 children: [
                                   const Icon(Icons.key, size: 15, color: AppColors.accentGreen),
                                   const SizedBox(width: 6),
-                                  const Text(
-                                    'Fiilen İkamet Eden Kiracı (Birincil Muhatap)',
-                                    style: TextStyle(
-                                      color: AppColors.accentGreen,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
+                                  const Expanded(
+                                    child: Text(
+                                      'Fiilen İkamet Eden Kiracı (Birincil Muhatap)',
+                                      style: TextStyle(
+                                        color: AppColors.accentGreen,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  const Spacer(),
+                                  const SizedBox(width: 6),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                     decoration: BoxDecoration(
@@ -1256,6 +1278,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       style: TextStyle(
                                         color: AppColors.accentGreen,
                                         fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    key: Key('open_module_for_${ho.unitId}'),
+                                    onTap: () {
+                                      AppFullscreenPage.push(
+                                        context: context,
+                                        builder: (_) => OwnersResidentsModulePage(
+                                          controller: widget.controller,
+                                          initialUnitId: ho.unitId,
+                                        ),
+                                      );
+                                    },
+                                    child: const Text(
+                                      'Modül →',
+                                      style: TextStyle(
+                                        color: AppColors.accentGreen,
+                                        fontSize: 11,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -1458,15 +1501,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 children: [
                                   const Icon(Icons.vpn_key_outlined, size: 15, color: AppColors.accentCyan),
                                   const SizedBox(width: 6),
-                                  const Text(
-                                    'Kat Maliki (Daire Mülk Sahibi)',
-                                    style: TextStyle(
-                                      color: AppColors.accentCyan,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
+                                  const Expanded(
+                                    child: Text(
+                                      'Kat Maliki (Daire Mülk Sahibi)',
+                                      style: TextStyle(
+                                        color: AppColors.accentCyan,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  const Spacer(),
+                                  const SizedBox(width: 6),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                     decoration: BoxDecoration(
@@ -1478,6 +1524,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       style: TextStyle(
                                         color: AppColors.accentCyan,
                                         fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    key: Key('open_module_for_owner_${ho.unitId}'),
+                                    onTap: () {
+                                      AppFullscreenPage.push(
+                                        context: context,
+                                        builder: (_) => OwnersResidentsModulePage(
+                                          controller: widget.controller,
+                                          initialUnitId: ho.unitId,
+                                        ),
+                                      );
+                                    },
+                                    child: const Text(
+                                      'Modül →',
+                                      style: TextStyle(
+                                        color: AppColors.accentCyan,
+                                        fontSize: 11,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -1579,15 +1646,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 color: statusColor,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                isVacant ? 'İkamet Durumu' : 'Fiilen İkamet Eden Kat Maliki (Birincil Muhatap)',
-                                style: TextStyle(
-                                  color: statusColor,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
+                              Expanded(
+                                child: Text(
+                                  isVacant ? 'İkamet Durumu' : 'Fiilen İkamet Eden Kat Maliki (Birincil Muhatap)',
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const Spacer(),
+                              const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                 decoration: BoxDecoration(
@@ -1599,6 +1669,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   style: TextStyle(
                                     color: statusColor,
                                     fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              InkWell(
+                                key: Key('open_module_for_${ho.unitId}'),
+                                onTap: () {
+                                  AppFullscreenPage.push(
+                                    context: context,
+                                    builder: (_) => OwnersResidentsModulePage(
+                                      controller: widget.controller,
+                                      initialUnitId: ho.unitId,
+                                    ),
+                                  );
+                                },
+                                child: Text(
+                                  'Modül →',
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -5250,13 +5341,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final ownerEmailCtrl = TextEditingController();
     final ownerPhoneCtrl = TextEditingController();
 
+    // Tenant controllers when role == 'OWNER' and owner does not reside (isResidentOwner == false && rented)
+    final tenantNameCtrl = TextEditingController();
+    final tenantEmailCtrl = TextEditingController();
+    final tenantPhoneCtrl = TextEditingController();
+
+    // Dynamic co-residents (Hane Sakinleri)
+    final pendingResidents = <_PendingResidentEntry>[];
+
     // Default to first house type if available (e.g. 2+1 or 3+1)
     final houseTypes = widget.controller.houseTypes;
     String? selectedHouseType = houseTypes.isNotEmpty ? houseTypes.first.typeName : null;
     String selectedRole = 'OWNER';
     bool isResidentOwner = true;
+    String ownerNotResidentOccupancy = 'VACANT'; // 'VACANT' or 'TENANT'
     String selectedRelationship = 'Eşi';
-    bool showSecondaryOwner = false;
+    bool showSecondaryOwner = true;
     String? emailError;
     String? phoneError;
     String? generalError;
@@ -5309,7 +5409,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               context: ctx,
               children: [
                 OutlinedButton(
-                  onPressed: () => Navigator.pop(ctx),
+                  onPressed: () {
+                    for (final r in pendingResidents) {
+                      r.dispose();
+                    }
+                    Navigator.pop(ctx);
+                  },
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     side: BorderSide(color: AppColors.border(context)),
@@ -5448,17 +5553,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       );
                     } else {
                       // OWNER
+                      final isRented = !isResidentOwner && ownerNotResidentOccupancy == 'TENANT';
                       await widget.controller.registerHomeOwner(
                         block: selectedBlock!,
                         unitNo: parsedUnit,
                         ownerName: ownerName,
                         email: emailText,
                         phone: phoneText,
+                        tenantFullName: isRented && tenantNameCtrl.text.trim().isNotEmpty ? tenantNameCtrl.text.trim() : null,
+                        tenantEmail: isRented && tenantEmailCtrl.text.trim().isNotEmpty ? tenantEmailCtrl.text.trim() : null,
+                        tenantPhone: isRented && tenantPhoneCtrl.text.trim().isNotEmpty ? tenantPhoneCtrl.text.trim() : null,
                         houseType: selectedHouseType,
                         duesAmount: currentTariff?.duesAmount ?? Decimal.zero,
                         isResident: isResidentOwner,
-                        role: selectedRole,
+                        role: isRented ? 'TENANT' : selectedRole,
                       );
+                    }
+
+                    // Save any pending household co-residents
+                    if (pendingResidents.isNotEmpty) {
+                      final cleanB = selectedBlock!.replaceAll('Blok', '').trim();
+                      final registeredHo = widget.controller.homeOwners.cast<HomeOwnerItem?>().firstWhere(
+                        (h) {
+                          if (h == null) return false;
+                          final b1 = h.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
+                          final b2 = cleanB.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '');
+                          return h.unitNo == parsedUnit && b1 == b2;
+                        },
+                        orElse: () => null,
+                      );
+                      final targetUnitId = registeredHo?.unitId ?? 'unit-$parsedUnit';
+
+                      for (final res in pendingResidents) {
+                        final resName = res.nameCtrl.text.trim();
+                        if (resName.isNotEmpty) {
+                          await widget.controller.addHouseholdMember(
+                            unitId: targetUnitId,
+                            block: selectedBlock!,
+                            unitNo: parsedUnit,
+                            fullName: resName,
+                            phone: res.phoneCtrl.text.trim().isNotEmpty ? res.phoneCtrl.text.trim() : phoneText,
+                            email: res.emailCtrl.text.trim().isNotEmpty ? res.emailCtrl.text.trim() : 'sakin_${DateTime.now().millisecondsSinceEpoch}@example.com',
+                            relationship: res.relationship,
+                          );
+                        }
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -5779,6 +5918,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             onSelectionChanged: (newSelection) {
                               setDialogState(() {
                                 selectedRole = newSelection.first;
+                                if (selectedRole == 'TENANT') {
+                                  showSecondaryOwner = true;
+                                }
                               });
                             },
                           ),
@@ -5812,6 +5954,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               },
                             ),
                           ),
+                          if (isResidentOwner) ...[
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentGreen.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.35)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.check_circle_outline, size: 15, color: AppColors.accentGreen),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '✓ Malik Oturuyor: Kat maliki bu dairede bizzat ikamet etmektedir. Bu daire için ayrıca kiracı tanımlanamaz.',
+                                      style: TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ] else ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentOrange.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.accentOrange.withValues(alpha: 0.3)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.info_outline, size: 15, color: AppColors.accentOrange),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Kat maliki evde oturmuyor. Dairenin güncel kullanım durumunu seçiniz:',
+                                          style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11, fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: SegmentedButton<String>(
+                                      segments: const [
+                                        ButtonSegment<String>(
+                                          value: 'VACANT',
+                                          label: Text('Boş Daire'),
+                                          icon: Icon(Icons.meeting_room_outlined, size: 15),
+                                        ),
+                                        ButtonSegment<String>(
+                                          value: 'TENANT',
+                                          label: Text('Kiracılı Daire (Kiracı Tanımla)'),
+                                          icon: Icon(Icons.key, size: 15),
+                                        ),
+                                      ],
+                                      selected: {ownerNotResidentOccupancy},
+                                      onSelectionChanged: (newSel) {
+                                        setDialogState(() => ownerNotResidentOccupancy = newSel.first);
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ] else if (selectedRole == 'TENANT') ...[
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -5864,7 +6078,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           decoration: InputDecoration(
                             labelText: selectedRole == 'TENANT'
                                 ? 'Kiracı Ad Soyad (Fiilen İkamet Eden Sakin)'
-                                : (selectedRole == 'RESIDENT' ? 'Hane Sakini Ad Soyad' : 'Ad Soyad'),
+                                : (selectedRole == 'RESIDENT'
+                                    ? 'Hane Sakini Ad Soyad'
+                                    : 'Ad Soyad'),
+                            helperText: selectedRole == 'OWNER'
+                                ? (isResidentOwner
+                                    ? 'Kat Maliki (Fiilen İkamet Eden Sakin)'
+                                    : 'Kat Maliki (Ev Sahibi / Mülk Sahibi)')
+                                : null,
                             labelStyle: TextStyle(color: AppColors.textSecondary(context)),
                             filled: true,
                             fillColor: AppColors.surface(context),
@@ -6014,7 +6235,286 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                             ),
                           ],
+                        ] else if (selectedRole == 'OWNER' && !isResidentOwner && ownerNotResidentOccupancy == 'TENANT') ...[
+                          // When OWNER is not resident and flat is rented to tenant
+                          const SizedBox(height: 14),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface(context),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppColors.accentGreen.withOpacity(0.4)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.key, size: 16, color: AppColors.accentGreen),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        'Kiracı Bilgileri (Fiilen İkamet Eden Sakin)',
+                                        style: TextStyle(
+                                          color: AppColors.textPrimary(context),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                TextField(
+                                  controller: tenantNameCtrl,
+                                  decoration: InputDecoration(
+                                    labelText: 'Kiracı Ad Soyad *',
+                                    hintText: 'Örn: Canan Kaya',
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: tenantPhoneCtrl,
+                                  keyboardType: TextInputType.phone,
+                                  decoration: InputDecoration(
+                                    labelText: 'Kiracı Telefon',
+                                    hintText: 'Örn: 0533 000 00 00',
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: tenantEmailCtrl,
+                                  keyboardType: TextInputType.emailAddress,
+                                  decoration: InputDecoration(
+                                    labelText: 'Kiracı E-posta',
+                                    hintText: 'Örn: kiraci@example.com',
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
+                      ],
+                    ),
+                  ),
+
+                  // =========================================================
+                  // SECTION 3: HANE SAKİNLERİ (BİRLİKTE İKAMET EDEN BİREYLER)
+                  // =========================================================
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.card(context),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.accentCyan.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.family_restroom, size: 16, color: AppColors.accentCyan),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '3. Hane Sakinleri (Birlikte İkamet Eden Bireyler)',
+                                style: TextStyle(
+                                  color: AppColors.textPrimary(context),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              key: const Key('add_co_resident_btn'),
+                              icon: const Icon(Icons.person_add_alt_1, size: 14, color: AppColors.accentCyan),
+                              label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.accentCyan)),
+                              onPressed: () {
+                                setDialogState(() {
+                                  pendingResidents.add(_PendingResidentEntry());
+                                });
+                              },
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                minimumSize: const Size(0, 28),
+                                side: const BorderSide(color: AppColors.accentCyan),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Dairede birlikte ikamet eden diğer aile bireylerini (eş, çocuk, anne/baba vb.) ekleyebilirsiniz.',
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                        ),
+                        const SizedBox(height: 8),
+                        if (pendingResidents.isEmpty)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface(context),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.border(context).withOpacity(0.5)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.info_outline, size: 15, color: AppColors.textSecondary(context)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Henüz hane sakini eklenmedi. Birlikte yaşayan aile bireylerini eklemek için "+ Hane Sakini Ekle" butonuna tıklayınız.',
+                                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          ...pendingResidents.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final res = entry.value;
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface(context),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppColors.accentCyan.withOpacity(0.35)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.accentCyan.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          'Hane Sakini #${idx + 1}',
+                                          style: const TextStyle(color: AppColors.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                                        tooltip: 'Hane Sakinini Kaldır',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        onPressed: () {
+                                          setDialogState(() {
+                                            pendingResidents.removeAt(idx);
+                                          });
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 6,
+                                        child: TextField(
+                                          controller: res.nameCtrl,
+                                          style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
+                                          decoration: InputDecoration(
+                                            labelText: 'Ad Soyad *',
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            hintText: 'Örn: Zeynep Yılmaz',
+                                            filled: true,
+                                            isDense: true,
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                            border: const OutlineInputBorder(),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        flex: 4,
+                                        child: DropdownButtonFormField<String>(
+                                          value: res.relationship,
+                                          isDense: true,
+                                          dropdownColor: AppColors.card(context),
+                                          style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
+                                          decoration: InputDecoration(
+                                            labelText: 'Yakınlık',
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            filled: true,
+                                            isDense: true,
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                            border: const OutlineInputBorder(),
+                                          ),
+                                          items: const [
+                                            DropdownMenuItem(value: 'Eşi', child: Text('Eşi')),
+                                            DropdownMenuItem(value: 'Çocuğu', child: Text('Çocuğu')),
+                                            DropdownMenuItem(value: 'Anne/Baba', child: Text('Anne/Baba')),
+                                            DropdownMenuItem(value: 'Kardeşi', child: Text('Kardeşi')),
+                                            DropdownMenuItem(value: 'Akrabası', child: Text('Akrabası')),
+                                            DropdownMenuItem(value: 'Ev Arkadaşı', child: Text('Ev Arkadaşı')),
+                                            DropdownMenuItem(value: 'Diğer', child: Text('Diğer')),
+                                          ],
+                                          onChanged: (val) {
+                                            if (val != null) setDialogState(() => res.relationship = val);
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextField(
+                                          controller: res.phoneCtrl,
+                                          keyboardType: TextInputType.phone,
+                                          style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
+                                          decoration: InputDecoration(
+                                            labelText: 'Telefon (Opsiyonel)',
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            hintText: 'Örn: 0532 ...',
+                                            filled: true,
+                                            isDense: true,
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                            border: const OutlineInputBorder(),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: res.emailCtrl,
+                                          keyboardType: TextInputType.emailAddress,
+                                          style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
+                                          decoration: InputDecoration(
+                                            labelText: 'E-posta (Opsiyonel)',
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            hintText: 'Örn: sakin@...',
+                                            filled: true,
+                                            isDense: true,
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                            border: const OutlineInputBorder(),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                       ],
                     ),
                   ),
@@ -6586,3 +7086,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 }
+
+class _PendingResidentEntry {
+  final TextEditingController nameCtrl;
+  final TextEditingController phoneCtrl;
+  final TextEditingController emailCtrl;
+  String relationship;
+
+  _PendingResidentEntry({
+    String? name,
+    String? phone,
+    String? email,
+    this.relationship = 'Eşi',
+  })  : nameCtrl = TextEditingController(text: name ?? ''),
+        phoneCtrl = TextEditingController(text: phone ?? ''),
+        emailCtrl = TextEditingController(text: email ?? '');
+
+  void dispose() {
+    nameCtrl.dispose();
+    phoneCtrl.dispose();
+    emailCtrl.dispose();
+  }
+}
+

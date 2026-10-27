@@ -560,6 +560,81 @@ class HomeOwnerItem {
   Decimal get operationalDuesBalance => _operationalDuesBalance ?? Decimal.zero;
   final Decimal? _capitalDuesBalance;
   Decimal get capitalDuesBalance => _capitalDuesBalance ?? Decimal.zero;
+  final String? primaryResponsibleName;
+  final String? primaryResponsibleRole;
+  final String? primaryResponsiblePhone;
+  final String? primaryResponsibleEmail;
+
+  bool get isTenantOccupied => occupancyStatus == 'TENANT_OCCUPIED' || (tenantFullName != null && tenantFullName!.isNotEmpty);
+  bool get isVacant => occupancyStatus == 'VACANT';
+  bool get isOwnerOccupied => !isTenantOccupied && !isVacant;
+
+  String get activeResponsibleResidentName {
+    if (primaryResponsibleName != null && primaryResponsibleName!.isNotEmpty) {
+      return primaryResponsibleName!;
+    }
+    if (isTenantOccupied) {
+      return tenantFullName ?? 'Kiracı';
+    }
+    if (isVacant) {
+      return 'Boş Daire';
+    }
+    return ownerFullName.isNotEmpty ? ownerFullName : 'Kat Maliki';
+  }
+
+  String get activeResponsibleRoleLabel {
+    if (primaryResponsibleRole != null && primaryResponsibleRole!.isNotEmpty) {
+      switch (primaryResponsibleRole) {
+        case 'TENANT':
+          return 'Kiracı (Aktif Sorumlu)';
+        case 'OWNER':
+          return 'Kat Maliki (Aktif Sorumlu)';
+        case 'RESIDENT':
+          return 'Hane Sakini (Aktif Sorumlu)';
+        default:
+          return primaryResponsibleRole!;
+      }
+    }
+    if (isTenantOccupied) {
+      return 'Kiracı (Aktif Sorumlu)';
+    }
+    if (isVacant) {
+      return 'Boş Daire';
+    }
+    return 'Kat Maliki (Aktif Sorumlu)';
+  }
+
+  String get activeResponsiblePhone {
+    if (primaryResponsiblePhone != null && primaryResponsiblePhone!.isNotEmpty) {
+      return primaryResponsiblePhone!;
+    }
+    if (primaryResponsibleRole == 'OWNER') {
+      return phone;
+    }
+    if (primaryResponsibleRole == 'TENANT') {
+      return tenantPhone ?? phone;
+    }
+    if (tenantPhone != null && tenantPhone!.isNotEmpty) {
+      return tenantPhone!;
+    }
+    return phone;
+  }
+
+  String get activeResponsibleEmail {
+    if (primaryResponsibleEmail != null && primaryResponsibleEmail!.isNotEmpty) {
+      return primaryResponsibleEmail!;
+    }
+    if (primaryResponsibleRole == 'OWNER') {
+      return email;
+    }
+    if (primaryResponsibleRole == 'TENANT') {
+      return tenantEmail ?? email;
+    }
+    if (tenantEmail != null && tenantEmail!.isNotEmpty) {
+      return tenantEmail!;
+    }
+    return email;
+  }
 
   const HomeOwnerItem({
     required this.unitId,
@@ -584,6 +659,10 @@ class HomeOwnerItem {
     this.householdResidents = const [],
     Decimal? operationalDuesBalance,
     Decimal? capitalDuesBalance,
+    this.primaryResponsibleName,
+    this.primaryResponsibleRole,
+    this.primaryResponsiblePhone,
+    this.primaryResponsibleEmail,
   }) : _operationalDuesBalance = operationalDuesBalance,
        _capitalDuesBalance = capitalDuesBalance;
 
@@ -616,6 +695,10 @@ class HomeOwnerItem {
           const [],
       operationalDuesBalance: Decimal.tryParse(json['operational_dues_balance']?.toString() ?? '0') ?? Decimal.zero,
       capitalDuesBalance: Decimal.tryParse(json['capital_dues_balance']?.toString() ?? '0') ?? Decimal.zero,
+      primaryResponsibleName: json['primary_responsible_name']?.toString(),
+      primaryResponsibleRole: json['primary_responsible_role']?.toString(),
+      primaryResponsiblePhone: json['primary_responsible_phone']?.toString(),
+      primaryResponsibleEmail: json['primary_responsible_email']?.toString(),
     );
   }
 
@@ -643,6 +726,11 @@ class HomeOwnerItem {
     List<UnitResidentMember>? householdResidents,
     Decimal? operationalDuesBalance,
     Decimal? capitalDuesBalance,
+    String? primaryResponsibleName,
+    String? primaryResponsibleRole,
+    String? primaryResponsiblePhone,
+    String? primaryResponsibleEmail,
+    bool clearPrimaryResponsible = false,
   }) {
     return HomeOwnerItem(
       unitId: unitId ?? this.unitId,
@@ -667,6 +755,10 @@ class HomeOwnerItem {
       householdResidents: householdResidents ?? this.householdResidents,
       operationalDuesBalance: operationalDuesBalance ?? this.operationalDuesBalance,
       capitalDuesBalance: capitalDuesBalance ?? this.capitalDuesBalance,
+      primaryResponsibleName: clearPrimaryResponsible ? null : (primaryResponsibleName ?? this.primaryResponsibleName),
+      primaryResponsibleRole: clearPrimaryResponsible ? null : (primaryResponsibleRole ?? this.primaryResponsibleRole),
+      primaryResponsiblePhone: clearPrimaryResponsible ? null : (primaryResponsiblePhone ?? this.primaryResponsiblePhone),
+      primaryResponsibleEmail: clearPrimaryResponsible ? null : (primaryResponsibleEmail ?? this.primaryResponsibleEmail),
     );
   }
 
@@ -694,6 +786,10 @@ class HomeOwnerItem {
       'household_residents': householdResidents.map((m) => m.toJson()).toList(),
       'operational_dues_balance': operationalDuesBalance.toString(),
       'capital_dues_balance': capitalDuesBalance.toString(),
+      'primary_responsible_name': primaryResponsibleName,
+      'primary_responsible_role': primaryResponsibleRole,
+      'primary_responsible_phone': primaryResponsiblePhone,
+      'primary_responsible_email': primaryResponsibleEmail,
     };
   }
 }

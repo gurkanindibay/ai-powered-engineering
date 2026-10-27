@@ -491,6 +491,8 @@ void main() {
       expect(find.byKey(const Key('add_resident_to_unit-dual-tab-test')), findsOneWidget);
 
       // Switch to Kat Maliki tab
+      await tester.ensureVisible(ownerTab);
+      await tester.pumpAndSettle();
       await tester.tap(ownerTab);
       await tester.pumpAndSettle();
 
@@ -499,6 +501,8 @@ void main() {
       expect(find.byKey(const Key('edit_owner_unit-dual-tab-test')), findsOneWidget);
 
       // Switch back to Sakinler tab
+      await tester.ensureVisible(residentsTab);
+      await tester.pumpAndSettle();
       await tester.tap(residentsTab);
       await tester.pumpAndSettle();
       expect(find.text('Fiilen İkamet Eden Kiracı (Birincil Muhatap)'), findsOneWidget);

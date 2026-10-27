@@ -1044,7 +1044,18 @@ impl SiteAdminService {
                                 &[&u_id, &tenant_person_id],
                             ).await;
                         }
-                        let _ = client.execute("UPDATE units SET tenant_person_id = NULL, occupancy_status = 'VACANT' WHERE id = $1", &[&u_id]).await;
+                        let new_occupancy = if req.is_resident == Some(true) { "OWNER_OCCUPIED" } else { "VACANT" };
+                        let _ = client.execute("UPDATE units SET tenant_person_id = NULL, occupancy_status = $1 WHERE id = $2", &[&new_occupancy, &u_id]).await;
+                        if req.is_resident == Some(true) {
+                            if let Some(owner_person_id) = p_id {
+                                let _ = client.execute(
+                                    "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, created_at)
+                                     VALUES ($1, $2, 'OWNER', CURRENT_DATE, true, NOW())
+                                     ON CONFLICT DO NOTHING",
+                                    &[&u_id, &owner_person_id],
+                                ).await;
+                            }
+                        }
                     } else if let Some(tenant_person_id) = t_id {
                         if let Some(ref t_name) = req.tenant_full_name {
                             let _ = client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[t_name, &tenant_person_id]).await;
