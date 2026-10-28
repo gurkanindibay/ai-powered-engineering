@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import 'app_fullscreen_page.dart';
 import 'bank_statement_reconciliation_page.dart';
 import 'manual_unit_assignment_page.dart';
+import 'payment_tracking_page.dart';
 import '../residents/owners_residents_module_page.dart';
 
 class DuesManagementView extends StatefulWidget {
@@ -763,6 +764,18 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   label: const Text('Excel / Ekstre Yükle'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  key: const Key('action_payment_tracking'),
+                  onPressed: () => PaymentTrackingPage.open(context, controller: widget.controller),
+                  icon: const Icon(Icons.account_balance_wallet, size: 16),
+                  label: const Text('Tahsilat & Kasa Takibi'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.indigo,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

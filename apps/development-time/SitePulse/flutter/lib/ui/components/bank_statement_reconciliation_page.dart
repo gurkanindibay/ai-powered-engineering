@@ -15,6 +15,16 @@ class BankStatementReconciliationPage extends StatefulWidget {
     required this.controller,
   });
 
+  static Future<void> open(
+    BuildContext context, {
+    required DashboardController controller,
+  }) {
+    return AppFullscreenPage.push(
+      context: context,
+      builder: (_) => BankStatementReconciliationPage(controller: controller),
+    );
+  }
+
   @override
   State<BankStatementReconciliationPage> createState() => _BankStatementReconciliationPageState();
 }

@@ -156,6 +156,63 @@
       ],
       "spec_ref": "SPEC-003",
       "description": "Embedded Tokio background scheduler and site manager UI action for monthly dues accrual with strict duplicate prevention and automatic advance payment offsetting."
+    },
+    {
+      "id": "task-15",
+      "name": "Payment Tracking Domain Schema & Unified Multi-Channel Inflow Ledger",
+      "module": "backend-db",
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-12",
+        "task-13",
+        "task-14"
+      ],
+      "spec_ref": "SPEC-004",
+      "description": "Extend database schema with payment tracking indices, receipt numbers, and multi-channel collection transaction query APIs."
+    },
+    {
+      "id": "task-16",
+      "name": "Dual-Ledger FIFO Allocation & KMK Delay Penalty Waterfall Engine",
+      "module": "backend-rust",
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-15"
+      ],
+      "spec_ref": "SPEC-004",
+      "description": "Implement 4-tier waterfall allocation engine: KMK delay penalties first, operational dues second, capital dues third, and surplus to advance."
+    },
+    {
+      "id": "task-17",
+      "name": "Sequential Digital Payment Receipt Generation & Voucher Verification",
+      "module": "backend-rust",
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-16"
+      ],
+      "spec_ref": "SPEC-004",
+      "description": "Generate monotonic sequentially numbered official payment receipts (#TAH-YYYY-XXXXXX) with verification hash."
+    },
+    {
+      "id": "task-18",
+      "name": "Site Manager Payment Tracking Dashboard & Debt Aging UI",
+      "module": "flutter-ui",
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-17"
+      ],
+      "spec_ref": "SPEC-004",
+      "description": "Build high-performance Flutter fullscreen Payment Tracking view with filters, collection rate KPIs, debt aging brackets, and receipt views."
+    },
+    {
+      "id": "task-19",
+      "name": "Occupancy Lifecycle Financial Handover & Move-Out Balance Freeze Hook",
+      "module": "full-stack",
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-18"
+      ],
+      "spec_ref": "SPEC-004",
+      "description": "Integrate Property & Occupancy Registry move-out action with Treasury Context to freeze tenant balance and shift future accruals to owner."
     }
   ]
 }

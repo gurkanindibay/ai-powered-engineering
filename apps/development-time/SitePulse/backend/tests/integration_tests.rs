@@ -2242,3 +2242,252 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
     let f14 = flats.iter().find(|f| f["unit_no"] == 14).expect("Flat 14 must be in overview");
     assert_eq!(f14["resident_name"], "Canan Can");
 }
+
+#[tokio::test]
+async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_kpis() {
+    let state = AppState::new();
+    let service = PaymentTrackingService::new(state.clone());
+
+    // Record 2 manual payments
+    let p1 = RecordManualPaymentRequest {
+        site_id: Some("site-1".to_string()),
+        unit_id: "d-14".to_string(),
+        amount: Decimal::from_str_exact("1500.00").unwrap(),
+        payer_name: "Ayşe Yılmaz".to_string(),
+        payer_role: "TENANT".to_string(),
+        payment_channel: "MANUAL_CASH".to_string(),
+        description: Some("Eylül ayı aidat nakit elden".to_string()),
+        payment_date: Some(Utc::now()),
+    };
+    service.record_and_allocate_payment(p1).await.unwrap();
+
+    let p2 = RecordManualPaymentRequest {
+        site_id: Some("site-1".to_string()),
+        unit_id: "d-14".to_string(),
+        amount: Decimal::from_str_exact("3000.00").unwrap(),
+        payer_name: "Ahmet Yılmaz".to_string(),
+        payer_role: "OWNER".to_string(),
+        payment_channel: "VIRTUAL_IBAN".to_string(),
+        description: Some("Banka transferi".to_string()),
+        payment_date: Some(Utc::now()),
+    };
+    service.record_and_allocate_payment(p2).await.unwrap();
+
+    // 1. Query all
+    let all = service.get_payment_stream(PaymentStreamFilter {
+        site_id: Some("site-1".to_string()),
+        ..Default::default()
+    }).await;
+    assert!(all.total_count >= 2);
+    assert!(all.total_volume >= Decimal::from_str_exact("4500.00").unwrap());
+
+    // 2. Query filtered by channel
+    let cash_only = service.get_payment_stream(PaymentStreamFilter {
+        site_id: Some("site-1".to_string()),
+        channel: Some("MANUAL_CASH".to_string()),
+        ..Default::default()
+    }).await;
+    assert_eq!(cash_only.total_count, 1);
+    assert_eq!(cash_only.entries[0].amount, Decimal::from_str_exact("1500.00").unwrap());
+
+    // 3. Query filtered by payer role
+    let tenant_only = service.get_payment_stream(PaymentStreamFilter {
+        site_id: Some("site-1".to_string()),
+        payer_role: Some("TENANT".to_string()),
+        ..Default::default()
+    }).await;
+    assert!(tenant_only.entries.iter().all(|e| e.payer_role == "TENANT"));
+}
+
+#[tokio::test]
+async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_brackets() {
+    let state = AppState::new();
+    let service = PaymentTrackingService::new(state.clone());
+
+    let today = Utc::now().date_naive();
+    {
+        let mut inner = state.inner.write().await;
+        inner.dues.clear();
+
+        // Current (due today)
+        inner.dues.push(DuesLiability {
+            id: "due-curr".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Ekim 2026".to_string(),
+            principal_amount: Decimal::from_str_exact("1000.00").unwrap(),
+            delay_penalty: Decimal::ZERO,
+            total_amount: Decimal::from_str_exact("1000.00").unwrap(),
+            due_date: today,
+            status: DebtStatus::Pending,
+        });
+
+        // 1-30 days overdue (due 20 days ago)
+        inner.dues.push(DuesLiability {
+            id: "due-20d".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Eylül 2026".to_string(),
+            principal_amount: Decimal::from_str_exact("1200.00").unwrap(),
+            delay_penalty: Decimal::from_str_exact("40.00").unwrap(),
+            total_amount: Decimal::from_str_exact("1240.00").unwrap(),
+            due_date: today - chrono::Days::new(20),
+            status: DebtStatus::Overdue,
+        });
+
+        // 31-60 days overdue (due 45 days ago)
+        inner.dues.push(DuesLiability {
+            id: "due-45d".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Ağustos 2026".to_string(),
+            principal_amount: Decimal::from_str_exact("1400.00").unwrap(),
+            delay_penalty: Decimal::from_str_exact("105.00").unwrap(),
+            total_amount: Decimal::from_str_exact("1505.00").unwrap(),
+            due_date: today - chrono::Days::new(45),
+            status: DebtStatus::Overdue,
+        });
+
+        // 60+ days overdue (due 80 days ago)
+        inner.dues.push(DuesLiability {
+            id: "due-80d".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Temmuz 2026".to_string(),
+            principal_amount: Decimal::from_str_exact("1600.00").unwrap(),
+            delay_penalty: Decimal::from_str_exact("200.00").unwrap(),
+            total_amount: Decimal::from_str_exact("1800.00").unwrap(),
+            due_date: today - chrono::Days::new(80),
+            status: DebtStatus::Overdue,
+        });
+    }
+
+    let report = service.get_debt_aging_report("site-1").await;
+    assert_eq!(report.total_current, Decimal::from_str_exact("1000.00").unwrap());
+    assert_eq!(report.total_1_30_days, Decimal::from_str_exact("1200.00").unwrap());
+    assert_eq!(report.total_31_60_days, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(report.total_60_plus_days, Decimal::from_str_exact("1600.00").unwrap());
+    assert_eq!(report.total_penalty, Decimal::from_str_exact("345.00").unwrap());
+    assert_eq!(report.grand_total, Decimal::from_str_exact("5545.00").unwrap());
+    assert_eq!(report.brackets.len(), 1);
+    assert_eq!(report.brackets[0].unit_id, "d-14");
+}
+
+#[tokio::test]
+async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_marks_rent_offset_eligible() {
+    let state = AppState::new();
+    let service = PaymentTrackingService::new(state.clone());
+
+    let req = RecordManualPaymentRequest {
+        site_id: Some("site-1".to_string()),
+        unit_id: "d-14".to_string(),
+        amount: Decimal::from_str_exact("2500.00").unwrap(),
+        payer_name: "Ali Kiracı".to_string(),
+        payer_role: "TENANT".to_string(),
+        payment_channel: "BANK_TRANSFER".to_string(),
+        description: Some("Daire 14 Asansör ve Demirbaş Harcaması Payı".to_string()),
+        payment_date: Some(Utc::now()),
+    };
+
+    let receipt = service.record_and_allocate_payment(req).await.unwrap();
+
+    assert!(receipt.receipt_number.starts_with("TAH-2026-"));
+    assert_eq!(receipt.total_amount, Decimal::from_str_exact("2500.00").unwrap());
+    assert!(receipt.is_rent_offset_eligible);
+    assert_eq!(receipt.on_behalf_of_role, Some("OWNER".to_string()));
+    assert!(receipt.legal_statutory_note.is_some());
+    assert!(receipt.legal_statutory_note.unwrap().contains("TBK Madde 314"));
+    assert_eq!(receipt.verification_hash.len(), 64);
+}
+
+#[tokio::test]
+async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capital_and_issues_receipt() {
+    let state = AppState::new();
+    let service = PaymentTrackingService::new(state.clone());
+
+    // Setup: Unit d-14 has ₺3000 advance balance and ₺1400 unpaid capital dues
+    {
+        let mut inner = state.inner.write().await;
+        inner.advance_payments.insert("d-14".to_string(), Decimal::from_str_exact("3000.00").unwrap());
+        inner.dues.clear();
+        inner.dues.push(DuesLiability {
+            id: "due-capital-1".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Eylül 2026".to_string(),
+            principal_amount: Decimal::from_str_exact("1400.00").unwrap(),
+            delay_penalty: Decimal::ZERO,
+            total_amount: Decimal::from_str_exact("1400.00").unwrap(),
+            due_date: Utc::now().date_naive(),
+            status: DebtStatus::Pending,
+        });
+    }
+
+    let transfer_req = InterLedgerTransferRequest {
+        site_id: Some("site-1".to_string()),
+        unit_id: "d-14".to_string(),
+        amount: Decimal::from_str_exact("1400.00").unwrap(),
+        note: Some("Ev sahibi onaylı avanstan demirbaşa virman".to_string()),
+        operator_user_id: Some("usr-manager".to_string()),
+    };
+
+    let resp = service.inter_ledger_transfer(transfer_req).await.unwrap();
+    assert!(resp.success);
+    assert_eq!(resp.transferred_amount, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(resp.remaining_advance_balance, Decimal::from_str_exact("1600.00").unwrap());
+    assert_eq!(resp.cleared_capital_due_amount, Decimal::from_str_exact("1400.00").unwrap());
+    assert!(resp.receipt_number.starts_with("TAH-2026-"));
+
+    // Verify due is marked as Paid in state
+    let inner = state.inner.read().await;
+    let due = inner.dues.iter().find(|d| d.id == "due-capital-1").unwrap();
+    assert_eq!(due.status, DebtStatus::Paid);
+}
+
+#[tokio::test]
+async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tenant_lease_preserved() {
+    let state = AppState::new();
+    let service = PaymentTrackingService::new(state.clone());
+
+    // Setup: Unit d-14 with tenant and old owner, plus ₺2800 debt
+    {
+        let mut inner = state.inner.write().await;
+        if let Some(unit) = inner.units.iter_mut().find(|u| u.id == "d-14") {
+            unit.tenant_user_id = Some("usr-tenant-1".to_string());
+        }
+        inner.dues.clear();
+        inner.dues.push(DuesLiability {
+            id: "due-old-1".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Ağustos 2026".to_string(),
+            principal_amount: Decimal::from_str_exact("2800.00").unwrap(),
+            delay_penalty: Decimal::ZERO,
+            total_amount: Decimal::from_str_exact("2800.00").unwrap(),
+            due_date: Utc::now().date_naive(),
+            status: DebtStatus::Pending,
+        });
+    }
+
+    let transfer_req = TransferOwnershipRequest {
+        site_id: Some("site-1".to_string()),
+        unit_id: "d-14".to_string(),
+        new_owner_name: "Mehmet Yeni Malik".to_string(),
+        new_owner_national_id: Some("12345678901".to_string()),
+        new_owner_phone: Some("0535 999 88 77".to_string()),
+        new_owner_email: Some("mehmet.yeni@begonya.com".to_string()),
+        transfer_date: Some(Utc::now().date_naive()),
+        notes: Some("Tapu devri noter onaylı satış belgesi".to_string()),
+    };
+
+    let resp = service.transfer_ownership(transfer_req).await.unwrap();
+    assert!(resp.success);
+    assert_eq!(resp.new_owner_name, "Mehmet Yeni Malik");
+    assert_eq!(resp.old_owner_exit_balance, Decimal::from_str_exact("2800.00").unwrap());
+
+    // Verify unit state
+    let inner = state.inner.read().await;
+    let unit = inner.units.iter().find(|u| u.id == "d-14").unwrap();
+    let new_owner_id = unit.owner_user_id.as_ref().unwrap();
+    let new_user = inner.users.iter().find(|u| &u.id == new_owner_id).unwrap();
+    assert_eq!(new_user.full_name, "Mehmet Yeni Malik");
+    // Tenant user id must remain untouched
+    assert_eq!(unit.tenant_user_id, Some("usr-tenant-1".to_string()));
+    // Old owner archived in unit occupancies
+    let occs = inner.unit_occupancies.get("d-14").unwrap();
+    assert!(occs.iter().any(|o| o.person_name == resp.old_owner_name && !o.is_active));
+}

@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
 import 'app_fullscreen_page.dart';
 import 'bank_statement_reconciliation_page.dart';
+import 'payment_tracking_page.dart';
 import '../residents/owners_residents_module_page.dart';
 
 class ManagerCockpitView extends StatelessWidget {
@@ -328,27 +329,20 @@ class ManagerCockpitView extends StatelessWidget {
 
         const SizedBox(height: 16),
 
-        // Bank Statement Ingestion & Automated Reconciliation Action Card (STORY-07-02)
+        // 1. Primary Financial Hub: Tahsilat & Ödeme Takibi (Canlı Kasa, Banka Ekstresi & Borç Yaşlandırma)
         InkWell(
-          onTap: () {
-            AppFullscreenPage.push(
-              context: context,
-              builder: (_) => BankStatementReconciliationPage(controller: controller),
-            );
-          },
+          key: const Key('quick_action_payment_tracking'),
+          onTap: () => PaymentTrackingPage.open(context, controller: controller),
           borderRadius: BorderRadius.circular(18),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             decoration: BoxDecoration(
               color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: AppColors.accentCyan.withOpacity(0.5),
-                width: 1.5,
-              ),
+              border: Border.all(color: Colors.indigo.withOpacity(0.5), width: 1.5),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.accentCyan.withOpacity(0.08),
+                  color: Colors.indigo.withOpacity(0.08),
                   blurRadius: 12,
                   offset: const Offset(0, 3),
                 ),
@@ -359,10 +353,10 @@ class ManagerCockpitView extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.accentCyan.withOpacity(0.15),
+                    color: Colors.indigo.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.account_balance, color: AppColors.accentCyan, size: 22),
+                  child: const Icon(Icons.account_balance_wallet, color: Colors.indigo, size: 22),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -372,7 +366,7 @@ class ManagerCockpitView extends StatelessWidget {
                       Row(
                         children: [
                           Text(
-                            'Banka Ekstresi & Eşleştirme',
+                            'Tahsilat & Ödeme Takibi',
                             style: TextStyle(
                               color: AppColors.textPrimary(context),
                               fontSize: 14,
@@ -387,7 +381,7 @@ class ManagerCockpitView extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Text(
-                              'Zero-Approval',
+                              'Canlı Kasa & Ekstre',
                               style: TextStyle(
                                 color: AppColors.accentGreen,
                                 fontSize: 9,
@@ -399,7 +393,7 @@ class ManagerCockpitView extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Excel, CSV veya MT940 ekstrelerini yapıştırın, aidatları otomatik eşleyin.',
+                        'Çok kanallı kasa akışı, banka ekstresi içe aktarma & eşleştirme, borç yaşlandırma ve dijital makbuzlar.',
                         style: TextStyle(
                           color: AppColors.textSecondary(context),
                           fontSize: 11,
@@ -408,7 +402,7 @@ class ManagerCockpitView extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.accentCyan),
+                const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.indigo),
               ],
             ),
           ),
@@ -416,7 +410,7 @@ class ManagerCockpitView extends StatelessWidget {
 
         const SizedBox(height: 12),
 
-        // Owners & Residents Module Quick Action Card
+        // 2. Owners & Residents Module Quick Action Card
         InkWell(
           key: const Key('quick_action_residents_module'),
           onTap: () {

@@ -204,30 +204,42 @@ void main() {
       // Verify switching to unmatched bank transactions segment
       expect(find.textContaining('Aşağıdaki transferler banka ekstresinde mevcut'), findsOneWidget);
 
-      // 6. Navigate to Fullscreen BankStatementReconciliationPage from Cockpit
+      // 6. Navigate to Fullscreen BankStatementReconciliationPage via Tahsilat & Ödeme Takibi from Cockpit
       final homeTab = find.text('Ana Sayfa');
       expect(homeTab, findsOneWidget);
       await tester.tap(homeTab);
       await tester.pumpAndSettle();
 
-      final bankReconCard = find.text('Banka Ekstresi & Eşleştirme');
-      expect(bankReconCard, findsOneWidget);
-      await tester.ensureVisible(bankReconCard);
+      final paymentTrackingCard = find.byKey(const Key('quick_action_payment_tracking'));
+      expect(paymentTrackingCard, findsOneWidget);
+      await tester.ensureVisible(paymentTrackingCard);
       await tester.pumpAndSettle();
-      await tester.tap(bankReconCard);
+      await tester.tap(paymentTrackingCard);
+      await tester.pumpAndSettle();
+
+      // From unified PaymentTrackingPage, open Bank Statement Reconciliation
+      final bankReconAction = find.byKey(const Key('action_open_bank_reconciliation'));
+      expect(bankReconAction, findsOneWidget);
+      await tester.tap(bankReconAction);
       await tester.pumpAndSettle();
 
       // Verify navigation to BankStatementReconciliationPage
       expect(find.byType(BankStatementReconciliationPage), findsOneWidget);
       expect(find.text('Excel, CSV veya SWIFT MT940 formatında yükleyin'), findsOneWidget);
 
-      // Return back using back button
+      // Return back to PaymentTrackingPage using back button
       final backBtn = find.byIcon(Icons.arrow_back_ios_new_rounded);
       expect(backBtn, findsOneWidget);
       await tester.tap(backBtn);
       await tester.pumpAndSettle();
 
       expect(find.byType(BankStatementReconciliationPage), findsNothing);
+
+      // Return back to Cockpit from PaymentTrackingPage
+      final backBtn2 = find.byIcon(Icons.arrow_back_ios_new_rounded);
+      expect(backBtn2, findsOneWidget);
+      await tester.tap(backBtn2);
+      await tester.pumpAndSettle();
     });
 
     testWidgets('E2E Journey 3: Home Owner Dues Inspection, Payment Checkout & Co-Resident Link Flow', (WidgetTester tester) async {

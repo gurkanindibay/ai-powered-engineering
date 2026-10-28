@@ -923,6 +923,19 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 minimumSize: const Size(0, 24),
                               ),
                             ),
+                            const SizedBox(width: 4),
+                            OutlinedButton.icon(
+                              key: Key('module_transfer_ownership_${ho.unitId}'),
+                              onPressed: () => _openTransferOwnership(ho),
+                              icon: const Icon(Icons.real_estate_agent, size: 11),
+                              label: const Text('Mülk Devri (Satış)', style: TextStyle(fontSize: 10)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.teal,
+                                side: const BorderSide(color: Colors.teal),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                minimumSize: const Size(0, 24),
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -2569,6 +2582,164 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _openTransferOwnership(HomeOwnerItem ho) {
+    final nameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    bool isSubmitting = false;
+
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return AppFullscreenPage(
+            title: 'Mülk Tapu Devri & Satış İşlemi',
+            subtitle: '${ho.block} Blok Daire ${ho.unitNo}',
+            bottomBar: AppFullscreenPage.buildBottomBar(
+              context: ctx,
+              children: [
+                OutlinedButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+                  child: const Text('Vazgeç'),
+                ),
+                ElevatedButton(
+                  key: const Key('module_confirm_transfer_ownership_btn'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          final newName = nameCtrl.text.trim();
+                          if (newName.isEmpty) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(content: Text('Lütfen yeni malikin adını ve soyadını giriniz.')),
+                            );
+                            return;
+                          }
+                          setDlgState(() => isSubmitting = true);
+                          final res = await widget.controller.transferUnitOwnership(
+                            unitId: ho.unitId,
+                            newOwnerName: newName,
+                            newOwnerPhone: phoneCtrl.text.trim(),
+                            newOwnerEmail: emailCtrl.text.trim(),
+                            notes: notesCtrl.text.trim(),
+                          );
+                          setDlgState(() => isSubmitting = false);
+                          if (res != null && ctx.mounted) {
+                            Navigator.pop(ctx);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(res['message']?.toString() ?? 'Mülk tapu devri başarıyla tamamlandı.'),
+                                  backgroundColor: Colors.teal,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  child: isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Tapu Devrini Onayla'),
+                ),
+              ],
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.info_outline, color: Colors.teal, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'KMK Uyarınca Mülk Devir Esasları',
+                                style: TextStyle(color: AppColors.textPrimary(ctx), fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '• Mevcut Kat Maliki: ${ho.ownerFullName.isNotEmpty ? ho.ownerFullName : "Bilinmiyor"}\n'
+                          '• Devir anına kadar olan tüm ödenmemiş borçlar ve avanslar eski malik hesabında dondurulur ve arşivlenir.\n'
+                          '• Yeni kat maliki tapu tescil tarihi itibarıyla tahakkuk edecek aidat ve demirbaşlardan sorumlu olur.\n'
+                          '${ho.isTenantOccupied ? "• Dairedeki aktif kiracının (${ho.tenantFullName ?? 'Kiracı'}) sözleşmesi ve sorumluluğu aynen devam eder." : "• Daire mülk sahibi kullanımında görünmektedir."}',
+                          style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 11, height: 1.4),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Yeni Kat Maliki Bilgileri',
+                    style: TextStyle(color: AppColors.textPrimary(ctx), fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('module_transfer_new_owner_name_input'),
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Yeni Kat Maliki Adı Soyadı *',
+                      prefixIcon: Icon(Icons.person, size: 18),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('module_transfer_new_owner_phone_input'),
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Yeni Kat Maliki Telefon',
+                      prefixIcon: Icon(Icons.phone, size: 18),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('module_transfer_new_owner_email_input'),
+                    controller: emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Yeni Kat Maliki E-Posta',
+                      prefixIcon: Icon(Icons.email, size: 18),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('module_transfer_notes_input'),
+                    controller: notesCtrl,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Tapu Devir Notları / Noter Satış Bilgisi',
+                      prefixIcon: Icon(Icons.note_alt_outlined, size: 18),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

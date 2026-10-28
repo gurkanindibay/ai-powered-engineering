@@ -3299,4 +3299,73 @@ pub async fn get_site_overview(
     (StatusCode::OK, Json(serde_json::to_value(response).unwrap()))
 }
 
+pub async fn get_payment_stream(
+    State(state): State<AppState>,
+    Query(filter): Query<crate::models::PaymentStreamFilter>,
+) -> Json<crate::models::PaymentStreamResponse> {
+    let service = crate::services::PaymentTrackingService::new(state);
+    Json(service.get_payment_stream(filter).await)
+}
+
+pub async fn get_debt_aging_report(
+    State(state): State<AppState>,
+    Query(q): Query<SiteIdParam>,
+) -> Json<crate::models::DebtAgingReport> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = crate::services::PaymentTrackingService::new(state);
+    Json(service.get_debt_aging_report(&site_id).await)
+}
+
+pub async fn record_manual_payment(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::models::RecordManualPaymentRequest>,
+) -> Result<(StatusCode, Json<crate::models::PaymentReceipt>), (StatusCode, String)> {
+    let service = crate::services::PaymentTrackingService::new(state);
+    service
+        .record_and_allocate_payment(payload)
+        .await
+        .map(|r| (StatusCode::CREATED, Json(r)))
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+pub async fn inter_ledger_transfer(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::models::InterLedgerTransferRequest>,
+) -> Result<Json<crate::models::InterLedgerTransferResponse>, (StatusCode, String)> {
+    let service = crate::services::PaymentTrackingService::new(state);
+    service
+        .inter_ledger_transfer(payload)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+pub async fn get_payment_receipt(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+) -> Result<Json<crate::models::PaymentReceipt>, (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = crate::services::PaymentTrackingService::new(state);
+    service
+        .get_receipt(&site_id, &id)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::NOT_FOUND, e))
+}
+
+pub async fn transfer_unit_ownership(
+    State(state): State<AppState>,
+    Path(unit_id): Path<String>,
+    Json(mut payload): Json<crate::models::TransferOwnershipRequest>,
+) -> Result<Json<crate::models::TransferOwnershipResponse>, (StatusCode, String)> {
+    payload.unit_id = unit_id;
+    let service = crate::services::PaymentTrackingService::new(state);
+    service
+        .transfer_ownership(payload)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
 

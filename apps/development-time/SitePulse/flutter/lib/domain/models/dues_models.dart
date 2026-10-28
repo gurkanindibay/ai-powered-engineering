@@ -1294,4 +1294,299 @@ class DuesPeriodItem {
   };
 }
 
+class AllocationBreakdownItemDto {
+  final String? dueId;
+  final String period;
+  final String expenseType;
+  final Decimal principalPaid;
+  final Decimal penaltyPaid;
+
+  const AllocationBreakdownItemDto({
+    this.dueId,
+    required this.period,
+    required this.expenseType,
+    required this.principalPaid,
+    required this.penaltyPaid,
+  });
+
+  factory AllocationBreakdownItemDto.fromJson(Map<String, dynamic> json) {
+    return AllocationBreakdownItemDto(
+      dueId: json['due_id']?.toString(),
+      period: json['period']?.toString() ?? '',
+      expenseType: json['expense_type']?.toString() ?? 'OPERATIONAL_DUES',
+      principalPaid: Decimal.tryParse(json['principal_paid']?.toString() ?? '0') ?? Decimal.zero,
+      penaltyPaid: Decimal.tryParse(json['penalty_paid']?.toString() ?? '0') ?? Decimal.zero,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'due_id': dueId,
+    'period': period,
+    'expense_type': expenseType,
+    'principal_paid': principalPaid.toString(),
+    'penalty_paid': penaltyPaid.toString(),
+  };
+}
+
+class PaymentReceiptDto {
+  final int id;
+  final String siteId;
+  final String unitId;
+  final String receiptNumber;
+  final int sequenceNumber;
+  final String payerName;
+  final String payerRole;
+  final String? onBehalfOfName;
+  final String? onBehalfOfRole;
+  final Decimal totalAmount;
+  final String paymentChannel;
+  final String? channelReference;
+  final Decimal allocatedPrincipal;
+  final Decimal allocatedPenalty;
+  final Decimal allocatedAdvance;
+  final List<AllocationBreakdownItemDto> allocationBreakdown;
+  final bool isRentOffsetEligible;
+  final String? legalStatutoryNote;
+  final String verificationHash;
+  final DateTime issuedAt;
+
+  const PaymentReceiptDto({
+    required this.id,
+    required this.siteId,
+    required this.unitId,
+    required this.receiptNumber,
+    required this.sequenceNumber,
+    required this.payerName,
+    required this.payerRole,
+    this.onBehalfOfName,
+    this.onBehalfOfRole,
+    required this.totalAmount,
+    required this.paymentChannel,
+    this.channelReference,
+    required this.allocatedPrincipal,
+    required this.allocatedPenalty,
+    required this.allocatedAdvance,
+    this.allocationBreakdown = const [],
+    this.isRentOffsetEligible = false,
+    this.legalStatutoryNote,
+    required this.verificationHash,
+    required this.issuedAt,
+  });
+
+  factory PaymentReceiptDto.fromJson(Map<String, dynamic> json) {
+    var rawList = json['allocation_breakdown'];
+    List<AllocationBreakdownItemDto> breakdown = [];
+    if (rawList is List) {
+      breakdown = rawList
+          .map((i) => AllocationBreakdownItemDto.fromJson(i as Map<String, dynamic>))
+          .toList();
+    }
+
+    return PaymentReceiptDto(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      siteId: json['site_id']?.toString() ?? '',
+      unitId: json['unit_id']?.toString() ?? '',
+      receiptNumber: json['receipt_number']?.toString() ?? '',
+      sequenceNumber: (json['sequence_number'] as num?)?.toInt() ?? 0,
+      payerName: json['payer_name']?.toString() ?? '',
+      payerRole: json['payer_role']?.toString() ?? 'TENANT',
+      onBehalfOfName: json['on_behalf_of_name']?.toString(),
+      onBehalfOfRole: json['on_behalf_of_role']?.toString(),
+      totalAmount: Decimal.tryParse(json['total_amount']?.toString() ?? '0') ?? Decimal.zero,
+      paymentChannel: json['payment_channel']?.toString() ?? 'MANUAL_CASH',
+      channelReference: json['channel_reference']?.toString(),
+      allocatedPrincipal: Decimal.tryParse(json['allocated_principal']?.toString() ?? '0') ?? Decimal.zero,
+      allocatedPenalty: Decimal.tryParse(json['allocated_penalty']?.toString() ?? '0') ?? Decimal.zero,
+      allocatedAdvance: Decimal.tryParse(json['allocated_advance']?.toString() ?? '0') ?? Decimal.zero,
+      allocationBreakdown: breakdown,
+      isRentOffsetEligible: json['is_rent_offset_eligible'] == true,
+      legalStatutoryNote: json['legal_statutory_note']?.toString(),
+      verificationHash: json['verification_hash']?.toString() ?? '',
+      issuedAt: json['issued_at'] != null
+          ? DateTime.tryParse(json['issued_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+}
+
+class PaymentEntryDto {
+  final int id;
+  final String siteId;
+  final String unitId;
+  final String? unitLabel;
+  final String payerName;
+  final String payerRole;
+  final int? receiptId;
+  final String? receiptNumber;
+  final Decimal amount;
+  final String paymentChannel;
+  final String settlementStatus;
+  final String? description;
+  final String? externalReference;
+  final DateTime paymentDate;
+  final DateTime createdAt;
+
+  const PaymentEntryDto({
+    required this.id,
+    required this.siteId,
+    required this.unitId,
+    this.unitLabel,
+    required this.payerName,
+    required this.payerRole,
+    this.receiptId,
+    this.receiptNumber,
+    required this.amount,
+    required this.paymentChannel,
+    required this.settlementStatus,
+    this.description,
+    this.externalReference,
+    required this.paymentDate,
+    required this.createdAt,
+  });
+
+  factory PaymentEntryDto.fromJson(Map<String, dynamic> json) {
+    return PaymentEntryDto(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      siteId: json['site_id']?.toString() ?? '',
+      unitId: json['unit_id']?.toString() ?? '',
+      unitLabel: json['unit_label']?.toString(),
+      payerName: json['payer_name']?.toString() ?? '',
+      payerRole: json['payer_role']?.toString() ?? 'TENANT',
+      receiptId: (json['receipt_id'] as num?)?.toInt(),
+      receiptNumber: json['receipt_number']?.toString(),
+      amount: Decimal.tryParse(json['amount']?.toString() ?? '0') ?? Decimal.zero,
+      paymentChannel: json['payment_channel']?.toString() ?? 'MANUAL_CASH',
+      settlementStatus: json['settlement_status']?.toString() ?? 'SETTLED',
+      description: json['description']?.toString(),
+      externalReference: json['external_reference']?.toString(),
+      paymentDate: json['payment_date'] != null
+          ? DateTime.tryParse(json['payment_date'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+}
+
+class PaymentStreamResponseDto {
+  final List<PaymentEntryDto> entries;
+  final Decimal totalVolume;
+  final Decimal settledVolume;
+  final Decimal unmatchedVolume;
+  final int totalCount;
+
+  const PaymentStreamResponseDto({
+    required this.entries,
+    required this.totalVolume,
+    required this.settledVolume,
+    required this.unmatchedVolume,
+    required this.totalCount,
+  });
+
+  factory PaymentStreamResponseDto.fromJson(Map<String, dynamic> json) {
+    var rawEntries = json['entries'];
+    List<PaymentEntryDto> list = [];
+    if (rawEntries is List) {
+      list = rawEntries
+          .map((e) => PaymentEntryDto.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+
+    return PaymentStreamResponseDto(
+      entries: list,
+      totalVolume: Decimal.tryParse(json['total_volume']?.toString() ?? '0') ?? Decimal.zero,
+      settledVolume: Decimal.tryParse(json['settled_volume']?.toString() ?? '0') ?? Decimal.zero,
+      unmatchedVolume: Decimal.tryParse(json['unmatched_volume']?.toString() ?? '0') ?? Decimal.zero,
+      totalCount: (json['total_count'] as num?)?.toInt() ?? list.length,
+    );
+  }
+}
+
+class DebtAgingBracketDto {
+  final String unitId;
+  final String unitLabel;
+  final String residentName;
+  final String debtorType;
+  final Decimal currentDue;
+  final Decimal overdue1to30Days;
+  final Decimal overdue31to60Days;
+  final Decimal overdue60PlusDays;
+  final Decimal accruedDelayPenalty;
+  final Decimal totalOutstanding;
+
+  const DebtAgingBracketDto({
+    required this.unitId,
+    required this.unitLabel,
+    required this.residentName,
+    required this.debtorType,
+    required this.currentDue,
+    required this.overdue1to30Days,
+    required this.overdue31to60Days,
+    required this.overdue60PlusDays,
+    required this.accruedDelayPenalty,
+    required this.totalOutstanding,
+  });
+
+  factory DebtAgingBracketDto.fromJson(Map<String, dynamic> json) {
+    return DebtAgingBracketDto(
+      unitId: json['unit_id']?.toString() ?? '',
+      unitLabel: json['unit_label']?.toString() ?? '',
+      residentName: json['resident_name']?.toString() ?? '',
+      debtorType: json['debtor_type']?.toString() ?? 'TENANT',
+      currentDue: Decimal.tryParse(json['current_due']?.toString() ?? '0') ?? Decimal.zero,
+      overdue1to30Days: Decimal.tryParse(json['overdue_1_30_days']?.toString() ?? '0') ?? Decimal.zero,
+      overdue31to60Days: Decimal.tryParse(json['overdue_31_60_days']?.toString() ?? '0') ?? Decimal.zero,
+      overdue60PlusDays: Decimal.tryParse(json['overdue_60_plus_days']?.toString() ?? '0') ?? Decimal.zero,
+      accruedDelayPenalty: Decimal.tryParse(json['accrued_delay_penalty']?.toString() ?? '0') ?? Decimal.zero,
+      totalOutstanding: Decimal.tryParse(json['total_outstanding']?.toString() ?? '0') ?? Decimal.zero,
+    );
+  }
+}
+
+class DebtAgingReportDto {
+  final DateTime asOfDate;
+  final Decimal totalCurrent;
+  final Decimal total1to30Days;
+  final Decimal total31to60Days;
+  final Decimal total60PlusDays;
+  final Decimal totalPenalty;
+  final Decimal grandTotal;
+  final List<DebtAgingBracketDto> brackets;
+
+  const DebtAgingReportDto({
+    required this.asOfDate,
+    required this.totalCurrent,
+    required this.total1to30Days,
+    required this.total31to60Days,
+    required this.total60PlusDays,
+    required this.totalPenalty,
+    required this.grandTotal,
+    required this.brackets,
+  });
+
+  factory DebtAgingReportDto.fromJson(Map<String, dynamic> json) {
+    var rawBrackets = json['brackets'];
+    List<DebtAgingBracketDto> list = [];
+    if (rawBrackets is List) {
+      list = rawBrackets
+          .map((b) => DebtAgingBracketDto.fromJson(b as Map<String, dynamic>))
+          .toList();
+    }
+
+    return DebtAgingReportDto(
+      asOfDate: json['as_of_date'] != null
+          ? DateTime.tryParse(json['as_of_date'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      totalCurrent: Decimal.tryParse(json['total_current']?.toString() ?? '0') ?? Decimal.zero,
+      total1to30Days: Decimal.tryParse(json['total_1_30_days']?.toString() ?? '0') ?? Decimal.zero,
+      total31to60Days: Decimal.tryParse(json['total_31_60_days']?.toString() ?? '0') ?? Decimal.zero,
+      total60PlusDays: Decimal.tryParse(json['total_60_plus_days']?.toString() ?? '0') ?? Decimal.zero,
+      totalPenalty: Decimal.tryParse(json['total_penalty']?.toString() ?? '0') ?? Decimal.zero,
+      grandTotal: Decimal.tryParse(json['grand_total']?.toString() ?? '0') ?? Decimal.zero,
+      brackets: list,
+    );
+  }
+}
+
 

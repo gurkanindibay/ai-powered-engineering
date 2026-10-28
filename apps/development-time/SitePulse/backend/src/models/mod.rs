@@ -436,6 +436,7 @@ pub struct UpdateHomeOwnerRequest {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[allow(dead_code)]
 pub enum OccupancyStatus {
     OwnerOccupied,
     TenantOccupied,
@@ -450,6 +451,7 @@ impl Default for OccupancyStatus {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[allow(dead_code)]
 pub enum ExpenseType {
     OperationalDues,
     CapitalDues,
@@ -461,8 +463,19 @@ impl Default for ExpenseType {
     }
 }
 
+impl ExpenseType {
+    #[allow(dead_code)]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ExpenseType::OperationalDues => "OPERATIONAL_DUES",
+            ExpenseType::CapitalDues => "CAPITAL_DUES",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[allow(dead_code)]
 pub enum DebtorType {
     Tenant,
     Owner,
@@ -471,6 +484,16 @@ pub enum DebtorType {
 impl Default for DebtorType {
     fn default() -> Self {
         DebtorType::Tenant
+    }
+}
+
+impl DebtorType {
+    #[allow(dead_code)]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DebtorType::Tenant => "TENANT",
+            DebtorType::Owner => "OWNER",
+        }
     }
 }
 
@@ -1150,4 +1173,200 @@ pub struct SiteOverviewResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guidance: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AllocationBreakdownItem {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due_id: Option<String>,
+    pub period: String,
+    pub expense_type: String,
+    pub principal_paid: Decimal,
+    pub penalty_paid: Decimal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentReceipt {
+    pub id: i64,
+    pub site_id: String,
+    pub unit_id: String,
+    pub receipt_number: String,
+    pub sequence_number: i64,
+    pub payer_name: String,
+    pub payer_role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_behalf_of_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_behalf_of_role: Option<String>,
+    pub total_amount: Decimal,
+    pub payment_channel: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_reference: Option<String>,
+    pub allocated_principal: Decimal,
+    pub allocated_penalty: Decimal,
+    pub allocated_advance: Decimal,
+    #[serde(default)]
+    pub allocation_breakdown: Vec<AllocationBreakdownItem>,
+    pub is_rent_offset_eligible: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legal_statutory_note: Option<String>,
+    pub verification_hash: String,
+    pub issued_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentEntry {
+    pub id: i64,
+    pub site_id: String,
+    pub unit_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit_label: Option<String>,
+    pub payer_name: String,
+    pub payer_role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_number: Option<String>,
+    pub amount: Decimal,
+    pub payment_channel: String,
+    pub settlement_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_reference: Option<String>,
+    pub payment_date: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PaymentStreamFilter {
+    #[serde(default)]
+    pub site_id: Option<String>,
+    #[serde(default)]
+    pub channel: Option<String>,
+    #[serde(default)]
+    pub payer_role: Option<String>,
+    #[serde(default)]
+    pub settlement_status: Option<String>,
+    #[serde(default)]
+    pub unit_id: Option<String>,
+    #[serde(default)]
+    pub search: Option<String>,
+    #[serde(default)]
+    pub start_date: Option<NaiveDate>,
+    #[serde(default)]
+    pub end_date: Option<NaiveDate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentStreamResponse {
+    pub entries: Vec<PaymentEntry>,
+    pub total_volume: Decimal,
+    pub settled_volume: Decimal,
+    pub unmatched_volume: Decimal,
+    pub total_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebtAgingBracket {
+    pub unit_id: String,
+    pub unit_label: String,
+    pub resident_name: String,
+    pub debtor_type: String,
+    pub current_due: Decimal,
+    pub overdue_1_30_days: Decimal,
+    pub overdue_31_60_days: Decimal,
+    pub overdue_60_plus_days: Decimal,
+    pub accrued_delay_penalty: Decimal,
+    pub total_outstanding: Decimal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebtAgingReport {
+    pub as_of_date: NaiveDate,
+    pub total_current: Decimal,
+    pub total_1_30_days: Decimal,
+    pub total_31_60_days: Decimal,
+    pub total_60_plus_days: Decimal,
+    pub total_penalty: Decimal,
+    pub grand_total: Decimal,
+    pub brackets: Vec<DebtAgingBracket>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InterLedgerTransferRequest {
+    #[serde(default)]
+    pub site_id: Option<String>,
+    pub unit_id: String,
+    pub amount: Decimal,
+    #[serde(default)]
+    pub note: Option<String>,
+    #[serde(default)]
+    pub operator_user_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InterLedgerTransferResponse {
+    pub success: bool,
+    pub message: String,
+    pub receipt_number: String,
+    pub transferred_amount: Decimal,
+    pub remaining_advance_balance: Decimal,
+    pub cleared_capital_due_amount: Decimal,
+    pub verification_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordManualPaymentRequest {
+    #[serde(default)]
+    pub site_id: Option<String>,
+    pub unit_id: String,
+    pub amount: Decimal,
+    pub payer_name: String,
+    #[serde(default = "default_payer_role")]
+    pub payer_role: String,
+    #[serde(default = "default_payment_channel")]
+    pub payment_channel: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub payment_date: Option<DateTime<Utc>>,
+}
+
+fn default_payer_role() -> String {
+    "TENANT".to_string()
+}
+
+fn default_payment_channel() -> String {
+    "MANUAL_CASH".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferOwnershipRequest {
+    #[serde(default)]
+    pub site_id: Option<String>,
+    pub unit_id: String,
+    pub new_owner_name: String,
+    #[serde(default)]
+    pub new_owner_national_id: Option<String>,
+    #[serde(default)]
+    pub new_owner_phone: Option<String>,
+    #[serde(default)]
+    pub new_owner_email: Option<String>,
+    #[serde(default)]
+    pub transfer_date: Option<NaiveDate>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferOwnershipResponse {
+    pub success: bool,
+    pub message: String,
+    pub unit_id: String,
+    pub old_owner_name: String,
+    pub old_owner_exit_balance: Decimal,
+    pub new_owner_name: String,
+    pub transferred_at: DateTime<Utc>,
+}
+
 

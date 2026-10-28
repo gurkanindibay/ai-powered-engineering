@@ -19,6 +19,7 @@ class AppFullscreenPage extends StatelessWidget {
   final Widget? bottomBar;
   final double maxWidth;
   final bool resizeToAvoidBottomInset;
+  final bool isScrollable;
 
   const AppFullscreenPage({
     super.key,
@@ -31,6 +32,7 @@ class AppFullscreenPage extends StatelessWidget {
     this.bottomBar,
     this.maxWidth = 640,
     this.resizeToAvoidBottomInset = true,
+    this.isScrollable = true,
   });
 
   /// Pushes an [AppFullscreenPage] onto the navigation stack with a smooth
@@ -251,15 +253,25 @@ class AppFullscreenPage extends StatelessWidget {
       ),
       bottomNavigationBar: bottomBar,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxWidth),
-              child: child,
-            ),
-          ),
-        ),
+        child: isScrollable
+            ? SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxWidth),
+                    child: child,
+                  ),
+                ),
+              )
+            : Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxWidth),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: child,
+                  ),
+                ),
+              ),
       ),
     );
   }

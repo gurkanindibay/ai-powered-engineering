@@ -1,0 +1,1488 @@
+import 'package:flutter/material.dart';
+import 'package:decimal/decimal.dart';
+import '../../domain/models/dues_models.dart';
+import '../dashboard/dashboard_controller.dart';
+import '../theme/app_theme.dart';
+import 'app_fullscreen_page.dart';
+import 'bank_statement_reconciliation_page.dart';
+
+class PaymentTrackingPage extends StatefulWidget {
+  final DashboardController controller;
+  final String? initialUnitId;
+  final int initialTabIndex;
+
+  const PaymentTrackingPage({
+    super.key,
+    required this.controller,
+    this.initialUnitId,
+    this.initialTabIndex = 0,
+  });
+
+  static Future<void> open(
+    BuildContext context, {
+    required DashboardController controller,
+    String? initialUnitId,
+    int initialTabIndex = 0,
+  }) {
+    return AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => PaymentTrackingPage(
+        controller: controller,
+        initialUnitId: initialUnitId,
+        initialTabIndex: initialTabIndex,
+      ),
+    );
+  }
+
+  @override
+  State<PaymentTrackingPage> createState() => _PaymentTrackingPageState();
+}
+
+class _PaymentTrackingPageState extends State<PaymentTrackingPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final TextEditingController _searchController = TextEditingController();
+
+  String _selectedChannel = 'ALL';
+  String _selectedRole = 'ALL';
+  String _selectedSettlement = 'ALL';
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex,
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
+    await widget.controller.fetchPaymentStream(
+      channel: _selectedChannel == 'ALL' ? null : _selectedChannel,
+      payerRole: _selectedRole == 'ALL' ? null : _selectedRole,
+      settlementStatus: _selectedSettlement == 'ALL' ? null : _selectedSettlement,
+      unitId: widget.initialUnitId,
+      search: _searchController.text.trim().isEmpty ? null : _searchController.text.trim(),
+    );
+    await widget.controller.fetchDebtAgingReport();
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) {
+        return AppFullscreenPage(
+          title: 'Tahsilat & Ödeme Takibi',
+          subtitle: '${widget.controller.siteName} • Çok Kanallı Kasa & Yaşlandırma',
+          isScrollable: false,
+          maxWidth: 960,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Yenile',
+              onPressed: _loadData,
+            ),
+            IconButton(
+              key: const Key('action_open_bank_reconciliation'),
+              icon: const Icon(Icons.receipt_long),
+              tooltip: 'Banka Ekstresi & Eşleştirme (Excel/MT940)',
+              onPressed: () async {
+                await BankStatementReconciliationPage.open(context, controller: widget.controller);
+                _loadData();
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.add_card),
+              tooltip: 'Manuel Tahsilat Girişi',
+              onPressed: () => _openRecordManualPayment(context),
+            ),
+          ],
+          bottomBar: AppFullscreenPage.buildBottomBar(
+            context: context,
+            children: [
+              OutlinedButton.icon(
+                icon: const Icon(Icons.swap_horiz),
+                label: const Text('Avansı Demirbaşa Aktar (Virman)'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: () => _openInterLedgerTransfer(context),
+              ),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.payments_outlined),
+                label: const Text('Nakit/Banka Girişi'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () => _openRecordManualPayment(context),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildKpiSummaryHeader(),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface(context),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border(context)),
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  labelColor: AppColors.primary,
+                  unselectedLabelColor: AppColors.textSecondary(context),
+                  indicatorColor: AppColors.primary,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  tabs: const [
+                    Tab(
+                      icon: Icon(Icons.stream, size: 20),
+                      text: 'Tahsilat Akışı (Stream)',
+                    ),
+                    Tab(
+                      icon: Icon(Icons.hourglass_top, size: 20),
+                      text: 'Borç Yaşlandırma (Aging)',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildPaymentStreamTab(),
+                    _buildDebtAgingTab(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildKpiSummaryHeader() {
+    final stream = widget.controller.paymentStream;
+    final totalVol = stream?.totalVolume.toString() ?? '0.00';
+    final settledVol = stream?.settledVolume.toString() ?? '0.00';
+    final count = stream?.totalCount ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primary.withOpacity(0.12),
+            AppColors.surface(context),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.account_balance, color: AppColors.primary, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TOPLAM TAHSİLAT HACMİ',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.1,
+                        color: AppColors.textSecondary(context),
+                      ),
+                    ),
+                    Text(
+                      '₺$totalVol',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.accentGreen,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.accentGreen.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.check_circle, color: AppColors.accentGreen, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$count İşlem',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.accentGreen,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Otomatik Eşleşen', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
+                    const SizedBox(height: 2),
+                    Text('₺$settledVol', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Mutabakat Oranı', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
+                    const SizedBox(height: 2),
+                    const Text('100% Güven', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Mevzuat Uyumu', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
+                    const SizedBox(height: 2),
+                    const Text('KMK Mad. 20', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.orange)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentStreamTab() {
+    final stream = widget.controller.paymentStream;
+    final unmatchedBank = widget.controller.unmatchedBankTransactions;
+
+    return Column(
+      children: [
+        if (unmatchedBank.isNotEmpty) ...[
+          Container(
+            key: const Key('banner_unmatched_bank_transactions'),
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.accentOrange.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.accentOrange.withOpacity(0.4)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentOrange.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.warning_amber_rounded, color: AppColors.accentOrange, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Banka Ekstresinde Eşleşme Bekleyen ${unmatchedBank.length} İşlem Var',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.accentOrange),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'İçe aktarılan ekstredeki ödemeleri dairelerle eşleştirip canlı kasaya işleyin.',
+                        style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton(
+                  key: const Key('btn_resolve_unmatched_bank'),
+                  onPressed: () async {
+                    await BankStatementReconciliationPage.open(context, controller: widget.controller);
+                    _loadData();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentOrange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Eşleştirmeyi Çöz'),
+                ),
+              ],
+            ),
+          ),
+        ],
+        // Filter bar
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              OutlinedButton.icon(
+                key: const Key('btn_stream_upload_bank_statement'),
+                onPressed: () async {
+                  await BankStatementReconciliationPage.open(context, controller: widget.controller);
+                  _loadData();
+                },
+                icon: const Icon(Icons.upload_file, size: 14, color: AppColors.accentCyan),
+                label: const Text('Ekstre Yükle / Eşleştir', style: TextStyle(fontSize: 12, color: AppColors.accentCyan)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.accentCyan),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                label: 'Kanal: ${_channelLabel(_selectedChannel)}',
+                icon: Icons.filter_alt,
+                onTap: _showChannelFilterDialog,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                label: 'Rol: ${_roleLabel(_selectedRole)}',
+                icon: Icons.person_outline,
+                onTap: _showRoleFilterDialog,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                label: 'Durum: ${_settlementLabel(_selectedSettlement)}',
+                icon: Icons.verified_outlined,
+                onTap: _showSettlementFilterDialog,
+              ),
+              if (_selectedChannel != 'ALL' || _selectedRole != 'ALL' || _selectedSettlement != 'ALL') ...[
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedChannel = 'ALL';
+                      _selectedRole = 'ALL';
+                      _selectedSettlement = 'ALL';
+                    });
+                    _loadData();
+                  },
+                  child: const Text('Temizle', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Search textfield
+        TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'Sakin adı, daire no, makbuz no veya açıklama ara...',
+            prefixIcon: const Icon(Icons.search, size: 20),
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () {
+                      _searchController.clear();
+                      _loadData();
+                    },
+                  )
+                : null,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            filled: true,
+            fillColor: AppColors.surface(context),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.border(context)),
+            ),
+          ),
+          onSubmitted: (_) => _loadData(),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: widget.controller.isPaymentStreamLoading
+              ? const Center(child: CircularProgressIndicator())
+              : (stream == null || stream.entries.isEmpty)
+                  ? _buildEmptyState('Bu filtrelere uygun tahsilat kaydı bulunamadı.')
+                  : ListView.separated(
+                      itemCount: stream.entries.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final entry = stream.entries[index];
+                        return _buildPaymentEntryCard(entry);
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.surface(context),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.border(context)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_drop_down, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentEntryCard(PaymentEntryDto entry) {
+    final isTenant = entry.payerRole == 'TENANT';
+    final isCapitalDesc = (entry.description?.toUpperCase().contains('DEMİRBAŞ') ?? false) ||
+        (entry.description?.toUpperCase().contains('ASANSÖR') ?? false) ||
+        (entry.description?.toUpperCase().contains('ÇATI') ?? false);
+    final isRentOffset = isTenant && isCapitalDesc;
+
+    return InkWell(
+      onTap: () => _openReceiptViewer(context, entry.receiptNumber ?? entry.id.toString()),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface(context),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border(context)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _channelColor(entry.paymentChannel).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    _channelIcon(entry.paymentChannel),
+                    color: _channelColor(entry.paymentChannel),
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            entry.unitLabel ?? entry.unitId,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isTenant
+                                  ? Colors.indigo.withOpacity(0.15)
+                                  : Colors.teal.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              isTenant ? 'Kiracı' : 'Kat Maliki',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: isTenant ? Colors.indigo : Colors.teal,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        entry.payerName,
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '+₺${entry.amount}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.accentGreen,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${entry.paymentDate.day}.${entry.paymentDate.month}.${entry.paymentDate.year}',
+                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            if (entry.description != null && entry.description!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                entry.description!,
+                style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (entry.receiptNumber != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.receipt_long, size: 12, color: AppColors.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          '#${entry.receiptNumber}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (isRentOffset) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.purple.withOpacity(0.4)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.assignment_turned_in, size: 12, color: Colors.purple),
+                        SizedBox(width: 4),
+                        Text(
+                          'Kira Mahsubu (KMK 20)',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purple),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDebtAgingTab() {
+    final report = widget.controller.debtAgingReport;
+
+    if (report == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Aging Brackets Grid
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 2.2,
+            children: [
+              _buildAgingSummaryTile('Vadesi Gelmemiş', '₺${report.totalCurrent}', Colors.blue, 'Normal döngü'),
+              _buildAgingSummaryTile('1 - 30 Gün Gecikmiş', '₺${report.total1to30Days}', Colors.amber.shade700, 'Hatırlatma SMS'),
+              _buildAgingSummaryTile('31 - 60 Gün Gecikmiş', '₺${report.total31to60Days}', Colors.orange.shade800, 'İhtar mektubu'),
+              _buildAgingSummaryTile('60+ Gün (Yasal Takip)', '₺${report.total60PlusDays}', Colors.red.shade700, 'Hukuki takip adayı'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Total Penalty & Grand Total Banner
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surface(context),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border(context)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('KMK %5 Gecikme Zammı', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
+                      const SizedBox(height: 2),
+                      Text('+₺${report.totalPenalty}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red)),
+                    ],
+                  ),
+                ),
+                Container(height: 30, width: 1, color: AppColors.border(context)),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Toplam Açık Alacak', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
+                      const SizedBox(height: 2),
+                      Text('₺${report.grandTotal}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Daire Bazlı Borç Yaşlandırma',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              Text(
+                '${report.brackets.length} Daire Borçlu',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (report.brackets.isEmpty)
+            _buildEmptyState('Sitede vadesi geçmiş veya açık borç bulunmuyor. Tebrikler!')
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: report.brackets.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final b = report.brackets[index];
+                return _buildDebtAgingBracketCard(b);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAgingSummaryTile(String title, String amount, Color color, String subtitle) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary(context)),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(amount, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+          Text(subtitle, style: TextStyle(fontSize: 10, color: AppColors.textSecondary(context))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDebtAgingBracketCard(DebtAgingBracketDto bracket) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(bracket.unitLabel, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${bracket.residentName} • ${bracket.debtorType == "TENANT" ? "Kiracı" : "Kat Maliki"}',
+                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '₺${bracket.totalOutstanding}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
+                  ),
+                  if (bracket.accruedDelayPenalty > Decimal.zero)
+                    Text(
+                      '+₺${bracket.accruedDelayPenalty} Faiz',
+                      style: const TextStyle(fontSize: 10, color: Colors.redAccent),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Micro progress bracket pills
+          Row(
+            children: [
+              if (bracket.currentDue > Decimal.zero)
+                _buildBracketPill('Cari: ₺${bracket.currentDue}', Colors.blue),
+              if (bracket.overdue1to30Days > Decimal.zero)
+                _buildBracketPill('1-30g: ₺${bracket.overdue1to30Days}', Colors.amber.shade700),
+              if (bracket.overdue31to60Days > Decimal.zero)
+                _buildBracketPill('31-60g: ₺${bracket.overdue31to60Days}', Colors.orange.shade800),
+              if (bracket.overdue60PlusDays > Decimal.zero)
+                _buildBracketPill('60+g: ₺${bracket.overdue60PlusDays}', Colors.red.shade700),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBracketPill(String text, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+    );
+  }
+
+  Widget _buildEmptyState(String msg) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, size: 48, color: AppColors.textSecondary(context).withOpacity(0.5)),
+            const SizedBox(height: 12),
+            Text(msg, textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary(context))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Dialogs & Modals
+  void _showChannelFilterDialog() {
+    final channels = ['ALL', 'VIRTUAL_IBAN', 'BANK_STATEMENT', 'CREDIT_CARD', 'MANUAL_CASH', 'INTER_LEDGER'];
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Ödeme Kanalı Filtresi'),
+        children: channels.map((c) {
+          return SimpleDialogOption(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _selectedChannel = c);
+              _loadData();
+            },
+            child: Text(_channelLabel(c)),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  void _showRoleFilterDialog() {
+    final roles = ['ALL', 'TENANT', 'OWNER'];
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Ödeyen Rolü Filtresi'),
+        children: roles.map((r) {
+          return SimpleDialogOption(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _selectedRole = r);
+              _loadData();
+            },
+            child: Text(_roleLabel(r)),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  void _showSettlementFilterDialog() {
+    final statuses = ['ALL', 'SETTLED', 'UNMATCHED'];
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Mutabakat Durumu Filtresi'),
+        children: statuses.map((s) {
+          return SimpleDialogOption(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _selectedSettlement = s);
+              _loadData();
+            },
+            child: Text(_settlementLabel(s)),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  void _openRecordManualPayment(BuildContext context) {
+    final amountCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    String unitId = 'd-14';
+    String role = 'TENANT';
+    String channel = 'MANUAL_CASH';
+
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AppFullscreenPage(
+            title: 'Manuel Tahsilat Girişi',
+            subtitle: 'Elden Nakit veya Havale Tahsilatı Kaydet',
+            bottomBar: AppFullscreenPage.buildBottomBar(
+              context: ctx,
+              children: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                    onPressed: () async {
+                      final amt = double.tryParse(amountCtrl.text.replaceAll(',', '.')) ?? 0.0;
+                      if (amt <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Lütfen geçerli bir tutar girin')),
+                        );
+                        return;
+                      }
+
+                      final receipt = await widget.controller.recordManualPayment(
+                        unitId: unitId,
+                        amount: amt,
+                        payerName: nameCtrl.text.trim().isEmpty ? 'Daire Sakini' : nameCtrl.text.trim(),
+                        payerRole: role,
+                        paymentChannel: channel,
+                        description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                      );
+
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (receipt != null && mounted) {
+                        _loadData();
+                        _openReceiptViewer(context, receipt.receiptNumber);
+                      }
+                    },
+                    child: const Text('Tahsilatı Kaydet & Makbuz Üret'),
+                  ),
+              ],
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Daire Seçimi', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: unitId,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    items: const [
+                      DropdownMenuItem(value: 'd-14', child: Text('A Blok D:14 (Ahmet / Kerem Yılmaz)')),
+                      DropdownMenuItem(value: 'd-1', child: Text('A Blok D:1')),
+                      DropdownMenuItem(value: 'd-2', child: Text('A Blok D:2')),
+                      DropdownMenuItem(value: 'd-5', child: Text('A Blok D:5')),
+                    ],
+                    onChanged: (v) => setDialogState(() => unitId = v ?? 'd-14'),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Tahsil Edilen Tutar (₺)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      prefixText: '₺ ',
+                      hintText: '1400.00',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Ödeyen Kişi Adı', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      hintText: 'Örn: Kerem Yılmaz',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Ödeyen Rolü', style: TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<String>(
+                              value: role,
+                              decoration: const InputDecoration(border: OutlineInputBorder()),
+                              items: const [
+                                DropdownMenuItem(value: 'TENANT', child: Text('Kiracı')),
+                                DropdownMenuItem(value: 'OWNER', child: Text('Kat Maliki')),
+                              ],
+                              onChanged: (v) => setDialogState(() => role = v ?? 'TENANT'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Kanal', style: TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<String>(
+                              value: channel,
+                              decoration: const InputDecoration(border: OutlineInputBorder()),
+                              items: const [
+                                DropdownMenuItem(value: 'MANUAL_CASH', child: Text('Elden Nakit')),
+                                DropdownMenuItem(value: 'BANK_STATEMENT', child: Text('Banka Havalesi')),
+                              ],
+                              onChanged: (v) => setDialogState(() => channel = v ?? 'MANUAL_CASH'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Açıklama / Dekont Notu', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: descCtrl,
+                    decoration: const InputDecoration(
+                      hintText: 'Örn: Asansör ve Demirbaş Harcaması Payı',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      ActionChip(
+                        label: const Text('Eylül Aidatı', style: TextStyle(fontSize: 11)),
+                        onPressed: () => setDialogState(() => descCtrl.text = 'Eylül 2026 Aidat Ödemesi'),
+                      ),
+                      ActionChip(
+                        label: const Text('Demirbaş - Asansör', style: TextStyle(fontSize: 11)),
+                        onPressed: () => setDialogState(() => descCtrl.text = 'Demirbaş - Asansör Revizyon Payı'),
+                      ),
+                      ActionChip(
+                        label: const Text('Çatı Onarımı', style: TextStyle(fontSize: 11)),
+                        onPressed: () => setDialogState(() => descCtrl.text = 'Çatı Onarım Demirbaş Katkısı'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _openInterLedgerTransfer(BuildContext context) {
+    final amountCtrl = TextEditingController(text: '1400.00');
+    final noteCtrl = TextEditingController(text: 'Ev sahibi onaylı avanstan demirbaşa virman');
+    String unitId = 'd-14';
+
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AppFullscreenPage(
+            title: 'Avansı Demirbaşa Aktar (Virman)',
+            subtitle: 'Birikmiş Avans Bakiyesini Demirbaş Borcuna Mahsup Et',
+            bottomBar: AppFullscreenPage.buildBottomBar(
+              context: ctx,
+              children: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: Colors.indigo,
+                    foregroundColor: Colors.white,
+                  ),
+                    onPressed: () async {
+                      final amt = double.tryParse(amountCtrl.text.replaceAll(',', '.')) ?? 0.0;
+                      if (amt <= 0) return;
+
+                      final res = await widget.controller.executeInterLedgerTransfer(
+                        unitId: unitId,
+                        amount: amt,
+                        note: noteCtrl.text.trim(),
+                      );
+
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (res != null && mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(res['message']?.toString() ?? 'Virman başarılı')),
+                        );
+                        _loadData();
+                        final rcp = res['receipt_number']?.toString();
+                        if (rcp != null) _openReceiptViewer(context, rcp);
+                      }
+                    },
+                    child: const Text('Virman İşlemini Onayla'),
+                  ),
+              ],
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.indigo.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.indigo.withOpacity(0.3)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.indigo, size: 20),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Kat malikinin fazla yatırdığı veya kiracıdan kalan avans bakiyesi, doğrudan dairenin ortak demirbaş/yatırım borçlarına mahsup edilir.',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Daire', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: unitId,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    items: const [
+                      DropdownMenuItem(value: 'd-14', child: Text('A Blok D:14 (Mevcut Avans: ₺3.000,00)')),
+                      DropdownMenuItem(value: 'd-1', child: Text('A Blok D:1')),
+                    ],
+                    onChanged: (v) => setDialogState(() => unitId = v ?? 'd-14'),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Virman Yapılacak Tutar (₺)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      prefixText: '₺ ',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Açıklama / Mutabakat Notu', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: noteCtrl,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _openReceiptViewer(BuildContext context, String identifier) async {
+    final receipt = await widget.controller.fetchReceipt(identifier);
+    if (!mounted || receipt == null) return;
+
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => AppFullscreenPage(
+        title: 'Dijital Tahsilat Makbuzu',
+        subtitle: '#${receipt.receiptNumber} • ${receipt.issuedAt.day}.${receipt.issuedAt.month}.${receipt.issuedAt.year}',
+        bottomBar: AppFullscreenPage.buildBottomBar(
+          context: ctx,
+          children: [
+            OutlinedButton.icon(
+              icon: const Icon(Icons.share),
+              label: const Text('Paylaş / PDF'),
+              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+              onPressed: () {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Makbuz PDF formatında dışa aktarıldı.')),
+                );
+              },
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.check),
+              label: const Text('Kapat'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Receipt Voucher Paper Card
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.surface(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.controller.siteName,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            Text(
+                              'Site Yönetimi Tahsilat Makbuzu',
+                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            receipt.receiptNumber,
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        children: [
+                          const Text('TOPLAM TAHSİLAT TUTARI', style: TextStyle(fontSize: 11, letterSpacing: 1.1)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '₺${receipt.totalAmount}',
+                            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.accentGreen),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildReceiptRow('Daire:', receipt.unitId),
+                    _buildReceiptRow('Ödeyen:', '${receipt.payerName} (${receipt.payerRole == "TENANT" ? "Kiracı" : "Kat Maliki"})'),
+                    if (receipt.onBehalfOfName != null)
+                      _buildReceiptRow('Adına Ödenen:', '${receipt.onBehalfOfName} (Kat Maliki)'),
+                    _buildReceiptRow('Ödeme Kanalı:', _channelLabel(receipt.paymentChannel)),
+                    _buildReceiptRow('Tarih & Saat:', receipt.issuedAt.toLocal().toString().split('.').first),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 12),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Mahsup ve Tahsisat Detayı', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildReceiptRow('Ana Para Borcu:', '₺${receipt.allocatedPrincipal}'),
+                    _buildReceiptRow('Gecikme Zammı (KMK %5):', '₺${receipt.allocatedPenalty}'),
+                    if (receipt.allocatedAdvance > Decimal.zero)
+                      _buildReceiptRow('Avans Bakiyesine Aktarılan:', '₺${receipt.allocatedAdvance}'),
+                    if (receipt.isRentOffsetEligible) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.purple.withOpacity(0.4)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.gavel, color: Colors.purple, size: 16),
+                                SizedBox(width: 6),
+                                Text(
+                                  'KİRA MAHSUBU UYGUNLUK BİLDİRİMİ',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.purple),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              receipt.legalStatutoryNote ??
+                                  '634 sayılı KMK Madde 20 & 22 uyarınca ortak demirbaş giderleri Kat Maliki sorumluluğundadır. Kiracı tarafından ödenen bu tutar TBK Madde 314 gereği kira bedelinden mahsup edilebilir.',
+                              style: const TextStyle(fontSize: 11, height: 1.3),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    // Digital Verification Hash
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.background(context),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.verified, color: AppColors.primary, size: 14),
+                              SizedBox(width: 4),
+                              Text('SHA-256 Dijital Doğrulama Kodu', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          SelectableText(
+                            receipt.verificationHash,
+                            style: const TextStyle(fontSize: 9, fontFamily: 'monospace', color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReceiptRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
+          Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  String _channelLabel(String code) {
+    switch (code) {
+      case 'VIRTUAL_IBAN':
+        return 'Sanal IBAN';
+      case 'BANK_STATEMENT':
+        return 'Banka Ekstresi';
+      case 'CREDIT_CARD':
+        return 'Kredi Kartı';
+      case 'MANUAL_CASH':
+        return 'Elden Nakit';
+      case 'INTER_LEDGER':
+        return 'Virman / Avans';
+      default:
+        return 'Tüm Kanallar';
+    }
+  }
+
+  IconData _channelIcon(String code) {
+    switch (code) {
+      case 'VIRTUAL_IBAN':
+        return Icons.qr_code;
+      case 'BANK_STATEMENT':
+        return Icons.account_balance;
+      case 'CREDIT_CARD':
+        return Icons.credit_card;
+      case 'MANUAL_CASH':
+        return Icons.money;
+      case 'INTER_LEDGER':
+        return Icons.swap_horiz;
+      default:
+        return Icons.payment;
+    }
+  }
+
+  Color _channelColor(String code) {
+    switch (code) {
+      case 'VIRTUAL_IBAN':
+        return Colors.blue;
+      case 'BANK_STATEMENT':
+        return Colors.indigo;
+      case 'CREDIT_CARD':
+        return Colors.purple;
+      case 'MANUAL_CASH':
+        return Colors.green;
+      case 'INTER_LEDGER':
+        return Colors.orange;
+      default:
+        return AppColors.primary;
+    }
+  }
+
+  String _roleLabel(String code) {
+    switch (code) {
+      case 'TENANT':
+        return 'Kiracı';
+      case 'OWNER':
+        return 'Kat Maliki';
+      default:
+        return 'Tüm Roller';
+    }
+  }
+
+  String _settlementLabel(String code) {
+    switch (code) {
+      case 'SETTLED':
+        return 'Eşleşti (Settled)';
+      case 'UNMATCHED':
+        return 'Havuzda Bekleyen';
+      default:
+        return 'Tüm Durumlar';
+    }
+  }
+}

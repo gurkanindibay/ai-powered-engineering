@@ -15,7 +15,8 @@ Each Epic represents a core business domain and contains atomic User Stories wit
 | **EPIC-05** | Backend Persistence, REST APIs & Verification Harness | 6 | 6 | 0 | **COMPLETED** | [EPIC-05-backend-persistence-verification-harness.md](EPIC-05-backend-persistence-verification-harness.md) |
 | **EPIC-06** | Identity, Authentication & Scoped Permission Model | 5 | 5 | 0 | **COMPLETED** | [EPIC-06-identity-access-auth.md](EPIC-06-identity-access-auth.md) |
 | **EPIC-07** | Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual | 7 | 7 | 0 | **COMPLETED** | [EPIC-07-bank-integration-and-automated-reconciliation.md](EPIC-07-bank-integration-and-automated-reconciliation.md) |
-| **EPIC-08** | Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility | 4 | 4 | 0 | **COMPLETED** | [EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md](EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md) |
+| **EPIC-08** | Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility | 5 | 5 | 0 | **COMPLETED** | [EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md](EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md) |
+| **EPIC-09** | Payment Tracking, Dual-Ledger Treasury & Delinquency Management | 7 | 0 | 7 | **SPECIFIED** | [EPIC-09-payment-tracking-and-treasury-management.md](EPIC-09-payment-tracking-and-treasury-management.md) |
 
 ---
 

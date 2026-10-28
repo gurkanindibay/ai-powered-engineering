@@ -7,6 +7,7 @@ pub mod mt940_engine;
 pub mod reconciliation_service;
 pub mod registration_approval_service;
 pub mod saas_tenant_service;
+pub mod payment_tracking_service;
 pub mod site_admin_service;
 pub mod site_bank_account_service;
 pub mod virtual_iban_service;
@@ -21,6 +22,7 @@ pub use kuveyt_turk_service::{
 };
 #[allow(unused_imports)]
 pub use mt940_engine::Mt940Engine;
+pub use payment_tracking_service::PaymentTrackingService;
 pub use reconciliation_service::ReconciliationService;
 pub use registration_approval_service::RegistrationApprovalService;
 pub use saas_tenant_service::{to_slug, SaasTenantService};

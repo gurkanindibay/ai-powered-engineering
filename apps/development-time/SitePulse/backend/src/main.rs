@@ -163,6 +163,13 @@ async fn main() {
         .route("/api/v1/payments/record", post(handlers::record_homeowner_payment))
         .route("/api/v1/payments/match-all", post(handlers::match_all_homeowner_payments))
         .route("/api/v1/payments/homeowner-records", get(handlers::get_homeowner_payments))
+        // Payment Tracking & Unified Treasury Streams (STORY-09-01 .. STORY-09-07)
+        .route("/api/v1/payments/stream", get(handlers::get_payment_stream))
+        .route("/api/v1/payments/debt-aging", get(handlers::get_debt_aging_report))
+        .route("/api/v1/payments/record-manual", post(handlers::record_manual_payment))
+        .route("/api/v1/payments/inter-ledger-transfer", post(handlers::inter_ledger_transfer))
+        .route("/api/v1/payments/receipts/:id", get(handlers::get_payment_receipt))
+        .route("/api/v1/site-admin/units/:id/transfer-ownership", post(handlers::transfer_unit_ownership))
         // System Reset & Test Data Fixtures
         .route("/api/v1/system/reset-demo-data", post(handlers::reset_demo_data))
         .route("/api/v1/system/recreate-db", post(handlers::recreate_db))

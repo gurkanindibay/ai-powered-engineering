@@ -41,6 +41,8 @@ pub struct AppStateInner {
     pub kuveyt_turk_client_secret: Option<String>,
     pub auto_scheduler_enabled: bool,
     pub unit_occupancies: HashMap<String, Vec<crate::models::OccupancyHistoryItem>>,
+    pub payment_receipts: Vec<crate::models::PaymentReceipt>,
+    pub payment_entries: Vec<crate::models::PaymentEntry>,
 }
 
 impl AppStateInner {
@@ -68,6 +70,8 @@ impl AppStateInner {
             kuveyt_turk_client_secret: std::env::var("KT_CLIENT_SECRET").ok(),
             auto_scheduler_enabled: false,
             unit_occupancies: HashMap::new(),
+            payment_receipts: Vec::new(),
+            payment_entries: Vec::new(),
         };
         inner.seed_system_lookups();
         if Self::should_seed_test_fixtures() {
@@ -403,6 +407,8 @@ impl AppStateInner {
         self.unit_payer_names.clear();
         self.house_types.clear();
         self.blocks.clear();
+        self.payment_receipts.clear();
+        self.payment_entries.clear();
         self.auto_scheduler_enabled = false;
         self.seed_system_lookups();
     }
@@ -412,6 +418,8 @@ impl AppStateInner {
         self.advance_payments.clear();
         self.homeowner_payments.clear();
         self.reconciliation_queue.clear();
+        self.payment_receipts.clear();
+        self.payment_entries.clear();
 
         // 100% clean slate: ₺0.00 debt
         self.dues.clear();

@@ -87,3 +87,19 @@ Establishes strict domain and financial separation between property owners and t
     When the Site Manager views the occupancy history timeline
     Then the timeline displays "Zeynep Kaya (2025 - 2026) • Left with ₺1.500,00" followed by "Mehmet Demir (2026 - Present) • Active"
   ```
+
+---
+
+### STORY-08-05: Title Deed Transfer & Property Ownership Sale Handover (Mülk Satış / Malik Değişikliği)
+- **Description:** When a unit is sold to a new owner, the system must separate past liabilities from future obligations according to the deed transfer date. The previous owner's historical profile is closed, the new owner is registered as legal deed holder, while any existing active lease agreement (Tenant) continues unaffected.
+- **Acceptance Criteria (Gherkin):**
+  ```gherkin
+  Scenario: Change property owner upon title deed sale without affecting tenant
+    Given Unit "A Blok D:14" has Tenant "Canan Kaya" and Owner "Ahmet Yılmaz"
+    When the Site Manager registers a Title Deed Transfer to New Owner "Selim Evsahibi" effective 2026-10-28
+    Then Ahmet Yılmaz is archived as historical property owner with closing balance
+    And Selim Evsahibi becomes the active owner_person_id for Unit "A Blok D:14"
+    And Canan Kaya remains the active tenant with zero interruption to her occupancy session
+    And subsequent capital dues assessments are billed to Selim Evsahibi
+  ```
+
