@@ -12,10 +12,12 @@ import '../residents/owners_residents_module_page.dart';
 
 class DuesManagementView extends StatefulWidget {
   final DashboardController controller;
+  final int initialSegment;
 
   const DuesManagementView({
     super.key,
     required this.controller,
+    this.initialSegment = 0,
   });
 
   @override
@@ -23,14 +25,15 @@ class DuesManagementView extends StatefulWidget {
 }
 
 class _DuesManagementViewState extends State<DuesManagementView> {
-  // 0: Daire Aidat Durumları, 1: Eşleşmeyen Banka Hareketleri
-  int _activeSegment = 0;
+  // 0: Daire Aidat Durumları, 1: Canlı Kasa & Tahsilat, 2: Borç Yaşlandırma, 3: Eşleşmeyenler
+  late int _activeSegment;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _activeSegment = widget.initialSegment;
     widget.controller.fetchReconciliationQueue();
   }
 
@@ -347,7 +350,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                           onPressed: () {
                             Navigator.pop(ctx);
                             setState(() {
-                              _activeSegment = 1; // Switch to unmatched pool tab
+                              _activeSegment = 3; // Switch to unmatched pool tab
                             });
                           },
                           style: OutlinedButton.styleFrom(
@@ -742,44 +745,89 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               ),
             ),
 
-            // Action Buttons: Accrue Dues & Import Bank File
+            // Action Buttons: Accrue Dues, Import Bank File, Payment Tracking & More Menu
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 ElevatedButton.icon(
                   onPressed: _showAccrueDuesDialog,
-                  icon: const Icon(Icons.event_repeat, size: 16),
-                  label: const Text('Toplu Aidat Tahakkuku'),
+                  icon: const Icon(Icons.event_repeat, size: 14),
+                  label: const Text('Toplu Aidat Tahakkuku', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentGreen,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
                 ElevatedButton.icon(
                   onPressed: _showImportOptionsDialog,
-                  icon: const Icon(Icons.upload_file, size: 16),
-                  label: const Text('Excel / Ekstre Yükle'),
+                  icon: const Icon(Icons.upload_file, size: 14),
+                  label: const Text('Excel / Ekstre Yükle', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentCyan,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
                 ElevatedButton.icon(
                   key: const Key('action_payment_tracking'),
-                  onPressed: () => PaymentTrackingPage.open(context, controller: widget.controller),
-                  icon: const Icon(Icons.account_balance_wallet, size: 16),
-                  label: const Text('Tahsilat & Kasa Takibi'),
+                  onPressed: () {
+                    setState(() => _activeSegment = 1);
+                    widget.controller.fetchPaymentStream();
+                  },
+                  icon: const Icon(Icons.account_balance_wallet, size: 14),
+                  label: const Text('Tahsilat & Kasa Takibi', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.indigo,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Diğer Kasa İşlemleri',
+                  icon: const Icon(Icons.more_vert, size: 20),
+                  onSelected: (val) {
+                    if (val == 'manual_cash') {
+                      PaymentTrackingPage.openRecordManualPayment(
+                        context,
+                        controller: widget.controller,
+                        onSaved: () => setState(() {}),
+                      );
+                    } else if (val == 'virman') {
+                      PaymentTrackingPage.openInterLedgerTransfer(
+                        context,
+                        controller: widget.controller,
+                        onCompleted: () => setState(() {}),
+                      );
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'manual_cash',
+                      child: Row(
+                        children: [
+                          Icon(Icons.payments_outlined, size: 16, color: AppColors.accentGreen),
+                          SizedBox(width: 8),
+                          Text('Nakit / Manuel Tahsilat', style: TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'virman',
+                      child: Row(
+                        children: [
+                          Icon(Icons.swap_horiz, size: 16, color: Colors.indigo),
+                          SizedBox(width: 8),
+                          Text('Virman (Aidat ⇄ Demirbaş)', style: TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -874,7 +922,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
         const SizedBox(height: 18),
 
-        // 3. Segmented Navigation: [ Daire Aidat Durumları ] vs [ Eşleşmeyen Banka Hareketleri ]
+        // 3. Segmented Navigation: 4 Segments (Daire Borçları, Canlı Kasa, Borç Yaşlandırma, Banka Eşleşmeyenler)
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
@@ -882,85 +930,46 @@ class _DuesManagementViewState extends State<DuesManagementView> {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: AppColors.border(context)),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: () => setState(() => _activeSegment = 0),
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: _activeSegment == 0 ? AppColors.accentCyan : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '📋 Daire Aidat Durumları',
-                      style: TextStyle(
-                        color: _activeSegment == 0 ? Colors.white : AppColors.textSecondary(context),
-                        fontSize: 13,
-                        fontWeight: _activeSegment == 0 ? FontWeight.bold : FontWeight.w500,
-                      ),
-                    ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 640;
+              if (isNarrow) {
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildSegmentTab(0, '📋 Daire Aidat Durumları'),
+                      const SizedBox(width: 4),
+                      _buildSegmentTab(1, '💳 Canlı Kasa & Tahsilat'),
+                      const SizedBox(width: 4),
+                      _buildSegmentTab(2, '⏳ Borç Yaşlandırma'),
+                      const SizedBox(width: 4),
+                      _buildSegmentTab(3, '🏦 Eşleşmeyenler', count: unmatchedItems.length),
+                    ],
                   ),
-                ),
-              ),
-              Expanded(
-                child: InkWell(
-                  onTap: () => setState(() => _activeSegment = 1),
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: _activeSegment == 1 ? AppColors.accentCyan : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    alignment: Alignment.center,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '🏦 Eşleşmeyenler',
-                          style: TextStyle(
-                            color: _activeSegment == 1 ? Colors.white : AppColors.textSecondary(context),
-                            fontSize: 13,
-                            fontWeight: _activeSegment == 1 ? FontWeight.bold : FontWeight.w500,
-                          ),
-                        ),
-                        if (unmatchedItems.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: _activeSegment == 1 ? Colors.white : AppColors.accentOrange,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              '${unmatchedItems.length}',
-                              style: TextStyle(
-                                color: _activeSegment == 1 ? AppColors.accentCyan : Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: _buildSegmentTab(0, '📋 Daire Aidat Durumları')),
+                  const SizedBox(width: 4),
+                  Expanded(child: _buildSegmentTab(1, '💳 Canlı Kasa & Tahsilat')),
+                  const SizedBox(width: 4),
+                  Expanded(child: _buildSegmentTab(2, '⏳ Borç Yaşlandırma')),
+                  const SizedBox(width: 4),
+                  Expanded(child: _buildSegmentTab(3, '🏦 Eşleşmeyenler', count: unmatchedItems.length)),
+                ],
+              );
+            },
           ),
         ),
 
         const SizedBox(height: 14),
 
-        // 4. Alert Banner if in Segment 0 and Unmatched Items Exist
-        if (_activeSegment == 0 && unmatchedItems.isNotEmpty) ...[
+        // 4. Alert Banner if not in Segment 3 and Unmatched Items Exist
+        if (_activeSegment != 3 && unmatchedItems.isNotEmpty) ...[
           InkWell(
-            onTap: () => setState(() => _activeSegment = 1),
+            onTap: () => setState(() => _activeSegment = 3),
             borderRadius: BorderRadius.circular(12),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -994,9 +1003,68 @@ class _DuesManagementViewState extends State<DuesManagementView> {
         // 5. Segment Content
         if (_activeSegment == 0)
           _buildFlatsDuesSection(flats)
+        else if (_activeSegment == 1)
+          PaymentStreamWidget(controller: widget.controller, isEmbedded: true)
+        else if (_activeSegment == 2)
+          DebtAgingWidget(controller: widget.controller, isEmbedded: true)
         else
           _buildUnmatchedBankTransactionsSection(unmatchedItems),
       ],
+    );
+  }
+
+  Widget _buildSegmentTab(int index, String label, {int count = 0}) {
+    final isSelected = _activeSegment == index;
+    return InkWell(
+      onTap: () {
+        setState(() => _activeSegment = index);
+        if (index == 1) widget.controller.fetchPaymentStream();
+        if (index == 2) widget.controller.fetchDebtAgingReport();
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accentCyan : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : AppColors.textSecondary(context),
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white : AppColors.accentOrange,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    color: isSelected ? AppColors.accentCyan : Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1419,6 +1487,41 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 ),
               ),
               const SizedBox(height: 4),
+              if (!flat.isPaid) ...[
+                InkWell(
+                  onTap: () {
+                    PaymentTrackingPage.openRecordManualPayment(
+                      context,
+                      controller: widget.controller,
+                      initialUnitId: flat.id,
+                      onSaved: () => setState(() {}),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    margin: const EdgeInsets.only(bottom: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentGreen.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.add, size: 12, color: AppColors.accentGreen),
+                        SizedBox(width: 2),
+                        Text(
+                          'Tahsilat Gir',
+                          style: TextStyle(
+                            color: AppColors.accentGreen,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               InkWell(
                 key: Key('dues_flat_resident_module_${flat.id}'),
                 onTap: () {

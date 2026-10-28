@@ -240,6 +240,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           onRefresh: () => widget.controller.fetchResidentDashboard(),
           color: AppColors.accentCyan,
           child: SingleChildScrollView(
+            key: ValueKey('tab_scroll_$_selectedTabIndex'),
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: _buildCurrentTabContent(isHomeRole),
@@ -541,6 +542,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onManageHomeOwnersTap: () {
                   setState(() {
                     _selectedTabIndex = 2;
+                  });
+                },
+                onNavigateToDuesTab: () {
+                  setState(() {
+                    _selectedTabIndex = 1;
                   });
                 },
               ),

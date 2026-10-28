@@ -13,6 +13,7 @@ class ManagerCockpitView extends StatelessWidget {
   final VoidCallback onAddResidentTap;
   final VoidCallback? onManageHouseTypesTap;
   final VoidCallback? onManageHomeOwnersTap;
+  final VoidCallback? onNavigateToDuesTab;
 
   const ManagerCockpitView({
     super.key,
@@ -20,6 +21,7 @@ class ManagerCockpitView extends StatelessWidget {
     required this.onAddResidentTap,
     this.onManageHouseTypesTap,
     this.onManageHomeOwnersTap,
+    this.onNavigateToDuesTab,
   });
 
   @override
@@ -605,19 +607,52 @@ class ManagerCockpitView extends StatelessWidget {
         const SizedBox(height: 24),
 
         // 3. Daire Aidat Takibi
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Text(
-              'Daire Aidat Takibi',
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Daire Aidat Takibi',
+                  style: TextStyle(
+                    color: AppColors.textPrimary(context),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentCyan.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text(
+                    'Özet',
+                    style: TextStyle(color: AppColors.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
+                if (onNavigateToDuesTab != null) ...[
+                  TextButton.icon(
+                    key: const Key('btn_open_unified_dues_center'),
+                    onPressed: onNavigateToDuesTab,
+                    icon: const Icon(Icons.arrow_forward, size: 14, color: AppColors.accentCyan),
+                    label: const Text(
+                      'Tüm Finans Merkezi',
+                      style: TextStyle(color: AppColors.accentCyan, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 _buildFilterChip(context, 'Tümü', 'ALL'),
                 const SizedBox(width: 6),
                 _buildFilterChip(context, 'Geciken', 'OVERDUE'),
@@ -632,8 +667,37 @@ class ManagerCockpitView extends StatelessWidget {
 
         if (flats.isEmpty)
           _buildZeroDataFlatsGuidance(context)
-        else
+        else ...[
           ...flats.map((flat) => _buildFlatStatusCard(context, flat)),
+          if (onNavigateToDuesTab != null) ...[
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: onNavigateToDuesTab,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.account_balance_wallet_outlined, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Daire bazlı detaylı tahakkuk, makbuz, virman, canlı kasa akışı ve banka ekstresi için Aidat & Kasa Yönetim Merkezi\'ne geçin.',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, size: 12, color: AppColors.primary),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
       ],
     );
   }
