@@ -268,7 +268,7 @@ void main() {
     expect(find.text('Eylül 2026 Tahsilat Durumu'), findsOneWidget);
     expect(find.text('₺0 Borç — Güncel'), findsOneWidget);
     expect(find.text('Onay Bekleyen Başvurular'), findsOneWidget);
-    expect(find.text('Daire Aidat Takibi'), findsOneWidget);
+    expect(find.byKey(const Key('btn_open_unified_dues_center')), findsOneWidget);
   });
 
   testWidgets('SitePulseApp switches to SaaS SuperAdmin view and displays platform tenants', (WidgetTester tester) async {

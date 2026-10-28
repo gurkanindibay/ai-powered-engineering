@@ -28,7 +28,6 @@ class ManagerCockpitView extends StatelessWidget {
   Widget build(BuildContext context) {
     final summary = controller.collectionSummary;
     final pendingList = controller.pendingRegistrations;
-    final flats = controller.currentMonthFlats;
     final isDark = AppColors.isDark(context);
 
     return Column(
@@ -325,6 +324,39 @@ class ManagerCockpitView extends StatelessWidget {
                     _buildMetricTile(context, 'Toplam Avans', '₺${summary.totalAdvanceBalance.toStringAsFixed(0)}', color: AppColors.accentCyan),
                 ],
               ),
+              if (onNavigateToDuesTab != null) ...[
+                const SizedBox(height: 14),
+                InkWell(
+                  key: const Key('btn_open_unified_dues_center'),
+                  onTap: onNavigateToDuesTab,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentCyan.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.accentCyan.withOpacity(0.35)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.account_balance_wallet_outlined, size: 16, color: AppColors.accentCyan),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Detaylı Daire Aidat & Kasa Yönetimi',
+                          style: TextStyle(
+                            color: AppColors.accentCyan,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.arrow_forward, size: 14, color: AppColors.accentCyan),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -603,221 +635,18 @@ class ManagerCockpitView extends StatelessWidget {
           )
         else
           ...pendingList.map((req) => _buildPendingRequestCard(context, req)),
-
-        const SizedBox(height: 24),
-
-        // 3. Daire Aidat Takibi
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Daire Aidat Takibi',
-                  style: TextStyle(
-                    color: AppColors.textPrimary(context),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentCyan.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    'Özet',
-                    style: TextStyle(color: AppColors.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (onNavigateToDuesTab != null) ...[
-                  TextButton.icon(
-                    key: const Key('btn_open_unified_dues_center'),
-                    onPressed: onNavigateToDuesTab,
-                    icon: const Icon(Icons.arrow_forward, size: 14, color: AppColors.accentCyan),
-                    label: const Text(
-                      'Tüm Finans Merkezi',
-                      style: TextStyle(color: AppColors.accentCyan, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                ],
-                _buildFilterChip(context, 'Tümü', 'ALL'),
-                const SizedBox(width: 6),
-                _buildFilterChip(context, 'Geciken', 'OVERDUE'),
-                const SizedBox(width: 6),
-                _buildFilterChip(context, 'Ödeyen', 'PAID'),
-              ],
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 12),
-
-        if (flats.isEmpty)
-          _buildZeroDataFlatsGuidance(context)
-        else ...[
-          ...flats.map((flat) => _buildFlatStatusCard(context, flat)),
-          if (onNavigateToDuesTab != null) ...[
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: onNavigateToDuesTab,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.25)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.account_balance_wallet_outlined, size: 18, color: AppColors.primary),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'Daire bazlı detaylı tahakkuk, makbuz, virman, canlı kasa akışı ve banka ekstresi için Aidat & Kasa Yönetim Merkezi\'ne geçin.',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, size: 12, color: AppColors.primary),
-                  ],
-                ),
-              ),
-            ),
-          ],
+        if (controller.currentManagedSite == null && controller.managedSitesList.isEmpty) ...[
+          const SizedBox(height: 16),
+          _buildNoSiteGuidance(context),
+        ] else if (controller.availableDuesMonths.isEmpty) ...[
+          const SizedBox(height: 16),
+          _buildNoPeriodGuidance(context),
         ],
       ],
     );
   }
 
-  Widget _buildZeroDataFlatsGuidance(BuildContext context) {
-    final hasNoPeriods = controller.availableDuesMonths.isEmpty;
-    final hasNoFlats = controller.flatsList.isEmpty;
-    final hasNoSite = controller.currentManagedSite == null && controller.managedSitesList.isEmpty;
-
-    if (hasNoSite) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.surface(context),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border(context)),
-        ),
-        child: Column(
-          children: [
-            const Icon(Icons.apartment_outlined, size: 36, color: AppColors.accentOrange),
-            const SizedBox(height: 8),
-            Text(
-              'Yönetilen Site Bulunmuyor',
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Sistemde henüz kayıtlı bir site bulunmuyor. Yönetici kokpitini kullanmak için lütfen yeni bir site tanımlayınız.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (hasNoPeriods) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.surface(context),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.accentCyan.withOpacity(0.3)),
-        ),
-        child: Column(
-          children: [
-            const Icon(Icons.event_busy_outlined, size: 36, color: AppColors.accentCyan),
-            const SizedBox(height: 8),
-            Text(
-              'Aidat Takibi İçin Dönem Bulunmuyor',
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Sitenizde daire bazlı aidat borçlarını ve ödeme durumlarını takip edebilmek için öncelikle "Aidat Yönetimi" sekmesinden bir aidat dönemi oluşturmanız gerekmektedir.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (hasNoFlats) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.surface(context),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.accentOrange.withOpacity(0.3)),
-        ),
-        child: Column(
-          children: [
-            const Icon(Icons.people_outline, size: 36, color: AppColors.accentOrange),
-            const SizedBox(height: 8),
-            Text(
-              'Kayıtlı Kat Maliki / Daire Yok',
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Bu sitede henüz kayıtlı kat maliki veya daire bulunmuyor. "Manuel Sakin Ekle" butonu ile daire ve kat maliki ekleyebilirsiniz.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                if (onManageHouseTypesTap != null)
-                  OutlinedButton.icon(
-                    onPressed: onManageHouseTypesTap,
-                    icon: const Icon(Icons.home_work_outlined, size: 16, color: AppColors.accentPurple),
-                    label: const Text('Konut Tipleri & Tarifeler'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.accentPurple,
-                      side: const BorderSide(color: AppColors.accentPurple),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                ElevatedButton.icon(
-                  onPressed: onAddResidentTap,
-                  icon: const Icon(Icons.person_add_alt_1, size: 16),
-                  label: const Text('Manuel Sakin Ekle'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentCyan,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-
+  Widget _buildNoSiteGuidance(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -827,22 +656,44 @@ class ManagerCockpitView extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(Icons.filter_list_off, size: 36, color: AppColors.textSecondary(context)),
+          const Icon(Icons.apartment_outlined, size: 36, color: AppColors.accentOrange),
           const SizedBox(height: 8),
           Text(
-            'Filtreye Uygun Daire Yok',
+            'Yönetilen Site Bulunmuyor',
             style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
-            'Seçtiğiniz filtre (${controller.flatFilter}) kriterine uygun daire bulunmuyor.',
+            'Sistemde henüz kayıtlı bir site bulunmuyor. Yönetici kokpitini kullanmak için lütfen yeni bir site tanımlayınız.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
           ),
-          const SizedBox(height: 10),
-          TextButton(
-            onPressed: () => controller.setFlatFilter('ALL'),
-            child: const Text('Tüm Daireleri Göster', style: TextStyle(color: AppColors.accentCyan)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoPeriodGuidance(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.accentCyan.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.event_busy_outlined, size: 36, color: AppColors.accentCyan),
+          const SizedBox(height: 8),
+          Text(
+            'Aidat Takibi İçin Dönem Bulunmuyor',
+            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Sitenizde daire bazlı aidat borçlarını ve ödeme durumlarını takip edebilmek için öncelikle "Aidat Yönetimi" sekmesinden bir aidat dönemi oluşturmanız gerekmektedir.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
           ),
         ],
       ),
@@ -867,32 +718,6 @@ class ManagerCockpitView extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildFilterChip(BuildContext context, String label, String code) {
-    final isSelected = controller.flatFilter == code;
-    return InkWell(
-      onTap: () => controller.setFlatFilter(code),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.accentCyan : AppColors.surface(context),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.accentCyan : AppColors.border(context),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : AppColors.textSecondary(context),
-            fontSize: 11,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
     );
   }
 
@@ -967,102 +792,6 @@ class ManagerCockpitView extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
                 child: const Text('Reddet', style: TextStyle(fontSize: 12)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFlatStatusCard(BuildContext context, FlatPaymentStatus flat) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface(context),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border(context)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: flat.isPaid
-                      ? AppColors.accentGreen.withOpacity(0.15)
-                      : AppColors.accentRed.withOpacity(0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    flat.shortLabel,
-                    style: TextStyle(
-                      color: flat.isPaid ? AppColors.accentGreen : AppColors.accentRed,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    flat.residentName,
-                    style: TextStyle(
-                      color: AppColors.textPrimary(context),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    flat.houseType != null && flat.houseType!.isNotEmpty
-                        ? '${flat.flatDesc} • ${flat.houseType}'
-                        : flat.flatDesc,
-                    style: TextStyle(
-                      color: AppColors.textSecondary(context),
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                flat.hasAdvanceBalance && flat.amountDue == Decimal.zero
-                    ? '+₺${flat.advanceBalance.toStringAsFixed(2)}'
-                    : '₺${flat.amountDue.toStringAsFixed(2)}',
-                style: TextStyle(
-                  color: flat.hasAdvanceBalance && flat.amountDue == Decimal.zero
-                      ? AppColors.accentGreen
-                      : AppColors.textPrimary(context),
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                flat.hasAdvanceBalance
-                    ? (flat.isPaid && flat.amountDue > Decimal.zero
-                        ? 'Ödendi (+₺${flat.advanceBalance.toStringAsFixed(2)} Avans)'
-                        : '+₺${flat.advanceBalance.toStringAsFixed(2)} Avans Bakiyesi')
-                    : (flat.isPaid
-                        ? (flat.amountDue == Decimal.zero ? 'Borç Yok' : 'Ödendi (${flat.paidDateStr ?? 'Tamam'})')
-                        : '${flat.daysOverdue} Gün Gecikme'),
-                style: TextStyle(
-                  color: flat.isPaid || flat.hasAdvanceBalance ? AppColors.accentGreen : AppColors.accentRed,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
               ),
             ],
           ),
