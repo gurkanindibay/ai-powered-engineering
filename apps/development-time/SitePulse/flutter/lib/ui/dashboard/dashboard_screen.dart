@@ -301,9 +301,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     label: 'Aidat Yönetimi',
                   ),
                 BottomNavigationBarItem(
-                  icon: Icon(isHomeRole ? Icons.home_outlined : Icons.apartment_outlined),
-                  activeIcon: Icon(isHomeRole ? Icons.home : Icons.apartment),
-                  label: isHomeRole ? 'Dairem' : (session.role == UserRole.saasAdmin ? 'Siteler' : 'Yönetim'),
+                  icon: Icon(isHomeRole ? Icons.home_outlined : (session.role == UserRole.siteManager ? Icons.people_alt_outlined : Icons.apartment_outlined)),
+                  activeIcon: Icon(isHomeRole ? Icons.home : (session.role == UserRole.siteManager ? Icons.people_alt : Icons.apartment)),
+                  label: isHomeRole ? 'Dairem' : (session.role == UserRole.saasAdmin ? 'Siteler' : 'Sakinler & Malikler'),
                 ),
                 const BottomNavigationBarItem(
                   icon: Icon(Icons.person_outline),

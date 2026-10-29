@@ -3,10 +3,6 @@ import 'package:decimal/decimal.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
-import 'app_fullscreen_page.dart';
-import 'bank_statement_reconciliation_page.dart';
-import 'payment_tracking_page.dart';
-import '../residents/owners_residents_module_page.dart';
 
 class ManagerCockpitView extends StatelessWidget {
   final DashboardController controller;
@@ -361,177 +357,58 @@ class ManagerCockpitView extends StatelessWidget {
           ),
         ),
 
-        const SizedBox(height: 16),
-
-        // 1. Primary Financial Hub: Tahsilat & Ödeme Takibi (Canlı Kasa, Banka Ekstresi & Borç Yaşlandırma)
-        InkWell(
-          key: const Key('quick_action_payment_tracking'),
-          onTap: () => PaymentTrackingPage.open(context, controller: controller),
-          borderRadius: BorderRadius.circular(18),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.indigo.withOpacity(0.5), width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.indigo.withOpacity(0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.indigo.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.account_balance_wallet, color: Colors.indigo, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Tahsilat & Ödeme Takibi',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.accentGreen.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'Canlı Kasa & Ekstre',
-                              style: TextStyle(
-                                color: AppColors.accentGreen,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Çok kanallı kasa akışı, banka ekstresi içe aktarma & eşleştirme, borç yaşlandırma ve dijital makbuzlar.',
-                        style: TextStyle(
-                          color: AppColors.textSecondary(context),
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.indigo),
-              ],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // 2. Owners & Residents Module Quick Action Card
-        InkWell(
-          key: const Key('quick_action_residents_module'),
-          onTap: () {
-            AppFullscreenPage.push(
-              context: context,
-              builder: (_) => OwnersResidentsModulePage(controller: controller),
-            );
-          },
-          borderRadius: BorderRadius.circular(18),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: AppColors.accentPurple.withOpacity(0.5),
-                width: 1.5,
+        if (controller.unmatchedBankCount > 0 && onNavigateToDuesTab != null) ...[
+          const SizedBox(height: 14),
+          InkWell(
+            key: const Key('dashboard_unmatched_bank_alert'),
+            onTap: onNavigateToDuesTab,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.accentOrange.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.accentOrange.withOpacity(0.4)),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.accentPurple.withOpacity(0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentPurple.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentOrange.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.sync_problem, color: AppColors.accentOrange, size: 20),
                   ),
-                  child: const Icon(Icons.people_alt, color: AppColors.accentPurple, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Kat Malikleri & Sakinler Modülü',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${controller.unmatchedBankCount} Eşleşmeyen Banka Hareketi Var',
+                          style: TextStyle(
+                            color: AppColors.textPrimary(context),
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.accentPurple.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'Özel Modül',
-                              style: TextStyle(
-                                color: AppColors.accentPurple,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Daire sakinleri, kiracılar, hane halkı ve aktif sorumluları tek merkezden yönetin.',
-                        style: TextStyle(
-                          color: AppColors.textSecondary(context),
-                          fontSize: 11,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        Text(
+                          'Banka ekstresinden gelen transferleri dairelerle eşleştirmek için dokunun.',
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.accentPurple),
-              ],
+                  const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.accentOrange),
+                ],
+              ),
             ),
           ),
-        ),
+        ],
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
 
         // 2. Onay Bekleyen Sakin Başvuruları
         Wrap(
@@ -571,10 +448,11 @@ class ManagerCockpitView extends StatelessWidget {
               children: [
                 if (onManageHomeOwnersTap != null)
                   TextButton.icon(
+                    key: const Key('btn_cockpit_manage_residents'),
                     onPressed: onManageHomeOwnersTap,
                     icon: const Icon(Icons.people_alt_outlined, size: 16, color: AppColors.accentSky),
                     label: const Text(
-                      'Sakinler & Malikler',
+                      'Sakin & Malik Listesi',
                       style: TextStyle(color: AppColors.accentSky, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),

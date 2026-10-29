@@ -196,11 +196,12 @@ void main() {
       expect(find.byKey(const Key('action_payment_tracking')), findsOneWidget);
     });
 
-    testWidgets('ManagerCockpitView contains Tahsilat & Ödeme Takibi quick action card', (tester) async {
+    testWidgets('ManagerCockpitView provides navigation to unified dues and cash management', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
+      bool navigatedToDues = false;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -208,6 +209,7 @@ void main() {
               child: ManagerCockpitView(
                 controller: controller,
                 onAddResidentTap: () {},
+                onNavigateToDuesTab: () => navigatedToDues = true,
               ),
             ),
           ),
@@ -215,7 +217,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('quick_action_payment_tracking')), findsOneWidget);
+      final duesNavBtn = find.byKey(const Key('btn_open_unified_dues_center'));
+      expect(duesNavBtn, findsOneWidget);
+      await tester.tap(duesNavBtn);
+      await tester.pumpAndSettle();
+      expect(navigatedToDues, isTrue);
     });
   });
 }

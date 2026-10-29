@@ -101,8 +101,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Tap on Tab 2 ("Yönetim")
-      final yonetimTab = find.text('Yönetim');
+      // Tap on Tab 2 ("Sakinler & Malikler")
+      final yonetimTab = find.text('Sakinler & Malikler');
       expect(yonetimTab, findsOneWidget);
       await tester.tap(yonetimTab);
       await tester.pumpAndSettle();
@@ -165,8 +165,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Go to Yönetim tab
-      final yonetimTab = find.text('Yönetim');
+      // Go to Sakinler & Malikler tab
+      final yonetimTab = find.text('Sakinler & Malikler');
       await tester.tap(yonetimTab);
       await tester.pumpAndSettle();
 
@@ -358,8 +358,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Go to Yönetim tab
-      await tester.tap(find.text('Yönetim'));
+      // Go to Sakinler & Malikler tab
+      await tester.tap(find.text('Sakinler & Malikler'));
       await tester.pumpAndSettle();
 
       // Verify card displays tenant Canan Can and owner Yeni Ev Sahibi 2
@@ -417,8 +417,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Go to Yönetim tab
-      await tester.tap(find.text('Yönetim'));
+      // Go to Sakinler & Malikler tab
+      await tester.tap(find.text('Sakinler & Malikler'));
       await tester.pumpAndSettle();
 
       // Tap delete on this unit
@@ -475,8 +475,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Go to Yönetim tab
-      await tester.tap(find.text('Yönetim'));
+      // Go to Sakinler & Malikler tab
+      await tester.tap(find.text('Sakinler & Malikler'));
       await tester.pumpAndSettle();
 
       // Verify card has dual tabs

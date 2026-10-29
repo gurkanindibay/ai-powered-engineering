@@ -129,7 +129,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Navigate to Yönetim tab
-      final yonetimTab = find.text('Yönetim');
+      final yonetimTab = find.text('Sakinler & Malikler');
       if (yonetimTab.evaluate().isNotEmpty) {
         await tester.tap(yonetimTab);
         await tester.pumpAndSettle();
@@ -154,7 +154,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final yonetimTab = find.text('Yönetim');
+      final yonetimTab = find.text('Sakinler & Malikler');
       expect(yonetimTab, findsOneWidget);
       await tester.tap(yonetimTab);
       await tester.pumpAndSettle();
@@ -193,7 +193,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final yonetimTab = find.text('Yönetim');
+      final yonetimTab = find.text('Sakinler & Malikler');
       expect(yonetimTab, findsOneWidget);
       await tester.tap(yonetimTab);
       await tester.pumpAndSettle();
@@ -235,7 +235,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final yonetimTab = find.text('Yönetim');
+      final yonetimTab = find.text('Sakinler & Malikler');
       await tester.tap(yonetimTab);
       await tester.pumpAndSettle();
 
@@ -307,7 +307,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final yonetimTab = find.text('Yönetim');
+      final yonetimTab = find.text('Sakinler & Malikler');
       await tester.tap(yonetimTab);
       await tester.pumpAndSettle();
 
@@ -359,7 +359,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final yonetimTab = find.text('Yönetim');
+      final yonetimTab = find.text('Sakinler & Malikler');
       await tester.tap(yonetimTab);
       await tester.pumpAndSettle();
 

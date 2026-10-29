@@ -80,25 +80,24 @@ void main() {
       expect(find.text('Ayşe Kiracı'), findsWidgets);
     });
 
-    testWidgets('Site Manager can open OwnersResidentsModulePage from Cockpit quick action button', (tester) async {
+    testWidgets('Site Manager can navigate to Sakinler & Malikler tab via Cockpit button', (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: DashboardScreen(controller: controller),
       ));
       await tester.pumpAndSettle();
 
-      // Find quick action in cockpit
-      final moduleActionBtn = find.byKey(const Key('quick_action_residents_module'));
-      await tester.ensureVisible(moduleActionBtn);
+      // Find 'Sakin & Malik Listesi' action button in cockpit
+      final sakinlerBtn = find.byKey(const Key('btn_cockpit_manage_residents'));
+      await tester.ensureVisible(sakinlerBtn);
       await tester.pumpAndSettle();
-      expect(moduleActionBtn, findsOneWidget);
+      expect(sakinlerBtn, findsOneWidget);
 
-      // Tap quick action to navigate to module
-      await tester.tap(moduleActionBtn);
+      // Tap button to navigate to Sakinler & Malikler tab
+      await tester.tap(sakinlerBtn);
       await tester.pumpAndSettle();
 
-      // Verify module is opened
-      expect(find.byType(OwnersResidentsModulePage), findsOneWidget);
-      expect(find.text('Kat Malikleri & Sakinler Modülü'), findsOneWidget);
+      // Verify navigated to Sakinler & Malikler tab and module button is present
+      expect(find.byKey(const Key('open_owners_residents_module')), findsOneWidget);
     });
 
     testWidgets('Site Manager can open OwnersResidentsModulePage from Yönetim tab header button', (tester) async {
@@ -107,8 +106,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Tap Yönetim tab
-      await tester.tap(find.text('Yönetim'));
+      // Tap Sakinler & Malikler tab
+      await tester.tap(find.text('Sakinler & Malikler'));
       await tester.pumpAndSettle();
 
       // Find module button in header

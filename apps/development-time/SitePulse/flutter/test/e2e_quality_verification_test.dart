@@ -204,22 +204,24 @@ void main() {
       // Verify switching to unmatched bank transactions segment
       expect(find.textContaining('Aşağıdaki transferler banka ekstresinde mevcut'), findsOneWidget);
 
-      // 6. Navigate to Fullscreen BankStatementReconciliationPage via Tahsilat & Ödeme Takibi from Cockpit
-      final homeTab = find.text('Ana Sayfa');
-      expect(homeTab, findsOneWidget);
-      await tester.tap(homeTab);
+      // 6. Navigate to Fullscreen BankStatementReconciliationPage via Aidat Yönetimi tab
+      final duesTabBtn = find.text('Aidat Yönetimi');
+      expect(duesTabBtn, findsOneWidget);
+      await tester.tap(duesTabBtn);
       await tester.pumpAndSettle();
 
-      final paymentTrackingCard = find.byKey(const Key('quick_action_payment_tracking'));
-      expect(paymentTrackingCard, findsOneWidget);
-      await tester.ensureVisible(paymentTrackingCard);
+      final paymentTrackingBtn = find.byKey(const Key('action_payment_tracking'));
+      expect(paymentTrackingBtn, findsOneWidget);
+      await tester.ensureVisible(paymentTrackingBtn);
       await tester.pumpAndSettle();
-      await tester.tap(paymentTrackingCard);
+      await tester.tap(paymentTrackingBtn);
       await tester.pumpAndSettle();
 
-      // From unified PaymentTrackingPage, open Bank Statement Reconciliation
-      final bankReconAction = find.byKey(const Key('action_open_bank_reconciliation'));
+      // From payment stream segment, open Bank Statement Reconciliation
+      final bankReconAction = find.byKey(const Key('btn_stream_upload_bank_statement'));
       expect(bankReconAction, findsOneWidget);
+      await tester.ensureVisible(bankReconAction);
+      await tester.pumpAndSettle();
       await tester.tap(bankReconAction);
       await tester.pumpAndSettle();
 
@@ -227,7 +229,7 @@ void main() {
       expect(find.byType(BankStatementReconciliationPage), findsOneWidget);
       expect(find.text('Excel, CSV veya SWIFT MT940 formatında yükleyin'), findsOneWidget);
 
-      // Return back to PaymentTrackingPage using back button
+      // Return back to Dues Management using back button
       final backBtn = find.byIcon(Icons.arrow_back_ios_new_rounded);
       expect(backBtn, findsOneWidget);
       await tester.tap(backBtn);
@@ -235,10 +237,10 @@ void main() {
 
       expect(find.byType(BankStatementReconciliationPage), findsNothing);
 
-      // Return back to Cockpit from PaymentTrackingPage
-      final backBtn2 = find.byIcon(Icons.arrow_back_ios_new_rounded);
-      expect(backBtn2, findsOneWidget);
-      await tester.tap(backBtn2);
+      // Return back to Cockpit via footer bar
+      final homeTab = find.text('Ana Sayfa');
+      expect(homeTab, findsOneWidget);
+      await tester.tap(homeTab);
       await tester.pumpAndSettle();
     });
 
