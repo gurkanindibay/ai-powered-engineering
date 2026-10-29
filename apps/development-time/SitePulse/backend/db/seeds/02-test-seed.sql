@@ -56,11 +56,22 @@ VALUES
     ('kisi-02', '98765432109', 'Zeynep Kaya', '+90 542 333 44 55', 'zeynep@example.com', 'TENANT')
 ON CONFLICT (id) DO NOTHING;
 
+-- Home Owner (Mehmet Öz)
+INSERT INTO persons (id, national_id, full_name, phone, email, person_type)
+VALUES 
+    ('kisi-04', '44444444444', 'Mehmet Öz', '+90 533 222 33 44', 'mehmet.oz@begonya.com', 'HOME_OWNER')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO users (id, site_id, full_name, email, phone, password_hash, role, must_change_password)
+VALUES 
+    ('usr-home-owner-4', 'site-1', 'Mehmet Öz', 'mehmet.oz@begonya.com', '+90 533 222 33 44', 'ARGON2_HASH_mehmetoz123', 'HOME_OWNER', FALSE)
+ON CONFLICT (email) DO NOTHING;
+
 -- 4. Test Units (Flats)
 INSERT INTO units (id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id) 
 VALUES 
     ('d-14', 'blok-A', 14, 4, 24, 'kisi-01', 'kisi-02'),
-    ('d-03', 'blok-B', 3, 1, 18, 'kisi-03', NULL)
+    ('d-03', 'blok-B', 3, 1, 18, 'kisi-04', NULL)
 ON CONFLICT (id) DO UPDATE
 SET owner_person_id = EXCLUDED.owner_person_id,
     tenant_person_id = EXCLUDED.tenant_person_id;

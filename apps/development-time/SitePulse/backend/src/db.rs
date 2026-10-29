@@ -530,19 +530,21 @@ pub async fn seed_test_data(pool: &Pool) -> Result<(), Box<dyn std::error::Error
             VALUES 
                 (3, '55555555555', 'Mehmet Demir', '+90 532 100 2030', 'mehmet.demir@begonya.com', 'HOME_OWNER'),
                 (1, '12345678901', 'Ahmet Yılmaz', '+90 532 111 22 33', 'ahmet.yilmaz@begonya.com', 'HOME_OWNER'),
-                (2, '98765432109', 'Zeynep Kaya', '+90 542 333 44 55', 'zeynep@example.com', 'TENANT')
+                (2, '98765432109', 'Zeynep Kaya', '+90 542 333 44 55', 'zeynep@example.com', 'TENANT'),
+                (4, '44444444444', 'Mehmet Öz', '+90 533 222 33 44', 'mehmet.oz@begonya.com', 'HOME_OWNER')
             ON CONFLICT (id) DO NOTHING;
 
             INSERT INTO users (id, site_id, full_name, email, phone, password_hash, role, must_change_password)
             VALUES 
                 (2, 1, 'Mehmet Demir', 'mehmet.demir@begonya.com', '+90 532 100 2030', 'ARGON2_HASH_mehmet123', 'SITE_MANAGER', FALSE),
-                (3, 1, 'Ahmet Yılmaz', 'ahmet.yilmaz@begonya.com', '+90 532 111 22 33', 'ARGON2_HASH_ahmet123', 'HOME_OWNER', FALSE)
+                (3, 1, 'Ahmet Yılmaz', 'ahmet.yilmaz@begonya.com', '+90 532 111 22 33', 'ARGON2_HASH_ahmet123', 'HOME_OWNER', FALSE),
+                (4, 1, 'Mehmet Öz', 'mehmet.oz@begonya.com', '+90 533 222 33 44', 'ARGON2_HASH_mehmetoz123', 'HOME_OWNER', FALSE)
             ON CONFLICT (email) DO NOTHING;
 
             INSERT INTO units (id, block_id, site_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, virtual_iban) 
             VALUES 
-                (14, 1, 1, 14, 4, 24, 1, 2, 'TR620020500009863791600001'),
-                (3, 2, 1, 3, 1, 18, 3, NULL, 'TR620020500009863791600002')
+                (14, 1, 1, 14, 4, 24, 1, NULL, 'TR620020500009863791600001'),
+                (3, 2, 1, 3, 1, 18, 4, NULL, 'TR620020500009863791600002')
             ON CONFLICT (id) DO UPDATE
             SET owner_person_id = EXCLUDED.owner_person_id, tenant_person_id = EXCLUDED.tenant_person_id, virtual_iban = EXCLUDED.virtual_iban;
 
@@ -589,11 +591,14 @@ pub async fn reset_db_to_seed_data(pool: &Pool) -> Result<(), Box<dyn std::error
             TRUNCATE TABLE invitation_tokens CASCADE;
             TRUNCATE TABLE unit_sender_ibans CASCADE;
             TRUNCATE TABLE unit_payer_names RESTART IDENTITY CASCADE;
+            UPDATE units SET owner_person_id = 1, tenant_person_id = NULL, occupancy_status = 'OWNER_OCCUPIED' WHERE id = 14;
+            UPDATE units SET owner_person_id = 4, tenant_person_id = NULL, occupancy_status = 'OWNER_OCCUPIED' WHERE id = 3;
+            DELETE FROM unit_occupancies WHERE unit_id NOT IN (14, 3);
             DELETE FROM units WHERE id NOT IN (14, 3);
             DELETE FROM blocks WHERE id NOT IN (1, 2);
             DELETE FROM sites WHERE id NOT IN (1, 2);
-            DELETE FROM users WHERE id NOT IN (1, 2, 3);
-            DELETE FROM persons WHERE id NOT IN (1, 2, 3);
+            DELETE FROM users WHERE id NOT IN (1, 2, 3, 4);
+            DELETE FROM persons WHERE id NOT IN (1, 2, 3, 4);
             DELETE FROM site_bank_accounts WHERE id > 1;
 
             SELECT setval(pg_get_serial_sequence('sites', 'id'), COALESCE((SELECT MAX(id) FROM sites), 1));
