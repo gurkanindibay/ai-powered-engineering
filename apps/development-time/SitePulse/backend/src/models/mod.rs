@@ -1369,4 +1369,184 @@ pub struct TransferOwnershipResponse {
     pub transferred_at: DateTime<Utc>,
 }
 
+// ==========================================
+// EPIC-10: Capital Projects & Fixture Dues Models
+// ==========================================
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CapitalProjectCategory {
+    Elevator,
+    FacadeInsulation,
+    RoofWaterproofing,
+    Generator,
+    SecuritySystem,
+    FireSafety,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AllocationBasis {
+    ByLandShare,
+    EqualPerUnit,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapitalProject {
+    pub id: String,
+    pub site_id: String,
+    pub title: String,
+    pub category: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub total_budget: Decimal,
+    pub allocation_basis: String,
+    pub target_start_date: NaiveDate,
+    #[serde(default)]
+    pub target_completion_date: Option<NaiveDate>,
+    #[serde(default)]
+    pub contractor_name: Option<String>,
+    #[serde(default)]
+    pub contractor_tax_no: Option<String>,
+    #[serde(default)]
+    pub contractor_iban: Option<String>,
+    #[serde(default)]
+    pub contract_amount: Option<Decimal>,
+    pub status: String,
+    pub collected_amount: Decimal,
+    pub disbursed_amount: Decimal,
+    pub remaining_fund_balance: Decimal,
+    pub total_units_count: i64,
+    pub installments_count: i64,
+    #[serde(default)]
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapitalProjectInstallment {
+    pub id: String,
+    pub project_id: String,
+    pub installment_number: i32,
+    pub total_installments: i32,
+    pub due_date: NaiveDate,
+    pub installment_budget: Decimal,
+    pub percentage: Decimal,
+    pub is_accrued: bool,
+    #[serde(default)]
+    pub accrued_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapitalContractorDisbursement {
+    pub id: String,
+    pub project_id: String,
+    pub milestone_name: String,
+    #[serde(default)]
+    pub invoice_number: Option<String>,
+    pub amount: Decimal,
+    pub disbursement_date: NaiveDate,
+    pub recipient_name: String,
+    pub recipient_iban: String,
+    #[serde(default)]
+    pub payment_reference: Option<String>,
+    #[serde(default)]
+    pub disbursement_method: String,
+    #[serde(default)]
+    pub notes: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnitCapitalShareSummary {
+    pub unit_id: String,
+    pub block: String,
+    pub unit_number: i32,
+    pub owner_name: String,
+    #[serde(default)]
+    pub owner_phone: Option<String>,
+    pub land_share: i32,
+    pub total_project_share: Decimal,
+    pub total_accrued: Decimal,
+    pub total_paid: Decimal,
+    pub remaining_debt: Decimal,
+    pub is_settled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCapitalProjectRequest {
+    #[serde(default)]
+    pub site_id: Option<String>,
+    pub title: String,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub total_budget: Decimal,
+    #[serde(default)]
+    pub allocation_basis: Option<String>,
+    #[serde(default)]
+    pub target_start_date: Option<NaiveDate>,
+    #[serde(default)]
+    pub target_completion_date: Option<NaiveDate>,
+    #[serde(default)]
+    pub contractor_name: Option<String>,
+    #[serde(default)]
+    pub contractor_tax_no: Option<String>,
+    #[serde(default)]
+    pub contractor_iban: Option<String>,
+    #[serde(default)]
+    pub contract_amount: Option<Decimal>,
+    #[serde(default)]
+    pub installments: Option<Vec<CreateInstallmentItem>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateInstallmentItem {
+    pub installment_number: i32,
+    pub total_installments: i32,
+    pub due_date: NaiveDate,
+    pub installment_budget: Decimal,
+    #[serde(default)]
+    pub percentage: Option<Decimal>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccrueInstallmentRequest {
+    pub installment_number: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccrueInstallmentResponse {
+    pub success: bool,
+    pub message: String,
+    pub project_id: String,
+    pub installment_number: i32,
+    pub total_accrued_amount: Decimal,
+    pub charged_units_count: i64,
+    pub accrued_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordDisbursementRequest {
+    pub milestone_name: String,
+    #[serde(default)]
+    pub invoice_number: Option<String>,
+    pub amount: Decimal,
+    #[serde(default)]
+    pub disbursement_date: Option<NaiveDate>,
+    pub recipient_name: String,
+    pub recipient_iban: String,
+    #[serde(default)]
+    pub payment_reference: Option<String>,
+    #[serde(default)]
+    pub disbursement_method: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+
 

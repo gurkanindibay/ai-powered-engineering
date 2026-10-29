@@ -6,6 +6,7 @@ import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
 import 'app_fullscreen_page.dart';
 import 'bank_statement_reconciliation_page.dart';
+import 'capital_projects_view.dart';
 import 'manual_unit_assignment_page.dart';
 import 'payment_tracking_page.dart';
 import '../residents/owners_residents_module_page.dart';
@@ -930,37 +931,18 @@ class _DuesManagementViewState extends State<DuesManagementView> {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: AppColors.border(context)),
           ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 640;
-              if (isNarrow) {
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildSegmentTab(0, '📋 Daire Aidat Durumları'),
-                      const SizedBox(width: 4),
-                      _buildSegmentTab(1, '💳 Canlı Kasa & Tahsilat'),
-                      const SizedBox(width: 4),
-                      _buildSegmentTab(2, '⏳ Borç Yaşlandırma'),
-                      const SizedBox(width: 4),
-                      _buildSegmentTab(3, '🏦 Eşleşmeyenler', count: unmatchedItems.length),
-                    ],
-                  ),
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: _buildSegmentTab(0, '📋 Daire Aidat Durumları')),
-                  const SizedBox(width: 4),
-                  Expanded(child: _buildSegmentTab(1, '💳 Canlı Kasa & Tahsilat')),
-                  const SizedBox(width: 4),
-                  Expanded(child: _buildSegmentTab(2, '⏳ Borç Yaşlandırma')),
-                  const SizedBox(width: 4),
-                  Expanded(child: _buildSegmentTab(3, '🏦 Eşleşmeyenler', count: unmatchedItems.length)),
-                ],
-              );
-            },
+          child: Row(
+            children: [
+              Expanded(child: _buildSegmentTab(0, '📋 Daire Aidat Durumları')),
+              const SizedBox(width: 4),
+              Expanded(child: _buildSegmentTab(1, '💳 Canlı Kasa')),
+              const SizedBox(width: 4),
+              Expanded(child: _buildSegmentTab(2, '⏳ Yaşlandırma')),
+              const SizedBox(width: 4),
+              Expanded(child: _buildSegmentTab(3, '🏦 Eşleşmeyenler', count: unmatchedItems.length)),
+              const SizedBox(width: 4),
+              Expanded(child: _buildSegmentTab(4, '🏗️ Demirbaş & Yatırım')),
+            ],
           ),
         ),
 
@@ -1007,8 +989,10 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           PaymentStreamWidget(controller: widget.controller, isEmbedded: true)
         else if (_activeSegment == 2)
           DebtAgingWidget(controller: widget.controller, isEmbedded: true)
+        else if (_activeSegment == 3)
+          _buildUnmatchedBankTransactionsSection(unmatchedItems)
         else
-          _buildUnmatchedBankTransactionsSection(unmatchedItems),
+          CapitalProjectsView(controller: widget.controller),
       ],
     );
   }
@@ -1016,10 +1000,12 @@ class _DuesManagementViewState extends State<DuesManagementView> {
   Widget _buildSegmentTab(int index, String label, {int count = 0}) {
     final isSelected = _activeSegment == index;
     return InkWell(
+      key: Key('segment_tab_$index'),
       onTap: () {
         setState(() => _activeSegment = index);
         if (index == 1) widget.controller.fetchPaymentStream();
         if (index == 2) widget.controller.fetchDebtAgingReport();
+        if (index == 4) widget.controller.fetchCapitalProjects();
       },
       borderRadius: BorderRadius.circular(10),
       child: Container(

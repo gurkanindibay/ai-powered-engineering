@@ -1589,4 +1589,247 @@ class DebtAgingReportDto {
   }
 }
 
+// ---------------------------------------------------------------------------
+// EPIC-10: Capital Expenditure & Fixtures (Demirbaş Yönetimi) Models
+// ---------------------------------------------------------------------------
+
+class CapitalProjectItem {
+  final String id;
+  final String siteId;
+  final String title;
+  final String category;
+  final String? description;
+  final Decimal totalBudget;
+  final String allocationBasis;
+  final DateTime targetStartDate;
+  final DateTime? targetCompletionDate;
+  final String? contractorName;
+  final String? contractorTaxNo;
+  final String? contractorIban;
+  final Decimal? contractAmount;
+  final String status;
+  final Decimal collectedAmount;
+  final Decimal disbursedAmount;
+  final Decimal remainingFundBalance;
+  final int totalUnitsCount;
+  final int installmentsCount;
+  final DateTime? createdAt;
+
+  const CapitalProjectItem({
+    required this.id,
+    required this.siteId,
+    required this.title,
+    required this.category,
+    this.description,
+    required this.totalBudget,
+    required this.allocationBasis,
+    required this.targetStartDate,
+    this.targetCompletionDate,
+    this.contractorName,
+    this.contractorTaxNo,
+    this.contractorIban,
+    this.contractAmount,
+    required this.status,
+    required this.collectedAmount,
+    required this.disbursedAmount,
+    required this.remainingFundBalance,
+    required this.totalUnitsCount,
+    required this.installmentsCount,
+    this.createdAt,
+  });
+
+  String get categoryLabel {
+    switch (category) {
+      case 'ELEVATOR':
+        return 'Asansör & Revizyon';
+      case 'ROOF_FACADE':
+        return 'Çatı & Dış Cephe Yalıtım';
+      case 'BOILER_HEATING':
+        return 'Merkezi Kazan & Isıtma';
+      case 'SECURITY_SYSTEM':
+        return 'Kamera & Güvenlik';
+      case 'LANDSCAPING':
+        return 'Çevre Düzeni & Peyzaj';
+      case 'GENERATOR':
+        return 'Jeneratör & Enerji';
+      default:
+        return 'Diğer Demirbaş';
+    }
+  }
+
+  String get allocationBasisLabel {
+    return allocationBasis == 'BY_LAND_SHARE' ? 'Arsa Payı Oranında (KMK 20)' : 'Eşit Paylaşım';
+  }
+
+  double get collectionProgressPercentage {
+    if (totalBudget <= Decimal.zero) return 0.0;
+    final pct = (collectedAmount / totalBudget).toDouble() * 100.0;
+    return pct.clamp(0.0, 100.0);
+  }
+
+  factory CapitalProjectItem.fromJson(Map<String, dynamic> json) {
+    return CapitalProjectItem(
+      id: json['id']?.toString() ?? '',
+      siteId: json['site_id']?.toString() ?? 'site-1',
+      title: json['title']?.toString() ?? '',
+      category: json['category']?.toString() ?? 'ELEVATOR',
+      description: json['description']?.toString(),
+      totalBudget: Decimal.tryParse(json['total_budget']?.toString() ?? '0') ?? Decimal.zero,
+      allocationBasis: json['allocation_basis']?.toString() ?? 'BY_LAND_SHARE',
+      targetStartDate: json['target_start_date'] != null
+          ? DateTime.tryParse(json['target_start_date'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      targetCompletionDate: json['target_completion_date'] != null
+          ? DateTime.tryParse(json['target_completion_date'].toString())
+          : null,
+      contractorName: json['contractor_name']?.toString(),
+      contractorTaxNo: json['contractor_tax_no']?.toString(),
+      contractorIban: json['contractor_iban']?.toString(),
+      contractAmount: json['contract_amount'] != null
+          ? Decimal.tryParse(json['contract_amount'].toString())
+          : null,
+      status: json['status']?.toString() ?? 'ACTIVE',
+      collectedAmount: Decimal.tryParse(json['collected_amount']?.toString() ?? '0') ?? Decimal.zero,
+      disbursedAmount: Decimal.tryParse(json['disbursed_amount']?.toString() ?? '0') ?? Decimal.zero,
+      remainingFundBalance: Decimal.tryParse(json['remaining_fund_balance']?.toString() ?? '0') ?? Decimal.zero,
+      totalUnitsCount: json['total_units_count'] is int ? json['total_units_count'] : 12,
+      installmentsCount: json['installments_count'] is int ? json['installments_count'] : 0,
+      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+    );
+  }
+}
+
+class CapitalProjectInstallmentItem {
+  final String id;
+  final String projectId;
+  final int installmentNumber;
+  final int totalInstallments;
+  final DateTime dueDate;
+  final Decimal installmentBudget;
+  final Decimal percentage;
+  final bool isAccrued;
+  final DateTime? accruedAt;
+
+  const CapitalProjectInstallmentItem({
+    required this.id,
+    required this.projectId,
+    required this.installmentNumber,
+    required this.totalInstallments,
+    required this.dueDate,
+    required this.installmentBudget,
+    required this.percentage,
+    required this.isAccrued,
+    this.accruedAt,
+  });
+
+  factory CapitalProjectInstallmentItem.fromJson(Map<String, dynamic> json) {
+    return CapitalProjectInstallmentItem(
+      id: json['id']?.toString() ?? '',
+      projectId: json['project_id']?.toString() ?? '',
+      installmentNumber: json['installment_number'] is int ? json['installment_number'] : 1,
+      totalInstallments: json['total_installments'] is int ? json['total_installments'] : 1,
+      dueDate: json['due_date'] != null
+          ? DateTime.tryParse(json['due_date'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      installmentBudget: Decimal.tryParse(json['installment_budget']?.toString() ?? '0') ?? Decimal.zero,
+      percentage: Decimal.tryParse(json['percentage']?.toString() ?? '0') ?? Decimal.zero,
+      isAccrued: json['is_accrued'] == true,
+      accruedAt: json['accrued_at'] != null ? DateTime.tryParse(json['accrued_at'].toString()) : null,
+    );
+  }
+}
+
+class CapitalContractorDisbursementItem {
+  final String id;
+  final String projectId;
+  final String milestoneName;
+  final String? invoiceNumber;
+  final Decimal amount;
+  final DateTime disbursementDate;
+  final String recipientName;
+  final String recipientIban;
+  final String? paymentReference;
+  final String disbursementMethod;
+  final String? notes;
+  final DateTime? createdAt;
+
+  const CapitalContractorDisbursementItem({
+    required this.id,
+    required this.projectId,
+    required this.milestoneName,
+    this.invoiceNumber,
+    required this.amount,
+    required this.disbursementDate,
+    required this.recipientName,
+    required this.recipientIban,
+    this.paymentReference,
+    required this.disbursementMethod,
+    this.notes,
+    this.createdAt,
+  });
+
+  factory CapitalContractorDisbursementItem.fromJson(Map<String, dynamic> json) {
+    return CapitalContractorDisbursementItem(
+      id: json['id']?.toString() ?? '',
+      projectId: json['project_id']?.toString() ?? '',
+      milestoneName: json['milestone_name']?.toString() ?? '',
+      invoiceNumber: json['invoice_number']?.toString(),
+      amount: Decimal.tryParse(json['amount']?.toString() ?? '0') ?? Decimal.zero,
+      disbursementDate: json['disbursement_date'] != null
+          ? DateTime.tryParse(json['disbursement_date'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      recipientName: json['recipient_name']?.toString() ?? '',
+      recipientIban: json['recipient_iban']?.toString() ?? '',
+      paymentReference: json['payment_reference']?.toString(),
+      disbursementMethod: json['disbursement_method']?.toString() ?? 'BANK_TRANSFER',
+      notes: json['notes']?.toString(),
+      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
+    );
+  }
+}
+
+class UnitCapitalShareItem {
+  final String unitId;
+  final String block;
+  final int unitNumber;
+  final String ownerName;
+  final String? ownerPhone;
+  final int landShare;
+  final Decimal totalProjectShare;
+  final Decimal totalAccrued;
+  final Decimal totalPaid;
+  final Decimal remainingDebt;
+  final bool isSettled;
+
+  const UnitCapitalShareItem({
+    required this.unitId,
+    required this.block,
+    required this.unitNumber,
+    required this.ownerName,
+    this.ownerPhone,
+    required this.landShare,
+    required this.totalProjectShare,
+    required this.totalAccrued,
+    required this.totalPaid,
+    required this.remainingDebt,
+    required this.isSettled,
+  });
+
+  factory UnitCapitalShareItem.fromJson(Map<String, dynamic> json) {
+    return UnitCapitalShareItem(
+      unitId: json['unit_id']?.toString() ?? '',
+      block: json['block']?.toString() ?? 'A',
+      unitNumber: json['unit_number'] is int ? json['unit_number'] : 1,
+      ownerName: json['owner_name']?.toString() ?? '',
+      ownerPhone: json['owner_phone']?.toString(),
+      landShare: json['land_share'] is int ? json['land_share'] : 24,
+      totalProjectShare: Decimal.tryParse(json['total_project_share']?.toString() ?? '0') ?? Decimal.zero,
+      totalAccrued: Decimal.tryParse(json['total_accrued']?.toString() ?? '0') ?? Decimal.zero,
+      totalPaid: Decimal.tryParse(json['total_paid']?.toString() ?? '0') ?? Decimal.zero,
+      remainingDebt: Decimal.tryParse(json['remaining_debt']?.toString() ?? '0') ?? Decimal.zero,
+      isSettled: json['is_settled'] == true,
+    );
+  }
+}
+
 

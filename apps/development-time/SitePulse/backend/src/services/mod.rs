@@ -7,6 +7,7 @@ pub mod mt940_engine;
 pub mod reconciliation_service;
 pub mod registration_approval_service;
 pub mod saas_tenant_service;
+pub mod capital_project_service;
 pub mod payment_tracking_service;
 pub mod site_admin_service;
 pub mod site_bank_account_service;
@@ -14,6 +15,7 @@ pub mod virtual_iban_service;
 
 pub use auth_service::AuthService;
 pub use bank_statement_parser::BankStatementParser;
+pub use capital_project_service::CapitalProjectService;
 pub use dues_calculation_service::DuesCalculationService;
 pub use home_resident_invitation_service::HomeResidentInvitationService;
 pub use kuveyt_turk_service::{

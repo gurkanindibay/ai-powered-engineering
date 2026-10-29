@@ -2491,3 +2491,153 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
     let occs = inner.unit_occupancies.get("d-14").unwrap();
     assert!(occs.iter().any(|o| o.person_name == resp.old_owner_name && !o.is_active));
 }
+
+// ---------------------------------------------------------------------------
+// EPIC-10: Capital Expenditure & Fixtures (Demirbaş Yönetimi) Integration Tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn when_creating_capital_project_with_installments_then_calculates_plan_correctly() {
+    let state = AppState::new();
+    let service = CapitalProjectService::new(state.clone());
+
+    let req = CreateCapitalProjectRequest {
+        site_id: Some("site-1".to_string()),
+        title: "Çatı İzolasyon ve Mantolama".to_string(),
+        category: Some("ROOF_FACADE".to_string()),
+        description: Some("Dış cephe ısı yalıtımı ve çatı su izolasyonu".to_string()),
+        total_budget: Decimal::from_str_exact("300000.00").unwrap(),
+        allocation_basis: Some("BY_LAND_SHARE".to_string()),
+        target_start_date: Some(Utc::now().date_naive()),
+        target_completion_date: None,
+        contractor_name: Some("İzotürk Yapı Ltd.".to_string()),
+        contractor_tax_no: Some("1234567890".to_string()),
+        contractor_iban: Some("TR120006200000000012345678".to_string()),
+        contract_amount: Some(Decimal::from_str_exact("300000.00").unwrap()),
+        installments: Some(vec![
+            CreateInstallmentItem {
+                installment_number: 1,
+                total_installments: 3,
+                due_date: Utc::now().date_naive(),
+                installment_budget: Decimal::from_str_exact("100000.00").unwrap(),
+                percentage: Some(Decimal::from_str_exact("33.33").unwrap()),
+            },
+            CreateInstallmentItem {
+                installment_number: 2,
+                total_installments: 3,
+                due_date: Utc::now().date_naive() + chrono::Duration::days(30),
+                installment_budget: Decimal::from_str_exact("100000.00").unwrap(),
+                percentage: Some(Decimal::from_str_exact("33.33").unwrap()),
+            },
+            CreateInstallmentItem {
+                installment_number: 3,
+                total_installments: 3,
+                due_date: Utc::now().date_naive() + chrono::Duration::days(60),
+                installment_budget: Decimal::from_str_exact("100000.00").unwrap(),
+                percentage: Some(Decimal::from_str_exact("33.34").unwrap()),
+            },
+        ]),
+    };
+
+    let project = service.create_project(req).await.unwrap();
+    assert_eq!(project.title, "Çatı İzolasyon ve Mantolama");
+    assert_eq!(project.total_budget, Decimal::from_str_exact("300000.00").unwrap());
+    assert_eq!(project.installments_count, 3);
+
+    let installments = service.list_installments(&project.id).await;
+    assert_eq!(installments.len(), 3);
+    assert_eq!(installments[0].installment_budget, Decimal::from_str_exact("100000.00").unwrap());
+}
+
+#[tokio::test]
+async fn when_accruing_capital_installment_then_reconciles_penny_drift_exactly() {
+    let state = AppState::new();
+    let service = CapitalProjectService::new(state.clone());
+
+    // Project with budget ₺10,000 across 1 installment
+    let req = CreateCapitalProjectRequest {
+        site_id: Some("site-1".to_string()),
+        title: "Güvenlik Kamera Sistemi".to_string(),
+        category: Some("SECURITY_SYSTEM".to_string()),
+        description: None,
+        total_budget: Decimal::from_str_exact("10000.00").unwrap(),
+        allocation_basis: Some("BY_LAND_SHARE".to_string()),
+        target_start_date: Some(Utc::now().date_naive()),
+        target_completion_date: None,
+        contractor_name: None,
+        contractor_tax_no: None,
+        contractor_iban: None,
+        contract_amount: None,
+        installments: Some(vec![
+            CreateInstallmentItem {
+                installment_number: 1,
+                total_installments: 1,
+                due_date: Utc::now().date_naive(),
+                installment_budget: Decimal::from_str_exact("10000.00").unwrap(),
+                percentage: Some(Decimal::from_str_exact("100.00").unwrap()),
+            },
+        ]),
+    };
+
+    let project = service.create_project(req).await.unwrap();
+    let accrue_res = service.accrue_installment(&project.id, 1).await.unwrap();
+    assert!(accrue_res.success);
+    assert_eq!(accrue_res.total_accrued_amount, Decimal::from_str_exact("10000.00").unwrap());
+
+    // Sum of all created dues for this project must equal exactly ₺10,000.00
+    let inner = state.inner.read().await;
+    let sum_dues: Decimal = inner
+        .dues
+        .iter()
+        .filter(|d| d.period.contains(&project.title))
+        .map(|d| d.principal_amount)
+        .sum();
+    assert_eq!(sum_dues, Decimal::from_str_exact("10000.00").unwrap());
+}
+
+#[tokio::test]
+async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
+    let state = AppState::new();
+    let service = CapitalProjectService::new(state.clone());
+
+    let req = CreateCapitalProjectRequest {
+        site_id: Some("site-1".to_string()),
+        title: "Kazan Dairesi Yenileme".to_string(),
+        category: Some("BOILER_HEATING".to_string()),
+        description: None,
+        total_budget: Decimal::from_str_exact("80000.00").unwrap(),
+        allocation_basis: Some("BY_LAND_SHARE".to_string()),
+        target_start_date: Some(Utc::now().date_naive()),
+        target_completion_date: None,
+        contractor_name: Some("Termik Mühendislik".to_string()),
+        contractor_tax_no: Some("9876543210".to_string()),
+        contractor_iban: Some("TR330006200000000098765432".to_string()),
+        contract_amount: Some(Decimal::from_str_exact("80000.00").unwrap()),
+        installments: None,
+    };
+
+    let project = service.create_project(req).await.unwrap();
+
+    let disb_req = RecordDisbursementRequest {
+        milestone_name: "1. Hakediş: Eski Kazan Sökümü".to_string(),
+        invoice_number: Some("FTR-2026-0042".to_string()),
+        amount: Decimal::from_str_exact("25000.00").unwrap(),
+        disbursement_date: Some(Utc::now().date_naive()),
+        recipient_name: "Termik Mühendislik".to_string(),
+        recipient_iban: "TR330006200000000098765432".to_string(),
+        payment_reference: Some("PROJ-KAZAN-HK1".to_string()),
+        disbursement_method: Some("BANK_TRANSFER".to_string()),
+        notes: Some("Söküm tutanağı imzalandı".to_string()),
+    };
+
+    let disb = service.record_disbursement(&project.id, disb_req).await.unwrap();
+    assert_eq!(disb.amount, Decimal::from_str_exact("25000.00").unwrap());
+    assert_eq!(disb.milestone_name, "1. Hakediş: Eski Kazan Sökümü");
+
+    let disbursements = service.list_disbursements(&project.id).await;
+    assert_eq!(disbursements.len(), 1);
+    assert_eq!(disbursements[0].amount, Decimal::from_str_exact("25000.00").unwrap());
+
+    let updated_proj = service.get_project(&project.id).await.unwrap();
+    assert_eq!(updated_proj.disbursed_amount, Decimal::from_str_exact("25000.00").unwrap());
+}

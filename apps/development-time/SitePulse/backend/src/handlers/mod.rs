@@ -11,9 +11,9 @@ use serde_json::json;
 
 use crate::models::*;
 use crate::services::{
-    AuthService, DuesCalculationService, HomeResidentInvitationService, KuveytTurkSandboxService,
-    ReconciliationService, RegistrationApprovalService, SaasTenantService, SiteAdminService,
-    SiteBankAccountService, VirtualIbanService,
+    AuthService, CapitalProjectService, DuesCalculationService, HomeResidentInvitationService,
+    KuveytTurkSandboxService, ReconciliationService, RegistrationApprovalService,
+    SaasTenantService, SiteAdminService, SiteBankAccountService, VirtualIbanService,
 };
 use crate::state::AppState;
 use uuid::Uuid;
@@ -3363,6 +3363,97 @@ pub async fn transfer_unit_ownership(
     let service = crate::services::PaymentTrackingService::new(state);
     service
         .transfer_ownership(payload)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+// ---------------------------------------------------------------------------
+// Capital Projects & Fixtures (Demirbaş Yönetimi - EPIC-10) Handlers
+// ---------------------------------------------------------------------------
+
+pub async fn list_capital_projects(
+    State(state): State<AppState>,
+    Query(q): Query<SiteIdParam>,
+) -> Json<Vec<CapitalProject>> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = CapitalProjectService::new(state);
+    Json(service.list_projects(&site_id).await)
+}
+
+pub async fn create_capital_project(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateCapitalProjectRequest>,
+) -> Result<(StatusCode, Json<CapitalProject>), (StatusCode, String)> {
+    let service = CapitalProjectService::new(state);
+    service
+        .create_project(payload)
+        .await
+        .map(|p| (StatusCode::CREATED, Json(p)))
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+pub async fn get_capital_project(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<CapitalProject>, (StatusCode, String)> {
+    let service = CapitalProjectService::new(state);
+    service
+        .get_project(&id)
+        .await
+        .map(Json)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "Demirbaş projesi bulunamadı.".to_string()))
+}
+
+pub async fn list_capital_installments(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Json<Vec<CapitalProjectInstallment>> {
+    let service = CapitalProjectService::new(state);
+    Json(service.list_installments(&id).await)
+}
+
+pub async fn accrue_capital_installment(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(payload): Json<AccrueInstallmentRequest>,
+) -> Result<Json<AccrueInstallmentResponse>, (StatusCode, String)> {
+    let service = CapitalProjectService::new(state);
+    service
+        .accrue_installment(&id, payload.installment_number)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+pub async fn record_capital_disbursement(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(payload): Json<RecordDisbursementRequest>,
+) -> Result<(StatusCode, Json<CapitalContractorDisbursement>), (StatusCode, String)> {
+    let service = CapitalProjectService::new(state);
+    service
+        .record_disbursement(&id, payload)
+        .await
+        .map(|d| (StatusCode::CREATED, Json(d)))
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+pub async fn list_capital_disbursements(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Json<Vec<CapitalContractorDisbursement>> {
+    let service = CapitalProjectService::new(state);
+    Json(service.list_disbursements(&id).await)
+}
+
+pub async fn get_unit_capital_shares(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<UnitCapitalShareSummary>>, (StatusCode, String)> {
+    let service = CapitalProjectService::new(state);
+    service
+        .get_unit_capital_shares(&id)
         .await
         .map(Json)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))

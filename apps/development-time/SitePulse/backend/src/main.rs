@@ -170,6 +170,31 @@ async fn main() {
         .route("/api/v1/payments/inter-ledger-transfer", post(handlers::inter_ledger_transfer))
         .route("/api/v1/payments/receipts/:id", get(handlers::get_payment_receipt))
         .route("/api/v1/site-admin/units/:id/transfer-ownership", post(handlers::transfer_unit_ownership))
+        // Capital Projects & Fixtures Management (Demirbaş Yönetimi - EPIC-10)
+        .route(
+            "/api/v1/capital-projects",
+            get(handlers::list_capital_projects).post(handlers::create_capital_project),
+        )
+        .route(
+            "/api/v1/capital-projects/:id",
+            get(handlers::get_capital_project),
+        )
+        .route(
+            "/api/v1/capital-projects/:id/installments",
+            get(handlers::list_capital_installments),
+        )
+        .route(
+            "/api/v1/capital-projects/:id/accrue-installment",
+            post(handlers::accrue_capital_installment),
+        )
+        .route(
+            "/api/v1/capital-projects/:id/disbursements",
+            get(handlers::list_capital_disbursements).post(handlers::record_capital_disbursement),
+        )
+        .route(
+            "/api/v1/capital-projects/:id/unit-shares",
+            get(handlers::get_unit_capital_shares),
+        )
         // System Reset & Test Data Fixtures
         .route("/api/v1/system/reset-demo-data", post(handlers::reset_demo_data))
         .route("/api/v1/system/recreate-db", post(handlers::recreate_db))

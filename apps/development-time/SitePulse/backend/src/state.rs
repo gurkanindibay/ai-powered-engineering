@@ -43,6 +43,9 @@ pub struct AppStateInner {
     pub unit_occupancies: HashMap<String, Vec<crate::models::OccupancyHistoryItem>>,
     pub payment_receipts: Vec<crate::models::PaymentReceipt>,
     pub payment_entries: Vec<crate::models::PaymentEntry>,
+    pub capital_projects: Vec<crate::models::CapitalProject>,
+    pub capital_installments: Vec<crate::models::CapitalProjectInstallment>,
+    pub capital_disbursements: Vec<crate::models::CapitalContractorDisbursement>,
 }
 
 impl AppStateInner {
@@ -72,6 +75,9 @@ impl AppStateInner {
             unit_occupancies: HashMap::new(),
             payment_receipts: Vec::new(),
             payment_entries: Vec::new(),
+            capital_projects: Vec::new(),
+            capital_installments: Vec::new(),
+            capital_disbursements: Vec::new(),
         };
         inner.seed_system_lookups();
         if Self::should_seed_test_fixtures() {
@@ -461,6 +467,83 @@ impl AppStateInner {
                 total_amount: Decimal::from_str_exact("1400.00").unwrap(),
                 due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
                 status: DebtStatus::Pending,
+            });
+        }
+
+        if !self.capital_projects.iter().any(|p| p.id == "cproj-1") {
+            self.capital_projects.push(crate::models::CapitalProject {
+                id: "cproj-1".to_string(),
+                site_id: "site-1".to_string(),
+                title: "A & B Blok Asansör Revizyonu ve Yeşil Etiket".to_string(),
+                category: "ELEVATOR".to_string(),
+                description: Some("TSE standartlarına uyum, motor yenileme ve kabin modernizasyonu".to_string()),
+                total_budget: Decimal::from_str_exact("360000.00").unwrap(),
+                allocation_basis: "BY_LAND_SHARE".to_string(),
+                target_start_date: NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+                target_completion_date: Some(NaiveDate::from_ymd_opt(2027, 1, 15).unwrap()),
+                contractor_name: Some("Otis Asansör San. ve Tic. A.Ş.".to_string()),
+                contractor_tax_no: Some("6480029182".to_string()),
+                contractor_iban: Some("TR120006200000000000000099".to_string()),
+                contract_amount: Some(Decimal::from_str_exact("360000.00").unwrap()),
+                status: "ACTIVE".to_string(),
+                collected_amount: Decimal::from_str_exact("120000.00").unwrap(),
+                disbursed_amount: Decimal::from_str_exact("60000.00").unwrap(),
+                remaining_fund_balance: Decimal::from_str_exact("60000.00").unwrap(),
+                total_units_count: 12,
+                installments_count: 3,
+                created_at: Some(Utc::now()),
+            });
+
+            self.capital_installments.push(crate::models::CapitalProjectInstallment {
+                id: "cinst-1".to_string(),
+                project_id: "cproj-1".to_string(),
+                installment_number: 1,
+                total_installments: 3,
+                due_date: NaiveDate::from_ymd_opt(2026, 10, 31).unwrap(),
+                installment_budget: Decimal::from_str_exact("120000.00").unwrap(),
+                percentage: Decimal::from_str_exact("33.33").unwrap(),
+                is_accrued: true,
+                accrued_at: Some(Utc::now()),
+                created_at: Some(Utc::now()),
+            });
+            self.capital_installments.push(crate::models::CapitalProjectInstallment {
+                id: "cinst-2".to_string(),
+                project_id: "cproj-1".to_string(),
+                installment_number: 2,
+                total_installments: 3,
+                due_date: NaiveDate::from_ymd_opt(2026, 11, 30).unwrap(),
+                installment_budget: Decimal::from_str_exact("120000.00").unwrap(),
+                percentage: Decimal::from_str_exact("33.33").unwrap(),
+                is_accrued: false,
+                accrued_at: None,
+                created_at: Some(Utc::now()),
+            });
+            self.capital_installments.push(crate::models::CapitalProjectInstallment {
+                id: "cinst-3".to_string(),
+                project_id: "cproj-1".to_string(),
+                installment_number: 3,
+                total_installments: 3,
+                due_date: NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
+                installment_budget: Decimal::from_str_exact("120000.00").unwrap(),
+                percentage: Decimal::from_str_exact("33.34").unwrap(),
+                is_accrued: false,
+                accrued_at: None,
+                created_at: Some(Utc::now()),
+            });
+
+            self.capital_disbursements.push(crate::models::CapitalContractorDisbursement {
+                id: "cdis-1".to_string(),
+                project_id: "cproj-1".to_string(),
+                milestone_name: "1. Hakediş: Malzeme Temini ve Sözleşme Avansı (%50)".to_string(),
+                invoice_number: Some("OTIS-2026-00441".to_string()),
+                amount: Decimal::from_str_exact("60000.00").unwrap(),
+                disbursement_date: NaiveDate::from_ymd_opt(2026, 10, 15).unwrap(),
+                recipient_name: "Otis Asansör San. ve Tic. A.Ş.".to_string(),
+                recipient_iban: "TR120006200000000000000099".to_string(),
+                payment_reference: Some("OTIS-HAKEDIS-1".to_string()),
+                disbursement_method: "BANK_TRANSFER".to_string(),
+                notes: Some("Sözleşme gereği peşin avans ödendi".to_string()),
+                created_at: Some(Utc::now()),
             });
         }
     }
