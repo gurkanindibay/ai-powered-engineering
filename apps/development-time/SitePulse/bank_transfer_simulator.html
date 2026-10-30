@@ -642,6 +642,9 @@
         <button id="btn-accrue-period" onclick="accrueNewPeriodDialog()" class="btn-toolbar" style="color: #60A5FA; background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.35);">
           <span>📅</span> Yeni Dönem Tahakkuku
         </button>
+        <button id="btn-reset-initial-state" onclick="resetToInitialState()" class="btn-toolbar" style="color: #FFFFFF; background: linear-gradient(135deg, #DC2626, #B91C1C); border-color: #EF4444; font-weight: 700; box-shadow: 0 0 12px rgba(239, 68, 68, 0.45);">
+          <span>⏮️</span> Başlangıç Durumuna Sıfırla (Rollback)
+        </button>
         <a href="http://localhost:9090" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 11.5px; font-weight: 700; background: rgba(0, 210, 180, 0.12); padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(0, 210, 180, 0.3);">SitePulse'ı Aç ↗</a>
       </div>
     </div>
@@ -1572,6 +1575,55 @@
         console.error('fetchLiveResidentStatus error:', err);
         document.getElementById('live-total-debt').innerText = 'Bağlantı Hatası';
         document.getElementById('live-advance-balance').innerText = 'Bağlantı Hatası';
+      }
+    }
+
+    async function resetToInitialState() {
+      if (!confirm("⚠️ DİKKAT: BAŞLANGIÇ DURUMUNA SIFIRLAMA (ROLLBACK)\n\nBu işlem:\n• Sonradan eklenen tüm test sitelerini ve 12 daireyi temizler.\n• Tüm test ödemelerini, aidat hareketlerini ve avansları sıfırlar.\n• Veritabanı ve sistemi fabrika başlangıç ayarlarına (Orijinal test tohumuna) döndürür.\n• Bu oturumdaki transfer geçmişini temizler.\n\nUygulamayı ilk başlangıç durumuna döndürmeyi onaylıyor musunuz?")) {
+        return;
+      }
+      const resetBtn = document.getElementById('btn-reset-initial-state');
+      const originalText = resetBtn ? resetBtn.innerHTML : '';
+      if (resetBtn) {
+        resetBtn.disabled = true;
+        resetBtn.innerHTML = '<span>⏳</span> Sıfırlanıyor...';
+      }
+
+      try {
+        let res = await fetch(`${BACKEND_URL}/api/v1/system/reset-to-initial-state`, {
+          method: 'POST'
+        });
+        if (!res.ok) {
+          res = await fetch(`${BACKEND_URL}/api/v1/system/recreate-db`, {
+            method: 'POST'
+          });
+        }
+        if (!res.ok) throw new Error('Backend HTTP ' + res.status);
+        const data = await res.json();
+
+        // Clear local storage history
+        clearLocalHistory();
+
+        alert('✅ BAŞLANGIÇ DURUMUNA DÖNDÜRÜLDÜ!\n\n' + (data.message || 'Uygulama başarıyla fabrika başlangıç durumuna döndürüldü.'));
+
+        // Refresh all simulator data
+        await loadSitesForModal();
+        await loadSitesForPayments();
+        await loadUnitsSummary();
+        await fetchLiveResidentStatus();
+        await refreshSitePayments();
+
+        const resultContainer = document.getElementById('result-container');
+        if (resultContainer) {
+          resultContainer.style.display = 'none';
+        }
+      } catch (err) {
+        alert('Başlangıç durumuna sıfırlama sırasında hata oluştu: ' + err.message);
+      } finally {
+        if (resetBtn) {
+          resetBtn.disabled = false;
+          resetBtn.innerHTML = originalText;
+        }
       }
     }
 

@@ -197,6 +197,7 @@ async fn main() {
         )
         // System Reset & Test Data Fixtures
         .route("/api/v1/system/reset-demo-data", post(handlers::reset_demo_data))
+        .route("/api/v1/system/reset-to-initial-state", post(handlers::reset_to_initial_state))
         .route("/api/v1/system/recreate-db", post(handlers::recreate_db))
         .route("/api/v1/system/accrue-test-due", post(handlers::accrue_test_due))
         .route("/api/v1/system/seed-test-fixtures", post(handlers::seed_test_fixtures))

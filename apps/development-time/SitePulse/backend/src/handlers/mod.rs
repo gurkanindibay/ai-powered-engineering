@@ -2523,15 +2523,61 @@ pub async fn recreate_db(
         }
     }
     let mut inner = state.inner.write().await;
-    inner.reset_all_payments_and_balances();
+    inner.clear_all_data();
     if let Some(ref pool) = state.pool {
         crate::db::load_all_from_db(pool, &mut inner).await;
+    } else {
+        inner.seed_test_fixtures();
     }
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "status": "SUCCESS",
             "message": "Tüm tablolar başarıyla silindi, yeniden oluşturuldu ve başlangıç verileriyle yüklendi.",
+            "sites_count": inner.sites.len(),
+            "users_count": inner.users.len(),
+            "units_count": inner.units.len(),
+            "dues_count": inner.dues.len()
+        })),
+    )
+}
+
+/// Fully restores the application and database back to pristine initial seed fixtures
+pub async fn reset_to_initial_state(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if crate::state::AppStateInner::is_production() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "status": "ERROR",
+                "message": "Sistemi sıfırlama işlemi canlı ortamda güvenlik nedeniyle engellenmiştir."
+            })),
+        );
+    }
+    if let Some(ref pool) = state.pool {
+        if let Err(e) = crate::db::recreate_db_schema_and_seed(pool).await {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "status": "ERROR",
+                    "message": format!("Veritabanı sıfırlanamadı: {}", e)
+                })),
+            );
+        }
+    }
+    let mut inner = state.inner.write().await;
+    inner.clear_all_data();
+    if let Some(ref pool) = state.pool {
+        crate::db::load_all_from_db(pool, &mut inner).await;
+    } else {
+        inner.seed_test_fixtures();
+    }
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "SUCCESS",
+            "message": "Uygulama başarıyla başlangıç durumuna (Fabrika Ayarları) döndürüldü. Tüm test verileri ve geçici kayıtlar temizlendi.",
             "sites_count": inner.sites.len(),
             "users_count": inner.users.len(),
             "units_count": inner.units.len(),

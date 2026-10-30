@@ -682,6 +682,7 @@ pub async fn recreate_db_schema_and_seed(pool: &Pool) -> Result<(), Box<dyn std:
         )
         .await?;
     init_db(pool).await?;
+    seed_test_data(pool).await?;
     info!("All database tables dropped and recreated with clean initial state.");
     Ok(())
 }
