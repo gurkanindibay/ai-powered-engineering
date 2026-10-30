@@ -1381,8 +1381,14 @@ class DashboardController extends ChangeNotifier {
     if (role == UserRole.saasAdmin) {
       fetchSaasSites();
     } else if (role == UserRole.siteManager) {
+      if (_currentManagedSite == null) {
+        attachCurrentManagedSiteForUser(email: _userSession.email);
+      }
       fetchSiteManagerOverview(siteId: _currentManagedSite?.id, period: _selectedDuesMonth);
     } else if (role == UserRole.homeOwner || role == UserRole.homeResident) {
+      if (_activeUnit.id.isEmpty) {
+        attachActiveUnitForUser(email: _userSession.email);
+      }
       if (_activeUnit.id.isNotEmpty) {
         fetchResidentDashboard(_activeUnit.id);
       } else if (!isTestMode) {
@@ -1430,25 +1436,441 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
-  void loginWithPassword(String email, String password) {
-    if (email.trim().isEmpty || password.trim().isEmpty) {
-      _authMessage = 'E-posta ve şifre zorunludur.';
-      notifyListeners();
+  void attachActiveUnitForUser({required String email, String? siteId, String? unitId}) {
+    // 1. If unitId is explicitly provided
+    if (unitId != null && unitId.isNotEmpty) {
+      final ho = _homeOwners.cast<HomeOwnerItem?>().firstWhere(
+        (h) => h?.unitId == unitId || h?.unitNo.toString() == unitId,
+        orElse: () => null,
+      );
+      if (ho != null) {
+        _activeUnit = ApartmentUnit(
+          id: ho.unitId.isNotEmpty ? ho.unitId : 'unit-${ho.unitNo}',
+          siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+          siteName: _currentManagedSite?.name ?? 'Sitemiz',
+          block: ho.block,
+          unitNo: ho.unitNo,
+          floor: ((ho.unitNo - 1) ~/ 4) + 1,
+          landShare: 1,
+          ownerName: ho.ownerFullName,
+          tenantName: ho.tenantFullName ?? '',
+          virtualIban: ho.virtualIban,
+          advancePayment: Decimal.zero,
+        );
+        fetchResidentDashboard(_activeUnit.id);
+        return;
+      }
+      final flat = _flatsList.cast<FlatPaymentStatus?>().firstWhere(
+        (f) => f?.id == unitId || f?.unitNo.toString() == unitId,
+        orElse: () => null,
+      );
+      if (flat != null) {
+        _activeUnit = ApartmentUnit(
+          id: flat.id,
+          siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+          siteName: _currentManagedSite?.name ?? 'Sitemiz',
+          block: flat.block,
+          unitNo: flat.unitNo,
+          floor: ((flat.unitNo - 1) ~/ 4) + 1,
+          landShare: 1,
+          ownerName: flat.residentName,
+          tenantName: '',
+          virtualIban: 'TR91 0020 5000 0986 3791 6000 01',
+          advancePayment: Decimal.zero,
+        );
+        fetchResidentDashboard(_activeUnit.id);
+        return;
+      }
+      _activeUnit = ApartmentUnit(
+        id: unitId,
+        siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+        siteName: _currentManagedSite?.name ?? 'Sitemiz',
+        block: 'A Blok',
+        unitNo: int.tryParse(unitId.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1,
+        floor: 1,
+        landShare: 1,
+        ownerName: email,
+        tenantName: '',
+        virtualIban: 'TR91 0020 5000 0986 3791 6000 01',
+        advancePayment: Decimal.zero,
+      );
+      fetchResidentDashboard(_activeUnit.id);
       return;
     }
 
-    final role = email.contains('admin')
-        ? UserRole.saasAdmin
-        : (email.contains('yonetim') || email.contains('manager') || email.contains('mehmet'))
-            ? UserRole.siteManager
-            : (email.contains('sakin') || email.contains('zeynep'))
-                ? UserRole.homeResident
-                : UserRole.homeOwner;
+    // 2. Match by email in _homeOwners
+    final ho = _homeOwners.cast<HomeOwnerItem?>().firstWhere(
+      (h) => h?.email.toLowerCase() == email.toLowerCase() || h?.tenantEmail?.toLowerCase() == email.toLowerCase(),
+      orElse: () => null,
+    );
+    if (ho != null) {
+      _activeUnit = ApartmentUnit(
+        id: ho.unitId.isNotEmpty ? ho.unitId : 'unit-${ho.unitNo}',
+        siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+        siteName: _currentManagedSite?.name ?? 'Sitemiz',
+        block: ho.block,
+        unitNo: ho.unitNo,
+        floor: ((ho.unitNo - 1) ~/ 4) + 1,
+        landShare: 1,
+        ownerName: ho.ownerFullName,
+        tenantName: ho.tenantFullName ?? '',
+        virtualIban: ho.virtualIban,
+        advancePayment: Decimal.zero,
+      );
+      fetchResidentDashboard(_activeUnit.id);
+      return;
+    }
 
-    _userSession = _createSession(role, AuthProvider.local, customEmail: email);
+    // 3. Match by provisioned homeowner
+    if (_provisionedHomeOwner != null && _provisionedHomeOwner!.email.toLowerCase() == email.toLowerCase()) {
+      _activeUnit = ApartmentUnit(
+        id: 'unit-${_provisionedHomeOwner!.unitNo}',
+        siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+        siteName: _currentManagedSite?.name ?? 'Sitemiz',
+        block: _provisionedHomeOwner!.block,
+        unitNo: _provisionedHomeOwner!.unitNo,
+        floor: ((_provisionedHomeOwner!.unitNo - 1) ~/ 4) + 1,
+        landShare: 1,
+        ownerName: _provisionedHomeOwner!.ownerName,
+        tenantName: '',
+        virtualIban: 'TR91 0020 5000 0986 3791 6000 01',
+        advancePayment: Decimal.zero,
+      );
+      fetchResidentDashboard(_activeUnit.id);
+      return;
+    }
+
+    // 4. Match by flatsList
+    if (_flatsList.isNotEmpty) {
+      final f = _flatsList.cast<FlatPaymentStatus?>().firstWhere(
+        (flat) => flat?.residentName.toLowerCase() == email.toLowerCase(),
+        orElse: () => _flatsList.first,
+      )!;
+      _activeUnit = ApartmentUnit(
+        id: f.id,
+        siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+        siteName: _currentManagedSite?.name ?? 'Sitemiz',
+        block: f.block,
+        unitNo: f.unitNo,
+        floor: ((f.unitNo - 1) ~/ 4) + 1,
+        landShare: 1,
+        ownerName: f.residentName,
+        tenantName: '',
+        virtualIban: 'TR91 0020 5000 0986 3791 6000 01',
+        advancePayment: Decimal.zero,
+      );
+      fetchResidentDashboard(_activeUnit.id);
+      return;
+    }
+
+    // 5. If no units exist at all, fetch overview to check remote
+    if (!isTestMode) {
+      fetchSiteManagerOverview(siteId: siteId).then((_) {
+        if (_flatsList.isNotEmpty && _activeUnit.id.isEmpty) {
+          final f = _flatsList.first;
+          _activeUnit = ApartmentUnit(
+            id: f.id,
+            siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+            siteName: _currentManagedSite?.name ?? 'Sitemiz',
+            block: f.block,
+            unitNo: f.unitNo,
+            floor: ((f.unitNo - 1) ~/ 4) + 1,
+            landShare: 1,
+            ownerName: f.residentName,
+            tenantName: '',
+            virtualIban: 'TR91 0020 5000 0986 3791 6000 01',
+            advancePayment: Decimal.zero,
+          );
+          fetchResidentDashboard(_activeUnit.id);
+          notifyListeners();
+        }
+      });
+    }
+  }
+
+  void attachCurrentManagedSiteForUser({required String email, String? siteId}) {
+    if (siteId != null && siteId.isNotEmpty) {
+      final s = _saasSites.cast<TenantSiteItem?>().firstWhere(
+        (site) => site?.id == siteId,
+        orElse: () => null,
+      );
+      if (s != null) {
+        _currentManagedSite = s;
+        return;
+      }
+    }
+    final s = _saasSites.cast<TenantSiteItem?>().firstWhere(
+      (site) => site?.adminEmail.toLowerCase() == email.toLowerCase(),
+      orElse: () => null,
+    );
+    if (s != null) {
+      _currentManagedSite = s;
+      return;
+    }
+    if (_provisionedCredentials != null && _provisionedCredentials!.adminEmail.toLowerCase() == email.toLowerCase()) {
+      _currentManagedSite = TenantSiteItem(
+        id: _provisionedCredentials!.siteId,
+        name: _provisionedCredentials!.siteName,
+        city: 'İstanbul',
+        address: '',
+        status: 'ACTIVE',
+        planType: _provisionedCredentials!.planType,
+        totalUnits: 0,
+        monthlyCollectionVolume: Decimal.zero,
+        adminName: _provisionedCredentials!.adminName,
+        adminEmail: _provisionedCredentials!.adminEmail,
+        adminPhone: '',
+        actionCount: 0,
+      );
+      return;
+    }
+    if (_saasSites.isNotEmpty) {
+      _currentManagedSite = _saasSites.first;
+    }
+  }
+
+  void loginAsHomeOwner(HomeOwnerItem owner) {
+    _activeUnit = ApartmentUnit(
+      id: owner.unitId.isNotEmpty ? owner.unitId : 'unit-${owner.unitNo}',
+      siteId: _currentManagedSite?.id ?? 'site-1',
+      siteName: _currentManagedSite?.name ?? 'Sitemiz',
+      block: owner.block,
+      unitNo: owner.unitNo,
+      floor: ((owner.unitNo - 1) ~/ 4) + 1,
+      landShare: 1,
+      ownerName: owner.ownerFullName,
+      tenantName: owner.tenantFullName ?? '',
+      virtualIban: owner.virtualIban,
+      advancePayment: Decimal.zero,
+    );
+    _userSession = _createSession(
+      UserRole.homeOwner,
+      AuthProvider.local,
+      customName: owner.ownerFullName,
+      customEmail: owner.email,
+      customPhone: owner.phone,
+    );
+    _isAuthenticated = true;
+    _authMessage = '${owner.ownerFullName} (${owner.block} D:${owner.unitNo}) olarak giriş yapıldı.';
+    fetchResidentDashboard(_activeUnit.id);
+    notifyListeners();
+  }
+
+  void loginAsProvisionedHomeOwner() {
+    if (_provisionedHomeOwner == null) return;
+    final p = _provisionedHomeOwner!;
+    _activeUnit = ApartmentUnit(
+      id: 'unit-${p.unitNo}',
+      siteId: _currentManagedSite?.id ?? 'site-1',
+      siteName: _currentManagedSite?.name ?? 'Sitemiz',
+      block: p.block,
+      unitNo: p.unitNo,
+      floor: ((p.unitNo - 1) ~/ 4) + 1,
+      landShare: 1,
+      ownerName: p.ownerName,
+      tenantName: '',
+      virtualIban: 'TR91 0020 5000 0986 3791 6000 01',
+      advancePayment: Decimal.zero,
+    );
+    _userSession = _createSession(
+      UserRole.homeOwner,
+      AuthProvider.local,
+      customName: p.ownerName,
+      customEmail: p.email,
+      customPhone: p.phone,
+    );
+    _isAuthenticated = true;
+    _authMessage = '${p.ownerName} (${p.block} D:${p.unitNo}) olarak giriş yapıldı.';
+    fetchResidentDashboard(_activeUnit.id);
+    notifyListeners();
+  }
+
+  void loginAsSiteManager(TenantSiteItem site, {SiteAdminActivePath? adminPath}) {
+    _currentManagedSite = site;
+    if (adminPath != null) {
+      _siteAdminPath = adminPath;
+    }
+    _userSession = _createSession(
+      UserRole.siteManager,
+      AuthProvider.local,
+      customName: site.adminName,
+      customEmail: site.adminEmail,
+      customPhone: site.adminPhone,
+    );
+    _isAuthenticated = true;
+    _authMessage = '${site.name} Yöneticisi (${site.adminName}) olarak giriş yapıldı.';
+    fetchSiteManagerOverview(siteId: site.id, period: _selectedDuesMonth);
+    notifyListeners();
+  }
+
+  void loginAsProvisionedSiteManager({SiteAdminActivePath? adminPath}) {
+    if (_provisionedCredentials == null) return;
+    final p = _provisionedCredentials!;
+    final site = TenantSiteItem(
+      id: p.siteId,
+      name: p.siteName,
+      city: 'İstanbul',
+      address: '',
+      status: 'ACTIVE',
+      planType: p.planType,
+      totalUnits: 0,
+      monthlyCollectionVolume: Decimal.zero,
+      adminName: p.adminName,
+      adminEmail: p.adminEmail,
+      adminPhone: '',
+      actionCount: 0,
+    );
+    loginAsSiteManager(site, adminPath: adminPath);
+  }
+
+  Future<bool> loginWithPassword(
+    String email,
+    String password, {
+    UserRole? targetRole,
+    SiteAdminActivePath? adminPath,
+  }) async {
+    if (email.trim().isEmpty || password.trim().isEmpty) {
+      _authMessage = 'E-posta ve şifre zorunludur.';
+      notifyListeners();
+      return false;
+    }
+
+    final trimmedEmail = email.trim();
+    final trimmedPass = password.trim();
+
+    // 1. Try remote authentication if not test mode
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/auth/login');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'email': trimmedEmail,
+            'password': trimmedPass,
+          }),
+        ).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+          final userData = data['user'] as Map<String, dynamic>?;
+          if (userData != null) {
+            final roleStr = userData['role']?.toString().toUpperCase() ?? '';
+            final siteId = userData['site_id']?.toString() ?? '';
+            final unitId = userData['unit_id']?.toString() ?? '';
+            final fullName = userData['full_name']?.toString() ?? trimmedEmail;
+            final phone = userData['phone']?.toString() ?? '';
+
+            UserRole resolvedRole;
+            if (roleStr == 'SAAS_ADMIN' || roleStr.contains('ADMIN')) {
+              resolvedRole = UserRole.saasAdmin;
+            } else if (roleStr == 'SITE_MANAGER' || roleStr.contains('MANAGER')) {
+              resolvedRole = UserRole.siteManager;
+            } else if (roleStr == 'HOME_RESIDENT' || roleStr.contains('RESIDENT')) {
+              resolvedRole = UserRole.homeResident;
+            } else {
+              resolvedRole = UserRole.homeOwner;
+            }
+
+            if (targetRole != null) {
+              resolvedRole = targetRole;
+            }
+
+            if (adminPath != null) {
+              _siteAdminPath = adminPath;
+            }
+
+            if (resolvedRole == UserRole.saasAdmin) {
+              await fetchSaasSites();
+            } else if (resolvedRole == UserRole.siteManager) {
+              attachCurrentManagedSiteForUser(email: trimmedEmail, siteId: siteId);
+              await fetchSiteManagerOverview(siteId: siteId.isNotEmpty ? siteId : _currentManagedSite?.id, period: _selectedDuesMonth);
+            } else {
+              attachActiveUnitForUser(email: trimmedEmail, siteId: siteId, unitId: unitId);
+              if (siteId.isNotEmpty) {
+                await fetchSiteManagerOverview(siteId: siteId, period: _selectedDuesMonth);
+              }
+            }
+
+            _userSession = _createSession(
+              resolvedRole,
+              AuthProvider.local,
+              customName: fullName,
+              customEmail: trimmedEmail,
+              customPhone: phone,
+            );
+            _isAuthenticated = true;
+            _authMessage = 'Şifre ile başarıyla giriş yapıldı (${resolvedRole.displayName}).';
+            notifyListeners();
+            return true;
+          }
+        } else if (response.statusCode == 401 || response.statusCode == 400) {
+          final errorBody = utf8.decode(response.bodyBytes);
+          _authMessage = errorBody.isNotEmpty ? errorBody : 'E-posta veya şifre hatalı.';
+          notifyListeners();
+          return false;
+        }
+      } catch (e) {
+        debugPrint('loginWithPassword backend call error: $e');
+      }
+    }
+
+    // 2. Local / Test Mode / Offline resolution
+    if (_provisionedCredentials != null && _provisionedCredentials!.adminEmail.toLowerCase() == trimmedEmail.toLowerCase()) {
+      loginAsProvisionedSiteManager(adminPath: adminPath);
+      return true;
+    }
+
+    if (_provisionedHomeOwner != null && _provisionedHomeOwner!.email.toLowerCase() == trimmedEmail.toLowerCase()) {
+      loginAsProvisionedHomeOwner();
+      return true;
+    }
+
+    final matchedSite = _saasSites.cast<TenantSiteItem?>().firstWhere(
+      (s) => s?.adminEmail.toLowerCase() == trimmedEmail.toLowerCase(),
+      orElse: () => null,
+    );
+    if (matchedSite != null) {
+      loginAsSiteManager(matchedSite, adminPath: adminPath);
+      return true;
+    }
+
+    final matchedHo = _homeOwners.cast<HomeOwnerItem?>().firstWhere(
+      (h) => h?.email.toLowerCase() == trimmedEmail.toLowerCase() || h?.tenantEmail?.toLowerCase() == trimmedEmail.toLowerCase(),
+      orElse: () => null,
+    );
+    if (matchedHo != null) {
+      loginAsHomeOwner(matchedHo);
+      return true;
+    }
+
+    final role = targetRole ?? (trimmedEmail.contains('admin')
+        ? UserRole.saasAdmin
+        : (trimmedEmail.contains('yonetim') || trimmedEmail.contains('manager') || trimmedEmail.contains('mehmet'))
+            ? UserRole.siteManager
+            : (trimmedEmail.contains('sakin') || trimmedEmail.contains('zeynep'))
+                ? UserRole.homeResident
+                : UserRole.homeOwner);
+
+    if (adminPath != null) {
+      _siteAdminPath = adminPath;
+    }
+
+    if (role == UserRole.saasAdmin) {
+      fetchSaasSites();
+    } else if (role == UserRole.siteManager) {
+      attachCurrentManagedSiteForUser(email: trimmedEmail);
+      fetchSiteManagerOverview(siteId: _currentManagedSite?.id, period: _selectedDuesMonth);
+    } else {
+      attachActiveUnitForUser(email: trimmedEmail);
+    }
+
+    _userSession = _createSession(role, AuthProvider.local, customEmail: trimmedEmail);
     _isAuthenticated = true;
     _authMessage = 'Şifre ile başarıyla giriş yapıldı (${role.displayName}).';
     notifyListeners();
+    return true;
   }
 
   void loginWithGoogle() {

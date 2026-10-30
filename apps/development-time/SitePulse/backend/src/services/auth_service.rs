@@ -66,7 +66,56 @@ impl AuthService {
             return Err("Invalid email or password (kullanıcı adı veya şifre hatalı).".to_string());
         }
 
-        Ok(create_auth_response(&user))
+        // Dynamically find unit_id for this user
+        let unit_id_opt = {
+            let inner = self.state.inner.read().await;
+            inner
+                .units
+                .iter()
+                .find(|un| {
+                    un.owner_user_id.as_deref() == Some(&user.id)
+                        || un.tenant_user_id.as_deref() == Some(&user.id)
+                })
+                .map(|un| un.id.clone())
+        };
+
+        let db_unit_id: Option<String> = if unit_id_opt.is_none() {
+            if let Some(ref pool) = self.state.pool {
+                if let Ok(client) = pool.get().await {
+                    let row_opt = client
+                        .query_opt(
+                            r#"
+                            SELECT u.id FROM units u
+                            LEFT JOIN persons op ON u.owner_person_id = op.id
+                            LEFT JOIN persons tp ON u.tenant_person_id = tp.id
+                            WHERE LOWER(op.email) = $1 OR LOWER(tp.email) = $1
+                            LIMIT 1
+                            "#,
+                            &[&email_norm],
+                        )
+                        .await
+                        .ok()
+                        .flatten();
+                    row_opt.map(|r| r.get::<_, i64>(0).to_string())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let effective_unit_id = unit_id_opt.or(db_unit_id).unwrap_or_else(|| {
+            if user.role == Role::HomeOwner || user.role == Role::HomeResident {
+                "d-14".to_string()
+            } else {
+                String::new()
+            }
+        });
+
+        Ok(create_auth_response(&user, &effective_unit_id))
     }
 
     pub async fn authenticate_with_google(
@@ -130,7 +179,7 @@ impl AuthService {
             });
         }
 
-        Ok(create_auth_response(&user))
+        Ok(create_auth_response(&user, "d-14"))
     }
 
     pub async fn register_with_password(
@@ -186,7 +235,7 @@ impl AuthService {
             });
         }
 
-        Ok(create_auth_response(&new_user))
+        Ok(create_auth_response(&new_user, "d-14"))
     }
 
     pub async fn get_current_profile(&self, user_id: &str) -> Result<UserProfileResponse, String> {
@@ -242,7 +291,7 @@ pub fn hash_password(password: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn create_auth_response(user: &User) -> AuthResponse {
+fn create_auth_response(user: &User, unit_id: &str) -> AuthResponse {
     let permissions = Permission::permissions_for_role(user.role);
     let summary = UserSummary {
         id: user.id.clone(),
@@ -251,7 +300,7 @@ fn create_auth_response(user: &User) -> AuthResponse {
         phone: user.phone.clone(),
         role: user.role,
         site_id: user.site_id.clone(),
-        unit_id: "d-14".to_string(),
+        unit_id: if unit_id.is_empty() { "d-14".to_string() } else { unit_id.to_string() },
         avatar_url: user.avatar_url.clone(),
         auth_provider: user.auth_provider.clone(),
         must_change_password: user.must_change_password,

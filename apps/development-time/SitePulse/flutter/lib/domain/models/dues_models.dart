@@ -555,6 +555,7 @@ class HomeOwnerItem {
   final String? tenantFullName;
   final String? tenantEmail;
   final String? tenantPhone;
+  final String? virtualIban;
   final List<UnitResidentMember> householdResidents;
   final Decimal? _operationalDuesBalance;
   Decimal get operationalDuesBalance => _operationalDuesBalance ?? Decimal.zero;
@@ -656,6 +657,7 @@ class HomeOwnerItem {
     this.tenantFullName,
     this.tenantEmail,
     this.tenantPhone,
+    this.virtualIban,
     this.householdResidents = const [],
     Decimal? operationalDuesBalance,
     Decimal? capitalDuesBalance,
@@ -689,6 +691,7 @@ class HomeOwnerItem {
       tenantFullName: json['tenant_full_name']?.toString(),
       tenantEmail: json['tenant_email']?.toString(),
       tenantPhone: json['tenant_phone']?.toString(),
+      virtualIban: json['virtual_iban']?.toString(),
       householdResidents: (json['household_residents'] as List<dynamic>?)
               ?.map((m) => UnitResidentMember.fromJson(m as Map<String, dynamic>))
               .toList() ??
@@ -722,6 +725,7 @@ class HomeOwnerItem {
     String? tenantFullName,
     String? tenantEmail,
     String? tenantPhone,
+    String? virtualIban,
     bool clearTenant = false,
     List<UnitResidentMember>? householdResidents,
     Decimal? operationalDuesBalance,
@@ -752,6 +756,7 @@ class HomeOwnerItem {
       tenantFullName: clearTenant ? null : (tenantFullName ?? this.tenantFullName),
       tenantEmail: clearTenant ? null : (tenantEmail ?? this.tenantEmail),
       tenantPhone: clearTenant ? null : (tenantPhone ?? this.tenantPhone),
+      virtualIban: virtualIban ?? this.virtualIban,
       householdResidents: householdResidents ?? this.householdResidents,
       operationalDuesBalance: operationalDuesBalance ?? this.operationalDuesBalance,
       capitalDuesBalance: capitalDuesBalance ?? this.capitalDuesBalance,

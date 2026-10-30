@@ -214,7 +214,7 @@ impl SiteAdminService {
             };
 
             // Insert user
-            let user_role_str = "HOME_RESIDENT";
+            let user_role_str = if is_tenant || is_resident_only { "HOME_RESIDENT" } else { "HOME_OWNER" };
             let user_row = client
                 .query_one(
                     r#"
@@ -533,7 +533,7 @@ impl SiteAdminService {
             email: email_norm.clone(),
             phone: request.phone.clone(),
             password_hash: Some(password_hash.clone()),
-            role: Role::HomeResident,
+            role: if is_tenant || is_resident_only { Role::HomeResident } else { Role::HomeOwner },
             must_change_password: true,
             auth_provider: "LOCAL".to_string(),
             google_sub: None,

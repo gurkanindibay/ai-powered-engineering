@@ -431,4 +431,122 @@ void main() {
 
     expect(find.text('Geçici Yönetim Şifresi Yenilendi!'), findsNothing);
   });
+
+  testWidgets('Selecting 🏠 Kat Maliki Girişi tab renders dedicated Homeowner Login Screen and allows login', (WidgetTester tester) async {
+    final controller = _createTestController(startAuthenticated: false);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Tap Kat Maliki Girişi tab
+    final homeOwnerTab = find.text('🏠 Kat Maliki Girişi');
+    expect(homeOwnerTab, findsOneWidget);
+    await tester.tap(homeOwnerTab);
+    await tester.pumpAndSettle();
+
+    // Verify dedicated Homeowner screen elements
+    expect(find.text('Kat Maliki & Ev Sakini Girişi'), findsOneWidget);
+    expect(find.text('E-posta & Şifre ile Kat Maliki Girişi'), findsOneWidget);
+    expect(find.text('Kat Maliki Olarak Giriş Yap'), findsOneWidget);
+    expect(find.text('Google ile Giriş Yap'), findsOneWidget);
+
+    // Tap login button after scrolling into view
+    final loginBtn = find.text('Kat Maliki Olarak Giriş Yap');
+    await tester.ensureVisible(loginBtn);
+    await tester.pumpAndSettle();
+    await tester.tap(loginBtn);
+    await tester.pumpAndSettle();
+
+    expect(controller.isAuthenticated, isTrue);
+    expect(controller.userRole, UserRole.homeOwner);
+  });
+
+  testWidgets('Selecting 🏢 Site Yöneticisi Girişi tab renders dedicated Site Manager Login Screen with dual path selector', (WidgetTester tester) async {
+    final controller = _createTestController(startAuthenticated: false);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Tap Site Yöneticisi Girişi tab
+    final siteManagerTab = find.text('🏢 Site Yöneticisi Girişi');
+    expect(siteManagerTab, findsOneWidget);
+    await tester.tap(siteManagerTab);
+    await tester.pumpAndSettle();
+
+    // Verify dedicated Site Manager screen elements
+    expect(find.text('Site Yöneticisi Girişi'), findsWidgets);
+    expect(find.text('Yönetici E-posta & Şifre ile Giriş'), findsOneWidget);
+    expect(find.text('Site Yöneticisi Olarak Giriş Yap'), findsOneWidget);
+    expect(find.textContaining('Giriş Yolu Seçimi'), findsWidgets);
+
+    // Tap login button
+    final managerLoginBtn = find.text('Site Yöneticisi Olarak Giriş Yap');
+    await tester.ensureVisible(managerLoginBtn);
+    await tester.pumpAndSettle();
+    await tester.tap(managerLoginBtn);
+    await tester.pumpAndSettle();
+
+    expect(controller.isAuthenticated, isTrue);
+    expect(controller.userRole, UserRole.siteManager);
+  });
+
+  testWidgets('When homeowner is newly registered, LoginScreen displays quick login card and logs into their unit', (WidgetTester tester) async {
+    final controller = _createTestController(startAuthenticated: false);
+    await controller.registerHomeOwner(
+      block: 'C Blok',
+      unitNo: 9,
+      ownerName: 'Ayşe Kaya',
+      email: 'ayse.kaya@gmail.com',
+      phone: '+90 532 999 88 77',
+    );
+
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Verify newly registered homeowner card on login screen
+    expect(find.text('Yeni Eklenen Kat Maliki'), findsOneWidget);
+    expect(find.text('Ayşe Kaya'), findsWidgets);
+    expect(find.text('C Blok D:9'), findsOneWidget);
+
+    // Tap quick login button
+    final quickLoginBtn = find.text('Ayşe Kaya Olarak Hemen Gir');
+    expect(quickLoginBtn, findsOneWidget);
+    await tester.tap(quickLoginBtn);
+    await tester.pumpAndSettle();
+
+    expect(controller.isAuthenticated, isTrue);
+    expect(controller.userRole, UserRole.homeOwner);
+    expect(controller.activeUnit.ownerName, 'Ayşe Kaya');
+    expect(controller.activeUnit.blok, 'C Blok');
+    expect(controller.activeUnit.daireNo, 9);
+  });
+
+  testWidgets('When site is newly registered, LoginScreen displays quick login card and logs into their site', (WidgetTester tester) async {
+    final controller = _createTestController(startAuthenticated: false);
+    await controller.registerNewSite(
+      name: 'Lale Evleri',
+      city: 'İzmir',
+      address: 'Alsancak',
+      adminName: 'Murat Can',
+      adminEmail: 'murat.can@lale.com',
+      adminPhone: '+90 533 111 22 33',
+    );
+
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Verify newly created site manager card on login screen
+    expect(find.text('Yeni Oluşturulan Site Yöneticisi'), findsOneWidget);
+    expect(find.text('Murat Can'), findsWidgets);
+    expect(find.text('Lale Evleri'), findsOneWidget);
+
+    // Tap quick login button
+    final quickLoginBtn = find.text('Lale Evleri Yöneticisi Olarak Gir');
+    expect(quickLoginBtn, findsOneWidget);
+    await tester.tap(quickLoginBtn);
+    await tester.pumpAndSettle();
+
+    expect(controller.isAuthenticated, isTrue);
+    expect(controller.userRole, UserRole.siteManager);
+    expect(controller.currentManagedSite?.name, 'Lale Evleri');
+    expect(controller.currentManagedSite?.adminName, 'Murat Can');
+  });
 }
