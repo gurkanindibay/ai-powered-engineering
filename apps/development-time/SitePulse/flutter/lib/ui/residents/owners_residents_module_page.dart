@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/dues_models.dart';
 import '../components/app_fullscreen_page.dart';
+import '../components/house_types_modal.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
 
@@ -109,6 +110,19 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
           title: 'Kat Malikleri & Sakinler Modülü',
           subtitle: '${widget.controller.userSession.siteName} • Yönetim ve Operasyon Portalı',
           icon: const Icon(Icons.people_alt, color: AppColors.accentCyan),
+          actions: [
+            OutlinedButton.icon(
+              onPressed: () => showManageHouseTypesFullscreen(context, widget.controller),
+              icon: const Icon(Icons.home_work_outlined, size: 14),
+              label: const Text('Konut Tipleri & Tarifeler', style: TextStyle(fontSize: 11)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.accentPurple,
+                side: const BorderSide(color: AppColors.accentPurple),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              ),
+            ),
+          ],
           bottomBar: AppFullscreenPage.buildBottomBar(
             context: context,
             children: [
@@ -518,6 +532,21 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       'Aylık Aidat',
                       style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
                     ),
+                    if (ho.capitalDuesBalance > Decimal.zero) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        '₺${ho.capitalDuesBalance.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: AppColors.accentOrange,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Text(
+                        'Demirbaş',
+                        style: TextStyle(color: AppColors.accentOrange, fontSize: 9),
+                      ),
+                    ],
                   ],
                 ),
               ],
