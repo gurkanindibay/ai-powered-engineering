@@ -2782,7 +2782,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  void _showAddHouseholdMemberDialog(HomeOwnerItem ho) {
+  void _showAddHouseholdMemberDialog([HomeOwnerItem? ho]) {
+    final effectiveBlock = ho?.block ?? (widget.controller.activeUnit.blok.isNotEmpty ? widget.controller.activeUnit.blok : 'A');
+    final effectiveUnitNo = ho?.unitNo ?? (widget.controller.activeUnit.daireNo > 0 ? widget.controller.activeUnit.daireNo : 1);
+    final effectiveUnitId = ho?.unitId ?? (widget.controller.activeUnit.id.isNotEmpty ? widget.controller.activeUnit.id : 'd-$effectiveUnitNo');
+
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
@@ -2798,7 +2802,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (context, setDialogState) {
           return AppFullscreenPage(
             title: 'Yeni Hane Sakini Ekle',
-            subtitle: '${ho.block} Daire ${ho.unitNo} • Birlikte Yaşayan Kişi',
+            subtitle: '$effectiveBlock Blok Daire $effectiveUnitNo • Birlikte Yaşayan Kişi',
             icon: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
@@ -2820,6 +2824,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: const Text('Vazgeç'),
                 ),
                 ElevatedButton(
+                  key: const Key('household_save_button'),
                   onPressed: isSaving
                       ? null
                       : () async {
@@ -2837,9 +2842,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           });
 
                           final ok = await widget.controller.addHouseholdMember(
-                            unitId: ho.unitId,
-                            block: ho.block,
-                            unitNo: ho.unitNo,
+                            unitId: effectiveUnitId,
+                            block: effectiveBlock,
+                            unitNo: effectiveUnitNo,
                             fullName: name,
                             phone: phoneCtrl.text.trim(),
                             email: emailCtrl.text.trim().isNotEmpty
@@ -2903,7 +2908,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const Icon(Icons.apartment, color: AppColors.accentCyan, size: 24),
                         const SizedBox(width: 10),
                         Text(
-                          '${ho.block} Blok • Daire ${ho.unitNo}',
+                          '$effectiveBlock Blok • Daire $effectiveUnitNo',
                           style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                       ],
@@ -4314,7 +4319,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildDairemHouseholdCard() {
     final residents = widget.controller.unitResidents;
-    final isOwner = widget.controller.userRole == UserRole.homeOwner ||
+    final isHomeUser = widget.controller.userRole == UserRole.homeOwner ||
+        widget.controller.userRole == UserRole.homeResident ||
         (widget.controller.userRole == UserRole.siteManager &&
             widget.controller.siteAdminPath == SiteAdminActivePath.myFlatOwner);
 
@@ -4331,32 +4337,88 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.people_outline, color: AppColors.accentCyan, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Hane Sakinleri (${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo})',
-                    style: TextStyle(
-                      color: AppColors.textPrimary(context),
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.people_outline, color: AppColors.accentCyan, size: 20),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Hane Sakinleri (${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo})',
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              if (isOwner)
-                TextButton.icon(
-                  onPressed: () => widget.controller.generateUnitInviteLink(),
-                  icon: const Icon(Icons.share, size: 14, color: AppColors.accentOrange),
-                  label: const Text(
-                    'Davet Linki',
-                    style: TextStyle(color: AppColors.accentOrange, fontSize: 11),
-                  ),
+              if (isHomeUser)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton.icon(
+                      key: const Key('btn_manual_add_resident'),
+                      onPressed: () => _showAddHouseholdMemberDialog(),
+                      icon: const Icon(Icons.person_add_alt_1, size: 13, color: Colors.white),
+                      label: const Text(
+                        'Sakin Ekle',
+                        style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    OutlinedButton.icon(
+                      key: const Key('btn_invite_resident_link'),
+                      onPressed: () => widget.controller.generateUnitInviteLink(),
+                      icon: const Icon(Icons.share, size: 13, color: AppColors.accentOrange),
+                      label: const Text(
+                        'Davet Linki',
+                        style: TextStyle(color: AppColors.accentOrange, fontSize: 11),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.accentOrange),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),
           const SizedBox(height: 12),
+          if (residents.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+              alignment: Alignment.center,
+              child: Column(
+                children: [
+                  Icon(Icons.group_outlined, size: 36, color: AppColors.textSecondary(context).withValues(alpha: 0.5)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Henüz kayıtlı hane sakini bulunmuyor.',
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Yukarıdaki "Sakin Ekle" veya "Davet Linki" butonlarını kullanarak hane sakinlerinizi ekleyebilirsiniz.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textSecondary(context).withValues(alpha: 0.8), fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
           ...residents.map((r) => Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
@@ -4368,43 +4430,101 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            r.fullName,
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            r.relationship,
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                          ),
+                          if (r.phone.isNotEmpty || r.email.isNotEmpty)
+                            Text(
+                              [if (r.phone.isNotEmpty) r.phone, if (r.email.isNotEmpty) r.email].join(' • '),
+                              style: TextStyle(color: AppColors.textSecondary(context).withValues(alpha: 0.7), fontSize: 10),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          r.fullName,
-                          style: TextStyle(
-                            color: AppColors.textPrimary(context),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: r.isOwner
+                                ? AppColors.accentCyan.withValues(alpha: 0.15)
+                                : AppColors.card(context),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            r.isOwner ? 'Malik' : 'Sakin',
+                            style: TextStyle(
+                              color: r.isOwner ? AppColors.accentCyan : AppColors.textSecondary(context),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                        Text(
-                          r.relationship,
-                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
-                        ),
+                        if (!r.isOwner && isHomeUser) ...[
+                          const SizedBox(width: 4),
+                          IconButton(
+                            key: Key('btn_delete_resident_${r.id}'),
+                            icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.accentRed),
+                            tooltip: 'Sakini Sil',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () => _confirmDeleteHouseholdResident(r),
+                          ),
+                        ],
                       ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: r.isOwner
-                            ? AppColors.accentCyan.withValues(alpha: 0.15)
-                            : AppColors.card(context),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        r.isOwner ? 'Malik' : 'Sakin',
-                        style: TextStyle(
-                          color: r.isOwner ? AppColors.accentCyan : AppColors.textSecondary(context),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
                     ),
                   ],
                 ),
               )),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteHouseholdResident(UnitResidentMember member) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface(context),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Hane Sakinini Sil', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text('${member.fullName} kişisini hane sakinlerinden kaldırmak istediğinize emin misiniz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            key: const Key('btn_confirm_delete_resident'),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await widget.controller.deleteHouseholdMember(residentId: member.id);
+              if (success && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Hane sakini başarıyla kaldırıldı.'),
+                    backgroundColor: AppColors.accentGreen,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentRed),
+            child: const Text('Sil', style: TextStyle(color: Colors.white)),
+          ),
         ],
       ),
     );

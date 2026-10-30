@@ -549,4 +549,109 @@ void main() {
     expect(controller.currentManagedSite?.name, 'Lale Evleri');
     expect(controller.currentManagedSite?.adminName, 'Murat Can');
   });
+
+  testWidgets('When homeowner logs in, they can manually add and delete household co-residents via UI', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 1.0;
+
+    final controller = _createTestController(startAuthenticated: false);
+    controller.loginAs(role: UserRole.homeOwner);
+
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Verify Dairem & Hane Bilgileri has manual add button and invite link button
+    final addResidentBtn = find.byKey(const Key('btn_manual_add_resident'));
+    final inviteLinkBtn = find.byKey(const Key('btn_invite_resident_link'));
+    expect(addResidentBtn, findsOneWidget);
+    expect(inviteLinkBtn, findsOneWidget);
+
+    // Tap + Sakin Ekle
+    await tester.ensureVisible(addResidentBtn);
+    await tester.tap(addResidentBtn);
+    await tester.pumpAndSettle();
+
+    // Verify modal inputs are present
+    expect(find.text('Yeni Hane Sakini Ekle'), findsOneWidget);
+    final nameField = find.byKey(const Key('household_name_field'));
+    final phoneField = find.byKey(const Key('household_phone_field'));
+    final emailField = find.byKey(const Key('household_email_field'));
+    final saveBtn = find.byKey(const Key('household_save_button'));
+
+    expect(nameField, findsOneWidget);
+    expect(phoneField, findsOneWidget);
+    expect(emailField, findsOneWidget);
+    expect(saveBtn, findsOneWidget);
+
+    // Enter details
+    await tester.enterText(nameField, 'Mehmet Kaya');
+    await tester.enterText(phoneField, '0533 999 88 77');
+    await tester.enterText(emailField, 'mehmet.kaya@example.com');
+    await tester.pumpAndSettle();
+
+    // Submit
+    await tester.tap(saveBtn);
+    await tester.pumpAndSettle();
+
+    // Verify resident is added and displayed in household card
+    expect(find.text('Mehmet Kaya'), findsOneWidget);
+    expect(find.textContaining('0533 999 88 77'), findsOneWidget);
+
+    // Now delete the resident
+    final addedResident = controller.unitResidents.firstWhere((r) => r.fullName == 'Mehmet Kaya');
+    final deleteBtn = find.byKey(Key('btn_delete_resident_${addedResident.id}'));
+    expect(deleteBtn, findsOneWidget);
+    await tester.ensureVisible(deleteBtn);
+    await tester.tap(deleteBtn);
+    await tester.pumpAndSettle();
+
+    // Confirm dialog
+    expect(find.text('Hane Sakinini Sil'), findsOneWidget);
+    final confirmDeleteBtn = find.byKey(const Key('btn_confirm_delete_resident'));
+    expect(confirmDeleteBtn, findsOneWidget);
+    await tester.tap(confirmDeleteBtn);
+    await tester.pumpAndSettle();
+
+    // Verify deleted
+    expect(find.text('Mehmet Kaya'), findsNothing);
+  });
+
+  testWidgets('When tenant (homeResident) logs in, they also have manual add resident and invite permissions', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 1.0;
+
+    final controller = _createTestController(startAuthenticated: false);
+    controller.loginAs(role: UserRole.homeResident);
+
+    // Verify tenant permissions include household management and invite
+    final canInvite = controller.userSession.permissions.any((p) => p.code == 'UNIT_INVITE_CO_RESIDENT' && p.isGranted);
+    final canManageHousehold = controller.userSession.permissions.any((p) => p.code == 'UNIT_MANAGE_HOUSEHOLD' && p.isGranted);
+    expect(canInvite, isTrue);
+    expect(canManageHousehold, isTrue);
+
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Verify tenant sees + Sakin Ekle and Davet Linki buttons
+    final addResidentBtn = find.byKey(const Key('btn_manual_add_resident'));
+    final inviteLinkBtn = find.byKey(const Key('btn_invite_resident_link'));
+    expect(addResidentBtn, findsOneWidget);
+    expect(inviteLinkBtn, findsOneWidget);
+
+    // Tap + Sakin Ekle as tenant
+    await tester.ensureVisible(addResidentBtn);
+    await tester.tap(addResidentBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Yeni Hane Sakini Ekle'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('household_name_field')), 'Canan Demir');
+    await tester.enterText(find.byKey(const Key('household_phone_field')), '0544 111 22 33');
+    await tester.enterText(find.byKey(const Key('household_email_field')), 'canan.demir@example.com');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('household_save_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Canan Demir'), findsOneWidget);
+  });
 }

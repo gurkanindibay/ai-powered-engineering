@@ -35,21 +35,10 @@ class ResidentActionsRow extends StatelessWidget {
           context,
           icon: Icons.person_add_alt_1_outlined,
           label: 'Sakin Davet',
-          color: isOwner ? AppColors.accentOrange : AppColors.textSecondary(context),
-          badgeText: isOwner ? 'Link Üret' : 'Yetki Yok',
-          badgeColor: isOwner ? AppColors.accentOrange : AppColors.border(context),
-          onTap: () {
-            if (isOwner) {
-              onInviteTap();
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Sadece Kat Maliki (Ev Sahibi) yeni sakin davet edebilir.'),
-                  backgroundColor: AppColors.accentRed,
-                ),
-              );
-            }
-          },
+          color: AppColors.accentOrange,
+          badgeText: isOwner ? 'Malik' : 'Sakin',
+          badgeColor: AppColors.accentOrange,
+          onTap: onInviteTap,
         ),
         // 3. Maintenance Request / Issue Reporting
         _buildActionButton(

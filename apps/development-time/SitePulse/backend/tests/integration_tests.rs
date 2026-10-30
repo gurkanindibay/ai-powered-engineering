@@ -306,6 +306,8 @@ fn when_resident_role_then_has_unit_restricted_permissions() {
     let permissions = Permission::permissions_for_role(Role::HomeResident);
     assert!(permissions.contains(&Permission::UnitRead));
     assert!(permissions.contains(&Permission::UnitPay));
+    assert!(permissions.contains(&Permission::UnitInviteCoResident));
+    assert!(permissions.contains(&Permission::UnitManageHousehold));
     assert!(!permissions.contains(&Permission::SiteManage));
     assert!(!permissions.contains(&Permission::LedgerManageAll));
     assert!(!permissions.contains(&Permission::TenantManage));
@@ -2207,6 +2209,32 @@ async fn when_registering_new_owner_or_tenant_to_existing_unit_then_archives_pre
     let current = hist2.iter().find(|h| h.person_name == "Halit Akçatepe").unwrap();
     assert!(current.is_active);
     assert_eq!(current.role, "TENANT");
+}
+
+#[tokio::test]
+async fn when_homeowner_or_tenant_manually_adds_household_member_then_stored_and_returned() {
+    let state = AppState::new();
+    let service = SiteAdminService::new(state.clone());
+
+    let member = service
+        .add_unit_member(
+            "site-1",
+            "d-14",
+            "Zeynep Yılmaz",
+            "+90 532 111 2233",
+            "zeynep.yilmaz@gmail.com",
+            "Eş",
+        )
+        .await
+        .expect("Manual add resident failed");
+
+    assert_eq!(member.full_name, "Zeynep Yılmaz");
+    assert_eq!(member.relationship, "Eş");
+    assert_eq!(member.email, "zeynep.yilmaz@gmail.com");
+
+    let invitation_service = HomeResidentInvitationService::new(state);
+    let members = invitation_service.get_unit_members("d-14").await;
+    assert!(members.iter().any(|m| m.full_name == "Zeynep Yılmaz" && m.relationship == "Eş"));
 }
 
 #[tokio::test]

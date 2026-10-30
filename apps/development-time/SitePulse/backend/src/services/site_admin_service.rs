@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::models::{
     DebtStatus, DuesLiability, HomeOwnerResponse, IndependentUnit, RegisterHomeOwnerRequest, Role,
-    User,
+    UnitMemberDto, User,
 };
 use crate::services::virtual_iban_service::VirtualIbanService;
 use crate::state::AppState;
@@ -1372,6 +1372,66 @@ impl SiteAdminService {
                 Err(format!("Kat maliki / daire '{}' bulunamadı.", unit_or_user_id))
             }
         }
+    }
+
+    pub async fn add_unit_member(
+        &self,
+        site_id: &str,
+        unit_id: &str,
+        full_name: &str,
+        phone: &str,
+        email: &str,
+        relationship: &str,
+    ) -> Result<UnitMemberDto, String> {
+        if full_name.trim().is_empty() {
+            return Err("Sakin adı soyadı boş olamaz.".to_string());
+        }
+        if email.trim().is_empty() {
+            return Err("E-posta adresi boş olamaz.".to_string());
+        }
+
+        let resident_id = format!("usr-res-{}", &uuid::Uuid::new_v4().to_string()[..8]);
+        let member = UnitMemberDto {
+            resident_id: resident_id.clone(),
+            full_name: full_name.to_string(),
+            relationship: if relationship.trim().is_empty() { "Ev Sakini".to_string() } else { relationship.to_string() },
+            phone: phone.to_string(),
+            email: email.trim().to_lowercase(),
+            is_owner: false,
+        };
+
+        if let Some(ref pool) = self.state.pool {
+            let _ = crate::db::save_unit_member(pool, unit_id, &member).await;
+        }
+
+        let mut inner = self.state.inner.write().await;
+        for key in &[unit_id.to_string(), format!("d-{}", unit_id), format!("unit-{}", unit_id)] {
+            inner.unit_members.entry(key.clone()).or_default().push(member.clone());
+        }
+
+        // Also add to inner.users so the co-resident can log in with temporary password if needed
+        let email_norm = email.trim().to_lowercase();
+        if !email_norm.is_empty() && !inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
+            let temp_pass = generate_resident_temporary_password();
+            let password_hash = format!("argon2id_hash_placeholder:{}", &temp_pass);
+            let s_id = if site_id.is_empty() { "site-1".to_string() } else { site_id.to_string() };
+            inner.users.push(crate::models::User {
+                id: resident_id.clone(),
+                site_id: s_id,
+                full_name: full_name.to_string(),
+                email: email_norm,
+                phone: phone.to_string(),
+                password_hash: Some(password_hash),
+                role: crate::models::Role::HomeResident,
+                must_change_password: true,
+                auth_provider: "LOCAL".to_string(),
+                google_sub: None,
+                avatar_url: None,
+                created_at: chrono::Utc::now(),
+            });
+        }
+
+        Ok(member)
     }
 
     pub async fn delete_unit_member(&self, _site_id: &str, unit_id: &str, resident_id: &str) -> Result<(), String> {

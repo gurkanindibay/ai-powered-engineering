@@ -845,6 +845,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
     if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     fetchUnitMatchingCriteria(effectiveUnitId);
+    fetchHouseholdMembers(effectiveUnitId);
     try {
       final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
       final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/dashboard');
@@ -2539,19 +2540,46 @@ class DashboardController extends ChangeNotifier {
     return true;
   }
 
+  Future<void> fetchHouseholdMembers([String? unitId]) async {
+    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
+    if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
+
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/home-residents/members/$effectiveUnitId');
+        final response = await http.get(url).timeout(const Duration(seconds: 3));
+        if (response.statusCode == 200) {
+          final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+          final members = list.map((m) => UnitResidentMember.fromJson(m as Map<String, dynamic>)).toList();
+          _unitResidents = members;
+          if (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner) {
+            _managerResidents = members;
+          }
+          notifyListeners();
+          return;
+        }
+      } catch (e) {
+        debugPrint('fetchHouseholdMembers error: $e');
+      }
+    }
+  }
+
   Future<bool> deleteHouseholdMember({
-    required String unitId,
+    String? unitId,
     required String residentId,
     String? siteId,
   }) async {
+    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? 'd-${_activeUnit.unitNumber}' : 'unit-1'));
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
 
     if (!isTestMode) {
       try {
         final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-        final url = Uri.parse('http://$host:8080/api/v1/home-residents/members/$unitId/$residentId?site_id=$effectiveSiteId');
+        final url = Uri.parse('http://$host:8080/api/v1/home-residents/members/$effectiveUnitId/$residentId?site_id=$effectiveSiteId');
         final response = await http.delete(url).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200 || response.statusCode == 204) {
+          await fetchHouseholdMembers(effectiveUnitId);
           await fetchHomeOwners(siteId: effectiveSiteId);
           notifyListeners();
           return true;
@@ -2562,12 +2590,16 @@ class DashboardController extends ChangeNotifier {
     }
 
     // In-memory update
-    final hoIndex = _homeOwners.indexWhere((h) => h.unitId == unitId);
+    _unitResidents = _unitResidents.where((m) => m.id != residentId && m.fullName != residentId).toList();
+    if (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner) {
+      _managerResidents = _managerResidents.where((m) => m.id != residentId && m.fullName != residentId).toList();
+    }
+    final hoIndex = _homeOwners.indexWhere((h) => h.unitId == effectiveUnitId);
     if (hoIndex != -1) {
       final updatedResidents = _homeOwners[hoIndex].householdResidents.where((m) => m.id != residentId && m.fullName != residentId).toList();
       _homeOwners[hoIndex] = _homeOwners[hoIndex].copyWith(householdResidents: updatedResidents);
-      notifyListeners();
     }
+    notifyListeners();
     return true;
   }
 
@@ -2595,6 +2627,7 @@ class DashboardController extends ChangeNotifier {
           }),
         ).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200 || response.statusCode == 204) {
+          await fetchHouseholdMembers(unitId);
           await fetchHomeOwners(siteId: effectiveSiteId);
           notifyListeners();
           return true;
@@ -2605,6 +2638,23 @@ class DashboardController extends ChangeNotifier {
     }
 
     // In-memory update
+    _unitResidents = _unitResidents.map((m) {
+      if (m.id == residentId || m.fullName == residentId) {
+        return UnitResidentMember(
+          id: m.id,
+          fullName: fullName,
+          relationship: relationship,
+          phone: phone,
+          email: email,
+          isOwner: m.isOwner,
+        );
+      }
+      return m;
+    }).toList();
+    if (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner) {
+      _managerResidents = _unitResidents;
+    }
+
     final hoIndex = _homeOwners.indexWhere((h) => h.unitId == unitId);
     if (hoIndex != -1) {
       final updatedResidents = _homeOwners[hoIndex].householdResidents.map((m) {
@@ -2621,64 +2671,71 @@ class DashboardController extends ChangeNotifier {
         return m;
       }).toList();
       _homeOwners[hoIndex] = _homeOwners[hoIndex].copyWith(householdResidents: updatedResidents);
-      notifyListeners();
     }
+    notifyListeners();
     return true;
   }
 
   Future<bool> addHouseholdMember({
-    required String unitId,
-    required String block,
-    required int unitNo,
+    String? unitId,
+    String? block,
+    int? unitNo,
     required String fullName,
     required String phone,
     required String email,
     required String relationship,
   }) async {
+    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? 'd-${_activeUnit.unitNumber}' : 'unit-1'));
+    final effectiveBlock = block ?? (_activeUnit.block.isNotEmpty ? _activeUnit.block : 'A');
+    final effectiveUnitNo = unitNo ?? (_activeUnit.unitNo > 0 ? _activeUnit.unitNo : 1);
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+
     if (!isTestMode) {
       try {
         final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
+        final memberUrl = Uri.parse('http://$host:8080/api/v1/home-residents/members/$effectiveUnitId?site_id=$effectiveSiteId');
         final response = await http.post(
-          url,
+          memberUrl,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
-            'block': block,
-            'unit_no': unitNo,
-            'floor': ((unitNo - 1) ~/ 4) + 1,
-            'owner_full_name': fullName,
-            'email': email,
+            'full_name': fullName,
             'phone': phone,
-            'role': 'RESIDENT',
+            'email': email,
             'relationship': relationship,
           }),
         ).timeout(const Duration(seconds: 4));
+
         if (response.statusCode == 200 || response.statusCode == 201) {
+          await fetchHouseholdMembers(effectiveUnitId);
           await fetchHomeOwners(siteId: effectiveSiteId);
           notifyListeners();
           return true;
         }
       } catch (e) {
-        debugPrint('addHouseholdMember error: $e');
+        debugPrint('addHouseholdMember remote error: $e');
       }
     }
 
     // In-memory update
-    final hoIndex = _homeOwners.indexWhere((h) => h.unitId == unitId);
+    final newMember = UnitResidentMember(
+      id: 'mem-${DateTime.now().millisecondsSinceEpoch}',
+      fullName: fullName,
+      relationship: relationship,
+      phone: phone,
+      email: email,
+      isOwner: false,
+    );
+    _unitResidents = [..._unitResidents, newMember];
+    if (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner) {
+      _managerResidents = [..._managerResidents, newMember];
+    }
+
+    final hoIndex = _homeOwners.indexWhere((h) => h.unitId == effectiveUnitId);
     if (hoIndex != -1) {
-      final newMember = UnitResidentMember(
-        id: 'mem-${DateTime.now().millisecondsSinceEpoch}',
-        fullName: fullName,
-        relationship: relationship,
-        phone: phone,
-        email: email,
-        isOwner: false,
-      );
       final updatedResidents = List<UnitResidentMember>.from(_homeOwners[hoIndex].householdResidents)..add(newMember);
       _homeOwners[hoIndex] = _homeOwners[hoIndex].copyWith(householdResidents: updatedResidents);
-      notifyListeners();
     }
+    notifyListeners();
     return true;
   }
 
@@ -3783,8 +3840,8 @@ class DashboardController extends ChangeNotifier {
         permissions = const [
           PermissionScope(code: 'UNIT_READ', title: 'Daire Aidat & Makbuz Görüntüleme', isGranted: true, isolationNote: 'Sadece yetkili bağımsız bölüm'),
           PermissionScope(code: 'UNIT_PAY', title: 'Online Aidat Ödeme', isGranted: true, isolationNote: 'Sadece yetkili bağımsız bölüm'),
-          PermissionScope(code: 'UNIT_INVITE_CO_RESIDENT', title: 'Hane Sakini Davet Linki', isGranted: false, isolationNote: 'Engelli: Sadece Kat Maliki davet linki üretebilir'),
-          PermissionScope(code: 'UNIT_MANAGE_HOUSEHOLD', title: 'Hane Sakinlerini Yönetme', isGranted: false, isolationNote: 'Engelli: Aile sakinleri üye ekleyemez'),
+          PermissionScope(code: 'UNIT_INVITE_CO_RESIDENT', title: 'Hane Sakini Davet Linki Üretme', isGranted: true, isolationNote: 'Sadece yetkili bağımsız bölüm'),
+          PermissionScope(code: 'UNIT_MANAGE_HOUSEHOLD', title: 'Hane Sakinlerini Listeleme/Ekleme', isGranted: true, isolationNote: 'Sadece yetkili bağımsız bölüm'),
           PermissionScope(code: 'LEDGER_MANAGE_ALL', title: 'Site Finansını Yönetme', isGranted: false, isolationNote: 'Engelli: Site yönetimi yetkisi yok'),
         ];
         break;

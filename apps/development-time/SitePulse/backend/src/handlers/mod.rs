@@ -743,6 +743,29 @@ pub async fn get_unit_members(
     Json(service.get_unit_members(&unit_id).await)
 }
 
+pub async fn add_unit_member(
+    State(state): State<AppState>,
+    Path(unit_id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<crate::models::AddUnitMemberRequest>,
+) -> Result<(StatusCode, Json<UnitMemberDto>), (StatusCode, String)> {
+    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let service = SiteAdminService::new(state);
+    let relationship = payload.relationship.unwrap_or_else(|| "Ev Sakini".to_string());
+    service
+        .add_unit_member(
+            &site_id,
+            &unit_id,
+            &payload.full_name,
+            &payload.phone,
+            &payload.email,
+            &relationship,
+        )
+        .await
+        .map(|res| (StatusCode::CREATED, Json(res)))
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
 pub async fn delete_unit_member(
     State(state): State<AppState>,
     Path((unit_id, resident_id)): Path<(String, String)>,

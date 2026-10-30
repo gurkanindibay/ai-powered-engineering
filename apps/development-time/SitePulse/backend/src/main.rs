@@ -101,7 +101,10 @@ async fn main() {
             get(handlers::generate_unit_invite_link),
         )
         .route("/api/v1/home-residents/register", post(handlers::register_home_resident))
-        .route("/api/v1/home-residents/members/:unit_id", get(handlers::get_unit_members))
+        .route(
+            "/api/v1/home-residents/members/:unit_id",
+            get(handlers::get_unit_members).post(handlers::add_unit_member),
+        )
         .route(
             "/api/v1/home-residents/members/:unit_id/:resident_id",
             delete(handlers::delete_unit_member).put(handlers::update_unit_member),

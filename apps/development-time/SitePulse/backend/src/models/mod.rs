@@ -87,6 +87,8 @@ impl Permission {
             Role::HomeResident => vec![
                 Permission::UnitRead,
                 Permission::UnitPay,
+                Permission::UnitInviteCoResident,
+                Permission::UnitManageHousehold,
             ],
         }
     }
@@ -656,6 +658,15 @@ pub struct UnitMemberDto {
     pub phone: String,
     pub email: String,
     pub is_owner: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddUnitMemberRequest {
+    pub full_name: String,
+    pub phone: String,
+    pub email: String,
+    #[serde(default)]
+    pub relationship: Option<String>,
 }
 
 // ============================================================================
