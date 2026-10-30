@@ -115,6 +115,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
             child: Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary(ctx))),
           ),
           ElevatedButton(
+            key: const Key('btn_confirm_accrual_dialog'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accentCyan,
               foregroundColor: Colors.white,
@@ -130,6 +131,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
     if (confirmed == true && mounted) {
       final res = await widget.controller.accrueCapitalInstallment(projectId, installmentNumber);
       if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(res['message']?.toString() ?? 'Taksit başarıyla tahakkuk ettirildi.'),
@@ -621,6 +623,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton.icon(
+                        key: const Key('btn_open_first_capital_project'),
                         onPressed: _openProjectWizard,
                         icon: const Icon(Icons.add),
                         label: const Text('İlk Demirbaş Projesini Başlat'),
@@ -1147,17 +1150,27 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
 
     // Calculate installment items
     final installmentList = <Map<String, dynamic>>[];
-    final perInstBudget = (budgetVal / Decimal.fromInt(_installmentsCount)).toDecimal();
-    final pct = (Decimal.fromInt(100) / Decimal.fromInt(_installmentsCount)).toDecimal();
+    final perInstBudget = (budgetVal / Decimal.fromInt(_installmentsCount)).toDecimal(scaleOnInfinitePrecision: 2);
+    final pct = (Decimal.fromInt(100) / Decimal.fromInt(_installmentsCount)).toDecimal(scaleOnInfinitePrecision: 2);
+
+    Decimal accumulatedBudget = Decimal.zero;
+    Decimal accumulatedPct = Decimal.zero;
 
     for (int i = 1; i <= _installmentsCount; i++) {
       final dueDate = DateTime.now().add(Duration(days: 30 * (i - 1)));
+      final isLast = (i == _installmentsCount);
+      final currentBudget = isLast ? (budgetVal - accumulatedBudget) : perInstBudget;
+      final currentPct = isLast ? (Decimal.fromInt(100) - accumulatedPct) : pct;
+
+      accumulatedBudget += currentBudget;
+      accumulatedPct += currentPct;
+
       installmentList.add({
         'installment_number': i,
         'total_installments': _installmentsCount,
         'due_date': dueDate.toIso8601String().substring(0, 10),
-        'installment_budget': perInstBudget.toString(),
-        'percentage': pct.toString(),
+        'installment_budget': currentBudget.toString(),
+        'percentage': currentPct.toString(),
       });
     }
 
@@ -1458,6 +1471,7 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
     setState(() => _isSubmitting = false);
 
     if (res != null && mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('₺${amt.toString()} hakediş ödemesi başarıyla kaydedildi.'),
@@ -1491,15 +1505,19 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Müteahhit Hakediş / İlerleme Ödemesi',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary(context),
+                  Expanded(
+                    child: Text(
+                      'Müteahhit Hakediş / İlerleme Ödemesi',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary(context),
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   IconButton(
+                    key: const Key('btn_close_disbursement_modal'),
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
@@ -1533,6 +1551,7 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
               ),
               const SizedBox(height: 10),
               TextFormField(
+                key: const Key('input_disbursement_recipient'),
                 controller: _recipientController,
                 decoration: InputDecoration(
                   labelText: 'Alıcı Firma / Kişi *',
@@ -1544,6 +1563,7 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
               ),
               const SizedBox(height: 10),
               TextFormField(
+                key: const Key('input_disbursement_iban'),
                 controller: _ibanController,
                 decoration: InputDecoration(
                   labelText: 'Alıcı IBAN *',

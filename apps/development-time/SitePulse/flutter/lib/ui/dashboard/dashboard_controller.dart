@@ -634,6 +634,21 @@ class DashboardController extends ChangeNotifier {
     _managerResidents = [];
     _collectionSummary = ComplexCollectionSummary();
     _userSession = _createSession(_userSession.role, _userSession.authProvider);
+    _capitalProjects = [];
+    _activeCapitalProject = null;
+    _capitalInstallments = [];
+    _capitalDisbursements = [];
+    _unitCapitalShares = [];
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void clearCapitalProjectsForTesting() {
+    _capitalProjects = [];
+    _activeCapitalProject = null;
+    _capitalInstallments = [];
+    _capitalDisbursements = [];
+    _unitCapitalShares = [];
     notifyListeners();
   }
 
@@ -4092,6 +4107,20 @@ class DashboardController extends ChangeNotifier {
     );
     _capitalProjects.insert(0, newProject);
     _activeCapitalProject = newProject;
+    if (installments != null) {
+      _capitalInstallments = installments.map((inst) {
+        return CapitalProjectInstallmentItem(
+          id: 'inst-${inst['installment_number']}-${newProject.id}',
+          projectId: newProject.id,
+          installmentNumber: inst['installment_number'] as int,
+          totalInstallments: inst['total_installments'] as int,
+          dueDate: DateTime.tryParse(inst['due_date']?.toString() ?? '') ?? DateTime.now(),
+          installmentBudget: Decimal.tryParse(inst['installment_budget']?.toString() ?? '0') ?? Decimal.zero,
+          percentage: Decimal.tryParse(inst['percentage']?.toString() ?? '0') ?? Decimal.zero,
+          isAccrued: false,
+        );
+      }).toList();
+    }
     notifyListeners();
     return newProject;
   }
