@@ -677,13 +677,28 @@ pub async fn recreate_db_schema_and_seed(pool: &Pool) -> Result<(), Box<dyn std:
     client
         .batch_execute(
             r#"
-            DROP TABLE IF EXISTS collection_transactions, dues_liabilities, dues_periods, reconciliation_queue, homeowner_payments, advance_balances, pending_registrations, unit_members, invitation_tokens, unit_sender_ibans, unit_payer_names, site_bank_accounts, units, users, persons, blocks, sites, system_supported_banks, system_configurations, house_types CASCADE;
+            DROP TABLE IF EXISTS capital_contractor_disbursements, capital_project_installments, capital_projects, debt_aging_snapshots, payment_entries, payment_receipts, collection_transactions, dues_liabilities, dues_periods, reconciliation_queue, homeowner_payments, advance_balances, pending_registrations, unit_members, invitation_tokens, unit_sender_ibans, unit_payer_names, site_bank_accounts, units, unit_occupancies, users, persons, blocks, sites, system_supported_banks, system_configurations, house_types CASCADE;
             "#,
         )
         .await?;
     init_db(pool).await?;
     seed_test_data(pool).await?;
     info!("All database tables dropped and recreated with clean initial state.");
+    Ok(())
+}
+
+pub async fn wipe_all_db_data(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    info!("Dropping all database tables to purge all sites, units, and residents for fresh start...");
+    client
+        .batch_execute(
+            r#"
+            DROP TABLE IF EXISTS capital_contractor_disbursements, capital_project_installments, capital_projects, debt_aging_snapshots, payment_entries, payment_receipts, collection_transactions, dues_liabilities, dues_periods, reconciliation_queue, homeowner_payments, advance_balances, pending_registrations, unit_members, invitation_tokens, unit_sender_ibans, unit_payer_names, site_bank_accounts, units, unit_occupancies, users, persons, blocks, sites, system_supported_banks, system_configurations, house_types CASCADE;
+            "#,
+        )
+        .await?;
+    init_db(pool).await?;
+    info!("All database tables recreated cleanly with zero sites, zero units, zero homeowners, and zero residents.");
     Ok(())
 }
 

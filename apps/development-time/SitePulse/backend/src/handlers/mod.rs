@@ -2478,7 +2478,7 @@ pub async fn clear_all_data(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     if let Some(ref pool) = state.pool {
-        let _ = crate::db::reset_db_to_seed_data(pool).await;
+        let _ = crate::db::wipe_all_db_data(pool).await;
     }
     let mut inner = state.inner.write().await;
     inner.clear_all_data();
@@ -2583,6 +2583,151 @@ pub async fn reset_to_initial_state(
             "units_count": inner.units.len(),
             "dues_count": inner.dues.len()
         })),
+    )
+}
+
+/// Completely wipes all data across the platform: all sites, units, homeowners, tenants,
+/// residents, dues, transactions, and balances — yielding a 100% fresh start (Zero-Data State).
+pub async fn wipe_all_data(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if crate::state::AppStateInner::is_production() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "status": "ERROR",
+                "message": "Tüm verileri silme işlemi canlı ortamda güvenlik nedeniyle engellenmiştir."
+            })),
+        );
+    }
+    if let Some(ref pool) = state.pool {
+        if let Err(e) = crate::db::wipe_all_db_data(pool).await {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "status": "ERROR",
+                    "message": format!("Tüm veriler silinemedi: {}", e)
+                })),
+            );
+        }
+    }
+    let mut inner = state.inner.write().await;
+    inner.clear_all_data();
+    if let Some(ref pool) = state.pool {
+        crate::db::load_all_from_db(pool, &mut inner).await;
+    } else {
+        inner.users.push(crate::models::User {
+            id: "1".to_string(),
+            site_id: "".to_string(),
+            full_name: "SaaS Platform Admin".to_string(),
+            email: "admin@sitepulse.io".to_string(),
+            phone: "+90 850 555 0000".to_string(),
+            password_hash: Some("ARGON2_HASH_admin123".to_string()),
+            role: crate::models::Role::SaasAdmin,
+            must_change_password: false,
+            auth_provider: "LOCAL".to_string(),
+            google_sub: None,
+            avatar_url: None,
+            created_at: chrono::Utc::now(),
+        });
+    }
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "SUCCESS",
+            "message": "Tüm siteler, daireler, kat malikleri, kiracılar, sakinler ve aidat verileri başarıyla silindi. Sistem sıfırdan tertemiz başlangıç (Fresh Start) durumundadır.",
+            "sites_count": inner.sites.len(),
+            "users_count": inner.users.len(),
+            "units_count": inner.units.len(),
+            "dues_count": inner.dues.len()
+        })),
+    )
+}
+
+/// Permanently purges a specific residential site and all associated units, residents,
+/// homeowners, tenants, and dues records — useful for fine-grained test rollbacks.
+pub async fn purge_site_cascade(
+    axum::extract::Path(site_id): axum::extract::Path<String>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if crate::state::AppStateInner::is_production() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "status": "ERROR",
+                "message": "Site silme işlemi canlı ortamda güvenlik nedeniyle engellenmiştir."
+            })),
+        );
+    }
+
+    if let Some(ref pool) = state.pool {
+        let client = match pool.get().await {
+            Ok(c) => c,
+            Err(e) => return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"status": "ERROR", "message": format!("DB connection error: {}", e)}))
+            ),
+        };
+        let site_id_num = site_id.parse::<i64>().unwrap_or(-1);
+        let _ = client.execute(
+            "DELETE FROM collection_transactions WHERE unit_id IN (SELECT id::text FROM units WHERE site_id = $1 OR site_id = $2)",
+            &[&site_id_num, &site_id],
+        ).await;
+        let _ = client.execute(
+            "DELETE FROM dues_liabilities WHERE unit_id IN (SELECT id::text FROM units WHERE site_id = $1 OR site_id = $2)",
+            &[&site_id_num, &site_id],
+        ).await;
+        let _ = client.execute(
+            "DELETE FROM unit_occupancies WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1 OR site_id = $2)",
+            &[&site_id_num, &site_id],
+        ).await;
+        let _ = client.execute(
+            "DELETE FROM unit_members WHERE unit_id IN (SELECT id::text FROM units WHERE site_id = $1 OR site_id = $2)",
+            &[&site_id_num, &site_id],
+        ).await;
+        let _ = client.execute(
+            "DELETE FROM users WHERE site_id = $1 OR site_id = $2",
+            &[&site_id_num, &site_id],
+        ).await;
+        let _ = client.execute(
+            "DELETE FROM units WHERE site_id = $1 OR site_id = $2",
+            &[&site_id_num, &site_id],
+        ).await;
+        let _ = client.execute(
+            "DELETE FROM blocks WHERE site_id = $1 OR site_id = $2",
+            &[&site_id_num, &site_id],
+        ).await;
+        let _ = client.execute(
+            "DELETE FROM site_bank_accounts WHERE site_id = $1 OR site_id = $2",
+            &[&site_id_num, &site_id],
+        ).await;
+        let _ = client.execute(
+            "DELETE FROM sites WHERE id = $1 OR id::text = $2",
+            &[&site_id_num, &site_id],
+        ).await;
+    }
+
+    let mut inner = state.inner.write().await;
+    let unit_ids: Vec<String> = inner.units.iter().filter(|u| u.site_id == site_id).map(|u| u.id.clone()).collect();
+    inner.units.retain(|u| u.site_id != site_id);
+    inner.users.retain(|u| u.site_id != site_id);
+    inner.dues.retain(|d| !unit_ids.contains(&d.unit_id));
+    for uid in &unit_ids {
+        inner.advance_payments.remove(uid);
+        inner.reconciliation_queue.retain(|q| q.matched_unit_id.as_deref() != Some(uid.as_str()));
+        inner.unit_members.remove(uid);
+    }
+    inner.sites.retain(|s| s.id != site_id);
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "SUCCESS",
+            "message": format!("Site '{}' ve bağlı tüm daireler, sakinler ve aidat kayıtları başarıyla silindi.", site_id),
+            "remaining_sites_count": inner.sites.len(),
+            "remaining_units_count": inner.units.len(),
+            "remaining_users_count": inner.users.len()
+        }))
     )
 }
 

@@ -1628,6 +1628,58 @@ async fn when_reset_demo_data_invoked_then_payments_and_dues_are_restored_to_cle
 }
 
 #[tokio::test]
+async fn when_wipe_all_data_invoked_then_all_sites_units_and_residents_are_purged() {
+    let state = AppState::new();
+
+    // Verify initial seeded state has sites and units
+    {
+        let inner = state.inner.read().await;
+        assert!(!inner.sites.is_empty());
+        assert!(!inner.units.is_empty());
+    }
+
+    // Call wipe_all_data handler
+    let _ = sitepulse_backend::handlers::wipe_all_data(axum::extract::State(state.clone())).await;
+
+    // Verify completely clean fresh start state
+    {
+        let inner = state.inner.read().await;
+        assert_eq!(inner.sites.len(), 0);
+        assert_eq!(inner.units.len(), 0);
+        assert_eq!(inner.dues.len(), 0);
+        assert_eq!(inner.advance_payments.len(), 0);
+        assert_eq!(inner.reconciliation_queue.len(), 0);
+        // Only SaaS platform admin user remains
+        assert!(inner.users.iter().all(|u| u.role == sitepulse_backend::models::Role::SaasAdmin));
+    }
+}
+
+#[tokio::test]
+async fn when_purge_site_cascade_invoked_then_site_and_associated_units_and_residents_are_removed() {
+    let state = AppState::new();
+
+    // Verify site-1 exists with units
+    {
+        let inner = state.inner.read().await;
+        assert!(inner.sites.iter().any(|s| s.id == "site-1"));
+        assert!(inner.units.iter().any(|u| u.site_id == "site-1"));
+    }
+
+    // Call purge_site_cascade
+    let _ = sitepulse_backend::handlers::purge_site_cascade(
+        axum::extract::Path("site-1".to_string()),
+        axum::extract::State(state.clone()),
+    ).await;
+
+    // Verify site-1 and its units are removed
+    {
+        let inner = state.inner.read().await;
+        assert!(!inner.sites.iter().any(|s| s.id == "site-1"));
+        assert!(!inner.units.iter().any(|u| u.site_id == "site-1"));
+    }
+}
+
+#[tokio::test]
 async fn when_provisioning_12_units_for_site_then_creates_residents_and_virtual_ibans() {
     use axum::response::IntoResponse;
     use sitepulse_backend::models::ProvisionSiteUnitsRequest;

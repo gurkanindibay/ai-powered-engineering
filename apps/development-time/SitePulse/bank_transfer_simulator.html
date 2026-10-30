@@ -627,23 +627,26 @@
         </div>
       </div>
       <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <button id="btn-wipe-all-data" onclick="wipeAllDataFreshStart()" class="btn-toolbar" style="color: #FFFFFF; background: linear-gradient(135deg, #DC2626, #991B1B); border-color: #EF4444; font-weight: 800; box-shadow: 0 0 14px rgba(220, 38, 38, 0.55);">
+          <span>💥</span> Tüm Verileri Sil (Fresh Start)
+        </button>
+        <button id="btn-reset-initial-state" onclick="resetToInitialState()" class="btn-toolbar" style="color: #FCA5A5; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.35); font-weight: 600;">
+          <span>⏮️</span> Örnek Tohumu Yükle (Seed)
+        </button>
+        <button id="btn-reset-demo" onclick="resetAllDemoData()" class="btn-toolbar" style="color: #F87171; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.35);">
+          <span>🔄</span> ₺0 Borç Sıfırla
+        </button>
         <button id="btn-new-site" onclick="openNewSiteModal()" class="btn-toolbar" style="color: #00D2B4; background: rgba(0, 210, 180, 0.15); border-color: rgba(0, 210, 180, 0.35);">
           <span>🏢</span> Yeni Site Kaydı
         </button>
         <button id="btn-provision-12" onclick="openProvision12UnitsModal()" class="btn-toolbar" style="color: #A78BFA; background: rgba(167, 139, 250, 0.15); border-color: rgba(167, 139, 250, 0.35);">
           <span>👥</span> 12 Haneli Site & Sakinleri Kur
         </button>
-        <button id="btn-reset-demo" onclick="resetAllDemoData()" class="btn-toolbar" style="color: #F87171; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.35);">
-          <span>🔄</span> Tümünü Sıfırla (₺0 Borç)
-        </button>
         <button id="btn-accrue-due" onclick="accrueTestDue()" class="btn-toolbar" style="color: #FBBF24; background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.35);">
-          <span>➕</span> ₺1.400 Aidat Borcu Ekle
+          <span>➕</span> ₺1.400 Aidat Ekle
         </button>
         <button id="btn-accrue-period" onclick="accrueNewPeriodDialog()" class="btn-toolbar" style="color: #60A5FA; background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.35);">
           <span>📅</span> Yeni Dönem Tahakkuku
-        </button>
-        <button id="btn-reset-initial-state" onclick="resetToInitialState()" class="btn-toolbar" style="color: #FFFFFF; background: linear-gradient(135deg, #DC2626, #B91C1C); border-color: #EF4444; font-weight: 700; box-shadow: 0 0 12px rgba(239, 68, 68, 0.45);">
-          <span>⏮️</span> Başlangıç Durumuna Sıfırla (Rollback)
         </button>
         <a href="http://localhost:9090" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 11.5px; font-weight: 700; background: rgba(0, 210, 180, 0.12); padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(0, 210, 180, 0.3);">SitePulse'ı Aç ↗</a>
       </div>
@@ -954,6 +957,9 @@
           <button type="button" class="btn-toolbar" onclick="refreshSitePayments()" style="color: var(--primary); background: rgba(0, 210, 180, 0.12); border-color: rgba(0, 210, 180, 0.3);">
             <span>🔄</span> Ödemeleri Yenile
           </button>
+          <button type="button" id="btn-delete-selected-site" class="btn-toolbar" onclick="deleteSelectedSiteCascade()" style="color: #EF4444; background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.35);">
+            <span>🗑️</span> Bu Siteyi & Sakinlerini Sil
+          </button>
         </div>
       </div>
 
@@ -1200,13 +1206,13 @@
               return `<option value="${id}">${name} (${id})</option>`;
             }).join('');
           } else {
-            select.innerHTML = `<option value="site-1">Begonya Sitesi (Varsayılan)</option>`;
+            select.innerHTML = `<option value="">⚠️ Kayıtlı Site Yok — Önce "Yeni Site Kaydı" Yapın</option>`;
           }
         } else {
-          select.innerHTML = `<option value="site-1">Begonya Sitesi (Varsayılan)</option>`;
+          select.innerHTML = `<option value="">Site listesi yüklenemedi</option>`;
         }
       } catch (e) {
-        select.innerHTML = `<option value="site-1">Begonya Sitesi (Varsayılan)</option>`;
+        select.innerHTML = `<option value="">Site listesi yüklenemedi</option>`;
       }
     }
 
@@ -1229,16 +1235,16 @@
             }
             select.value = currentPaymentsSiteId;
           } else {
-            select.innerHTML = `<option value="site-1">Begonya Sitesi (site-1)</option>`;
-            currentPaymentsSiteId = 'site-1';
+            select.innerHTML = `<option value="">⚠️ Kayıtlı Site Yok (0 Site - Fresh Start)</option>`;
+            currentPaymentsSiteId = '';
           }
         } else {
-          select.innerHTML = `<option value="site-1">Begonya Sitesi (site-1)</option>`;
-          currentPaymentsSiteId = 'site-1';
+          select.innerHTML = `<option value="">Site listesi yüklenemedi</option>`;
+          currentPaymentsSiteId = '';
         }
       } catch (e) {
-        select.innerHTML = `<option value="site-1">Begonya Sitesi (site-1)</option>`;
-        currentPaymentsSiteId = 'site-1';
+        select.innerHTML = `<option value="">Site listesi yüklenemedi</option>`;
+        currentPaymentsSiteId = '';
       }
     }
 
@@ -1356,15 +1362,25 @@
         unitsList = units;
 
         if (units.length === 0) {
-          select.innerHTML = '<option value="">⚠️ Kayıtlı daire yok - Yukarıdan "12 Haneli Site & Sakinleri Kur" yapın</option>';
+          select.innerHTML = '<option value="">⚠️ Kayıtlı daire yok (0 Daire - Fresh Start)</option>';
           badge.innerText = '0 Daire';
           tableCount.innerText = '0 Daire';
           tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
-            Sistemde henüz kayıtlı daire bulunmuyor.<br>
-            <button onclick="openProvision12UnitsModal()" class="btn-primary-action" style="margin: 12px auto 0; font-size: 12px; padding: 6px 14px;">
-              <span>👥</span> 12 Haneli Site & Sakinleri Hemen Oluştur
-            </button>
+            Sistemde henüz kayıtlı daire bulunmuyor (Fresh Start / Sıfır Veri Durumu).<br>
+            <div style="margin-top: 14px; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;">
+              <button onclick="openNewSiteModal()" class="btn-toolbar" style="color: #00D2B4; background: rgba(0, 210, 180, 0.15); border-color: rgba(0, 210, 180, 0.35);">
+                <span>🏢</span> Yeni Site Kaydı Yap
+              </button>
+              <button onclick="openProvision12UnitsModal()" class="btn-primary-action" style="font-size: 12px; padding: 6px 14px;">
+                <span>👥</span> 12 Haneli Site & Sakinleri Kur
+              </button>
+              <button onclick="resetToInitialState()" class="btn-toolbar" style="color: #FCA5A5; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.35);">
+                <span>⏮️</span> Örnek Tohumu Yükle (Seed)
+              </button>
+            </div>
           </td></tr>`;
+          currentSelectedUnitId = '';
+          fetchLiveResidentStatus();
           return;
         }
 
@@ -1553,8 +1569,16 @@
     }
 
     async function fetchLiveResidentStatus(unitId, siteId) {
-      const targetUnitId = unitId || currentSelectedUnitId || 'd-1';
-      const targetSiteId = siteId || currentSelectedSiteId || 'site-1';
+      if (!unitsList || unitsList.length === 0) {
+        document.getElementById('live-total-debt').innerText = 'Kayıtlı Daire Yok (0 Daire)';
+        document.getElementById('live-total-debt').className = 'resident-val';
+        document.getElementById('live-advance-balance').innerText = '₺0,00';
+        document.getElementById('live-virtual-iban').innerText = '—';
+        document.getElementById('live-unit-name').innerText = 'Sistemde daire kaydı bulunmuyor (Fresh Start)';
+        return;
+      }
+      const targetUnitId = unitId || currentSelectedUnitId || (unitsList[0] ? unitsList[0].unit_id : 'd-1');
+      const targetSiteId = siteId || currentSelectedSiteId || (unitsList[0] ? unitsList[0].site_id : 'site-1');
       try {
         const res = await fetch(`${BACKEND_URL}/api/v1/residents/${targetUnitId}/dashboard?site_id=${targetSiteId}`);
         if (!res.ok) throw new Error('Backend HTTP ' + res.status);
@@ -1575,6 +1599,96 @@
         console.error('fetchLiveResidentStatus error:', err);
         document.getElementById('live-total-debt').innerText = 'Bağlantı Hatası';
         document.getElementById('live-advance-balance').innerText = 'Bağlantı Hatası';
+      }
+    }
+
+    async function wipeAllDataFreshStart() {
+      if (!confirm("⚠️ DİKKAT: TÜM VERİLERİ SİLME (FRESH START / SIFIR VERİ DURUMU)\n\nBu işlem:\n• Tüm siteleri (Begonya, Kardelen vb.) sistemden tamamen siler.\n• Tüm kat maliklerini, kiracıları, sakinleri ve bağımsız bölümleri siler.\n• Tüm aidat borçlarını, tahsilatları ve banka hareketlerini temizler.\n• Bu oturumdaki transfer geçmişini temizler.\n• Sistemi ve test ortamını SIFIR VERİ (0 Site, 0 Daire, 0 Sakin) tertemiz başlangıç durumuna getirir.\n\nTüm verileri silip sıfırdan başlamayı onaylıyor musunuz?")) {
+        return;
+      }
+      const btn = document.getElementById('btn-wipe-all-data');
+      const origText = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> Tüm Veriler Siliniyor...';
+      }
+
+      try {
+        let res = await fetch(`${BACKEND_URL}/api/v1/system/wipe-all-data`, {
+          method: 'POST'
+        });
+        if (!res.ok) {
+          res = await fetch(`${BACKEND_URL}/api/v1/system/clear-all-data`, {
+            method: 'POST'
+          });
+        }
+        if (!res.ok) throw new Error('Backend HTTP ' + res.status);
+        const data = await res.json();
+
+        // Clear local storage history
+        clearLocalHistory();
+
+        alert('💥 TÜM VERİLER SİLİNDİ (FRESH START)!\n\n' + 
+              (data.message || 'Tüm siteler, malikler, kiracılar ve sakinler silindi.') + 
+              '\n\nSistemde artık 0 site ve 0 daire bulunmaktadır. Testlerinize sıfırdan başlayabilirsiniz.');
+
+        currentSelectedUnitId = '';
+        currentPaymentsSiteId = '';
+
+        // Refresh all tables and data
+        await loadSitesForModal();
+        await loadSitesForPayments();
+        await loadUnitsSummary();
+        await fetchLiveResidentStatus();
+        await refreshSitePayments();
+
+        const resultContainer = document.getElementById('result-container');
+        if (resultContainer) {
+          resultContainer.style.display = 'none';
+        }
+      } catch (err) {
+        alert('Tüm verileri silme sırasında hata oluştu: ' + err.message);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = origText;
+        }
+      }
+    }
+
+    async function deleteSelectedSiteCascade() {
+      const select = document.getElementById('payments-site-select');
+      const siteId = select ? select.value : currentPaymentsSiteId;
+      if (!siteId) {
+        alert('Lütfen silinecek bir site seçiniz.');
+        return;
+      }
+      const selectedOption = select && select.selectedOptions[0] ? select.selectedOptions[0].text : siteId;
+
+      if (!confirm(`⚠️ SİTE VE TÜM SAKİNLERİ SİLİNECEK:\n\nSeçili "${selectedOption}" sitesi ve bu siteye bağlı TÜM bağımsız bölümler, kat malikleri, kiracılar ve aidat kayıtları tamamen silinecektir.\n\nOnaylıyor musunuz?`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/system/purge-site/${encodeURIComponent(siteId)}`, {
+          method: 'POST'
+        });
+        if (!res.ok) throw new Error('Backend HTTP ' + res.status);
+        const data = await res.json();
+
+        alert('✅ SİTE VE BAĞLI TÜM SAKİNLER SİLİNDİ:\n\n' + data.message);
+
+        currentPaymentsSiteId = '';
+        currentSelectedUnitId = '';
+
+        // Refresh UI
+        await loadSitesForModal();
+        await loadSitesForPayments();
+        await loadUnitsSummary();
+        await fetchLiveResidentStatus();
+        await refreshSitePayments();
+      } catch (err) {
+        alert('Site silme sırasında hata oluştu: ' + err.message);
       }
     }
 
@@ -1718,6 +1832,11 @@
 
       if (amount <= 0) {
         alert('Lütfen geçerli bir transfer tutarı giriniz.');
+        return;
+      }
+
+      if (!unitsList || unitsList.length === 0) {
+        alert('⚠️ Sistemde kayıtlı site veya daire bulunmuyor (Fresh Start / Sıfır Veri Durumu).\n\nLütfen önce yukarıdaki "Yeni Site Kaydı" veya "12 Haneli Site & Sakinleri Kur" butonunu kullanarak test verisi oluşturun.');
         return;
       }
 
@@ -1999,6 +2118,18 @@
       const metricTxns = document.getElementById('sp-metric-txns');
 
       if (!tbody) return;
+
+      if (!availableSites || availableSites.length === 0) {
+        if (metricCollected) metricCollected.innerText = '₺0,00';
+        if (metricCard) metricCard.innerText = '₺0,00';
+        if (metricFast) metricFast.innerText = '₺0,00';
+        if (metricAdvance) metricAdvance.innerText = '₺0,00';
+        if (metricTxns) metricTxns.innerText = '0 Adet';
+        if (badge) badge.innerText = '0 Ödeme';
+        sitePaymentsCache = [];
+        filterSitePaymentsTable();
+        return;
+      }
 
       try {
         const effectiveSiteId = (currentPaymentsSiteId && currentPaymentsSiteId !== 'undefined') ? currentPaymentsSiteId : 'site-1';
