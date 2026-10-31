@@ -654,4 +654,70 @@ void main() {
 
     expect(find.text('Canan Demir'), findsOneWidget);
   });
+
+  testWidgets('When user taps Temizle on Site Manager login screen, clears login cache and form inputs', (WidgetTester tester) async {
+    final controller = _createTestController(startAuthenticated: false);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Select Site Yöneticisi Girişi tab
+    final siteManagerTab = find.text('🏢 Site Yöneticisi Girişi');
+    await tester.tap(siteManagerTab);
+    await tester.pumpAndSettle();
+
+    final clearBtn = find.byKey(const Key('btn_clear_login_cache_manager'));
+    expect(clearBtn, findsOneWidget);
+
+    await tester.tap(clearBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Giriş önbelleği ve form alanları temizlendi.'), findsOneWidget);
+  });
+
+  testWidgets('When login has empty inputs or fails, displays visible error banner and feedback', (WidgetTester tester) async {
+    final controller = _createTestController(startAuthenticated: false);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Select Site Yöneticisi Girişi tab
+    final siteManagerTab = find.text('🏢 Site Yöneticisi Girişi');
+    await tester.tap(siteManagerTab);
+    await tester.pumpAndSettle();
+
+    // First clear inputs using Temizle
+    final clearBtn = find.byKey(const Key('btn_clear_login_cache_manager'));
+    await tester.tap(clearBtn);
+    await tester.pumpAndSettle();
+
+    // Tap login button with empty fields
+    final managerLoginBtn = find.text('Site Yöneticisi Olarak Giriş Yap');
+    await tester.ensureVisible(managerLoginBtn);
+    await tester.tap(managerLoginBtn);
+    await tester.pumpAndSettle();
+
+    // Verify error banner is visible with validation message
+    expect(find.byKey(const Key('login_error_banner')), findsOneWidget);
+    expect(find.text('Giriş Yapılamadı'), findsOneWidget);
+    expect(find.text('Lütfen e-posta ve şifrenizi eksiksiz giriniz.'), findsWidgets);
+    expect(controller.isAuthenticated, isFalse);
+
+    // Tap close button on validation error banner
+    final closeErrorBtn = find.byTooltip('Kapat');
+    expect(closeErrorBtn, findsOneWidget);
+    await tester.tap(closeErrorBtn);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('login_error_banner')), findsNothing);
+
+    // Simulate controller error
+    controller.setAuthError('Hatalı e-posta veya şifre. Lütfen girdiğiniz bilgileri kontrol edin.');
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('login_error_banner')), findsOneWidget);
+    expect(find.text('Hatalı e-posta veya şifre. Lütfen girdiğiniz bilgileri kontrol edin.'), findsOneWidget);
+
+    // Close second error banner
+    await tester.tap(find.byTooltip('Kapat'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('login_error_banner')), findsNothing);
+  });
 }

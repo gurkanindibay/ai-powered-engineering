@@ -43,6 +43,9 @@ class _LoginScreenState extends State<LoginScreen> {
   late final TextEditingController _saasEmailController;
   late final TextEditingController _saasPasswordController;
 
+  bool _isSubmitting = false;
+  String? _localError;
+
   @override
   void initState() {
     super.initState();
@@ -55,21 +58,21 @@ class _LoginScreenState extends State<LoginScreen> {
       text: pCred != null ? pCred.adminEmail : (_shouldShowDemoPersonas ? 'mehmet.demir@begonya.com' : ''),
     );
     _passwordController = TextEditingController(
-      text: pCred != null ? pCred.temporaryPassword : (_shouldShowDemoPersonas ? 'Password123' : ''),
+      text: _shouldShowDemoPersonas ? 'Password123' : '',
     );
 
     _homeownerEmailController = TextEditingController(
       text: pHo != null ? pHo.email : (_shouldShowDemoPersonas ? 'ahmet.yilmaz@begonya.com' : ''),
     );
     _homeownerPasswordController = TextEditingController(
-      text: pHo != null ? pHo.temporaryPassword : (_shouldShowDemoPersonas ? 'Password123' : ''),
+      text: _shouldShowDemoPersonas ? 'Password123' : '',
     );
 
     _managerEmailController = TextEditingController(
       text: pCred != null ? pCred.adminEmail : (_shouldShowDemoPersonas ? 'mehmet.demir@begonya.com' : ''),
     );
     _managerPasswordController = TextEditingController(
-      text: pCred != null ? pCred.temporaryPassword : (_shouldShowDemoPersonas ? 'Password123' : ''),
+      text: _shouldShowDemoPersonas ? 'Password123' : '',
     );
 
     _saasEmailController = TextEditingController(text: 'admin@sitepulse.io');
@@ -80,17 +83,180 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _onControllerUpdate() {
     if (!mounted) return;
-    final pCred = widget.controller.provisionedCredentials;
-    final pHo = widget.controller.provisionedHomeOwner;
-    if (pCred != null && _managerEmailController.text.isEmpty) {
-      _managerEmailController.text = pCred.adminEmail;
-      _managerPasswordController.text = pCred.temporaryPassword;
-    }
-    if (pHo != null && _homeownerEmailController.text.isEmpty) {
-      _homeownerEmailController.text = pHo.email;
-      _homeownerPasswordController.text = pHo.temporaryPassword;
-    }
     setState(() {});
+  }
+
+  void _clearCacheAndForm() {
+    setState(() {
+      _localError = null;
+    });
+    widget.controller.clearAuthMessage();
+    widget.controller.clearAllLoginCache();
+    _managerEmailController.clear();
+    _managerPasswordController.clear();
+    _homeownerEmailController.clear();
+    _homeownerPasswordController.clear();
+    _emailController.clear();
+    _passwordController.clear();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Giriş önbelleği ve form alanları temizlendi.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    setState(() {});
+  }
+
+  Future<void> _performPasswordLogin({
+    required String email,
+    required String password,
+    UserRole? targetRole,
+    SiteAdminActivePath? adminPath,
+  }) async {
+    final trimmedEmail = email.trim();
+    final trimmedPass = password.trim();
+
+    if (trimmedEmail.isEmpty || trimmedPass.isEmpty) {
+      const msg = 'Lütfen e-posta ve şifrenizi eksiksiz giriniz.';
+      setState(() {
+        _localError = msg;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Text(msg),
+            ],
+          ),
+          backgroundColor: Color(0xFFD97706),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _localError = null;
+    });
+
+    try {
+      final success = await widget.controller.loginWithPassword(
+        trimmedEmail,
+        trimmedPass,
+        targetRole: targetRole,
+        adminPath: adminPath,
+      );
+
+      if (!mounted) return;
+
+      if (!success) {
+        final errorMsg = widget.controller.authMessage ?? 'Giriş başarısız: E-posta veya şifre hatalı.';
+        setState(() {
+          _localError = errorMsg;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    errorMsg,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final errorMsg = 'Giriş işlemi sırasında hata oluştu: $e';
+        setState(() {
+          _localError = errorMsg;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildErrorBanner(BuildContext context) {
+    final message = _localError ?? (!widget.controller.isAuthenticated ? widget.controller.authMessage : null);
+    if (message == null || message.trim().isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      key: const Key('login_error_banner'),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEF4444).withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.6), width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline, color: Color(0xFFEF4444), size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Giriş Yapılamadı',
+                  style: TextStyle(
+                    color: Color(0xFFEF4444),
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  message,
+                  style: TextStyle(
+                    color: AppColors.textPrimary(context),
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Kapat',
+            icon: const Icon(Icons.close, size: 16, color: Color(0xFFEF4444)),
+            onPressed: () {
+              setState(() {
+                _localError = null;
+              });
+              widget.controller.clearAuthMessage();
+            },
+            constraints: const BoxConstraints(),
+            padding: EdgeInsets.zero,
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -305,7 +471,9 @@ class _LoginScreenState extends State<LoginScreen> {
       onTap: () {
         setState(() {
           _selectedTab = tab;
+          _localError = null;
         });
+        widget.controller.clearAuthMessage();
       },
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
@@ -385,22 +553,43 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Icon(Icons.lock_outline, color: AppColors.accentGreen, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'E-posta & Şifre ile Kat Maliki Girişi',
-                    style: TextStyle(
-                      color: AppColors.textPrimary(context),
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                  Row(
+                    children: [
+                      const Icon(Icons.lock_outline, color: AppColors.accentGreen, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'E-posta & Şifre ile Kat Maliki Girişi',
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  TextButton.icon(
+                    key: const Key('btn_clear_login_cache_homeowner'),
+                    onPressed: _clearCacheAndForm,
+                    icon: const Icon(Icons.cleaning_services_outlined, size: 13, color: AppColors.accentGreen),
+                    label: const Text(
+                      'Temizle',
+                      style: TextStyle(fontSize: 11, color: AppColors.accentGreen),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
+              _buildErrorBanner(context),
               TextField(
                 controller: _homeownerEmailController,
+                onChanged: (_) {
+                  if (_localError != null || widget.controller.authMessage != null) {
+                    setState(() => _localError = null);
+                    widget.controller.clearAuthMessage();
+                  }
+                },
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
                   labelText: 'Kat Maliki / Sakin E-posta',
@@ -415,6 +604,12 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _homeownerPasswordController,
                 obscureText: _obscureHomeownerPassword,
+                onChanged: (_) {
+                  if (_localError != null || widget.controller.authMessage != null) {
+                    setState(() => _localError = null);
+                    widget.controller.clearAuthMessage();
+                  }
+                },
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
                   labelText: 'Şifre',
@@ -435,15 +630,24 @@ class _LoginScreenState extends State<LoginScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    widget.controller.loginWithPassword(
-                      _homeownerEmailController.text,
-                      _homeownerPasswordController.text,
-                      targetRole: UserRole.homeOwner,
-                    );
-                  },
-                  icon: const Icon(Icons.login, size: 18),
-                  label: const Text('Kat Maliki Olarak Giriş Yap', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: _isSubmitting
+                      ? null
+                      : () => _performPasswordLogin(
+                            email: _homeownerEmailController.text,
+                            password: _homeownerPasswordController.text,
+                            targetRole: UserRole.homeOwner,
+                          ),
+                  icon: _isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Icon(Icons.login, size: 18),
+                  label: Text(
+                    _isSubmitting ? 'Giriş Yapılıyor...' : 'Kat Maliki Olarak Giriş Yap',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentGreen,
                     foregroundColor: Colors.white,
@@ -547,22 +751,43 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Icon(Icons.admin_panel_settings, color: AppColors.accentCyan, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Yönetici E-posta & Şifre ile Giriş',
-                    style: TextStyle(
-                      color: AppColors.textPrimary(context),
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                  Row(
+                    children: [
+                      const Icon(Icons.admin_panel_settings, color: AppColors.accentCyan, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Yönetici E-posta & Şifre ile Giriş',
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  TextButton.icon(
+                    key: const Key('btn_clear_login_cache_manager'),
+                    onPressed: _clearCacheAndForm,
+                    icon: const Icon(Icons.cleaning_services_outlined, size: 13, color: AppColors.accentCyan),
+                    label: const Text(
+                      'Temizle',
+                      style: TextStyle(fontSize: 11, color: AppColors.accentCyan),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
+              _buildErrorBanner(context),
               TextField(
                 controller: _managerEmailController,
+                onChanged: (_) {
+                  if (_localError != null || widget.controller.authMessage != null) {
+                    setState(() => _localError = null);
+                    widget.controller.clearAuthMessage();
+                  }
+                },
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
                   labelText: 'Site Yöneticisi E-posta',
@@ -577,6 +802,12 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _managerPasswordController,
                 obscureText: _obscureManagerPassword,
+                onChanged: (_) {
+                  if (_localError != null || widget.controller.authMessage != null) {
+                    setState(() => _localError = null);
+                    widget.controller.clearAuthMessage();
+                  }
+                },
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
                   labelText: 'Şifre',
@@ -602,16 +833,25 @@ class _LoginScreenState extends State<LoginScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    widget.controller.loginWithPassword(
-                      _managerEmailController.text,
-                      _managerPasswordController.text,
-                      targetRole: UserRole.siteManager,
-                      adminPath: _selectedAdminPath,
-                    );
-                  },
-                  icon: const Icon(Icons.login, size: 18),
-                  label: const Text('Site Yöneticisi Olarak Giriş Yap', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: _isSubmitting
+                      ? null
+                      : () => _performPasswordLogin(
+                            email: _managerEmailController.text,
+                            password: _managerPasswordController.text,
+                            targetRole: UserRole.siteManager,
+                            adminPath: _selectedAdminPath,
+                          ),
+                  icon: _isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Icon(Icons.login, size: 18),
+                  label: Text(
+                    _isSubmitting ? 'Giriş Yapılıyor...' : 'Site Yöneticisi Olarak Giriş Yap',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentCyan,
                     foregroundColor: Colors.white,
@@ -677,6 +917,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
               const SizedBox(height: 14),
+              _buildErrorBanner(context),
               TextField(
                 controller: _saasEmailController,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -893,22 +1134,27 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      _buildErrorBanner(context),
+                      const SizedBox(height: 6),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () {
-                            widget.controller.loginWithPassword(
-                              _emailController.text,
-                              _passwordController.text,
-                            );
-                          },
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => _performPasswordLogin(
+                                    email: _emailController.text,
+                                    password: _passwordController.text,
+                                  ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.accentCyan,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                          child: const Text('Şifreyle Giriş Yap', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: Text(
+                            _isSubmitting ? 'Giriş Yapılıyor...' : 'Şifreyle Giriş Yap',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 10),

@@ -1421,6 +1421,15 @@ class DashboardController extends ChangeNotifier {
   void logout() {
     _isAuthenticated = false;
     _authMessage = null;
+    _provisionedCredentials = null;
+    _provisionedHomeOwner = null;
+    notifyListeners();
+  }
+
+  void clearAllLoginCache() {
+    _provisionedCredentials = null;
+    _provisionedHomeOwner = null;
+    _authMessage = null;
     notifyListeners();
   }
 
@@ -1808,12 +1817,23 @@ class DashboardController extends ChangeNotifier {
           }
         } else if (response.statusCode == 401 || response.statusCode == 400) {
           final errorBody = utf8.decode(response.bodyBytes);
-          _authMessage = errorBody.isNotEmpty ? errorBody : 'E-posta veya şifre hatalı.';
+          if (errorBody.contains('Invalid email or password') || errorBody.contains('kullanıcı adı veya şifre hatalı')) {
+            _authMessage = 'Hatalı e-posta veya şifre. Lütfen girdiğiniz bilgileri kontrol edin.';
+          } else {
+            _authMessage = errorBody.isNotEmpty ? errorBody : 'E-posta veya şifre hatalı.';
+          }
+          notifyListeners();
+          return false;
+        } else {
+          _authMessage = 'Giriş yapılamadı (Sunucu yanıt kodu: ${response.statusCode}).';
           notifyListeners();
           return false;
         }
       } catch (e) {
         debugPrint('loginWithPassword backend call error: $e');
+        _authMessage = 'Sunucuya bağlanılamadı. Lütfen arka uç servisinin (port 8080) çalıştığından emin olun.';
+        notifyListeners();
+        return false;
       }
     }
 
@@ -2031,6 +2051,31 @@ class DashboardController extends ChangeNotifier {
     );
     _authMessage = '${site.name} yöneticisi için yeni geçici şifre üretildi.';
     notifyListeners();
+
+    if (!isTestMode) {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/saas/sites/$siteId/reset-admin-password');
+      http.post(url).then((response) {
+        if (response.statusCode == 200) {
+          final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+          if (data['temporary_password'] != null) {
+            _provisionedCredentials = ProvisionedSiteCredentials(
+              siteId: site.id,
+              siteName: site.name,
+              adminName: site.adminName,
+              adminEmail: site.adminEmail,
+              temporaryPassword: data['temporary_password'].toString(),
+              planType: site.planType,
+              isRenewal: true,
+            );
+            notifyListeners();
+          }
+        }
+      }).catchError((e) {
+        debugPrint('resetSiteManagerPassword remote sync notice: $e');
+      });
+    }
+
     return true;
   }
 
@@ -2982,6 +3027,11 @@ class DashboardController extends ChangeNotifier {
 
   void clearAuthMessage() {
     _authMessage = null;
+    notifyListeners();
+  }
+
+  void setAuthError(String message) {
+    _authMessage = message;
     notifyListeners();
   }
 
