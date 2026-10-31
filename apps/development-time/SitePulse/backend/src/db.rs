@@ -48,11 +48,17 @@ pub fn parse_id_to_i64(s: &str) -> Option<i64> {
     if let Ok(num) = s.parse::<i64>() {
         return Some(num);
     }
-    if s == "blok-A" {
+    if s == "blok-A" || s == "blk-A" || s == "A Blok" || s == "A" {
         return Some(1);
     }
-    if s == "blok-B" {
+    if s == "blok-B" || s == "blk-B" || s == "B Blok" || s == "B" {
         return Some(2);
+    }
+    if s == "blok-C" || s == "blk-C" || s == "C Blok" || s == "C" {
+        return Some(3);
+    }
+    if s == "blok-D" || s == "blk-D" || s == "D Blok" || s == "D" {
+        return Some(4);
     }
     if s == "usr-saas-root" {
         return Some(1);
@@ -67,6 +73,7 @@ pub fn parse_id_to_i64(s: &str) -> Option<i64> {
     let stripped = s
         .trim_start_matches("site-")
         .trim_start_matches("blok-")
+        .trim_start_matches("blk-")
         .trim_start_matches("kisi-")
         .trim_start_matches("usr-")
         .trim_start_matches("d-")
@@ -1658,10 +1665,100 @@ pub async fn save_user(pool: &Pool, user: &User) -> Result<(), Box<dyn std::erro
 pub async fn save_unit(pool: &Pool, unit: &IndependentUnit) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let id_num = parse_id_to_i64(&unit.id).unwrap_or(unit.unit_number as i64);
-    let block_id_num = parse_id_to_i64(&unit.block_id).unwrap_or(1);
     let site_id_num = parse_id_to_i64(&unit.site_id).unwrap_or(1);
+
+    // Ensure site exists in PostgreSQL before inserting unit
+    let site_exists = client
+        .query_opt("SELECT id FROM sites WHERE id = $1", &[&site_id_num])
+        .await?
+        .is_some();
+    if !site_exists {
+        client
+            .execute(
+                r#"
+                INSERT INTO sites (id, name, address, slug, status, plan_type, license_end_date)
+                VALUES ($1, 'Site', 'Adres', 'site', 'ACTIVE', 'STANDARD', CURRENT_DATE + INTERVAL '1 year')
+                ON CONFLICT (id) DO NOTHING
+                "#,
+                &[&site_id_num],
+            )
+            .await?;
+    }
+
+    // Resolve or insert valid block_id for this site
+    let block_id_num: i64 = match client
+        .query_opt(
+            "SELECT id FROM blocks WHERE site_id = $1 AND (block_name ILIKE $2 OR block_name ILIKE $3)",
+            &[&site_id_num, &unit.block_id, &format!("{} Blok", unit.block_id)],
+        )
+        .await?
+    {
+        Some(r) => r.get(0),
+        None => {
+            let bname = if unit.block_id.trim().is_empty() {
+                "A Blok".to_string()
+            } else {
+                unit.block_id.clone()
+            };
+            let r = client
+                .query_one(
+                    "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10) RETURNING id",
+                    &[&site_id_num, &bname],
+                )
+                .await?;
+            r.get(0)
+        }
+    };
+
     let owner_id_num = unit.owner_user_id.as_deref().and_then(parse_id_to_i64);
+    let effective_owner_id = if let Some(oid) = owner_id_num {
+        let exists = client.query_opt("SELECT id FROM persons WHERE id = $1", &[&oid]).await?.is_some();
+        if exists {
+            Some(oid)
+        } else {
+            let user_row = client.query_opt("SELECT full_name, phone, email FROM users WHERE id = $1", &[&oid]).await?;
+            if let Some(ur) = user_row {
+                let name: String = ur.get(0);
+                let phone: Option<String> = ur.get(1);
+                let email: String = ur.get(2);
+                let ph = phone.unwrap_or_default();
+                client.execute(
+                    "INSERT INTO persons (id, full_name, phone, email, person_type) VALUES ($1, $2, $3, $4, 'KAT_MALIKI') ON CONFLICT (id) DO NOTHING",
+                    &[&oid, &name, &ph, &email],
+                ).await?;
+                Some(oid)
+            } else {
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let tenant_id_num = unit.tenant_user_id.as_deref().and_then(parse_id_to_i64);
+    let effective_tenant_id = if let Some(tid) = tenant_id_num {
+        let exists = client.query_opt("SELECT id FROM persons WHERE id = $1", &[&tid]).await?.is_some();
+        if exists {
+            Some(tid)
+        } else {
+            let user_row = client.query_opt("SELECT full_name, phone, email FROM users WHERE id = $1", &[&tid]).await?;
+            if let Some(ur) = user_row {
+                let name: String = ur.get(0);
+                let phone: Option<String> = ur.get(1);
+                let email: String = ur.get(2);
+                let ph = phone.unwrap_or_default();
+                client.execute(
+                    "INSERT INTO persons (id, full_name, phone, email, person_type) VALUES ($1, $2, $3, $4, 'KAT_SAKINI') ON CONFLICT (id) DO NOTHING",
+                    &[&tid, &name, &ph, &email],
+                ).await?;
+                Some(tid)
+            } else {
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     client
         .execute(
@@ -1685,8 +1782,8 @@ pub async fn save_unit(pool: &Pool, unit: &IndependentUnit) -> Result<(), Box<dy
                 &unit.unit_number,
                 &unit.floor,
                 &unit.land_share,
-                &owner_id_num,
-                &tenant_id_num,
+                &effective_owner_id,
+                &effective_tenant_id,
                 &unit.virtual_iban,
             ],
         )
@@ -2429,4 +2526,85 @@ pub async fn get_blocks_for_site_from_db(
         });
     }
     Ok(list)
+}
+
+pub async fn sync_all_in_memory_to_db(
+    pool: &Pool,
+    state: &AppStateInner,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+
+    // 1. Sync Sites
+    for site in &state.sites {
+        let _ = save_site(pool, site).await;
+    }
+
+    // 2. Sync Blocks
+    for block in &state.blocks {
+        let block_id_num = parse_id_to_i64(&block.id).unwrap_or(1);
+        let site_id_num = parse_id_to_i64(&block.site_id).unwrap_or(1);
+        let _ = client
+            .execute(
+                r#"
+                INSERT INTO blocks (id, site_id, block_name, total_floors)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (id) DO UPDATE SET
+                    site_id = EXCLUDED.site_id,
+                    block_name = EXCLUDED.block_name,
+                    total_floors = EXCLUDED.total_floors
+                "#,
+                &[&block_id_num, &site_id_num, &block.block_name, &block.total_floors],
+            )
+            .await;
+    }
+
+    // 3. Sync Users and Persons
+    for user in &state.users {
+        let user_id_num = parse_id_to_i64(&user.id).unwrap_or(1);
+        let p_type = match user.role {
+            Role::HomeOwner => "KAT_MALIKI",
+            Role::HomeResident => "KAT_SAKINI",
+            _ => "YONETICI",
+        };
+        let _ = client
+            .execute(
+                r#"
+                INSERT INTO persons (id, full_name, phone, email, person_type)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (id) DO UPDATE SET
+                    full_name = EXCLUDED.full_name,
+                    phone = EXCLUDED.phone,
+                    email = EXCLUDED.email,
+                    person_type = EXCLUDED.person_type
+                "#,
+                &[&user_id_num, &user.full_name, &user.phone, &user.email, &p_type],
+            )
+            .await;
+
+        let _ = save_user(pool, user).await;
+    }
+
+    // 4. Sync Units
+    for unit in &state.units {
+        let _ = save_unit(pool, unit).await;
+    }
+
+    // 5. Sync Dues Liabilities
+    for due in &state.dues {
+        let _ = save_due_liability(pool, due).await;
+    }
+
+    // 6. Sync Remembered Sender IBANs & Payer Names
+    for (iban, unit_id) in &state.remembered_sender_ibans {
+        let meta = state.sender_iban_metadata.get(iban);
+        let label = meta.and_then(|m| m.0.as_deref());
+        let bank = meta.and_then(|m| m.1.as_deref());
+        let _ = save_remembered_sender_iban(pool, iban, unit_id, label, bank).await;
+    }
+    for (unit_id, names) in &state.unit_payer_names {
+        let _ = save_unit_payer_names(pool, unit_id, names).await;
+    }
+
+    info!("Synchronized all in-memory state to PostgreSQL database successfully.");
+    Ok(())
 }

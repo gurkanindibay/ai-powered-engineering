@@ -2680,6 +2680,42 @@ pub async fn wipe_all_data(
     )
 }
 
+pub async fn sync_db(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if let Some(ref pool) = state.pool {
+        let inner = state.inner.read().await;
+        if let Err(e) = crate::db::sync_all_in_memory_to_db(pool, &inner).await {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "status": "ERROR",
+                    "message": format!("Database sync failed: {}", e)
+                })),
+            );
+        }
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "SUCCESS",
+                "message": "All in-memory sites, blocks, units, users, and dues synchronized to PostgreSQL successfully.",
+                "sites_count": inner.sites.len(),
+                "users_count": inner.users.len(),
+                "units_count": inner.units.len(),
+                "dues_count": inner.dues.len()
+            })),
+        )
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "status": "ERROR",
+                "message": "PostgreSQL connection pool is not configured."
+            })),
+        )
+    }
+}
+
 /// Permanently purges a specific residential site and all associated units, residents,
 /// homeowners, tenants, and dues records — useful for fine-grained test rollbacks.
 pub async fn purge_site_cascade(
@@ -2974,15 +3010,9 @@ pub async fn provision_site_units(
 
     if let Some(ref pool) = state.pool {
         let pool = pool.clone();
-        let units_to_save: Vec<IndependentUnit> = inner.units.clone();
-        let dues_to_save: Vec<DuesLiability> = inner.dues.clone();
+        let snapshot = inner.clone();
         tokio::spawn(async move {
-            for u in units_to_save {
-                let _ = crate::db::save_unit(&pool, &u).await;
-            }
-            for d in dues_to_save {
-                let _ = crate::db::save_due_liability(&pool, &d).await;
-            }
+            let _ = crate::db::sync_all_in_memory_to_db(&pool, &snapshot).await;
         });
     }
 

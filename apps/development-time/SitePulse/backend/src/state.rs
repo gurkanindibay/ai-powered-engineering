@@ -17,6 +17,7 @@ pub struct AppState {
     pub pool: Option<deadpool_postgres::Pool>,
 }
 
+#[derive(Clone)]
 pub struct AppStateInner {
     pub sites: Vec<Site>,
     pub users: Vec<User>,

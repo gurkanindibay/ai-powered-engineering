@@ -203,6 +203,7 @@ async fn main() {
         )
         // System Reset & Test Data Fixtures
         .route("/api/v1/system/reset-demo-data", post(handlers::reset_demo_data))
+        .route("/api/v1/system/sync-db", post(handlers::sync_db))
         .route("/api/v1/system/reset-to-initial-state", post(handlers::reset_to_initial_state))
         .route("/api/v1/system/wipe-all-data", post(handlers::wipe_all_data))
         .route("/api/v1/system/delete-all-data", post(handlers::wipe_all_data))

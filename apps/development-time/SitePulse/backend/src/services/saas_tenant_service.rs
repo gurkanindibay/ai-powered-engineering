@@ -227,11 +227,13 @@ impl SaasTenantService {
         let site_idx = inner
             .sites
             .iter()
-            .position(|s| s.id == site_id)
+            .position(|s| s.id == site_id || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(site_id))
             .ok_or_else(|| format!("Site with id '{}' not found", site_id))?;
 
+        let actual_site_id = inner.sites[site_idx].id.clone();
+
         // Invariant Guard 1: Check if any independent units exist for this site
-        let has_units = inner.units.iter().any(|u| u.site_id == site_id);
+        let has_units = inner.units.iter().any(|u| u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id));
         if has_units {
             return Err(format!(
                 "Cannot delete site '{}': active units exist in complex (işlem kaydı mevcut)",
@@ -240,7 +242,7 @@ impl SaasTenantService {
         }
 
         // Invariant Guard 2: Check if any pending registrations exist for this site
-        let has_pending = inner.pending_registrations.iter().any(|r| r.site_id == site_id);
+        let has_pending = inner.pending_registrations.iter().any(|r| r.site_id == actual_site_id || crate::db::parse_id_to_i64(&r.site_id) == crate::db::parse_id_to_i64(&actual_site_id));
         if has_pending {
             return Err(format!(
                 "Cannot delete site '{}': pending registration requests exist",
@@ -252,7 +254,7 @@ impl SaasTenantService {
         let unit_ids: Vec<String> = inner
             .units
             .iter()
-            .filter(|u| u.site_id == site_id)
+            .filter(|u| u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id))
             .map(|u| u.id.clone())
             .collect();
         let has_dues = inner.dues.iter().any(|d| unit_ids.contains(&d.unit_id));
@@ -267,7 +269,7 @@ impl SaasTenantService {
         inner.sites.remove(site_idx);
 
         // Purge unactivated tenant admin user(s) created for this site
-        inner.users.retain(|u| u.site_id != site_id || u.role == Role::SaasAdmin);
+        inner.users.retain(|u| (u.site_id != actual_site_id && crate::db::parse_id_to_i64(&u.site_id) != crate::db::parse_id_to_i64(&actual_site_id)) || u.role == Role::SaasAdmin);
 
         if let Some(ref pool) = self.state.pool {
             let pool = pool.clone();
