@@ -80,6 +80,35 @@ void main() {
       expect(creds!.temporaryPassword.startsWith('SP-'), isTrue);
     });
 
+    test('when updating site information, then persists updated values and notifies listeners', () async {
+      final initialSite = controller.saasSites.first;
+      final targetId = initialSite.id;
+
+      final result = await controller.updateSite(
+        siteId: targetId,
+        name: 'Göztepe Park Rezidans',
+        city: 'İzmir',
+        address: 'Göztepe Mah. Sahil Cad. No:100',
+        status: 'ACTIVE',
+        planType: 'PRO',
+        adminName: 'Ahmet Güncellenmiş',
+        adminEmail: 'ahmet.guncel@goztepe.com',
+        adminPhone: '0555 444 33 22',
+        blocks: ['A Blok', 'B Blok', 'C Blok'],
+      );
+
+      expect(result, isTrue);
+      final updatedSite = controller.saasSites.firstWhere((s) => s.id == targetId);
+      expect(updatedSite.name, 'Göztepe Park Rezidans');
+      expect(updatedSite.city, 'İzmir');
+      expect(updatedSite.address, 'Göztepe Mah. Sahil Cad. No:100');
+      expect(updatedSite.planType, 'PRO');
+      expect(updatedSite.adminName, 'Ahmet Güncellenmiş');
+      expect(updatedSite.adminEmail, 'ahmet.guncel@goztepe.com');
+      expect(updatedSite.adminPhone, '0555 444 33 22');
+      expect(updatedSite.blocks, ['A Blok', 'B Blok', 'C Blok']);
+    });
+
     test('when register home owner by manager, then adds flat and issues resident password', () {
       final initialFlatsCount = controller.flatsList.length;
       controller.registerHomeOwner(

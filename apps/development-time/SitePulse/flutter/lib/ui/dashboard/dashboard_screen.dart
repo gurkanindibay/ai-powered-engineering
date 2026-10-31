@@ -559,6 +559,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return SaasAdminView(
           controller: widget.controller,
           onAddSiteTap: _showAddSiteDialog,
+          onEditSiteTap: _showEditSiteDialog,
           onDeleteSiteTap: _confirmDeleteSite,
           onResetPasswordTap: _confirmResetAdminPassword,
         );
@@ -680,6 +681,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return SaasAdminView(
         controller: widget.controller,
         onAddSiteTap: _showAddSiteDialog,
+        onEditSiteTap: _showEditSiteDialog,
         onDeleteSiteTap: _confirmDeleteSite,
         onResetPasswordTap: _confirmResetAdminPassword,
       );
@@ -7412,6 +7414,238 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditSiteDialog(TenantSiteItem site) {
+    final nameCtrl = TextEditingController(text: site.name);
+    final cityCtrl = TextEditingController(text: site.city);
+    final addressCtrl = TextEditingController(text: site.address);
+    final adminNameCtrl = TextEditingController(text: site.adminName);
+    final adminEmailCtrl = TextEditingController(text: site.adminEmail);
+    final adminPhoneCtrl = TextEditingController(text: site.adminPhone);
+    final blocksCtrl = TextEditingController(text: site.blocks.join(', '));
+    String selectedStatus = site.status;
+    String selectedPlanType = site.planType;
+
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AppFullscreenPage(
+          title: '${site.name} Bilgilerini Düzenle',
+          subtitle: 'Site yapılandırması, yönetici iletişim ve blok ayarları',
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.accentGreen.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.edit_note, color: AppColors.accentGreen, size: 20),
+          ),
+          bottomBar: AppFullscreenPage.buildBottomBar(
+            context: ctx,
+            children: [
+              OutlinedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: BorderSide(color: AppColors.border(context)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+              ),
+              ElevatedButton(
+                key: const Key('btn_save_site_edit'),
+                onPressed: () async {
+                  final siteName = nameCtrl.text.trim();
+                  final adminName = adminNameCtrl.text.trim();
+                  if (siteName.isEmpty || adminName.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Lütfen Site Adı ve Yönetici Ad Soyad alanlarını doldurunuz.'),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                    return;
+                  }
+                  final rawBlocks = blocksCtrl.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+                  final blocks = rawBlocks.isNotEmpty ? rawBlocks : site.blocks;
+                  Navigator.pop(ctx);
+                  await widget.controller.updateSite(
+                    siteId: site.id,
+                    name: siteName,
+                    city: cityCtrl.text.trim().isEmpty ? site.city : cityCtrl.text.trim(),
+                    address: addressCtrl.text.trim(),
+                    adminName: adminName,
+                    adminEmail: adminEmailCtrl.text.trim(),
+                    adminPhone: adminPhoneCtrl.text.trim(),
+                    status: selectedStatus,
+                    planType: selectedPlanType,
+                    blocks: blocks,
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentGreen,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Değişiklikleri Kaydet', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              TextField(
+                key: const Key('edit_site_name_field'),
+                controller: nameCtrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Site / Proje Adı',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: ['ACTIVE', 'TRIAL', 'SUSPENDED'].contains(selectedStatus) ? selectedStatus : 'ACTIVE',
+                      items: const [
+                        DropdownMenuItem(value: 'ACTIVE', child: Text('ACTIVE (Aktif)')),
+                        DropdownMenuItem(value: 'TRIAL', child: Text('TRIAL (Deneme)')),
+                        DropdownMenuItem(value: 'SUSPENDED', child: Text('SUSPENDED (Askıda)')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => selectedStatus = val);
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Durum',
+                        labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                        filled: true,
+                        fillColor: AppColors.card(context),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      dropdownColor: AppColors.card(context),
+                      style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: ['ENTERPRISE', 'PRO', 'STARTER', 'COMMUNITY'].contains(selectedPlanType) ? selectedPlanType : 'ENTERPRISE',
+                      items: const [
+                        DropdownMenuItem(value: 'ENTERPRISE', child: Text('ENTERPRISE')),
+                        DropdownMenuItem(value: 'PRO', child: Text('PRO')),
+                        DropdownMenuItem(value: 'STARTER', child: Text('STARTER')),
+                        DropdownMenuItem(value: 'COMMUNITY', child: Text('COMMUNITY')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => selectedPlanType = val);
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Paket / Plan',
+                        labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                        filled: true,
+                        fillColor: AppColors.card(context),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      dropdownColor: AppColors.card(context),
+                      style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('edit_site_city_field'),
+                controller: cityCtrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Şehir',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('edit_site_address_field'),
+                controller: addressCtrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Adres',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('edit_site_blocks_field'),
+                controller: blocksCtrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Bloklar (Virgülle ayırarak giriniz: A Blok, B Blok)',
+                  helperText: 'Sitede yer alan blokları belirleyin.',
+                  helperStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  prefixIcon: const Icon(Icons.domain, size: 20, color: AppColors.accentGreen),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('edit_site_admin_name_field'),
+                controller: adminNameCtrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Yönetici Ad Soyad',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('edit_site_admin_email_field'),
+                controller: adminEmailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Yönetici E-posta',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('edit_site_admin_phone_field'),
+                controller: adminPhoneCtrl,
+                keyboardType: TextInputType.phone,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Yönetici Telefon',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

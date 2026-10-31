@@ -74,6 +74,43 @@ async fn when_registering_new_site_then_provisions_site_and_manager_with_tempora
 }
 
 #[tokio::test]
+async fn when_updating_site_then_site_details_and_admin_info_are_updated() {
+    let state = AppState::new();
+    let service = SaasTenantService::new(state);
+
+    let reg_req = RegisterSiteRequest {
+        site_name: "Nilüfer Sitesi".to_string(),
+        address: "Bursa, Nilüfer".to_string(),
+        site_admin_full_name: "Ali Veli".to_string(),
+        site_admin_email: "ali.veli@nilufer.com".to_string(),
+        site_admin_phone: "+90 532 111 2233".to_string(),
+        plan_type: Some("STANDARD".to_string()),
+        blocks: Some(vec!["A Blok".to_string(), "B Blok".to_string()]),
+    };
+    let reg_res = service.register_site(reg_req).await.expect("Registration failed");
+
+    let update_req = UpdateSiteRequest {
+        site_name: Some("Nilüfer Lüks Rezidans".to_string()),
+        address: Some("Bursa, Nilüfer, Çamlık Cad. No:12".to_string()),
+        status: Some("ACTIVE".to_string()),
+        plan_type: Some("PREMIUM".to_string()),
+        site_admin_full_name: Some("Ali Veli Kaya".to_string()),
+        site_admin_email: Some("ali.kaya@nilufer.com".to_string()),
+        site_admin_phone: Some("+90 532 999 8877".to_string()),
+        blocks: Some(vec!["A Blok".to_string(), "B Blok".to_string(), "C Blok".to_string()]),
+    };
+
+    let updated = service.update_site(&reg_res.site_id, update_req).await.expect("Update failed");
+    assert_eq!(updated.site_name, "Nilüfer Lüks Rezidans");
+    assert_eq!(updated.address, "Bursa, Nilüfer, Çamlık Cad. No:12");
+    assert_eq!(updated.plan_type, "PREMIUM");
+    assert_eq!(updated.primary_manager_name, "Ali Veli Kaya");
+    assert_eq!(updated.primary_manager_email, "ali.kaya@nilufer.com");
+    assert_eq!(updated.primary_manager_phone, "+90 532 999 8877");
+    assert_eq!(updated.blocks, vec!["A Blok", "B Blok", "C Blok"]);
+}
+
+#[tokio::test]
 async fn when_duplicate_email_then_throws_exception() {
     let state = AppState::new();
     let service = SaasTenantService::new(state);

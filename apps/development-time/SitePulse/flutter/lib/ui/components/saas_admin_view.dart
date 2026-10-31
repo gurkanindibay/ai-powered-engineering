@@ -6,6 +6,7 @@ import '../dashboard/dashboard_controller.dart';
 class SaasAdminView extends StatelessWidget {
   final DashboardController controller;
   final VoidCallback onAddSiteTap;
+  final void Function(TenantSiteItem site)? onEditSiteTap;
   final void Function(TenantSiteItem site)? onDeleteSiteTap;
   final void Function(TenantSiteItem site)? onResetPasswordTap;
 
@@ -13,6 +14,7 @@ class SaasAdminView extends StatelessWidget {
     super.key,
     required this.controller,
     required this.onAddSiteTap,
+    this.onEditSiteTap,
     this.onDeleteSiteTap,
     this.onResetPasswordTap,
   });
@@ -295,6 +297,37 @@ class SaasAdminView extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    if (onEditSiteTap != null) ...[
+                      InkWell(
+                        key: Key('btn_edit_site_${site.id}'),
+                        onTap: () => onEditSiteTap!(site),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentGreen.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.accentGreen.withOpacity(0.4)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.edit_outlined, size: 13, color: AppColors.accentGreen),
+                              SizedBox(width: 4),
+                              Text(
+                                'Düzenle',
+                                style: TextStyle(
+                                  color: AppColors.accentGreen,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     if (onResetPasswordTap != null)
                       InkWell(
                         onTap: () => onResetPasswordTap!(site),

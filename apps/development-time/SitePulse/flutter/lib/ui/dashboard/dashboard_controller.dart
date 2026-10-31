@@ -2027,6 +2027,100 @@ class DashboardController extends ChangeNotifier {
     _saasSites.removeAt(index);
     _authMessage = '${site.name} başarıyla silindi.';
     notifyListeners();
+
+    if (!isTestMode) {
+      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final url = Uri.parse('http://$host:8080/api/v1/saas/sites/$siteId');
+      http.delete(url).catchError((e) {
+        debugPrint('deleteSite remote sync notice: $e');
+      });
+    }
+
+    return true;
+  }
+
+  /// Updates existing site information and manager details.
+  Future<bool> updateSite({
+    required String siteId,
+    String? name,
+    String? city,
+    String? address,
+    String? status,
+    String? planType,
+    String? adminName,
+    String? adminEmail,
+    String? adminPhone,
+    List<String>? blocks,
+  }) async {
+    final index = _saasSites.indexWhere((s) => s.id == siteId);
+    if (index == -1) return false;
+    final currentSite = _saasSites[index];
+
+    final updatedSite = currentSite.copyWith(
+      name: name ?? currentSite.name,
+      city: city ?? currentSite.city,
+      address: address ?? currentSite.address,
+      status: status ?? currentSite.status,
+      planType: planType ?? currentSite.planType,
+      adminName: adminName ?? currentSite.adminName,
+      adminEmail: adminEmail ?? currentSite.adminEmail,
+      adminPhone: adminPhone ?? currentSite.adminPhone,
+      blocks: blocks ?? currentSite.blocks,
+    );
+
+    _saasSites[index] = updatedSite;
+    if (_currentManagedSite?.id == siteId) {
+      _currentManagedSite = updatedSite;
+    }
+    _authMessage = '${updatedSite.name} bilgileri başarıyla güncellendi.';
+    notifyListeners();
+
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/saas/sites/$siteId');
+        final payload = <String, dynamic>{};
+        if (name != null) payload['site_name'] = name;
+        if (address != null) payload['address'] = address;
+        if (status != null) payload['status'] = status;
+        if (planType != null) payload['plan_type'] = planType;
+        if (adminName != null) payload['site_admin_full_name'] = adminName;
+        if (adminEmail != null) payload['site_admin_email'] = adminEmail;
+        if (adminPhone != null) payload['site_admin_phone'] = adminPhone;
+        if (blocks != null) payload['blocks'] = blocks;
+
+        final response = await http.put(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(payload),
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+          final freshBlocks = (data['blocks'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? updatedSite.blocks;
+          _saasSites[index] = updatedSite.copyWith(
+            name: data['site_name']?.toString() ?? updatedSite.name,
+            address: data['address']?.toString() ?? updatedSite.address,
+            status: data['status']?.toString() ?? updatedSite.status,
+            planType: data['plan_type']?.toString() ?? updatedSite.planType,
+            adminName: data['primary_manager_name']?.toString() ?? updatedSite.adminName,
+            adminEmail: data['primary_manager_email']?.toString() ?? updatedSite.adminEmail,
+            adminPhone: data['primary_manager_phone']?.toString() ?? updatedSite.adminPhone,
+            blocks: freshBlocks,
+          );
+          if (_currentManagedSite?.id == siteId) {
+            _currentManagedSite = _saasSites[index];
+          }
+          notifyListeners();
+          return true;
+        } else {
+          debugPrint('updateSite failed with status: ${response.statusCode}');
+        }
+      } catch (e) {
+        debugPrint('updateSite remote sync error: $e');
+      }
+    }
+
     return true;
   }
 

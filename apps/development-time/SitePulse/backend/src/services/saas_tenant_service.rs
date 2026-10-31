@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::models::{
     RegisterSiteRequest, Role, SaasGlobalStatsDto, SaasSiteSummaryDto, Site,
-    SiteAdminPasswordResetResponse, SiteRegistrationResponse, User,
+    SiteAdminPasswordResetResponse, SiteRegistrationResponse, UpdateSiteRequest, User,
 };
 use crate::state::AppState;
 
@@ -278,6 +278,176 @@ impl SaasTenantService {
         }
 
         Ok(())
+    }
+
+    pub async fn update_site(
+        &self,
+        site_id: &str,
+        req: UpdateSiteRequest,
+    ) -> Result<SaasSiteSummaryDto, String> {
+        let mut inner = self.state.inner.write().await;
+        let site_idx = inner
+            .sites
+            .iter()
+            .position(|s| s.id == site_id || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(site_id))
+            .ok_or_else(|| format!("Site with id '{}' not found", site_id))?;
+
+        if let Some(ref name) = req.site_name {
+            if name.trim().is_empty() {
+                return Err("Site name cannot be empty".to_string());
+            }
+            inner.sites[site_idx].name = name.trim().to_string();
+            inner.sites[site_idx].slug = to_slug(name);
+        }
+        if let Some(ref addr) = req.address {
+            inner.sites[site_idx].address = addr.trim().to_string();
+        }
+        if let Some(ref status) = req.status {
+            inner.sites[site_idx].status = status.trim().to_uppercase();
+        }
+        if let Some(ref plan) = req.plan_type {
+            inner.sites[site_idx].plan_type = plan.trim().to_uppercase();
+        }
+
+        let actual_site_id = inner.sites[site_idx].id.clone();
+        let updated_site = inner.sites[site_idx].clone();
+
+        // Check email uniqueness if a new email is provided
+        if let Some(ref email) = req.site_admin_email {
+            let email_clean = email.trim().to_lowercase();
+            if !email_clean.is_empty() {
+                let user_idx = inner.users.iter().position(|u| {
+                    (u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id))
+                        && u.role == Role::SiteManager
+                });
+                let current_user_id = user_idx.map(|idx| inner.users[idx].id.clone());
+                let email_exists = inner.users.iter().any(|u| Some(&u.id) != current_user_id.as_ref() && u.email.to_lowercase() == email_clean);
+                if email_exists {
+                    return Err(format!("An account with this email address already exists (zaten mevcut): {}", email));
+                }
+            }
+        }
+
+        // Update site admin user if details are provided
+        let mut admin_user_to_save: Option<User> = None;
+        if req.site_admin_full_name.is_some() || req.site_admin_email.is_some() || req.site_admin_phone.is_some() {
+            if let Some(user) = inner.users.iter_mut().find(|u| {
+                (u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id))
+                    && u.role == Role::SiteManager
+            }) {
+                if let Some(ref fname) = req.site_admin_full_name {
+                    if !fname.trim().is_empty() {
+                        user.full_name = fname.trim().to_string();
+                    }
+                }
+                if let Some(ref email) = req.site_admin_email {
+                    let email_clean = email.trim().to_lowercase();
+                    if !email_clean.is_empty() {
+                        user.email = email_clean;
+                    }
+                }
+                if let Some(ref phone) = req.site_admin_phone {
+                    user.phone = phone.trim().to_string();
+                }
+                admin_user_to_save = Some(user.clone());
+            }
+        }
+
+        // Update blocks if provided
+        let mut updated_blocks: Vec<String> = Vec::new();
+        if let Some(ref new_blocks) = req.blocks {
+            inner.blocks.retain(|b| b.site_id != actual_site_id && crate::db::parse_id_to_i64(&b.site_id) != crate::db::parse_id_to_i64(&actual_site_id));
+            for (idx, bname) in new_blocks.iter().enumerate() {
+                let trimmed = bname.trim();
+                if !trimmed.is_empty() {
+                    inner.blocks.push(crate::models::BlockDto {
+                        id: format!("blk-{}-{}", &actual_site_id[..6.min(actual_site_id.len())], idx + 1),
+                        site_id: actual_site_id.clone(),
+                        block_name: trimmed.to_string(),
+                        total_floors: 10,
+                    });
+                    updated_blocks.push(trimmed.to_string());
+                }
+            }
+        } else {
+            updated_blocks = inner
+                .blocks
+                .iter()
+                .filter(|b| b.site_id == actual_site_id || crate::db::parse_id_to_i64(&b.site_id) == crate::db::parse_id_to_i64(&actual_site_id))
+                .map(|b| b.block_name.clone())
+                .collect();
+        }
+
+        // Find current admin info for summary
+        let admin_info = inner.users.iter().find(|u| {
+            (u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id))
+                && u.role == Role::SiteManager
+        });
+
+        let primary_name = admin_info.map(|u| u.full_name.clone()).unwrap_or_else(|| "Unassigned".to_string());
+        let primary_email = admin_info.map(|u| u.email.clone()).unwrap_or_else(|| "-".to_string());
+        let primary_phone = admin_info.map(|u| u.phone.clone()).unwrap_or_else(|| "-".to_string());
+
+        let total_units = inner.units.iter().filter(|u| {
+            u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id)
+        }).count() as i32;
+
+        let site_unit_ids: std::collections::HashSet<&str> = inner
+            .units
+            .iter()
+            .filter(|u| u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id))
+            .map(|u| u.id.as_str())
+            .collect();
+
+        let volume: Decimal = inner
+            .dues
+            .iter()
+            .filter(|d| site_unit_ids.contains(d.unit_id.as_str()))
+            .map(|d| d.principal_amount)
+            .sum();
+
+        // Async PostgreSQL persistence
+        if let Some(ref pool) = self.state.pool {
+            let pool = pool.clone();
+            let s = updated_site.clone();
+            let u_opt = admin_user_to_save;
+            let blist = updated_blocks.clone();
+            let sid = actual_site_id.clone();
+            tokio::spawn(async move {
+                let _ = crate::db::save_site(&pool, &s).await;
+                if let Some(ref u) = u_opt {
+                    let _ = crate::db::save_user(&pool, u).await;
+                }
+                if let Ok(client) = pool.get().await {
+                    let numeric_site = crate::db::parse_id_to_i64(&sid).unwrap_or(1);
+                    let _ = client.execute("DELETE FROM blocks WHERE site_id = $1", &[&numeric_site]).await;
+                    for bname in blist {
+                        let _ = client
+                            .execute(
+                                "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10)",
+                                &[&numeric_site, &bname],
+                            )
+                            .await;
+                    }
+                }
+            });
+        }
+
+        Ok(SaasSiteSummaryDto {
+            site_id: actual_site_id,
+            site_name: updated_site.name,
+            slug: updated_site.slug,
+            address: updated_site.address,
+            status: updated_site.status,
+            plan_type: updated_site.plan_type,
+            license_end_date: updated_site.license_end_date,
+            total_units,
+            monthly_dues_volume: volume,
+            primary_manager_name: primary_name,
+            primary_manager_email: primary_email,
+            primary_manager_phone: primary_phone,
+            blocks: updated_blocks,
+        })
     }
 
     pub async fn reset_site_admin_password(

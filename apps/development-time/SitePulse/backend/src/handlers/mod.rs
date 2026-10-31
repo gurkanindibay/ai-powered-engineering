@@ -484,6 +484,19 @@ pub async fn delete_site(
         .map_err(|e| (StatusCode::CONFLICT, e))
 }
 
+pub async fn update_site(
+    Path(site_id): Path<String>,
+    State(state): State<AppState>,
+    Json(payload): Json<UpdateSiteRequest>,
+) -> Result<(StatusCode, Json<SaasSiteSummaryDto>), (StatusCode, String)> {
+    let service = SaasTenantService::new(state);
+    service
+        .update_site(&site_id, payload)
+        .await
+        .map(|res| (StatusCode::OK, Json(res)))
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
 pub async fn reset_site_admin_password(
     Path(site_id): Path<String>,
     State(state): State<AppState>,

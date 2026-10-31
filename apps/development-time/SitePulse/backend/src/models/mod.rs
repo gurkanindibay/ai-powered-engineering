@@ -309,6 +309,19 @@ pub struct RegisterSiteRequest {
     pub blocks: Option<Vec<String>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UpdateSiteRequest {
+    pub site_name: Option<String>,
+    pub address: Option<String>,
+    pub status: Option<String>,
+    pub plan_type: Option<String>,
+    pub site_admin_full_name: Option<String>,
+    pub site_admin_email: Option<String>,
+    pub site_admin_phone: Option<String>,
+    #[serde(default)]
+    pub blocks: Option<Vec<String>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SiteRegistrationResponse {
     pub site_id: String,

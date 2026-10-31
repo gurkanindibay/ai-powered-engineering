@@ -399,6 +399,38 @@ class TenantSiteItem {
   /// Invariant: A site has actions if it has registered units, financial collection volume,
   /// or logged operational actions. Sites with hasActions == false are eligible for deletion.
   bool get hasActions => actionCount > 0 || totalUnits > 0 || monthlyCollectionVolume > Decimal.zero;
+
+  TenantSiteItem copyWith({
+    String? id,
+    String? name,
+    String? city,
+    String? address,
+    String? status,
+    String? planType,
+    int? totalUnits,
+    Decimal? monthlyCollectionVolume,
+    String? adminName,
+    String? adminEmail,
+    String? adminPhone,
+    int? actionCount,
+    List<String>? blocks,
+  }) {
+    return TenantSiteItem(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      city: city ?? this.city,
+      address: address ?? this.address,
+      status: status ?? this.status,
+      planType: planType ?? this.planType,
+      totalUnits: totalUnits ?? this.totalUnits,
+      monthlyCollectionVolume: monthlyCollectionVolume ?? this.monthlyCollectionVolume,
+      adminName: adminName ?? this.adminName,
+      adminEmail: adminEmail ?? this.adminEmail,
+      adminPhone: adminPhone ?? this.adminPhone,
+      actionCount: actionCount ?? this.actionCount,
+      blocks: blocks ?? this.blocks,
+    );
+  }
 }
 
 class UnitResidentMember {

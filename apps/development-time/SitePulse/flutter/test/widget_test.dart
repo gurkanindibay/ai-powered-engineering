@@ -432,6 +432,41 @@ void main() {
     expect(find.text('Geçici Yönetim Şifresi Yenilendi!'), findsNothing);
   });
 
+  testWidgets('SitePulseApp allows editing site information from SaaS Admin view', (WidgetTester tester) async {
+    final controller = _createTestController(startAuthenticated: true);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    // Switch to SaaS Admin
+    controller.switchSessionRole(UserRole.saasAdmin);
+    await tester.pumpAndSettle();
+
+    final targetSite = controller.saasSites.first;
+    final editBtn = find.byKey(Key('btn_edit_site_${targetSite.id}'));
+    expect(editBtn, findsOneWidget);
+
+    await tester.ensureVisible(editBtn);
+    await tester.pumpAndSettle();
+    await tester.tap(editBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('${targetSite.name} Bilgilerini Düzenle'), findsOneWidget);
+
+    final nameField = find.byKey(const Key('edit_site_name_field'));
+    expect(nameField, findsOneWidget);
+
+    await tester.enterText(nameField, 'Begonya Modern Sitesi');
+    await tester.pumpAndSettle();
+
+    final saveBtn = find.byKey(const Key('btn_save_site_edit'));
+    expect(saveBtn, findsOneWidget);
+    await tester.tap(saveBtn);
+    await tester.pumpAndSettle();
+
+    expect(controller.saasSites.firstWhere((s) => s.id == targetSite.id).name, 'Begonya Modern Sitesi');
+    expect(find.text('Begonya Modern Sitesi'), findsWidgets);
+  });
+
   testWidgets('Selecting 🏠 Kat Maliki Girişi tab renders dedicated Homeowner Login Screen and allows login', (WidgetTester tester) async {
     final controller = _createTestController(startAuthenticated: false);
     await tester.pumpWidget(SitePulseApp(controller: controller));
