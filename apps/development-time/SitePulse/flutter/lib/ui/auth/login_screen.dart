@@ -22,14 +22,14 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  LoginTab _selectedTab = LoginTab.quickAll;
+  LoginTab _selectedTab = LoginTab.siteManager;
   SiteAdminActivePath _selectedAdminPath = SiteAdminActivePath.managerCockpit;
-  bool _showManualLogin = false;
+  bool _showManualLogin = true;
   bool _obscureHomeownerPassword = true;
   bool _obscureManagerPassword = true;
   bool _obscureGeneralPassword = true;
 
-  bool get _shouldShowDemoPersonas => !kReleaseMode || widget.controller.isTestMode;
+  bool get _shouldShowDemoPersonas => widget.controller.isTestMode;
 
   late final TextEditingController _emailController;
   late final TextEditingController _passwordController;
@@ -49,34 +49,33 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _showManualLogin = !_shouldShowDemoPersonas;
+    _showManualLogin = true;
 
     final pCred = widget.controller.provisionedCredentials;
     final pHo = widget.controller.provisionedHomeOwner;
+    final isTest = widget.controller.isTestMode;
+
+    if (isTest) {
+      _selectedTab = LoginTab.quickAll;
+    }
 
     _emailController = TextEditingController(
-      text: pCred != null ? pCred.adminEmail : (_shouldShowDemoPersonas ? 'mehmet.demir@begonya.com' : ''),
+      text: pCred != null ? pCred.adminEmail : (isTest ? 'yonetici@begonya.com' : ''),
     );
-    _passwordController = TextEditingController(
-      text: _shouldShowDemoPersonas ? 'Password123' : '',
-    );
+    _passwordController = TextEditingController(text: isTest ? 'Password123' : '');
 
     _homeownerEmailController = TextEditingController(
-      text: pHo != null ? pHo.email : (_shouldShowDemoPersonas ? 'ahmet.yilmaz@begonya.com' : ''),
+      text: pHo != null ? pHo.email : (isTest ? 'ahmet.yilmaz@begonya.com' : ''),
     );
-    _homeownerPasswordController = TextEditingController(
-      text: _shouldShowDemoPersonas ? 'Password123' : '',
-    );
+    _homeownerPasswordController = TextEditingController(text: isTest ? 'Password123' : '');
 
     _managerEmailController = TextEditingController(
-      text: pCred != null ? pCred.adminEmail : (_shouldShowDemoPersonas ? 'mehmet.demir@begonya.com' : ''),
+      text: pCred != null ? pCred.adminEmail : (isTest ? 'yonetici@begonya.com' : ''),
     );
-    _managerPasswordController = TextEditingController(
-      text: _shouldShowDemoPersonas ? 'Password123' : '',
-    );
+    _managerPasswordController = TextEditingController(text: isTest ? 'Password123' : '');
 
     _saasEmailController = TextEditingController(text: 'admin@sitepulse.io');
-    _saasPasswordController = TextEditingController(text: 'AdminPass2026!');
+    _saasPasswordController = TextEditingController(text: isTest ? 'AdminPass2026!' : '');
 
     widget.controller.addListener(_onControllerUpdate);
   }
@@ -676,34 +675,36 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 16),
 
         // 4. Demo Home Owner & Resident Personas
-        Text(
-          'Örnek Demo Sakinler:',
-          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        _buildPersonaCard(
-          title: 'Kat Maliki (Ev Sahibi)',
-          subtitle: 'A Blok D:14 aidat ödemesi, sanal IBAN ile FAST, hane davet linki üretme',
-          name: 'Ahmet Yılmaz',
-          email: 'ahmet.yilmaz@begonya.com',
-          badgeText: 'A Blok D:14',
-          badgeColor: AppColors.accentGreen,
-          icon: Icons.home,
-          buttonText: 'Kat Maliki Olarak Gir',
-          onLogin: () => widget.controller.loginAs(role: UserRole.homeOwner),
-        ),
-        const SizedBox(height: 10),
-        _buildPersonaCard(
-          title: 'Ev Sakini (Aile / Kiracı)',
-          subtitle: 'A Blok D:14 aidat görüntüleme ve kredi kartı ile ödeme (kısıtlı yetki)',
-          name: 'Zeynep Yılmaz',
-          email: 'zeynep.yilmaz@gmail.com',
-          badgeText: 'A Blok D:14 (Kısıtlı)',
-          badgeColor: AppColors.accentOrange,
-          icon: Icons.person_outline,
-          buttonText: 'Ev Sakini Olarak Gir',
-          onLogin: () => widget.controller.loginAs(role: UserRole.homeResident),
-        ),
+        if (_shouldShowDemoPersonas) ...[
+          Text(
+            'Örnek Demo Sakinler:',
+            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          _buildPersonaCard(
+            title: 'Kat Maliki (Ev Sahibi)',
+            subtitle: 'A Blok D:14 aidat ödemesi, sanal IBAN ile FAST, hane davet linki üretme',
+            name: 'Ahmet Yılmaz',
+            email: 'ahmet.yilmaz@begonya.com',
+            badgeText: 'A Blok D:14',
+            badgeColor: AppColors.accentGreen,
+            icon: Icons.home,
+            buttonText: 'Kat Maliki Olarak Gir',
+            onLogin: () => widget.controller.loginAs(role: UserRole.homeOwner),
+          ),
+          const SizedBox(height: 10),
+          _buildPersonaCard(
+            title: 'Ev Sakini (Aile / Kiracı)',
+            subtitle: 'A Blok D:14 aidat görüntüleme ve kredi kartı ile ödeme (kısıtlı yetki)',
+            name: 'Zeynep Yılmaz',
+            email: 'zeynep.yilmaz@gmail.com',
+            badgeText: 'A Blok D:14 (Kısıtlı)',
+            badgeColor: AppColors.accentOrange,
+            icon: Icons.person_outline,
+            buttonText: 'Ev Sakini Olarak Gir',
+            onLogin: () => widget.controller.loginAs(role: UserRole.homeResident),
+          ),
+        ],
       ],
     );
   }
@@ -865,14 +866,6 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
 
         const SizedBox(height: 16),
-
-        // 4. Demo Site Manager Card
-        Text(
-          'Örnek Demo Site Yöneticisi:',
-          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        _buildSiteManagerCard(),
       ],
     );
   }
@@ -1005,53 +998,55 @@ class _LoginScreenState extends State<LoginScreen> {
           const SizedBox(height: 14),
         ],
 
-        // 1. SaaS Platform Admin Card
-        _buildPersonaCard(
-          title: 'SaaS Platform Admin',
-          subtitle: 'Platform geneli tüm siteleri yönetme, yeni site açılışı ve geçici şifre yenileme',
-          name: 'SaaS Süper Yönetici',
-          email: 'admin@sitepulse.io',
-          badgeText: 'Platform Geneli',
-          badgeColor: AppColors.accentPurple,
-          icon: Icons.hub,
-          buttonText: 'SaaS Paneline Gir',
-          onLogin: () => widget.controller.loginAs(role: UserRole.saasAdmin),
-        ),
+        if (_shouldShowDemoPersonas) ...[
+          // 1. SaaS Platform Admin Card
+          _buildPersonaCard(
+            title: 'SaaS Platform Admin',
+            subtitle: 'Platform geneli tüm siteleri yönetme, yeni site açılışı ve geçici şifre yenileme',
+            name: 'SaaS Süper Yönetici',
+            email: 'admin@sitepulse.io',
+            badgeText: 'Platform Geneli',
+            badgeColor: AppColors.accentPurple,
+            icon: Icons.hub,
+            buttonText: 'SaaS Paneline Gir',
+            onLogin: () => widget.controller.loginAs(role: UserRole.saasAdmin),
+          ),
 
-        const SizedBox(height: 14),
+          const SizedBox(height: 14),
 
-        // 2. Site Manager Card with Path Selector
-        _buildSiteManagerCard(),
+          // 2. Site Manager Card with Path Selector
+          _buildSiteManagerCard(),
 
-        const SizedBox(height: 14),
+          const SizedBox(height: 14),
 
-        // 3. Home Owner Card
-        _buildPersonaCard(
-          title: 'Kat Maliki (Ev Sahibi)',
-          subtitle: 'A Blok D:14 aidat ödemesi, sanal IBAN ile FAST, hane davet linki üretme',
-          name: 'Ahmet Yılmaz',
-          email: 'ahmet.yilmaz@begonya.com',
-          badgeText: 'A Blok D:14',
-          badgeColor: AppColors.accentGreen,
-          icon: Icons.home,
-          buttonText: 'Kat Maliki Olarak Gir',
-          onLogin: () => widget.controller.loginAs(role: UserRole.homeOwner),
-        ),
+          // 3. Home Owner Card
+          _buildPersonaCard(
+            title: 'Kat Maliki (Ev Sahibi)',
+            subtitle: 'A Blok D:14 aidat ödemesi, sanal IBAN ile FAST, hane davet linki üretme',
+            name: 'Ahmet Yılmaz',
+            email: 'ahmet.yilmaz@begonya.com',
+            badgeText: 'A Blok D:14',
+            badgeColor: AppColors.accentGreen,
+            icon: Icons.home,
+            buttonText: 'Kat Maliki Olarak Gir',
+            onLogin: () => widget.controller.loginAs(role: UserRole.homeOwner),
+          ),
 
-        const SizedBox(height: 14),
+          const SizedBox(height: 14),
 
-        // 4. Home Resident Card
-        _buildPersonaCard(
-          title: 'Ev Sakini (Aile / Kiracı)',
-          subtitle: 'A Blok D:14 aidat görüntüleme ve kredi kartı ile ödeme (yönetim ve davet yetkileri kısıtlı)',
-          name: 'Zeynep Yılmaz',
-          email: 'zeynep.yilmaz@gmail.com',
-          badgeText: 'A Blok D:14 (Kısıtlı)',
-          badgeColor: AppColors.accentOrange,
-          icon: Icons.person_outline,
-          buttonText: 'Ev Sakini Olarak Gir',
-          onLogin: () => widget.controller.loginAs(role: UserRole.homeResident),
-        ),
+          // 4. Home Resident Card
+          _buildPersonaCard(
+            title: 'Ev Sakini (Aile / Kiracı)',
+            subtitle: 'A Blok D:14 aidat görüntüleme ve kredi kartı ile ödeme (yönetim ve davet yetkileri kısıtlı)',
+            name: 'Zeynep Yılmaz',
+            email: 'zeynep.yilmaz@gmail.com',
+            badgeText: 'A Blok D:14 (Kısıtlı)',
+            badgeColor: AppColors.accentOrange,
+            icon: Icons.person_outline,
+            buttonText: 'Ev Sakini Olarak Gir',
+            onLogin: () => widget.controller.loginAs(role: UserRole.homeResident),
+          ),
+        ],
 
         const SizedBox(height: 24),
 
@@ -1532,8 +1527,16 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               ElevatedButton(
                 onPressed: () {
-                  _managerEmailController.text = site.adminEmail;
-                  widget.controller.loginAsSiteManager(site, adminPath: _selectedAdminPath);
+                  setState(() {
+                    _managerEmailController.text = site.adminEmail;
+                    _localError = null;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('${site.name} yöneticisi (${site.adminEmail}) seçildi. Lütfen şifrenizi giriniz.'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accentCyan.withOpacity(0.15),
@@ -1542,7 +1545,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text('Yönetici Gir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                child: const Text('Yönetici Seç', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
               ),
             ],
           ),

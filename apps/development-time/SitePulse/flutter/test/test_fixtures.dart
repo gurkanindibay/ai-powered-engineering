@@ -274,6 +274,14 @@ extension DashboardControllerTestFixtures on DashboardController {
     setSiteBankAccountForTesting(TestFixtures.siteBankAccount);
     setUnitResidentsForTesting(TestFixtures.managerResidents);
     setManagerResidentsForTesting(TestFixtures.managerResidents);
+    setBlocksForTesting(['A Blok', 'B Blok']);
+    setHouseTypesForTesting([
+      HouseTypeTariff(id: '1', siteId: 'site-1', typeName: '1+1', duesAmount: Decimal.parse('1000.00'), description: '1 Oda 1 Salon'),
+      HouseTypeTariff(id: '2', siteId: 'site-1', typeName: '2+1', duesAmount: Decimal.parse('1400.00'), description: '2 Oda 1 Salon'),
+      HouseTypeTariff(id: '3', siteId: 'site-1', typeName: '3+1', duesAmount: Decimal.parse('1800.00'), description: '3 Oda 1 Salon'),
+      HouseTypeTariff(id: '4', siteId: 'site-1', typeName: '4+1', duesAmount: Decimal.parse('2200.00'), description: '4 Oda 1 Salon'),
+      HouseTypeTariff(id: '5', siteId: 'site-1', typeName: 'Dublex', duesAmount: Decimal.parse('2500.00'), description: 'Çatı Dubleks / Bahçe Katı'),
+    ]);
     setSelectedDuesMonthForTesting('Eylül 2026');
     switchSessionRole(UserRole.homeOwner);
   }

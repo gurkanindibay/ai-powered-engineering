@@ -252,13 +252,7 @@ class DashboardController extends ChangeNotifier {
   SiteBankAccount? get siteBankAccount => _siteBankAccount;
 
   // House Types & Dues Tariffs
-  List<HouseTypeTariff> _houseTypes = [
-    HouseTypeTariff(id: '1', siteId: '1', typeName: '1+1', duesAmount: Decimal.parse('1000.00'), description: '1 Oda 1 Salon'),
-    HouseTypeTariff(id: '2', siteId: '1', typeName: '2+1', duesAmount: Decimal.parse('1400.00'), description: '2 Oda 1 Salon'),
-    HouseTypeTariff(id: '3', siteId: '1', typeName: '3+1', duesAmount: Decimal.parse('1800.00'), description: '3 Oda 1 Salon'),
-    HouseTypeTariff(id: '4', siteId: '1', typeName: '4+1', duesAmount: Decimal.parse('2200.00'), description: '4 Oda 1 Salon'),
-    HouseTypeTariff(id: '5', siteId: '1', typeName: 'Dublex', duesAmount: Decimal.parse('2500.00'), description: 'Çatı Dubleks / Bahçe Katı'),
-  ];
+  List<HouseTypeTariff> _houseTypes = [];
   List<HouseTypeTariff> get houseTypes {
     final seen = <String>{};
     final unique = <HouseTypeTariff>[];
@@ -367,7 +361,7 @@ class DashboardController extends ChangeNotifier {
   }
 
   // Site Blocks
-  List<String> _blocks = ['A Blok', 'B Blok'];
+  List<String> _blocks = [];
   List<String> get blocks {
     final seen = <String>{};
     final unique = <String>[];
@@ -492,6 +486,17 @@ class DashboardController extends ChangeNotifier {
     _accountTransactions = [];
     _collectionSummary = ComplexCollectionSummary.zero();
     _matchingCriteria = null;
+
+    if (isTestMode) {
+      _houseTypes = [
+        HouseTypeTariff(id: '1', siteId: '1', typeName: '1+1', duesAmount: Decimal.parse('1000.00'), description: '1 Oda 1 Salon'),
+        HouseTypeTariff(id: '2', siteId: '1', typeName: '2+1', duesAmount: Decimal.parse('1400.00'), description: '2 Oda 1 Salon'),
+        HouseTypeTariff(id: '3', siteId: '1', typeName: '3+1', duesAmount: Decimal.parse('1800.00'), description: '3 Oda 1 Salon'),
+        HouseTypeTariff(id: '4', siteId: '1', typeName: '4+1', duesAmount: Decimal.parse('2200.00'), description: '4 Oda 1 Salon'),
+        HouseTypeTariff(id: '5', siteId: '1', typeName: 'Dublex', duesAmount: Decimal.parse('2500.00'), description: 'Çatı Dubleks / Bahçe Katı'),
+      ];
+      _blocks = ['A Blok', 'B Blok'];
+    }
 
     if (_activeUnit.id.isNotEmpty) {
       fetchResidentDashboard();
@@ -4068,61 +4073,73 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
-    // Default mock stream for test fixtures or offline demo
-    final mockEntries = [
-      PaymentEntryDto(
-        id: 1,
-        siteId: effectiveSiteId,
-        unitId: 'd-14',
-        unitLabel: 'A Blok D:14',
-        payerName: 'Ahmet Yılmaz',
-        payerRole: 'OWNER',
-        receiptNumber: 'TAH-2026-000001',
-        amount: Decimal.parse('1400.00'),
-        paymentChannel: 'VIRTUAL_IBAN',
-        settlementStatus: 'SETTLED',
-        description: 'Eylül 2026 Aidatı Sanal IBAN Otomatik Eşleşme',
-        paymentDate: DateTime.now().subtract(const Duration(days: 2)),
-        createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      PaymentEntryDto(
-        id: 2,
-        siteId: effectiveSiteId,
-        unitId: 'd-14',
-        unitLabel: 'A Blok D:14',
-        payerName: 'Kerem Yılmaz',
-        payerRole: 'TENANT',
-        receiptNumber: 'TAH-2026-000002',
-        amount: Decimal.parse('2500.00'),
-        paymentChannel: 'BANK_STATEMENT',
-        settlementStatus: 'SETTLED',
-        description: 'Asansör Revizyon ve Demirbaş Katkı Payı [Kira Mahsubu]',
-        paymentDate: DateTime.now().subtract(const Duration(days: 1)),
-        createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      PaymentEntryDto(
-        id: 3,
-        siteId: effectiveSiteId,
-        unitId: 'd-14',
-        unitLabel: 'A Blok D:14',
-        payerName: 'Site Yönetimi',
-        payerRole: 'OWNER',
-        receiptNumber: 'TAH-2026-000003',
-        amount: Decimal.parse('500.00'),
-        paymentChannel: 'INTER_LEDGER',
-        settlementStatus: 'SETTLED',
-        description: 'Avans Bakiyesinden Demirbaş Borcuna Virman',
-        paymentDate: DateTime.now(),
-        createdAt: DateTime.now(),
-      ),
-    ];
+    if (isTestMode) {
+      final mockEntries = [
+        PaymentEntryDto(
+          id: 1,
+          siteId: effectiveSiteId,
+          unitId: 'd-14',
+          unitLabel: 'A Blok D:14',
+          payerName: 'Ahmet Yılmaz',
+          payerRole: 'OWNER',
+          receiptNumber: 'TAH-2026-000001',
+          amount: Decimal.parse('1400.00'),
+          paymentChannel: 'VIRTUAL_IBAN',
+          settlementStatus: 'SETTLED',
+          description: 'Eylül 2026 Aidatı Sanal IBAN Otomatik Eşleşme',
+          paymentDate: DateTime.now().subtract(const Duration(days: 2)),
+          createdAt: DateTime.now().subtract(const Duration(days: 2)),
+        ),
+        PaymentEntryDto(
+          id: 2,
+          siteId: effectiveSiteId,
+          unitId: 'd-14',
+          unitLabel: 'A Blok D:14',
+          payerName: 'Kerem Yılmaz',
+          payerRole: 'TENANT',
+          receiptNumber: 'TAH-2026-000002',
+          amount: Decimal.parse('2500.00'),
+          paymentChannel: 'BANK_STATEMENT',
+          settlementStatus: 'SETTLED',
+          description: 'Asansör Revizyon ve Demirbaş Katkı Payı [Kira Mahsubu]',
+          paymentDate: DateTime.now().subtract(const Duration(days: 1)),
+          createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        ),
+        PaymentEntryDto(
+          id: 3,
+          siteId: effectiveSiteId,
+          unitId: 'd-14',
+          unitLabel: 'A Blok D:14',
+          payerName: 'Site Yönetimi',
+          payerRole: 'OWNER',
+          receiptNumber: 'TAH-2026-000003',
+          amount: Decimal.parse('500.00'),
+          paymentChannel: 'INTER_LEDGER',
+          settlementStatus: 'SETTLED',
+          description: 'Avans Bakiyesinden Demirbaş Borcuna Virman',
+          paymentDate: DateTime.now(),
+          createdAt: DateTime.now(),
+        ),
+      ];
+
+      _paymentStream = PaymentStreamResponseDto(
+        entries: mockEntries,
+        totalVolume: Decimal.parse('4400.00'),
+        settledVolume: Decimal.parse('4400.00'),
+        unmatchedVolume: Decimal.zero,
+        totalCount: 3,
+      );
+      _isPaymentStreamLoading = false;
+      notifyListeners();
+      return _paymentStream!;
+    }
 
     _paymentStream = PaymentStreamResponseDto(
-      entries: mockEntries,
-      totalVolume: Decimal.parse('4400.00'),
-      settledVolume: Decimal.parse('4400.00'),
+      entries: const [],
+      totalVolume: Decimal.zero,
+      settledVolume: Decimal.zero,
       unmatchedVolume: Decimal.zero,
-      totalCount: mockEntries.length,
+      totalCount: 0,
     );
     _isPaymentStreamLoading = false;
     notifyListeners();
@@ -4396,7 +4413,60 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<CapitalProjectItem> _getMockCapitalProjects() {
+  Future<List<CapitalProjectItem>> fetchCapitalProjects({String? siteId}) async {
+    _isLoadingCapitalProjects = true;
+    _capitalProjectError = null;
+    notifyListeners();
+
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
+
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final uri = Uri.http('$host:8080', '/api/v1/capital-projects', {'site_id': effectiveSiteId});
+        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200) {
+          final rawList = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+          _capitalProjects = rawList.map((e) => CapitalProjectItem.fromJson(e as Map<String, dynamic>)).toList();
+          if (_capitalProjects.isNotEmpty) {
+            _activeCapitalProject = _capitalProjects.first;
+            await selectCapitalProject(_activeCapitalProject!);
+          } else {
+            _activeCapitalProject = null;
+          }
+          _isLoadingCapitalProjects = false;
+          notifyListeners();
+          return _capitalProjects;
+        }
+      } catch (e) {
+        debugPrint('fetchCapitalProjects error: $e');
+      }
+    }
+
+    if (!isTestMode) {
+      _capitalProjects = [];
+      _activeCapitalProject = null;
+      _capitalInstallments = [];
+      _capitalDisbursements = [];
+      _unitCapitalShares = [];
+      _isLoadingCapitalProjects = false;
+      notifyListeners();
+      return _capitalProjects;
+    }
+
+    _capitalProjects = _getTestFixtureCapitalProjects();
+    if (_capitalProjects.isNotEmpty) {
+      _activeCapitalProject = _capitalProjects.first;
+      _capitalInstallments = _getTestFixtureCapitalInstallments(_activeCapitalProject!.id);
+      _unitCapitalShares = _getTestFixtureUnitCapitalShares(_activeCapitalProject!.id);
+      _capitalDisbursements = _getTestFixtureCapitalDisbursements(_activeCapitalProject!.id);
+    }
+    _isLoadingCapitalProjects = false;
+    notifyListeners();
+    return _capitalProjects;
+  }
+
+  List<CapitalProjectItem> _getTestFixtureCapitalProjects() {
     return [
       CapitalProjectItem(
         id: 'cproj-1',
@@ -4423,7 +4493,7 @@ class DashboardController extends ChangeNotifier {
     ];
   }
 
-  List<CapitalProjectInstallmentItem> _getMockCapitalInstallments(String projectId) {
+  List<CapitalProjectInstallmentItem> _getTestFixtureCapitalInstallments(String projectId) {
     return [
       CapitalProjectInstallmentItem(
         id: 'cinst-1',
@@ -4470,33 +4540,32 @@ class DashboardController extends ChangeNotifier {
     ];
   }
 
-  List<CapitalContractorDisbursementItem> _getMockCapitalDisbursements(String projectId) {
+  List<CapitalContractorDisbursementItem> _getTestFixtureCapitalDisbursements(String projectId) {
     return [
       CapitalContractorDisbursementItem(
         id: 'cdisb-1',
         projectId: projectId,
         milestoneName: '1. Hakediş: Halat ve Pano Değişimi',
-        invoiceNumber: 'FTR-2026-0089',
+        invoiceNumber: 'FAT-2026-089',
         amount: Decimal.parse('40000.00'),
-        disbursementDate: DateTime(2026, 9, 20),
+        disbursementDate: DateTime(2026, 9, 2),
         recipientName: 'Schindler & Doğan Asansör Sanayi',
         recipientIban: 'TR560006200000012345678901',
-        paymentReference: 'CPROJ-1-HK1',
+        paymentReference: 'REF-HAKEDIS-01',
         disbursementMethod: 'BANK_TRANSFER',
-        notes: 'Halat ve kumanda paneli montaj tutanağı onaylandı',
-        createdAt: DateTime(2026, 9, 20),
+        notes: 'Malzeme temini ve avans ödemesi',
+        createdAt: DateTime(2026, 9, 2),
       ),
     ];
   }
 
-  List<UnitCapitalShareItem> _getMockUnitCapitalShares(String projectId) {
+  List<UnitCapitalShareItem> _getTestFixtureUnitCapitalShares(String projectId) {
     return [
       UnitCapitalShareItem(
-        unitId: 'd-1',
+        unitId: 'unit-1',
         block: 'A',
         unitNumber: 1,
         ownerName: 'Ali Kaya',
-        ownerPhone: '0532 111 22 33',
         landShare: 24,
         totalProjectShare: Decimal.parse('10000.00'),
         totalAccrued: Decimal.parse('5000.00'),
@@ -4505,11 +4574,10 @@ class DashboardController extends ChangeNotifier {
         isSettled: true,
       ),
       UnitCapitalShareItem(
-        unitId: 'd-2',
+        unitId: 'unit-2',
         block: 'A',
         unitNumber: 2,
-        ownerName: 'Fatma Şahin',
-        ownerPhone: '0533 222 33 44',
+        ownerName: 'Mehmet Demir',
         landShare: 24,
         totalProjectShare: Decimal.parse('10000.00'),
         totalAccrued: Decimal.parse('5000.00'),
@@ -4518,61 +4586,18 @@ class DashboardController extends ChangeNotifier {
         isSettled: false,
       ),
       UnitCapitalShareItem(
-        unitId: 'd-14',
-        block: 'A',
-        unitNumber: 14,
+        unitId: 'unit-3',
+        block: 'B',
+        unitNumber: 1,
         ownerName: 'Ahmet Yılmaz',
-        ownerPhone: '0555 123 45 67',
         landShare: 24,
         totalProjectShare: Decimal.parse('10000.00'),
         totalAccrued: Decimal.parse('5000.00'),
-        totalPaid: Decimal.parse('5000.00'),
-        remainingDebt: Decimal.zero,
-        isSettled: true,
+        totalPaid: Decimal.zero,
+        remainingDebt: Decimal.parse('5000.00'),
+        isSettled: false,
       ),
     ];
-  }
-
-  Future<List<CapitalProjectItem>> fetchCapitalProjects({String? siteId}) async {
-    _isLoadingCapitalProjects = true;
-    _capitalProjectError = null;
-    notifyListeners();
-
-    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
-
-    if (!isTestMode) {
-      try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-        final uri = Uri.http('$host:8080', '/api/v1/capital-projects', {'site_id': effectiveSiteId});
-        final response = await http.get(uri).timeout(const Duration(seconds: 4));
-        if (response.statusCode == 200) {
-          final rawList = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
-          _capitalProjects = rawList.map((e) => CapitalProjectItem.fromJson(e as Map<String, dynamic>)).toList();
-          if (_capitalProjects.isNotEmpty) {
-            _activeCapitalProject = _capitalProjects.first;
-            await selectCapitalProject(_activeCapitalProject!);
-          } else {
-            _activeCapitalProject = null;
-          }
-          _isLoadingCapitalProjects = false;
-          notifyListeners();
-          return _capitalProjects;
-        }
-      } catch (e) {
-        debugPrint('fetchCapitalProjects error: $e');
-      }
-    }
-
-    _capitalProjects = _getMockCapitalProjects();
-    if (_capitalProjects.isNotEmpty) {
-      _activeCapitalProject = _capitalProjects.first;
-      _capitalInstallments = _getMockCapitalInstallments(_activeCapitalProject!.id);
-      _capitalDisbursements = _getMockCapitalDisbursements(_activeCapitalProject!.id);
-      _unitCapitalShares = _getMockUnitCapitalShares(_activeCapitalProject!.id);
-    }
-    _isLoadingCapitalProjects = false;
-    notifyListeners();
-    return _capitalProjects;
   }
 
   Future<void> selectCapitalProject(CapitalProjectItem project) async {
@@ -4602,7 +4627,7 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
-    _capitalInstallments = _getMockCapitalInstallments(projectId);
+    _capitalInstallments = isTestMode ? _getTestFixtureCapitalInstallments(projectId) : [];
     notifyListeners();
     return _capitalInstallments;
   }
@@ -4624,7 +4649,7 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
-    _capitalDisbursements = _getMockCapitalDisbursements(projectId);
+    _capitalDisbursements = isTestMode ? _getTestFixtureCapitalDisbursements(projectId) : [];
     notifyListeners();
     return _capitalDisbursements;
   }
@@ -4646,7 +4671,7 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
-    _unitCapitalShares = _getMockUnitCapitalShares(projectId);
+    _unitCapitalShares = isTestMode ? _getTestFixtureUnitCapitalShares(projectId) : [];
     notifyListeners();
     return _unitCapitalShares;
   }
@@ -4777,7 +4802,11 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
-    // Mock fallback
+    if (!isTestMode) {
+      return {'success': false, 'message': 'Bağlantı hatası: Taksit tahakkuk ettirilemedi.'};
+    }
+
+    // Test mode fallback
     final idx = _capitalInstallments.indexWhere((i) => i.projectId == projectId && i.installmentNumber == installmentNumber);
     if (idx != -1) {
       final old = _capitalInstallments[idx];

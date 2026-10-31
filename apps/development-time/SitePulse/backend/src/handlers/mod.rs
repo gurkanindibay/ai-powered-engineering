@@ -254,31 +254,80 @@ pub async fn get_resident_dashboard(
     let calc_service = DuesCalculationService::new();
     let mut inner = state.inner.write().await;
 
-    let unit = inner
-        .units
-        .iter()
-        .find(|u| u.id == unit_id)
-        .cloned()
-        .unwrap_or_else(|| {
-            let default_viban = VirtualIbanService::generate_virtual_iban(
-                VirtualIbanService::KUVEYT_TURK_BANK_CODE,
-                "site-1",
-                "A",
-                14,
-            );
-            IndependentUnit {
-                id: unit_id.clone(),
-                site_id: "site-1".to_string(),
-                block_id: "A".to_string(),
-                unit_number: 14,
-                floor: 4,
-                land_share: 24,
-                owner_user_id: None,
-                tenant_user_id: None,
-                virtual_iban: Some(default_viban),
-                house_type: Some("2+1".to_string()),
+    let unit_opt = if let Some(u) = inner.units.iter().find(|u| u.id == unit_id || crate::db::parse_id_to_i64(&u.id) == crate::db::parse_id_to_i64(&unit_id)).cloned() {
+        Some(u)
+    } else if let Some(ref pool) = state.pool {
+        if let Ok(client) = pool.get().await {
+            let num_id = crate::db::parse_id_to_i64(&unit_id).unwrap_or(0);
+            if let Ok(Some(row)) = client.query_opt(
+                "SELECT u.id, u.site_id, COALESCE(b.block_name, 'A Blok'), u.unit_number, u.floor, u.land_share, u.owner_person_id, u.tenant_person_id, u.virtual_iban, u.house_type FROM units u LEFT JOIN blocks b ON u.block_id = b.id WHERE u.id = $1 OR u.id::text = $2",
+                &[&num_id, &unit_id],
+            ).await {
+                let u_id: i64 = row.get(0);
+                let s_id: Option<i64> = row.get(1);
+                let b_name: String = row.get(2);
+                let u_num: i32 = row.get(3);
+                let floor: i32 = row.get(4);
+                let land_share: i32 = row.get(5);
+                let o_pid: Option<i64> = row.get(6);
+                let t_pid: Option<i64> = row.get(7);
+                let v_iban: Option<String> = row.get(8);
+                let h_type: Option<String> = row.get(9);
+                Some(IndependentUnit {
+                    id: u_id.to_string(),
+                    site_id: s_id.map(|s| s.to_string()).unwrap_or_else(|| "1".to_string()),
+                    block_id: b_name,
+                    unit_number: u_num,
+                    floor,
+                    land_share,
+                    owner_user_id: o_pid.map(|p| p.to_string()),
+                    tenant_user_id: t_pid.map(|p| p.to_string()),
+                    virtual_iban: v_iban,
+                    house_type: h_type,
+                })
+            } else {
+                None
             }
-        });
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let unit = match unit_opt {
+        Some(u) => u,
+        None => {
+            if crate::state::AppStateInner::should_seed_test_fixtures() {
+                let default_viban = VirtualIbanService::generate_virtual_iban(
+                    VirtualIbanService::KUVEYT_TURK_BANK_CODE,
+                    "site-1",
+                    "A",
+                    14,
+                );
+                IndependentUnit {
+                    id: unit_id.clone(),
+                    site_id: "site-1".to_string(),
+                    block_id: "A".to_string(),
+                    unit_number: 14,
+                    floor: 4,
+                    land_share: 24,
+                    owner_user_id: None,
+                    tenant_user_id: None,
+                    virtual_iban: Some(default_viban),
+                    house_type: Some("2+1".to_string()),
+                }
+            } else {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({
+                        "status": "ERROR",
+                        "message": format!("Unit '{}' not found in database", unit_id)
+                    })),
+                ).into_response();
+            }
+        }
+    };
 
     // Automatically apply available advance payments against any unpaid dues (FIFO)
     apply_advance_payments_offset(&mut inner, Some(&unit_id));
@@ -381,7 +430,7 @@ pub async fn get_resident_dashboard(
         transactions,
     };
 
-    (StatusCode::OK, Json(response))
+    (StatusCode::OK, Json(response)).into_response()
 }
 
 // 2. Auth Handlers
@@ -1110,38 +1159,36 @@ pub async fn confirm_reconciliation(
             Vec::new()
         };
 
-        tokio::spawn(async move {
-            for (txn_id, due_id, unit_id, amt, ref_no, desc) in matches_to_save {
-                let _ = crate::db::save_collection_transaction(
-                    &pool,
-                    &txn_id,
-                    due_id.as_deref(),
-                    unit_id.as_deref(),
-                    "BANK_STATEMENT",
-                    amt,
-                    ref_no.as_deref(),
-                    Some(&desc),
-                ).await;
-            }
-            for d_id in cleared {
-                let _ = crate::db::update_due_liability(&pool, &d_id, "PAID", Decimal::ZERO).await;
-            }
-            for (match_id, status_code, notes) in confirmed_status_updates {
-                let _ = crate::db::update_reconciliation_status(
-                    &pool,
-                    &match_id,
-                    "Approved",
-                    &status_code,
-                    notes.as_deref(),
-                ).await;
-            }
-            for (uid, bal) in updated_advances {
-                let _ = crate::db::save_advance_balance(&pool, &uid, bal).await;
-            }
-            for (uid, iban) in remembered_to_save {
-                let _ = crate::db::save_remembered_sender_iban(&pool, &uid, &iban, None, None).await;
-            }
-        });
+        for (txn_id, due_id, unit_id, amt, ref_no, desc) in matches_to_save {
+            let _ = crate::db::save_collection_transaction(
+                &pool,
+                &txn_id,
+                due_id.as_deref(),
+                unit_id.as_deref(),
+                "BANK_STATEMENT",
+                amt,
+                ref_no.as_deref(),
+                Some(&desc),
+            ).await;
+        }
+        for d_id in cleared {
+            let _ = crate::db::update_due_liability(&pool, &d_id, "PAID", Decimal::ZERO).await;
+        }
+        for (match_id, status_code, notes) in confirmed_status_updates {
+            let _ = crate::db::update_reconciliation_status(
+                &pool,
+                &match_id,
+                "Approved",
+                &status_code,
+                notes.as_deref(),
+            ).await;
+        }
+        for (uid, bal) in updated_advances {
+            let _ = crate::db::save_advance_balance(&pool, &uid, bal).await;
+        }
+        for (uid, iban) in remembered_to_save {
+            let _ = crate::db::save_remembered_sender_iban(&pool, &uid, &iban, None, None).await;
+        }
     }
 
     Ok((
@@ -1177,13 +1224,7 @@ pub async fn remember_sender_iban(
     }
 
     if let Some(ref pool) = state.pool {
-        let pool = pool.clone();
-        let u_id = payload.unit_id.clone();
-        let s_iban = clean.clone();
-        let s_name = payload.sender_name.clone();
-        tokio::spawn(async move {
-            let _ = crate::db::save_remembered_sender_iban(&pool, &u_id, &s_iban, s_name.as_deref(), None).await;
-        });
+        let _ = crate::db::save_remembered_sender_iban(pool, &payload.unit_id, &clean, payload.sender_name.as_deref(), None).await;
     }
 
     Ok(Json(RememberSenderIbanResponse {
@@ -1272,14 +1313,7 @@ pub async fn add_unit_sender_iban(
     }
 
     if let Some(ref pool) = state.pool {
-        let pool = pool.clone();
-        let u_id = unit_id.clone();
-        let s_iban = clean.clone();
-        let lbl = payload.label.clone();
-        let bnk = payload.bank_name.clone();
-        tokio::spawn(async move {
-            let _ = crate::db::save_remembered_sender_iban(&pool, &u_id, &s_iban, lbl.as_deref(), bnk.as_deref()).await;
-        });
+        let _ = crate::db::save_remembered_sender_iban(pool, &unit_id, &clean, payload.label.as_deref(), payload.bank_name.as_deref()).await;
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -1301,11 +1335,7 @@ pub async fn delete_unit_sender_iban(
     }
 
     if let Some(ref pool) = state.pool {
-        let pool = pool.clone();
-        let s_iban = clean.clone();
-        tokio::spawn(async move {
-            let _ = crate::db::delete_remembered_sender_iban(&pool, &s_iban).await;
-        });
+        let _ = crate::db::delete_remembered_sender_iban(pool, &clean).await;
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -1333,12 +1363,7 @@ pub async fn update_unit_payer_names(
     }
 
     if let Some(ref pool) = state.pool {
-        let pool = pool.clone();
-        let u_id = unit_id.clone();
-        let names = cleaned_names.clone();
-        tokio::spawn(async move {
-            let _ = crate::db::save_unit_payer_names(&pool, &u_id, &names).await;
-        });
+        let _ = crate::db::save_unit_payer_names(pool, &unit_id, &cleaned_names).await;
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -1688,33 +1713,27 @@ pub async fn handle_bank_incoming_webhook(
 
     // Persist to PostgreSQL database (STORY-05-01 / Financial Ledger)
     if let Some(ref pool) = state.pool {
-        let pool = pool.clone();
         let txn_id = format!("txn-{}", Uuid::new_v4().simple());
-        let due_id = target_due_id.clone();
-        let unit_id = unit.id.clone();
-        let amount = payload.amount;
         let ref_code = payload.transaction_id.clone();
-        let desc = payload.description.clone().unwrap_or_else(|| format!("FAST Bank Transfer: {}", unit_id));
-        tokio::spawn(async move {
-            let _ = crate::db::save_collection_transaction(
-                &pool,
-                &txn_id,
-                due_id.as_deref(),
-                Some(&unit_id),
-                "BANK_TRANSFER",
-                amount,
-                Some(&ref_code),
-                Some(&desc),
+        let desc = payload.description.clone().unwrap_or_else(|| format!("FAST Bank Transfer: {}", unit.id));
+        let _ = crate::db::save_collection_transaction(
+            pool,
+            &txn_id,
+            target_due_id.as_deref(),
+            Some(&unit.id),
+            "BANK_TRANSFER",
+            payload.amount,
+            Some(&ref_code),
+            Some(&desc),
+        ).await;
+        if let Some(ref d_id) = target_due_id {
+            let _ = crate::db::update_due_liability(
+                pool,
+                d_id,
+                "PAID",
+                payload.amount,
             ).await;
-            if let Some(ref d_id) = due_id {
-                let _ = crate::db::update_due_liability(
-                    &pool,
-                    d_id,
-                    "PAID",
-                    amount,
-                ).await;
-            }
-        });
+        }
     }
 
     // 4. Calculate remaining debt
@@ -1876,11 +1895,7 @@ pub async fn create_dues_period(
     inner.dues_periods.push(new_period.clone());
 
     if let Some(ref pool) = state.pool {
-        let pool = pool.clone();
-        let p_save = new_period.clone();
-        tokio::spawn(async move {
-            let _ = crate::db::save_dues_period(&pool, &p_save).await;
-        });
+        let _ = crate::db::save_dues_period(pool, &new_period).await;
     }
 
     Ok((StatusCode::CREATED, Json(new_period)))
@@ -1924,11 +1939,7 @@ pub async fn accrue_monthly_dues(
         };
         inner.dues_periods.push(period_record.clone());
         if let Some(ref pool) = state.pool {
-            let pool = pool.clone();
-            let p_save = period_record.clone();
-            tokio::spawn(async move {
-                let _ = crate::db::save_dues_period(&pool, &p_save).await;
-            });
+            let _ = crate::db::save_dues_period(pool, &period_record).await;
         }
     }
 
@@ -1974,18 +1985,15 @@ pub async fn accrue_monthly_dues(
     }
 
     if let Some(ref pool) = state.pool {
-        let pool = pool.clone();
         let dues_to_save: Vec<DuesLiability> = inner
             .dues
             .iter()
             .filter(|d| d.period == payload.period)
             .cloned()
             .collect();
-        tokio::spawn(async move {
-            for due in dues_to_save {
-                let _ = crate::db::save_due_liability(&pool, &due).await;
-            }
-        });
+        for due in &dues_to_save {
+            let _ = crate::db::save_due_liability(pool, due).await;
+        }
     }
 
     if newly_accrued_units_count == 0 {
@@ -2172,61 +2180,59 @@ pub async fn record_homeowner_payment(
         let p_method = payload.payment_method.clone();
         let is_card = p_method.to_uppercase().contains("CARD") || p_method.to_uppercase().contains("KART");
 
-        tokio::spawn(async move {
-            let _ = crate::db::save_homeowner_payment(&pool, &rec).await;
-            let _ = crate::db::save_advance_balance(&pool, &unit_id, adv_bal).await;
+        let _ = crate::db::save_homeowner_payment(&pool, &rec).await;
+        let _ = crate::db::save_advance_balance(&pool, &unit_id, adv_bal).await;
 
-            let r_match = ReconciliationMatch {
-                match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
-                transaction: BankTransactionItem {
-                    transaction_id: ref_code.clone().unwrap_or_else(|| rec.id.clone()),
-                    date: Utc::now().date_naive(),
-                    amount,
-                    currency: "TRY".to_string(),
-                    description: note.clone().unwrap_or_else(|| {
-                        if is_card {
-                            "Kredi Kartı ile Aidat Ödemesi".to_string()
-                        } else {
-                            format!("{} ile Aidat Ödemesi", p_method)
-                        }
-                    }),
-                    sender_name: res_name_clone.clone(),
-                    sender_iban: None,
-                    reference_no: Some(receipt_id_clone),
-                },
-                matched_unit_id: Some(rec.unit_id.clone()),
-                matched_block: Some(rec.block_id.clone()),
-                matched_unit_number: Some(rec.unit_number),
-                matched_resident_name: res_name_clone,
-                confidence_score: 100,
-                matched_due_id: None,
-                outstanding_balance: Some(cleared_debt),
-                amount_matches_balance: cleared_debt == amount,
-                status: ReconciliationStatus::Approved,
-                status_code: ReconciliationStatus::Approved.as_str().to_string(),
-                notes: Some(msg_clone),
-            };
-            let _ = crate::db::save_reconciliation_match(&pool, &r_match).await;
-
-            let _ = crate::db::save_collection_transaction(
-                &pool,
-                &txn_id,
-                matched_due_id.as_deref(),
-                Some(&unit_id),
-                "ONLINE_PAYMENT",
+        let r_match = ReconciliationMatch {
+            match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
+            transaction: BankTransactionItem {
+                transaction_id: ref_code.clone().unwrap_or_else(|| rec.id.clone()),
+                date: Utc::now().date_naive(),
                 amount,
-                ref_code.as_deref(),
-                note.as_deref(),
+                currency: "TRY".to_string(),
+                description: note.clone().unwrap_or_else(|| {
+                    if is_card {
+                        "Kredi Kartı ile Aidat Ödemesi".to_string()
+                    } else {
+                        format!("{} ile Aidat Ödemesi", p_method)
+                    }
+                }),
+                sender_name: res_name_clone.clone(),
+                sender_iban: None,
+                reference_no: Some(receipt_id_clone),
+            },
+            matched_unit_id: Some(rec.unit_id.clone()),
+            matched_block: Some(rec.block_id.clone()),
+            matched_unit_number: Some(rec.unit_number),
+            matched_resident_name: res_name_clone,
+            confidence_score: 100,
+            matched_due_id: None,
+            outstanding_balance: Some(cleared_debt),
+            amount_matches_balance: cleared_debt == amount,
+            status: ReconciliationStatus::Approved,
+            status_code: ReconciliationStatus::Approved.as_str().to_string(),
+            notes: Some(msg_clone),
+        };
+        let _ = crate::db::save_reconciliation_match(&pool, &r_match).await;
+
+        let _ = crate::db::save_collection_transaction(
+            &pool,
+            &txn_id,
+            matched_due_id.as_deref(),
+            Some(&unit_id),
+            "ONLINE_PAYMENT",
+            amount,
+            ref_code.as_deref(),
+            note.as_deref(),
+        ).await;
+        if let Some(ref d_id) = matched_due_id {
+            let _ = crate::db::update_due_liability(
+                &pool,
+                d_id,
+                "PAID",
+                amount,
             ).await;
-            if let Some(ref d_id) = matched_due_id {
-                let _ = crate::db::update_due_liability(
-                    &pool,
-                    d_id,
-                    "PAID",
-                    amount,
-                ).await;
-            }
-        });
+        }
     }
 
     // Also record in reconciliation_queue as an approved digital receipt
@@ -2379,14 +2385,12 @@ pub async fn match_all_homeowner_payments(
             .iter()
             .map(|uid| (uid.clone(), inner.advance_payments.get(uid).copied().unwrap_or(Decimal::ZERO)))
             .collect();
-        tokio::spawn(async move {
-            for (pid, st, clr, adv) in updated_records {
-                let _ = crate::db::update_homeowner_payment_match(&pool, &pid, &st, clr, adv).await;
-            }
-            for (uid, bal) in unit_advances {
-                let _ = crate::db::save_advance_balance(&pool, &uid, bal).await;
-            }
-        });
+        for (pid, st, clr, adv) in updated_records {
+            let _ = crate::db::update_homeowner_payment_match(&pool, &pid, &st, clr, adv).await;
+        }
+        for (uid, bal) in unit_advances {
+            let _ = crate::db::save_advance_balance(&pool, &uid, bal).await;
+        }
     }
 
     Ok((
@@ -3009,11 +3013,8 @@ pub async fn provision_site_units(
     }
 
     if let Some(ref pool) = state.pool {
-        let pool = pool.clone();
         let snapshot = inner.clone();
-        tokio::spawn(async move {
-            let _ = crate::db::sync_all_in_memory_to_db(&pool, &snapshot).await;
-        });
+        let _ = crate::db::sync_all_in_memory_to_db(pool, &snapshot).await;
     }
 
     let total_volume = monthly_dues * Decimal::from(units_count);

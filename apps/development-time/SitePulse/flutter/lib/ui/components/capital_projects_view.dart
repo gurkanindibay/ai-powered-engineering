@@ -24,7 +24,11 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
   void initState() {
     super.initState();
     if (widget.controller.capitalProjects.isEmpty) {
-      widget.controller.fetchCapitalProjects();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.controller.capitalProjects.isEmpty) {
+          widget.controller.fetchCapitalProjects();
+        }
+      });
     }
   }
 

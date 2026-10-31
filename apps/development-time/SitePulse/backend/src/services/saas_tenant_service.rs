@@ -103,26 +103,19 @@ impl SaasTenantService {
         }
 
         if let Some(ref pool) = self.state.pool {
-            let pool = pool.clone();
-            let s = new_site.clone();
-            let u = admin_user.clone();
-            let blist = blocks_list.clone();
-            let sid = site_id.clone();
-            tokio::spawn(async move {
-                let _ = crate::db::save_site(&pool, &s).await;
-                let _ = crate::db::save_user(&pool, &u).await;
-                if let Ok(client) = pool.get().await {
-                    let numeric_site = crate::db::parse_id_to_i64(&sid).unwrap_or(1);
-                    for bname in blist {
-                        let _ = client
-                            .execute(
-                                "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10)",
-                                &[&numeric_site, &bname],
-                            )
-                            .await;
-                    }
+            let _ = crate::db::save_site(pool, &new_site).await;
+            let _ = crate::db::save_user(pool, &admin_user).await;
+            if let Ok(client) = pool.get().await {
+                let numeric_site = crate::db::parse_id_to_i64(&site_id).unwrap_or(1);
+                for bname in &blocks_list {
+                    let _ = client
+                        .execute(
+                            "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10) ON CONFLICT DO NOTHING",
+                            &[&numeric_site, bname],
+                        )
+                        .await;
                 }
-            });
+            }
         }
 
         Ok(SiteRegistrationResponse {
@@ -142,6 +135,92 @@ impl SaasTenantService {
     }
 
     pub async fn get_all_sites(&self) -> Vec<SaasSiteSummaryDto> {
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                if let Ok(rows) = client
+                    .query(
+                        "SELECT s.id, s.name, s.slug, s.address, s.status, s.plan_type, s.license_end_date FROM sites s ORDER BY s.id ASC",
+                        &[],
+                    )
+                    .await
+                {
+                    let mut result = Vec::new();
+                    for row in rows {
+                        let id: i64 = row.get(0);
+                        let name: String = row.get(1);
+                        let slug: String = row.get::<_, Option<String>>(2).unwrap_or_else(|| id.to_string());
+                        let address: String = row.get::<_, Option<String>>(3).unwrap_or_default();
+                        let status: String = row.get::<_, Option<String>>(4).unwrap_or_else(|| "ACTIVE".to_string());
+                        let plan_type: String = row.get::<_, Option<String>>(5).unwrap_or_else(|| "STANDARD".to_string());
+                        let license_end_date: Option<chrono::NaiveDate> = row.get(6);
+
+                        let manager_row = client
+                            .query_opt(
+                                "SELECT full_name, email, phone FROM users WHERE (site_id = $1 OR site_id::text = $2) AND role = 'SITE_MANAGER' ORDER BY id ASC LIMIT 1",
+                                &[&id, &id.to_string()],
+                            )
+                            .await
+                            .ok()
+                            .flatten();
+
+                        let (primary_manager_name, primary_manager_email, primary_manager_phone) = match manager_row {
+                            Some(m_row) => (
+                                m_row.get::<_, String>(0),
+                                m_row.get::<_, String>(1),
+                                m_row.get::<_, Option<String>>(2).unwrap_or_else(|| "-".to_string()),
+                            ),
+                            None => ("Unassigned".to_string(), "-".to_string(), "-".to_string()),
+                        };
+
+                        let unit_count_row = client
+                            .query_one("SELECT COUNT(*) FROM units WHERE site_id = $1", &[&id])
+                            .await
+                            .ok();
+                        let total_units: i64 = unit_count_row.map(|r| r.get(0)).unwrap_or(0);
+
+                        let dues_volume_row = client
+                            .query_one(
+                                "SELECT COALESCE(SUM(principal_amount), 0) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id = $1",
+                                &[&id],
+                            )
+                            .await
+                            .ok();
+                        let monthly_dues_volume: Decimal = dues_volume_row
+                            .map(|r| r.get(0))
+                            .unwrap_or(Decimal::ZERO);
+
+                        let block_rows = client
+                            .query("SELECT block_name FROM blocks WHERE site_id = $1 ORDER BY id ASC", &[&id])
+                            .await
+                            .unwrap_or_default();
+                        let mut blocks: Vec<String> = block_rows.iter().map(|r| r.get(0)).collect();
+                        if blocks.is_empty() {
+                            blocks = vec!["A Blok".to_string(), "B Blok".to_string()];
+                        }
+
+                        result.push(SaasSiteSummaryDto {
+                            site_id: id.to_string(),
+                            site_name: name,
+                            slug,
+                            address,
+                            status,
+                            plan_type,
+                            license_end_date: license_end_date.unwrap_or_else(|| chrono::Utc::now().date_naive() + chrono::Days::new(365)),
+                            total_units: total_units as i32,
+                            monthly_dues_volume,
+                            primary_manager_name,
+                            primary_manager_email,
+                            primary_manager_phone,
+                            blocks,
+                        });
+                    }
+                    if !result.is_empty() {
+                        return result;
+                    }
+                }
+            }
+        }
+
         let inner = self.state.inner.read().await;
         inner
             .sites
@@ -272,11 +351,10 @@ impl SaasTenantService {
         inner.users.retain(|u| (u.site_id != actual_site_id && crate::db::parse_id_to_i64(&u.site_id) != crate::db::parse_id_to_i64(&actual_site_id)) || u.role == Role::SaasAdmin);
 
         if let Some(ref pool) = self.state.pool {
-            let pool = pool.clone();
-            let s_id = site_id.to_string();
-            tokio::spawn(async move {
-                let _ = crate::db::delete_site(&pool, &s_id).await;
-            });
+            let _ = crate::db::delete_site(pool, site_id).await;
+            if actual_site_id != site_id {
+                let _ = crate::db::delete_site(pool, &actual_site_id).await;
+            }
         }
 
         Ok(())
@@ -408,31 +486,24 @@ impl SaasTenantService {
             .map(|d| d.principal_amount)
             .sum();
 
-        // Async PostgreSQL persistence
+        // Synchronous PostgreSQL persistence
         if let Some(ref pool) = self.state.pool {
-            let pool = pool.clone();
-            let s = updated_site.clone();
-            let u_opt = admin_user_to_save;
-            let blist = updated_blocks.clone();
-            let sid = actual_site_id.clone();
-            tokio::spawn(async move {
-                let _ = crate::db::save_site(&pool, &s).await;
-                if let Some(ref u) = u_opt {
-                    let _ = crate::db::save_user(&pool, u).await;
+            let _ = crate::db::save_site(pool, &updated_site).await;
+            if let Some(ref u) = admin_user_to_save {
+                let _ = crate::db::save_user(pool, u).await;
+            }
+            if let Ok(client) = pool.get().await {
+                let numeric_site = crate::db::parse_id_to_i64(&actual_site_id).unwrap_or(1);
+                let _ = client.execute("DELETE FROM blocks WHERE site_id = $1", &[&numeric_site]).await;
+                for bname in &updated_blocks {
+                    let _ = client
+                        .execute(
+                            "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10)",
+                            &[&numeric_site, bname],
+                        )
+                        .await;
                 }
-                if let Ok(client) = pool.get().await {
-                    let numeric_site = crate::db::parse_id_to_i64(&sid).unwrap_or(1);
-                    let _ = client.execute("DELETE FROM blocks WHERE site_id = $1", &[&numeric_site]).await;
-                    for bname in blist {
-                        let _ = client
-                            .execute(
-                                "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10)",
-                                &[&numeric_site, &bname],
-                            )
-                            .await;
-                    }
-                }
-            });
+            }
         }
 
         Ok(SaasSiteSummaryDto {
@@ -488,10 +559,7 @@ impl SaasTenantService {
         };
 
         if let Some(ref pool) = self.state.pool {
-            let pool = pool.clone();
-            tokio::spawn(async move {
-                let _ = crate::db::save_user(&pool, &updated_user).await;
-            });
+            let _ = crate::db::save_user(pool, &updated_user).await;
         }
 
         Ok(SiteAdminPasswordResetResponse {

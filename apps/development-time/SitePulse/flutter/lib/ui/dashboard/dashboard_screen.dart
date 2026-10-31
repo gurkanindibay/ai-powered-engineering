@@ -5741,7 +5741,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Default to first house type if available (e.g. 2+1 or 3+1)
     final houseTypes = widget.controller.houseTypes;
-    String? selectedHouseType = houseTypes.isNotEmpty ? houseTypes.first.typeName : null;
+    String? selectedHouseType = houseTypes.isNotEmpty ? houseTypes.first.typeName : '2+1';
     String selectedRole = 'OWNER';
     bool isResidentOwner = true;
     String ownerNotResidentOccupancy = 'VACANT'; // 'VACANT' or 'TENANT'

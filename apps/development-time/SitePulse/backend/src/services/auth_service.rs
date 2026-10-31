@@ -27,26 +27,22 @@ impl AuthService {
         }
 
         let email_norm = request.email.trim().to_lowercase();
-        let user_opt = {
-            let inner = self.state.inner.read().await;
-            inner
-                .users
-                .iter()
-                .find(|u| u.email.to_lowercase() == email_norm)
-                .cloned()
+        let user_from_db = if let Some(ref pool) = self.state.pool {
+            crate::db::get_user_by_email(pool, &email_norm).await.ok().flatten()
+        } else {
+            None
         };
 
-        let user = match user_opt {
+        let user = match user_from_db {
             Some(u) => u,
             None => {
-                if let Some(ref pool) = self.state.pool {
-                    match crate::db::get_user_by_email(pool, &email_norm).await {
-                        Ok(Some(u)) => u,
-                        _ => return Err("Invalid email or password (kullanıcı adı veya şifre hatalı).".to_string()),
-                    }
-                } else {
-                    return Err("Invalid email or password (kullanıcı adı veya şifre hatalı).".to_string());
-                }
+                let inner = self.state.inner.read().await;
+                inner
+                    .users
+                    .iter()
+                    .find(|u| u.email.to_lowercase() == email_norm)
+                    .cloned()
+                    .ok_or_else(|| "Invalid email or password (kullanıcı adı veya şifre hatalı).".to_string())?
             }
         };
 
@@ -176,11 +172,7 @@ impl AuthService {
         };
 
         if let Some(ref pool) = self.state.pool {
-            let pool = pool.clone();
-            let u = user.clone();
-            tokio::spawn(async move {
-                let _ = crate::db::save_user(&pool, &u).await;
-            });
+            let _ = crate::db::save_user(pool, &user).await;
         }
 
         Ok(create_auth_response(&user, "d-14"))
@@ -232,11 +224,7 @@ impl AuthService {
         inner.users.push(new_user.clone());
 
         if let Some(ref pool) = self.state.pool {
-            let pool = pool.clone();
-            let u = new_user.clone();
-            tokio::spawn(async move {
-                let _ = crate::db::save_user(&pool, &u).await;
-            });
+            let _ = crate::db::save_user(pool, &new_user).await;
         }
 
         Ok(create_auth_response(&new_user, "d-14"))
