@@ -527,23 +527,90 @@ impl SaasTenantService {
         &self,
         site_id: &str,
     ) -> Result<SiteAdminPasswordResetResponse, String> {
+        let temp_pass = generate_secure_temporary_password();
+        let password_hash = format!("ARGON2_HASH_{}", &temp_pass);
+
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                let numeric_site = crate::db::parse_id_to_i64(site_id).unwrap_or(0);
+                let site_row_opt = client
+                    .query_opt(
+                        "SELECT id, name FROM sites WHERE id = $1 OR id::text = $2",
+                        &[&numeric_site, &site_id],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                if let Some(srow) = site_row_opt {
+                    let s_id: i64 = srow.get(0);
+                    let s_name: String = srow.get(1);
+
+                    let user_row_opt = client
+                        .query_opt(
+                            "SELECT id, full_name, email FROM users WHERE (site_id = $1 OR site_id::text = $2) AND role = 'SITE_MANAGER' LIMIT 1",
+                            &[&s_id, &site_id],
+                        )
+                        .await
+                        .map_err(|e| e.to_string())?;
+
+                    if let Some(urow) = user_row_opt {
+                        let u_id: i64 = urow.get(0);
+                        let u_name: String = urow.get(1);
+                        let u_email: String = urow.get(2);
+
+                        client
+                            .execute(
+                                "UPDATE users SET password_hash = $1, must_change_password = true WHERE id = $2",
+                                &[&password_hash, &u_id],
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
+
+                        // Sync in-memory state
+                        let mut inner = self.state.inner.write().await;
+                        if let Some(user) = inner.users.iter_mut().find(|u| {
+                            u.id == u_id.to_string()
+                                || crate::db::parse_id_to_i64(&u.id) == Some(u_id)
+                                || u.email.to_lowercase() == u_email.to_lowercase()
+                        }) {
+                            user.password_hash = Some(password_hash.clone());
+                            user.must_change_password = true;
+                        }
+
+                        return Ok(SiteAdminPasswordResetResponse {
+                            site_id: s_id.to_string(),
+                            site_name: s_name,
+                            admin_user_id: u_id.to_string(),
+                            admin_full_name: u_name,
+                            admin_email: u_email,
+                            temporary_password: temp_pass,
+                            must_change_password: true,
+                            renewed_at: Utc::now(),
+                        });
+                    }
+                }
+            }
+        }
+
         let mut inner = self.state.inner.write().await;
 
         let site = inner
             .sites
             .iter()
-            .find(|s| s.id == site_id)
+            .find(|s| s.id == site_id || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(site_id))
             .ok_or_else(|| format!("Site with id '{}' not found", site_id))?
             .clone();
+
+        let actual_site_id = site.id.clone();
 
         let user_idx = inner
             .users
             .iter()
-            .position(|u| u.site_id == site_id && u.role == Role::SiteManager)
+            .position(|u| {
+                (u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id))
+                    && u.role == Role::SiteManager
+            })
             .ok_or_else(|| format!("No SiteManager found for site '{}'", site_id))?;
-
-        let temp_pass = generate_secure_temporary_password();
-        let password_hash = format!("ARGON2_HASH_{}", &temp_pass);
 
         let admin_user_id;
         let admin_full_name;

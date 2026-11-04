@@ -470,6 +470,18 @@ pub async fn register_password(
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
+pub async fn change_password(
+    State(state): State<AppState>,
+    Json(payload): Json<ChangePasswordRequest>,
+) -> Result<Json<AuthResponse>, (StatusCode, String)> {
+    let service = AuthService::new(state);
+    service
+        .change_password(payload)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
 #[derive(Deserialize)]
 pub struct ProfileQuery {
     pub user_id: Option<String>,

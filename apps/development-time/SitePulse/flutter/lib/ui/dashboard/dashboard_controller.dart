@@ -1808,12 +1808,15 @@ class DashboardController extends ChangeNotifier {
               }
             }
 
+            final mustChangePassword = userData['must_change_password'] == true;
+
             _userSession = _createSession(
               resolvedRole,
               AuthProvider.local,
               customName: fullName,
               customEmail: trimmedEmail,
               customPhone: phone,
+              mustChangePassword: mustChangePassword,
             );
             _isAuthenticated = true;
             _authMessage = 'Şifre ile başarıyla giriş yapıldı (${resolvedRole.displayName}).';
@@ -2131,13 +2134,36 @@ class DashboardController extends ChangeNotifier {
 
   /// Generates/renews a temporary management password for a site manager.
   /// Sets mustChangePassword and triggers credentials presentation dialog.
-  bool resetSiteManagerPassword(String siteId) {
+  Future<bool> resetSiteManagerPassword(String siteId) async {
     final index = _saasSites.indexWhere((s) => s.id == siteId);
     if (index == -1) return false;
     final site = _saasSites[index];
 
-    final randomPart = DateTime.now().millisecondsSinceEpoch.toString().substring(8);
-    final tempPassword = 'SP-$randomPart-PASS';
+    String tempPassword = 'SP-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}-PASS';
+
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/saas/sites/$siteId/reset-admin-password');
+        final response = await http.post(url).timeout(const Duration(seconds: 5));
+        if (response.statusCode == 200) {
+          final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+          if (data['temporary_password'] != null) {
+            tempPassword = data['temporary_password'].toString();
+          }
+        } else {
+          final err = utf8.decode(response.bodyBytes);
+          _authMessage = 'Şifre yenilenemedi: $err';
+          notifyListeners();
+          return false;
+        }
+      } catch (e) {
+        debugPrint('resetSiteManagerPassword remote sync error: $e');
+        _authMessage = 'Bağlantı hatası: Şifre yenilenemedi.';
+        notifyListeners();
+        return false;
+      }
+    }
 
     _provisionedCredentials = ProvisionedSiteCredentials(
       siteId: site.id,
@@ -2150,31 +2176,62 @@ class DashboardController extends ChangeNotifier {
     );
     _authMessage = '${site.name} yöneticisi için yeni geçici şifre üretildi.';
     notifyListeners();
+    return true;
+  }
 
-    if (!isTestMode) {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-      final url = Uri.parse('http://$host:8080/api/v1/saas/sites/$siteId/reset-admin-password');
-      http.post(url).then((response) {
-        if (response.statusCode == 200) {
-          final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-          if (data['temporary_password'] != null) {
-            _provisionedCredentials = ProvisionedSiteCredentials(
-              siteId: site.id,
-              siteName: site.name,
-              adminName: site.adminName,
-              adminEmail: site.adminEmail,
-              temporaryPassword: data['temporary_password'].toString(),
-              planType: site.planType,
-              isRenewal: true,
-            );
-            notifyListeners();
-          }
-        }
-      }).catchError((e) {
-        debugPrint('resetSiteManagerPassword remote sync notice: $e');
-      });
+  Future<bool> changePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    if (email.trim().isEmpty || currentPassword.trim().isEmpty || newPassword.trim().isEmpty) {
+      _authMessage = 'Lütfen tüm şifre alanlarını eksiksiz doldurunuz.';
+      notifyListeners();
+      return false;
     }
 
+    if (newPassword.trim().length < 6) {
+      _authMessage = 'Yeni şifre en az 6 karakter olmalıdır.';
+      notifyListeners();
+      return false;
+    }
+
+    if (!isTestMode) {
+      try {
+        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final url = Uri.parse('http://$host:8080/api/v1/auth/change-password');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'email': email.trim().toLowerCase(),
+            'current_password': currentPassword.trim(),
+            'new_password': newPassword.trim(),
+          }),
+        ).timeout(const Duration(seconds: 5));
+
+        if (response.statusCode == 200) {
+          _userSession = _userSession.copyWith(mustChangePassword: false);
+          _authMessage = 'Şifreniz başarıyla güncellendi.';
+          notifyListeners();
+          return true;
+        } else {
+          final err = utf8.decode(response.bodyBytes);
+          _authMessage = err.isNotEmpty ? err : 'Şifre değiştirilemedi.';
+          notifyListeners();
+          return false;
+        }
+      } catch (e) {
+        debugPrint('changePassword error: $e');
+        _authMessage = 'Bağlantı hatası: Şifre değiştirilemedi.';
+        notifyListeners();
+        return false;
+      }
+    }
+
+    _userSession = _userSession.copyWith(mustChangePassword: false);
+    _authMessage = 'Şifreniz başarıyla güncellendi (Test Modu).';
+    notifyListeners();
     return true;
   }
 
@@ -3957,6 +4014,7 @@ class DashboardController extends ChangeNotifier {
     String? customEmail,
     String? customPhone,
     String? avatarUrl,
+    bool mustChangePassword = false,
   }) {
     final List<PermissionScope> permissions;
     switch (role) {
@@ -4019,6 +4077,7 @@ class DashboardController extends ChangeNotifier {
       authProvider: provider,
       avatarUrl: avatarUrl,
       permissions: permissions,
+      mustChangePassword: mustChangePassword,
     );
   }
 

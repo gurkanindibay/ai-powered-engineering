@@ -53,6 +53,7 @@ class UserSession {
   final AuthProvider authProvider;
   final String? avatarUrl;
   final List<PermissionScope> permissions;
+  final bool mustChangePassword;
 
   const UserSession({
     required this.id,
@@ -65,6 +66,7 @@ class UserSession {
     required this.authProvider,
     this.avatarUrl,
     required this.permissions,
+    this.mustChangePassword = false,
   });
 
   UserSession copyWith({
@@ -78,6 +80,7 @@ class UserSession {
     AuthProvider? authProvider,
     String? avatarUrl,
     List<PermissionScope>? permissions,
+    bool? mustChangePassword,
   }) {
     return UserSession(
       id: id ?? this.id,
@@ -90,6 +93,7 @@ class UserSession {
       authProvider: authProvider ?? this.authProvider,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       permissions: permissions ?? this.permissions,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
     );
   }
 }

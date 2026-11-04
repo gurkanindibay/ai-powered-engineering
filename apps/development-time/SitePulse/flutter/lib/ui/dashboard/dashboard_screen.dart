@@ -245,7 +245,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             key: ValueKey('tab_scroll_$_selectedTabIndex'),
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: _buildCurrentTabContent(isHomeRole),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (session.mustChangePassword) _buildMustChangePasswordBanner(),
+                _buildCurrentTabContent(isHomeRole),
+              ],
+            ),
           ),
         ),
       ),
@@ -7728,6 +7734,223 @@ class _DashboardScreenState extends State<DashboardScreen> {
         widget.controller.resetSiteManagerPassword(site.id);
       }
     });
+  }
+
+  Widget _buildMustChangePasswordBanner() {
+    return Container(
+      key: const Key('banner_must_change_password'),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFD97706).withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD97706).withOpacity(0.8), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 24),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Geçici Şifre İle Giriş Yapıldı',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFD97706), fontSize: 13),
+                ),
+                Text(
+                  'Hesap güvenliğiniz için lütfen yeni bir kalıcı şifre belirleyiniz.',
+                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            key: const Key('btn_open_change_password'),
+            onPressed: _showChangePasswordDialog,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD97706),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Şifre Değiştir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    final currentPassCtrl = TextEditingController();
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+    bool isSubmitting = false;
+    String? localError;
+
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AppFullscreenPage(
+          title: 'Şifre Değiştir',
+          subtitle: '${widget.controller.userSession.fullName} (${widget.controller.userSession.email})',
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.accentCyan.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.password, color: AppColors.accentCyan, size: 20),
+          ),
+          bottomBar: AppFullscreenPage.buildBottomBar(
+            context: ctx,
+            children: [
+              OutlinedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: BorderSide(color: AppColors.border(context)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+              ),
+              ElevatedButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        final cur = currentPassCtrl.text.trim();
+                        final n1 = newPassCtrl.text.trim();
+                        final n2 = confirmPassCtrl.text.trim();
+                        if (cur.isEmpty || n1.isEmpty || n2.isEmpty) {
+                          setDialogState(() => localError = 'Lütfen tüm alanları eksiksiz doldurunuz.');
+                          return;
+                        }
+                        if (n1 != n2) {
+                          setDialogState(() => localError = 'Yeni şifreler birbiriyle uyuşmuyor.');
+                          return;
+                        }
+                        if (n1.length < 6) {
+                          setDialogState(() => localError = 'Yeni şifre en az 6 karakter olmalıdır.');
+                          return;
+                        }
+                        setDialogState(() {
+                          isSubmitting = true;
+                          localError = null;
+                        });
+                        final ok = await widget.controller.changePassword(
+                          email: widget.controller.userSession.email,
+                          currentPassword: cur,
+                          newPassword: n1,
+                        );
+                        if (ok && mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Şifreniz başarıyla güncellendi.'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          setState(() {});
+                        } else {
+                          setDialogState(() {
+                            isSubmitting = false;
+                            localError = widget.controller.authMessage ?? 'Şifre güncellenemedi.';
+                          });
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentCyan,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(isSubmitting ? 'Kaydediliyor...' : 'Şifreyi Güncelle', style: const TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (localError != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.redAccent),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(localError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              Text('E-posta:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+              const SizedBox(height: 4),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.card(context),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border(context)),
+                ),
+                child: Text(
+                  widget.controller.userSession.email,
+                  style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: currentPassCtrl,
+                obscureText: true,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Mevcut (veya Geçici) Şifre',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: newPassCtrl,
+                obscureText: true,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Yeni Kalıcı Şifre (En az 6 karakter)',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmPassCtrl,
+                obscureText: true,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Yeni Şifre Tekrar',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

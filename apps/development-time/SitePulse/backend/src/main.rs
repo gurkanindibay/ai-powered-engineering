@@ -47,6 +47,7 @@ async fn main() {
         .route("/api/v1/auth/login", post(handlers::login_password))
         .route("/api/v1/auth/google", post(handlers::login_google))
         .route("/api/v1/auth/register", post(handlers::register_password))
+        .route("/api/v1/auth/change-password", post(handlers::change_password))
         .route("/api/v1/auth/me", get(handlers::get_profile))
         // SaaS Multi-Tenancy
         .route("/api/v1/saas/sites", get(handlers::get_all_sites).post(handlers::register_site))

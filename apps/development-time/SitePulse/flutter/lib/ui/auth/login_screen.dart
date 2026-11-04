@@ -70,18 +70,44 @@ class _LoginScreenState extends State<LoginScreen> {
     _homeownerPasswordController = TextEditingController(text: isTest ? 'Password123' : '');
 
     _managerEmailController = TextEditingController(
-      text: pCred != null ? pCred.adminEmail : (isTest ? 'yonetici@begonya.com' : ''),
+      text: pCred != null
+          ? pCred.adminEmail
+          : (isTest
+              ? 'yonetici@begonya.com'
+              : (widget.controller.saasSites.isNotEmpty
+                  ? widget.controller.saasSites.first.adminEmail
+                  : '')),
     );
-    _managerPasswordController = TextEditingController(text: isTest ? 'Password123' : '');
+    _managerPasswordController = TextEditingController(
+      text: pCred != null ? pCred.temporaryPassword : (isTest ? 'Password123' : ''),
+    );
 
     _saasEmailController = TextEditingController(text: 'admin@sitepulse.io');
     _saasPasswordController = TextEditingController(text: isTest ? 'AdminPass2026!' : '');
 
     widget.controller.addListener(_onControllerUpdate);
+
+    if (!isTest) {
+      widget.controller.fetchSaasSites();
+    }
   }
 
   void _onControllerUpdate() {
     if (!mounted) return;
+    final pCred = widget.controller.provisionedCredentials;
+    if (pCred != null) {
+      if (_managerEmailController.text.isEmpty || _managerEmailController.text != pCred.adminEmail) {
+        _managerEmailController.text = pCred.adminEmail;
+      }
+      if (_managerPasswordController.text.isEmpty || _managerPasswordController.text != pCred.temporaryPassword) {
+        _managerPasswordController.text = pCred.temporaryPassword;
+      }
+    } else if (_managerEmailController.text.isEmpty && widget.controller.saasSites.isNotEmpty) {
+      final firstAdmin = widget.controller.saasSites.first.adminEmail;
+      if (firstAdmin.isNotEmpty) {
+        _managerEmailController.text = firstAdmin;
+      }
+    }
     setState(() {});
   }
 
@@ -1529,6 +1555,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 onPressed: () {
                   setState(() {
                     _managerEmailController.text = site.adminEmail;
+                    final pCred = widget.controller.provisionedCredentials;
+                    if (pCred != null && (pCred.siteId == site.id || pCred.adminEmail.toLowerCase() == site.adminEmail.toLowerCase())) {
+                      _managerPasswordController.text = pCred.temporaryPassword;
+                    }
                     _localError = null;
                   });
                   ScaffoldMessenger.of(context).showSnackBar(

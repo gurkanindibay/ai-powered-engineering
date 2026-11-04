@@ -202,8 +202,8 @@ void main() {
       expect(controller.authMessage, contains('silinemez'));
     });
 
-    test('when reset site manager password, generates new temporary password and sets credentials', () {
-      final success = controller.resetSiteManagerPassword('site-1');
+    test('when reset site manager password, generates new temporary password and sets credentials', () async {
+      final success = await controller.resetSiteManagerPassword('site-1');
       expect(success, isTrue);
       expect(controller.provisionedCredentials, isNotNull);
       final creds = controller.provisionedCredentials!;
@@ -215,8 +215,8 @@ void main() {
       expect(controller.authMessage, contains('yeni geçici şifre üretildi'));
     });
 
-    test('when reset password for non-existent site, returns false', () {
-      final success = controller.resetSiteManagerPassword('invalid-site-id');
+    test('when reset password for non-existent site, returns false', () async {
+      final success = await controller.resetSiteManagerPassword('invalid-site-id');
       expect(success, isFalse);
       expect(controller.provisionedCredentials, isNull);
     });
