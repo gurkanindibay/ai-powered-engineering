@@ -259,18 +259,18 @@ impl RegistrationApprovalService {
 
                 // Insert user
                 let user_role_str = "HOME_RESIDENT";
+                let person_id_opt: Option<i64> = if person_numeric_id > 0 { Some(person_numeric_id) } else { None };
                 if let Ok(user_row) = client
                     .query_one(
                         r#"
-                        INSERT INTO users (site_id, full_name, email, phone, password_hash, role, must_change_password)
-                        VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+                        INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
+                        VALUES ($1, $2, $3, $4, $5, TRUE)
                         RETURNING id
                         "#,
                         &[
                             &site_numeric_id,
-                            &req.full_name,
+                            &person_id_opt,
                             &req.email,
-                            &req.phone,
                             &password_hash,
                             &user_role_str,
                         ],
@@ -330,6 +330,7 @@ impl RegistrationApprovalService {
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
+            person_id: if person_numeric_id > 0 { Some(person_numeric_id) } else { None },
         };
         inner.users.push(resident_user.clone());
 

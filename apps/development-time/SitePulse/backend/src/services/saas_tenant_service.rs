@@ -85,6 +85,7 @@ impl SaasTenantService {
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
+            person_id: None,
         };
         inner.users.push(admin_user.clone());
 
@@ -156,7 +157,10 @@ impl SaasTenantService {
 
                         let manager_row = client
                             .query_opt(
-                                "SELECT full_name, email, phone FROM users WHERE (site_id = $1 OR site_id::text = $2) AND role = 'SITE_MANAGER' ORDER BY id ASC LIMIT 1",
+                                "SELECT COALESCE(p.full_name, 'Site Manager'), u.email, COALESCE(p.phone, '-')
+                                 FROM users u
+                                 LEFT JOIN persons p ON u.person_id = p.id
+                                 WHERE (u.site_id = $1 OR u.site_id::text = $2) AND u.role = 'SITE_MANAGER' ORDER BY u.id ASC LIMIT 1",
                                 &[&id, &id.to_string()],
                             )
                             .await
@@ -547,7 +551,10 @@ impl SaasTenantService {
 
                     let user_row_opt = client
                         .query_opt(
-                            "SELECT id, full_name, email FROM users WHERE (site_id = $1 OR site_id::text = $2) AND role = 'SITE_MANAGER' LIMIT 1",
+                            "SELECT u.id, COALESCE(p.full_name, 'Site Manager'), u.email
+                             FROM users u
+                             LEFT JOIN persons p ON u.person_id = p.id
+                             WHERE (u.site_id = $1 OR u.site_id::text = $2) AND u.role = 'SITE_MANAGER' LIMIT 1",
                             &[&s_id, &site_id],
                         )
                         .await

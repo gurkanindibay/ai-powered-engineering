@@ -2681,6 +2681,7 @@ pub async fn wipe_all_data(
             google_sub: None,
             avatar_url: None,
             created_at: chrono::Utc::now(),
+            person_id: Some(1),
         });
     }
     (
@@ -2948,6 +2949,7 @@ pub async fn provision_site_units(
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
+                person_id: None,
             });
         }
 

@@ -132,6 +132,15 @@ run_sql_file "$INIT_DIR/00-01-init-schema.sql"
 run_sql_file "$INIT_DIR/00-02-saas-multi-tenancy.sql"
 run_sql_file "$INIT_DIR/00-03-auth-and-permission-providers.sql"
 run_sql_file "$INIT_DIR/00-04-site-bank-account.sql"
+if [ -f "$INIT_DIR/00-05-payment-tracking-and-receipts.sql" ]; then
+    run_sql_file "$INIT_DIR/00-05-payment-tracking-and-receipts.sql"
+fi
+if [ -f "$INIT_DIR/00-06-capital-expenditure-and-fixtures.sql" ]; then
+    run_sql_file "$INIT_DIR/00-06-capital-expenditure-and-fixtures.sql"
+fi
+if [ -f "$INIT_DIR/00-07-viable-occupancy-ownership-and-identity.sql" ]; then
+    run_sql_file "$INIT_DIR/00-07-viable-occupancy-ownership-and-identity.sql"
+fi
 run_sql_file "$INIT_DIR/01-system-seed.sql"
 
 # 4. Apply site data according to selected mode

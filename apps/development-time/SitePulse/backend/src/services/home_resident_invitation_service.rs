@@ -131,6 +131,7 @@ impl HomeResidentInvitationService {
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
+            person_id: None,
         };
         inner.users.push(resident_user.clone());
 
@@ -141,6 +142,7 @@ impl HomeResidentInvitationService {
             phone: request.phone.clone().unwrap_or_else(|| "-".to_string()),
             email: email_norm.clone(),
             is_owner: false,
+            occupancy_id: None,
         };
 
         inner
@@ -174,7 +176,14 @@ impl HomeResidentInvitationService {
             if let Ok(client) = pool.get().await {
                 if let Ok(rows) = client
                     .query(
-                        "SELECT resident_id, full_name, relationship, phone, email, is_owner FROM unit_members WHERE unit_id = $1 ORDER BY id ASC",
+                        r#"
+                        SELECT um.resident_id, um.full_name, um.relationship, um.phone, um.email, um.is_owner, um.occupancy_id
+                        FROM unit_members um
+                        LEFT JOIN unit_occupancies uo ON um.occupancy_id = uo.id
+                        WHERE (um.unit_id = $1 OR um.unit_id = (SELECT unit_number::text FROM units WHERE id::text = $1) OR um.unit_id = (SELECT id::text FROM units WHERE unit_number::text = $1))
+                          AND (um.occupancy_id IS NULL OR uo.is_active = true)
+                        ORDER BY um.id ASC
+                        "#,
                         &[&unit_id],
                     )
                     .await
@@ -189,6 +198,7 @@ impl HomeResidentInvitationService {
                                 phone: r.get::<_, Option<String>>(3).unwrap_or_default(),
                                 email: r.get::<_, Option<String>>(4).unwrap_or_default(),
                                 is_owner: r.get(5),
+                                occupancy_id: r.try_get(6).ok().flatten(),
                             })
                             .collect();
                     }

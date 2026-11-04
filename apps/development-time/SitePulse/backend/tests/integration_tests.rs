@@ -2361,6 +2361,60 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
 }
 
 #[tokio::test]
+async fn when_tenant_moves_out_then_household_members_are_archived_and_cleared_from_active_unit() {
+    let state = AppState::new();
+    let service = SiteAdminService::new(state.clone());
+
+    // 1. Register tenant
+    let tenant_req = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        block: "B Blok".to_string(),
+        unit_no: 25,
+        floor: 3,
+        owner_full_name: "Ali Veli (Kiracı)".to_string(),
+        phone: "0532 999 88 77".to_string(),
+        email: "ali.veli25@sitepulse.io".to_string(),
+        tenant_full_name: None,
+        tenant_email: None,
+        tenant_phone: None,
+        land_share: None,
+        monthly_dues: Some(Decimal::from(1500)),
+        house_type: None,
+        is_resident: true,
+        role: Some("TENANT".to_string()),
+    };
+    let created = service.register_home_owner("site-1", tenant_req).await.unwrap();
+
+    // 2. Add household co-resident
+    service
+        .add_unit_member(
+            "site-1",
+            &created.unit_id,
+            "Ayşe Veli",
+            "0532 999 88 78",
+            "ayse.veli25@sitepulse.io",
+            "Eş",
+        )
+        .await
+        .unwrap();
+
+    let invitation_service = HomeResidentInvitationService::new(state.clone());
+    let members_before = invitation_service.get_unit_members(&created.unit_id).await;
+    assert!(members_before.iter().any(|m| m.full_name == "Ayşe Veli"));
+
+    // 3. Move out tenant
+    let move_out_req = sitepulse_backend::models::MoveOutResidentRequest {
+        end_date: Some("2026-11-04".to_string()),
+        notes: Some("Kiracı tahliyesi".to_string()),
+    };
+    let move_out_res = service.move_out_resident("site-1", &created.unit_id, move_out_req).await.unwrap();
+    assert_eq!(move_out_res.is_active, false);
+
+    // 4. Verify household members are cleared from active unit
+    let members_after = invitation_service.get_unit_members(&created.unit_id).await;
+    assert!(members_after.is_empty(), "Active household members must be empty after move-out");
+}
+
+#[tokio::test]
 async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_kpis() {
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());

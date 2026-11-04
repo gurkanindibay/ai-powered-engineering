@@ -138,6 +138,7 @@ impl AppStateInner {
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
+                person_id: Some(1),
             });
         }
 
@@ -230,6 +231,7 @@ impl AppStateInner {
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
+                person_id: Some(1),
             });
         }
 
@@ -248,6 +250,7 @@ impl AppStateInner {
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
+                person_id: Some(1),
             });
         }
 
@@ -368,6 +371,7 @@ impl AppStateInner {
                 phone: "+90 532 111 22 33".to_string(),
                 email: "ahmet.yilmaz@begonya.com".to_string(),
                 is_owner: true,
+                occupancy_id: Some(1),
             }],
         );
 

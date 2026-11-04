@@ -698,6 +698,7 @@ impl PaymentTrackingService {
             google_sub: None,
             avatar_url: None,
             created_at: now,
+            person_id: None,
         });
 
         // Archive old owner in unit_occupancies

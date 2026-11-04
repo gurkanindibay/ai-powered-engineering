@@ -47,13 +47,16 @@ SET config_value = EXCLUDED.config_value,
 
 -- 3. Initial SaaS Platform Super Administrator
 -- Note: In production deployments, change admin password immediately upon first login.
-INSERT INTO users (id, site_id, full_name, email, phone, password_hash, role, must_change_password)
+INSERT INTO persons (id, national_id, full_name, phone, email, person_type)
+VALUES (999, '99999999999', 'SaaS Platform Admin', '+90 850 555 0000', 'admin@sitepulse.io', 'YONETICI')
+ON CONFLICT (email) DO NOTHING;
+
+INSERT INTO users (id, site_id, person_id, email, password_hash, role, must_change_password)
 VALUES (
     1,
     NULL,
-    'SaaS Platform Admin',
+    (SELECT id FROM persons WHERE email = 'admin@sitepulse.io'),
     'admin@sitepulse.io',
-    '+90 850 555 0000',
     'argon2id_hash_placeholder',
     'SAAS_ADMIN',
     FALSE

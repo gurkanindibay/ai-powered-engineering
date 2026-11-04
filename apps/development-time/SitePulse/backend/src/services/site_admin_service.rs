@@ -154,6 +154,7 @@ impl SiteAdminService {
             .as_ref()
             .map(|s| !s.trim().is_empty())
             .unwrap_or(false);
+        let mut explicit_tenant_pid: Option<i64> = None;
 
         // 2. Persist to PostgreSQL if pool is available
         if let Some(ref pool) = self.state.pool {
@@ -218,15 +219,14 @@ impl SiteAdminService {
             let user_row = client
                 .query_one(
                     r#"
-                    INSERT INTO users (site_id, full_name, email, phone, password_hash, role, must_change_password)
-                    VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+                    INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
+                    VALUES ($1, $2, $3, $4, $5, TRUE)
                     RETURNING id
                     "#,
                     &[
                         &site_numeric_id,
-                        &request.owner_full_name,
+                        &person_numeric_id,
                         &email_norm,
-                        &request.phone,
                         &password_hash,
                         &user_role_str,
                     ],
@@ -262,6 +262,7 @@ impl SiteAdminService {
                     row.get(0)
                 };
                 explicit_tenant_person_id = Some(t_pid);
+                explicit_tenant_pid = Some(t_pid);
 
                 if !t_email_norm.is_empty() {
                     let existing_t_user = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&t_email_norm]).await.ok().flatten();
@@ -269,10 +270,10 @@ impl SiteAdminService {
                         let _ = client
                             .execute(
                                 r#"
-                                INSERT INTO users (site_id, full_name, email, phone, password_hash, role, must_change_password)
-                                VALUES ($1, $2, $3, $4, $5, 'HOME_RESIDENT', TRUE)
+                                INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
+                                VALUES ($1, $2, $3, $4, 'HOME_RESIDENT', TRUE)
                                 "#,
-                                &[&site_numeric_id, &t_name, &t_email_norm, &t_phone, &password_hash],
+                                &[&site_numeric_id, &t_pid, &t_email_norm, &password_hash],
                             )
                             .await;
                     }
@@ -539,6 +540,7 @@ impl SiteAdminService {
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
+            person_id: if person_numeric_id > 0 { Some(person_numeric_id) } else { None },
         };
         inner.users.push(resident_user.clone());
 
@@ -562,6 +564,7 @@ impl SiteAdminService {
                 phone: request.phone.clone(),
                 email: email_norm.clone(),
                 is_owner: false,
+                occupancy_id: None,
             };
             inner.unit_members.entry(unit_id.clone()).or_default().push(member_dto.clone());
             if unit_numeric_id > 0 {
@@ -591,6 +594,7 @@ impl SiteAdminService {
                     google_sub: None,
                     avatar_url: None,
                     created_at: Utc::now(),
+                    person_id: explicit_tenant_pid,
                 };
                 inner.users.push(tenant_user);
                 explicit_tenant_user_id_in_mem = Some(tid);
@@ -750,6 +754,7 @@ impl SiteAdminService {
                 phone: request.phone.clone(),
                 email: email_norm.clone(),
                 is_owner: false,
+                occupancy_id: None,
             }]
         } else {
             Vec::new()
@@ -823,7 +828,13 @@ impl SiteAdminService {
                 let mut household_map: std::collections::HashMap<String, Vec<crate::models::UnitMemberDto>> = std::collections::HashMap::new();
                 if let Ok(m_rows) = client
                     .query(
-                        "SELECT unit_id, resident_id, full_name, relationship, COALESCE(phone, ''), COALESCE(email, ''), is_owner FROM unit_members ORDER BY id ASC",
+                        r#"
+                        SELECT um.unit_id, um.resident_id, um.full_name, um.relationship, COALESCE(um.phone, ''), COALESCE(um.email, ''), um.is_owner, um.occupancy_id
+                        FROM unit_members um
+                        LEFT JOIN unit_occupancies uo ON um.occupancy_id = uo.id
+                        WHERE um.occupancy_id IS NULL OR uo.is_active = true
+                        ORDER BY um.id ASC
+                        "#,
                         &[],
                     )
                     .await
@@ -837,6 +848,7 @@ impl SiteAdminService {
                             phone: mr.get(4),
                             email: mr.get(5),
                             is_owner: mr.get(6),
+                            occupancy_id: mr.try_get(7).ok().flatten(),
                         };
                         household_map.entry(u_id).or_default().push(mem);
                     }
@@ -1059,11 +1071,9 @@ impl SiteAdminService {
                     } else if let Some(tenant_person_id) = t_id {
                         if let Some(ref t_name) = req.tenant_full_name {
                             let _ = client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[t_name, &tenant_person_id]).await;
-                            let _ = client.execute("UPDATE users SET full_name = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[t_name, &site_numeric, &tenant_person_id]).await;
                         }
                         if let Some(ref t_phone) = req.tenant_phone {
                             let _ = client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[t_phone, &tenant_person_id]).await;
-                            let _ = client.execute("UPDATE users SET phone = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[t_phone, &site_numeric, &tenant_person_id]).await;
                         }
                         if let Some(ref t_email) = req.tenant_email {
                             let email_norm = t_email.trim().to_lowercase();
@@ -1099,11 +1109,9 @@ impl SiteAdminService {
                     if let Some(owner_person_id) = p_id {
                         if let Some(ref name) = req.owner_full_name {
                             let _ = client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[name, &owner_person_id]).await;
-                            let _ = client.execute("UPDATE users SET full_name = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[name, &site_numeric, &owner_person_id]).await;
                         }
                         if let Some(ref phone) = req.phone {
                             let _ = client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[phone, &owner_person_id]).await;
-                            let _ = client.execute("UPDATE users SET phone = $1 WHERE site_id = $2 AND email = (SELECT email FROM persons WHERE id = $3)", &[phone, &site_numeric, &owner_person_id]).await;
                         }
                         if let Some(ref email) = req.email {
                             let email_norm = email.trim().to_lowercase();
@@ -1184,6 +1192,7 @@ impl SiteAdminService {
                         google_sub: None,
                         avatar_url: None,
                         created_at: chrono::Utc::now(),
+                        person_id: None,
                     });
                     inner.units[uidx].tenant_user_id = Some(new_uid);
                 }
@@ -1398,6 +1407,7 @@ impl SiteAdminService {
             phone: phone.to_string(),
             email: email.trim().to_lowercase(),
             is_owner: false,
+            occupancy_id: None,
         };
 
         if let Some(ref pool) = self.state.pool {
@@ -1428,6 +1438,7 @@ impl SiteAdminService {
                 google_sub: None,
                 avatar_url: None,
                 created_at: chrono::Utc::now(),
+                person_id: None,
             });
         }
 
@@ -1812,19 +1823,34 @@ impl SiteAdminService {
                 let target_person_id = tenant_id.or(owner_id).ok_or_else(|| "Unit has no occupant to move out".to_string())?;
                 let occ_role = if tenant_id.is_some() { "TENANT" } else { "OWNER" };
 
-                // Calculate exit balance: unpaid liabilities for this unit
-                let exit_balance: Decimal = client
-                    .query_one(
-                        r#"
-                        SELECT COALESCE(SUM(principal_amount + delay_penalty - paid_amount), 0.00)
-                        FROM dues_liabilities
-                        WHERE unit_id = $1 AND status != 'PAID'
-                        "#,
-                        &[&unit_numeric],
-                    )
-                    .await
-                    .map(|r| r.get(0))
-                    .unwrap_or(Decimal::ZERO);
+                // Calculate exit balance: operational liabilities for tenant, all liabilities for owner (KMK Art. 20/22)
+                let exit_balance: Decimal = if occ_role == "TENANT" {
+                    client
+                        .query_one(
+                            r#"
+                            SELECT COALESCE(SUM(principal_amount + delay_penalty - paid_amount), 0.00)
+                            FROM dues_liabilities
+                            WHERE unit_id = $1 AND status != 'PAID' AND expense_type != 'CAPITAL_DUES'
+                            "#,
+                            &[&unit_numeric],
+                        )
+                        .await
+                        .map(|r| r.get(0))
+                        .unwrap_or(Decimal::ZERO)
+                } else {
+                    client
+                        .query_one(
+                            r#"
+                            SELECT COALESCE(SUM(principal_amount + delay_penalty - paid_amount), 0.00)
+                            FROM dues_liabilities
+                            WHERE unit_id = $1 AND status != 'PAID'
+                            "#,
+                            &[&unit_numeric],
+                        )
+                        .await
+                        .map(|r| r.get(0))
+                        .unwrap_or(Decimal::ZERO)
+                };
 
                 let notes_val = req.notes.clone();
 
@@ -1860,6 +1886,27 @@ impl SiteAdminService {
                         .map_err(|e| e.to_string())?;
                     row.get(0)
                 };
+
+                // Bind active household members to the closed occupancy session
+                let _ = client
+                    .execute(
+                        "UPDATE unit_members SET occupancy_id = $1 WHERE (unit_id = $2 OR unit_id = $3) AND occupancy_id IS NULL",
+                        &[&occ_id, &unit_numeric.to_string(), &format!("d-{}", unit_numeric)],
+                    )
+                    .await;
+
+                // Clear active household members from in-memory cache
+                {
+                    let mut inner = self.state.inner.write().await;
+                    for key in &[
+                        unit_numeric.to_string(),
+                        format!("d-{}", unit_numeric),
+                        format!("unit-{}", unit_numeric),
+                        unit_id.to_string(),
+                    ] {
+                        inner.unit_members.remove(key);
+                    }
+                }
 
                 // Update unit status to VACANT and clear tenant_person_id if tenant moved out
                 if tenant_id.is_some() {
@@ -1902,7 +1949,35 @@ impl SiteAdminService {
             }
         }
 
-        Err("Database connection unavailable".to_string())
+        // In-memory fallback if PostgreSQL pool is not active
+        let mut inner = self.state.inner.write().await;
+        if let Some(unit) = inner.units.iter_mut().find(|u| u.id == unit_id || u.unit_number.to_string() == unit_id) {
+            unit.tenant_user_id = None;
+        }
+        for key in &[
+            unit_numeric.to_string(),
+            format!("d-{}", unit_numeric),
+            format!("unit-{}", unit_numeric),
+            unit_id.to_string(),
+        ] {
+            inner.unit_members.remove(key);
+        }
+
+        Ok(crate::models::OccupancyHistoryItem {
+            id: 1,
+            unit_id: unit_numeric,
+            person_id: 1,
+            person_name: "Tenant".to_string(),
+            person_phone: None,
+            person_email: None,
+            role: "TENANT".to_string(),
+            start_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+            end_date: Some(chrono::Utc::now().format("%Y-%m-%d").to_string()),
+            is_active: false,
+            exit_balance: Decimal::ZERO,
+            notes: req.notes,
+            created_at: chrono::Utc::now(),
+        })
     }
 
     pub async fn move_in_resident(

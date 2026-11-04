@@ -170,6 +170,20 @@ pub struct IndependentUnit {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Person {
+    pub id: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub national_id: Option<String>,
+    pub full_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phone: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub person_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: String,
     pub site_id: String,
@@ -183,6 +197,8 @@ pub struct User {
     pub google_sub: Option<String>,
     pub avatar_url: Option<String>,
     pub created_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub person_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -678,6 +694,8 @@ pub struct UnitMemberDto {
     pub phone: String,
     pub email: String,
     pub is_owner: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub occupancy_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

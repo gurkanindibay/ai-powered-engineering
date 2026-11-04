@@ -166,6 +166,7 @@ impl AuthService {
                 google_sub: Some(payload.sub),
                 avatar_url: Some(payload.picture),
                 created_at: Utc::now(),
+                person_id: None,
             };
             inner.users.push(new_user.clone());
             new_user
@@ -219,6 +220,7 @@ impl AuthService {
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
+            person_id: None,
         };
 
         inner.users.push(new_user.clone());

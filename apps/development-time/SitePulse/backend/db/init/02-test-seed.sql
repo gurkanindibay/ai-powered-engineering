@@ -35,9 +35,9 @@ VALUES
     (3, '55555555555', 'Mehmet Demir', '+90 532 100 2030', 'mehmet.demir@begonya.com', 'HOME_OWNER')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO users (id, site_id, full_name, email, phone, password_hash, role, must_change_password)
+INSERT INTO users (id, site_id, person_id, email, password_hash, role, must_change_password)
 VALUES 
-    (2, 1, 'Mehmet Demir', 'mehmet.demir@begonya.com', '+90 532 100 2030', 'ARGON2_HASH_mehmet123', 'SITE_MANAGER', FALSE)
+    (2, 1, 3, 'mehmet.demir@begonya.com', 'ARGON2_HASH_mehmet123', 'SITE_MANAGER', FALSE)
 ON CONFLICT (email) DO NOTHING;
 
 -- Home Owner (Ahmet Yılmaz)
@@ -46,9 +46,9 @@ VALUES
     (1, '12345678901', 'Ahmet Yılmaz', '+90 532 111 22 33', 'ahmet.yilmaz@begonya.com', 'HOME_OWNER')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO users (id, site_id, full_name, email, phone, password_hash, role, must_change_password)
+INSERT INTO users (id, site_id, person_id, email, password_hash, role, must_change_password)
 VALUES 
-    (3, 1, 'Ahmet Yılmaz', 'ahmet.yilmaz@begonya.com', '+90 532 111 22 33', 'ARGON2_HASH_ahmet123', 'HOME_OWNER', FALSE)
+    (3, 1, 1, 'ahmet.yilmaz@begonya.com', 'ARGON2_HASH_ahmet123', 'HOME_OWNER', FALSE)
 ON CONFLICT (email) DO NOTHING;
 
 -- Tenant (Zeynep Kaya)
@@ -63,9 +63,9 @@ VALUES
     (4, '44444444444', 'Mehmet Öz', '+90 533 222 33 44', 'mehmet.oz@begonya.com', 'HOME_OWNER')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO users (id, site_id, full_name, email, phone, password_hash, role, must_change_password)
+INSERT INTO users (id, site_id, person_id, email, password_hash, role, must_change_password)
 VALUES 
-    (4, 1, 'Mehmet Öz', 'mehmet.oz@begonya.com', '+90 533 222 33 44', 'ARGON2_HASH_mehmetoz123', 'HOME_OWNER', FALSE)
+    (4, 1, 4, 'mehmet.oz@begonya.com', 'ARGON2_HASH_mehmetoz123', 'HOME_OWNER', FALSE)
 ON CONFLICT (email) DO NOTHING;
 
 -- 4. Test Units (Flats)
