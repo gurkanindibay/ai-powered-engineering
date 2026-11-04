@@ -587,6 +587,170 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
             ALTER TABLE dues_liabilities ADD COLUMN IF NOT EXISTS capital_project_id BIGINT;
             ALTER TABLE dues_liabilities ADD COLUMN IF NOT EXISTS installment_number INT;
             CREATE INDEX IF NOT EXISTS idx_dues_capital_project ON dues_liabilities (capital_project_id);
+
+            -- Active Occupancy Single-Session Invariant & Integrity Checks
+            ALTER TABLE unit_occupancies DROP CONSTRAINT IF EXISTS chk_occupancy_dates;
+            ALTER TABLE unit_occupancies ADD CONSTRAINT chk_occupancy_dates CHECK (end_date IS NULL OR end_date >= start_date);
+
+            ALTER TABLE unit_occupancies DROP CONSTRAINT IF EXISTS chk_occupancy_type;
+            ALTER TABLE unit_occupancies ADD CONSTRAINT chk_occupancy_type CHECK (occupancy_type IN ('OWNER', 'TENANT'));
+
+            DROP INDEX IF EXISTS idx_occupancies_active_unit;
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_unit_active_occupancy ON unit_occupancies (unit_id) WHERE is_active = true;
+
+            -- Dues Liabilities Financial Safeguards & Invariant Enforcement
+            ALTER TABLE dues_liabilities DROP CONSTRAINT IF EXISTS chk_dues_principal_non_negative;
+            ALTER TABLE dues_liabilities ADD CONSTRAINT chk_dues_principal_non_negative CHECK (principal_amount >= 0);
+
+            ALTER TABLE dues_liabilities DROP CONSTRAINT IF EXISTS chk_dues_penalty_non_negative;
+            ALTER TABLE dues_liabilities ADD CONSTRAINT chk_dues_penalty_non_negative CHECK (delay_penalty >= 0);
+
+            ALTER TABLE dues_liabilities DROP CONSTRAINT IF EXISTS chk_dues_paid_non_negative;
+            ALTER TABLE dues_liabilities ADD CONSTRAINT chk_dues_paid_non_negative CHECK (paid_amount >= 0);
+
+            ALTER TABLE dues_liabilities DROP CONSTRAINT IF EXISTS chk_dues_status;
+            ALTER TABLE dues_liabilities ADD CONSTRAINT chk_dues_status CHECK (status IN ('PENDING', 'PAID', 'OVERDUE', 'CANCELLED', 'PARTIALLY_PAID'));
+
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_unit_period_expense ON dues_liabilities (unit_id, period, expense_type) WHERE capital_project_id IS NULL;
+
+            -- Payment, Collection & Advance Non-Negative Numeric Safeguards
+            ALTER TABLE collection_transactions DROP CONSTRAINT IF EXISTS chk_collection_paid_amount;
+            ALTER TABLE collection_transactions ADD CONSTRAINT chk_collection_paid_amount CHECK (paid_amount > 0);
+
+            ALTER TABLE homeowner_payments DROP CONSTRAINT IF EXISTS chk_homeowner_payment_amount;
+            ALTER TABLE homeowner_payments ADD CONSTRAINT chk_homeowner_payment_amount CHECK (amount > 0);
+
+            ALTER TABLE homeowner_payments DROP CONSTRAINT IF EXISTS chk_homeowner_cleared_non_negative;
+            ALTER TABLE homeowner_payments ADD CONSTRAINT chk_homeowner_cleared_non_negative CHECK (cleared_debt_amount >= 0);
+
+            ALTER TABLE homeowner_payments DROP CONSTRAINT IF EXISTS chk_homeowner_advance_non_negative;
+            ALTER TABLE homeowner_payments ADD CONSTRAINT chk_homeowner_advance_non_negative CHECK (advance_credit_amount >= 0);
+
+            ALTER TABLE advance_balances DROP CONSTRAINT IF EXISTS chk_advance_balance_non_negative;
+            ALTER TABLE advance_balances ADD CONSTRAINT chk_advance_balance_non_negative CHECK (balance >= 0);
+
+            ALTER TABLE payment_receipts DROP CONSTRAINT IF EXISTS chk_receipt_total_non_negative;
+            ALTER TABLE payment_receipts ADD CONSTRAINT chk_receipt_total_non_negative CHECK (total_amount >= 0);
+
+            ALTER TABLE payment_receipts DROP CONSTRAINT IF EXISTS chk_receipt_principal_non_negative;
+            ALTER TABLE payment_receipts ADD CONSTRAINT chk_receipt_principal_non_negative CHECK (allocated_principal >= 0);
+
+            ALTER TABLE payment_receipts DROP CONSTRAINT IF EXISTS chk_receipt_penalty_non_negative;
+            ALTER TABLE payment_receipts ADD CONSTRAINT chk_receipt_penalty_non_negative CHECK (allocated_penalty >= 0);
+
+            ALTER TABLE payment_receipts DROP CONSTRAINT IF EXISTS chk_receipt_advance_non_negative;
+            ALTER TABLE payment_receipts ADD CONSTRAINT chk_receipt_advance_non_negative CHECK (allocated_advance >= 0);
+
+            ALTER TABLE payment_entries DROP CONSTRAINT IF EXISTS chk_payment_entry_amount;
+            ALTER TABLE payment_entries ADD CONSTRAINT chk_payment_entry_amount CHECK (amount > 0);
+
+            ALTER TABLE capital_projects DROP CONSTRAINT IF EXISTS chk_capital_budget_positive;
+            ALTER TABLE capital_projects ADD CONSTRAINT chk_capital_budget_positive CHECK (total_budget > 0);
+
+            ALTER TABLE capital_project_installments DROP CONSTRAINT IF EXISTS chk_installment_budget_positive;
+            ALTER TABLE capital_project_installments ADD CONSTRAINT chk_installment_budget_positive CHECK (installment_budget > 0);
+
+            ALTER TABLE capital_project_installments DROP CONSTRAINT IF EXISTS chk_installment_pct_positive;
+            ALTER TABLE capital_project_installments ADD CONSTRAINT chk_installment_pct_positive CHECK (percentage > 0 AND percentage <= 100.00);
+
+            ALTER TABLE capital_contractor_disbursements DROP CONSTRAINT IF EXISTS chk_disbursement_amount_positive;
+            ALTER TABLE capital_contractor_disbursements ADD CONSTRAINT chk_disbursement_amount_positive CHECK (amount > 0);
+
+            -- Physical Units & Blocks Integrity
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_site_block_name ON blocks (site_id, block_name);
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_units_virtual_iban ON units (virtual_iban) WHERE virtual_iban IS NOT NULL;
+
+            ALTER TABLE units DROP CONSTRAINT IF EXISTS chk_units_floor;
+            ALTER TABLE units ADD CONSTRAINT chk_units_floor CHECK (floor >= -5 AND floor <= 150);
+
+            ALTER TABLE units DROP CONSTRAINT IF EXISTS chk_units_land_share;
+            ALTER TABLE units ADD CONSTRAINT chk_units_land_share CHECK (land_share > 0);
+
+            ALTER TABLE units DROP CONSTRAINT IF EXISTS chk_units_occupancy_status;
+            ALTER TABLE units ADD CONSTRAINT chk_units_occupancy_status CHECK (occupancy_status IN ('OWNER_OCCUPIED', 'TENANT_OCCUPIED', 'VACANT'));
+
+            -- Foreign Key Covering Indexes
+            CREATE INDEX IF NOT EXISTS idx_users_site_id ON users (site_id);
+            CREATE INDEX IF NOT EXISTS idx_units_owner_person ON units (owner_person_id);
+            CREATE INDEX IF NOT EXISTS idx_units_tenant_person ON units (tenant_person_id);
+            CREATE INDEX IF NOT EXISTS idx_units_site_id ON units (site_id);
+            CREATE INDEX IF NOT EXISTS idx_occupancies_unit_id ON unit_occupancies (unit_id);
+            CREATE INDEX IF NOT EXISTS idx_occupancies_person ON unit_occupancies (person_id);
+            CREATE INDEX IF NOT EXISTS idx_site_bank_accounts_site ON site_bank_accounts (site_id);
+            CREATE INDEX IF NOT EXISTS idx_site_bank_accounts_config_by ON site_bank_accounts (configured_by);
+            CREATE INDEX IF NOT EXISTS idx_dues_liabilities_unit ON dues_liabilities (unit_id);
+            CREATE INDEX IF NOT EXISTS idx_dues_liabilities_person ON dues_liabilities (liable_person_id);
+            CREATE INDEX IF NOT EXISTS idx_dues_liabilities_occupancy ON dues_liabilities (occupancy_id);
+            CREATE INDEX IF NOT EXISTS idx_dues_liabilities_capital_proj ON dues_liabilities (capital_project_id);
+            CREATE INDEX IF NOT EXISTS idx_col_tx_liability ON collection_transactions (dues_liability_id);
+            CREATE INDEX IF NOT EXISTS idx_col_tx_unit ON collection_transactions (unit_id);
+            CREATE INDEX IF NOT EXISTS idx_payment_entries_receipt ON payment_entries (receipt_id);
+            CREATE INDEX IF NOT EXISTS idx_advance_balances_unit ON advance_balances (unit_id);
+            CREATE INDEX IF NOT EXISTS idx_homeowner_payments_unit ON homeowner_payments (unit_id);
+            CREATE INDEX IF NOT EXISTS idx_homeowner_payments_block ON homeowner_payments (block_id);
+
+            -- Canonical Persons Email Uniqueness
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_persons_email_lower ON persons (LOWER(email)) WHERE email IS NOT NULL AND email <> '';
+
+            -- Household Member Synchronizer Function & Trigger
+            CREATE OR REPLACE FUNCTION fn_sync_unit_member_to_occupancy()
+            RETURNS TRIGGER AS $trg$
+            DECLARE
+                v_occ_id BIGINT;
+                v_person_id BIGINT;
+            BEGIN
+                IF (TG_OP = 'DELETE') THEN
+                    DELETE FROM occupancy_members 
+                    WHERE full_name = OLD.full_name 
+                      AND (occupancy_id = OLD.occupancy_id OR occupancy_id IN (
+                          SELECT uo.id FROM unit_occupancies uo 
+                          JOIN units u ON u.id = uo.unit_id 
+                          WHERE u.id::text = OLD.unit_id OR u.unit_number::text = OLD.unit_id OR ('d-' || u.unit_number::text) = OLD.unit_id
+                      ));
+                    RETURN OLD;
+                END IF;
+
+                v_occ_id := NEW.occupancy_id;
+                IF v_occ_id IS NULL THEN
+                    SELECT uo.id INTO v_occ_id
+                    FROM unit_occupancies uo
+                    JOIN units u ON u.id = uo.unit_id
+                    WHERE (u.id::text = NEW.unit_id OR u.unit_number::text = NEW.unit_id OR ('d-' || u.unit_number::text) = NEW.unit_id)
+                      AND uo.is_active = true
+                    ORDER BY uo.id DESC LIMIT 1;
+                END IF;
+
+                IF NEW.email IS NOT NULL AND NEW.email <> '' THEN
+                    SELECT id INTO v_person_id FROM persons WHERE LOWER(email) = LOWER(NEW.email) LIMIT 1;
+                END IF;
+
+                IF (TG_OP = 'INSERT') THEN
+                    IF v_occ_id IS NOT NULL THEN
+                        INSERT INTO occupancy_members (occupancy_id, person_id, full_name, relationship, phone, email, is_emergency_contact, created_at)
+                        VALUES (v_occ_id, v_person_id, NEW.full_name, NEW.relationship, NEW.phone, NEW.email, false, COALESCE(NEW.created_at, CURRENT_TIMESTAMP))
+                        ON CONFLICT DO NOTHING;
+                    END IF;
+                    RETURN NEW;
+                ELSIF (TG_OP = 'UPDATE') THEN
+                    IF v_occ_id IS NOT NULL THEN
+                        UPDATE occupancy_members
+                        SET full_name = NEW.full_name,
+                            relationship = NEW.relationship,
+                            phone = NEW.phone,
+                            email = NEW.email,
+                            person_id = COALESCE(v_person_id, occupancy_members.person_id)
+                        WHERE full_name = OLD.full_name AND occupancy_id = v_occ_id;
+                    END IF;
+                    RETURN NEW;
+                END IF;
+                RETURN NULL;
+            END;
+            $trg$ LANGUAGE plpgsql;
+
+            DROP TRIGGER IF EXISTS trg_sync_unit_members ON unit_members;
+            CREATE TRIGGER trg_sync_unit_members
+            AFTER INSERT OR UPDATE OR DELETE ON unit_members
+            FOR EACH ROW EXECUTE FUNCTION fn_sync_unit_member_to_occupancy();
             "#,
         )
         .await?;
