@@ -54,7 +54,7 @@ impl CapitalProjectService {
                         RETURNING id
                         "#,
                         &[
-                            &site_id,
+                            &crate::db::parse_id_to_i64(&site_id).unwrap_or(1),
                             &req.title,
                             &category,
                             &req.description,
@@ -218,10 +218,10 @@ impl CapitalProjectService {
                             ), 0.00) as disbursed_amount,
                             (SELECT COUNT(*) FROM capital_project_installments WHERE project_id = cp.id) as installments_count
                         FROM capital_projects cp
-                        WHERE cp.site_id = $1 OR $1 = ''
+                        WHERE $1::bigint IS NULL OR cp.site_id = $1
                         ORDER BY cp.created_at DESC
                         "#,
-                        &[&site_id],
+                        &[&crate::db::parse_id_to_i64(site_id)],
                     )
                     .await;
 
@@ -235,7 +235,7 @@ impl CapitalProjectService {
 
                         projects.push(CapitalProject {
                             id: format!("cproj-{}", id_num),
-                            site_id: r.get("site_id"),
+                            site_id: r.get::<_, i64>("site_id").to_string(),
                             title: r.get("title"),
                             category: r.get("category"),
                             description: r.get("description"),

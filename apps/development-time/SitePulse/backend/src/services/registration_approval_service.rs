@@ -109,7 +109,7 @@ impl RegistrationApprovalService {
                 if let Ok(rows) = client
                     .query(
                         "SELECT request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident, status, submitted_at FROM pending_registrations WHERE site_id = $1 AND status = 'PENDING' ORDER BY submitted_at DESC",
-                        &[&site_id],
+                        &[&crate::db::parse_id_to_i64(site_id).unwrap_or(1)],
                     )
                     .await
                 {
@@ -118,7 +118,7 @@ impl RegistrationApprovalService {
                             .into_iter()
                             .map(|row| PendingRegistrationResponse {
                                 request_id: row.get(0),
-                                site_id: row.get(1),
+                                site_id: row.get::<_, i64>(1).to_string(),
                                 block: row.get(2),
                                 unit_no: row.get(3),
                                 floor: row.get(4),

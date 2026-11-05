@@ -35,6 +35,8 @@ SYNC_MAP = {
     "00-06-capital-expenditure-and-fixtures.sql": "V6__capital_expenditure_and_fixtures.sql",
     "00-07-viable-occupancy-ownership-and-identity.sql": "V7__viable_occupancy_ownership_and_identity.sql",
     "00-08-referential-and-financial-integrity.sql": "V9__referential_and_financial_integrity.sql",
+    "00-09-ledger-and-referential-integrity.sql": "V10__ledger_and_referential_integrity.sql",
+    "00-10-consolidate-household-members.sql": "V11__consolidate_household_members.sql",
 }
 
 CONTAINER = "sitepulse-postgres"
@@ -85,7 +87,7 @@ NEGATIVE_CASES = [
     (
         "duplicate capital installment",
         """INSERT INTO capital_projects (site_id, title, category, total_budget, target_start_date)
-           VALUES ('1', 'T', 'OTHER', 100, CURRENT_DATE);
+           VALUES (1, 'T', 'OTHER', 100, CURRENT_DATE);
            INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, expense_type,
                                          capital_project_id, installment_number)
            SELECT u.id, 'C', 10, CURRENT_DATE, 'CAPITAL_DUES', cp.id, 1 FROM units u, capital_projects cp;
@@ -119,6 +121,26 @@ NEGATIVE_CASES = [
            SELECT id, 'ZIRAAT', 'Ziraat', 'TR330006100519786457841326', 'Site', 'EXCEL', TRUE FROM sites LIMIT 1;
            INSERT INTO site_bank_accounts (site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active)
            SELECT id, 'AKBANK', 'Akbank', 'TR330006100519786457841327', 'Site', 'EXCEL', TRUE FROM sites LIMIT 1""",
+    ),
+    (
+        "payment_entries rejects phantom unit",
+        "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel) VALUES (1, 999999, 'X', 10, 'CASH')",
+    ),
+    (
+        "advance_balances rejects phantom unit",
+        "INSERT INTO advance_balances (unit_id, balance) VALUES (999999, 10)",
+    ),
+    (
+        "capital_projects rejects phantom site",
+        "INSERT INTO capital_projects (site_id, title, category, total_budget, target_start_date) VALUES (999999, 'T', 'OTHER', 100, CURRENT_DATE)",
+    ),
+    (
+        "occupancy_members rejects phantom occupancy",
+        "INSERT INTO occupancy_members (occupancy_id, full_name, relationship) VALUES (999999, 'X', 'self')",
+    ),
+    (
+        "occupancy_members rejects phantom resident user",
+        "INSERT INTO occupancy_members (occupancy_id, resident_user_id, full_name, relationship) VALUES (1, 999999, 'X', 'self')",
     ),
 ]
 
@@ -207,7 +229,7 @@ def main() -> int:
         sync_migrations()
 
     init_sql = sorted(INIT_DIR.glob("00-*.sql"))
-    migration_sql = sorted(MIGRATIONS_DIR.glob("V*.sql"))
+    migration_sql = sorted(MIGRATIONS_DIR.glob("V*.sql"), key=lambda p: int(p.stem.split("__")[0][1:]))
     if not init_sql or not migration_sql:
         print("schema sources not found", file=sys.stderr)
         return 2

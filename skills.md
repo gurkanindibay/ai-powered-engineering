@@ -63,7 +63,9 @@ This document lists the available skills and custom tools available to AI agents
 ./scripts/schema_integrity_check.py --sync
 ```
 
-`backend/db/init` is the single editable schema source; the `V*` base migrations are generated from it. Never hand-edit both.
+`backend/db/init` is the single editable source for both schema and seed data:
+the `V*` base migrations are generated from it, and the Rust backend bootstraps
+by `include_str!`-ing the same files — never hand-edit more than one copy.
 
 ---
 

@@ -128,7 +128,7 @@ do_verify() {
             (SELECT count(*) FROM users WHERE site_id::text = '${site_id}' OR site_id IS NULL) AS users_count,
             (SELECT count(*) FROM dues_periods WHERE site_id::text = '${site_id}') AS periods_count,
             (SELECT count(*) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id::text = '${site_id}') AS dues_count,
-            (SELECT count(*) FROM collection_transactions ct JOIN units u ON ct.unit_id = u.id WHERE u.site_id::text = '${site_id}') AS tx_count;
+            (SELECT count(*) FROM payment_entries pe JOIN units u ON pe.unit_id = u.id WHERE u.site_id::text = '${site_id}') AS tx_count;
     "
 
     echo "2. Financial Balance Summary (Site ID: ${site_id}):"
@@ -151,8 +151,8 @@ do_verify() {
             (SELECT count(*) FROM units WHERE block_id NOT IN (SELECT id FROM blocks)) AS orphaned_units_block,
             (SELECT count(*) FROM units WHERE site_id NOT IN (SELECT id FROM sites)) AS orphaned_units_site,
             (SELECT count(*) FROM dues_liabilities WHERE unit_id NOT IN (SELECT id FROM units)) AS orphaned_dues_unit,
-            (SELECT count(*) FROM collection_transactions WHERE unit_id IS NOT NULL AND unit_id NOT IN (SELECT id FROM units)) AS orphaned_tx_unit,
-            (SELECT count(*) FROM unit_members WHERE unit_id NOT IN (SELECT id::text FROM units) AND unit_id NOT LIKE 'd-%') AS orphaned_members;
+            (SELECT count(*) FROM payment_entries WHERE unit_id NOT IN (SELECT id FROM units)) AS orphaned_payment_entries,
+            (SELECT count(*) FROM occupancy_members WHERE occupancy_id NOT IN (SELECT id FROM unit_occupancies)) AS orphaned_members;
     "
 
     echo "4. Virtual IBAN Allocations (Site ID: ${site_id}):"

@@ -77,7 +77,9 @@ The primary database verification tool is a Python CLI located at:
    ```
    Replays `backend/db/init/00-*.sql` and `backend/migrations/V*.sql` into throwaway
    databases and asserts both produce the same schema and that the integrity
-   constraints reject invalid data. `backend/db/init` is the single editable source.
+   constraints reject invalid data. `backend/db/init` is the single editable source for
+   schema AND seed data — the Rust backend `include_str!`s the same files at startup
+   (see `backend/src/db.rs`), so there is no duplicated schema/seed in code.
 
 ## Environment Details
 - **Docker Container:** `sitepulse-postgres`

@@ -19,6 +19,20 @@ SET name = EXCLUDED.name,
     status = EXCLUDED.status,
     plan_type = EXCLUDED.plan_type;
 
+-- 1b. Tariff categories for every site (priced per unit size)
+INSERT INTO house_types (site_id, type_name, dues_amount, description)
+SELECT s.id, t.type_name, t.dues_amount, t.description
+FROM sites s
+CROSS JOIN (
+    VALUES
+        ('1+1', 1000.00::NUMERIC(15,2), '1 Oda 1 Salon'),
+        ('2+1', 1400.00::NUMERIC(15,2), '2 Oda 1 Salon'),
+        ('3+1', 1800.00::NUMERIC(15,2), '3 Oda 1 Salon'),
+        ('4+1', 2200.00::NUMERIC(15,2), '4 Oda 1 Salon'),
+        ('Dublex', 2500.00::NUMERIC(15,2), 'Çatı Dubleks / Bahçe Katı')
+) AS t(type_name, dues_amount, description)
+ON CONFLICT (site_id, type_name) DO NOTHING;
+
 -- 2. Test Blocks
 INSERT INTO blocks (id, site_id, block_name, total_floors) 
 VALUES 
@@ -96,7 +110,7 @@ SET iban = EXCLUDED.iban,
     is_active = EXCLUDED.is_active;
 
 -- 6. Dues Liabilities & Transactions (Clean Slate: 0 debts, 0 transactions)
-TRUNCATE TABLE collection_transactions RESTART IDENTITY CASCADE;
+TRUNCATE TABLE payment_entries RESTART IDENTITY CASCADE;
 TRUNCATE TABLE dues_liabilities RESTART IDENTITY CASCADE;
 
 -- 7. Synchronize Identity Sequences
@@ -107,4 +121,4 @@ SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FR
 SELECT setval(pg_get_serial_sequence('units', 'id'), COALESCE((SELECT MAX(id) FROM units), 1));
 SELECT setval(pg_get_serial_sequence('site_bank_accounts', 'id'), COALESCE((SELECT MAX(id) FROM site_bank_accounts), 1));
 SELECT setval(pg_get_serial_sequence('dues_liabilities', 'id'), 1, false);
-SELECT setval(pg_get_serial_sequence('collection_transactions', 'id'), 1, false);
+SELECT setval(pg_get_serial_sequence('payment_entries', 'id'), 1, false);

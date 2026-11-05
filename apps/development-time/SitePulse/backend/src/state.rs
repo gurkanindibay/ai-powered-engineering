@@ -372,6 +372,8 @@ impl AppStateInner {
                 email: "ahmet.yilmaz@begonya.com".to_string(),
                 is_owner: true,
                 occupancy_id: Some(1),
+                person_id: None,
+                resident_user_id: None,
             }],
         );
 

@@ -688,6 +688,7 @@ pub struct HomeResidentResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnitMemberDto {
+    /// `occupancy_members.id` — the sole, real identifier for a household member.
     pub resident_id: String,
     pub full_name: String,
     pub relationship: String,
@@ -696,6 +697,10 @@ pub struct UnitMemberDto {
     pub is_owner: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub occupancy_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub person_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resident_user_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

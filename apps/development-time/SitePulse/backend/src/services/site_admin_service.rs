@@ -298,12 +298,15 @@ impl SiteAdminService {
                     let _ = client
                         .execute(
                             r#"
-                            INSERT INTO unit_members (unit_id, resident_id, full_name, relationship, phone, email, is_owner, created_at)
-                            VALUES ($1, $2, $3, 'Ev Sakini', $4, $5, false, CURRENT_TIMESTAMP)
+                            INSERT INTO occupancy_members (occupancy_id, person_id, resident_user_id, full_name, relationship, phone, email, is_emergency_contact, created_at)
+                            SELECT uo.id, $2, $3, $4, 'Ev Sakini', $5, $6, false, CURRENT_TIMESTAMP
+                            FROM unit_occupancies uo
+                            WHERE uo.unit_id = $1 AND uo.is_active = true
                             "#,
                             &[
-                                &unit_numeric_id.to_string(),
-                                &user_numeric_id.to_string(),
+                                &unit_numeric_id,
+                                &Some(person_numeric_id),
+                                &Some(user_numeric_id),
                                 &request.owner_full_name,
                                 &request.phone,
                                 &email_norm,
@@ -447,12 +450,15 @@ impl SiteAdminService {
                     let _ = client
                         .execute(
                             r#"
-                            INSERT INTO unit_members (unit_id, resident_id, full_name, relationship, phone, email, is_owner, created_at)
-                            VALUES ($1, $2, $3, 'Ev Sakini', $4, $5, false, CURRENT_TIMESTAMP)
+                            INSERT INTO occupancy_members (occupancy_id, person_id, resident_user_id, full_name, relationship, phone, email, is_emergency_contact, created_at)
+                            SELECT uo.id, $2, $3, $4, 'Ev Sakini', $5, $6, false, CURRENT_TIMESTAMP
+                            FROM unit_occupancies uo
+                            WHERE uo.unit_id = $1 AND uo.is_active = true
                             "#,
                             &[
-                                &unit_numeric_id.to_string(),
-                                &user_numeric_id.to_string(),
+                                &unit_numeric_id,
+                                &Some(person_numeric_id),
+                                &Some(user_numeric_id),
                                 &request.owner_full_name,
                                 &request.phone,
                                 &email_norm,
@@ -565,6 +571,8 @@ impl SiteAdminService {
                 email: email_norm.clone(),
                 is_owner: false,
                 occupancy_id: None,
+                person_id: None,
+                resident_user_id: None,
             };
             inner.unit_members.entry(unit_id.clone()).or_default().push(member_dto.clone());
             if unit_numeric_id > 0 {
@@ -755,6 +763,8 @@ impl SiteAdminService {
                 email: email_norm.clone(),
                 is_owner: false,
                 occupancy_id: None,
+                person_id: None,
+                resident_user_id: None,
             }]
         } else {
             Vec::new()
@@ -829,26 +839,29 @@ impl SiteAdminService {
                 if let Ok(m_rows) = client
                     .query(
                         r#"
-                        SELECT um.unit_id, um.resident_id, um.full_name, um.relationship, COALESCE(um.phone, ''), COALESCE(um.email, ''), um.is_owner, um.occupancy_id
-                        FROM unit_members um
-                        LEFT JOIN unit_occupancies uo ON um.occupancy_id = uo.id
-                        WHERE um.occupancy_id IS NULL OR uo.is_active = true
-                        ORDER BY um.id ASC
+                        SELECT uo.unit_id, om.id, om.full_name, om.relationship, COALESCE(om.phone, ''), COALESCE(om.email, ''), (uo.occupancy_type = 'OWNER'), om.occupancy_id
+                        FROM occupancy_members om
+                        JOIN unit_occupancies uo ON om.occupancy_id = uo.id
+                        WHERE uo.is_active = true
+                        ORDER BY om.id ASC
                         "#,
                         &[],
                     )
                     .await
                 {
                     for mr in m_rows {
-                        let u_id: String = mr.get(0);
+                        let u_id: i64 = mr.get(0);
+                        let u_id = u_id.to_string();
                         let mem = crate::models::UnitMemberDto {
-                            resident_id: mr.get(1),
+                            resident_id: mr.get::<_, i64>(1).to_string(),
                             full_name: mr.get(2),
                             relationship: mr.get(3),
                             phone: mr.get(4),
                             email: mr.get(5),
                             is_owner: mr.get(6),
                             occupancy_id: mr.try_get(7).ok().flatten(),
+                person_id: None,
+                resident_user_id: None,
                         };
                         household_map.entry(u_id).or_default().push(mem);
                     }
@@ -1272,16 +1285,14 @@ impl SiteAdminService {
                     let u_id: i64 = u_row.get(0);
                     let p_id: Option<i64> = u_row.get(1);
                     let t_id: Option<i64> = u_row.get(2);
-                    let u_id_str = u_id.to_string();
 
                     // Delete dependent records safely adhering to foreign key hierarchy
-                    let _ = client.execute("DELETE FROM collection_transactions WHERE unit_id = $1 OR dues_liability_id IN (SELECT id FROM dues_liabilities WHERE unit_id = $1)", &[&u_id]).await;
+                    let _ = client.execute("DELETE FROM payment_entries WHERE unit_id = $1 OR dues_liability_id IN (SELECT id FROM dues_liabilities WHERE unit_id = $1)", &[&u_id]).await;
                     let _ = client.execute("DELETE FROM dues_liabilities WHERE unit_id = $1", &[&u_id]).await;
                     let _ = client.execute("DELETE FROM unit_occupancies WHERE unit_id = $1", &[&u_id]).await;
-                    let _ = client.execute("DELETE FROM unit_members WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
-                    let _ = client.execute("DELETE FROM advance_balances WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
-                    let _ = client.execute("DELETE FROM unit_sender_ibans WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
-                    let _ = client.execute("DELETE FROM unit_payer_names WHERE unit_id = $1 OR unit_id = $2", &[&u_id_str, &format!("d-{}", u_id)]).await;
+                    let _ = client.execute("DELETE FROM advance_balances WHERE unit_id = $1", &[&u_id]).await;
+                    let _ = client.execute("DELETE FROM unit_sender_ibans WHERE unit_id = $1", &[&u_id]).await;
+                    let _ = client.execute("DELETE FROM unit_payer_names WHERE unit_id = $1", &[&u_id]).await;
                     let _ = client.execute("DELETE FROM units WHERE id = $1", &[&u_id]).await;
 
                     // Clean up person and user if no other units or occupancies exist
@@ -1399,20 +1410,35 @@ impl SiteAdminService {
             return Err("E-posta adresi boş olamaz.".to_string());
         }
 
-        let resident_id = format!("usr-res-{}", &uuid::Uuid::new_v4().to_string()[..8]);
+        let relationship_val = if relationship.trim().is_empty() { "Ev Sakini" } else { relationship };
+
+        // Persist into the canonical household table; it resolves the unit's active
+        // occupancy and links the person by email. The returned id is the real identifier.
+        let member_id = match self.state.pool {
+            Some(ref pool) => crate::db::save_unit_member(
+                pool,
+                unit_id,
+                full_name,
+                relationship_val,
+                phone,
+                email,
+            )
+            .await
+            .unwrap_or(0),
+            None => 0,
+        };
+
         let member = UnitMemberDto {
-            resident_id: resident_id.clone(),
+            resident_id: member_id.to_string(),
             full_name: full_name.to_string(),
-            relationship: if relationship.trim().is_empty() { "Ev Sakini".to_string() } else { relationship.to_string() },
+            relationship: relationship_val.to_string(),
             phone: phone.to_string(),
             email: email.trim().to_lowercase(),
             is_owner: false,
             occupancy_id: None,
+            person_id: None,
+            resident_user_id: None,
         };
-
-        if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::save_unit_member(pool, unit_id, &member).await;
-        }
 
         let mut inner = self.state.inner.write().await;
         for key in &[unit_id.to_string(), format!("d-{}", unit_id), format!("unit-{}", unit_id)] {
@@ -1426,7 +1452,7 @@ impl SiteAdminService {
             let password_hash = format!("argon2id_hash_placeholder:{}", &temp_pass);
             let s_id = if site_id.is_empty() { "site-1".to_string() } else { site_id.to_string() };
             inner.users.push(crate::models::User {
-                id: resident_id.clone(),
+                id: format!("usr-res-{}", &uuid::Uuid::new_v4().to_string()[..8]),
                 site_id: s_id,
                 full_name: full_name.to_string(),
                 email: email_norm,
@@ -1448,9 +1474,11 @@ impl SiteAdminService {
     pub async fn delete_unit_member(&self, _site_id: &str, unit_id: &str, resident_id: &str) -> Result<(), String> {
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
+                let unit_id_num = crate::db::parse_id_to_i64(unit_id).unwrap_or(0);
+                let member_id = crate::db::parse_id_to_i64(resident_id);
                 let _ = client.execute(
-                    "DELETE FROM unit_members WHERE (unit_id = $1 OR unit_id = $2 OR unit_id = (SELECT unit_number::text FROM units WHERE id::text = $1) OR unit_id = (SELECT id::text FROM units WHERE unit_number::text = $1)) AND (resident_id = $3 OR full_name = $3 OR id::text = $3)",
-                    &[&unit_id, &format!("d-{}", unit_id), &resident_id],
+                    "DELETE FROM occupancy_members WHERE id = $1 AND occupancy_id IN (SELECT id FROM unit_occupancies WHERE unit_id = $2)",
+                    &[&member_id, &unit_id_num],
                 ).await;
             }
         }
@@ -1476,9 +1504,11 @@ impl SiteAdminService {
     ) -> Result<(), String> {
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
+                let unit_id_num = crate::db::parse_id_to_i64(unit_id).unwrap_or(0);
+                let member_id = crate::db::parse_id_to_i64(resident_id);
                 let _ = client.execute(
-                    "UPDATE unit_members SET full_name = $1, phone = $2, email = $3, relationship = $4 WHERE (unit_id = $5 OR unit_id = $6 OR unit_id = (SELECT unit_number::text FROM units WHERE id::text = $5) OR unit_id = (SELECT id::text FROM units WHERE unit_number::text = $5)) AND (resident_id = $7 OR full_name = $7 OR id::text = $7)",
-                    &[&full_name, &phone, &email, &relationship, &unit_id, &format!("d-{}", unit_id), &resident_id],
+                    "UPDATE occupancy_members SET full_name = $1, phone = $2, email = $3, relationship = $4 WHERE id = $5 AND occupancy_id IN (SELECT id FROM unit_occupancies WHERE unit_id = $6)",
+                    &[&full_name, &phone, &email, &relationship, &member_id, &unit_id_num],
                 ).await;
             }
         }
@@ -1890,8 +1920,8 @@ impl SiteAdminService {
                 // Bind active household members to the closed occupancy session
                 let _ = client
                     .execute(
-                        "UPDATE unit_members SET occupancy_id = $1 WHERE (unit_id = $2 OR unit_id = $3) AND occupancy_id IS NULL",
-                        &[&occ_id, &unit_numeric.to_string(), &format!("d-{}", unit_numeric)],
+                        "UPDATE occupancy_members SET occupancy_id = $1 WHERE occupancy_id IS NULL AND person_id IN (SELECT person_id FROM unit_occupancies WHERE id = $1)",
+                        &[&occ_id],
                     )
                     .await;
 

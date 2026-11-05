@@ -57,7 +57,7 @@ VALUES (
     NULL,
     (SELECT id FROM persons WHERE email = 'admin@sitepulse.io'),
     'admin@sitepulse.io',
-    'argon2id_hash_placeholder',
+    'ARGON2_HASH_admin123',
     'SAAS_ADMIN',
     FALSE
 )

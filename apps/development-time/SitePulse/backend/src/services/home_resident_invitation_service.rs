@@ -143,6 +143,8 @@ impl HomeResidentInvitationService {
             email: email_norm.clone(),
             is_owner: false,
             occupancy_id: None,
+                person_id: None,
+                resident_user_id: None,
         };
 
         inner
@@ -155,7 +157,15 @@ impl HomeResidentInvitationService {
 
         if let Some(ref pool) = self.state.pool {
             let _ = crate::db::save_user(pool, &resident_user).await;
-            let _ = crate::db::save_unit_member(pool, &unit_id, &member_dto).await;
+            let _ = crate::db::save_unit_member(
+                pool,
+                &unit_id,
+                &member_dto.full_name,
+                &member_dto.relationship,
+                &member_dto.phone,
+                &member_dto.email,
+            )
+            .await;
         }
 
         Ok(HomeResidentResponse {
@@ -177,14 +187,14 @@ impl HomeResidentInvitationService {
                 if let Ok(rows) = client
                     .query(
                         r#"
-                        SELECT um.resident_id, um.full_name, um.relationship, um.phone, um.email, um.is_owner, um.occupancy_id
-                        FROM unit_members um
-                        LEFT JOIN unit_occupancies uo ON um.occupancy_id = uo.id
-                        WHERE (um.unit_id = $1 OR um.unit_id = (SELECT unit_number::text FROM units WHERE id::text = $1) OR um.unit_id = (SELECT id::text FROM units WHERE unit_number::text = $1))
-                          AND (um.occupancy_id IS NULL OR uo.is_active = true)
-                        ORDER BY um.id ASC
+                        SELECT om.id, om.full_name, om.relationship, om.phone, om.email,
+                               (uo.occupancy_type = 'OWNER'), om.occupancy_id, om.person_id, om.resident_user_id
+                        FROM occupancy_members om
+                        JOIN unit_occupancies uo ON om.occupancy_id = uo.id
+                        WHERE uo.unit_id = $1 AND uo.is_active = true
+                        ORDER BY om.id ASC
                         "#,
-                        &[&unit_id],
+                        &[&crate::db::parse_id_to_i64(unit_id).unwrap_or(0)],
                     )
                     .await
                 {
@@ -192,13 +202,15 @@ impl HomeResidentInvitationService {
                         return rows
                             .into_iter()
                             .map(|r| UnitMemberDto {
-                                resident_id: r.get(0),
+                                resident_id: r.get::<_, i64>(0).to_string(),
                                 full_name: r.get(1),
                                 relationship: r.get(2),
                                 phone: r.get::<_, Option<String>>(3).unwrap_or_default(),
                                 email: r.get::<_, Option<String>>(4).unwrap_or_default(),
                                 is_owner: r.get(5),
                                 occupancy_id: r.try_get(6).ok().flatten(),
+                                person_id: r.try_get(7).ok().flatten(),
+                                resident_user_id: r.try_get(8).ok().flatten(),
                             })
                             .collect();
                     }

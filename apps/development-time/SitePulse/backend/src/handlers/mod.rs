@@ -2759,19 +2759,15 @@ pub async fn purge_site_cascade(
         };
         let site_id_num = site_id.parse::<i64>().unwrap_or(-1);
         let _ = client.execute(
-            "DELETE FROM collection_transactions WHERE unit_id IN (SELECT id::text FROM units WHERE site_id = $1 OR site_id = $2)",
+            "DELETE FROM payment_entries WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1 OR site_id = $2)",
             &[&site_id_num, &site_id],
         ).await;
         let _ = client.execute(
-            "DELETE FROM dues_liabilities WHERE unit_id IN (SELECT id::text FROM units WHERE site_id = $1 OR site_id = $2)",
+            "DELETE FROM dues_liabilities WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1 OR site_id = $2)",
             &[&site_id_num, &site_id],
         ).await;
         let _ = client.execute(
             "DELETE FROM unit_occupancies WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1 OR site_id = $2)",
-            &[&site_id_num, &site_id],
-        ).await;
-        let _ = client.execute(
-            "DELETE FROM unit_members WHERE unit_id IN (SELECT id::text FROM units WHERE site_id = $1 OR site_id = $2)",
             &[&site_id_num, &site_id],
         ).await;
         let _ = client.execute(

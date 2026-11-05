@@ -213,7 +213,7 @@ class DbVerifier:
             (SELECT COUNT(*) FROM users) AS total_users,
             (SELECT COUNT(*) FROM dues_periods WHERE site_id::text = '{site_id}') AS dues_periods,
             (SELECT COUNT(*) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id::text = '{site_id}') AS dues_liabilities,
-            (SELECT COUNT(*) FROM collection_transactions ct JOIN units u ON ct.unit_id = u.id WHERE u.site_id::text = '{site_id}') AS collections
+            (SELECT COUNT(*) FROM payment_entries pe JOIN units u ON pe.unit_id = u.id WHERE u.site_id::text = '{site_id}') AS collections
         """
         summary["entity_counts"] = self.query_json(counts_sql)[0]
 
@@ -248,8 +248,8 @@ class DbVerifier:
             "orphaned_dues_liabilities": self.query_json(
                 f"SELECT dl.id, dl.unit_id FROM dues_liabilities dl LEFT JOIN units u ON dl.unit_id = u.id WHERE u.id IS NULL;"
             ),
-            "orphaned_unit_members": self.query_json(
-                f"SELECT um.id, um.unit_id, um.full_name FROM unit_members um LEFT JOIN units u ON um.unit_id::text = u.id::text WHERE u.id IS NULL;"
+            "orphaned_household_members": self.query_json(
+                "SELECT om.id, om.occupancy_id, om.full_name FROM occupancy_members om LEFT JOIN unit_occupancies uo ON om.occupancy_id = uo.id WHERE uo.id IS NULL;"
             ),
         }
         summary["integrity_issues"] = orphan_checks

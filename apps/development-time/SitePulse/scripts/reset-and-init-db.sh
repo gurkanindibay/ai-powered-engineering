@@ -138,6 +138,12 @@ fi
 if [ -f "$INIT_DIR/00-08-referential-and-financial-integrity.sql" ]; then
     run_sql_file "$INIT_DIR/00-08-referential-and-financial-integrity.sql"
 fi
+if [ -f "$INIT_DIR/00-09-ledger-and-referential-integrity.sql" ]; then
+    run_sql_file "$INIT_DIR/00-09-ledger-and-referential-integrity.sql"
+fi
+if [ -f "$INIT_DIR/00-10-consolidate-household-members.sql" ]; then
+    run_sql_file "$INIT_DIR/00-10-consolidate-household-members.sql"
+fi
 run_sql_file "$INIT_DIR/01-system-seed.sql"
 
 # 4. Apply site data according to selected mode
@@ -151,13 +157,13 @@ fi
 # 5. Enforce 0 dues liabilities, 0 periods, 0 collection transactions
 echo "▶ [4/4] Enforcing clean dues ledger (ZERO site payment periods)..."
 run_sql_stdin << 'EOF'
-TRUNCATE TABLE collection_transactions RESTART IDENTITY CASCADE;
+TRUNCATE TABLE payment_entries RESTART IDENTITY CASCADE;
 TRUNCATE TABLE dues_liabilities RESTART IDENTITY CASCADE;
 TRUNCATE TABLE dues_periods RESTART IDENTITY CASCADE;
 
 SELECT setval(pg_get_serial_sequence('dues_periods', 'id'), 1, false);
 SELECT setval(pg_get_serial_sequence('dues_liabilities', 'id'), 1, false);
-SELECT setval(pg_get_serial_sequence('collection_transactions', 'id'), 1, false);
+SELECT setval(pg_get_serial_sequence('payment_entries', 'id'), 1, false);
 EOF
 echo "  ✔ Dues liabilities and collection transactions strictly empty."
 
@@ -182,7 +188,7 @@ SELECT
     (SELECT COUNT(*) FROM users) as users_count,
     (SELECT COUNT(*) FROM site_bank_accounts) as bank_accounts_count,
     (SELECT COUNT(*) FROM dues_liabilities) as dues_periods_count,
-    (SELECT COUNT(*) FROM collection_transactions) as transactions_count;
+    (SELECT COUNT(*) FROM payment_entries) as transactions_count;
 EOF
 
 echo ""
