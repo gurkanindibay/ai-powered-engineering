@@ -56,8 +56,14 @@ impl PaymentTrackingService {
 
     /// Next sequential receipt number for a given site (e.g., #TAH-2026-000001)
     pub async fn next_receipt_number(&self, site_id: &str) -> (String, i64) {
-        let inner = self.state.inner.read().await;
         let year = Utc::now().format("%Y").to_string();
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(next_seq) = crate::db::get_next_receipt_sequence(pool, site_id).await {
+                let receipt_no = format!("TAH-{}-{:06}", year, next_seq);
+                return (receipt_no, next_seq);
+            }
+        }
+        let inner = self.state.inner.read().await;
         let max_seq = inner
             .payment_receipts
             .iter()
@@ -429,7 +435,7 @@ impl PaymentTrackingService {
         // Also record corresponding payment entry in stream
         let entry_id = (inner.payment_entries.len() + 1) as i64;
         let unit_label = format!("{} Blok D:{}", unit.block_id, unit.unit_number);
-        inner.payment_entries.push(PaymentEntry {
+        let entry = PaymentEntry {
             id: entry_id,
             site_id: site_id.clone(),
             unit_id: unit_id.clone(),
@@ -445,7 +451,8 @@ impl PaymentTrackingService {
             external_reference: Some(format!("REF-{}", Uuid::new_v4().simple())),
             payment_date: issued_at,
             created_at: Utc::now(),
-        });
+        };
+        inner.payment_entries.push(entry.clone());
 
         // Also keep homeowner payment record in sync
         inner.homeowner_payments.push(crate::models::HomeownerPaymentRecord {
@@ -463,6 +470,68 @@ impl PaymentTrackingService {
             advance_credit_amount: allocated_advance,
             created_at: issued_at,
         });
+
+        drop(inner);
+
+        if let Some(ref pool) = self.state.pool {
+            let db_rcp_id = match crate::db::save_payment_receipt(pool, &receipt).await {
+                Ok(id) => Some(id),
+                Err(e) => {
+                    tracing::warn!("Failed to persist payment receipt to DB: {}", e);
+                    None
+                }
+            };
+
+            let mut db_entry = entry.clone();
+            db_entry.receipt_id = db_rcp_id;
+
+            let db_entry_id = match crate::db::save_payment_entry(pool, &db_entry).await {
+                Ok(id) => id,
+                Err(e) => {
+                    tracing::warn!("Failed to persist payment entry to DB: {}", e);
+                    entry_id
+                }
+            };
+
+            for item in &receipt.allocation_breakdown {
+                if let Some(ref d_id) = item.due_id {
+                    let d_id_num = crate::db::parse_id_to_i64(d_id).unwrap_or(1);
+                    let _ = crate::db::record_due_allocation(
+                        pool,
+                        d_id_num,
+                        item.principal_paid,
+                        item.penalty_paid,
+                    )
+                    .await;
+                    let _ = crate::db::save_payment_allocation(
+                        pool,
+                        db_entry_id,
+                        d_id_num,
+                        item.principal_paid,
+                        item.penalty_paid,
+                    )
+                    .await;
+                }
+            }
+
+            if allocated_advance > Decimal::ZERO {
+                let debtor_type = if req.payer_role == "OWNER" { "OWNER" } else { "TENANT" };
+                let inner = self.state.inner.read().await;
+                let current_bal = inner.advance_payments.get(&unit_id).copied().unwrap_or(Decimal::ZERO);
+                drop(inner);
+                let _ = crate::db::save_advance_balance_with_type(pool, &unit_id, debtor_type, current_bal).await;
+                let _ = crate::db::save_advance_ledger_entry(
+                    pool,
+                    &unit_id,
+                    debtor_type,
+                    "PAYMENT_SURPLUS",
+                    allocated_advance,
+                    Some(&receipt_number),
+                    Some("Fazla ödeme avans bakiyesine aktarıldı"),
+                )
+                .await;
+            }
+        }
 
         Ok(receipt)
     }
@@ -589,11 +658,11 @@ impl PaymentTrackingService {
             issued_at: now,
         };
 
-        inner.payment_receipts.push(receipt);
+        inner.payment_receipts.push(receipt.clone());
 
         let entry_id = (inner.payment_entries.len() + 1) as i64;
         let unit_label = format!("{} Blok D:{}", unit.block_id, unit.unit_number);
-        inner.payment_entries.push(PaymentEntry {
+        let entry = PaymentEntry {
             id: entry_id,
             site_id: site_id.clone(),
             unit_id: unit_id.clone(),
@@ -609,7 +678,64 @@ impl PaymentTrackingService {
             external_reference: Some(format!("VIRMAN-{}", Uuid::new_v4().simple())),
             payment_date: now,
             created_at: now,
-        });
+        };
+        inner.payment_entries.push(entry.clone());
+
+        drop(inner);
+
+        if let Some(ref pool) = self.state.pool {
+            let db_rcp_id = match crate::db::save_payment_receipt(pool, &receipt).await {
+                Ok(id) => Some(id),
+                Err(e) => {
+                    tracing::warn!("Failed to persist virman receipt to DB: {}", e);
+                    None
+                }
+            };
+
+            let mut db_entry = entry.clone();
+            db_entry.receipt_id = db_rcp_id;
+
+            let db_entry_id = match crate::db::save_payment_entry(pool, &db_entry).await {
+                Ok(id) => id,
+                Err(e) => {
+                    tracing::warn!("Failed to persist virman entry to DB: {}", e);
+                    entry_id
+                }
+            };
+
+            for item in &receipt.allocation_breakdown {
+                if let Some(ref d_id) = item.due_id {
+                    let d_id_num = crate::db::parse_id_to_i64(d_id).unwrap_or(1);
+                    let _ = crate::db::record_due_allocation(
+                        pool,
+                        d_id_num,
+                        item.principal_paid,
+                        item.penalty_paid,
+                    )
+                    .await;
+                    let _ = crate::db::save_payment_allocation(
+                        pool,
+                        db_entry_id,
+                        d_id_num,
+                        item.principal_paid,
+                        item.penalty_paid,
+                    )
+                    .await;
+                }
+            }
+
+            let _ = crate::db::save_advance_balance_with_type(pool, &unit_id, "OWNER", remaining_advance).await;
+            let _ = crate::db::save_advance_ledger_entry(
+                pool,
+                &unit_id,
+                "OWNER",
+                "VIRMAN_DEBIT",
+                transfer_amount,
+                Some(&receipt_number),
+                Some("Demirbaş borcu mahsubu (virman)"),
+            )
+            .await;
+        }
 
         Ok(InterLedgerTransferResponse {
             success: true,
@@ -643,7 +769,54 @@ impl PaymentTrackingService {
             })
             .cloned();
 
-        receipt.ok_or_else(|| format!("Makbuz bulunamadı: {}", identifier))
+        if let Some(r) = receipt {
+            return Ok(r);
+        }
+
+        if let Some(ref pool) = self.state.pool {
+            if let Ok(client) = pool.get().await {
+                let site_id_num = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+                let row_res = if let Some(n) = num_id {
+                    client.query_opt(
+                        "SELECT id, site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, on_behalf_of_name, on_behalf_of_role, total_amount, payment_channel, channel_reference, allocated_principal, allocated_penalty, allocated_advance, allocation_breakdown::text, is_rent_offset_eligible, legal_statutory_note, verification_hash, issued_at FROM payment_receipts WHERE (site_id = $1 OR $1 = 0) AND (id = $2 OR receipt_number = $3)",
+                        &[&site_id_num, &n, &identifier],
+                    ).await
+                } else {
+                    client.query_opt(
+                        "SELECT id, site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, on_behalf_of_name, on_behalf_of_role, total_amount, payment_channel, channel_reference, allocated_principal, allocated_penalty, allocated_advance, allocation_breakdown::text, is_rent_offset_eligible, legal_statutory_note, verification_hash, issued_at FROM payment_receipts WHERE (site_id = $1 OR $1 = 0) AND receipt_number = $2",
+                        &[&site_id_num, &identifier],
+                    ).await
+                };
+
+                if let Ok(Some(row)) = row_res {
+                    let breakdown_str: String = row.get(15);
+                    return Ok(PaymentReceipt {
+                        id: row.get(0),
+                        site_id: row.get::<_, i64>(1).to_string(),
+                        unit_id: row.get::<_, i64>(2).to_string(),
+                        receipt_number: row.get(3),
+                        sequence_number: row.get(4),
+                        payer_name: row.get(5),
+                        payer_role: row.get(6),
+                        on_behalf_of_name: row.get(7),
+                        on_behalf_of_role: row.get(8),
+                        total_amount: row.get(9),
+                        payment_channel: row.get(10),
+                        channel_reference: row.get(11),
+                        allocated_principal: row.get(12),
+                        allocated_penalty: row.get(13),
+                        allocated_advance: row.get(14),
+                        allocation_breakdown: serde_json::from_str(&breakdown_str).unwrap_or_default(),
+                        is_rent_offset_eligible: row.get(16),
+                        legal_statutory_note: row.get(17),
+                        verification_hash: row.get(18),
+                        issued_at: row.get(19),
+                    });
+                }
+            }
+        }
+
+        Err(format!("Makbuz bulunamadı: {}", identifier))
     }
 
     /// Transfer property title deed ownership (ev satışı) with debt freeze & handover
@@ -685,7 +858,7 @@ impl PaymentTrackingService {
             format!("malik.{}@begonya.com", Uuid::new_v4().simple())
         });
 
-        inner.users.push(User {
+        let new_user = User {
             id: new_user_id.clone(),
             site_id: site_id.clone(),
             full_name: req.new_owner_name.clone(),
@@ -699,7 +872,9 @@ impl PaymentTrackingService {
             avatar_url: None,
             created_at: now,
             person_id: None,
-        });
+        };
+
+        inner.users.push(new_user.clone());
 
         // Archive old owner in unit_occupancies
         let notes = format!(
@@ -707,7 +882,7 @@ impl PaymentTrackingService {
             old_owner_name,
             old_owner_exit_balance,
             req.new_owner_name,
-            req.notes.unwrap_or_default()
+            req.notes.as_deref().unwrap_or_default()
         );
 
         let unit_num_i64 = crate::db::parse_id_to_i64(&unit_id).unwrap_or(1);
@@ -725,7 +900,7 @@ impl PaymentTrackingService {
             end_date: Some(transfer_date.to_string()),
             is_active: false,
             exit_balance: old_owner_exit_balance,
-            notes: Some(notes),
+            notes: Some(notes.clone()),
             created_at: now,
         };
 
@@ -737,6 +912,20 @@ impl PaymentTrackingService {
 
         // Update unit owner
         inner.units[unit_idx].owner_user_id = Some(new_user_id);
+
+        drop(inner);
+
+        if let Some(ref pool) = self.state.pool {
+            let _ = crate::db::transfer_unit_ownership_db(
+                pool,
+                &unit_id,
+                &new_user,
+                transfer_date,
+                old_owner_exit_balance,
+                req.notes.as_deref(),
+            )
+            .await;
+        }
 
         Ok(TransferOwnershipResponse {
             success: true,

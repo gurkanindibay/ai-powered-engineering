@@ -94,6 +94,30 @@ by `include_str!`-ing the same files — never hand-edit more than one copy.
 - **Skill Definition:** [.agents/skills/continuous-improvement-tooling/SKILL.md](file:///.agents/skills/continuous-improvement-tooling/SKILL.md)
 - **Purpose:** Directs the agent to evaluate whether bespoke scripts, inspection routines, or verification procedures created during feature development or debugging have recurring value, and crystallize them into durable, well-documented Python CLI tools in `scripts/` for future iterations.
 
+---
+
+## 5. Memory-Persistence Architecture Linter (`memory_persistence_lint.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/memory_persistence_lint.py](file:///apps/development-time/SitePulse/scripts/memory_persistence_lint.py) (symlinked to `scripts/memory_persistence_lint.py`)
+- **Purpose:** Continuous verification gate preventing memory vs. database duality bugs. Ensures that all in-memory entities are hydrated on startup, mutations persist to PostgreSQL, no destructive overwrites exist on monetary ledgers, and conflict targets match active schema constraints.
+
+### Capabilities:
+- Verifies hydration of all 15 critical tables in `load_all_from_db()`.
+- Catches destructive overwrites on `dues_liabilities.paid_amount`.
+- Verifies composite conflict arbiter `(unit_id, debtor_type)` on `advance_balances`.
+- Verifies unique composite conflict arbiter `(unit_id, sender_iban)` on `unit_sender_ibans`.
+- Asserts database-backed receipt sequences, payment entry allocations, and advance sub-ledger audit trail.
+- Integrated into `scripts/schema_integrity_check.py`.
+
+### Quick Usage Examples:
+```bash
+# Run human-readable lint report
+./scripts/memory_persistence_lint.py
+
+# Emit JSON for automated CI/CD pipeline assertions
+./scripts/memory_persistence_lint.py --json
+```
+
 ### Core Rules:
 1. **Notice Repetitive Need:** If an ad-hoc query or multi-step command is executed more than once, extract and structure it.
 2. **Author in Python:** Build with `argparse`, type annotations, structured table output, and `--json` support.

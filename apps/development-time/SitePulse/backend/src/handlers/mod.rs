@@ -994,6 +994,14 @@ pub async fn parse_bank_statement(
     for m in &matches {
         inner.reconciliation_queue.push(m.clone());
     }
+    drop(inner);
+
+    if let Some(ref pool) = state.pool {
+        let site_bank_id = active_account.as_ref().and_then(|a| crate::db::parse_id_to_i64(&a.id));
+        for m in &matches {
+            let _ = crate::db::save_reconciliation_match_for_site(pool, m, &payload.site_id, site_bank_id).await;
+        }
+    }
 
     let matched_count = matches.iter().filter(|m| m.status == ReconciliationStatus::PendingApproval).count();
     let already_processed_count = matches.iter().filter(|m| m.status == ReconciliationStatus::AlreadyProcessed).count();

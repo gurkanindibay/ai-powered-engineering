@@ -5,9 +5,10 @@ use tokio_postgres::NoTls;
 use tracing::{info, warn};
 
 use crate::models::{
-    BankTransactionItem, BlockDto, DebtStatus, DuesLiability, HomeownerPaymentRecord, IndependentUnit,
-    PaymentEntry, PaymentMatchStatus, PendingRegistrationResponse, ReconciliationMatch,
-    ReconciliationStatus, Role, Site, SiteBankAccount, UnitInviteLinkResponse, UnitMemberDto, User,
+    AllocationBreakdownItem, BankTransactionItem, BlockDto, DebtStatus, DuesLiability,
+    HomeownerPaymentRecord, IndependentUnit, OccupancyHistoryItem, PaymentEntry, PaymentMatchStatus,
+    PaymentReceipt, PendingRegistrationResponse, ReconciliationMatch, ReconciliationStatus, Role,
+    Site, SiteBankAccount, UnitInviteLinkResponse, UnitMemberDto, User,
 };
 use crate::services::VirtualIbanService;
 use crate::state::AppStateInner;
@@ -138,6 +139,7 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
         include_str!("../db/init/00-08-referential-and-financial-integrity.sql"),
         include_str!("../db/init/00-09-ledger-and-referential-integrity.sql"),
         include_str!("../db/init/00-10-consolidate-household-members.sql"),
+        include_str!("../db/init/00-11-financial-and-tenancy-remediation.sql"),
     ] {
         client.batch_execute(schema_sql).await?;
     }
@@ -827,6 +829,74 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
         );
     }
 
+    // 6b. Load Payment Receipts
+    if let Ok(rows) = client
+        .query(
+            "SELECT id, site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, on_behalf_of_name, on_behalf_of_role, total_amount, payment_channel, channel_reference, allocated_principal, allocated_penalty, allocated_advance, allocation_breakdown::text, is_rent_offset_eligible, legal_statutory_note, verification_hash, issued_at FROM payment_receipts ORDER BY sequence_number ASC",
+            &[],
+        )
+        .await
+    {
+        for row in rows {
+            let id: i64 = row.get(0);
+            let site_id: i64 = row.get(1);
+            let unit_id: i64 = row.get(2);
+            let receipt_number: String = row.get(3);
+            let sequence_number: i64 = row.get(4);
+            let payer_name: String = row.get(5);
+            let payer_role: String = row.get(6);
+            let on_behalf_of_name: Option<String> = row.get(7);
+            let on_behalf_of_role: Option<String> = row.get(8);
+            let total_amount: Decimal = row.get(9);
+            let payment_channel: String = row.get(10);
+            let channel_reference: Option<String> = row.get(11);
+            let allocated_principal: Decimal = row.get(12);
+            let allocated_penalty: Decimal = row.get(13);
+            let allocated_advance: Decimal = row.get(14);
+            let breakdown_str: String = row.get(15);
+            let is_rent_offset_eligible: bool = row.get(16);
+            let legal_statutory_note: Option<String> = row.get(17);
+            let verification_hash: String = row.get(18);
+            let issued_at: Option<DateTime<Utc>> = row.get(19);
+
+            let allocation_breakdown: Vec<AllocationBreakdownItem> =
+                serde_json::from_str(&breakdown_str).unwrap_or_default();
+
+            let receipt = PaymentReceipt {
+                id,
+                site_id: site_id.to_string(),
+                unit_id: unit_id.to_string(),
+                receipt_number,
+                sequence_number,
+                payer_name,
+                payer_role,
+                on_behalf_of_name,
+                on_behalf_of_role,
+                total_amount,
+                payment_channel,
+                channel_reference,
+                allocated_principal,
+                allocated_penalty,
+                allocated_advance,
+                allocation_breakdown,
+                is_rent_offset_eligible,
+                legal_statutory_note,
+                verification_hash,
+                issued_at: issued_at.unwrap_or_else(Utc::now),
+            };
+
+            if let Some(pos) = state.payment_receipts.iter().position(|r| r.id == id) {
+                state.payment_receipts[pos] = receipt;
+            } else {
+                state.payment_receipts.push(receipt);
+            }
+        }
+        info!(
+            "Loaded {} payment receipts from PostgreSQL",
+            state.payment_receipts.len()
+        );
+    }
+
     // 7. Load Pending Registrations
     if let Ok(rows) = client
         .query(
@@ -894,6 +964,61 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
             }
         }
         info!("Loaded household members for {} units from PostgreSQL", state.unit_members.len());
+    }
+
+    // 8b. Load Occupancy History
+    if let Ok(rows) = client
+        .query(
+            r#"
+            SELECT uo.id, uo.unit_id, uo.person_id, p.full_name, p.phone, p.email,
+                   uo.occupancy_type, uo.start_date, uo.end_date, uo.is_active,
+                   COALESCE(uo.exit_balance, 0.00), uo.notes, uo.created_at
+            FROM unit_occupancies uo
+            JOIN persons p ON uo.person_id = p.id
+            ORDER BY uo.start_date ASC
+            "#,
+            &[],
+        )
+        .await
+    {
+        for row in rows {
+            let id: i64 = row.get(0);
+            let unit_id: i64 = row.get(1);
+            let person_id: i64 = row.get(2);
+            let person_name: String = row.get(3);
+            let person_phone: Option<String> = row.get(4);
+            let person_email: Option<String> = row.get(5);
+            let role: String = row.get(6);
+            let start_date: NaiveDate = row.get(7);
+            let end_date: Option<NaiveDate> = row.get(8);
+            let is_active: bool = row.get(9);
+            let exit_balance: Decimal = row.get(10);
+            let notes: Option<String> = row.get(11);
+            let created_at: Option<DateTime<Utc>> = row.get(12);
+
+            let item = OccupancyHistoryItem {
+                id,
+                unit_id,
+                person_id,
+                person_name,
+                person_phone,
+                person_email,
+                role,
+                start_date: start_date.to_string(),
+                end_date: end_date.map(|d| d.to_string()),
+                is_active,
+                exit_balance,
+                notes,
+                created_at: created_at.unwrap_or_else(Utc::now),
+            };
+
+            let key = unit_id.to_string();
+            let history = state.unit_occupancies.entry(key).or_default();
+            if !history.iter().any(|h| h.id == item.id) {
+                history.push(item);
+            }
+        }
+        info!("Loaded occupancy history for {} units from PostgreSQL", state.unit_occupancies.len());
     }
 
     // 9. Load Invitation Tokens
@@ -1451,7 +1576,18 @@ pub async fn update_due_liability(
         .execute(
             r#"
             UPDATE dues_liabilities
-            SET status = $2, paid_amount = $3, payment_date = CURRENT_TIMESTAMP
+            SET status = $2,
+                paid_amount = CASE 
+                    WHEN $3 > 0::numeric THEN LEAST(paid_amount + $3, principal_amount + delay_penalty)
+                    WHEN $2 = 'PAID' THEN principal_amount + delay_penalty
+                    ELSE paid_amount
+                END,
+                paid_principal = CASE
+                    WHEN $3 > 0::numeric THEN LEAST(paid_principal + $3, principal_amount)
+                    WHEN $2 = 'PAID' THEN principal_amount
+                    ELSE paid_principal
+                END,
+                payment_date = CURRENT_TIMESTAMP
             WHERE id = $1
             "#,
             &[&due_id_num, &status, &paid_amount],
@@ -1459,6 +1595,165 @@ pub async fn update_due_liability(
         .await?;
     info!("Updated dues liability {} (numeric ID: {}) to status {} in PostgreSQL", due_id, due_id_num, status);
     Ok(())
+}
+
+pub async fn record_due_allocation(
+    pool: &Pool,
+    due_id_num: i64,
+    allocated_principal: Decimal,
+    allocated_penalty: Decimal,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    client
+        .execute(
+            r#"
+            UPDATE dues_liabilities
+            SET paid_principal = LEAST(paid_principal + $2, principal_amount),
+                paid_penalty = LEAST(paid_penalty + $3, delay_penalty),
+                paid_amount = LEAST(paid_amount + $2 + $3, principal_amount + delay_penalty),
+                status = CASE
+                    WHEN (paid_principal + $2 >= principal_amount) AND (paid_penalty + $3 >= delay_penalty) THEN 'PAID'
+                    ELSE 'PARTIALLY_PAID'
+                END,
+                payment_date = CURRENT_TIMESTAMP
+            WHERE id = $1
+            "#,
+            &[&due_id_num, &allocated_principal, &allocated_penalty],
+        )
+        .await?;
+    Ok(())
+}
+
+pub async fn save_payment_receipt(
+    pool: &Pool,
+    receipt: &PaymentReceipt,
+) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let site_id_num = parse_id_to_i64(&receipt.site_id).unwrap_or(1);
+    let unit_id_num = parse_id_to_i64(&receipt.unit_id).unwrap_or(1);
+    let breakdown_json_str = serde_json::to_string(&receipt.allocation_breakdown)?;
+
+    let row = client
+        .query_one(
+            r#"
+            INSERT INTO payment_receipts (
+                site_id, unit_id, receipt_number, sequence_number,
+                payer_name, payer_role, on_behalf_of_name, on_behalf_of_role,
+                total_amount, payment_channel, channel_reference,
+                allocated_principal, allocated_penalty, allocated_advance,
+                allocation_breakdown, is_rent_offset_eligible, legal_statutory_note,
+                verification_hash, issued_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::text::jsonb, $16, $17, $18, $19)
+            ON CONFLICT (site_id, receipt_number) DO UPDATE SET
+                payer_name = EXCLUDED.payer_name,
+                total_amount = EXCLUDED.total_amount
+            RETURNING id
+            "#,
+            &[
+                &site_id_num,
+                &unit_id_num,
+                &receipt.receipt_number,
+                &receipt.sequence_number,
+                &receipt.payer_name,
+                &receipt.payer_role,
+                &receipt.on_behalf_of_name,
+                &receipt.on_behalf_of_role,
+                &receipt.total_amount,
+                &receipt.payment_channel,
+                &receipt.channel_reference,
+                &receipt.allocated_principal,
+                &receipt.allocated_penalty,
+                &receipt.allocated_advance,
+                &breakdown_json_str,
+                &receipt.is_rent_offset_eligible,
+                &receipt.legal_statutory_note,
+                &receipt.verification_hash,
+                &receipt.issued_at,
+            ],
+        )
+        .await?;
+    let receipt_id: i64 = row.get(0);
+    info!("Saved payment receipt {} (id: {}) to PostgreSQL", receipt.receipt_number, receipt_id);
+    Ok(receipt_id)
+}
+
+pub async fn get_next_receipt_sequence(
+    pool: &Pool,
+    site_id: &str,
+) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let site_id_num = parse_id_to_i64(site_id).unwrap_or(1);
+    let row = client
+        .query_one(
+            "SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM payment_receipts WHERE site_id = $1",
+            &[&site_id_num],
+        )
+        .await?;
+    let next_seq: i64 = row.get(0);
+    Ok(next_seq)
+}
+
+pub async fn save_payment_entry(
+    pool: &Pool,
+    entry: &PaymentEntry,
+) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let site_id_num = parse_id_to_i64(&entry.site_id).unwrap_or(1);
+    let unit_id_num = parse_id_to_i64(&entry.unit_id).unwrap_or(1);
+
+    let row = client
+        .query_one(
+            r#"
+            INSERT INTO payment_entries (
+                site_id, unit_id, payer_name, payer_role, receipt_id,
+                amount, payment_channel, settlement_status, description,
+                external_reference, payment_date, created_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING id
+            "#,
+            &[
+                &site_id_num,
+                &unit_id_num,
+                &entry.payer_name,
+                &entry.payer_role,
+                &entry.receipt_id,
+                &entry.amount,
+                &entry.payment_channel,
+                &entry.settlement_status,
+                &entry.description,
+                &entry.external_reference,
+                &entry.payment_date,
+                &entry.created_at,
+            ],
+        )
+        .await?;
+    let entry_id: i64 = row.get(0);
+    info!("Saved payment entry (id: {}) to PostgreSQL", entry_id);
+    Ok(entry_id)
+}
+
+pub async fn save_payment_allocation(
+    pool: &Pool,
+    payment_entry_id: i64,
+    dues_liability_id: i64,
+    principal_amount: Decimal,
+    penalty_amount: Decimal,
+) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let row = client
+        .query_one(
+            r#"
+            INSERT INTO payment_allocations (payment_entry_id, dues_liability_id, principal_amount, penalty_amount, created_at)
+            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+            RETURNING id
+            "#,
+            &[&payment_entry_id, &dues_liability_id, &principal_amount, &penalty_amount],
+        )
+        .await?;
+    let alloc_id: i64 = row.get(0);
+    Ok(alloc_id)
 }
 
 pub async fn save_collection_transaction(
@@ -1566,22 +1861,56 @@ pub async fn save_advance_balance(
     unit_id: &str,
     balance: Decimal,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    save_advance_balance_with_type(pool, unit_id, "TENANT", balance).await
+}
+
+pub async fn save_advance_balance_with_type(
+    pool: &Pool,
+    unit_id: &str,
+    debtor_type: &str,
+    balance: Decimal,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let unit_id_num = parse_id_to_i64(unit_id).unwrap_or(1);
     client
         .execute(
             r#"
-            INSERT INTO advance_balances (unit_id, balance, updated_at)
-            VALUES ($1, $2, CURRENT_TIMESTAMP)
-            ON CONFLICT (unit_id) DO UPDATE SET
+            INSERT INTO advance_balances (unit_id, balance, debtor_type, updated_at)
+            VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+            ON CONFLICT (unit_id, debtor_type) DO UPDATE SET
                 balance = EXCLUDED.balance,
                 updated_at = CURRENT_TIMESTAMP
             "#,
-            &[&unit_id_num, &balance],
+            &[&unit_id_num, &balance, &debtor_type],
         )
         .await?;
-    info!("Saved advance balance (₺{}) for unit {} to PostgreSQL", balance, unit_id);
+    info!("Saved advance balance (₺{}) for unit {} ({}) to PostgreSQL", balance, unit_id, debtor_type);
     Ok(())
+}
+
+pub async fn save_advance_ledger_entry(
+    pool: &Pool,
+    unit_id: &str,
+    debtor_type: &str,
+    entry_type: &str,
+    amount: Decimal,
+    reference_id: Option<&str>,
+    description: Option<&str>,
+) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let unit_id_num = parse_id_to_i64(unit_id).unwrap_or(1);
+    let row = client
+        .query_one(
+            r#"
+            INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, reference_id, description, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+            RETURNING id
+            "#,
+            &[&unit_id_num, &debtor_type, &entry_type, &amount, &reference_id, &description],
+        )
+        .await?;
+    let entry_id: i64 = row.get(0);
+    Ok(entry_id)
 }
 
 pub async fn save_pending_registration(
@@ -1748,8 +2077,7 @@ pub async fn save_remembered_sender_iban(
             r#"
             INSERT INTO unit_sender_ibans (sender_iban, unit_id, label, bank_name, created_at)
             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-            ON CONFLICT (sender_iban) DO UPDATE SET
-                unit_id = EXCLUDED.unit_id,
+            ON CONFLICT (unit_id, sender_iban) DO UPDATE SET
                 label = EXCLUDED.label,
                 bank_name = EXCLUDED.bank_name
             "#,
@@ -1792,20 +2120,29 @@ pub async fn save_unit_payer_names(
     Ok(())
 }
 
-pub async fn save_reconciliation_match(
+pub async fn save_reconciliation_match_for_site(
     pool: &Pool,
     m: &ReconciliationMatch,
+    site_id: &str,
+    bank_account_id: Option<i64>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let status_str = format!("{:?}", m.status);
     let confidence_i32 = m.confidence_score as i32;
     let matched_unit_num = m.matched_unit_id.as_deref().and_then(parse_id_to_i64);
     let matched_due_num = m.matched_due_id.as_deref().and_then(parse_id_to_i64);
+    let site_id_num = parse_id_to_i64(site_id).unwrap_or(1);
     client
         .execute(
             r#"
-            INSERT INTO reconciliation_queue (match_id, transaction_id, txn_date, amount, currency, description, sender_name, sender_iban, reference_no, matched_unit_id, matched_block, matched_unit_number, matched_resident_name, confidence_score, matched_due_id, outstanding_balance, amount_matches_balance, status, status_code, notes, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, CURRENT_TIMESTAMP)
+            INSERT INTO reconciliation_queue (
+                match_id, transaction_id, txn_date, amount, currency, description,
+                sender_name, sender_iban, reference_no, matched_unit_id, matched_block,
+                matched_unit_number, matched_resident_name, confidence_score, matched_due_id,
+                outstanding_balance, amount_matches_balance, status, status_code, notes,
+                site_id, site_bank_account_id, created_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, CURRENT_TIMESTAMP)
             ON CONFLICT (match_id) DO UPDATE SET
                 status = EXCLUDED.status,
                 status_code = EXCLUDED.status_code,
@@ -1832,10 +2169,88 @@ pub async fn save_reconciliation_match(
                 &status_str,
                 &m.status_code,
                 &m.notes,
+                &site_id_num,
+                &bank_account_id,
             ],
         )
         .await?;
     info!("Saved reconciliation match {} to PostgreSQL", m.match_id);
+    Ok(())
+}
+
+pub async fn save_reconciliation_match(
+    pool: &Pool,
+    m: &ReconciliationMatch,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    save_reconciliation_match_for_site(pool, m, "1", None).await
+}
+
+pub async fn transfer_unit_ownership_db(
+    pool: &Pool,
+    unit_id: &str,
+    new_user: &User,
+    transfer_date: chrono::NaiveDate,
+    exit_balance: Decimal,
+    notes: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let unit_id_num = parse_id_to_i64(unit_id).unwrap_or(1);
+
+    // 1. Ensure new user is saved and person is created
+    save_user(pool, new_user).await?;
+
+    // 2. Fetch new user person_id
+    let new_user_num = parse_id_to_i64(&new_user.id).unwrap_or(1);
+    let new_person_id: Option<i64> = client
+        .query_opt(
+            "SELECT person_id FROM users WHERE id = $1 OR LOWER(email) = LOWER($2)",
+            &[&new_user_num, &new_user.email],
+        )
+        .await?
+        .and_then(|r| r.get(0));
+
+    // 3. Deactivate old ownership in unit_ownerships
+    let _ = client
+        .execute(
+            "UPDATE unit_ownerships SET is_active = false, end_date = $2 WHERE unit_id = $1 AND is_active = true",
+            &[&unit_id_num, &transfer_date],
+        )
+        .await;
+
+    // 4. Insert new ownership
+    if let Some(pid) = new_person_id {
+        let _ = client
+            .execute(
+                r#"
+                INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, is_active, created_at)
+                VALUES ($1, $2, 100.00, $3, true, CURRENT_TIMESTAMP)
+                "#,
+                &[&unit_id_num, &pid, &transfer_date],
+            )
+            .await;
+
+        // 5. Deactivate old owner occupancy if active
+        let _ = client
+            .execute(
+                r#"
+                UPDATE unit_occupancies
+                SET is_active = false, end_date = $2, exit_balance = $3, notes = COALESCE($4, notes)
+                WHERE unit_id = $1 AND is_active = true AND occupancy_type = 'OWNER'
+                "#,
+                &[&unit_id_num, &transfer_date, &exit_balance, &notes],
+            )
+            .await;
+
+        // 6. Update units owner
+        let _ = client
+            .execute(
+                "UPDATE units SET owner_person_id = $2 WHERE id = $1",
+                &[&unit_id_num, &pid],
+            )
+            .await;
+    }
+
+    info!("Transferred ownership for unit {} to user {} in PostgreSQL", unit_id, new_user.email);
     Ok(())
 }
 
@@ -2188,6 +2603,16 @@ pub async fn sync_all_in_memory_to_db(
     }
     for (unit_id, names) in &state.unit_payer_names {
         let _ = save_unit_payer_names(pool, unit_id, names).await;
+    }
+
+    // 7. Sync Advance Balances
+    for (unit_id, bal) in &state.advance_payments {
+        let _ = save_advance_balance(pool, unit_id, *bal).await;
+    }
+
+    // 8. Sync Payment Receipts
+    for r in &state.payment_receipts {
+        let _ = save_payment_receipt(pool, r).await;
     }
 
     info!("Synchronized all in-memory state to PostgreSQL database successfully.");

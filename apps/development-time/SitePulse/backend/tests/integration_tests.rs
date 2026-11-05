@@ -2812,3 +2812,98 @@ async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
     let updated_proj = service.get_project(&project.id).await.unwrap();
     assert_eq!(updated_proj.disbursed_amount, Decimal::from_str_exact("25000.00").unwrap());
 }
+
+#[tokio::test]
+async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tbk100_and_surplus_to_advance() {
+    let state = AppState::new();
+    let service = PaymentTrackingService::new(state.clone());
+
+    {
+        let mut inner = state.inner.write().await;
+        inner.dues.clear();
+        inner.dues.push(DuesLiability {
+            id: "due-test-1".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Ekim 2026".to_string(),
+            principal_amount: Decimal::from_str_exact("1000.00").unwrap(),
+            delay_penalty: Decimal::from_str_exact("50.00").unwrap(),
+            total_amount: Decimal::from_str_exact("1050.00").unwrap(),
+            due_date: NaiveDate::from_ymd_opt(2026, 10, 15).unwrap(),
+            status: DebtStatus::Overdue,
+        });
+    }
+
+    let req = RecordManualPaymentRequest {
+        site_id: Some("site-1".to_string()),
+        unit_id: "d-14".to_string(),
+        amount: Decimal::from_str_exact("1200.00").unwrap(),
+        payer_name: "Ali Veli".to_string(),
+        payer_role: "OWNER".to_string(),
+        payment_channel: "BANK_TRANSFER".to_string(),
+        payment_date: None,
+        description: Some("Ekim Aidat ve Avans".to_string()),
+    };
+
+    let receipt = service.record_and_allocate_payment(req).await.unwrap();
+
+    assert_eq!(receipt.allocated_penalty, Decimal::from_str_exact("50.00").unwrap());
+    assert_eq!(receipt.allocated_principal, Decimal::from_str_exact("1000.00").unwrap());
+    assert_eq!(receipt.allocated_advance, Decimal::from_str_exact("150.00").unwrap());
+    assert_eq!(receipt.total_amount, Decimal::from_str_exact("1200.00").unwrap());
+    assert!(receipt.receipt_number.starts_with("TAH-2026-"));
+    assert!(!receipt.verification_hash.is_empty());
+
+    let inner = state.inner.read().await;
+    let due = inner.dues.iter().find(|d| d.id == "due-test-1").unwrap();
+    assert_eq!(due.status, DebtStatus::Paid);
+    assert_eq!(due.total_amount, Decimal::ZERO);
+
+    let advance = inner.advance_payments.get("d-14").copied().unwrap_or(Decimal::ZERO);
+    assert_eq!(advance, Decimal::from_str_exact("150.00").unwrap());
+}
+
+#[tokio::test]
+async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_occupancy_history() {
+    let state = AppState::new();
+    let service = PaymentTrackingService::new(state.clone());
+
+    {
+        let mut inner = state.inner.write().await;
+        inner.dues.clear();
+        inner.dues.push(DuesLiability {
+            id: "due-freeze-1".to_string(),
+            unit_id: "d-14".to_string(),
+            period: "Eylül 2026".to_string(),
+            principal_amount: Decimal::from_str_exact("800.00").unwrap(),
+            delay_penalty: Decimal::ZERO,
+            total_amount: Decimal::from_str_exact("800.00").unwrap(),
+            due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
+            status: DebtStatus::Overdue,
+        });
+    }
+
+    let req = TransferOwnershipRequest {
+        site_id: Some("site-1".to_string()),
+        unit_id: "d-14".to_string(),
+        new_owner_name: "Fatma Yılmaz".to_string(),
+        new_owner_national_id: None,
+        new_owner_email: Some("fatma.yilmaz@begonya.com".to_string()),
+        new_owner_phone: Some("+905559876543".to_string()),
+        transfer_date: Some(NaiveDate::from_ymd_opt(2026, 11, 1).unwrap()),
+        notes: Some("Tapu devir işlemi yapıldı".to_string()),
+    };
+
+    let res = service.transfer_ownership(req).await.unwrap();
+
+    assert!(res.success);
+    assert_eq!(res.old_owner_exit_balance, Decimal::from_str_exact("800.00").unwrap());
+    assert_eq!(res.new_owner_name, "Fatma Yılmaz");
+
+    let inner = state.inner.read().await;
+    let occupancies = inner.unit_occupancies.get("d-14").unwrap();
+    assert!(!occupancies.is_empty());
+    let last = occupancies.last().unwrap();
+    assert_eq!(last.role, "OWNER");
+    assert!(!last.is_active);
+    assert_eq!(last.exit_balance, Decimal::from_str_exact("800.00").unwrap());
+}

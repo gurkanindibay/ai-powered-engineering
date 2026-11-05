@@ -144,6 +144,9 @@ fi
 if [ -f "$INIT_DIR/00-10-consolidate-household-members.sql" ]; then
     run_sql_file "$INIT_DIR/00-10-consolidate-household-members.sql"
 fi
+if [ -f "$INIT_DIR/00-11-financial-and-tenancy-remediation.sql" ]; then
+    run_sql_file "$INIT_DIR/00-11-financial-and-tenancy-remediation.sql"
+fi
 run_sql_file "$INIT_DIR/01-system-seed.sql"
 
 # 4. Apply site data according to selected mode

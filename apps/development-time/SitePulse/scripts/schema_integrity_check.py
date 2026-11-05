@@ -37,6 +37,7 @@ SYNC_MAP = {
     "00-08-referential-and-financial-integrity.sql": "V9__referential_and_financial_integrity.sql",
     "00-09-ledger-and-referential-integrity.sql": "V10__ledger_and_referential_integrity.sql",
     "00-10-consolidate-household-members.sql": "V11__consolidate_household_members.sql",
+    "00-11-financial-and-tenancy-remediation.sql": "V12__financial_and_tenancy_remediation.sql",
 }
 
 CONTAINER = "sitepulse-postgres"
@@ -135,6 +136,11 @@ NEGATIVE_CASES = [
         "INSERT INTO capital_projects (site_id, title, category, total_budget, target_start_date) VALUES (999999, 'T', 'OTHER', 100, CURRENT_DATE)",
     ),
     (
+        "capital dues cannot be debtor_type TENANT",
+        """INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, expense_type, debtor_type)
+           SELECT id, 'P-CAPITAL', 100, CURRENT_DATE, 'CAPITAL_DUES', 'TENANT' FROM units LIMIT 1""",
+    ),
+    (
         "occupancy_members rejects phantom occupancy",
         "INSERT INTO occupancy_members (occupancy_id, full_name, relationship) VALUES (999999, 'X', 'self')",
     ),
@@ -213,6 +219,23 @@ def check(init_sql: list[pathlib.Path], migration_sql: list[pathlib.Path]) -> di
                     "detail": [] if result.returncode != 0 else ["statement was accepted"],
                 }
             )
+
+        # Memory-persistence consistency checks
+        try:
+            sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+            from memory_persistence_lint import run_all_checks as run_persistence_checks
+            for pcheck in run_persistence_checks():
+                findings.append({
+                    "check": f"persistence: {pcheck['check']}",
+                    "ok": pcheck["status"] == "PASS",
+                    "detail": [] if pcheck["status"] == "PASS" else [pcheck["message"]],
+                })
+        except Exception as e:
+            findings.append({
+                "check": "persistence: linter_execution",
+                "ok": False,
+                "detail": [str(e)],
+            })
     finally:
         psql("postgres", 'DROP DATABASE IF EXISTS "sitepulse_check_init";')
         psql("postgres", 'DROP DATABASE IF EXISTS "sitepulse_check_mig";')
