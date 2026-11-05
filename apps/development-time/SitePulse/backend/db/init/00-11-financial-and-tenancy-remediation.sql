@@ -160,3 +160,4 @@ CREATE INDEX IF NOT EXISTS idx_invitation_tokens_site ON invitation_tokens (site
 CREATE INDEX IF NOT EXISTS idx_invitation_tokens_unit ON invitation_tokens (unit_id);
 CREATE INDEX IF NOT EXISTS idx_reconciliation_queue_due ON reconciliation_queue (matched_due_id);
 CREATE INDEX IF NOT EXISTS idx_debt_aging_unit ON debt_aging_snapshots (unit_id);
+

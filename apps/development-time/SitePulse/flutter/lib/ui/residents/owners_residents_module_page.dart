@@ -826,6 +826,83 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       ),
                     ),
                     const SizedBox(height: 8),
+                  ] else ...[
+                    // Kat Maliki (Mukim - Fiilen İkamet Eden Kat Maliki)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.card(context),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.accentCyan.withOpacity(0.35)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.home, size: 14, color: AppColors.accentCyan),
+                              const SizedBox(width: 6),
+                              const Expanded(
+                                child: Text(
+                                  'Fiilen İkamet Eden Kat Maliki (Birincil Muhatap)',
+                                  style: TextStyle(color: AppColors.accentCyan, fontSize: 11, fontWeight: FontWeight.bold),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              OutlinedButton.icon(
+                                key: Key('module_edit_owner_res_${ho.unitId}'),
+                                onPressed: () => _openEditHomeOwner(ho, initialTab: 0),
+                                icon: const Icon(Icons.edit_outlined, size: 11),
+                                label: const Text('Düzenle', style: TextStyle(fontSize: 10)),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.accentCyan,
+                                  side: const BorderSide(color: AppColors.accentCyan),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  minimumSize: const Size(0, 24),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              OutlinedButton.icon(
+                                key: Key('module_add_tenant_${ho.unitId}'),
+                                onPressed: () => _openMoveIn(ho),
+                                icon: const Icon(Icons.person_add_alt, size: 11),
+                                label: const Text('Kiracı Girişi', style: TextStyle(fontSize: 10)),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.accentGreen,
+                                  side: const BorderSide(color: AppColors.accentGreen),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  minimumSize: const Size(0, 24),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              OutlinedButton.icon(
+                                key: Key('module_move_out_owner_${ho.unitId}'),
+                                onPressed: () => _openMoveOut(ho),
+                                icon: const Icon(Icons.logout, size: 11),
+                                label: const Text('Tahliye', style: TextStyle(fontSize: 10)),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.accentOrange,
+                                  side: const BorderSide(color: AppColors.accentOrange),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  minimumSize: const Size(0, 24),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            ho.ownerFullName.isNotEmpty ? ho.ownerFullName : 'Kat Maliki',
+                            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            '${ho.phone.isNotEmpty ? ho.phone : 'Telefon Yok'} • ${ho.email.isNotEmpty ? ho.email : 'E-posta Yok'}',
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                   ],
 
                   // Household Co-Residents
@@ -994,6 +1071,32 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   spacing: 8,
                   runSpacing: 6,
                   children: [
+                    OutlinedButton.icon(
+                      key: Key('module_quick_add_resident_${ho.unitId}'),
+                      onPressed: () => _openAddHouseholdMember(ho),
+                      icon: const Icon(Icons.person_add_outlined, size: 13, color: AppColors.accentPurple),
+                      label: const Text('+ Sakin Ekle', style: TextStyle(fontSize: 11)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.accentPurple,
+                        side: const BorderSide(color: AppColors.accentPurple),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        minimumSize: const Size(0, 30),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      key: Key('module_quick_move_in_${ho.unitId}'),
+                      onPressed: () => _openMoveIn(ho),
+                      icon: const Icon(Icons.key, size: 13, color: AppColors.accentGreen),
+                      label: const Text('Yeni Sakin Girişi', style: TextStyle(fontSize: 11)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.accentGreen,
+                        side: const BorderSide(color: AppColors.accentGreen),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        minimumSize: const Size(0, 30),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
                     OutlinedButton.icon(
                       key: Key('module_history_ho_${ho.unitId}'),
                       onPressed: () => _openUnitHistory(ho),
@@ -2192,6 +2295,117 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         ),
                       ],
                     ),
+                  ),
+
+                  // Hane Sakinleri / Birlikte Yaşayanlar (Co-residents)
+                  Builder(
+                    builder: (context) {
+                      final currentHo = widget.controller.homeOwners.firstWhere(
+                        (h) => h.unitId == ho.unitId,
+                        orElse: () => ho,
+                      );
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: AppColors.card(ctx),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.accentPurple.withOpacity(0.35)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.family_restroom, size: 16, color: AppColors.accentPurple),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'Hane Sakinleri / Birlikte Yaşayanlar (${currentHo.householdResidents.length})',
+                                    style: TextStyle(color: AppColors.textPrimary(ctx), fontWeight: FontWeight.bold, fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                ElevatedButton.icon(
+                                  key: const Key('module_edit_dialog_add_household_member'),
+                                  onPressed: () {
+                                    _openAddHouseholdMember(currentHo);
+                                    setDlgState(() {});
+                                  },
+                                  icon: const Icon(Icons.person_add_alt, size: 12),
+                                  label: const Text('Yeni Sakin Ekle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.accentPurple,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    minimumSize: const Size(0, 28),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            if (currentHo.householdResidents.isNotEmpty) ...[
+                              ...currentHo.householdResidents.map((m) => Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: AppColors.background(ctx),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.border(ctx).withOpacity(0.5)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.person_outline, size: 14, color: AppColors.accentPurple),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            m.fullName,
+                                            style: TextStyle(color: AppColors.textPrimary(ctx), fontSize: 12, fontWeight: FontWeight.bold),
+                                          ),
+                                          Text(
+                                            '${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
+                                            style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 11),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.accentCyan),
+                                      tooltip: 'Düzenle',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () {
+                                        _openEditHouseholdMember(currentHo, m);
+                                        setDlgState(() {});
+                                      },
+                                    ),
+                                    const SizedBox(width: 6),
+                                    IconButton(
+                                      icon: const Icon(Icons.close, size: 14, color: AppColors.accentRed),
+                                      tooltip: 'Sil',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () {
+                                        _confirmDeleteHouseholdMember(currentHo, m);
+                                        setDlgState(() {});
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              )),
+                            ] else ...[
+                              Text(
+                                'Bu daireye kayıtlı ek hane sakini bulunmuyor. Yeni hane sakini eklemek için yukarıdaki butonu kullanabilirsiniz.',
+                                style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 11, fontStyle: FontStyle.italic),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

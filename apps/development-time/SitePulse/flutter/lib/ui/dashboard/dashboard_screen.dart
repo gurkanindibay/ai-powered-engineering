@@ -1954,6 +1954,80 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           ),
                                         ],
                                       ),
+                                      const SizedBox(height: 10),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 6,
+                                        children: [
+                                          OutlinedButton.icon(
+                                            key: Key('edit_residents_${ho.unitId}'),
+                                            onPressed: () => _showEditHomeOwnerDialog(ho, initialTab: 0),
+                                            icon: const Icon(Icons.edit_outlined, size: 12),
+                                            label: const Text('Sakinleri Düzenle', style: TextStyle(fontSize: 11)),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: AppColors.accentCyan,
+                                              side: const BorderSide(color: AppColors.accentCyan),
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              minimumSize: const Size(0, 28),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                          ),
+                                          OutlinedButton.icon(
+                                            key: Key('add_resident_member_to_${ho.unitId}'),
+                                            onPressed: () => _showAddHouseholdMemberDialog(ho),
+                                            icon: const Icon(Icons.person_add_alt_1, size: 12),
+                                            label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11)),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: AppColors.accentPurple,
+                                              side: const BorderSide(color: AppColors.accentPurple),
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              minimumSize: const Size(0, 28),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                          ),
+                                          OutlinedButton.icon(
+                                            key: Key('move_in_resident_to_${ho.unitId}'),
+                                            onPressed: () => _showMoveInDialog(ho),
+                                            icon: const Icon(Icons.key, size: 12),
+                                            label: const Text('Yeni Sakin / Kiracı Girişi', style: TextStyle(fontSize: 11)),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: AppColors.accentGreen,
+                                              side: const BorderSide(color: AppColors.accentGreen),
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              minimumSize: const Size(0, 28),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                          ),
+                                          OutlinedButton.icon(
+                                            key: Key('move_out_resident_${ho.unitId}'),
+                                            onPressed: () => _showMoveOutDialog(ho),
+                                            icon: const Icon(Icons.logout, size: 12),
+                                            label: const Text('Sakin Ayrılışı (Move-Out)', style: TextStyle(fontSize: 11)),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: AppColors.accentOrange,
+                                              side: const BorderSide(color: AppColors.accentOrange),
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              minimumSize: const Size(0, 28),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ] else ...[
+                                      const SizedBox(height: 10),
+                                      ElevatedButton.icon(
+                                        key: Key('move_in_btn_${ho.unitId}'),
+                                        onPressed: () => _showMoveInDialog(ho),
+                                        icon: const Icon(Icons.person_add_alt, size: 13),
+                                        label: const Text('Yeni Sakin / Kiracı Girişi (Move-In)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.accentGreen,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          minimumSize: const Size(0, 28),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                      ),
                                     ],
                                   ],
                                 ),
@@ -2025,29 +2099,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     if (ho.householdResidents.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.background(context),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.border(context).withOpacity(0.6)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.family_restroom, size: 14, color: AppColors.accentPurple),
-                                const SizedBox(width: 6),
-                                Text(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.background(context),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.border(context).withOpacity(0.6)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.family_restroom, size: 14, color: AppColors.accentPurple),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
                                   'Hane Sakinleri / Birlikte Yaşayanlar (${ho.householdResidents.length})',
                                   style: TextStyle(
                                     color: AppColors.textPrimary(context),
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 6),
+                              TextButton.icon(
+                                key: Key('add_resident_to_${ho.unitId}'),
+                                onPressed: () => _showAddHouseholdMemberDialog(ho),
+                                icon: const Icon(Icons.add, size: 14, color: AppColors.accentPurple),
+                                label: const Text('+ Sakin Ekle', style: TextStyle(color: AppColors.accentPurple, fontSize: 11, fontWeight: FontWeight.bold)),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  minimumSize: const Size(0, 24),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (ho.householdResidents.isNotEmpty) ...[
                             const SizedBox(height: 6),
                             ...ho.householdResidents.map((m) => Padding(
                               padding: const EdgeInsets.only(bottom: 6),
@@ -2093,11 +2183,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                             )),
                           ],
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ],
-                );
+                ],
+              );
               },
             ),
 
@@ -2108,6 +2199,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
               spacing: 8,
               runSpacing: 6,
               children: [
+                OutlinedButton.icon(
+                  key: Key('quick_add_resident_${ho.unitId}'),
+                  onPressed: () => _showAddHouseholdMemberDialog(ho),
+                  icon: const Icon(Icons.person_add_outlined, size: 13, color: AppColors.accentPurple),
+                  label: const Text('+ Sakin Ekle', style: TextStyle(fontSize: 11)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.accentPurple,
+                    side: const BorderSide(color: AppColors.accentPurple),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: const Size(0, 30),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  key: Key('quick_move_in_${ho.unitId}'),
+                  onPressed: () => _showMoveInDialog(ho),
+                  icon: const Icon(Icons.key, size: 13, color: AppColors.accentGreen),
+                  label: const Text('Yeni Sakin Girişi', style: TextStyle(fontSize: 11)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.accentGreen,
+                    side: const BorderSide(color: AppColors.accentGreen),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: const Size(0, 30),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
                 OutlinedButton.icon(
                   key: Key('module_history_ho_${ho.unitId}'),
                   onPressed: () => _showUnitOccupancyHistoryDialog(ho),
@@ -4039,6 +4156,182 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
 
                     const SizedBox(height: 14),
+
+                    // Hane Sakinleri / Birlikte Yaşayanlar (Co-residents) for Owner-Occupied Unit
+                    Builder(
+                      builder: (context) {
+                        final currentHo = widget.controller.homeOwners.firstWhere(
+                          (h) => h.unitId == resident.unitId,
+                          orElse: () => resident,
+                        );
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 18),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.card(context),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.accentPurple.withOpacity(0.35)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accentPurple.withOpacity(0.12),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.family_restroom, color: AppColors.accentPurple, size: 16),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Hane Sakinleri / Birlikte Yaşayanlar (${currentHo.householdResidents.length})',
+                                      style: TextStyle(
+                                        color: AppColors.textPrimary(context),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  ElevatedButton.icon(
+                                    key: const Key('dialog_add_household_member'),
+                                    onPressed: () {
+                                      _showAddHouseholdMemberDialog(currentHo);
+                                      setDialogState(() {});
+                                    },
+                                    icon: const Icon(Icons.person_add_alt, size: 14),
+                                    label: const Text('Yeni Sakin Ekle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.accentPurple,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      minimumSize: const Size(0, 32),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              if (currentHo.householdResidents.isNotEmpty) ...[
+                                ...currentHo.householdResidents.map((m) => Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.background(context),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: AppColors.border(context).withOpacity(0.5)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.person_outline, size: 16, color: AppColors.accentPurple),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              m.fullName,
+                                              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.bold),
+                                            ),
+                                            Text(
+                                              '${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}${m.email.isNotEmpty ? ' • ${m.email}' : ''}',
+                                              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      IconButton(
+                                        key: Key('dialog_edit_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
+                                        icon: const Icon(Icons.edit_outlined, size: 16, color: AppColors.accentCyan),
+                                        tooltip: 'Düzenle',
+                                        onPressed: () {
+                                          _showEditHouseholdMemberDialog(currentHo, m);
+                                          setDialogState(() {});
+                                        },
+                                      ),
+                                      IconButton(
+                                        key: Key('dialog_delete_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
+                                        icon: const Icon(Icons.close, size: 16, color: AppColors.accentRed),
+                                        tooltip: 'Sil',
+                                        onPressed: () {
+                                          _confirmDeleteHouseholdMember(currentHo, m);
+                                          setDialogState(() {});
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                )),
+                              ] else ...[
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.background(context),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    'Bu daireye kayıtlı ek hane sakini bulunmuyor. Yeni hane sakini eklemek için yukarıdaki butonu kullanabilirsiniz.',
+                                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontStyle: FontStyle.italic),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    // Quick option to assign/move-in a tenant for this unit
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 18),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentGreen.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.accentGreen.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.key, color: AppColors.accentGreen, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Kiracı / Yeni Sakin Tanımla',
+                                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  'Daireyi kiraya vermek veya yeni sakin girişi yapmak için tıklayınız.',
+                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            key: const Key('dialog_move_in_btn'),
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _showMoveInDialog(resident);
+                            },
+                            icon: const Icon(Icons.person_add_alt, size: 14),
+                            label: const Text('Giriş Başlat (Move-In)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentGreen,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              minimumSize: const Size(0, 32),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
 
                   // House Type

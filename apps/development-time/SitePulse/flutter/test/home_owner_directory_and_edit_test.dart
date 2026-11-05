@@ -538,6 +538,101 @@ void main() {
       expect(updatedUnit.tenantFullName, equals('Canan Can Düzenlendi'));
       expect(updatedUnit.tenantPhone, equals('+90 533 888 77 66'));
     });
+
+    testWidgets('Site Manager viewing owner-occupied unit can add new resident via card actions, household header, and edit dialog', (tester) async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+
+      final ownerOccupiedUnit = HomeOwnerItem(
+        unitId: 'unit-owner-res-test',
+        siteId: 'site-1',
+        block: 'A',
+        unitNo: 1,
+        floor: 1,
+        ownerFullName: 'Murat Ay',
+        email: 'murat@ay.com',
+        phone: '0531 345 45 45',
+        occupancyStatus: 'OWNER_OCCUPIED',
+        landShare: '1/24',
+        monthlyDues: Decimal.parse('1000.00'),
+        houseType: '1+1',
+        isResident: true,
+        mustChangePassword: false,
+        createdAt: DateTime.now(),
+        householdResidents: const [
+          UnitResidentMember(
+            id: 'mem-ayse',
+            fullName: 'Ayşe Ay',
+            relationship: 'Eşi',
+            phone: '0531 111 22 33',
+          ),
+        ],
+      );
+      controller.homeOwners.insert(0, ownerOccupiedUnit);
+
+      await tester.pumpWidget(MaterialApp(
+        home: DashboardScreen(controller: controller),
+      ));
+      await tester.pumpAndSettle();
+
+      // Go to Sakinler & Malikler tab
+      await tester.tap(find.text('Sakinler & Malikler'));
+      await tester.pumpAndSettle();
+
+      // Verify homeowner Murat Ay and existing household member Ayşe Ay are rendered
+      expect(find.textContaining('Murat Ay'), findsWidgets);
+      expect(find.textContaining('Ayşe Ay'), findsOneWidget);
+
+      // Verify resident add action buttons are visible on the owner-occupied unit card
+      final cardAddMemberBtn = find.byKey(const Key('add_resident_to_unit-owner-res-test'));
+      expect(cardAddMemberBtn, findsOneWidget);
+
+      final quickAddResidentBtn = find.byKey(const Key('quick_add_resident_unit-owner-res-test'));
+      expect(quickAddResidentBtn, findsOneWidget);
+
+      final sectionAAddResidentBtn = find.byKey(const Key('add_resident_member_to_unit-owner-res-test'));
+      expect(sectionAAddResidentBtn, findsOneWidget);
+
+      // Tap + Sakin Ekle in Section C to add a new resident
+      await tester.ensureVisible(cardAddMemberBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(cardAddMemberBtn);
+      await tester.pumpAndSettle();
+
+      // Verify modal opened
+      expect(find.text('Yeni Hane Sakini Ekle'), findsOneWidget);
+
+      // Enter name for second resident
+      final nameField = find.byType(TextField).first;
+      await tester.enterText(nameField, 'Oğuz Ay');
+      await tester.pumpAndSettle();
+
+      // Save new household resident
+      final saveMemberBtn = find.byKey(const Key('household_save_button'));
+      expect(saveMemberBtn, findsOneWidget);
+      await tester.tap(saveMemberBtn);
+      await tester.pumpAndSettle();
+
+      // Verify second resident is now present under householdResidents in controller
+      final updatedHo = controller.homeOwners.firstWhere((h) => h.unitId == 'unit-owner-res-test');
+      expect(updatedHo.householdResidents.length, equals(2));
+      expect(updatedHo.householdResidents.any((r) => r.fullName == 'Oğuz Ay'), isTrue);
+
+      // Now tap Düzenle on the owner-occupied card
+      final editBtn = find.text('Düzenle').first;
+      await tester.ensureVisible(editBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(editBtn);
+      await tester.pumpAndSettle();
+
+      // Verify Edit dialog has Hane Sakinleri section with Yeni Sakin Ekle button and Move-In option
+      expect(find.text('Sakin Bilgilerini Düzenle'), findsOneWidget);
+      expect(find.byKey(const Key('dialog_add_household_member')), findsOneWidget);
+      expect(find.byKey(const Key('dialog_move_in_btn')), findsOneWidget);
+      expect(find.textContaining('Oğuz Ay'), findsOneWidget);
+    });
   });
 }
 
