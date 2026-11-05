@@ -136,23 +136,65 @@ class SaasAdminView extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            ElevatedButton.icon(
-              onPressed: onAddSiteTap,
-              icon: const Icon(Icons.add_business, size: 16),
-              label: const Text('Yeni Site Kaydet', style: TextStyle(fontSize: 12)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Siteleri Yenile',
+                  icon: Icon(Icons.refresh, size: 20, color: AppColors.accentCyan),
+                  onPressed: () => controller.fetchSaasSites(),
+                ),
+                const SizedBox(width: 6),
+                ElevatedButton.icon(
+                  onPressed: onAddSiteTap,
+                  icon: const Icon(Icons.add_business, size: 16),
+                  label: const Text('Yeni Site Kaydet', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
 
         const SizedBox(height: 12),
 
-        ...sites.map((site) => _buildTenantSiteCard(context, site)),
+        if (sites.isEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+            decoration: BoxDecoration(
+              color: AppColors.card(context),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border(context)),
+            ),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(Icons.domain_disabled, size: 44, color: AppColors.textSecondary(context)),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Kayıtlı Site Bulunamadı',
+                    style: TextStyle(
+                      color: AppColors.textPrimary(context),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Sisteme yeni bir site eklemek için "Yeni Site Kaydet" butonuna tıklayınız.',
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ...sites.map((site) => _buildTenantSiteCard(context, site)),
       ],
     );
   }

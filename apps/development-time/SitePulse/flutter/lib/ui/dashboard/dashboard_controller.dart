@@ -51,6 +51,9 @@ class DashboardController extends ChangeNotifier {
   /// Flag indicating whether the controller is operating under active test fixtures (for unit/widget testing)
   bool isTestMode = false;
 
+  /// Centralized API host resolver for web and native environments
+  String get apiHost => (kIsWeb && Uri.base.host.isNotEmpty && Uri.base.host != '0.0.0.0') ? Uri.base.host : 'localhost';
+
   ApartmentUnit _managerUnit = ApartmentUnit.empty;
   ApartmentUnit get activeUnit =>
       (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner)
@@ -274,7 +277,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '1';
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/house-types?site_id=$effectiveSiteId');
         final response = await http.get(url).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
@@ -308,7 +311,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '1';
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/house-types?site_id=$effectiveSiteId');
         final response = await http.post(
           url,
@@ -348,7 +351,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '1';
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/house-types/$id?site_id=$effectiveSiteId');
         await http.delete(url).timeout(const Duration(seconds: 4));
       } catch (e) {
@@ -392,7 +395,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '1';
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/blocks?site_id=$effectiveSiteId');
         final response = await http.get(url).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
@@ -432,7 +435,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/blocks?site_id=$effectiveSiteId');
         final response = await http.post(
           url,
@@ -503,6 +506,9 @@ class DashboardController extends ChangeNotifier {
     }
     if (_currentManagedSite?.id.isNotEmpty == true) {
       fetchReconciliationQueue();
+    }
+    if (!isTestMode) {
+      fetchSaasSites();
     }
   }
 
@@ -664,7 +670,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
     if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria');
       final response = await http.get(url).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
@@ -687,7 +693,7 @@ class DashboardController extends ChangeNotifier {
     if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     final clean = iban.replaceAll(' ', '').toUpperCase();
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria/ibans');
       final response = await http.post(
         url,
@@ -730,7 +736,7 @@ class DashboardController extends ChangeNotifier {
     if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     final clean = iban.replaceAll(' ', '').toUpperCase();
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria/ibans/$clean');
       final response = await http.delete(url).timeout(const Duration(seconds: 3));
 
@@ -758,7 +764,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
     if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria/payer-names');
       final response = await http.put(
         url,
@@ -784,7 +790,7 @@ class DashboardController extends ChangeNotifier {
   Future<bool> resetAllDemoData() async {
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/system/reset-demo-data');
         await http.post(url).timeout(const Duration(seconds: 3));
       } catch (e) {
@@ -832,7 +838,7 @@ class DashboardController extends ChangeNotifier {
   Future<bool> accrueTestDue([String? unitId]) async {
     final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final url = Uri.parse('http://$host:8080/api/v1/system/accrue-test-due');
       await http.post(url).timeout(const Duration(seconds: 3));
     } catch (e) {
@@ -852,7 +858,7 @@ class DashboardController extends ChangeNotifier {
     fetchUnitMatchingCriteria(effectiveUnitId);
     fetchHouseholdMembers(effectiveUnitId);
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/dashboard');
       final response = await http.get(url).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
@@ -925,7 +931,7 @@ class DashboardController extends ChangeNotifier {
     }
     if (effectiveSiteId == null || effectiveSiteId.isEmpty) return;
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final url = Uri.parse('http://$host:8080/api/v1/bank/statements/reconciliation-queue?site_id=$effectiveSiteId');
       final response = await http.get(url).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
@@ -960,7 +966,7 @@ class DashboardController extends ChangeNotifier {
   Future<void> fetchSiteManagerOverview({String? siteId, String? period}) async {
     if (isTestMode) return;
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final queryParams = <String, String>{};
       if (siteId != null && siteId.isNotEmpty) {
         queryParams['site_id'] = siteId;
@@ -1116,38 +1122,39 @@ class DashboardController extends ChangeNotifier {
   Future<void> fetchSaasSites() async {
     if (isTestMode) return;
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-      final url = Uri.parse('http://$host:8080/api/v1/saas/sites');
-      final response = await http.get(url).timeout(const Duration(seconds: 3));
+      final url = Uri.parse('http://$apiHost:8080/api/v1/saas/sites');
+      final response = await http.get(url).timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
-        if (data.isNotEmpty) {
-          _saasSites = data.map<TenantSiteItem>((item) {
-            final addr = item['address']?.toString() ?? '';
-            final city = addr.contains(',') ? addr.split(',').last.trim() : 'İstanbul';
-            final blocksJson = item['blocks'] as List<dynamic>?;
-            final blocks = blocksJson != null && blocksJson.isNotEmpty
-                ? blocksJson.map((e) => e.toString()).toList()
-                : const ['A Blok', 'B Blok'];
-            return TenantSiteItem(
-              id: item['site_id'] as String? ?? '',
-              name: item['site_name'] as String? ?? '',
-              city: city,
-              address: addr,
-              status: item['status'] as String? ?? 'ACTIVE',
-              planType: item['plan_type'] as String? ?? 'STANDARD',
-              totalUnits: (item['total_units'] as num?)?.toInt() ?? 0,
-              monthlyCollectionVolume: Decimal.tryParse(item['monthly_dues_volume']?.toString() ?? '0') ?? Decimal.zero,
-              adminName: item['primary_manager_name'] as String? ?? 'Yönetici Atanmadı',
-              adminEmail: item['primary_manager_email'] as String? ?? '',
-              adminPhone: item['primary_manager_phone'] as String? ?? '',
-              actionCount: (item['total_units'] as num?)?.toInt() ?? 0,
-              blocks: blocks,
-            );
-          }).toList();
-          notifyListeners();
+        _saasSites = data.map<TenantSiteItem>((item) {
+          final addr = item['address']?.toString() ?? '';
+          final city = addr.contains(',') ? addr.split(',').last.trim() : 'İstanbul';
+          final blocksJson = item['blocks'] as List<dynamic>?;
+          final blocks = blocksJson != null && blocksJson.isNotEmpty
+              ? blocksJson.map((e) => e.toString()).toList()
+              : const ['A Blok', 'B Blok'];
+          return TenantSiteItem(
+            id: item['site_id'] as String? ?? '',
+            name: item['site_name'] as String? ?? '',
+            city: city,
+            address: addr,
+            status: item['status'] as String? ?? 'ACTIVE',
+            planType: item['plan_type'] as String? ?? 'STANDARD',
+            totalUnits: (item['total_units'] as num?)?.toInt() ?? 0,
+            monthlyCollectionVolume: Decimal.tryParse(item['monthly_dues_volume']?.toString() ?? '0') ?? Decimal.zero,
+            adminName: item['primary_manager_name'] as String? ?? 'Yönetici Atanmadı',
+            adminEmail: item['primary_manager_email'] as String? ?? '',
+            adminPhone: item['primary_manager_phone'] as String? ?? '',
+            actionCount: (item['total_units'] as num?)?.toInt() ?? 0,
+            blocks: blocks,
+          );
+        }).toList();
+        _managedSitesList = List.from(_saasSites);
+        if (_currentManagedSite == null && _saasSites.isNotEmpty) {
+          _currentManagedSite = _saasSites.first;
         }
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('fetchSaasSites error: $e');
@@ -1165,7 +1172,7 @@ class DashboardController extends ChangeNotifier {
         : (_currentManagedSite?.id.isNotEmpty == true
             ? _currentManagedSite!.id
             : (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : (_saasSites.isNotEmpty ? _saasSites.first.id : '1')));
-    final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+    final host = apiHost;
     final url = Uri.parse('http://$host:8080/api/v1/dues/accrue-period');
     final dueAmount = amount ?? Decimal.parse('1400.00');
     final dt = dueDate ?? DateTime.now();
@@ -1319,7 +1326,7 @@ class DashboardController extends ChangeNotifier {
         : (_currentManagedSite?.id.isNotEmpty == true
             ? _currentManagedSite!.id
             : (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : (_saasSites.isNotEmpty ? _saasSites.first.id : '1')));
-    final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+    final host = apiHost;
     final url = Uri.parse('http://$host:8080/api/v1/dues/periods');
     final formattedDueDate =
         "${dueDate.year.toString().padLeft(4, '0')}-${dueDate.month.toString().padLeft(2, '0')}-${dueDate.day.toString().padLeft(2, '0')}";
@@ -1756,7 +1763,7 @@ class DashboardController extends ChangeNotifier {
     // 1. Try remote authentication if not test mode
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/auth/login');
         final response = await http.post(
           url,
@@ -1916,7 +1923,7 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> registerNewSite({
+  Future<bool> registerNewSite({
     required String name,
     required String city,
     required String address,
@@ -1932,8 +1939,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-        final url = Uri.parse('http://$host:8080/api/v1/saas/sites');
+        final url = Uri.parse('http://$apiHost:8080/api/v1/saas/sites');
         final response = await http.post(
           url,
           headers: {'Content-Type': 'application/json'},
@@ -1946,7 +1952,7 @@ class DashboardController extends ChangeNotifier {
             'plan_type': planType,
             'blocks': siteBlocks,
           }),
-        ).timeout(const Duration(seconds: 4));
+        ).timeout(const Duration(seconds: 5));
 
         if (response.statusCode == 200 || response.statusCode == 201) {
           final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -1967,7 +1973,8 @@ class DashboardController extends ChangeNotifier {
             actionCount: 0,
             blocks: siteBlocks,
           );
-          _saasSites = [newSite, ..._saasSites];
+          _saasSites = [newSite, ..._saasSites.where((s) => s.id != createdSiteId)];
+          _managedSitesList = List.from(_saasSites);
           _provisionedCredentials = ProvisionedSiteCredentials(
             siteId: createdSiteId,
             siteName: name,
@@ -1976,11 +1983,23 @@ class DashboardController extends ChangeNotifier {
             temporaryPassword: createdPassword,
             planType: planType,
           );
+          _authMessage = '$name sitesi başarıyla kaydedildi.';
           notifyListeners();
-          return;
+          return true;
+        } else {
+          final errorBody = utf8.decode(response.bodyBytes);
+          _authMessage = errorBody.isNotEmpty
+              ? errorBody
+              : 'Site kaydı başarısız oldu (HTTP ${response.statusCode})';
+          debugPrint('registerNewSite error: ${response.statusCode} - $errorBody');
+          notifyListeners();
+          return false;
         }
       } catch (e) {
         debugPrint('registerNewSite remote error: $e');
+        _authMessage = 'Bağlantı hatası: Sunucuya ulaşılamadı ($e)';
+        notifyListeners();
+        return false;
       }
     }
 
@@ -2001,6 +2020,7 @@ class DashboardController extends ChangeNotifier {
     );
 
     _saasSites = [newSite, ..._saasSites];
+    _managedSitesList = List.from(_saasSites);
     _provisionedCredentials = ProvisionedSiteCredentials(
       siteId: siteId,
       siteName: name,
@@ -2010,6 +2030,7 @@ class DashboardController extends ChangeNotifier {
       planType: planType,
     );
     notifyListeners();
+    return true;
   }
 
   /// Invariant Guard: Check if a site can be deleted.
@@ -2037,7 +2058,7 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
 
     if (!isTestMode) {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final url = Uri.parse('http://$host:8080/api/v1/saas/sites/$siteId');
       http.delete(url).catchError((e) {
         debugPrint('deleteSite remote sync notice: $e');
@@ -2085,7 +2106,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/saas/sites/$siteId');
         final payload = <String, dynamic>{};
         if (name != null) payload['site_name'] = name;
@@ -2143,7 +2164,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/saas/sites/$siteId/reset-admin-password');
         final response = await http.post(url).timeout(const Duration(seconds: 5));
         if (response.statusCode == 200) {
@@ -2198,7 +2219,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/auth/change-password');
         final response = await http.post(
           url,
@@ -2267,7 +2288,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
         final response = await http.post(
           url,
@@ -2495,7 +2516,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
         final response = await http.get(url).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
@@ -2582,7 +2603,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners/$unitId?site_id=$effectiveSiteId');
         final response = await http.put(
           url,
@@ -2699,7 +2720,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners/$unitId?site_id=$effectiveSiteId');
         final response = await http.delete(
           url,
@@ -2747,7 +2768,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/home-residents/members/$effectiveUnitId');
         final response = await http.get(url).timeout(const Duration(seconds: 3));
         if (response.statusCode == 200) {
@@ -2776,7 +2797,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/home-residents/members/$effectiveUnitId/$residentId?site_id=$effectiveSiteId');
         final response = await http.delete(url).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200 || response.statusCode == 204) {
@@ -2815,7 +2836,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/home-residents/members/$unitId/$residentId?site_id=$effectiveSiteId');
         final response = await http.put(
           url,
@@ -2893,7 +2914,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final memberUrl = Uri.parse('http://$host:8080/api/v1/home-residents/members/$effectiveUnitId?site_id=$effectiveSiteId');
         final response = await http.post(
           memberUrl,
@@ -2944,7 +2965,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/units/$unitId/move-out?site_id=$effectiveSiteId');
         final response = await http.post(
           url,
@@ -2999,7 +3020,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/units/$unitId/move-in?site_id=$effectiveSiteId');
         final response = await http.post(
           url,
@@ -3070,7 +3091,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/site-admin/units/$unitId/occupancy-history?site_id=$effectiveSiteId');
         final response = await http.get(url).timeout(const Duration(seconds: 4));
 
@@ -3097,7 +3118,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final url = Uri.parse('http://$host:8080/api/v1/registration/approve/$requestId');
         final response = await http.post(url).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
@@ -3791,7 +3812,7 @@ class DashboardController extends ChangeNotifier {
     // Dispatch to Rust Backend to persist reconciliation settlement
     if (isTestMode) return;
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final url = Uri.parse('http://$host:8080/api/v1/bank/statements/confirm-reconciliation');
       final payload = {
         'site_id': _currentManagedSite?.id ?? _activeUnit.siteId,
@@ -3827,7 +3848,7 @@ class DashboardController extends ChangeNotifier {
   }) async {
     if (isTestMode) return;
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final url = Uri.parse('http://$host:8080/api/v1/bank/remembered-ibans');
       await http.post(
         url,
@@ -3972,7 +3993,7 @@ class DashboardController extends ChangeNotifier {
     // Sync with backend API
     if (isTestMode) return;
     try {
-      final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      final host = apiHost;
       final url = Uri.parse('http://$host:8080/api/v1/payments/record');
       final response = await http.post(
         url,
@@ -4117,7 +4138,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.http('$host:8080', '/api/v1/payments/stream', queryParams);
         final response = await http.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
@@ -4209,7 +4230,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.parse('http://$host:8080/api/v1/payments/debt-aging?site_id=$effectiveSiteId');
         final response = await http.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
@@ -4272,7 +4293,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.parse('http://$host:8080/api/v1/payments/record-manual');
         final response = await http.post(
           uri,
@@ -4328,7 +4349,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.parse('http://$host:8080/api/v1/payments/inter-ledger-transfer');
         final response = await http.post(
           uri,
@@ -4359,7 +4380,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.parse('http://$host:8080/api/v1/payments/receipts/$identifier?site_id=$effectiveSiteId');
         final response = await http.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
@@ -4413,7 +4434,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.parse('http://$host:8080/api/v1/site-admin/units/$unitId/transfer-ownership');
         final response = await http.post(
           uri,
@@ -4481,7 +4502,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.http('$host:8080', '/api/v1/capital-projects', {'site_id': effectiveSiteId});
         final response = await http.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
@@ -4672,7 +4693,7 @@ class DashboardController extends ChangeNotifier {
   Future<List<CapitalProjectInstallmentItem>> fetchCapitalInstallments(String projectId) async {
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.parse('http://$host:8080/api/v1/capital-projects/$projectId/installments');
         final response = await http.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
@@ -4694,7 +4715,7 @@ class DashboardController extends ChangeNotifier {
   Future<List<CapitalContractorDisbursementItem>> fetchCapitalDisbursements(String projectId) async {
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.parse('http://$host:8080/api/v1/capital-projects/$projectId/disbursements');
         final response = await http.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
@@ -4716,7 +4737,7 @@ class DashboardController extends ChangeNotifier {
   Future<List<UnitCapitalShareItem>> fetchUnitCapitalShares(String projectId) async {
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.parse('http://$host:8080/api/v1/capital-projects/$projectId/unit-shares');
         final response = await http.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
@@ -4770,7 +4791,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.parse('http://$host:8080/api/v1/capital-projects');
         final response = await http.post(
           uri,
@@ -4837,7 +4858,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.parse('http://$host:8080/api/v1/capital-projects/$projectId/accrue-installment');
         final response = await http.post(
           uri,
@@ -4914,7 +4935,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = kIsWeb && Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+        final host = apiHost;
         final uri = Uri.parse('http://$host:8080/api/v1/capital-projects/$projectId/disbursements');
         final response = await http.post(
           uri,

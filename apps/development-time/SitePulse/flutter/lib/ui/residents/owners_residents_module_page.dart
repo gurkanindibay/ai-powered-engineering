@@ -814,7 +814,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             key: Key('module_move_in_${ho.unitId}'),
                             onPressed: () => _openMoveIn(ho),
                             icon: const Icon(Icons.person_add_alt, size: 12),
-                            label: const Text('Yeni Sakin Girişi', style: TextStyle(fontSize: 11)),
+                            label: const Text('Yeni Kiracı / Sakin Girişi', style: TextStyle(fontSize: 11)),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.accentGreen,
                               foregroundColor: Colors.white,
@@ -1074,8 +1074,8 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     OutlinedButton.icon(
                       key: Key('module_quick_add_resident_${ho.unitId}'),
                       onPressed: () => _openAddHouseholdMember(ho),
-                      icon: const Icon(Icons.person_add_outlined, size: 13, color: AppColors.accentPurple),
-                      label: const Text('+ Sakin Ekle', style: TextStyle(fontSize: 11)),
+                      icon: const Icon(Icons.family_restroom, size: 13, color: AppColors.accentPurple),
+                      label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.accentPurple,
                         side: const BorderSide(color: AppColors.accentPurple),
@@ -1088,7 +1088,14 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       key: Key('module_quick_move_in_${ho.unitId}'),
                       onPressed: () => _openMoveIn(ho),
                       icon: const Icon(Icons.key, size: 13, color: AppColors.accentGreen),
-                      label: const Text('Yeni Sakin Girişi', style: TextStyle(fontSize: 11)),
+                      label: Text(
+                        ho.isVacant
+                            ? 'Yeni Kiracı / Sakin Girişi'
+                            : ho.isTenantOccupied
+                                ? 'Yeni Kiracı Girişi (Move-In)'
+                                : 'Kiracı Tanımla (Move-In)',
+                        style: const TextStyle(fontSize: 11),
+                      ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.accentGreen,
                         side: const BorderSide(color: AppColors.accentGreen),
@@ -2333,7 +2340,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                     setDlgState(() {});
                                   },
                                   icon: const Icon(Icons.person_add_alt, size: 12),
-                                  label: const Text('Yeni Sakin Ekle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                  label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.accentPurple,
                                     foregroundColor: Colors.white,

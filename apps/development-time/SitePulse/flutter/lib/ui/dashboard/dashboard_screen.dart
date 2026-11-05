@@ -43,15 +43,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     widget.controller.addListener(_onControllerUpdate);
-    widget.controller.fetchResidentDashboard();
+    if (widget.controller.userRole == UserRole.saasAdmin) {
+      widget.controller.fetchSaasSites();
+    } else {
+      widget.controller.fetchResidentDashboard();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        widget.controller.fetchHomeOwners();
+        if (widget.controller.userRole == UserRole.saasAdmin) {
+          widget.controller.fetchSaasSites();
+        } else {
+          widget.controller.fetchHomeOwners();
+        }
       }
     });
-    _liveSyncTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    _liveSyncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted) {
-        widget.controller.fetchResidentDashboard();
+        // SaaS sites do not change frequently; they are updated on-demand (add/edit/delete/refresh).
+        // Only resident dashboard uses live balance sync.
+        if (widget.controller.userRole != UserRole.saasAdmin) {
+          widget.controller.fetchResidentDashboard();
+        }
       }
     });
   }
@@ -239,7 +251,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () => widget.controller.fetchResidentDashboard(),
+          onRefresh: () async {
+            if (widget.controller.userRole == UserRole.saasAdmin) {
+              await widget.controller.fetchSaasSites();
+            } else {
+              await widget.controller.fetchResidentDashboard();
+              await widget.controller.fetchHomeOwners();
+            }
+          },
           color: AppColors.accentCyan,
           child: SingleChildScrollView(
             key: ValueKey('tab_scroll_$_selectedTabIndex'),
@@ -1653,8 +1672,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   TextButton.icon(
                                     key: Key('add_resident_to_${ho.unitId}'),
                                     onPressed: () => _showAddHouseholdMemberDialog(ho),
-                                    icon: const Icon(Icons.add, size: 14, color: AppColors.accentPurple),
-                                    label: const Text('+ Sakin Ekle', style: TextStyle(color: AppColors.accentPurple, fontSize: 11, fontWeight: FontWeight.bold)),
+                                    icon: const Icon(Icons.person_add_alt_1, size: 14, color: AppColors.accentPurple),
+                                    label: const Text('+ Hane Sakini Ekle', style: TextStyle(color: AppColors.accentPurple, fontSize: 11, fontWeight: FontWeight.bold)),
                                     style: TextButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       minimumSize: const Size(0, 24),
@@ -1989,7 +2008,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             key: Key('move_in_resident_to_${ho.unitId}'),
                                             onPressed: () => _showMoveInDialog(ho),
                                             icon: const Icon(Icons.key, size: 12),
-                                            label: const Text('Yeni Sakin / Kiracı Girişi', style: TextStyle(fontSize: 11)),
+                                            label: Text(
+                                              isTenant ? 'Yeni Kiracı Girişi (Move-In)' : 'Kiracı Tanımla (Move-In)',
+                                              style: const TextStyle(fontSize: 11),
+                                            ),
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: AppColors.accentGreen,
                                               side: const BorderSide(color: AppColors.accentGreen),
@@ -2202,8 +2224,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 OutlinedButton.icon(
                   key: Key('quick_add_resident_${ho.unitId}'),
                   onPressed: () => _showAddHouseholdMemberDialog(ho),
-                  icon: const Icon(Icons.person_add_outlined, size: 13, color: AppColors.accentPurple),
-                  label: const Text('+ Sakin Ekle', style: TextStyle(fontSize: 11)),
+                  icon: const Icon(Icons.family_restroom, size: 13, color: AppColors.accentPurple),
+                  label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.accentPurple,
                     side: const BorderSide(color: AppColors.accentPurple),
@@ -2216,7 +2238,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   key: Key('quick_move_in_${ho.unitId}'),
                   onPressed: () => _showMoveInDialog(ho),
                   icon: const Icon(Icons.key, size: 13, color: AppColors.accentGreen),
-                  label: const Text('Yeni Sakin Girişi', style: TextStyle(fontSize: 11)),
+                  label: Text(
+                    ho.isVacant
+                        ? 'Yeni Kiracı / Sakin Girişi'
+                        : isTenant
+                            ? 'Yeni Kiracı Girişi (Move-In)'
+                            : 'Kiracı Tanımla (Move-In)',
+                    style: const TextStyle(fontSize: 11),
+                  ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.accentGreen,
                     side: const BorderSide(color: AppColors.accentGreen),
@@ -3933,7 +3962,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         setDialogState(() {});
                                       },
                                       icon: const Icon(Icons.person_add_alt, size: 14),
-                                      label: const Text('Yeni Sakin Ekle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                      label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: AppColors.accentPurple,
                                         foregroundColor: Colors.white,
@@ -4203,7 +4232,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       setDialogState(() {});
                                     },
                                     icon: const Icon(Icons.person_add_alt, size: 14),
-                                    label: const Text('Yeni Sakin Ekle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                    label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: AppColors.accentPurple,
                                       foregroundColor: Colors.white,
@@ -4302,11 +4331,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Kiracı / Yeni Sakin Tanımla',
+                                  isTenant ? 'Yeni Kiracı Girişi (Move-In)' : 'Kiracı Tanımla (Move-In)',
                                   style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.bold),
                                 ),
                                 Text(
-                                  'Daireyi kiraya vermek veya yeni sakin girişi yapmak için tıklayınız.',
+                                  isTenant
+                                      ? 'Mevcut kiracıyı arşivleyip yeni bir kiracı için oturum başlatır.'
+                                      : 'Daire kiraya verildiğinde veya yeni kiracı taşındığında oturum başlatır.',
                                   style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
                                 ),
                               ],
@@ -4319,8 +4350,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Navigator.pop(ctx);
                               _showMoveInDialog(resident);
                             },
-                            icon: const Icon(Icons.person_add_alt, size: 14),
-                            label: const Text('Giriş Başlat (Move-In)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            icon: const Icon(Icons.key, size: 14),
+                            label: Text(
+                              isTenant ? 'Kiracı Girişini Başlat' : 'Kiracı Girişini Başlat',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.accentGreen,
                               foregroundColor: Colors.white,
@@ -5929,7 +5963,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           context: ctx,
           children: [
             ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () {
+                Navigator.pop(ctx);
+                widget.controller.fetchSaasSites();
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accentCyan,
                 foregroundColor: Colors.white,
@@ -7559,160 +7596,254 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final adminEmailCtrl = TextEditingController();
     final adminPhoneCtrl = TextEditingController();
     final blocksCtrl = TextEditingController(text: 'A Blok, B Blok');
+    bool isSaving = false;
+    String? localError;
 
     AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppFullscreenPage(
-        title: 'Yeni Site / Kompleks Kaydet',
-        subtitle: 'SaaS tenant kurulumu ve yetkili atama',
-        icon: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.accentCyan.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AppFullscreenPage(
+          title: 'Yeni Site / Kompleks Kaydet',
+          subtitle: 'SaaS tenant kurulumu ve yetkili atama',
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.accentCyan.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.apartment, color: AppColors.accentCyan, size: 20),
           ),
-          child: const Icon(Icons.apartment, color: AppColors.accentCyan, size: 20),
-        ),
-        bottomBar: AppFullscreenPage.buildBottomBar(
-          context: ctx,
-          children: [
-            OutlinedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                side: BorderSide(color: AppColors.border(context)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          bottomBar: AppFullscreenPage.buildBottomBar(
+            context: ctx,
+            children: [
+              OutlinedButton(
+                onPressed: isSaving ? null : () => Navigator.pop(ctx),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: BorderSide(color: AppColors.border(context)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
-              child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final siteName = nameCtrl.text.trim();
-                final adminName = adminNameCtrl.text.trim();
-                if (siteName.isEmpty || adminName.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Lütfen Site Adı ve Yönetici Ad Soyad alanlarını doldurunuz.'),
-                      backgroundColor: Colors.redAccent,
-                    ),
-                  );
-                  return;
-                }
-                final rawBlocks = blocksCtrl.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-                final blocks = rawBlocks.isNotEmpty ? rawBlocks : ['A Blok', 'B Blok'];
-                Navigator.pop(ctx);
-                widget.controller.registerNewSite(
-                  name: siteName,
-                  city: cityCtrl.text.trim().isEmpty ? 'İstanbul' : cityCtrl.text.trim(),
-                  address: addressCtrl.text.trim(),
-                  adminName: adminName,
-                  adminEmail: adminEmailCtrl.text.trim().isEmpty ? 'yonetici@sitepulse.internal' : adminEmailCtrl.text.trim(),
-                  adminPhone: adminPhoneCtrl.text.trim().isEmpty ? '+90 532 000 00 00' : adminPhoneCtrl.text.trim(),
-                  blocks: blocks,
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ElevatedButton(
+                key: const Key('btn_save_new_site'),
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        final siteName = nameCtrl.text.trim();
+                        final adminName = adminNameCtrl.text.trim();
+                        final adminEmail = adminEmailCtrl.text.trim();
+
+                        if (siteName.isEmpty || adminName.isEmpty) {
+                          setDialogState(() {
+                            localError = 'Lütfen Site Adı ve Yönetici Ad Soyad alanlarını doldurunuz.';
+                          });
+                          return;
+                        }
+
+                        if (adminEmail.isNotEmpty && !adminEmail.contains('@')) {
+                          setDialogState(() {
+                            localError = 'Lütfen geçerli bir yönetici e-posta adresi giriniz.';
+                          });
+                          return;
+                        }
+
+                        final cleanSiteTag = siteName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+                        final effectiveAdminEmail = adminEmail.isNotEmpty
+                            ? adminEmail
+                            : (widget.controller.isTestMode
+                                ? 'yonetici@sitepulse.internal'
+                                : 'yonetici.${cleanSiteTag.isNotEmpty ? cleanSiteTag : "site"}@sitepulse.internal');
+
+                        setDialogState(() {
+                          isSaving = true;
+                          localError = null;
+                        });
+
+                        final rawBlocks = blocksCtrl.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+                        final blocks = rawBlocks.isNotEmpty ? rawBlocks : ['A Blok', 'B Blok'];
+
+                        bool isClosed = false;
+                        try {
+                          final success = await widget.controller.registerNewSite(
+                            name: siteName,
+                            city: cityCtrl.text.trim().isEmpty ? 'İstanbul' : cityCtrl.text.trim(),
+                            address: addressCtrl.text.trim(),
+                            adminName: adminName,
+                            adminEmail: effectiveAdminEmail,
+                            adminPhone: adminPhoneCtrl.text.trim().isEmpty ? '+90 532 000 00 00' : adminPhoneCtrl.text.trim(),
+                            blocks: blocks,
+                          );
+
+                          if (success) {
+                            if (ctx.mounted) {
+                              isClosed = true;
+                              Navigator.pop(ctx);
+                            }
+                            widget.controller.fetchSaasSites();
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('$siteName sitesi başarıyla veritabanına kaydedildi.'),
+                                  backgroundColor: AppColors.accentGreen,
+                                ),
+                              );
+                            }
+                          } else {
+                            setDialogState(() {
+                              isSaving = false;
+                              localError = widget.controller.authMessage ?? 'Site kaydedilemedi. Lütfen bilgileri kontrol ediniz.';
+                            });
+                          }
+                        } catch (e) {
+                          setDialogState(() {
+                            isSaving = false;
+                            localError = 'Bir hata oluştu: $e';
+                          });
+                        } finally {
+                          if (!isClosed && ctx.mounted) {
+                            setDialogState(() {
+                              isSaving = false;
+                            });
+                          }
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentCyan,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: isSaving
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Siteyi Kaydet & Yetkilendir', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
-              child: const Text('Siteyi Kaydet & Yetkilendir', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            TextField(
-              controller: nameCtrl,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Site / Proje Adı',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (localError != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.redAccent),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          localError!,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              TextField(
+                controller: nameCtrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Site / Proje Adı',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: cityCtrl,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Şehir',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: cityCtrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Şehir',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: addressCtrl,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Adres',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: addressCtrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Adres',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              key: const Key('add_site_blocks_field'),
-              controller: blocksCtrl,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Bloklar (Virgülle ayırarak giriniz: A Blok, B Blok)',
-                helperText: 'Sitede yer alan blokları belirleyin. Sakin eklerken bu bloklar seçilecektir.',
-                helperStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                prefixIcon: const Icon(Icons.domain, size: 20, color: AppColors.accentCyan),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('add_site_blocks_field'),
+                controller: blocksCtrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Bloklar (Virgülle ayırarak giriniz: A Blok, B Blok)',
+                  helperText: 'Sitede yer alan blokları belirleyin. Sakin eklerken bu bloklar seçilecektir.',
+                  helperStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  prefixIcon: const Icon(Icons.domain, size: 20, color: AppColors.accentCyan),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: adminNameCtrl,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Yönetici Ad Soyad',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: adminNameCtrl,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Yönetici Ad Soyad',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: adminEmailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Yönetici E-posta',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: adminEmailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Yönetici E-posta',
+                  helperText: 'Yöneticinin sisteme giriş yapacağı benzersiz e-posta adresi.',
+                  helperStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: adminPhoneCtrl,
-              keyboardType: TextInputType.phone,
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Yönetici Telefon',
-                labelStyle: TextStyle(color: AppColors.textSecondary(context)),
-                filled: true,
-                fillColor: AppColors.card(context),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: adminPhoneCtrl,
+                keyboardType: TextInputType.phone,
+                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Yönetici Telefon',
+                  labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                  filled: true,
+                  fillColor: AppColors.card(context),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
