@@ -236,7 +236,7 @@ impl RegistrationApprovalService {
                 };
 
                 // Find or create person
-                let person_type = if req.is_resident { "KAT_SAKINI" } else { "KAT_MALIKI" };
+                let person_type = if req.is_resident { "HOME_RESIDENT" } else { "HOME_OWNER" };
                 let existing_person = client
                     .query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&req.email])
                     .await

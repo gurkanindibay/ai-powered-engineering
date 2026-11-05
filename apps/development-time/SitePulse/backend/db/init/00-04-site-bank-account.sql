@@ -13,11 +13,10 @@ CREATE TABLE IF NOT EXISTS site_bank_accounts (
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
     configured_by   BIGINT REFERENCES users(id),
     created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-
-    -- A site may have at most one active bank account at any time
-    CONSTRAINT uq_site_active_bank UNIQUE (site_id, is_active) DEFERRABLE INITIALLY DEFERRED
+    updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- A site may have at most one ACTIVE bank account at any time.
+-- (A plain UNIQUE(site_id, is_active) would also cap inactive history to one row.)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_site_active_bank ON site_bank_accounts (site_id) WHERE is_active = TRUE;
 CREATE INDEX IF NOT EXISTS idx_site_bank_account_site ON site_bank_accounts (site_id);
-CREATE INDEX IF NOT EXISTS idx_site_bank_account_active ON site_bank_accounts (site_id, is_active);

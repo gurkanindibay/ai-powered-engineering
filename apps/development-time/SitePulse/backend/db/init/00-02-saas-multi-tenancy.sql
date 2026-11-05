@@ -21,3 +21,35 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_user_site ON users (site_id);
 CREATE INDEX IF NOT EXISTS idx_user_email ON users (email);
+
+-- Self-service registration requests awaiting manager approval
+CREATE TABLE IF NOT EXISTS pending_registrations (
+    request_id VARCHAR(100) PRIMARY KEY,
+    site_id VARCHAR(50) NOT NULL,
+    block VARCHAR(50) NOT NULL,
+    unit_no INT NOT NULL,
+    floor INT NOT NULL,
+    full_name VARCHAR(120) NOT NULL,
+    email VARCHAR(120) NOT NULL,
+    phone VARCHAR(30) NOT NULL,
+    is_resident BOOLEAN NOT NULL DEFAULT TRUE,
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+    submitted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_pending_reg_site_status ON pending_registrations (site_id, status);
+
+-- One-time unit invitation links
+CREATE TABLE IF NOT EXISTS invitation_tokens (
+    token VARCHAR(100) PRIMARY KEY,
+    token_type VARCHAR(20) NOT NULL DEFAULT 'UNIT',
+    site_id VARCHAR(50),
+    unit_id VARCHAR(50),
+    building VARCHAR(50),
+    unit_number VARCHAR(20),
+    relationship VARCHAR(100),
+    invite_url TEXT NOT NULL,
+    security_notice TEXT,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_invitation_tokens_expires ON invitation_tokens (expires_at);

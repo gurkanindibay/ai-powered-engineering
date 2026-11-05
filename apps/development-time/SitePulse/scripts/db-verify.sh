@@ -100,7 +100,7 @@ do_residents() {
                 WHEN u.tenant_person_id = p.id THEN 'Sakin (Kiracı)'
                 WHEN u.owner_person_id = p.id AND u.tenant_person_id IS NULL THEN 'Malik (Oturuyor)'
                 WHEN u.owner_person_id = p.id THEN 'Malik (Ev Sahibi)'
-                WHEN p.person_type IN ('KAT_SAKINI', 'TENANT', 'RESIDENT') THEN 'Sakin'
+                WHEN p.person_type IN ('HOME_RESIDENT', 'KAT_SAKINI', 'TENANT', 'RESIDENT') THEN 'Sakin'
                 ELSE 'Malik'
             END AS role_status
         FROM persons p

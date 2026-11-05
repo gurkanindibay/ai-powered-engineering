@@ -324,9 +324,9 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
                 '',
                 u.email,
                 CASE 
-                    WHEN u.role = 'HOME_OWNER' THEN 'KAT_MALIKI'
-                    WHEN u.role = 'HOME_RESIDENT' THEN 'KAT_SAKINI'
-                    ELSE 'YONETICI'
+                    WHEN u.role = 'HOME_OWNER' THEN 'HOME_OWNER'
+                    WHEN u.role = 'HOME_RESIDENT' THEN 'HOME_RESIDENT'
+                    ELSE 'SITE_MANAGER'
                 END
             FROM users u
             WHERE u.person_id IS NULL AND NOT EXISTS (
@@ -390,6 +390,10 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
                 CONSTRAINT uq_user_site_role UNIQUE (user_id, site_id, role)
             );
             CREATE INDEX IF NOT EXISTS idx_user_site_roles_lookup ON user_site_roles (site_id, role);
+            CREATE INDEX IF NOT EXISTS idx_user_site ON users (site_id);
+            CREATE INDEX IF NOT EXISTS idx_user_email ON users (email);
+            CREATE INDEX IF NOT EXISTS idx_user_auth_provider ON users (auth_provider);
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_user_google_sub ON users (google_sub) WHERE google_sub IS NOT NULL;
 
             INSERT INTO user_site_roles (user_id, site_id, role)
             SELECT u.id, u.site_id, u.role
@@ -410,6 +414,8 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
                 expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE INDEX IF NOT EXISTS idx_invitation_tokens_expires ON invitation_tokens (expires_at);
 
             CREATE TABLE IF NOT EXISTS advance_balances (
                 unit_id VARCHAR(50) PRIMARY KEY,
@@ -586,7 +592,7 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
 
             ALTER TABLE dues_liabilities ADD COLUMN IF NOT EXISTS capital_project_id BIGINT;
             ALTER TABLE dues_liabilities ADD COLUMN IF NOT EXISTS installment_number INT;
-            CREATE INDEX IF NOT EXISTS idx_dues_capital_project ON dues_liabilities (capital_project_id);
+
 
             -- Active Occupancy Single-Session Invariant & Integrity Checks
             ALTER TABLE unit_occupancies DROP CONSTRAINT IF EXISTS chk_occupancy_dates;
@@ -670,22 +676,23 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
             ALTER TABLE units ADD CONSTRAINT chk_units_occupancy_status CHECK (occupancy_status IN ('OWNER_OCCUPIED', 'TENANT_OCCUPIED', 'VACANT'));
 
             -- Foreign Key Covering Indexes
-            CREATE INDEX IF NOT EXISTS idx_users_site_id ON users (site_id);
             CREATE INDEX IF NOT EXISTS idx_units_owner_person ON units (owner_person_id);
             CREATE INDEX IF NOT EXISTS idx_units_tenant_person ON units (tenant_person_id);
             CREATE INDEX IF NOT EXISTS idx_units_site_id ON units (site_id);
             CREATE INDEX IF NOT EXISTS idx_occupancies_unit_id ON unit_occupancies (unit_id);
             CREATE INDEX IF NOT EXISTS idx_occupancies_person ON unit_occupancies (person_id);
-            CREATE INDEX IF NOT EXISTS idx_site_bank_accounts_site ON site_bank_accounts (site_id);
+            CREATE INDEX IF NOT EXISTS idx_site_bank_account_site ON site_bank_accounts (site_id);
             CREATE INDEX IF NOT EXISTS idx_site_bank_accounts_config_by ON site_bank_accounts (configured_by);
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_site_active_bank ON site_bank_accounts (site_id) WHERE is_active = true;
             CREATE INDEX IF NOT EXISTS idx_dues_liabilities_unit ON dues_liabilities (unit_id);
+            CREATE INDEX IF NOT EXISTS idx_dues_unit_status ON dues_liabilities (unit_id, status);
             CREATE INDEX IF NOT EXISTS idx_dues_liabilities_person ON dues_liabilities (liable_person_id);
             CREATE INDEX IF NOT EXISTS idx_dues_liabilities_occupancy ON dues_liabilities (occupancy_id);
             CREATE INDEX IF NOT EXISTS idx_dues_liabilities_capital_proj ON dues_liabilities (capital_project_id);
             CREATE INDEX IF NOT EXISTS idx_col_tx_liability ON collection_transactions (dues_liability_id);
             CREATE INDEX IF NOT EXISTS idx_col_tx_unit ON collection_transactions (unit_id);
             CREATE INDEX IF NOT EXISTS idx_payment_entries_receipt ON payment_entries (receipt_id);
-            CREATE INDEX IF NOT EXISTS idx_advance_balances_unit ON advance_balances (unit_id);
+
             CREATE INDEX IF NOT EXISTS idx_homeowner_payments_unit ON homeowner_payments (unit_id);
             CREATE INDEX IF NOT EXISTS idx_homeowner_payments_block ON homeowner_payments (block_id);
 
@@ -751,6 +758,85 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
             CREATE TRIGGER trg_sync_unit_members
             AFTER INSERT OR UPDATE OR DELETE ON unit_members
             FOR EACH ROW EXECUTE FUNCTION fn_sync_unit_member_to_occupancy();
+
+            -- Referential & financial integrity hardening (mirrors migrations/V9)
+            UPDATE persons SET person_type = 'HOME_OWNER' WHERE person_type IN ('KAT_MALIKI', 'OWNER');
+            UPDATE persons SET person_type = 'HOME_RESIDENT' WHERE person_type IN ('KAT_SAKINI', 'TENANT', 'RESIDENT');
+            UPDATE persons SET person_type = 'SITE_MANAGER' WHERE person_type IN ('YONETICI', 'MANAGER');
+
+            ALTER TABLE persons DROP CONSTRAINT IF EXISTS chk_persons_person_type;
+            ALTER TABLE persons ADD CONSTRAINT chk_persons_person_type
+                CHECK (person_type IN ('HOME_OWNER', 'HOME_RESIDENT', 'SITE_MANAGER', 'SAAS_ADMIN'));
+
+            -- ON CONFLICT (email) needs a non-partial unique constraint; the partial
+            -- LOWER(email) index alone makes every upsert by email fail at runtime.
+            ALTER TABLE persons DROP CONSTRAINT IF EXISTS uq_persons_email;
+            ALTER TABLE persons ADD CONSTRAINT uq_persons_email UNIQUE (email);
+
+            ALTER TABLE persons DROP CONSTRAINT IF EXISTS chk_persons_email_not_blank;
+            ALTER TABLE persons ADD CONSTRAINT chk_persons_email_not_blank CHECK (email IS NULL OR email <> '');
+
+            UPDATE units u SET site_id = b.site_id
+            FROM blocks b
+            WHERE b.id = u.block_id AND u.site_id IS DISTINCT FROM b.site_id;
+
+            ALTER TABLE units ALTER COLUMN site_id SET NOT NULL;
+
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_blocks_id_site ON blocks (id, site_id);
+
+            ALTER TABLE units DROP CONSTRAINT IF EXISTS fk_units_block_site;
+            ALTER TABLE units ADD CONSTRAINT fk_units_block_site
+                FOREIGN KEY (block_id, site_id) REFERENCES blocks(id, site_id) ON DELETE CASCADE;
+
+            ALTER TABLE unit_occupancies DROP CONSTRAINT IF EXISTS chk_occupancy_active_open;
+            ALTER TABLE unit_occupancies ADD CONSTRAINT chk_occupancy_active_open
+                CHECK (NOT is_active OR end_date IS NULL);
+
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_unit_active_owner
+                ON unit_ownerships (unit_id, person_id) WHERE is_active = TRUE;
+
+            ALTER TABLE dues_liabilities DROP CONSTRAINT IF EXISTS chk_dues_expense_type;
+            ALTER TABLE dues_liabilities ADD CONSTRAINT chk_dues_expense_type
+                CHECK (expense_type IN ('OPERATIONAL_DUES', 'CAPITAL_DUES'));
+
+            ALTER TABLE dues_liabilities DROP CONSTRAINT IF EXISTS chk_dues_debtor_type;
+            ALTER TABLE dues_liabilities ADD CONSTRAINT chk_dues_debtor_type
+                CHECK (debtor_type IN ('OWNER', 'TENANT'));
+
+            ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_role;
+            ALTER TABLE users ADD CONSTRAINT chk_users_role
+                CHECK (role IN ('SAAS_ADMIN', 'SITE_MANAGER', 'HOME_OWNER', 'HOME_RESIDENT'));
+
+            ALTER TABLE user_site_roles DROP CONSTRAINT IF EXISTS chk_user_site_roles_role;
+            ALTER TABLE user_site_roles ADD CONSTRAINT chk_user_site_roles_role
+                CHECK (role IN ('SAAS_ADMIN', 'SITE_MANAGER', 'HOME_OWNER', 'HOME_RESIDENT'));
+
+            ALTER TABLE site_bank_accounts DROP CONSTRAINT IF EXISTS chk_bank_statement_format;
+            ALTER TABLE site_bank_accounts ADD CONSTRAINT chk_bank_statement_format
+                CHECK (statement_format IN ('EXCEL', 'CSV', 'MT940'));
+
+            ALTER TABLE site_bank_accounts DROP CONSTRAINT IF EXISTS chk_bank_iban_format;
+            ALTER TABLE site_bank_accounts ADD CONSTRAINT chk_bank_iban_format
+                CHECK (iban ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$');
+
+            ALTER TABLE dues_liabilities DROP CONSTRAINT IF EXISTS fk_dues_capital_project;
+            ALTER TABLE dues_liabilities ADD CONSTRAINT fk_dues_capital_project
+                FOREIGN KEY (capital_project_id) REFERENCES capital_projects(id) ON DELETE SET NULL;
+
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_unit_capital_installment
+                ON dues_liabilities (unit_id, capital_project_id, installment_number)
+                WHERE capital_project_id IS NOT NULL;
+
+            ALTER TABLE dues_liabilities DROP CONSTRAINT IF EXISTS chk_dues_paid_within_owed;
+            ALTER TABLE dues_liabilities ADD CONSTRAINT chk_dues_paid_within_owed
+                CHECK (paid_amount <= principal_amount + delay_penalty);
+
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_site_receipt_sequence
+                ON payment_receipts (site_id, sequence_number);
+
+            ALTER TABLE payment_receipts DROP CONSTRAINT IF EXISTS chk_receipt_allocation_sums;
+            ALTER TABLE payment_receipts ADD CONSTRAINT chk_receipt_allocation_sums
+                CHECK (allocated_principal + allocated_penalty + allocated_advance = total_amount);
             "#,
         )
         .await?;
@@ -778,7 +864,7 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
             ON CONFLICT (config_key) DO NOTHING;
 
             INSERT INTO persons (id, national_id, full_name, phone, email, person_type)
-            VALUES (999, '99999999999', 'SaaS Platform Admin', '+90 850 555 0000', 'admin@sitepulse.io', 'YONETICI')
+            VALUES (999, '99999999999', 'SaaS Platform Admin', '+90 850 555 0000', 'admin@sitepulse.io', 'SITE_MANAGER')
             ON CONFLICT (id) DO NOTHING;
 
             INSERT INTO users (id, site_id, person_id, email, password_hash, role, must_change_password)
@@ -848,7 +934,7 @@ pub async fn seed_test_data(pool: &Pool) -> Result<(), Box<dyn std::error::Error
             VALUES 
                 (3, '55555555555', 'Mehmet Demir', '+90 532 100 2030', 'mehmet.demir@begonya.com', 'HOME_OWNER'),
                 (1, '12345678901', 'Ahmet Yılmaz', '+90 532 111 22 33', 'ahmet.yilmaz@begonya.com', 'HOME_OWNER'),
-                (2, '98765432109', 'Zeynep Kaya', '+90 542 333 44 55', 'zeynep@example.com', 'TENANT'),
+                (2, '98765432109', 'Zeynep Kaya', '+90 542 333 44 55', 'zeynep@example.com', 'HOME_RESIDENT'),
                 (4, '44444444444', 'Mehmet Öz', '+90 533 222 33 44', 'mehmet.oz@begonya.com', 'HOME_OWNER')
             ON CONFLICT (id) DO NOTHING;
 
@@ -1884,9 +1970,9 @@ pub async fn save_user(pool: &Pool, user: &User) -> Result<(), Box<dyn std::erro
             Some(pid)
         } else if !user.full_name.is_empty() {
             let p_type = match user.role {
-                Role::HomeOwner => "KAT_MALIKI",
-                Role::HomeResident => "KAT_SAKINI",
-                _ => "YONETICI",
+                Role::HomeOwner => "HOME_OWNER",
+                Role::HomeResident => "HOME_RESIDENT",
+                _ => "SITE_MANAGER",
             };
             let row = client
                 .query_one(
@@ -2027,7 +2113,7 @@ pub async fn save_unit(pool: &Pool, unit: &IndependentUnit) -> Result<(), Box<dy
                 let email: String = ur.get(2);
                 let ph = phone.unwrap_or_default();
                 client.execute(
-                    "INSERT INTO persons (id, full_name, phone, email, person_type) VALUES ($1, $2, $3, $4, 'KAT_MALIKI') ON CONFLICT (id) DO NOTHING",
+                    "INSERT INTO persons (id, full_name, phone, email, person_type) VALUES ($1, $2, $3, $4, 'HOME_OWNER') ON CONFLICT (id) DO NOTHING",
                     &[&oid, &name, &ph, &email],
                 ).await?;
                 Some(oid)
@@ -2052,7 +2138,7 @@ pub async fn save_unit(pool: &Pool, unit: &IndependentUnit) -> Result<(), Box<dy
                 let email: String = ur.get(2);
                 let ph = phone.unwrap_or_default();
                 client.execute(
-                    "INSERT INTO persons (id, full_name, phone, email, person_type) VALUES ($1, $2, $3, $4, 'KAT_SAKINI') ON CONFLICT (id) DO NOTHING",
+                    "INSERT INTO persons (id, full_name, phone, email, person_type) VALUES ($1, $2, $3, $4, 'HOME_RESIDENT') ON CONFLICT (id) DO NOTHING",
                     &[&tid, &name, &ph, &email],
                 ).await?;
                 Some(tid)
@@ -2892,9 +2978,9 @@ pub async fn sync_all_in_memory_to_db(
     for user in &state.users {
         let user_id_num = parse_id_to_i64(&user.id).unwrap_or(1);
         let p_type = match user.role {
-            Role::HomeOwner => "KAT_MALIKI",
-            Role::HomeResident => "KAT_SAKINI",
-            _ => "YONETICI",
+            Role::HomeOwner => "HOME_OWNER",
+            Role::HomeResident => "HOME_RESIDENT",
+            _ => "SITE_MANAGER",
         };
         let _ = client
             .execute(

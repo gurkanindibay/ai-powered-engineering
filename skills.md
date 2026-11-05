@@ -42,6 +42,31 @@ This document lists the available skills and custom tools available to AI agents
 
 ---
 
+## 1b. Schema Integrity Gate (`schema_integrity_check.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/schema_integrity_check.py](file:///apps/development-time/SitePulse/scripts/schema_integrity_check.py) (symlinked to `scripts/schema_integrity_check.py`)
+- **Purpose:** Replays the docker init scripts (`backend/db/init/00-*.sql`) and the versioned migrations (`backend/migrations/V*.sql`) into throwaway databases, asserts both produce the identical schema, and asserts the integrity constraints reject invalid data. Guards against the historical drift between `db/init`, `migrations/` and the Rust bootstrap in `backend/src/db.rs`.
+
+### Capabilities:
+- **Schema congruence:** compares every column, constraint and index produced by both schema sources.
+- **Negative cases:** proves `person_type`/`expense_type` domains, unit↔block site consistency, active-occupancy openness, overpayment, duplicate capital installments, receipt allocation/sequence uniqueness, IBAN format and one-active-bank-per-site are all enforced.
+
+### Quick Usage Examples:
+```bash
+# Full gate (schema congruence + constraint rejection tests)
+./scripts/schema_integrity_check.py
+
+# Machine-readable output for CI
+./scripts/schema_integrity_check.py --json
+
+# Regenerate migrations/V*.sql from backend/db/init/00-*.sql, then verify
+./scripts/schema_integrity_check.py --sync
+```
+
+`backend/db/init` is the single editable schema source; the `V*` base migrations are generated from it. Never hand-edit both.
+
+---
+
 ## 2. Rust Engineering Skills (`rust-skills`)
 
 - **Skill Definition:** [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md)

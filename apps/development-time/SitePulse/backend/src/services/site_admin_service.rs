@@ -195,7 +195,7 @@ impl SiteAdminService {
             };
 
             // Find or create person
-            let person_type = if request.is_resident { "KAT_SAKINI" } else { "KAT_MALIKI" };
+            let person_type = if request.is_resident { "HOME_RESIDENT" } else { "HOME_OWNER" };
             let existing_person = client
                 .query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&email_norm])
                 .await
@@ -254,7 +254,7 @@ impl SiteAdminService {
                 } else {
                     let row = client
                         .query_one(
-                            "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, 'KAT_SAKINI') RETURNING id",
+                            "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, 'HOME_RESIDENT') RETURNING id",
                             &[&t_name, &t_phone, &t_email_norm],
                         )
                         .await
@@ -1089,7 +1089,7 @@ impl SiteAdminService {
                             let t_phone = req.tenant_phone.clone().unwrap_or_default();
                             let row_res = client.query_one(
                                 "INSERT INTO persons (full_name, phone, email, person_type) 
-                                 VALUES ($1, $2, $3, 'KAT_SAKINI') 
+                                 VALUES ($1, $2, $3, 'HOME_RESIDENT') 
                                  ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, phone = EXCLUDED.phone 
                                  RETURNING id",
                                 &[&t_name, &t_phone, &t_email],
@@ -2017,7 +2017,7 @@ impl SiteAdminService {
                         let full_name = req.full_name.clone().unwrap_or_else(|| "New Resident".to_string());
                         let phone = req.phone.clone();
                         let p_role = req.role.to_uppercase();
-                        let p_type = if p_role == "TENANT" { "KAT_SAKINI" } else { "KAT_MALIKI" };
+                        let p_type = if p_role == "TENANT" { "HOME_RESIDENT" } else { "HOME_OWNER" };
                         let row = client
                             .query_one(
                                 "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, $4) RETURNING id",

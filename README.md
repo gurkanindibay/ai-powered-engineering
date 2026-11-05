@@ -128,13 +128,13 @@ ai-powered-engineering/
 ├── apps/
 │   ├── runtime/                       # === RUNTIME INFERENCE SYSTEMS ===
 │   │   ├── README.md                  # Runtime inference guide & Copilot/Antigravity docs
-│   │   ├── AuditGuard/                # Agent-Powered Business Application (.NET 8)
+│   │   ├── AuditGuard/                # Agent-Powered Business Application (.NET 10)
 │   │   │   ├── README.md              # Autonomous Expense Audit Microservice
 │   │   │   ├── AuditGuard.slnx        # Solution file
 │   │   │   ├── src/                   # Core, Harness, Loop, Agents, Graph, CLI
 │   │   │   ├── tests/                 # 12 xUnit unit tests (100% passing)
 │   │   │   └── benchmarks/            # 6 real-world benchmark fixtures & evaluation runner
-│   │   └── TaskPilot/                 # Standalone Business Application (.NET 8/10)
+│   │   └── TaskPilot/                 # Standalone Business Application (.NET 10)
 │   │       ├── README.md              # Standalone Task & Workflow Management App
 │   │       ├── TaskPilot.slnx         # Solution file (Zero Agent Dependencies)
 │   │       ├── src/                   # Core, Infrastructure, Services, Cli
@@ -149,7 +149,7 @@ ai-powered-engineering/
 │           ├── backend/               # High-Performance Rust Axum REST backend & SQL migrations
 │           └── scripts/               # Test runners & Docker dev database scripts
 └── factory/
-    └── DevFactory/                    # Autonomous Software Development Factory Platform (.NET 8/10)
+    └── DevFactory/                    # Autonomous Software Development Factory Platform (.NET 10)
         ├── README.md                  # Factory Architecture & Assembly Line Guide
         ├── DevFactory.sln             # Solution file
         ├── src/                       # Core, Harness (Roslyn AST), Loop, Agents, Graph, Cli
@@ -174,7 +174,7 @@ python benchmarks/runner.py
 
 ### Run Runtime Apps
 
-#### AuditGuard (.NET 8 Runtime Inference Microservice)
+#### AuditGuard (.NET 10 Runtime Inference Microservice)
 ```bash
 # 1. Run unit tests (12 passing)
 dotnet test apps/runtime/AuditGuard/tests/AuditGuard.Tests
@@ -186,7 +186,7 @@ dotnet run --project apps/runtime/AuditGuard/benchmarks/AuditGuard.Benchmarks
 dotnet run --project apps/runtime/AuditGuard/src/AuditGuard.Cli -- demo
 ```
 
-#### TaskPilot (.NET 8/10 Business Workflow Engine)
+#### TaskPilot (.NET 10 Business Workflow Engine)
 ```bash
 # 1. Run unit tests (13 passing)
 dotnet test apps/runtime/TaskPilot/tests/TaskPilot.Tests

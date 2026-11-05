@@ -36,8 +36,8 @@ flowchart LR
 
 | Application | Stack | Role | Runtime Features |
 | :--- | :--- | :--- | :--- |
-| [**AuditGuard**](AuditGuard/README.md) | .NET 8 / C# | Autonomous Expense Audit Microservice | In-loop math reconciliation, corporate policy catalog, directed graph engine, and 6-fixture benchmark runner |
-| [**TaskPilot**](TaskPilot/README.md) | .NET 8/10 C# | Enterprise Workflow Management | High-reliability domain state machine, thread-safe atomic repository, overdue calculation engine |
+| [**AuditGuard**](AuditGuard/README.md) | .NET 10 / C# | Autonomous Expense Audit Microservice | In-loop math reconciliation, corporate policy catalog, directed graph engine, and 6-fixture benchmark runner |
+| [**TaskPilot**](TaskPilot/README.md) | .NET 10 C# | Enterprise Workflow Management | High-reliability domain state machine, thread-safe atomic repository, overdue calculation engine |
 
 ---
 
@@ -48,7 +48,7 @@ When developing or extending runtime inference systems using GitHub Copilot:
 ### A. Authoring Verification Gates
 Prompt Copilot to generate strict, zero-tolerance deterministic gates:
 ```text
-Prompt: "Create a deterministic verification gate for [Domain Rule] in .NET 8 that verifies [Invariants], uses high-precision decimal arithmetic, and returns a GateResult with exact delta metrics."
+Prompt: "Create a deterministic verification gate for [Domain Rule] in .NET 10 that verifies [Invariants], uses high-precision decimal arithmetic, and returns a GateResult with exact delta metrics."
 ```
 
 ### B. Designing Context Compactors

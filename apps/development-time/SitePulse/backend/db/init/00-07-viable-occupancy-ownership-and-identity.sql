@@ -79,7 +79,7 @@ WHERE u.site_id IS NOT NULL AND u.role IS NOT NULL
 ON CONFLICT ON CONSTRAINT uq_user_site_role DO NOTHING;
 
 -- 4. Identity foreign key link on users & single source of truth in persons
-ALTER TABLE users ADD COLUMN IF NOT EXISTS person_id BIGINT REFERENCES persons(id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS person_id BIGINT REFERENCES persons(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_users_person_id ON users (person_id);
 
 -- Ensure a person exists for every existing user before dropping full_name/phone
@@ -92,9 +92,9 @@ SELECT
     COALESCE(u.phone, ''),
     u.email,
     CASE 
-        WHEN u.role = 'HOME_OWNER' THEN 'KAT_MALIKI'
-        WHEN u.role = 'HOME_RESIDENT' THEN 'KAT_SAKINI'
-        ELSE 'YONETICI'
+        WHEN u.role = 'HOME_OWNER' THEN 'HOME_OWNER'
+        WHEN u.role = 'HOME_RESIDENT' THEN 'HOME_RESIDENT'
+        ELSE 'SITE_MANAGER'
     END
 FROM users u
 WHERE u.person_id IS NULL AND NOT EXISTS (
@@ -191,14 +191,11 @@ ALTER TABLE units DROP CONSTRAINT IF EXISTS chk_units_occupancy_status;
 ALTER TABLE units ADD CONSTRAINT chk_units_occupancy_status CHECK (occupancy_status IN ('OWNER_OCCUPIED', 'TENANT_OCCUPIED', 'VACANT'));
 
 -- 9. Foreign Key Covering Indexes (Deadlock Prevention & Optimal Queries)
-CREATE INDEX IF NOT EXISTS idx_users_site_id ON users (site_id);
+CREATE INDEX IF NOT EXISTS idx_site_bank_accounts_config_by ON site_bank_accounts (configured_by);
 CREATE INDEX IF NOT EXISTS idx_units_owner_person ON units (owner_person_id);
 CREATE INDEX IF NOT EXISTS idx_units_tenant_person ON units (tenant_person_id);
 CREATE INDEX IF NOT EXISTS idx_units_site_id ON units (site_id);
 CREATE INDEX IF NOT EXISTS idx_occupancies_unit_id ON unit_occupancies (unit_id);
-CREATE INDEX IF NOT EXISTS idx_occupancies_person ON unit_occupancies (person_id);
-CREATE INDEX IF NOT EXISTS idx_site_bank_accounts_site ON site_bank_accounts (site_id);
-CREATE INDEX IF NOT EXISTS idx_site_bank_accounts_config_by ON site_bank_accounts (configured_by);
 CREATE INDEX IF NOT EXISTS idx_dues_liabilities_unit ON dues_liabilities (unit_id);
 CREATE INDEX IF NOT EXISTS idx_dues_liabilities_person ON dues_liabilities (liable_person_id);
 CREATE INDEX IF NOT EXISTS idx_dues_liabilities_occupancy ON dues_liabilities (occupancy_id);
@@ -206,7 +203,6 @@ CREATE INDEX IF NOT EXISTS idx_dues_liabilities_capital_proj ON dues_liabilities
 CREATE INDEX IF NOT EXISTS idx_col_tx_liability ON collection_transactions (dues_liability_id);
 CREATE INDEX IF NOT EXISTS idx_col_tx_unit ON collection_transactions (unit_id);
 CREATE INDEX IF NOT EXISTS idx_payment_entries_receipt ON payment_entries (receipt_id);
-CREATE INDEX IF NOT EXISTS idx_advance_balances_unit ON advance_balances (unit_id);
 CREATE INDEX IF NOT EXISTS idx_homeowner_payments_unit ON homeowner_payments (unit_id);
 CREATE INDEX IF NOT EXISTS idx_homeowner_payments_block ON homeowner_payments (block_id);
 

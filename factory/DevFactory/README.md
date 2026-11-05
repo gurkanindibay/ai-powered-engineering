@@ -1,6 +1,6 @@
 # DevFactory: Autonomous Software Development Factory
 
-> **Architecture**: .NET 8 / 10 Enterprise Development Platform  
+> **Architecture**: .NET 10 Enterprise Development Platform  
 > **Engineering Paradigm**: Multi-Stage Assembly Line via **Harness**, **Loop**, and **Graph Engineering**  
 > **Output Deliverables**: 100% Standalone, Production-Grade .NET Solutions (Zero Agent Runtime Dependencies)  
 

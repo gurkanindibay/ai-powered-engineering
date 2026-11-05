@@ -54,7 +54,7 @@ ON CONFLICT (email) DO NOTHING;
 -- Tenant (Zeynep Kaya)
 INSERT INTO persons (id, national_id, full_name, phone, email, person_type)
 VALUES 
-    (2, '98765432109', 'Zeynep Kaya', '+90 542 333 44 55', 'zeynep@example.com', 'TENANT')
+    (2, '98765432109', 'Zeynep Kaya', '+90 542 333 44 55', 'zeynep@example.com', 'HOME_RESIDENT')
 ON CONFLICT (id) DO NOTHING;
 
 -- Home Owner (Mehmet Öz)

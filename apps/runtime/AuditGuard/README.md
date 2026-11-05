@@ -1,6 +1,6 @@
 # AuditGuard: Autonomous Expense & Invoice Audit Microservice
 
-> **Architecture**: .NET 8 / C# Enterprise Microservice  
+> **Architecture**: .NET 10 / C# Enterprise Microservice  
 > **Pattern**: 4-Layer Agentic Engineering (Harness → Loop → Graph → Evals)  
 > **Domain**: Fintech, Accounts Payable, Automated Expense Compliance, Stochasticity Mitigation  
 

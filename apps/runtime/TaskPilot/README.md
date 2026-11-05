@@ -1,6 +1,6 @@
 # TaskPilot: Standalone Enterprise Task & Workflow Management App
 
-> **Architecture**: .NET 8 / 10 Standalone Clean Architecture Application  
+> **Architecture**: .NET 10 Standalone Clean Architecture Application  
 > **Framework Dependencies**: **Zero Agent / Zero LLM Dependencies**  
 > **Role in Catalog**: Developed *using* the 4-layer Agentic Engineering system (Harness, Loop, Agents) as the developer bot, producing a pure standalone software product.  
 

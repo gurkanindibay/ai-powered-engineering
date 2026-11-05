@@ -51,7 +51,6 @@ CREATE TABLE IF NOT EXISTS capital_contractor_disbursements (
 CREATE INDEX IF NOT EXISTS idx_contractor_disbursements_proj ON capital_contractor_disbursements (project_id);
 
 ALTER TABLE dues_liabilities 
-ADD COLUMN IF NOT EXISTS capital_project_id BIGINT REFERENCES capital_projects(id) ON DELETE SET NULL,
+ADD COLUMN IF NOT EXISTS capital_project_id BIGINT,
 ADD COLUMN IF NOT EXISTS installment_number INT DEFAULT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_dues_capital_project ON dues_liabilities (capital_project_id);

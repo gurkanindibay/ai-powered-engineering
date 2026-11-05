@@ -51,7 +51,7 @@ flowchart TD
 | Application / System | Technologies | Methodology | Key Artifacts |
 | :--- | :--- | :--- | :--- |
 | [**SitePulse**](SitePulse/README.md) | Cross-Platform Flutter (Dart, M3) + Rust (Axum, Tokio, rust_decimal) + PostgreSQL 16 | Spec-Driven Development + Task DAG + Loop Harness | `.specify/`, `harness/harness_cli.py`, `flutter/`, `backend/`, `scripts/` |
-| [**DevFactory**](../../factory/DevFactory/README.md) | .NET 8 / 10, Roslyn AST In-Memory Analysis, CLI | Multi-Stage Manufacturing Assembly Line | `src/DevFactory.Harness`, `DevFactory.Loop`, `DevFactory.Graph` |
+| [**DevFactory**](../../factory/DevFactory/README.md) | .NET 10, Roslyn AST In-Memory Analysis, CLI | Multi-Stage Manufacturing Assembly Line | `src/DevFactory.Harness`, `DevFactory.Loop`, `DevFactory.Graph` |
 
 ---
 

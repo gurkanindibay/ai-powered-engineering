@@ -111,18 +111,12 @@ run_sql_file() {
 
 # 2. Drop existing application tables to ensure clean slate
 echo "▶ [1/4] Dropping existing database relations..."
+# Dropping the whole schema (instead of an explicit table list) guarantees no
+# orphaned rows survive from tables added after this list was last edited.
 run_sql_stdin << 'EOF'
-DROP TABLE IF EXISTS collection_transactions CASCADE;
-DROP TABLE IF EXISTS dues_liabilities CASCADE;
-DROP TABLE IF EXISTS dues_periods CASCADE;
-DROP TABLE IF EXISTS site_bank_accounts CASCADE;
-DROP TABLE IF EXISTS units CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
-DROP TABLE IF EXISTS persons CASCADE;
-DROP TABLE IF EXISTS blocks CASCADE;
-DROP TABLE IF EXISTS sites CASCADE;
-DROP TABLE IF EXISTS system_supported_banks CASCADE;
-DROP TABLE IF EXISTS system_configurations CASCADE;
+DROP SCHEMA IF EXISTS public CASCADE;
+CREATE SCHEMA public;
+GRANT USAGE ON SCHEMA public TO PUBLIC;
 EOF
 echo "  ✔ Database tables dropped cleanly."
 
@@ -140,6 +134,9 @@ if [ -f "$INIT_DIR/00-06-capital-expenditure-and-fixtures.sql" ]; then
 fi
 if [ -f "$INIT_DIR/00-07-viable-occupancy-ownership-and-identity.sql" ]; then
     run_sql_file "$INIT_DIR/00-07-viable-occupancy-ownership-and-identity.sql"
+fi
+if [ -f "$INIT_DIR/00-08-referential-and-financial-integrity.sql" ]; then
+    run_sql_file "$INIT_DIR/00-08-referential-and-financial-integrity.sql"
 fi
 run_sql_file "$INIT_DIR/01-system-seed.sql"
 
