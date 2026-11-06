@@ -37,7 +37,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _homeOwnerBlockFilter = 'ALL';
   String _homeOwnerOccupancyFilter = 'ALL';
   final Map<String, int> _unitCardTabs = {};
-  Timer? _liveSyncTimer;
 
   @override
   void initState() {
@@ -57,20 +56,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
     });
-    _liveSyncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) {
-        // SaaS sites do not change frequently; they are updated on-demand (add/edit/delete/refresh).
-        // Only resident dashboard uses live balance sync.
-        if (widget.controller.userRole != UserRole.saasAdmin) {
-          widget.controller.fetchResidentDashboard();
-        }
-      }
-    });
   }
 
   @override
   void dispose() {
-    _liveSyncTimer?.cancel();
     widget.controller.removeListener(_onControllerUpdate);
     super.dispose();
   }
@@ -2500,23 +2489,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       isSaving = true;
                       errorMsg = null;
                     });
-                    final ok = await widget.controller.moveOutResident(
-                      resident.unitId,
-                      notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
-                    );
-                    if (ok && ctx.mounted) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Sakin ayrılışı kaydedildi. Daire boş durumuna getirildi.'),
-                          backgroundColor: AppColors.accentGreen,
-                        ),
+                    try {
+                      final messenger = ScaffoldMessenger.of(this.context);
+                      final ok = await widget.controller.moveOutResident(
+                        resident.unitId,
+                        notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
                       );
-                    } else if (ctx.mounted) {
-                      setDialogState(() {
-                        isSaving = false;
-                        errorMsg = 'İşlem gerçekleştirilemedi.';
-                      });
+                      if (ok && ctx.mounted) {
+                        Navigator.pop(ctx);
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('Sakin ayrılışı kaydedildi. Daire boş durumuna getirildi.'),
+                            backgroundColor: AppColors.accentGreen,
+                          ),
+                        );
+                      } else if (ctx.mounted) {
+                        setDialogState(() {
+                          isSaving = false;
+                          errorMsg = 'İşlem gerçekleştirilemedi.';
+                        });
+                      }
+                    } catch (e) {
+                      if (ctx.mounted) {
+                        setDialogState(() {
+                          isSaving = false;
+                          errorMsg = 'Beklenmeyen bir hata oluştu: $e';
+                        });
+                      }
+                    } finally {
+                      if (ctx.mounted && isSaving) {
+                        setDialogState(() => isSaving = false);
+                      }
                     }
                   },
                   icon: isSaving
@@ -2626,27 +2629,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       isSaving = true;
                       errorMsg = null;
                     });
-                    final ok = await widget.controller.moveInResident(
-                      resident.unitId,
-                      role: selectedRole,
-                      fullName: nameCtrl.text.trim(),
-                      email: emailCtrl.text.trim(),
-                      phone: phoneCtrl.text.trim().isNotEmpty ? phoneCtrl.text.trim() : null,
-                      notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
-                    );
-                    if (ok && ctx.mounted) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Yeni sakin başarıyla eklendi ve oturum başlatıldı.'),
-                          backgroundColor: AppColors.accentGreen,
-                        ),
+                    try {
+                      final messenger = ScaffoldMessenger.of(this.context);
+                      final ok = await widget.controller.moveInResident(
+                        resident.unitId,
+                        role: selectedRole,
+                        fullName: nameCtrl.text.trim(),
+                        email: emailCtrl.text.trim(),
+                        phone: phoneCtrl.text.trim().isNotEmpty ? phoneCtrl.text.trim() : null,
+                        notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
                       );
-                    } else if (ctx.mounted) {
-                      setDialogState(() {
-                        isSaving = false;
-                        errorMsg = 'Kayıt işlemi başarısız oldu.';
-                      });
+                      if (ok && ctx.mounted) {
+                        Navigator.pop(ctx);
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('Yeni sakin başarıyla eklendi ve oturum başlatıldı.'),
+                            backgroundColor: AppColors.accentGreen,
+                          ),
+                        );
+                      } else if (ctx.mounted) {
+                        setDialogState(() {
+                          isSaving = false;
+                          errorMsg = 'Kayıt işlemi başarısız oldu.';
+                        });
+                      }
+                    } catch (e) {
+                      if (ctx.mounted) {
+                        setDialogState(() {
+                          isSaving = false;
+                          errorMsg = 'Beklenmeyen bir hata oluştu: $e';
+                        });
+                      }
+                    } finally {
+                      if (ctx.mounted && isSaving) {
+                        setDialogState(() => isSaving = false);
+                      }
                     }
                   },
                   icon: isSaving
@@ -2778,28 +2795,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             nameError = null;
                           });
 
-                          final ok = await widget.controller.updateHouseholdMember(
-                            unitId: ho.unitId,
-                            residentId: member.id.isNotEmpty ? member.id : member.fullName,
-                            fullName: name,
-                            phone: phoneCtrl.text.trim(),
-                            email: emailCtrl.text.trim(),
-                            relationship: selectedRelationship,
-                          );
-
-                          if (ok && ctx.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Hane sakini başarıyla güncellendi.'),
-                                backgroundColor: AppColors.accentGreen,
-                              ),
+                          try {
+                            final messenger = ScaffoldMessenger.of(this.context);
+                            final ok = await widget.controller.updateHouseholdMember(
+                              unitId: ho.unitId,
+                              residentId: member.id.isNotEmpty ? member.id : member.fullName,
+                              fullName: name,
+                              phone: phoneCtrl.text.trim(),
+                              email: emailCtrl.text.trim(),
+                              relationship: selectedRelationship,
                             );
-                          } else if (ctx.mounted) {
-                            setDialogState(() {
-                              isSaving = false;
-                              generalError = 'Güncelleme sırasında bir hata oluştu.';
-                            });
+
+                            if (ok && ctx.mounted) {
+                              Navigator.pop(ctx);
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Hane sakini başarıyla güncellendi.'),
+                                  backgroundColor: AppColors.accentGreen,
+                                ),
+                              );
+                            } else if (ctx.mounted) {
+                              setDialogState(() {
+                                isSaving = false;
+                                generalError = 'Güncelleme sırasında bir hata oluştu.';
+                              });
+                            }
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              setDialogState(() {
+                                isSaving = false;
+                                generalError = 'Beklenmeyen hata: $e';
+                              });
+                            }
+                          } finally {
+                            if (ctx.mounted && isSaving) {
+                              setDialogState(() => isSaving = false);
+                            }
                           }
                         },
                   style: ElevatedButton.styleFrom(
@@ -2995,31 +3026,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             nameError = null;
                           });
 
-                          final ok = await widget.controller.addHouseholdMember(
-                            unitId: effectiveUnitId,
-                            block: effectiveBlock,
-                            unitNo: effectiveUnitNo,
-                            fullName: name,
-                            phone: phoneCtrl.text.trim(),
-                            email: emailCtrl.text.trim().isNotEmpty
-                                ? emailCtrl.text.trim()
-                                : 'sakin.${DateTime.now().millisecondsSinceEpoch}@example.com',
-                            relationship: selectedRelationship,
-                          );
-
-                          if (ok && ctx.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Hane sakini başarıyla eklendi.'),
-                                backgroundColor: AppColors.accentGreen,
-                              ),
+                          try {
+                            final messenger = ScaffoldMessenger.of(this.context);
+                            final ok = await widget.controller.addHouseholdMember(
+                              unitId: effectiveUnitId,
+                              block: effectiveBlock,
+                              unitNo: effectiveUnitNo,
+                              fullName: name,
+                              phone: phoneCtrl.text.trim(),
+                              email: emailCtrl.text.trim().isNotEmpty
+                                  ? emailCtrl.text.trim()
+                                  : 'sakin.${DateTime.now().millisecondsSinceEpoch}@example.com',
+                              relationship: selectedRelationship,
                             );
-                          } else if (ctx.mounted) {
-                            setDialogState(() {
-                              isSaving = false;
-                              generalError = 'Kayıt sırasında bir hata oluştu.';
-                            });
+
+                            if (ok && ctx.mounted) {
+                              Navigator.pop(ctx);
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Hane sakini başarıyla eklendi.'),
+                                  backgroundColor: AppColors.accentGreen,
+                                ),
+                              );
+                            } else if (ctx.mounted) {
+                              setDialogState(() {
+                                isSaving = false;
+                                generalError = 'Kayıt sırasında bir hata oluştu.';
+                              });
+                            }
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              setDialogState(() {
+                                isSaving = false;
+                                generalError = 'Beklenmeyen hata: $e';
+                              });
+                            }
+                          } finally {
+                            if (ctx.mounted && isSaving) {
+                              setDialogState(() => isSaving = false);
+                            }
                           }
                         },
                   style: ElevatedButton.styleFrom(
@@ -3600,35 +3645,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             generalError = null;
                           });
 
-                          final selectedTariff = houseTypes.where((ht) => ht.typeName == selectedHouseType).firstOrNull;
-                          final dues = selectedTariff?.duesAmount ?? (Decimal.tryParse(duesCtrl.text.replaceAll(',', '.')) ?? resident.monthlyDues);
-                          final success = await widget.controller.updateHomeOwner(
-                            unitId: resident.unitId,
-                            fullName: oName.isNotEmpty ? oName : resident.ownerFullName,
-                            email: oEmail.isNotEmpty ? oEmail : resident.email,
-                            phone: oPhone.isNotEmpty ? oPhone : resident.phone,
-                            tenantFullName: isTenant ? (tName.isNotEmpty ? tName : resident.tenantFullName) : null,
-                            tenantEmail: isTenant ? (tEmail.isNotEmpty ? tEmail : resident.tenantEmail) : null,
-                            tenantPhone: isTenant ? (tPhone.isNotEmpty ? tPhone : resident.tenantPhone) : null,
-                            houseType: selectedHouseType,
-                            monthlyDues: dues,
-                            landShare: landShareCtrl.text.trim().isNotEmpty ? landShareCtrl.text.trim() : resident.landShare,
-                            isResident: isResident,
-                          );
-
-                          if (success && ctx.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Sakin bilgileri başarıyla güncellendi.'),
-                                backgroundColor: AppColors.accentGreen,
-                              ),
+                          try {
+                            final messenger = ScaffoldMessenger.of(this.context);
+                            final selectedTariff = houseTypes.where((ht) => ht.typeName == selectedHouseType).firstOrNull;
+                            final dues = selectedTariff?.duesAmount ?? (Decimal.tryParse(duesCtrl.text.replaceAll(',', '.')) ?? resident.monthlyDues);
+                            final success = await widget.controller.updateHomeOwner(
+                              unitId: resident.unitId,
+                              fullName: oName.isNotEmpty ? oName : resident.ownerFullName,
+                              email: oEmail.isNotEmpty ? oEmail : resident.email,
+                              phone: oPhone.isNotEmpty ? oPhone : resident.phone,
+                              tenantFullName: isTenant ? (tName.isNotEmpty ? tName : resident.tenantFullName) : null,
+                              tenantEmail: isTenant ? (tEmail.isNotEmpty ? tEmail : resident.tenantEmail) : null,
+                              tenantPhone: isTenant ? (tPhone.isNotEmpty ? tPhone : resident.tenantPhone) : null,
+                              houseType: selectedHouseType,
+                              monthlyDues: dues,
+                              landShare: landShareCtrl.text.trim().isNotEmpty ? landShareCtrl.text.trim() : resident.landShare,
+                              isResident: isResident,
                             );
-                          } else {
-                            setDialogState(() {
-                              isSaving = false;
-                              generalError = 'Güncelleme sırasında hata oluştu. Lütfen tekrar deneyiniz.';
-                            });
+
+                            if (success && ctx.mounted) {
+                              Navigator.pop(ctx);
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Sakin bilgileri başarıyla güncellendi.'),
+                                  backgroundColor: AppColors.accentGreen,
+                                ),
+                              );
+                            } else if (ctx.mounted) {
+                              setDialogState(() {
+                                isSaving = false;
+                                generalError = 'Güncelleme sırasında hata oluştu. Lütfen tekrar deneyiniz.';
+                              });
+                            }
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              setDialogState(() {
+                                isSaving = false;
+                                generalError = 'Beklenmeyen hata: $e';
+                              });
+                            }
+                          } finally {
+                            if (ctx.mounted && isSaving) {
+                              setDialogState(() => isSaving = false);
+                            }
                           }
                         },
                   style: ElevatedButton.styleFrom(
@@ -7423,23 +7482,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             return;
                           }
                           setDlgState(() => isSubmitting = true);
-                          final res = await widget.controller.transferUnitOwnership(
-                            unitId: ho.unitId,
-                            newOwnerName: newName,
-                            newOwnerPhone: phoneCtrl.text.trim(),
-                            newOwnerEmail: emailCtrl.text.trim(),
-                            notes: notesCtrl.text.trim(),
-                          );
-                          setDlgState(() => isSubmitting = false);
-                          if (res != null && ctx.mounted) {
-                            Navigator.pop(ctx);
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                          try {
+                            final messenger = ScaffoldMessenger.of(this.context);
+                            final res = await widget.controller.transferUnitOwnership(
+                              unitId: ho.unitId,
+                              newOwnerName: newName,
+                              newOwnerPhone: phoneCtrl.text.trim(),
+                              newOwnerEmail: emailCtrl.text.trim(),
+                              notes: notesCtrl.text.trim(),
+                            );
+                            if (res != null && ctx.mounted) {
+                              Navigator.pop(ctx);
+                              messenger.showSnackBar(
                                 SnackBar(
                                   content: Text(res['message']?.toString() ?? 'Mülk tapu devri başarıyla tamamlandı.'),
                                   backgroundColor: Colors.teal,
                                 ),
                               );
+                            }
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.redAccent),
+                              );
+                            }
+                          } finally {
+                            if (ctx.mounted) {
+                              setDlgState(() => isSubmitting = false);
                             }
                           }
                         },
@@ -8262,25 +8331,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           isSubmitting = true;
                           localError = null;
                         });
-                        final ok = await widget.controller.changePassword(
-                          email: widget.controller.userSession.email,
-                          currentPassword: cur,
-                          newPassword: n1,
-                        );
-                        if (ok && mounted) {
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Şifreniz başarıyla güncellendi.'),
-                              backgroundColor: Colors.green,
-                            ),
+                        try {
+                          final messenger = ScaffoldMessenger.of(this.context);
+                          final ok = await widget.controller.changePassword(
+                            email: widget.controller.userSession.email,
+                            currentPassword: cur,
+                            newPassword: n1,
                           );
-                          setState(() {});
-                        } else {
-                          setDialogState(() {
-                            isSubmitting = false;
-                            localError = widget.controller.authMessage ?? 'Şifre güncellenemedi.';
-                          });
+                          if (ok && ctx.mounted) {
+                            Navigator.pop(ctx);
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Şifreniz başarıyla güncellendi.'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            if (mounted) setState(() {});
+                          } else if (ctx.mounted) {
+                            setDialogState(() {
+                              isSubmitting = false;
+                              localError = widget.controller.authMessage ?? 'Şifre güncellenemedi.';
+                            });
+                          }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            setDialogState(() {
+                              isSubmitting = false;
+                              localError = 'Beklenmeyen hata: $e';
+                            });
+                          }
+                        } finally {
+                          if (ctx.mounted && isSubmitting) {
+                            setDialogState(() => isSubmitting = false);
+                          }
                         }
                       },
                 style: ElevatedButton.styleFrom(

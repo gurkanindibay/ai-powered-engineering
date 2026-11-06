@@ -2624,9 +2624,23 @@ class DashboardController extends ChangeNotifier {
         ).timeout(const Duration(seconds: 4));
 
         if (response.statusCode == 200 || response.statusCode == 204) {
-          await fetchHomeOwners(siteId: effectiveSiteId);
-          await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
+          _applyLocalHomeOwnerUpdate(
+            unitId: unitId,
+            fullName: fullName,
+            email: email,
+            phone: phone,
+            tenantFullName: tenantFullName,
+            tenantEmail: tenantEmail,
+            tenantPhone: tenantPhone,
+            removeTenant: removeTenant,
+            houseType: houseType,
+            effectiveDues: effectiveDues,
+            landShare: landShare,
+            isResident: isResident,
+          );
           notifyListeners();
+          fetchHomeOwners(siteId: effectiveSiteId).catchError((e) => debugPrint('bg fetchHomeOwners error: $e'));
+          fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth).catchError((e) => debugPrint('bg fetchSiteManagerOverview error: $e'));
           return true;
         } else {
           final err = utf8.decode(response.bodyBytes);
@@ -2638,6 +2652,38 @@ class DashboardController extends ChangeNotifier {
     }
 
     // In-memory update
+    _applyLocalHomeOwnerUpdate(
+      unitId: unitId,
+      fullName: fullName,
+      email: email,
+      phone: phone,
+      tenantFullName: tenantFullName,
+      tenantEmail: tenantEmail,
+      tenantPhone: tenantPhone,
+      removeTenant: removeTenant,
+      houseType: houseType,
+      effectiveDues: effectiveDues,
+      landShare: landShare,
+      isResident: isResident,
+    );
+    notifyListeners();
+    return true;
+  }
+
+  void _applyLocalHomeOwnerUpdate({
+    required String unitId,
+    String? fullName,
+    String? email,
+    String? phone,
+    String? tenantFullName,
+    String? tenantEmail,
+    String? tenantPhone,
+    bool? removeTenant,
+    String? houseType,
+    Decimal? effectiveDues,
+    String? landShare,
+    bool? isResident,
+  }) {
     final index = _homeOwners.indexWhere((h) => h.unitId == unitId || (email != null && h.email.toLowerCase() == email.toLowerCase()));
     if (index != -1) {
       final current = _homeOwners[index];
@@ -2677,8 +2723,6 @@ class DashboardController extends ChangeNotifier {
         amountDue: effectiveDues ?? _flatsList[flatIndex].amountDue,
       );
     }
-    notifyListeners();
-    return true;
   }
 
   Future<bool> setPrimaryResponsibleResident({

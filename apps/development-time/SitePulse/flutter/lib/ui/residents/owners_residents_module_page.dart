@@ -2116,44 +2116,49 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                 ElevatedButton(
                   key: const Key('module_save_edit_resident_btn'),
                   onPressed: () async {
-                    bool success = false;
-                    if (occupancyMode == 'TENANT') {
-                      success = await widget.controller.updateHomeOwner(
-                        unitId: ho.unitId,
-                        fullName: ownerNameCtrl.text.trim(),
-                        phone: ownerPhoneCtrl.text.trim(),
-                        email: ownerEmailCtrl.text.trim(),
-                        tenantFullName: tenantNameCtrl.text.trim().isNotEmpty ? tenantNameCtrl.text.trim() : null,
-                        tenantPhone: tenantPhoneCtrl.text.trim().isNotEmpty ? tenantPhoneCtrl.text.trim() : null,
-                        tenantEmail: tenantEmailCtrl.text.trim().isNotEmpty ? tenantEmailCtrl.text.trim() : null,
-                        isResident: false,
-                      );
-                    } else if (occupancyMode == 'OWNER') {
-                      success = await widget.controller.updateHomeOwner(
-                        unitId: ho.unitId,
-                        fullName: ownerNameCtrl.text.trim(),
-                        phone: ownerPhoneCtrl.text.trim(),
-                        email: ownerEmailCtrl.text.trim(),
-                        removeTenant: true,
-                        isResident: true,
-                      );
-                    } else {
-                      // VACANT
-                      success = await widget.controller.updateHomeOwner(
-                        unitId: ho.unitId,
-                        fullName: ownerNameCtrl.text.trim(),
-                        phone: ownerPhoneCtrl.text.trim(),
-                        email: ownerEmailCtrl.text.trim(),
-                        removeTenant: true,
-                        isResident: false,
-                      );
-                    }
+                    try {
+                      final messenger = ScaffoldMessenger.of(this.context);
+                      bool success = false;
+                      if (occupancyMode == 'TENANT') {
+                        success = await widget.controller.updateHomeOwner(
+                          unitId: ho.unitId,
+                          fullName: ownerNameCtrl.text.trim(),
+                          phone: ownerPhoneCtrl.text.trim(),
+                          email: ownerEmailCtrl.text.trim(),
+                          tenantFullName: tenantNameCtrl.text.trim().isNotEmpty ? tenantNameCtrl.text.trim() : null,
+                          tenantPhone: tenantPhoneCtrl.text.trim().isNotEmpty ? tenantPhoneCtrl.text.trim() : null,
+                          tenantEmail: tenantEmailCtrl.text.trim().isNotEmpty ? tenantEmailCtrl.text.trim() : null,
+                          isResident: false,
+                        );
+                      } else if (occupancyMode == 'OWNER') {
+                        success = await widget.controller.updateHomeOwner(
+                          unitId: ho.unitId,
+                          fullName: ownerNameCtrl.text.trim(),
+                          phone: ownerPhoneCtrl.text.trim(),
+                          email: ownerEmailCtrl.text.trim(),
+                          removeTenant: true,
+                          isResident: true,
+                        );
+                      } else {
+                        // VACANT
+                        success = await widget.controller.updateHomeOwner(
+                          unitId: ho.unitId,
+                          fullName: ownerNameCtrl.text.trim(),
+                          phone: ownerPhoneCtrl.text.trim(),
+                          email: ownerEmailCtrl.text.trim(),
+                          removeTenant: true,
+                          isResident: false,
+                        );
+                      }
 
-                    if (success && ctx.mounted) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(this.context).showSnackBar(
-                        const SnackBar(content: Text('Sakin bilgileri başarıyla güncellendi.')),
-                      );
+                      if (success && ctx.mounted) {
+                        Navigator.pop(ctx);
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text('Sakin bilgileri başarıyla güncellendi.')),
+                        );
+                      }
+                    } catch (e) {
+                      debugPrint('_openEditHomeOwner error: $e');
                     }
                   },
                   child: const Text('Kaydet'),
@@ -2874,23 +2879,33 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             return;
                           }
                           setDlgState(() => isSubmitting = true);
-                          final res = await widget.controller.transferUnitOwnership(
-                            unitId: ho.unitId,
-                            newOwnerName: newName,
-                            newOwnerPhone: phoneCtrl.text.trim(),
-                            newOwnerEmail: emailCtrl.text.trim(),
-                            notes: notesCtrl.text.trim(),
-                          );
-                          setDlgState(() => isSubmitting = false);
-                          if (res != null && ctx.mounted) {
-                            Navigator.pop(ctx);
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                          try {
+                            final messenger = ScaffoldMessenger.of(this.context);
+                            final res = await widget.controller.transferUnitOwnership(
+                              unitId: ho.unitId,
+                              newOwnerName: newName,
+                              newOwnerPhone: phoneCtrl.text.trim(),
+                              newOwnerEmail: emailCtrl.text.trim(),
+                              notes: notesCtrl.text.trim(),
+                            );
+                            if (res != null && ctx.mounted) {
+                              Navigator.pop(ctx);
+                              messenger.showSnackBar(
                                 SnackBar(
                                   content: Text(res['message']?.toString() ?? 'Mülk tapu devri başarıyla tamamlandı.'),
                                   backgroundColor: Colors.teal,
                                 ),
                               );
+                            }
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.redAccent),
+                              );
+                            }
+                          } finally {
+                            if (ctx.mounted) {
+                              setDlgState(() => isSubmitting = false);
                             }
                           }
                         },
