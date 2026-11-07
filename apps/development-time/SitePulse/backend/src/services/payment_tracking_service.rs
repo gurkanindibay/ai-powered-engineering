@@ -180,8 +180,18 @@ impl PaymentTrackingService {
             .map(|e| e.amount)
             .sum();
 
+        let paged_entries = if let (Some(page), Some(page_size)) = (filter.page, filter.page_size) {
+            let skip = page.saturating_sub(1) * page_size;
+            filtered.into_iter().skip(skip).take(page_size).collect()
+        } else if let Some(limit) = filter.limit {
+            let offset = filter.offset.unwrap_or(0);
+            filtered.into_iter().skip(offset).take(limit).collect()
+        } else {
+            filtered
+        };
+
         PaymentStreamResponse {
-            entries: filtered,
+            entries: paged_entries,
             total_volume,
             settled_volume,
             unmatched_volume,

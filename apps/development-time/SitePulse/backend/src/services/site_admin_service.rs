@@ -550,7 +550,13 @@ impl SiteAdminService {
         };
         inner.users.push(resident_user.clone());
 
-        let unit_id = if unit_numeric_id > 0 {
+        let existing_unit_pos = inner.units.iter().position(|u| {
+            (u.site_id == site_id || crate::auth::same_id(&u.site_id, site_id))
+                && u.unit_number == request.unit_no
+        });
+        let unit_id = if let Some(pos) = existing_unit_pos {
+            inner.units[pos].id.clone()
+        } else if unit_numeric_id > 0 {
             unit_numeric_id.to_string()
         } else {
             format!("unit-{}", request.unit_no)
@@ -578,11 +584,15 @@ impl SiteAdminService {
             if unit_numeric_id > 0 {
                 inner.unit_members.entry(unit_numeric_id.to_string()).or_default().push(member_dto.clone());
             }
-            inner.unit_members.entry(request.unit_no.to_string()).or_default().push(member_dto.clone());
-            inner.unit_members.entry(format!("unit-{}", request.unit_no)).or_default().push(member_dto.clone());
-            inner.unit_members.entry(format!("d-{}", request.unit_no)).or_default().push(member_dto);
+            let legacy_id = format!("d-{}", request.unit_no);
+            if legacy_id != unit_id {
+                inner.unit_members.entry(legacy_id).or_default().push(member_dto.clone());
+            }
+            let unit_prefix_id = format!("unit-{}", request.unit_no);
+            if unit_prefix_id != unit_id {
+                inner.unit_members.entry(unit_prefix_id).or_default().push(member_dto);
+            }
         } else {
-            let existing_unit_pos = inner.units.iter().position(|u| u.id == unit_id || (u.site_id == site_id && u.unit_number == request.unit_no));
             let existing_owner_id = existing_unit_pos.and_then(|p| inner.units[p].owner_user_id.clone());
             let existing_tenant_id = existing_unit_pos.and_then(|p| inner.units[p].tenant_user_id.clone());
 
@@ -996,9 +1006,6 @@ impl SiteAdminService {
                 .unit_members
                 .get(&unit_id)
                 .cloned()
-                .or_else(|| inner.unit_members.get(&unit_no.to_string()).cloned())
-                .or_else(|| inner.unit_members.get(&format!("d-{}", unit_no)).cloned())
-                .or_else(|| inner.unit_members.get(&format!("unit-{}", unit_no)).cloned())
                 .unwrap_or_default();
 
             result.push(HomeOwnerResponse {
@@ -1294,62 +1301,58 @@ impl SiteAdminService {
         let site_numeric = crate::db::require_id("entity", site_id)?;
         let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
 
-        // 1. If DB pool is available, delete from PostgreSQL
+        // 1. If DB pool is available, dissociate in PostgreSQL inside a single transaction
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                let unit_row_opt = if let Some(uid) = id_numeric {
-                    client
-                        .query_opt(
-                            "SELECT id, owner_person_id, tenant_person_id FROM units WHERE (id = $1 OR owner_person_id = $1 OR tenant_person_id = $1) AND site_id = $2",
-                            &[&uid, &site_numeric],
-                        )
+            let mut client = pool.get().await.map_err(|e| format!("Database connection error: {}", e))?;
+            let tx = client.transaction().await.map_err(|e| format!("Transaction error: {}", e))?;
+
+            let unit_row_opt = if let Some(uid) = id_numeric {
+                tx.query_opt(
+                    "SELECT id, owner_person_id, tenant_person_id FROM units WHERE (id = $1 OR owner_person_id = $1) AND site_id = $2",
+                    &[&uid, &site_numeric],
+                )
+                .await
+                .map_err(|e| e.to_string())?
+            } else {
+                tx.query_opt(
+                    "SELECT u.id, u.owner_person_id, u.tenant_person_id FROM units u JOIN persons p ON u.owner_person_id = p.id WHERE p.email = $1 AND u.site_id = $2",
+                    &[&unit_or_user_id, &site_numeric],
+                )
+                .await
+                .map_err(|e| e.to_string())?
+            };
+
+            if let Some(u_row) = unit_row_opt {
+                let u_id: i64 = u_row.get(0);
+                let p_id: Option<i64> = u_row.get(1);
+
+                // Dissociate owner from unit without deleting the physical unit
+                tx.execute("UPDATE units SET owner_person_id = NULL WHERE id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
+
+                if let Some(person_id) = p_id {
+                    tx.execute(
+                        "UPDATE unit_occupancies SET is_active = FALSE, end_date = CURRENT_DATE WHERE unit_id = $1 AND person_id = $2 AND is_active = TRUE",
+                        &[&u_id, &person_id],
+                    ).await.map_err(|e| e.to_string())?;
+
+                    let other_units: i64 = tx
+                        .query_one("SELECT COUNT(*) FROM units WHERE owner_person_id = $1 OR tenant_person_id = $1", &[&person_id])
                         .await
-                        .ok()
-                        .flatten()
-                } else {
-                    client
-                        .query_opt(
-                            "SELECT u.id, u.owner_person_id, u.tenant_person_id FROM units u JOIN persons p ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id) WHERE p.email = $1 AND u.site_id = $2",
-                            &[&unit_or_user_id, &site_numeric],
-                        )
+                        .map(|r| r.get::<_, i64>(0))
+                        .unwrap_or(0);
+                    let other_occ: i64 = tx
+                        .query_one("SELECT COUNT(*) FROM unit_occupancies WHERE person_id = $1 AND is_active = TRUE", &[&person_id])
                         .await
-                        .ok()
-                        .flatten()
-                };
+                        .map(|r| r.get::<_, i64>(0))
+                        .unwrap_or(0);
 
-                if let Some(u_row) = unit_row_opt {
-                    let u_id: i64 = u_row.get(0);
-                    let p_id: Option<i64> = u_row.get(1);
-                    let t_id: Option<i64> = u_row.get(2);
-
-                    // Delete dependent records safely adhering to foreign key hierarchy
-                    client.execute("DELETE FROM payment_entries WHERE unit_id = $1 OR dues_liability_id IN (SELECT id FROM dues_liabilities WHERE unit_id = $1)", &[&u_id]).await.map_err(|e| e.to_string())?;
-                    client.execute("DELETE FROM dues_liabilities WHERE unit_id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
-                    client.execute("DELETE FROM unit_occupancies WHERE unit_id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
-                    client.execute("DELETE FROM advance_balances WHERE unit_id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
-                    client.execute("DELETE FROM unit_sender_ibans WHERE unit_id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
-                    client.execute("DELETE FROM unit_payer_names WHERE unit_id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
-                    client.execute("DELETE FROM units WHERE id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
-
-                    // Clean up person and user if no other units or occupancies exist
-                    for person_id in [p_id, t_id].iter().flatten() {
-                        let other_units = client
-                            .query_one("SELECT COUNT(*) FROM units WHERE owner_person_id = $1 OR tenant_person_id = $1", &[person_id])
-                            .await
-                            .map(|r| r.get::<_, i64>(0))
-                            .unwrap_or(0);
-                        let other_occ = client
-                            .query_one("SELECT COUNT(*) FROM unit_occupancies WHERE person_id = $1", &[person_id])
-                            .await
-                            .map(|r| r.get::<_, i64>(0))
-                            .unwrap_or(0);
-                        if other_units == 0 && other_occ == 0 {
-                            client.execute("DELETE FROM users WHERE site_id = $1 AND email = (SELECT email FROM persons WHERE id = $2)", &[&site_numeric, person_id]).await.map_err(|e| e.to_string())?;
-                            client.execute("DELETE FROM persons WHERE id = $1", &[person_id]).await.map_err(|e| e.to_string())?;
-                        }
+                    if other_units == 0 && other_occ == 0 {
+                        tx.execute("DELETE FROM users WHERE site_id = $1 AND email = (SELECT email FROM persons WHERE id = $2)", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
+                        tx.execute("DELETE FROM persons WHERE id = $1", &[&person_id]).await.map_err(|e| e.to_string())?;
                     }
                 }
             }
+            tx.commit().await.map_err(|e| format!("Transaction commit error: {}", e))?;
         }
 
         // 2. In-memory state cleanup
@@ -1370,40 +1373,29 @@ impl SiteAdminService {
 
         if !target_units.is_empty() {
             let target_unit_ids: Vec<String> = target_units.iter().map(|u| u.id.clone()).collect();
-            let target_unit_nos: Vec<i32> = target_units.iter().map(|u| u.unit_number).collect();
             let target_owner_uids: Vec<String> = target_units
                 .iter()
                 .filter_map(|u| u.owner_user_id.clone())
                 .collect();
 
-            // Retain only unrelated units
+            // Clear matching units for this site
             inner.units.retain(|u| {
                 let matches_site = u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric);
                 if !matches_site {
                     return true;
                 }
-                !(target_unit_ids.contains(&u.id) || target_unit_nos.contains(&u.unit_number))
+                !target_unit_ids.contains(&u.id)
             });
 
-            // Clean dues
-            inner.dues.retain(|d| {
-                !target_unit_ids.contains(&d.unit_id)
-                    && !target_unit_nos.iter().any(|n| d.unit_id == format!("d-{}", n) || d.unit_id == n.to_string())
-            });
+            // Clean dues strictly for target units in this site
+            inner.dues.retain(|d| !target_unit_ids.contains(&d.unit_id));
 
-            // Clean advance
+            // Clean advance and mappings strictly for target units
             for u_id in &target_unit_ids {
                 inner.advance_payments.remove(u_id);
                 inner.unit_members.remove(u_id);
                 inner.unit_payer_names.remove(u_id);
                 inner.unit_invite_tokens.remove(u_id);
-            }
-            for n in &target_unit_nos {
-                let leg_id = format!("d-{}", n);
-                inner.advance_payments.remove(&leg_id);
-                inner.unit_members.remove(&leg_id);
-                inner.unit_payer_names.remove(&leg_id);
-                inner.unit_invite_tokens.remove(&leg_id);
             }
 
             // Remove users if not owning other units

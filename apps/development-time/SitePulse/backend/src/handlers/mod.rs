@@ -100,6 +100,7 @@ pub fn apply_advance_payments_offset(
         // FIFO: Sort by due_date ascending
         unpaid_indices.sort_by_key(|&i| inner.dues[i].due_date);
 
+        let unit_site_id = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.site_id.clone()).unwrap_or_else(|| "1".to_string());
         let unit_block = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.block_id.clone()).unwrap_or_else(|| "A".to_string());
         let unit_number = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.unit_number).unwrap_or(1);
         let unit_resident_name = inner
@@ -132,6 +133,7 @@ pub fn apply_advance_payments_offset(
                     let match_seq = inner.reconciliation_queue.len() + 1;
                     inner.reconciliation_queue.push(ReconciliationMatch {
                         match_id: format!("MATCH-OFFSET-{}", match_seq),
+                        site_id: unit_site_id.clone(),
                         transaction: BankTransactionItem {
                             transaction_id: offset_txn_id,
                             date: Utc::now().date_naive(),
@@ -166,6 +168,7 @@ pub fn apply_advance_payments_offset(
                     let match_seq = inner.reconciliation_queue.len() + 1;
                     inner.reconciliation_queue.push(ReconciliationMatch {
                         match_id: format!("MATCH-OFFSET-PARTIAL-{}", match_seq),
+                        site_id: unit_site_id.clone(),
                         transaction: BankTransactionItem {
                             transaction_id: offset_txn_id,
                             date: Utc::now().date_naive(),
@@ -799,7 +802,18 @@ pub async fn get_pending_registrations(
 pub async fn approve_registration(
     Path(request_id): Path<String>,
     State(state): State<AppState>,
+    claims: Option<axum::Extension<crate::auth::Claims>>,
 ) -> Result<Json<ApprovalResultResponse>, (StatusCode, String)> {
+    if let Some(axum::Extension(ref c)) = claims {
+        if !c.is_saas_admin() {
+            let inner = state.inner.read().await;
+            if let Some(r) = inner.pending_registrations.iter().find(|r| r.request_id == request_id) {
+                if !crate::auth::same_id(&r.site_id, &c.site_id) {
+                    return Err((StatusCode::FORBIDDEN, "Registration application belongs to another site".to_string()));
+                }
+            }
+        }
+    }
     let service = RegistrationApprovalService::new(state);
     service
         .approve_registration(&request_id)
@@ -811,7 +825,18 @@ pub async fn approve_registration(
 pub async fn reject_registration(
     Path(request_id): Path<String>,
     State(state): State<AppState>,
+    claims: Option<axum::Extension<crate::auth::Claims>>,
 ) -> Result<Json<PendingRegistrationResponse>, (StatusCode, String)> {
+    if let Some(axum::Extension(ref c)) = claims {
+        if !c.is_saas_admin() {
+            let inner = state.inner.read().await;
+            if let Some(r) = inner.pending_registrations.iter().find(|r| r.request_id == request_id) {
+                if !crate::auth::same_id(&r.site_id, &c.site_id) {
+                    return Err((StatusCode::FORBIDDEN, "Registration application belongs to another site".to_string()));
+                }
+            }
+        }
+    }
     let service = RegistrationApprovalService::new(state);
     service
         .reject_registration(&request_id)
@@ -1015,9 +1040,13 @@ pub async fn parse_bank_statement(
         .collect();
 
     let site_dues: Vec<DuesLiability> = inner
-        .dues.to_vec();
+        .dues
+        .iter()
+        .filter(|d| site_units.iter().any(|u| u.id == d.unit_id))
+        .cloned()
+        .collect();
 
-    let matches = recon_service.reconcile_transactions(&txns, &site_units, &site_users, &site_dues, today);
+    let matches = recon_service.reconcile_transactions_with_site(Some(&payload.site_id), &txns, &site_units, &site_users, &site_dues, today);
 
     // Append to reconciliation queue in state
     for m in &matches {
@@ -1051,9 +1080,21 @@ pub async fn parse_bank_statement(
 
 pub async fn get_reconciliation_queue(
     State(state): State<AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Json<Vec<ReconciliationMatch>> {
     let inner = state.inner.read().await;
-    Json(inner.reconciliation_queue.clone())
+    let site_id = params.get("site_id").or_else(|| params.get("siteId"));
+    if let Some(target_site) = site_id {
+        let filtered: Vec<ReconciliationMatch> = inner
+            .reconciliation_queue
+            .iter()
+            .filter(|m| crate::auth::same_id(&m.site_id, target_site))
+            .cloned()
+            .collect();
+        Json(filtered)
+    } else {
+        Json(inner.reconciliation_queue.clone())
+    }
 }
 
 pub async fn confirm_reconciliation(
@@ -1062,6 +1103,19 @@ pub async fn confirm_reconciliation(
 ) -> Result<(StatusCode, Json<ConfirmReconciliationResponse>), (StatusCode, String)> {
     let mut inner = state.inner.write().await;
     let ledger_before = ledger_snapshot(&inner);
+
+    // Enforce tenant boundary: verify all match_ids belong to caller's payload.site_id
+    for match_id in &payload.match_ids {
+        if let Some(m) = inner.reconciliation_queue.iter().find(|m| m.match_id == *match_id) {
+            if !crate::auth::same_id(&m.site_id, &payload.site_id) {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    format!("Match {} belongs to site {}, not {}", match_id, m.site_id, payload.site_id),
+                ));
+            }
+        }
+    }
+
     let mut confirmed_count = 0;
     let mut total_amount_cleared = Decimal::ZERO;
     let mut updated_unit_ids = Vec::new();
@@ -1717,9 +1771,13 @@ pub async fn process_bank_incoming_webhook(
     let unit = match unit_index {
         Some(idx) => inner.units[idx].clone(),
         None => {
-            // Transaction arrived at site bank account, but cannot be automatically matched.
-            // In financial & banking systems, money transfer succeeds and enters site bank account.
-            // We record this in reconciliation_queue as UNMATCHED / ESLESTIRILEMEDI so the site manager can manually assign it!
+            let bank_site_id = inner
+                .site_bank_accounts
+                .iter()
+                .find(|ba| ba.iban.replace(' ', "").to_uppercase() == clean_viban)
+                .map(|ba| ba.site_id.clone())
+                .unwrap_or_else(|| "1".to_string());
+
             let txn_desc = payload.description.clone().unwrap_or_else(|| {
                 format!("Site Ana Hesabı FAST Transferi: {}", payload.virtual_iban)
             });
@@ -1730,6 +1788,7 @@ pub async fn process_bank_incoming_webhook(
 
             inner.reconciliation_queue.push(ReconciliationMatch {
                 match_id: match_id.clone(),
+                site_id: bank_site_id,
                 transaction: BankTransactionItem {
                     transaction_id: payload.transaction_id.clone(),
                     date: Utc::now().date_naive(),
@@ -1931,6 +1990,7 @@ pub async fn process_bank_incoming_webhook(
     let match_seq = inner.reconciliation_queue.len() + 1;
     inner.reconciliation_queue.push(ReconciliationMatch {
         match_id: format!("MATCH-{}", match_seq),
+        site_id: unit.site_id.clone(),
         transaction: BankTransactionItem {
             transaction_id: payload.transaction_id.clone(),
             date: Utc::now().date_naive(),
@@ -2318,6 +2378,7 @@ pub async fn record_homeowner_payment(
         let match_seq = inner.reconciliation_queue.len() + 1;
         let r_match = ReconciliationMatch {
             match_id: format!("MATCH-{}", match_seq),
+            site_id: unit.site_id.clone(),
             transaction: BankTransactionItem {
                 transaction_id: ref_code.clone().unwrap_or_else(|| rec.id.clone()),
                 date: Utc::now().date_naive(),
@@ -2367,6 +2428,7 @@ pub async fn record_homeowner_payment(
     let match_seq = inner.reconciliation_queue.len() + 1;
     inner.reconciliation_queue.push(ReconciliationMatch {
         match_id: format!("MATCH-{}", match_seq),
+        site_id: unit.site_id.clone(),
         transaction: BankTransactionItem {
             transaction_id: payload.reference_code.unwrap_or_else(|| payment_id.clone()),
             date: Utc::now().date_naive(),
