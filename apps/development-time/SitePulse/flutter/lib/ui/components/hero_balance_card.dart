@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../domain/models/dues_models.dart';
+import '../../domain/models/money.dart';
 import '../theme/app_theme.dart';
 
 class HeroBalanceCard extends StatelessWidget {
@@ -28,24 +29,25 @@ class HeroBalanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final debtDouble = dues.toplamTutar.toDouble();
-    final advDouble = advancePayment?.toDouble() ?? 0.0;
-    final hasPenalty = dues.gecikmeTazminati.toDouble() > 0 &&
-        debtDouble > 0 &&
+    final debt = dues.toplamTutar;
+    final adv = advancePayment ?? Decimal.zero;
+    final hasDebt = debt > Decimal.zero;
+    final hasPenalty = dues.gecikmeTazminati > Decimal.zero &&
+        hasDebt &&
         dues.status != DebtStatus.paid;
     final isDark = AppColors.isDark(context);
-    final hasAdvance = debtDouble <= 0 && advDouble > 0;
+    final hasAdvance = !hasDebt && adv > Decimal.zero;
 
     // Format amount: e.g. 1423.33 → ₺1.423,33 (Turkish locale)
-    final totalDouble = hasAdvance ? advDouble : debtDouble;
-    final rawAmountText = _formatTurkishCurrency(totalDouble);
+    final total = hasAdvance ? adv : debt;
+    final rawAmountText = Money.fromDecimal(total).toTurkishString();
     final amountText = hasAdvance ? '+$rawAmountText' : rawAmountText;
-    final debtFormatted = _formatTurkishCurrency(debtDouble);
-    final advFormatted = '+${_formatTurkishCurrency(advDouble)}';
+    final debtFormatted = Money.fromDecimal(debt).toTurkishString();
+    final advFormatted = '+${Money.fromDecimal(adv).toTurkishString()}';
 
     final mainLabel = hasAdvance
         ? 'Toplam Hesap Bakiyesi (Artı Bakiye)'
-        : (debtDouble > 0 ? 'Ödenecek Toplam Tutar' : 'Toplam Hesap Bakiyesi');
+        : (hasDebt ? 'Ödenecek Toplam Tutar' : 'Toplam Hesap Bakiyesi');
 
     return Container(
       decoration: BoxDecoration(
@@ -190,7 +192,7 @@ class HeroBalanceCard extends StatelessWidget {
                 ],
               ),
             )
-          else if (dues.donem.isEmpty || debtDouble <= 0)
+          else if (dues.donem.isEmpty || !hasDebt)
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -239,7 +241,7 @@ class HeroBalanceCard extends StatelessWidget {
                 ),
               ),
             ),
-          if ((dues.donem.isEmpty || debtDouble <= 0) && !hasAdvance) ...[
+          if ((dues.donem.isEmpty || !hasDebt) && !hasAdvance) ...[
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -294,7 +296,7 @@ class HeroBalanceCard extends StatelessWidget {
                       Text(
                         debtFormatted,
                         style: TextStyle(
-                          color: debtDouble > 0 ? const Color(0xFFEF4444) : AppColors.textPrimary(context),
+                          color: hasDebt ? const Color(0xFFEF4444) : AppColors.textPrimary(context),
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                         ),
@@ -323,7 +325,7 @@ class HeroBalanceCard extends StatelessWidget {
                       Text(
                         advFormatted,
                         style: TextStyle(
-                          color: advDouble > 0 ? const Color(0xFF10B981) : AppColors.textSecondary(context),
+                          color: adv > Decimal.zero ? const Color(0xFF10B981) : AppColors.textSecondary(context),
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                         ),
@@ -341,10 +343,10 @@ class HeroBalanceCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _ActionButton(
-                  label: hasAdvance || debtDouble <= 0 ? 'Avans Yükle' : 'Hemen Öde',
-                  icon: hasAdvance || debtDouble <= 0 ? Icons.add_card_outlined : Icons.payments_outlined,
+                  label: hasAdvance || !hasDebt ? 'Avans Yükle' : 'Hemen Öde',
+                  icon: hasAdvance || !hasDebt ? Icons.add_card_outlined : Icons.payments_outlined,
                   filled: true,
-                  color: hasAdvance || debtDouble <= 0 ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  color: hasAdvance || !hasDebt ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                   onTap: onPayPressed,
                 ),
               ),
@@ -352,8 +354,8 @@ class HeroBalanceCard extends StatelessWidget {
               // Detay / Hesap Özeti — ghost outline (secondary)
               Expanded(
                 child: _ActionButton(
-                  label: hasAdvance || debtDouble <= 0 ? 'Hesap Özeti' : 'Borç Detayı',
-                  icon: hasAdvance || debtDouble <= 0 ? Icons.account_balance_wallet_outlined : Icons.receipt_long_outlined,
+                  label: hasAdvance || !hasDebt ? 'Hesap Özeti' : 'Borç Detayı',
+                  icon: hasAdvance || !hasDebt ? Icons.account_balance_wallet_outlined : Icons.receipt_long_outlined,
                   filled: false,
                   color: AppColors.textPrimary(context),
                   borderColor: AppColors.border(context),
@@ -372,23 +374,6 @@ class HeroBalanceCard extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  /// Formats a double to Turkish currency style: ₺1.423,33
-  static String _formatTurkishCurrency(double value) {
-    final parts = value.toStringAsFixed(2).split('.');
-    final intPart = parts[0];
-    final decPart = parts[1];
-
-    // Insert thousands separator (dot in Turkish)
-    final buffer = StringBuffer();
-    for (int i = 0; i < intPart.length; i++) {
-      if (i > 0 && (intPart.length - i) % 3 == 0) {
-        buffer.write('.');
-      }
-      buffer.write(intPart[i]);
-    }
-    return '₺${buffer.toString()},$decPart';
   }
 }
 
