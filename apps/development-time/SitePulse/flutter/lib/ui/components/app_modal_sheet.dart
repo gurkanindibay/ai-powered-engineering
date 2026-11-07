@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 
-/// Standard Mobile Modal Bottom Sheet component for SitePulse.
+/// Legacy modal bottom sheet container.
 ///
-/// Mandated by SitePulse Engineering Constitution (Spec Kit):
-/// Center popups (`AlertDialog`) are prohibited on mobile interfaces.
-/// All dialogs, sheets, and flows must slide up from the bottom as
-/// full-width, keyboard-cushioned, swipe-dismissable Modal Bottom Sheets.
+/// Superseded: the SitePulse constitution prohibits partial bottom sheets and
+/// center popups for interactive flows. Use [AppFullscreenPage] or
+/// `showSpPage` with `SpAlertPage` / `SpDialogPage` / `SpSelectionPage`
+/// (`sp_dialog_pages.dart`). Kept only so older branches still compile.
+@Deprecated('Use AppFullscreenPage or showSpPage (sp_dialog_pages.dart); bottom sheets are prohibited')
 class AppModalSheet extends StatelessWidget {
   final Widget? icon;
   final String? title;
@@ -228,6 +229,7 @@ class AppModalSheet extends StatelessWidget {
                     ),
                     if (showCloseButton)
                       IconButton(
+                        tooltip: AppStrings.close,
                         icon: Icon(Icons.close, size: 20, color: AppColors.textSecondary(context)),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
 
 import '../../testing/test_id.dart';
+import '../components/sp_dialog_pages.dart';
 import '../theme/app_theme.dart';
 
 /// Kind of a transient message. Each kind has its own icon and fill so that an
@@ -146,9 +147,11 @@ class SpToast {
       show(context, message, ToastKind.error, action: action);
 }
 
-/// Confirmation dialog that names the object and the consequence.
+/// Full-screen confirmation page that names the object and the consequence.
 ///
-/// Cancel sits left of confirm; a destructive confirm uses the danger fill.
+/// Opens as a 100% viewport page (center popups are prohibited by the
+/// constitution). Cancel sits left of confirm in the sticky bottom bar; a
+/// destructive confirm uses the danger fill.
 Future<bool> showSpConfirmDialog(
   BuildContext context, {
   required String title,
@@ -158,16 +161,13 @@ Future<bool> showSpConfirmDialog(
   bool destructive = false,
   String? confirmKey,
 }) async {
-  final result = await showDialog<bool>(
+  final result = await showSpPage<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
+    builder: (ctx) => SpAlertPage(
       title: Text(title),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: Text(message),
-      ),
+      content: Text(message),
       actions: [
-        testId('btn_confirm_cancel', TextButton(
+        testId('btn_confirm_cancel', OutlinedButton(
           key: const Key('btn_confirm_cancel'),
           onPressed: () => Navigator.of(ctx).pop(false),
           child: Text(cancelLabel),

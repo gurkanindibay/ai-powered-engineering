@@ -16,6 +16,7 @@ import '../residents/owners_residents_module_page.dart';
 
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
+import 'sp_dialog_pages.dart';
 class DuesManagementView extends StatefulWidget {
   final DashboardController controller;
   final int initialSegment;
@@ -108,12 +109,9 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
   void _showImportOptionsDialog() {
     final isDark = AppColors.isDark(context);
-    showModalBottomSheet(
+    showSpSheetPage(
       context: context,
       backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) {
         return SafeArea(
           child: SingleChildScrollView(
@@ -133,10 +131,6 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                         fontWeight: FontWeight.bold,
                       ),
                     )),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -188,10 +182,10 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
     final isDark = AppColors.isDark(context);
 
-    showDialog(
+    showSpPage(
       context: context,
       builder: (ctx) {
-        return Dialog(
+        return SpDialogPage(
           backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: SingleChildScrollView(
@@ -439,14 +433,14 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     final selectedMonth = widget.controller.selectedDuesMonth;
     final isDark = AppColors.isDark(context);
 
-    await showDialog(
+    await showSpPage(
       context: context,
       builder: (ctx) {
         bool isSubmitting = false;
 
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
-            return AlertDialog(
+            return SpAlertPage(
               backgroundColor: isDark ? AppColors.darkCard : AppColors.lightCard,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Row(
@@ -688,6 +682,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               child: Row(
                 children: [
                   IconButton(
+                    tooltip: 'Önceki ay',
                     icon: const Icon(Icons.chevron_left, size: 20),
                     visualDensity: VisualDensity.compact,
                     onPressed: _prevMonth,
@@ -737,6 +732,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     ),
                   ),
                   IconButton(
+                    tooltip: 'Sonraki ay',
                     icon: const Icon(Icons.chevron_right, size: 20),
                     visualDensity: VisualDensity.compact,
                     onPressed: _nextMonth,
@@ -1145,6 +1141,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               border: InputBorder.none,
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
+                      tooltip: 'Aramayı temizle',
                       icon: const Icon(Icons.clear, size: 16),
                       onPressed: () {
                         _searchController.clear();

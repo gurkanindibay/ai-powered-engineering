@@ -144,7 +144,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify dialog is shown
-      expect(find.text('Toplu Aidat Tahakkuku'), findsNWidgets(2)); // Button + Dialog Title
+      // Full-screen page title (the calling screen is now covered, so its button is offstage)
+      expect(find.text('Toplu Aidat Tahakkuku'), findsOneWidget);
       expect(find.text('Tahakkuk Dönemi:'), findsOneWidget);
       // The dialog shows the per-unit amount in the Turkish format (other cards show it too).
       expect(find.text('₺1.400,00'), findsWidgets);

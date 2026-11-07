@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import 'app_fullscreen_page.dart';
 
 import '../design_system/money_formatter.dart';
+import 'sp_dialog_pages.dart';
 Future<void> showManageHouseTypesFullscreen(BuildContext context, DashboardController controller) async {
   await AppFullscreenPage.push(
     context: context,
@@ -135,15 +136,17 @@ Future<void> showManageHouseTypesFullscreen(BuildContext context, DashboardContr
                             ),
                           ),
                           testId('btn_edit_house_type_${item.typeName}', IconButton(
+                            tooltip: 'Tarifeyi düzenle',
                             icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.accentPurple),
                             onPressed: () => _showEditHouseTypeDialog(context, controller, item, setDialogState),
                           )),
                           IconButton(
+                            tooltip: 'Tarifeyi sil',
                             icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.accentRed),
                             onPressed: () async {
-                              final confirm = await showDialog<bool>(
+                              final confirm = await showSpPage<bool>(
                                 context: context,
-                                builder: (c) => AlertDialog(
+                                builder: (c) => SpAlertPage(
                                   title: const Text('Tarifeyi Sil'),
                                   content: Text('${item.typeName} tarifesini silmek istediğinize emin misiniz?'),
                                   actions: [
@@ -203,7 +206,7 @@ void _showEditHouseTypeDialog(BuildContext context, DashboardController controll
                   side: BorderSide(color: AppColors.border(context)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+                child: Text(AppStrings.cancel, style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
               testId('btn_save_house_type', ElevatedButton(
                 onPressed: () async {

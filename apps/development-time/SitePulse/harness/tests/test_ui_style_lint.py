@@ -54,6 +54,27 @@ class UiStyleLintTests(unittest.TestCase):
         self.assertEqual(_rules(report), ["emoji-icon"])
         self.assertEqual(report["findings"][0]["line"], 2)
 
+    def test_popups_are_reported(self):
+        report = _lint({"a.dart": (
+            "showDialog(context: c, builder: (_) => AlertDialog(title: t));\n"
+            "showModalBottomSheet<bool>(context: c, builder: b);\n"
+            "final d = SimpleDialog(children: []); final e = Dialog(child: x);"
+        )})
+        self.assertEqual(_rules(report), ["no-popup"] * 5)
+
+    def test_full_screen_pages_and_comments_pass(self):
+        report = _lint({"a.dart": (
+            "// was showDialog(...) with an AlertDialog(...)\n"
+            "showSpPage<bool>(context: c, builder: (_) => SpAlertPage(title: t));\n"
+            "final o = SimpleDialogOption(child: x); final p = SpDialogPage(child: y);\n"
+            "final s = 'Dialog(';"
+        )})
+        self.assertTrue(report["passed"], report)
+
+    def test_deprecated_sheet_container_is_exempt_from_popup_rule(self):
+        report = _lint({"components/app_modal_sheet.dart": "showModalBottomSheet(context: c, builder: b);"})
+        self.assertTrue(report["passed"], report)
+
     def test_stand_in_google_icon_is_reported(self):
         report = _lint({"a.dart": "final i = Icon(Icons.g_mobiledata);"})
         self.assertEqual(_rules(report), ["stand-in-icon"])

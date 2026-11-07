@@ -473,7 +473,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   side: BorderSide(color: AppColors.border(context)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+                child: Text(AppStrings.cancel, style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
               testId('btn_submit_profile_change_password', ElevatedButton(
                 onPressed: isSubmitting

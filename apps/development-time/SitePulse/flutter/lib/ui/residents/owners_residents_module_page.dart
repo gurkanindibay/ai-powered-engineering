@@ -11,6 +11,7 @@ import '../design_system/sp_skeleton.dart';
 
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
+import '../components/sp_dialog_pages.dart';
 /// Standalone Fullscreen Module for Comprehensive Owners & Residents Management.
 ///
 /// Mandated by SitePulse UX Guidelines:
@@ -186,6 +187,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   prefixIcon: const Icon(Icons.search, size: 20),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
+                          tooltip: 'Aramayı temizle',
                           icon: const Icon(Icons.clear, size: 18),
                           onPressed: () => setState(() => _searchQuery = ''),
                         )
@@ -1161,13 +1163,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
   // DIALOG WORKFLOWS & ACTIONS
 
   void _showSelectPrimaryResponsibleDialog(HomeOwnerItem ho) {
-    showModalBottomSheet(
+    showSpSheetPage(
       context: context,
-      isScrollControlled: true,
       backgroundColor: AppColors.surface(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) {
         return SafeArea(
           child: SingleChildScrollView(
