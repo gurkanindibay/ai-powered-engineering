@@ -67,12 +67,25 @@ class SetupError(RuntimeError):
     pass
 
 
+def load_env_file(path: Path) -> None:
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
 # ---------------------------------------------------------------------------
 # PostgreSQL
 # ---------------------------------------------------------------------------
 
 class Psql:
     def __init__(self, container: str):
+        if not os.environ.get("DB_PASS"):
+            load_env_file(BACKEND / ".env")
         self.user = os.environ.get("DB_USER", "sitepulse_user")
         self.password = os.environ.get("DB_PASS", "")
         self.host = os.environ.get("DB_HOST", "127.0.0.1")

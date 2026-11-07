@@ -38,8 +38,10 @@ pub fn create_pool() -> Option<Pool> {
     cfg.password = Some(password);
     cfg.dbname = Some(dbname);
     cfg.manager = Some(ManagerConfig { recycling_method: RecyclingMethod::Fast });
-    let mut pool_cfg = PoolConfig::default();
-    pool_cfg.timeouts = Timeouts::wait_millis(10_000);
+    let pool_cfg = PoolConfig {
+        timeouts: Timeouts::wait_millis(10_000),
+        ..Default::default()
+    };
     cfg.pool = Some(pool_cfg);
 
     let pool = match ssl_mode.as_str() {
