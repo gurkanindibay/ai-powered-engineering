@@ -28,7 +28,11 @@ class SaasAdmin:
         fill(self.page, "change_password_current", current)
         fill(self.page, "change_password_new", new)
         fill(self.page, "change_password_confirm", new)
-        by_id(self.page, "btn_submit_change_password").click()
+        # Wait for the backend's answer, not just the UI: the banner can disappear before it is stored.
+        with self.page.expect_response(lambda r: "/api/v1/auth/change-password" in r.url, timeout=15_000) as resp:
+            by_id(self.page, "btn_submit_change_password").click()
+        if resp.value.status != 200:
+            raise AssertionError(f"change-password -> {resp.value.status}: {resp.value.text()[:300]}")
 
     def site_name(self, site_id: str) -> str:
         return text_of(by_id(self.page, f"site_card_name_{site_id}"))
