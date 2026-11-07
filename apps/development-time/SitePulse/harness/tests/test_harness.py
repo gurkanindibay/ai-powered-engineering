@@ -245,5 +245,29 @@ class TestProjectData(unittest.TestCase):
         self.assertTrue(report["passed"], report["issues"])
 
 
+class TestPersistenceLint(unittest.TestCase):
+    """The persistence lint enforces repository boundaries and result handling."""
+
+    def test_backend_passes_persistence_lint(self):
+        from scripts.memory_persistence_lint import lint
+        findings = lint(PROJECT_ROOT / "backend")
+        self.assertEqual(findings, [])
+
+    def test_service_repository_boundary_violation_caught(self):
+        from scripts.memory_persistence_lint import lint
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src_dir = root / "src"
+            services_dir = src_dir / "services"
+            services_dir.mkdir(parents=True)
+            (src_dir / "lib.rs").write_text("#![deny(unused_must_use)]\n")
+            (services_dir / "saas_tenant_service.rs").write_text(
+                'pub async fn bad_code() { client.query("SELECT * FROM sites", &[]).await; }\n'
+            )
+            findings = lint(root)
+            rules = [f["rule"] for f in findings]
+            self.assertIn("service-repository-boundary", rules)
+
+
 if __name__ == "__main__":
     unittest.main()

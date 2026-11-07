@@ -64,86 +64,23 @@ impl SaasTenantService {
             .unwrap_or_else(|| vec!["A Blok".to_string(), "B Blok".to_string()]);
 
         let (site_id, user_id, block_dtos, person_id) = if let Some(ref pool) = self.state.pool {
-            let client = pool.get().await.map_err(|e| e.to_string())?;
+            let reg = crate::db::create_site_with_manager_and_blocks(
+                pool,
+                &request.site_name,
+                &request.address,
+                &slug,
+                &plan,
+                license_end,
+                &request.site_admin_full_name,
+                &request.site_admin_phone,
+                &email_norm,
+                &password_hash,
+                &blocks_list,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
 
-            // 1. Insert site with RETURNING id
-            let site_row = client
-                .query_one(
-                    r#"
-                    INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
-                    VALUES ($1, $2, $3, 'ACTIVE', $4, $5)
-                    RETURNING id
-                    "#,
-                    &[
-                        &request.site_name,
-                        &request.address,
-                        &slug,
-                        &plan,
-                        &license_end,
-                    ],
-                )
-                .await
-                .map_err(|e| e.to_string())?;
-            let numeric_site: i64 = site_row.get(0);
-            let s_id = numeric_site.to_string();
-
-            // 2. Insert person & user with RETURNING id
-            let person_row = client
-                .query_one(
-                    r#"
-                    INSERT INTO persons (full_name, phone, email, person_type)
-                    VALUES ($1, $2, $3, 'SITE_MANAGER')
-                    RETURNING id
-                    "#,
-                    &[
-                        &request.site_admin_full_name,
-                        &request.site_admin_phone,
-                        &email_norm,
-                    ],
-                )
-                .await
-                .map_err(|e| e.to_string())?;
-            let p_id: i64 = person_row.get(0);
-
-            let user_row = client
-                .query_one(
-                    r#"
-                    INSERT INTO users (site_id, email, password_hash, role, must_change_password, person_id)
-                    VALUES ($1, $2, $3, 'SITE_MANAGER', true, $4)
-                    RETURNING id
-                    "#,
-                    &[
-                        &numeric_site,
-                        &email_norm,
-                        &password_hash,
-                        &p_id,
-                    ],
-                )
-                .await
-                .map_err(|e| e.to_string())?;
-            let numeric_user: i64 = user_row.get(0);
-            let u_id = numeric_user.to_string();
-
-            // 3. Insert blocks with RETURNING id
-            let mut created_blocks = Vec::new();
-            for bname in &blocks_list {
-                let block_row = client
-                    .query_one(
-                        "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10) RETURNING id",
-                        &[&numeric_site, bname],
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?;
-                let numeric_block: i64 = block_row.get(0);
-                created_blocks.push(crate::models::BlockDto {
-                    id: numeric_block.to_string(),
-                    site_id: s_id.clone(),
-                    block_name: bname.clone(),
-                    total_floors: 10,
-                });
-            }
-
-            (s_id, u_id, created_blocks, Some(p_id))
+            (reg.site_id, reg.user_id, reg.blocks, Some(reg.person_id))
         } else {
             let max_site = inner.sites.iter().filter_map(|s| crate::db::parse_id_to_i64(&s.id)).max().unwrap_or(0);
             let s_id = (max_site + 1).to_string();
@@ -217,90 +154,9 @@ impl SaasTenantService {
 
     pub async fn get_all_sites(&self) -> Vec<SaasSiteSummaryDto> {
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(rows) = crate::db::logged(client
-                    .query(
-                        "SELECT s.id, s.name, s.slug, s.address, s.status, s.plan_type, s.license_end_date FROM sites s ORDER BY s.id ASC",
-                        &[],
-                    )
-                    .await, "saas_tenant_service") {
-                    let mut result = Vec::new();
-                    for row in rows {
-                        let id: i64 = row.get(0);
-                        let name: String = row.get(1);
-                        let slug: String = row.get::<_, Option<String>>(2).unwrap_or_else(|| id.to_string());
-                        let address: String = row.get::<_, Option<String>>(3).unwrap_or_default();
-                        let status: String = row.get::<_, Option<String>>(4).unwrap_or_else(|| "ACTIVE".to_string());
-                        let plan_type: String = row.get::<_, Option<String>>(5).unwrap_or_else(|| "STANDARD".to_string());
-                        let license_end_date: Option<chrono::NaiveDate> = row.get(6);
-
-                        let manager_row = client
-                            .query_opt(
-                                "SELECT COALESCE(p.full_name, 'Site Manager'), u.email, COALESCE(p.phone, '-')
-                                 FROM users u
-                                 LEFT JOIN persons p ON u.person_id = p.id
-                                 WHERE (u.site_id = $1 OR u.site_id::text = $2) AND u.role = 'SITE_MANAGER' ORDER BY u.id ASC LIMIT 1",
-                                &[&id, &id.to_string()],
-                            )
-                            .await
-                            .ok()
-                            .flatten();
-
-                        let (primary_manager_name, primary_manager_email, primary_manager_phone) = match manager_row {
-                            Some(m_row) => (
-                                m_row.get::<_, String>(0),
-                                m_row.get::<_, String>(1),
-                                m_row.get::<_, Option<String>>(2).unwrap_or_else(|| "-".to_string()),
-                            ),
-                            None => ("Unassigned".to_string(), "-".to_string(), "-".to_string()),
-                        };
-
-                        let unit_count_row = crate::db::logged(client
-                            .query_one("SELECT COUNT(*) FROM units WHERE site_id = $1", &[&id])
-                            .await, "saas_tenant_service");
-                        let total_units: i64 = unit_count_row.map(|r| r.get(0)).unwrap_or(0);
-
-                        let dues_volume_row = crate::db::logged(
-                            client
-                                .query_one(
-                                    "SELECT COALESCE(SUM(principal_amount), 0) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id = $1",
-                                    &[&id],
-                                )
-                                .await,
-                            "site dues volume",
-                        );
-                        let monthly_dues_volume: Decimal = dues_volume_row
-                            .map(|r| r.get(0))
-                            .unwrap_or(Decimal::ZERO);
-
-                        let block_rows = client
-                            .query("SELECT block_name FROM blocks WHERE site_id = $1 ORDER BY id ASC", &[&id])
-                            .await
-                            .unwrap_or_default();
-                        let mut blocks: Vec<String> = block_rows.iter().map(|r| r.get(0)).collect();
-                        if blocks.is_empty() {
-                            blocks = vec!["A Blok".to_string(), "B Blok".to_string()];
-                        }
-
-                        result.push(SaasSiteSummaryDto {
-                            site_id: id.to_string(),
-                            site_name: name,
-                            slug,
-                            address,
-                            status,
-                            plan_type,
-                            license_end_date: license_end_date.unwrap_or_else(|| chrono::Utc::now().date_naive() + chrono::Days::new(365)),
-                            total_units: total_units as i32,
-                            monthly_dues_volume,
-                            primary_manager_name,
-                            primary_manager_email,
-                            primary_manager_phone,
-                            blocks,
-                        });
-                    }
-                    if !result.is_empty() {
-                        return result;
-                    }
+            if let Ok(summaries) = crate::db::fetch_all_saas_site_summaries(pool).await {
+                if !summaries.is_empty() {
+                    return summaries;
                 }
             }
         }
@@ -574,18 +430,7 @@ impl SaasTenantService {
             if let Some(ref u) = admin_user_to_save {
                 crate::db::save_user(pool, u).await.map_err(|e| e.to_string())?;
             }
-            if let Ok(client) = pool.get().await {
-                let numeric_site = crate::db::require_id("entity", &actual_site_id)?;
-                client.execute("DELETE FROM blocks WHERE site_id = $1", &[&numeric_site]).await.map_err(|e| e.to_string())?;
-                for bname in &updated_blocks {
-                    client
-                        .execute(
-                            "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10)",
-                            &[&numeric_site, bname],
-                        )
-                        .await.map_err(|e| e.to_string())?;
-                }
-            }
+            crate::db::replace_site_blocks(pool, &actual_site_id, &updated_blocks).await.map_err(|e| e.to_string())?;
         }
 
         Ok(SaasSiteSummaryDto {
@@ -613,67 +458,34 @@ impl SaasTenantService {
         let password_hash = crate::auth::hash_password(&temp_pass);
 
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                let numeric_site = crate::db::require_id("entity", site_id)?;
-                let site_row_opt = client
-                    .query_opt(
-                        "SELECT id, name FROM sites WHERE id = $1 OR id::text = $2",
-                        &[&numeric_site, &site_id],
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?;
+            let res_opt = crate::db::reset_site_admin_password_by_site(pool, site_id, &password_hash)
+                .await
+                .map_err(|e| e.to_string())?;
 
-                if let Some(srow) = site_row_opt {
-                    let s_id: i64 = srow.get(0);
-                    let s_name: String = srow.get(1);
-
-                    let user_row_opt = client
-                        .query_opt(
-                            "SELECT u.id, COALESCE(p.full_name, 'Site Manager'), u.email
-                             FROM users u
-                             LEFT JOIN persons p ON u.person_id = p.id
-                             WHERE (u.site_id = $1 OR u.site_id::text = $2) AND u.role = 'SITE_MANAGER' LIMIT 1",
-                            &[&s_id, &site_id],
-                        )
-                        .await
-                        .map_err(|e| e.to_string())?;
-
-                    if let Some(urow) = user_row_opt {
-                        let u_id: i64 = urow.get(0);
-                        let u_name: String = urow.get(1);
-                        let u_email: String = urow.get(2);
-
-                        client
-                            .execute(
-                                "UPDATE users SET password_hash = $1, must_change_password = true WHERE id = $2",
-                                &[&password_hash, &u_id],
-                            )
-                            .await
-                            .map_err(|e| e.to_string())?;
-
-                        // Sync in-memory state
-                        let mut inner = self.state.inner.write().await;
-                        if let Some(user) = inner.users.iter_mut().find(|u| {
-                            u.id == u_id.to_string()
-                                || crate::db::parse_id_to_i64(&u.id) == Some(u_id)
-                                || u.email.to_lowercase() == u_email.to_lowercase()
-                        }) {
-                            user.password_hash = Some(password_hash.clone());
-                            user.must_change_password = true;
-                        }
-
-                        return Ok(SiteAdminPasswordResetResponse {
-                            site_id: s_id.to_string(),
-                            site_name: s_name,
-                            admin_user_id: u_id.to_string(),
-                            admin_full_name: u_name,
-                            admin_email: u_email,
-                            temporary_password: temp_pass,
-                            must_change_password: true,
-                            renewed_at: Utc::now(),
-                        });
-                    }
+            if let Some(res) = res_opt {
+                // Sync in-memory state
+                let mut inner = self.state.inner.write().await;
+                if let Some(user) = inner.users.iter_mut().find(|u| {
+                    u.id == res.user_id.to_string()
+                        || crate::db::parse_id_to_i64(&u.id) == Some(res.user_id)
+                        || u.email.to_lowercase() == res.user_email.to_lowercase()
+                }) {
+                    user.password_hash = Some(password_hash.clone());
+                    user.must_change_password = true;
                 }
+
+                return Ok(SiteAdminPasswordResetResponse {
+                    site_id: res.site_id.to_string(),
+                    site_name: res.site_name,
+                    admin_user_id: res.user_id.to_string(),
+                    admin_full_name: res.user_name,
+                    admin_email: res.user_email,
+                    temporary_password: temp_pass,
+                    must_change_password: true,
+                    renewed_at: Utc::now(),
+                });
+            } else {
+                return Err(format!("Site {} not found or has no active site manager", site_id));
             }
         }
 
