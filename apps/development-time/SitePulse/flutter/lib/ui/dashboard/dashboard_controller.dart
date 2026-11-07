@@ -1764,7 +1764,8 @@ class DashboardController extends ChangeNotifier {
             final roleStr = userData['role']?.toString().toUpperCase() ?? '';
             final siteId = userData['site_id']?.toString() ?? '';
             final unitId = userData['unit_id']?.toString() ?? '';
-            final fullName = userData['full_name']?.toString() ?? trimmedEmail;
+            final rawName = userData['full_name']?.toString().trim() ?? '';
+            final fullName = rawName.isNotEmpty ? rawName : trimmedEmail;
             final phone = userData['phone']?.toString() ?? '';
 
             UserRole resolvedRole;

@@ -1,5 +1,6 @@
 # Local development stack. Secrets come from backend/.env (see .env.example);
-# none are written here. Ports are bound to 127.0.0.1 only.
+# none are written here. Ports are bound to loopback only (127.0.0.1 and ::1),
+# so `localhost` works for IPv4 and IPv6 clients but nothing is exposed to the network.
 #
 # The schema is created by the backend's migration runner (backend/migrations),
 # not by docker-entrypoint-initdb.d, so there is a single schema source.
@@ -15,6 +16,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASS:?Set DB_PASS in backend/.env}
     ports:
       - "127.0.0.1:5432:5432"
+      - "[::1]:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -32,6 +34,7 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8081:8080"
+      - "[::1]:8081:8080"
     depends_on:
       postgres:
         condition: service_healthy

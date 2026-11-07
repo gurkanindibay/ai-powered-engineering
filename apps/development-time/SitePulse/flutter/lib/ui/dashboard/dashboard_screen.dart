@@ -230,7 +230,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 radius: 16,
                 backgroundColor: AppColors.primary,
                 child: Text(
-                  session.fullName.substring(0, 1),
+                  (session.fullName.trim().isEmpty ? '?' : session.fullName.trim().substring(0, 1).toUpperCase()),
                   style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                 ),
               ),
