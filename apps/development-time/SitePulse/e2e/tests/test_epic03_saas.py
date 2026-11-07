@@ -89,6 +89,7 @@ def saas_ui(saas_ready, login_page, page, actors):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-03-03")
+@pytest.mark.gui_id("GUI-X-03")  # zero-data site: guidance instead of errors
 def test_new_manager_must_change_password_and_lands_on_an_empty_site(login_page, page, api, saas_ready):
     from pages import ManagerCockpit, ResidentsTab
     created = api.create_site(saas_ready, "Palmiye Evleri", "murat.yildirim@e2e.test")

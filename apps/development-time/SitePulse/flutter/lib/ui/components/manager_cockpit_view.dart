@@ -233,7 +233,7 @@ class ManagerCockpitView extends StatelessWidget {
                           : AppColors.accentGreen.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(
+                    child: testId('cockpit_collection_badge', Text(
                       summary.totalExpected == Decimal.zero
                           ? (summary.totalAdvanceBalance > Decimal.zero
                               ? '₺${summary.totalAdvanceBalance.toStringAsFixed(0)} Avans Mevcut'
@@ -246,7 +246,7 @@ class ManagerCockpitView extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
-                    ),
+                    )),
                   ),
                 ],
               ),
@@ -255,22 +255,22 @@ class ManagerCockpitView extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text(
+                  testId('cockpit_collected_amount', Text(
                     '₺${summary.totalCollected.toStringAsFixed(0)}',
                     style: TextStyle(
                       color: AppColors.textPrimary(context),
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                     ),
-                  ),
+                  )),
                   const SizedBox(width: 8),
-                  Text(
+                  testId('cockpit_expected_amount', Text(
                     '/ ₺${summary.totalExpected.toStringAsFixed(0)}',
                     style: TextStyle(
                       color: AppColors.textSecondary(context),
                       fontSize: 18,
                     ),
-                  ),
+                  )),
                   if (summary.totalAdvanceBalance > Decimal.zero) ...[
                     const SizedBox(width: 12),
                     Container(

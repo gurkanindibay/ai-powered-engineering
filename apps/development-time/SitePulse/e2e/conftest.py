@@ -74,6 +74,14 @@ def browser_context_args(browser_context_args, browser_name):
 
 
 @pytest.fixture(autouse=True)
+def record_gui_ids(request):
+    """Write each test's GUI scenario ids into the JUnit report (read by scripts/gui_traceability.py)."""
+    ids = [m.args[0] for m in request.node.iter_markers("gui_id")]
+    request.node.user_properties.append(("gui_ids", ",".join(sorted(set(ids)))))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def page_guard(request, page):
     """Fail on uncaught JS errors and backend 5xx; 4xx are app behaviour, recorded only."""
     errors: list[str] = []

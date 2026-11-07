@@ -25,8 +25,15 @@ class LoginPage:
 
     def login(self, role: str, email: str, password: str) -> None:
         tab, prefix = ROLES[role]
-        by_id(self.page, f"login_tab_{tab}").click()
-        by_id(self.page, f"login_{prefix}_email").wait_for()
+        # A tab tap right after the first frame is occasionally dropped; retry until the panel shows.
+        for attempt in range(3):
+            by_id(self.page, f"login_tab_{tab}").click()
+            try:
+                by_id(self.page, f"login_{prefix}_email").wait_for(timeout=8_000)
+                break
+            except Exception:
+                if attempt == 2:
+                    raise
         # Fields may be prefilled; fill() clears them first.
         fill(self.page, f"login_{prefix}_email", email)
         fill(self.page, f"login_{prefix}_password", password)

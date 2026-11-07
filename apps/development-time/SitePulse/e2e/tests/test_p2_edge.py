@@ -178,22 +178,28 @@ def test_payer_name_alias_auto_matches_the_transfer(login_as, login_page, page, 
 @pytest.mark.edge
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-07")
-def test_residents_module_search_by_name_and_unit(login_as, page):
+def test_residents_module_search_by_name_and_unit(login_as, page, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
     by_id(page, "btn_cockpit_manage_residents").click()
     by_id(page, "open_owners_residents_module").click()
     by_id(page, "module_search_input").wait_for(timeout=10_000)
 
+    only = ("id => { const ids = new Set([...document.querySelectorAll('[flt-semantics-identifier^=\"module_history_ho_\"]')]"
+            ".map(e => e.getAttribute('flt-semantics-identifier'))); return ids.size === 1 && ids.has(id); }")
+    def shows_only(card_id: str) -> None:
+        try:
+            page.wait_for_function(only, arg=card_id, timeout=10_000)
+        except Exception:
+            ids = sorted(set(page.eval_on_selector_all('[flt-semantics-identifier^="module_history_ho_"]',
+                                                       "els => els.map(e => e.getAttribute('flt-semantics-identifier'))")))
+            pytest.fail(f"expected only {card_id}, cards shown: {ids}; units: {stack.sql('SELECT id, unit_number FROM units ORDER BY id;')!r}")
+
     fill(page, "module_search_input", "Mehmet Öz")
-    page.wait_for_function("() => document.querySelectorAll('[flt-semantics-identifier^=\"module_history_ho_\"]')"
-                           ".length === 1", timeout=10_000)
-    assert by_id(page, "module_history_ho_1").count() == 1
+    shows_only(f"module_history_ho_{_unit_id(stack, 'B Blok', 3)}")
 
     fill(page, "module_search_input", "14")
-    page.wait_for_function("() => document.querySelectorAll('[flt-semantics-identifier^=\"module_history_ho_\"]')"
-                           ".length === 1", timeout=10_000)
-    assert by_id(page, "module_history_ho_2").count() == 1
+    shows_only(f"module_history_ho_{_unit_id(stack, 'A Blok', 14)}")
 
 
 @pytest.mark.edge
@@ -207,13 +213,22 @@ def test_remove_tenant_only_keeps_the_owner(login_as, page, api, actors, stack):
     ManagerCockpit(page).wait()
     ResidentsTab(page).open()
 
-    by_id(page, f"delete_ho_{b3}").click()
-    by_id(page, "remove_tenant_only_button").click()
-    by_id(page, "remove_tenant_only_button").wait_for(state="detached", timeout=10_000)
-    page.wait_for_timeout(1_000)
+    query = f"SELECT owner_person_id || '|' || coalesce(tenant_person_id::text, '') FROM units WHERE id = {int(b3)};"
+    # Under load a tap during the dialog's open animation can land on the barrier and just close it;
+    # retry only while the database shows no change, so the action is never applied twice.
+    for _ in range(2):
+        by_id(page, f"delete_ho_{b3}").click()
+        button = by_id(page, "remove_tenant_only_button")
+        button.wait_for(timeout=10_000)
+        page.wait_for_timeout(600)  # let the dialog finish opening
+        button.click()
+        button.wait_for(state="detached", timeout=10_000)
+        if stack.wait_sql(query, f"{owner}|", timeout_s=5) == f"{owner}|":
+            break
 
-    assert stack.sql(f"SELECT owner_person_id || '|' || coalesce(tenant_person_id::text, '') FROM units "
-                     f"WHERE id = {int(b3)};") == f"{owner}|"
+    assert stack.sql(query) == f"{owner}|", (
+        f"tenant still set; occupancies: {stack.sql(f'SELECT id, occupancy_type, is_active FROM unit_occupancies WHERE unit_id = {int(b3)};')!r}; "
+        f"cards: {sorted(set(page.eval_on_selector_all('[flt-semantics-identifier^="delete_ho_"]', 'els => els.map(e => e.getAttribute("flt-semantics-identifier"))')))}")
     assert stack.sql(f"SELECT is_active FROM unit_occupancies WHERE unit_id = {int(b3)} "
                      "AND occupancy_type = 'TENANT';") == "f"
 
