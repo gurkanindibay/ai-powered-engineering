@@ -1413,7 +1413,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       phone: ownerPhoneCtrl.text.trim().isNotEmpty ? ownerPhoneCtrl.text.trim() : '05550000000',
                       email: ownerEmailCtrl.text.trim().isNotEmpty
                           ? ownerEmailCtrl.text.trim()
-                          : 'evsahibi${DateTime.now().millisecondsSinceEpoch}@example.com',
+                          : 'evsahibi$unitNo@example.com',
                       tenantFullName: isTenantOccupied ? tenantNameCtrl.text.trim() : null,
                       tenantPhone: isTenantOccupied && tenantPhoneCtrl.text.trim().isNotEmpty ? tenantPhoneCtrl.text.trim() : null,
                       tenantEmail: isTenantOccupied && tenantEmailCtrl.text.trim().isNotEmpty ? tenantEmailCtrl.text.trim() : null,
@@ -1434,7 +1434,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         },
                         orElse: () => null,
                       );
-                      final targetUnitId = registeredHo?.unitId ?? 'unit-$unitNo';
+                      final targetUnitId = registeredHo?.unitId ?? '$unitNo';
 
                       for (final res in pendingResidents) {
                         final resName = res.nameCtrl.text.trim();
@@ -1449,7 +1449,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 : (ownerPhoneCtrl.text.trim().isNotEmpty ? ownerPhoneCtrl.text.trim() : '05550000000'),
                             email: res.emailCtrl.text.trim().isNotEmpty
                                 ? res.emailCtrl.text.trim()
-                                : 'sakin_${DateTime.now().millisecondsSinceEpoch}@example.com',
+                                : 'sakin_${unitNo}_${res.relationship.toLowerCase()}@example.com',
                             relationship: res.relationship,
                           );
                         }
@@ -2457,7 +2457,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       fullName: name,
                       relationship: relationCtrl.text.trim(),
                       phone: phoneCtrl.text.trim(),
-                      email: 'sakin${DateTime.now().millisecondsSinceEpoch}@example.com',
+                      email: phoneCtrl.text.trim().isNotEmpty ? '${phoneCtrl.text.trim()}@sakin.local' : 'sakin_${ho.unitNo}@example.com',
                     );
                     if (setAsPrimary && success) {
                       widget.controller.setPrimaryResponsibleResident(

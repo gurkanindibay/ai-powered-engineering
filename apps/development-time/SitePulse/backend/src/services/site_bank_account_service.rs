@@ -1,5 +1,4 @@
 use chrono::Utc;
-use uuid::Uuid;
 
 use crate::models::{
     BankAccountConfigResponse, BankStatementFormat, ConfigureBankAccountRequest, SiteBankAccount,
@@ -75,7 +74,41 @@ impl SiteBankAccountService {
         };
 
         let now = Utc::now();
-        let new_id = format!("sba-{}", Uuid::new_v4().simple());
+        let new_id = if let Some(ref pool) = self.state.pool {
+            let client = pool.get().await.map_err(|e| e.to_string())?;
+            let site_id_num = crate::db::require_id("entity", site_id)?;
+            let config_by_num = req.configured_by.as_deref().and_then(crate::db::parse_id_to_i64);
+            client.execute(
+                "UPDATE site_bank_accounts SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE site_id = $1 AND is_active = true",
+                &[&site_id_num],
+            ).await.map_err(|e| e.to_string())?;
+
+            let row = client.query_one(
+                r#"
+                INSERT INTO site_bank_accounts (site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                RETURNING id
+                "#,
+                &[
+                    &site_id_num,
+                    &bank.as_code().to_string(),
+                    &bank.display_name().to_string(),
+                    &iban_clean,
+                    &req.account_holder.trim().to_string(),
+                    &format_str.to_string(),
+                    &true,
+                    &config_by_num,
+                    &now,
+                    &now,
+                ],
+            ).await.map_err(|e| e.to_string())?;
+            let db_id: i64 = row.get(0);
+            db_id.to_string()
+        } else {
+            let inner = self.state.inner.read().await;
+            let max_id = inner.site_bank_accounts.iter().filter_map(|b| crate::db::parse_id_to_i64(&b.id)).max().unwrap_or(0);
+            (max_id + 1).to_string()
+        };
 
         let new_account = SiteBankAccount {
             id: new_id,
@@ -102,10 +135,6 @@ impl SiteBankAccountService {
             }
         }
         inner.site_bank_accounts.push(new_account.clone());
-
-        if let Some(ref pool) = self.state.pool {
-            crate::db::save_site_bank_account(pool, &new_account).await.map_err(|e| e.to_string())?;
-        }
 
         Ok(response)
     }

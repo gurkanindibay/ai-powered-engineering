@@ -1136,6 +1136,36 @@ class SiteBankAccount {
 
   SupportedBank? get supportedBank => SupportedBank.fromCode(bankCode);
 
+  factory SiteBankAccount.fromJson(Map<String, dynamic> json) {
+    return SiteBankAccount(
+      id: json['id']?.toString() ?? '',
+      siteId: json['site_id']?.toString() ?? '',
+      bankCode: json['bank_code']?.toString() ?? '',
+      bankName: json['bank_name']?.toString() ?? '',
+      iban: json['iban']?.toString() ?? '',
+      accountHolder: json['account_holder']?.toString() ?? '',
+      statementFormat: json['statement_format']?.toString() ?? 'EXCEL',
+      isActive: json['is_active'] as bool? ?? true,
+      configuredBy: json['configured_by']?.toString(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.tryParse(json['updated_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'site_id': siteId,
+    'bank_code': bankCode,
+    'bank_name': bankName,
+    'iban': iban,
+    'account_holder': accountHolder,
+    'statement_format': statementFormat,
+    'is_active': isActive,
+    'configured_by': configuredBy,
+    'updated_at': updatedAt.toIso8601String(),
+  };
+
   SiteBankAccount copyWith({
     String? id,
     String? siteId,

@@ -1,6 +1,5 @@
 use chrono::Utc;
 use rand::{distributions::Alphanumeric, Rng};
-use uuid::Uuid;
 
 use crate::models::{
     ApprovalResultResponse, PendingRegistrationResponse, Role, SiteInvitationLinkResponse,
@@ -71,7 +70,8 @@ impl RegistrationApprovalService {
             ));
         }
 
-        let request_id = format!("req-{}", &Uuid::new_v4().to_string()[..8]);
+        let max_req = inner.pending_registrations.iter().filter_map(|r| crate::db::parse_id_to_i64(&r.request_id)).max().unwrap_or(0);
+        let request_id = (max_req + 1).to_string();
         let site_id = inner
             .sites
             .iter()
@@ -309,7 +309,8 @@ impl RegistrationApprovalService {
         let user_id = if user_numeric_id > 0 {
             user_numeric_id.to_string()
         } else {
-            format!("usr-resident-{}", &Uuid::new_v4().to_string()[..8])
+            let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            (max_u + 1).to_string()
         };
 
         let resident_user = User {
@@ -332,13 +333,15 @@ impl RegistrationApprovalService {
         let unit_id = if unit_numeric_id > 0 {
             unit_numeric_id.to_string()
         } else {
-            format!("unit-{}", req.unit_no)
+            let max_unit = inner.units.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            (max_unit + 1).to_string()
         };
 
         let block_id_str = if block_numeric_id > 0 {
             block_numeric_id.to_string()
         } else {
-            format!("blok-{}", effective_clean_block)
+            let max_blk = inner.blocks.iter().filter_map(|b| crate::db::parse_id_to_i64(&b.id)).max().unwrap_or(0);
+            (max_blk + 1).to_string()
         };
 
         let unit = crate::models::IndependentUnit {

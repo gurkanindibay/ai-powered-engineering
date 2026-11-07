@@ -221,6 +221,7 @@ class Context:
         self.manager = ""
         self.other_manager = ""
         self.receipt_before_restart: Optional[int] = None
+        self.unit_id: str = "1"
 
 
 def check_unauthenticated(ctx: Context) -> Tuple[bool, str]:
@@ -249,9 +250,9 @@ def check_cross_site(ctx: Context) -> Tuple[bool, str]:
     b = ctx.backend.base
     probes = [
         http("GET", b + "/api/v1/site-admin/home-owners?site_id=1", token=ctx.other_manager)[0],
-        http("GET", b + "/api/v1/site-admin/units/14/occupancy-history", token=ctx.other_manager)[0],
+        http("GET", b + f"/api/v1/site-admin/units/{ctx.unit_id}/occupancy-history", token=ctx.other_manager)[0],
         http("GET", b + "/api/v1/site-admin/bank-account/1", token=ctx.other_manager)[0],
-        http("POST", b + "/api/v1/payments/record-manual", token=ctx.other_manager, body={"site_id": "1", "unit_id": "14", "amount": "1.00", "payer_name": "x"})[0],
+        http("POST", b + "/api/v1/payments/record-manual", token=ctx.other_manager, body={"site_id": "1", "unit_id": ctx.unit_id, "amount": "1.00", "payer_name": "x"})[0],
     ]
     own = http("GET", b + "/api/v1/site-admin/home-owners", token=ctx.manager)[0]
     return all(p == 403 for p in probes) and own == 200, f"foreign {probes}, own {own}"
@@ -272,7 +273,7 @@ def check_webhook(ctx: Context) -> Tuple[bool, str]:
 def pay(ctx: Context, amount: str = "3.00", key: Optional[str] = None) -> Tuple[int, str]:
     headers = {"Idempotency-Key": key} if key else None
     return http("POST", ctx.backend.base + "/api/v1/payments/record-manual", token=ctx.manager,
-                body={"unit_id": "14", "amount": amount, "payer_name": "System Check", "payer_role": "OWNER", "payment_channel": "MANUAL_CASH"}, headers=headers)
+                body={"unit_id": ctx.unit_id, "amount": amount, "payer_name": "System Check", "payer_role": "OWNER", "payment_channel": "MANUAL_CASH"}, headers=headers)
 
 
 def check_concurrent(ctx: Context) -> Tuple[bool, str]:
@@ -312,8 +313,8 @@ def check_sequences(ctx: Context) -> Tuple[bool, str]:
         ctx.manager = login(ctx.backend, "mehmet.demir@begonya.com", "mehmet123")
     status, _ = pay(ctx)
     inserted = ctx.psql.run(ctx.backend.db_name,
-                            "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status) "
-                            "VALUES (14, 'Restart Check ' || clock_timestamp()::text, 1, CURRENT_DATE, 'PENDING') RETURNING id;")
+                            f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status) "
+                            f"VALUES ({ctx.unit_id}, 'Restart Check ' || clock_timestamp()::text, 1, CURRENT_DATE, 'PENDING') RETURNING id;")
     return status == 201 and inserted.isdigit(), f"payment after restart {status}, new dues id {inserted}"
 
 
@@ -332,6 +333,9 @@ CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
 def seed(ctx: Context) -> None:
     db = ctx.backend.db_name
     ctx.psql.run(db, TEST_SEED.read_text(encoding="utf-8"))
+    unit_id = ctx.psql.run(db, "SELECT id FROM units WHERE unit_number = 14 LIMIT 1;").strip()
+    if unit_id:
+        ctx.unit_id = unit_id
     manager2 = hash_password("OtherManager-123")
     ctx.psql.run(db, f"""
         INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
@@ -341,7 +345,7 @@ def seed(ctx: Context) -> None:
         SELECT s.id, p.id, 'other.manager@syscheck.test', '{manager2}', 'SITE_MANAGER', FALSE
         FROM sites s, persons p WHERE s.slug = 'syscheck-2' AND p.email = 'other.manager@syscheck.test';
         INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status)
-        VALUES (14, 'System Check Dues', 100.00, CURRENT_DATE, 'PENDING');
+        VALUES ({ctx.unit_id}, 'System Check Dues', 100.00, CURRENT_DATE, 'PENDING');
     """)
 
 

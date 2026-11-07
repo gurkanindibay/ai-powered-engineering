@@ -1,7 +1,6 @@
 use chrono::{DateTime, Datelike, Utc};
 
 use rust_decimal::Decimal;
-use uuid::Uuid;
 
 use crate::models::{
     DebtStatus, DuesLiability, HomeOwnerResponse, IndependentUnit, RegisterHomeOwnerRequest, Role,
@@ -530,7 +529,8 @@ impl SiteAdminService {
         let user_id = if user_numeric_id > 0 {
             user_numeric_id.to_string()
         } else {
-            format!("usr-resident-{}", &Uuid::new_v4().to_string()[..8])
+            let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            (max_u + 1).to_string()
         };
 
         let resident_user = User {
@@ -588,7 +588,8 @@ impl SiteAdminService {
 
             let mut explicit_tenant_user_id_in_mem: Option<String> = None;
             if has_explicit_tenant {
-                let tid = format!("usr-tenant-{}", &Uuid::new_v4().to_string()[..8]);
+                let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+                let tid = (max_u + 1).to_string();
                 let tenant_user = User {
                     id: tid.clone(),
                     site_id: site_id.to_string(),
@@ -742,8 +743,9 @@ impl SiteAdminService {
                 format!("{} {}", month_name, now.year())
             });
 
+            let max_d = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
             inner.dues.push(DuesLiability {
-                id: format!("DUE-{}-{}", unit_id, Uuid::new_v4().simple()),
+                id: (max_d + 1).to_string(),
                 unit_id: unit_id.clone(),
                 period,
                 principal_amount: monthly_dues,
@@ -1192,8 +1194,9 @@ impl SiteAdminService {
                 }
             } else if let Some(ref t_name) = req.tenant_full_name {
                 if !t_name.trim().is_empty() {
-                    let new_uid = format!("usr-t-{}", inner.users.len() + 1);
-                    let email = req.tenant_email.clone().unwrap_or_else(|| format!("tenant.{}@example.com", inner.users.len() + 1));
+                    let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+                    let new_uid = (max_u + 1).to_string();
+                    let email = req.tenant_email.clone().unwrap_or_else(|| format!("tenant.{}@example.com", new_uid));
                     let phone = req.tenant_phone.clone().unwrap_or_default();
                     inner.users.push(crate::models::User {
                         id: new_uid.clone(),
@@ -1482,8 +1485,9 @@ impl SiteAdminService {
             let temp_pass = generate_resident_temporary_password();
             let password_hash = crate::auth::hash_password(&temp_pass);
             let s_id = site_id.to_string();
+            let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
             inner.users.push(crate::models::User {
-                id: format!("usr-res-{}", &uuid::Uuid::new_v4().to_string()[..8]),
+                id: (max_u + 1).to_string(),
                 site_id: s_id,
                 full_name: full_name.to_string(),
                 email: email_norm,
@@ -1662,10 +1666,7 @@ impl SiteAdminService {
         let site_numeric = crate::db::require_id("entity", site_id)?;
         let type_name_trimmed = request.type_name.trim().to_string();
 
-        let mut id_str = format!("ht-{}", &Uuid::new_v4().to_string()[..8]);
-
-        // Save to DB if pool available
-        if let Some(ref pool) = self.state.pool {
+        let id_str = if let Some(ref pool) = self.state.pool {
             let client = pool.get().await.map_err(|e| format!("DB connection error: {}", e))?;
             let row = client
                 .query_one(
@@ -1682,8 +1683,12 @@ impl SiteAdminService {
                 .await
                 .map_err(|e| format!("DB insert error: {}", e))?;
             let db_id: i64 = row.get(0);
-            id_str = db_id.to_string();
-        }
+            db_id.to_string()
+        } else {
+            let inner = self.state.inner.read().await;
+            let max_id = inner.house_types.iter().filter_map(|h| crate::db::parse_id_to_i64(&h.id)).max().unwrap_or(0);
+            (max_id + 1).to_string()
+        };
 
         let tariff = crate::models::HouseTypeTariff {
             id: id_str,
@@ -1793,9 +1798,7 @@ impl SiteAdminService {
         let total_floors = request.total_floors.unwrap_or(10);
         let site_numeric = crate::db::require_id("entity", site_id)?;
 
-        let mut id_str = format!("blk-{}", &Uuid::new_v4().to_string()[..8]);
-
-        if let Some(ref pool) = self.state.pool {
+        let id_str = if let Some(ref pool) = self.state.pool {
             let client = pool.get().await.map_err(|e| format!("DB connection error: {}", e))?;
             let existing = client
                 .query_opt(
@@ -1807,13 +1810,13 @@ impl SiteAdminService {
 
             if let Some(row) = existing {
                 let db_id: i64 = row.get(0);
-                id_str = db_id.to_string();
                 client
                     .execute(
                         "UPDATE blocks SET total_floors = $1 WHERE id = $2",
                         &[&total_floors, &db_id],
                     )
                     .await.map_err(|e| e.to_string())?;
+                db_id.to_string()
             } else {
                 let row = client
                     .query_one(
@@ -1823,9 +1826,13 @@ impl SiteAdminService {
                     .await
                     .map_err(|e| format!("DB insert error: {}", e))?;
                 let db_id: i64 = row.get(0);
-                id_str = db_id.to_string();
+                db_id.to_string()
             }
-        }
+        } else {
+            let inner = self.state.inner.read().await;
+            let max_id = inner.blocks.iter().filter_map(|b| crate::db::parse_id_to_i64(&b.id)).max().unwrap_or(0);
+            (max_id + 1).to_string()
+        };
 
         let block = crate::models::BlockDto {
             id: id_str,

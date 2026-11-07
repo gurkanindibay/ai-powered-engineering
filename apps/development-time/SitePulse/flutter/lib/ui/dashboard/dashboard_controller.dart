@@ -327,8 +327,18 @@ class DashboardController extends ChangeNotifier {
       }
     }
     final existingIdx = _houseTypes.indexWhere((h) => h.typeName.toLowerCase() == typeName.toLowerCase());
+    int maxHtId = 0;
+    for (final ht in _houseTypes) {
+      final parsed = int.tryParse(ht.id);
+      if (parsed != null && parsed > maxHtId) {
+        maxHtId = parsed;
+      }
+    }
+    final nextId = existingIdx != -1
+        ? _houseTypes[existingIdx].id
+        : '${maxHtId > 0 ? maxHtId + 1 : _houseTypes.length + 1}';
     final newHt = HouseTypeTariff(
-      id: 'ht-${DateTime.now().millisecondsSinceEpoch}',
+      id: nextId,
       siteId: effectiveSiteId,
       typeName: typeName,
       duesAmount: duesAmount,
@@ -1918,7 +1928,6 @@ class DashboardController extends ChangeNotifier {
     List<String>? blocks,
   }) async {
     final siteBlocks = (blocks != null && blocks.isNotEmpty) ? blocks : ['A Blok', 'B Blok'];
-    final siteId = 'site-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
     final tempPassword = 'SP-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}-PASS';
 
     if (!isTestMode) {
@@ -1940,7 +1949,7 @@ class DashboardController extends ChangeNotifier {
 
         if (response.statusCode == 200 || response.statusCode == 201) {
           final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-          final createdSiteId = data['site_id']?.toString() ?? siteId;
+          final createdSiteId = (data['site_id'] ?? data['id'])?.toString() ?? '${_saasSites.length + 1}';
           final createdPassword = data['temporary_password']?.toString() ?? tempPassword;
           final newSite = TenantSiteItem(
             id: createdSiteId,
@@ -1987,8 +1996,17 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
+    int maxSiteId = 0;
+    for (final s in _saasSites) {
+      final parsed = int.tryParse(s.id);
+      if (parsed != null && parsed > maxSiteId) {
+        maxSiteId = parsed;
+      }
+    }
+    final simulatedSiteId = '${maxSiteId > 0 ? maxSiteId + 1 : _saasSites.length + 1}';
+
     final newSite = TenantSiteItem(
-      id: siteId,
+      id: simulatedSiteId,
       name: name,
       city: city,
       address: address,
@@ -2006,7 +2024,7 @@ class DashboardController extends ChangeNotifier {
     _saasSites = [newSite, ..._saasSites];
     _managedSitesList = List.from(_saasSites);
     _provisionedCredentials = ProvisionedSiteCredentials(
-      siteId: siteId,
+      siteId: simulatedSiteId,
       siteName: name,
       adminName: adminName,
       adminEmail: adminEmail,
@@ -2299,6 +2317,19 @@ class DashboardController extends ChangeNotifier {
           }
           await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
           await fetchHomeOwners(siteId: effectiveSiteId);
+          _provisionedHomeOwner = ProvisionedHomeOwnerCredentials(
+            block: block,
+            unitNo: unitNo,
+            ownerName: ownerName,
+            email: email,
+            phone: phone,
+            temporaryPassword: tempPassword,
+            isResident: isResident,
+            duesAmount: dues,
+            houseType: effectiveHouseType,
+          );
+          notifyListeners();
+          return;
         } else {
           final errorBody = utf8.decode(response.bodyBytes);
           debugPrint('registerHomeOwner remote error: ${response.statusCode} - $errorBody');
@@ -2323,7 +2354,7 @@ class DashboardController extends ChangeNotifier {
 
       if (!alreadyPresent) {
         final newFlat = FlatPaymentStatus(
-          id: 'f-${DateTime.now().millisecondsSinceEpoch}',
+          id: '${_flatsList.length + 1}',
           block: cleanBlock,
           unitNo: unitNo,
           residentName: ownerName,
@@ -2364,7 +2395,7 @@ class DashboardController extends ChangeNotifier {
       return h.unitNo == unitNo && b1 == b2;
     });
 
-    final String targetUnitId = existingHoIndex != -1 ? _homeOwners[existingHoIndex].unitId : 'unit-$unitNo';
+    final String targetUnitId = existingHoIndex != -1 ? _homeOwners[existingHoIndex].unitId : '$unitNo';
 
     // If unit already had an occupant and we're registering a new OWNER or TENANT, archive old occupant to history
     if (existingHoIndex != -1 && !isResidentRole) {
@@ -2374,7 +2405,7 @@ class DashboardController extends ChangeNotifier {
         final prevName = old.tenantFullName ?? old.ownerFullName;
         final prevRole = old.tenantFullName != null ? 'TENANT' : 'OWNER';
         currentHist.add(OccupancyHistoryItem(
-          id: DateTime.now().millisecondsSinceEpoch - 1000,
+          id: currentHist.length + 1,
           unitId: int.tryParse(targetUnitId.replaceAll(RegExp(r'[^0-9]'), '')) ?? unitNo,
           personId: 101,
           personName: prevName,
@@ -2401,7 +2432,7 @@ class DashboardController extends ChangeNotifier {
       }
 
       _localOccupancyHistory[targetUnitId]!.insert(0, OccupancyHistoryItem(
-        id: DateTime.now().millisecondsSinceEpoch,
+        id: (_localOccupancyHistory[targetUnitId]?.length ?? 0) + 1,
         unitId: int.tryParse(targetUnitId.replaceAll(RegExp(r'[^0-9]'), '')) ?? unitNo,
         personId: 102,
         personName: ownerName,
@@ -2453,7 +2484,7 @@ class DashboardController extends ChangeNotifier {
       if (isResidentRole) {
         final existingHo = _homeOwners[existingHoIndex];
         final newMember = UnitResidentMember(
-          id: 'usr-res-${DateTime.now().millisecondsSinceEpoch}',
+          id: '${existingHo.householdResidents.length + 1}',
           fullName: ownerName,
           relationship: relationship ?? 'Ev Sakini',
           phone: phone,
@@ -2470,7 +2501,7 @@ class DashboardController extends ChangeNotifier {
     } else {
       if (isResidentRole) {
         final newMember = UnitResidentMember(
-          id: 'usr-res-${DateTime.now().millisecondsSinceEpoch}',
+          id: '1',
           fullName: ownerName,
           relationship: relationship ?? 'Ev Sakini',
           phone: phone,
@@ -2813,7 +2844,7 @@ class DashboardController extends ChangeNotifier {
     required String residentId,
     String? siteId,
   }) async {
-    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? 'd-${_activeUnit.unitNumber}' : 'unit-1'));
+    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? _activeUnit.unitNumber : '1'));
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
 
     if (!isTestMode) {
@@ -2926,7 +2957,7 @@ class DashboardController extends ChangeNotifier {
     required String email,
     required String relationship,
   }) async {
-    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? 'd-${_activeUnit.unitNumber}' : 'unit-1'));
+    final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? _activeUnit.unitNumber : '1'));
     final effectiveBlock = block ?? (_activeUnit.block.isNotEmpty ? _activeUnit.block : 'A');
     final effectiveUnitNo = unitNo ?? (_activeUnit.unitNo > 0 ? _activeUnit.unitNo : 1);
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
@@ -2951,14 +2982,25 @@ class DashboardController extends ChangeNotifier {
           notifyListeners();
           return true;
         }
+        return false;
       } catch (e) {
         debugPrint('addHouseholdMember remote error: $e');
+        return false;
       }
     }
 
+    int maxMemId = 0;
+    for (final m in _unitResidents) {
+      final parsed = int.tryParse(m.id);
+      if (parsed != null && parsed > maxMemId) {
+        maxMemId = parsed;
+      }
+    }
+    final nextMemId = '${maxMemId > 0 ? maxMemId + 1 : _unitResidents.length + 1}';
+
     // In-memory update
     final newMember = UnitResidentMember(
-      id: 'mem-${DateTime.now().millisecondsSinceEpoch}',
+      id: nextMemId,
       fullName: fullName,
       relationship: relationship,
       phone: phone,
@@ -3081,8 +3123,14 @@ class DashboardController extends ChangeNotifier {
         return h;
       }).toList();
 
+      int maxOccId = 0;
+      for (final h in _localOccupancyHistory.values.expand((list) => list)) {
+        if (h.id > maxOccId) maxOccId = h.id;
+      }
+      final nextOccId = maxOccId > 0 ? maxOccId + 1 : (_localOccupancyHistory[unitId]?.length ?? 0) + 1;
+
       _localOccupancyHistory[unitId]!.insert(0, OccupancyHistoryItem(
-        id: DateTime.now().millisecondsSinceEpoch,
+        id: nextOccId,
         unitId: int.tryParse(unitId.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0,
         personId: 105,
         personName: fullName,
@@ -3152,8 +3200,16 @@ class DashboardController extends ChangeNotifier {
     final cleanBlock = target.block.replaceAll('Blok', '').trim();
     final existingIdx = _flatsList.indexWhere((f) => f.unitNo == target.unitNo && f.block == cleanBlock);
     if (existingIdx == -1) {
+      int maxFlatId = 0;
+      for (final f in _flatsList) {
+        final parsed = int.tryParse(f.id);
+        if (parsed != null && parsed > maxFlatId) {
+          maxFlatId = parsed;
+        }
+      }
+      final nextFlatId = '${maxFlatId > 0 ? maxFlatId + 1 : _flatsList.length + 1}';
       final newFlat = FlatPaymentStatus(
-        id: 'f-${DateTime.now().millisecondsSinceEpoch}',
+        id: nextFlatId,
         block: cleanBlock,
         unitNo: target.unitNo,
         residentName: target.fullName,
@@ -3200,7 +3256,7 @@ class DashboardController extends ChangeNotifier {
     final token = 'SP-HANE-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}';
     final unitLabel = _activeUnit.displayLabel.isNotEmpty ? _activeUnit.displayLabel : 'Yetkili Bağımsız Bölüm';
     final siteSlug = _activeUnit.siteName.isNotEmpty ? _activeUnit.siteName.toLowerCase().replaceAll(' ', '-') : 'site';
-    final unitId = _activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? 'd-${_activeUnit.unitNumber}' : 'unit');
+    final unitId = _activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? _activeUnit.unitNumber : '1');
     _unitInviteInfo = UnitInviteInfo(
       inviteUrl: 'https://sitepulse.app/join/$siteSlug/units/$unitId?token=$token',
       token: token,
@@ -3252,9 +3308,10 @@ class DashboardController extends ChangeNotifier {
       return false;
     }
 
+    final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     _siteBankAccount = SiteBankAccount(
-      id: 'sba-${DateTime.now().millisecondsSinceEpoch}',
-      siteId: _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : ''),
+      id: '1',
+      siteId: effectiveSiteId,
       bankCode: bank.code,
       bankName: bank.displayName,
       iban: cleanIban,
@@ -3267,7 +3324,48 @@ class DashboardController extends ChangeNotifier {
 
     _bankStatementError = null;
     notifyListeners();
+
+    if (!isTestMode) {
+      _syncBankAccountToBackend(
+        siteId: effectiveSiteId,
+        bankCode: bank.code,
+        iban: cleanIban,
+        accountHolder: accountHolder.trim(),
+      );
+    }
     return true;
+  }
+
+  Future<void> _syncBankAccountToBackend({
+    required String siteId,
+    required String bankCode,
+    required String iban,
+    required String accountHolder,
+  }) async {
+    try {
+      final url = ApiClient.uri('/api/v1/site-admin/bank-account/$siteId');
+      final response = await ApiClient.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'bank_code': bankCode,
+          'iban': iban,
+          'account_holder': accountHolder,
+          'configured_by': _userSession.id,
+        }),
+      ).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        if (data['id'] != null) {
+          _siteBankAccount = _siteBankAccount?.copyWith(
+            id: data['id'].toString(),
+          );
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('Sync bank account error: $e');
+    }
   }
 
   bool parseBankStatementFile({
@@ -3988,10 +4086,11 @@ class DashboardController extends ChangeNotifier {
         ? '₺${clearedDebt.toStringAsFixed(2)} borç kapatıldı • ₺${advanceCredit.toStringAsFixed(2)} avans bakiyenize aktarıldı'
         : (clearedDebt > Decimal.zero ? 'Aidat borcu başarıyla kapatıldı' : 'Aktif borç bulunmuyor • Avans bakiyenize aktarıldı');
 
+    final tempTxId = 'draft-${_accountTransactions.length + 1}';
     _accountTransactions.insert(
       0,
       AccountTransactionItem(
-        id: 'TXN-APP-${DateTime.now().millisecondsSinceEpoch}',
+        id: tempTxId,
         title: txTitle,
         subtitle: txSubtitle,
         amount: amount,
@@ -4554,8 +4653,8 @@ class DashboardController extends ChangeNotifier {
   List<CapitalProjectItem> _getTestFixtureCapitalProjects() {
     return [
       CapitalProjectItem(
-        id: 'cproj-1',
-        siteId: 'site-1',
+        id: '1',
+        siteId: '1',
         title: 'Asansör Revizyonu ve Yeşil Etiket',
         category: 'ELEVATOR',
         description: 'A ve B Blok 2 adet asansörün TSE standardına uyumlu yeşil etiket revizyonu ve halat değişimi',
@@ -4581,7 +4680,7 @@ class DashboardController extends ChangeNotifier {
   List<CapitalProjectInstallmentItem> _getTestFixtureCapitalInstallments(String projectId) {
     return [
       CapitalProjectInstallmentItem(
-        id: 'cinst-1',
+        id: '1',
         projectId: projectId,
         installmentNumber: 1,
         totalInstallments: 4,
@@ -4592,7 +4691,7 @@ class DashboardController extends ChangeNotifier {
         accruedAt: DateTime(2026, 9, 1),
       ),
       CapitalProjectInstallmentItem(
-        id: 'cinst-2',
+        id: '2',
         projectId: projectId,
         installmentNumber: 2,
         totalInstallments: 4,
@@ -4603,7 +4702,7 @@ class DashboardController extends ChangeNotifier {
         accruedAt: DateTime(2026, 10, 1),
       ),
       CapitalProjectInstallmentItem(
-        id: 'cinst-3',
+        id: '3',
         projectId: projectId,
         installmentNumber: 3,
         totalInstallments: 4,
@@ -4613,7 +4712,7 @@ class DashboardController extends ChangeNotifier {
         isAccrued: false,
       ),
       CapitalProjectInstallmentItem(
-        id: 'cinst-4',
+        id: '4',
         projectId: projectId,
         installmentNumber: 4,
         totalInstallments: 4,
@@ -4628,7 +4727,7 @@ class DashboardController extends ChangeNotifier {
   List<CapitalContractorDisbursementItem> _getTestFixtureCapitalDisbursements(String projectId) {
     return [
       CapitalContractorDisbursementItem(
-        id: 'cdisb-1',
+        id: '1',
         projectId: projectId,
         milestoneName: '1. Hakediş: Halat ve Pano Değişimi',
         invoiceNumber: 'FAT-2026-089',
@@ -4647,7 +4746,7 @@ class DashboardController extends ChangeNotifier {
   List<UnitCapitalShareItem> _getTestFixtureUnitCapitalShares(String projectId) {
     return [
       UnitCapitalShareItem(
-        unitId: 'unit-1',
+        unitId: '1',
         block: 'A',
         unitNumber: 1,
         ownerName: 'Ali Kaya',
@@ -4659,7 +4758,7 @@ class DashboardController extends ChangeNotifier {
         isSettled: true,
       ),
       UnitCapitalShareItem(
-        unitId: 'unit-2',
+        unitId: '2',
         block: 'A',
         unitNumber: 2,
         ownerName: 'Mehmet Demir',
@@ -4671,7 +4770,7 @@ class DashboardController extends ChangeNotifier {
         isSettled: false,
       ),
       UnitCapitalShareItem(
-        unitId: 'unit-3',
+        unitId: '3',
         block: 'B',
         unitNumber: 1,
         ownerName: 'Ahmet Yılmaz',
@@ -4812,8 +4911,17 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
+    int maxProjId = 0;
+    for (final p in _capitalProjects) {
+      final parsed = int.tryParse(p.id);
+      if (parsed != null && parsed > maxProjId) {
+        maxProjId = parsed;
+      }
+    }
+    final nextProjId = '${maxProjId > 0 ? maxProjId + 1 : _capitalProjects.length + 1}';
+
     final newProject = CapitalProjectItem(
-      id: 'cproj-${DateTime.now().millisecondsSinceEpoch}',
+      id: nextProjId,
       siteId: effectiveSiteId,
       title: title,
       category: category ?? 'ELEVATOR',
@@ -4839,7 +4947,7 @@ class DashboardController extends ChangeNotifier {
     if (installments != null) {
       _capitalInstallments = installments.map((inst) {
         return CapitalProjectInstallmentItem(
-          id: 'inst-${inst['installment_number']}-${newProject.id}',
+          id: '${inst['installment_number']}',
           projectId: newProject.id,
           installmentNumber: inst['installment_number'] as int,
           totalInstallments: inst['total_installments'] as int,
@@ -4956,8 +5064,17 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
+    int maxDisbId = 0;
+    for (final d in _capitalDisbursements) {
+      final parsed = int.tryParse(d.id);
+      if (parsed != null && parsed > maxDisbId) {
+        maxDisbId = parsed;
+      }
+    }
+    final nextDisbId = '${maxDisbId > 0 ? maxDisbId + 1 : _capitalDisbursements.length + 1}';
+
     final newDisbursement = CapitalContractorDisbursementItem(
-      id: 'cdisb-${DateTime.now().millisecondsSinceEpoch}',
+      id: nextDisbId,
       projectId: projectId,
       milestoneName: milestoneName,
       invoiceNumber: invoiceNumber,

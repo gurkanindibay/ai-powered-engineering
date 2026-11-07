@@ -1,7 +1,6 @@
 use std::time::Duration;
 use chrono::{Datelike, NaiveDate, Utc};
 use rust_decimal::Decimal;
-use uuid::Uuid;
 
 use crate::handlers::apply_advance_payments_offset;
 use crate::models::{DebtStatus, DuesLiability};
@@ -105,7 +104,8 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
                     }
                 }
             } else {
-                due.id = format!("DUE-{}-{}", unit.id, Uuid::new_v4().simple());
+                let max_d = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
+                due.id = (max_d + 1).to_string();
             }
             inner.dues.push(due);
             site_newly_accrued += 1;

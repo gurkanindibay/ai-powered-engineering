@@ -16,7 +16,6 @@ use crate::services::{
     SaasTenantService, SiteAdminService, SiteBankAccountService, VirtualIbanService,
 };
 use crate::state::AppState;
-use uuid::Uuid;
 
 
 /// Snapshot of the in-memory ledger (liability payment state and advance
@@ -130,8 +129,9 @@ pub fn apply_advance_payments_offset(
 
                 let offset_txn_id = format!("TXN-ADV-OFFSET-{}", due_id);
                 if !inner.reconciliation_queue.iter().any(|m| m.transaction.transaction_id == offset_txn_id) {
+                    let match_seq = inner.reconciliation_queue.len() + 1;
                     inner.reconciliation_queue.push(ReconciliationMatch {
-                        match_id: format!("MATCH-OFFSET-{}", Uuid::new_v4().simple()),
+                        match_id: format!("MATCH-OFFSET-{}", match_seq),
                         transaction: BankTransactionItem {
                             transaction_id: offset_txn_id,
                             date: Utc::now().date_naive(),
@@ -163,8 +163,9 @@ pub fn apply_advance_payments_offset(
 
                 let offset_txn_id = format!("TXN-ADV-PARTIAL-{}", due_id);
                 if !inner.reconciliation_queue.iter().any(|m| m.transaction.transaction_id == offset_txn_id) {
+                    let match_seq = inner.reconciliation_queue.len() + 1;
                     inner.reconciliation_queue.push(ReconciliationMatch {
-                        match_id: format!("MATCH-OFFSET-PARTIAL-{}", Uuid::new_v4().simple()),
+                        match_id: format!("MATCH-OFFSET-PARTIAL-{}", match_seq),
                         transaction: BankTransactionItem {
                             transaction_id: offset_txn_id,
                             date: Utc::now().date_naive(),
@@ -1172,9 +1173,14 @@ pub async fn confirm_reconciliation(
         type PendingCollection = (String, Option<String>, Option<String>, Decimal, Option<String>, String);
         let matches_to_save: Vec<PendingCollection> = confirmed_matches
             .iter()
-            .map(|m| {
+            .enumerate()
+            .map(|(idx, m)| {
                 (
-                    format!("txn-{}", Uuid::new_v4().simple()),
+                    if !m.transaction.transaction_id.is_empty() {
+                        m.transaction.transaction_id.clone()
+                    } else {
+                        format!("txn-{}", idx + 1)
+                    },
                     m.matched_due_id.clone(),
                     m.matched_unit_id.clone(),
                     m.transaction.amount,
@@ -1717,8 +1723,10 @@ pub async fn process_bank_incoming_webhook(
             let txn_desc = payload.description.clone().unwrap_or_else(|| {
                 format!("Site Ana Hesabı FAST Transferi: {}", payload.virtual_iban)
             });
-            let match_id = format!("MATCH-{}", Uuid::new_v4().simple());
-            let receipt_id = format!("DKN-UNM-{}", Uuid::new_v4().simple());
+            let match_seq = inner.reconciliation_queue.len() + 1;
+            let receipt_seq = inner.reconciliation_queue.len() + 1;
+            let match_id = format!("MATCH-{}", match_seq);
+            let receipt_id = format!("DKN-UNM-{}", receipt_seq);
 
             inner.reconciliation_queue.push(ReconciliationMatch {
                 match_id: match_id.clone(),
@@ -1789,7 +1797,7 @@ pub async fn process_bank_incoming_webhook(
                 cleared_amount: Decimal::ZERO,
                 remaining_debt: Decimal::ZERO,
                 advance_payment: current_advance,
-                receipt_id: format!("DUP-{}", Uuid::new_v4().simple()),
+                receipt_id: format!("DUP-{}", inner.reconciliation_queue.len() + 1),
                 message: "Duplicate bank transaction notification ignored. Idempotency preserved.".to_string(),
             }),
         ));
@@ -1829,7 +1837,11 @@ pub async fn process_bank_incoming_webhook(
 
     // Persist to PostgreSQL database (STORY-05-01 / Financial Ledger)
     if let Some(ref pool) = state.pool {
-        let txn_id = format!("txn-{}", Uuid::new_v4().simple());
+        let txn_id = if !payload.transaction_id.is_empty() {
+            payload.transaction_id.clone()
+        } else {
+            format!("txn-{}", inner.reconciliation_queue.len() + 1)
+        };
         let ref_code = payload.transaction_id.clone();
         let desc = payload.description.clone().unwrap_or_else(|| format!("FAST Bank Transfer: {}", unit.id));
         crate::db::save_collection_transaction(
@@ -1856,7 +1868,8 @@ pub async fn process_bank_incoming_webhook(
         .sum();
 
     // 5. Generate immutable receipt and append to reconciliation queue
-    let receipt_id = format!("DKN-2026-{}", Uuid::new_v4().simple());
+    let receipt_seq = inner.reconciliation_queue.len() + 1;
+    let receipt_id = format!("DKN-2026-{}", receipt_seq);
 
     let unit_block_desc = if unit.block_id.contains("Blok") {
         unit.block_id.clone()
@@ -1915,8 +1928,9 @@ pub async fn process_bank_incoming_webhook(
         .and_then(|uid| inner.users.iter().find(|u| &u.id == uid))
         .map(|u| u.full_name.clone());
 
+    let match_seq = inner.reconciliation_queue.len() + 1;
     inner.reconciliation_queue.push(ReconciliationMatch {
-        match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
+        match_id: format!("MATCH-{}", match_seq),
         transaction: BankTransactionItem {
             transaction_id: payload.transaction_id.clone(),
             date: Utc::now().date_naive(),
@@ -1994,8 +2008,9 @@ pub async fn create_dues_period(
         return Ok((StatusCode::OK, Json(existing.clone())));
     }
 
+    let max_p = inner.dues_periods.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
     let new_period = DuesPeriod {
-        id: format!("PER-{}", Uuid::new_v4().simple()),
+        id: (max_p + 1).to_string(),
         site_id: payload.site_id.clone(),
         period_name: payload.period_name.clone(),
         due_date: payload.due_date,
@@ -2041,8 +2056,9 @@ pub async fn accrue_monthly_dues(
             && p.period_name.eq_ignore_ascii_case(&payload.period)
     });
     if !period_exists {
+        let max_p = inner.dues_periods.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
         let period_record = DuesPeriod {
-            id: format!("PER-{}", Uuid::new_v4().simple()),
+            id: (max_p + 1).to_string(),
             site_id: payload.site_id.clone(),
             period_name: payload.period.clone(),
             due_date: payload.due_date,
@@ -2080,7 +2096,8 @@ pub async fn accrue_monthly_dues(
                     .unwrap_or(Decimal::new(1400, 0))
             };
 
-            let due_id = format!("DUE-{}-{}", unit.id, Uuid::new_v4().simple());
+            let max_d = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
+            let due_id = (max_d + 1).to_string();
             inner.dues.push(DuesLiability {
                 id: due_id,
                 unit_id: unit.id.clone(),
@@ -2185,7 +2202,8 @@ pub async fn record_homeowner_payment(
         }
     };
 
-    let payment_id = format!("PAY-{}", Uuid::new_v4().simple());
+    let payment_num = inner.homeowner_payments.len() + 1;
+    let payment_id = format!("PAY-{}", payment_num);
     let mut remaining_payment = payload.amount;
     let mut cleared_debt = Decimal::ZERO;
 
@@ -2273,11 +2291,12 @@ pub async fn record_homeowner_payment(
 
     inner.homeowner_payments.push(record.clone());
 
-    let receipt_id = format!("RCP-{}", Uuid::new_v4().simple());
+    let receipt_seq = inner.homeowner_payments.len();
+    let receipt_id = format!("RCP-{}", receipt_seq);
 
     if let Some(ref pool) = state.pool {
         let pool = pool.clone();
-        let txn_id = format!("txn-{}", Uuid::new_v4().simple());
+        let txn_id = format!("txn-{}", receipt_seq);
         let unit_id = unit.id.clone();
         let amount = payload.amount;
         let ref_code = payload.reference_code.clone();
@@ -2296,8 +2315,9 @@ pub async fn record_homeowner_payment(
 
         crate::db::save_homeowner_payment(&pool, &rec).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
 
+        let match_seq = inner.reconciliation_queue.len() + 1;
         let r_match = ReconciliationMatch {
-            match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
+            match_id: format!("MATCH-{}", match_seq),
             transaction: BankTransactionItem {
                 transaction_id: ref_code.clone().unwrap_or_else(|| rec.id.clone()),
                 date: Utc::now().date_naive(),
@@ -2344,8 +2364,9 @@ pub async fn record_homeowner_payment(
     }
 
     // Also record in reconciliation_queue as an approved digital receipt
+    let match_seq = inner.reconciliation_queue.len() + 1;
     inner.reconciliation_queue.push(ReconciliationMatch {
-        match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
+        match_id: format!("MATCH-{}", match_seq),
         transaction: BankTransactionItem {
             transaction_id: payload.reference_code.unwrap_or_else(|| payment_id.clone()),
             date: Utc::now().date_naive(),
@@ -2936,58 +2957,213 @@ pub async fn provision_site_units(
     let accrue_dues = payload.accrue_initial_dues.unwrap_or(true);
     let dues_period = payload.period.clone().unwrap_or_else(|| "Ekim 2026".to_string());
 
-    let mut inner = state.inner.write().await;
-
     // 1. Resolve or register target site
+    let s_name = payload.site_name.clone().unwrap_or_else(|| "Yeni Yaşam Sitesi".to_string());
+    let slug = crate::services::to_slug(&s_name);
+
     let site_id = if let Some(ref s_id) = payload.site_id {
-        if inner.sites.iter().any(|s| &s.id == s_id) {
-            s_id.clone()
+        let in_mem = {
+            let inner = state.inner.read().await;
+            inner.sites.iter().find(|s| s.id == *s_id || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(s_id)).map(|s| s.id.clone())
+        };
+        if let Some(id) = in_mem {
+            id
+        } else if let Some(ref pool) = state.pool {
+            let id_num = match crate::db::parse_id_to_i64(s_id) {
+                Some(n) => n,
+                None => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(serde_json::json!({
+                            "status": "ERROR",
+                            "message": format!("Invalid site ID: {}", s_id)
+                        })),
+                    );
+                }
+            };
+            let client = match pool.get().await {
+                Ok(c) => c,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "status": "ERROR",
+                            "message": format!("Database error: {}", e)
+                        })),
+                    );
+                }
+            };
+            let row = match client.query_opt("SELECT id, name, slug, address, status, plan_type, license_end_date FROM sites WHERE id = $1", &[&id_num]).await {
+                Ok(r) => r,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "status": "ERROR",
+                            "message": format!("Database error: {}", e)
+                        })),
+                    );
+                }
+            };
+            if let Some(r) = row {
+                let id_val: i64 = r.get(0);
+                let id_str = id_val.to_string();
+                let name: String = r.get(1);
+                let s_slug: Option<String> = r.get(2);
+                let addr: Option<String> = r.get(3);
+                let st: String = r.get(4);
+                let plan: String = r.get(5);
+                let lic_end: Option<chrono::NaiveDate> = r.get(6);
+                let mut inner = state.inner.write().await;
+                if !inner.sites.iter().any(|s| s.id == id_str) {
+                    inner.sites.push(Site {
+                        id: id_str.clone(),
+                        name,
+                        address: addr.unwrap_or_else(|| "Adres".to_string()),
+                        slug: s_slug.unwrap_or_else(|| slug.clone()),
+                        status: st,
+                        plan_type: plan,
+                        license_end_date: lic_end.unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
+                        timezone: crate::models::default_site_timezone(),
+                    });
+                }
+                id_str
+            } else {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({
+                        "status": "ERROR",
+                        "message": format!("Site with ID '{}' not found", s_id)
+                    })),
+                );
+            }
         } else {
-            let s_name = payload.site_name.clone().unwrap_or_else(|| "Yeni Yaşam Sitesi".to_string());
-            let slug = crate::services::to_slug(&s_name);
-            inner.sites.push(Site {
-                id: s_id.clone(),
-                name: s_name.clone(),
-                address: "Ataşehir, İstanbul".to_string(),
-                slug,
-                status: "ACTIVE".to_string(),
-                plan_type: "PREMIUM".to_string(),
-                license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
-                timezone: crate::models::default_site_timezone(),
-            });
-            s_id.clone()
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "status": "ERROR",
+                    "message": format!("Site with ID '{}' not found", s_id)
+                })),
+            );
         }
-    } else if let Some(ref s_name) = payload.site_name {
-        let s_id = format!("site-{}", &uuid::Uuid::new_v4().to_string()[..8]);
-        let slug = crate::services::to_slug(s_name);
-        inner.sites.push(Site {
-            id: s_id.clone(),
-            name: s_name.clone(),
-            address: "Kadıköy, İstanbul".to_string(),
-            slug,
-            status: "ACTIVE".to_string(),
-            plan_type: "PREMIUM".to_string(),
-            license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
-            timezone: crate::models::default_site_timezone(),
-        });
-        s_id
-    } else if let Some(first_site) = inner.sites.first() {
-        first_site.id.clone()
     } else {
-        let s_id = "site-1".to_string();
-        inner.sites.push(Site {
-            id: s_id.clone(),
-            name: "Begonya Sitesi".to_string(),
-            address: "Ataşehir, Begonya Sok. No:14, İstanbul".to_string(),
-            slug: "begonya-sitesi".to_string(),
-            status: "ACTIVE".to_string(),
-            plan_type: "PREMIUM".to_string(),
-            license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
-            timezone: crate::models::default_site_timezone(),
-        });
-        s_id
+        let in_mem = {
+            let inner = state.inner.read().await;
+            inner.sites.iter().find(|s| s.slug == slug || s.name.eq_ignore_ascii_case(&s_name)).map(|s| s.id.clone())
+        };
+        if let Some(id) = in_mem {
+            id
+        } else if let Some(ref pool) = state.pool {
+            let client = match pool.get().await {
+                Ok(c) => c,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "status": "ERROR",
+                            "message": format!("Database error: {}", e)
+                        })),
+                    );
+                }
+            };
+            let row = match client.query_opt("SELECT id, name, slug, address, status, plan_type, license_end_date FROM sites WHERE slug = $1 OR LOWER(name) = LOWER($2)", &[&slug, &s_name]).await {
+                Ok(r) => r,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "status": "ERROR",
+                            "message": format!("Database error: {}", e)
+                        })),
+                    );
+                }
+            };
+            if let Some(r) = row {
+                let id_val: i64 = r.get(0);
+                let id_str = id_val.to_string();
+                let name: String = r.get(1);
+                let s_slug: Option<String> = r.get(2);
+                let addr: Option<String> = r.get(3);
+                let st: String = r.get(4);
+                let plan: String = r.get(5);
+                let lic_end: Option<chrono::NaiveDate> = r.get(6);
+                let mut inner = state.inner.write().await;
+                if !inner.sites.iter().any(|s| s.id == id_str) {
+                    inner.sites.push(Site {
+                        id: id_str.clone(),
+                        name,
+                        address: addr.unwrap_or_else(|| "Kadıköy, İstanbul".to_string()),
+                        slug: s_slug.unwrap_or_else(|| slug.clone()),
+                        status: st,
+                        plan_type: plan,
+                        license_end_date: lic_end.unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
+                        timezone: crate::models::default_site_timezone(),
+                    });
+                }
+                id_str
+            } else {
+                let license_end = Utc::now().date_naive() + chrono::Days::new(365);
+                let ins_row = match client
+                    .query_one(
+                        r#"
+                        INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
+                        VALUES ($1, $2, $3, 'ACTIVE', 'PREMIUM', $4)
+                        ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+                        RETURNING id
+                        "#,
+                        &[&s_name, &"Kadıköy, İstanbul", &slug, &license_end],
+                    )
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(serde_json::json!({
+                                "status": "ERROR",
+                                "message": format!("Failed to create site: {}", e)
+                            })),
+                        );
+                    }
+                };
+                let new_id: i64 = ins_row.get(0);
+                let id_str = new_id.to_string();
+                let mut inner = state.inner.write().await;
+                inner.sites.push(Site {
+                    id: id_str.clone(),
+                    name: s_name,
+                    address: "Kadıköy, İstanbul".to_string(),
+                    slug,
+                    status: "ACTIVE".to_string(),
+                    plan_type: "PREMIUM".to_string(),
+                    license_end_date: license_end,
+                    timezone: crate::models::default_site_timezone(),
+                });
+                id_str
+            }
+        } else {
+            let mut inner = state.inner.write().await;
+            if let Some(existing) = inner.sites.iter().find(|s| s.slug == slug || s.name.eq_ignore_ascii_case(&s_name)) {
+                existing.id.clone()
+            } else {
+                let max_id = inner.sites.iter().filter_map(|s| crate::db::parse_id_to_i64(&s.id)).max().unwrap_or(0);
+                let id_str = (max_id + 1).to_string();
+                inner.sites.push(Site {
+                    id: id_str.clone(),
+                    name: s_name,
+                    address: "Kadıköy, İstanbul".to_string(),
+                    slug,
+                    status: "ACTIVE".to_string(),
+                    plan_type: "PREMIUM".to_string(),
+                    license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
+                    timezone: crate::models::default_site_timezone(),
+                });
+                id_str
+            }
+        }
     };
 
+    let mut inner = state.inner.write().await;
     let site_name = inner.sites.iter().find(|s| s.id == site_id).map(|s| s.name.clone()).unwrap_or_else(|| "Site".to_string());
 
     // 2. Sample 12 Turkish resident names
@@ -3010,7 +3186,6 @@ pub async fn provision_site_units(
     let site_slug = crate::services::to_slug(&site_name);
 
     for i in 1..=units_count {
-        let unit_id = format!("d-{}", i);
         let unit_number = i as i32;
         let floor = ((i - 1) / 4 + 1) as i32;
         let name_idx = (i - 1) % sample_names.len();
@@ -3025,16 +3200,16 @@ pub async fn provision_site_units(
             unit_number,
         );
 
-        let user_id = format!("usr-{}-{}", site_id, i);
-
         // Add or update resident user
-        if let Some(existing_user) = inner.users.iter_mut().find(|u| u.id == user_id) {
+        let user_id = if let Some(existing_user) = inner.users.iter_mut().find(|u| u.email == email || (u.site_id == site_id && u.full_name == resident_name)) {
             existing_user.full_name = resident_name.clone();
-            existing_user.email = email.clone();
             existing_user.phone = phone.clone();
+            existing_user.id.clone()
         } else {
+            let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            let u_id = (max_u + 1).to_string();
             inner.users.push(User {
-                id: user_id.clone(),
+                id: u_id.clone(),
                 site_id: site_id.clone(),
                 full_name: resident_name.clone(),
                 email: email.clone(),
@@ -3048,19 +3223,23 @@ pub async fn provision_site_units(
                 created_at: Utc::now(),
                 person_id: None,
             });
-        }
+            u_id
+        };
 
         // Add or update independent flat
-        if let Some(existing_unit) = inner.units.iter_mut().find(|u| u.id == unit_id) {
-            existing_unit.site_id = site_id.clone();
-            existing_unit.block_id = block_name.clone();
-            existing_unit.unit_number = unit_number;
-            existing_unit.floor = floor;
-            existing_unit.owner_user_id = Some(user_id.clone());
-            existing_unit.virtual_iban = Some(virtual_iban.clone());
+        let existing_pos = inner.units.iter().position(|u| u.site_id == site_id && u.unit_number == unit_number);
+        let unit_id = if let Some(pos) = existing_pos {
+            let u = &mut inner.units[pos];
+            u.block_id = block_name.clone();
+            u.floor = floor;
+            u.owner_user_id = Some(user_id.clone());
+            u.virtual_iban = Some(virtual_iban.clone());
+            u.id.clone()
         } else {
+            let max_unit = inner.units.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            let new_unit_id = (max_unit + 1).to_string();
             inner.units.push(IndependentUnit {
-                id: unit_id.clone(),
+                id: new_unit_id.clone(),
                 site_id: site_id.clone(),
                 block_id: block_name.clone(),
                 unit_number,
@@ -3071,7 +3250,8 @@ pub async fn provision_site_units(
                 virtual_iban: Some(virtual_iban.clone()),
                 house_type: Some(if unit_number % 2 == 0 { "3+1".to_string() } else { "2+1".to_string() }),
             });
-        }
+            new_unit_id
+        };
 
         // Matching criteria & sender IBAN
         inner.unit_payer_names.insert(unit_id.clone(), vec![resident_name.clone()]);
@@ -3083,24 +3263,23 @@ pub async fn provision_site_units(
         );
 
         // Optional dues accrual
-        if accrue_dues {
-            let due_id = format!("b-{}-{}", unit_id, crate::services::to_slug(&dues_period));
-            if !inner.dues.iter().any(|d| d.id == due_id) {
-                inner.dues.push(DuesLiability {
-                    id: due_id,
-                    unit_id: unit_id.clone(),
-                    period: dues_period.clone(),
-                    principal_amount: monthly_dues,
-                    delay_penalty: Decimal::ZERO,
-                    total_amount: monthly_dues,
-                    due_date: Utc::now().date_naive() + chrono::Days::new(15),
-                    status: DebtStatus::Pending,
-                    paid_principal: Decimal::ZERO,
-                    paid_penalty: Decimal::ZERO,
-                    debtor_type: "TENANT".to_string(),
-                    expense_type: "OPERATIONAL_DUES".to_string(),
-                });
-            }
+        if accrue_dues && !inner.dues.iter().any(|d| d.unit_id == unit_id && d.period == dues_period) {
+            let max_due = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
+            let due_id = (max_due + 1).to_string();
+            inner.dues.push(DuesLiability {
+                id: due_id,
+                unit_id: unit_id.clone(),
+                period: dues_period.clone(),
+                principal_amount: monthly_dues,
+                delay_penalty: Decimal::ZERO,
+                total_amount: monthly_dues,
+                due_date: Utc::now().date_naive() + chrono::Days::new(15),
+                status: DebtStatus::Pending,
+                paid_principal: Decimal::ZERO,
+                paid_penalty: Decimal::ZERO,
+                debtor_type: "TENANT".to_string(),
+                expense_type: "OPERATIONAL_DUES".to_string(),
+            });
         }
 
         // Auto-offset against any pre-existing advance balance for this unit

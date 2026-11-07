@@ -2,7 +2,6 @@ use chrono::{NaiveDate, Utc};
 use regex::Regex;
 use rust_decimal::Decimal;
 use std::str::FromStr;
-use uuid::Uuid;
 
 use crate::models::{BankStatementFormat, BankTransactionItem};
 use crate::services::mt940_engine::Mt940Engine;
@@ -139,7 +138,7 @@ impl BankStatementParser {
         let amount = detected_amount?;
         let date = detected_date.unwrap_or_else(|| Utc::now().date_naive());
         let description = detected_desc.unwrap_or_else(|| format!("Banka İşlemi Satır {}", row_num));
-        let txn_id = detected_ref.unwrap_or_else(|| format!("TXN-EXCEL-{:03}-{}", row_num, Uuid::new_v4().simple()));
+        let txn_id = detected_ref.unwrap_or_else(|| format!("TXN-EXCEL-{:03}", row_num));
 
         Some(BankTransactionItem {
             transaction_id: txn_id,
@@ -159,7 +158,7 @@ impl BankStatementParser {
 
         // Clean amount and currency tokens from description
         let description = line.to_string();
-        let txn_id = format!("TXN-ROW-{:03}-{}", row_num, Uuid::new_v4().simple());
+        let txn_id = format!("TXN-ROW-{:03}", row_num);
 
         Some(BankTransactionItem {
             transaction_id: txn_id,

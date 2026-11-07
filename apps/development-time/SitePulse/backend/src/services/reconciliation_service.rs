@@ -1,7 +1,6 @@
 use chrono::NaiveDate;
 use regex::Regex;
 use rust_decimal::Decimal;
-use uuid::Uuid;
 
 use crate::models::{
     BankTransactionItem, DebtStatus, DuesLiability, IndependentUnit,
@@ -219,7 +218,7 @@ impl ReconciliationService {
             (ReconciliationStatus::Unmatched, None)
         };
 
-        let match_id = format!("MATCH-{}", Uuid::new_v4().simple());
+        let match_id = format!("MATCH-{}", txn.transaction_id);
 
         ReconciliationMatch {
             match_id,
