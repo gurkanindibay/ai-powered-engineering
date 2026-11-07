@@ -2,7 +2,6 @@ use chrono::NaiveDate;
 use regex::Regex;
 use rust_decimal::Decimal;
 use std::str::FromStr;
-use uuid::Uuid;
 
 use crate::models::BankTransactionItem;
 
@@ -31,7 +30,9 @@ impl Mt940Engine {
         // Tag pattern: :TAG:
         let tag_regex = Regex::new(r"^:([0-9]{2}[A-Z]?):(.*)$").map_err(|e| e.to_string())?;
 
-        let finalize_transaction = |t_61: &str, t_86: &[String]| -> Option<BankTransactionItem> {
+        let mut tx_seq = 0usize;
+        let mut finalize_transaction = |t_61: &str, t_86: &[String]| -> Option<BankTransactionItem> {
+            tx_seq += 1;
             let parsed_61 = Self::parse_tag_61(t_61)?;
             let narrative = if !t_86.is_empty() {
                 t_86.join(" ").trim().to_string()
@@ -39,8 +40,9 @@ impl Mt940Engine {
                 parsed_61.reference.clone().unwrap_or_else(|| "MT940 Transaction".to_string())
             };
 
+            let fallback_ref = format!("TXN-MT940-{:03}", tx_seq);
             Some(BankTransactionItem {
-                transaction_id: parsed_61.reference.clone().unwrap_or_else(|| format!("TXN-{}", Uuid::new_v4().simple())),
+                transaction_id: parsed_61.reference.clone().unwrap_or(fallback_ref),
                 date: parsed_61.date,
                 amount: parsed_61.amount,
                 currency: "TRY".to_string(),

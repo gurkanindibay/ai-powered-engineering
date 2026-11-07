@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 use chrono::Utc;
 use jsonwebtoken::{decode, decode_header, jwk::JwkSet, Algorithm, DecodingKey, Validation};
 use serde::Deserialize;
-use uuid::Uuid;
 
 use crate::auth;
 use crate::models::{
@@ -192,8 +191,13 @@ impl AuthService {
                 .filter(|t| !t.trim().is_empty())
                 .ok_or_else(|| "No account exists for this Google identity. Ask your site manager for an invitation link.".to_string())?;
             let scope = self.consume_invite_token(token.trim()).await?;
+            let next_user_id = {
+                let inner = self.state.inner.read().await;
+                let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+                (max_u + 1).to_string()
+            };
             let new_user = User {
-                id: format!("usr-{}", Uuid::new_v4().simple()),
+                id: next_user_id,
                 site_id: scope.site_id,
                 full_name: payload.name.clone(),
                 email: email_norm.clone(),
@@ -213,9 +217,16 @@ impl AuthService {
             new_user
         };
 
+        let mut user = user;
         self.ensure_site_active(&user).await?;
         if let Some(ref pool) = self.state.pool {
             crate::db::save_user(pool, &user).await.map_err(|e| format!("Failed to persist user: {}", e))?;
+            if let Ok(client) = pool.get().await {
+                if let Ok(Some(row)) = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&user.email.to_lowercase()]).await {
+                    let db_id: i64 = row.get("id");
+                    user.id = db_id.to_string();
+                }
+            }
         }
         Ok(self.auth_response(&user).await)
     }
@@ -238,8 +249,14 @@ impl AuthService {
             .ok_or_else(|| "An invitation token from your site manager is required to register.".to_string())?;
         let scope = self.consume_invite_token(token.trim()).await?;
 
-        let new_user = User {
-            id: format!("usr-{}", Uuid::new_v4().simple()),
+        let next_user_id = {
+            let inner = self.state.inner.read().await;
+            let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            (max_u + 1).to_string()
+        };
+
+        let mut new_user = User {
+            id: next_user_id,
             site_id: scope.site_id,
             full_name: request.full_name.trim().to_string(),
             email: email_norm,
@@ -260,6 +277,12 @@ impl AuthService {
         }
         if let Some(ref pool) = self.state.pool {
             crate::db::save_user(pool, &new_user).await.map_err(|e| format!("Failed to persist user: {}", e))?;
+            if let Ok(client) = pool.get().await {
+                if let Ok(Some(row)) = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&new_user.email.to_lowercase()]).await {
+                    let db_id: i64 = row.get("id");
+                    new_user.id = db_id.to_string();
+                }
+            }
         }
         Ok(self.auth_response(&new_user).await)
     }

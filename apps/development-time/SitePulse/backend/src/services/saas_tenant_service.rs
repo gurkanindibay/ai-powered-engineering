@@ -1,7 +1,6 @@
 use chrono::Utc;
 
 use rust_decimal::Decimal;
-use uuid::Uuid;
 
 use crate::models::{
     RegisterSiteRequest, Role, SaasGlobalStatsDto, SaasSiteSummaryDto, Site,
@@ -50,12 +49,122 @@ impl SaasTenantService {
             counter += 1;
         }
 
-        let site_id = format!("site-{}", &Uuid::new_v4().to_string()[..8]);
         let plan = request
             .plan_type
             .unwrap_or_else(|| "STANDARD".to_string())
             .to_uppercase();
         let license_end = Utc::now().date_naive() + chrono::Days::new(365);
+
+        let temp_pass = generate_secure_temporary_password();
+        let password_hash = crate::auth::hash_password(&temp_pass);
+
+        let blocks_list: Vec<String> = request
+            .blocks
+            .filter(|b| !b.is_empty())
+            .unwrap_or_else(|| vec!["A Blok".to_string(), "B Blok".to_string()]);
+
+        let (site_id, user_id, block_dtos, person_id) = if let Some(ref pool) = self.state.pool {
+            let client = pool.get().await.map_err(|e| e.to_string())?;
+
+            // 1. Insert site with RETURNING id
+            let site_row = client
+                .query_one(
+                    r#"
+                    INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
+                    VALUES ($1, $2, $3, 'ACTIVE', $4, $5)
+                    RETURNING id
+                    "#,
+                    &[
+                        &request.site_name,
+                        &request.address,
+                        &slug,
+                        &plan,
+                        &license_end,
+                    ],
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            let numeric_site: i64 = site_row.get(0);
+            let s_id = numeric_site.to_string();
+
+            // 2. Insert person & user with RETURNING id
+            let person_row = client
+                .query_one(
+                    r#"
+                    INSERT INTO persons (full_name, phone, email, person_type)
+                    VALUES ($1, $2, $3, 'SITE_MANAGER')
+                    RETURNING id
+                    "#,
+                    &[
+                        &request.site_admin_full_name,
+                        &request.site_admin_phone,
+                        &email_norm,
+                    ],
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            let p_id: i64 = person_row.get(0);
+
+            let user_row = client
+                .query_one(
+                    r#"
+                    INSERT INTO users (site_id, email, password_hash, role, must_change_password, person_id)
+                    VALUES ($1, $2, $3, 'SITE_MANAGER', true, $4)
+                    RETURNING id
+                    "#,
+                    &[
+                        &numeric_site,
+                        &email_norm,
+                        &password_hash,
+                        &p_id,
+                    ],
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            let numeric_user: i64 = user_row.get(0);
+            let u_id = numeric_user.to_string();
+
+            // 3. Insert blocks with RETURNING id
+            let mut created_blocks = Vec::new();
+            for bname in &blocks_list {
+                let block_row = client
+                    .query_one(
+                        "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10) RETURNING id",
+                        &[&numeric_site, bname],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let numeric_block: i64 = block_row.get(0);
+                created_blocks.push(crate::models::BlockDto {
+                    id: numeric_block.to_string(),
+                    site_id: s_id.clone(),
+                    block_name: bname.clone(),
+                    total_floors: 10,
+                });
+            }
+
+            (s_id, u_id, created_blocks, Some(p_id))
+        } else {
+            let max_site = inner.sites.iter().filter_map(|s| crate::db::parse_id_to_i64(&s.id)).max().unwrap_or(0);
+            let s_id = (max_site + 1).to_string();
+
+            let max_user = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            let u_id = (max_user + 1).to_string();
+
+            let mut max_block = inner.blocks.iter().filter_map(|b| crate::db::parse_id_to_i64(&b.id)).max().unwrap_or(0);
+            let mut created_blocks = Vec::new();
+            for bname in &blocks_list {
+                max_block += 1;
+                created_blocks.push(crate::models::BlockDto {
+                    id: max_block.to_string(),
+                    site_id: s_id.clone(),
+                    block_name: bname.clone(),
+                    total_floors: 10,
+                });
+            }
+
+            (s_id, u_id, created_blocks, None)
+        };
 
         let new_site = Site {
             id: site_id.clone(),
@@ -67,12 +176,8 @@ impl SaasTenantService {
             license_end_date: license_end,
             timezone: crate::models::default_site_timezone(),
         };
-        inner.sites.push(new_site.clone());
+        inner.sites.push(new_site);
 
-        let temp_pass = generate_secure_temporary_password();
-        let password_hash = crate::auth::hash_password(&temp_pass);
-
-        let user_id = format!("usr-{}", &Uuid::new_v4().to_string()[..8]);
         let admin_user = User {
             id: user_id.clone(),
             site_id: site_id.clone(),
@@ -86,38 +191,12 @@ impl SaasTenantService {
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
-            person_id: None,
+            person_id,
         };
-        inner.users.push(admin_user.clone());
+        inner.users.push(admin_user);
 
-        let blocks_list: Vec<String> = request
-            .blocks
-            .filter(|b| !b.is_empty())
-            .unwrap_or_else(|| vec!["A Blok".to_string(), "B Blok".to_string()]);
-
-        for (idx, bname) in blocks_list.iter().enumerate() {
-            inner.blocks.push(crate::models::BlockDto {
-                id: format!("blk-{}-{}", &site_id[..6.min(site_id.len())], idx + 1),
-                site_id: site_id.clone(),
-                block_name: bname.clone(),
-                total_floors: 10,
-            });
-        }
-
-        if let Some(ref pool) = self.state.pool {
-            crate::db::save_site(pool, &new_site).await.map_err(|e| e.to_string())?;
-            crate::db::save_user(pool, &admin_user).await.map_err(|e| e.to_string())?;
-            if let Ok(client) = pool.get().await {
-                let numeric_site = crate::db::require_id("entity", &site_id)?;
-                for bname in &blocks_list {
-                    client
-                        .execute(
-                            "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10) ON CONFLICT DO NOTHING",
-                            &[&numeric_site, bname],
-                        )
-                        .await.map_err(|e| e.to_string())?;
-                }
-            }
+        for b in block_dtos {
+            inner.blocks.push(b);
         }
 
         Ok(SiteRegistrationResponse {
@@ -438,11 +517,13 @@ impl SaasTenantService {
         let mut updated_blocks: Vec<String> = Vec::new();
         if let Some(ref new_blocks) = req.blocks {
             inner.blocks.retain(|b| b.site_id != actual_site_id && crate::db::parse_id_to_i64(&b.site_id) != crate::db::parse_id_to_i64(&actual_site_id));
-            for (idx, bname) in new_blocks.iter().enumerate() {
+            let mut max_block = inner.blocks.iter().filter_map(|b| crate::db::parse_id_to_i64(&b.id)).max().unwrap_or(0);
+            for bname in new_blocks {
                 let trimmed = bname.trim();
                 if !trimmed.is_empty() {
+                    max_block += 1;
                     inner.blocks.push(crate::models::BlockDto {
-                        id: format!("blk-{}-{}", &actual_site_id[..6.min(actual_site_id.len())], idx + 1),
+                        id: max_block.to_string(),
                         site_id: actual_site_id.clone(),
                         block_name: trimmed.to_string(),
                         total_floors: 10,

@@ -3036,7 +3036,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               phone: phoneCtrl.text.trim(),
                               email: emailCtrl.text.trim().isNotEmpty
                                   ? emailCtrl.text.trim()
-                                  : 'sakin.${DateTime.now().millisecondsSinceEpoch}@example.com',
+                                  : 'sakin.$effectiveUnitNo@example.com',
                               relationship: selectedRelationship,
                             );
 
@@ -6367,7 +6367,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         },
                         orElse: () => null,
                       );
-                      final targetUnitId = registeredHo?.unitId ?? 'unit-$parsedUnit';
+                      final targetUnitId = registeredHo?.unitId ?? '$parsedUnit';
 
                       for (final res in pendingResidents) {
                         final resName = res.nameCtrl.text.trim();
@@ -6378,7 +6378,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             unitNo: parsedUnit,
                             fullName: resName,
                             phone: res.phoneCtrl.text.trim().isNotEmpty ? res.phoneCtrl.text.trim() : phoneText,
-                            email: res.emailCtrl.text.trim().isNotEmpty ? res.emailCtrl.text.trim() : 'sakin_${DateTime.now().millisecondsSinceEpoch}@example.com',
+                            email: res.emailCtrl.text.trim().isNotEmpty ? res.emailCtrl.text.trim() : 'sakin_$parsedUnit@example.com',
                             relationship: res.relationship,
                           );
                         }

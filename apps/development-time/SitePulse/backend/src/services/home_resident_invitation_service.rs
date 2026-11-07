@@ -1,6 +1,5 @@
 use chrono::Utc;
 use rand::{distributions::Alphanumeric, Rng};
-use uuid::Uuid;
 
 use crate::models::{
     HomeResidentResponse, RegisterHomeResidentRequest, Role, UnitInviteLinkResponse,
@@ -132,7 +131,13 @@ impl HomeResidentInvitationService {
             .relationship
             .unwrap_or_else(|| token_info.relationship.clone());
 
-        let resident_id = format!("usr-res-{}", &Uuid::new_v4().to_string()[..8]);
+        let max_user = inner
+            .users
+            .iter()
+            .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
+            .max()
+            .unwrap_or(0);
+        let resident_id = (max_user + 1).to_string();
         let temp_pass = generate_temporary_password();
 
         let resident_user = User {
@@ -172,9 +177,16 @@ impl HomeResidentInvitationService {
 
         drop(inner);
 
+        let mut final_resident_id = resident_id.clone();
         if let Some(ref pool) = self.state.pool {
             crate::db::delete_invitation_token(pool, &digest).await.map_err(|e| e.to_string())?;
             crate::db::save_user(pool, &resident_user).await.map_err(|e| format!("Failed to persist resident: {}", e))?;
+            if let Ok(client) = pool.get().await {
+                if let Ok(Some(row)) = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&email_norm]).await {
+                    let db_id: i64 = row.get("id");
+                    final_resident_id = db_id.to_string();
+                }
+            }
             crate::db::save_unit_member(
                 pool,
                 &unit_id,
@@ -188,7 +200,7 @@ impl HomeResidentInvitationService {
         }
 
         Ok(HomeResidentResponse {
-            resident_id,
+            resident_id: final_resident_id,
             full_name: request.full_name,
             email: email_norm,
             phone: request.phone,

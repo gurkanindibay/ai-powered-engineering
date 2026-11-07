@@ -74,18 +74,24 @@ impl CapitalProjectService {
                 match row_res {
                     Ok(row) => {
                         let id_num: i64 = row.get("id");
-                        project_id_str = format!("cproj-{}", id_num);
+                        project_id_str = id_num.to_string();
                     }
                     Err(e) => {
                         warn!("PostgreSQL error inserting capital_project: {}. Falling back to memory.", e);
-                        project_id_str = format!("cproj-{}", now.timestamp_millis());
+                        let inner = self.state.inner.read().await;
+                        let max_id = inner.capital_projects.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
+                        project_id_str = (max_id + 1).to_string();
                     }
                 }
             } else {
-                project_id_str = format!("cproj-{}", now.timestamp_millis());
+                let inner = self.state.inner.read().await;
+                let max_id = inner.capital_projects.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
+                project_id_str = (max_id + 1).to_string();
             }
         } else {
-            project_id_str = format!("cproj-{}", now.timestamp_millis());
+            let inner = self.state.inner.read().await;
+            let max_id = inner.capital_projects.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
+            project_id_str = (max_id + 1).to_string();
         }
 
         let total_units_count: i64;
@@ -102,7 +108,6 @@ impl CapitalProjectService {
             let total_count = installments_count as i32;
 
             for item in installment_items {
-                let inst_id = format!("cinst-{}-{}", project_id_str, item.installment_number);
                 let pct = item.percentage.unwrap_or_else(|| {
                     if total_count > 0 {
                         Decimal::from(100) / Decimal::from(total_count)
@@ -111,32 +116,22 @@ impl CapitalProjectService {
                     }
                 });
 
-                let installment = CapitalProjectInstallment {
-                    id: inst_id.clone(),
-                    project_id: project_id_str.clone(),
-                    installment_number: item.installment_number,
-                    total_installments: total_count,
-                    due_date: item.due_date,
-                    installment_budget: item.installment_budget,
-                    percentage: pct,
-                    is_accrued: false,
-                    accrued_at: None,
-                    created_at: Some(now),
-                };
+                let mut inst_id = String::new();
 
                 // DB insert if available
                 if let Some(pool) = &self.state.pool {
                     if let Ok(client) = pool.get().await {
-                        if let Ok(p_id) = project_id_str.trim_start_matches("cproj-").parse::<i64>() {
-                            client
-                                .execute(
+                        if let Some(p_id) = crate::db::parse_id_to_i64(&project_id_str) {
+                            let row_res = client
+                                .query_one(
                                     r#"
                                     INSERT INTO capital_project_installments (
                                         project_id, installment_number, total_installments,
                                         due_date, installment_budget, percentage, is_accrued, created_at
                                     )
                                     VALUES ($1, $2, $3, $4, $5, $6, FALSE, $7)
-                                    ON CONFLICT (project_id, installment_number) DO NOTHING
+                                    ON CONFLICT (project_id, installment_number) DO UPDATE SET total_installments = EXCLUDED.total_installments
+                                    RETURNING id
                                     "#,
                                     &[
                                         &p_id,
@@ -148,10 +143,33 @@ impl CapitalProjectService {
                                         &now,
                                     ],
                                 )
-                                .await.map_err(|e| e.to_string())?;
+                                .await;
+                            if let Ok(row) = row_res {
+                                let id_val: i64 = row.get("id");
+                                inst_id = id_val.to_string();
+                            }
                         }
                     }
                 }
+
+                if inst_id.is_empty() {
+                    let inner = self.state.inner.read().await;
+                    let max_inst = inner.capital_installments.iter().filter_map(|i| crate::db::parse_id_to_i64(&i.id)).max().unwrap_or(0);
+                    inst_id = (max_inst + 1 + created_installments.len() as i64).to_string();
+                }
+
+                let installment = CapitalProjectInstallment {
+                    id: inst_id,
+                    project_id: project_id_str.clone(),
+                    installment_number: item.installment_number,
+                    total_installments: total_count,
+                    due_date: item.due_date,
+                    installment_budget: item.installment_budget,
+                    percentage: pct,
+                    is_accrued: false,
+                    accrued_at: None,
+                    created_at: Some(now),
+                };
 
                 created_installments.push(installment);
             }
@@ -234,7 +252,7 @@ impl CapitalProjectService {
                         let inst_c: i64 = r.get("installments_count");
 
                         projects.push(CapitalProject {
-                            id: format!("cproj-{}", id_num),
+                            id: id_num.to_string(),
                             site_id: r.get::<_, i64>("site_id").to_string(),
                             title: r.get("title"),
                             category: r.get("category"),
@@ -312,7 +330,7 @@ impl CapitalProjectService {
 
         if let Some(pool) = &self.state.pool {
             if let Ok(client) = pool.get().await {
-                if let Ok(p_id) = project_id.trim_start_matches("cproj-").parse::<i64>() {
+                if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
                     let rows_res = client
                         .query(
                             r#"
@@ -331,8 +349,8 @@ impl CapitalProjectService {
                             let id_num: i64 = r.get("id");
                             let p_id_num: i64 = r.get("project_id");
                             list.push(CapitalProjectInstallment {
-                                id: format!("cinst-{}", id_num),
-                                project_id: format!("cproj-{}", p_id_num),
+                                id: id_num.to_string(),
+                                project_id: p_id_num.to_string(),
                                 installment_number: r.get("installment_number"),
                                 total_installments: r.get("total_installments"),
                                 due_date: r.get("due_date"),
@@ -434,9 +452,9 @@ impl CapitalProjectService {
         // Generate dues_liabilities in DB if available
         if let Some(pool) = &self.state.pool {
             if let Ok(client) = pool.get().await {
-                if let Ok(p_id) = project_id.trim_start_matches("cproj-").parse::<i64>() {
+                if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
                     for (unit, share) in &unit_shares {
-                        if let Ok(u_id) = unit.id.trim_start_matches("d-").parse::<i64>() {
+                        if let Some(u_id) = crate::db::parse_id_to_i64(&unit.id) {
                             client
                                 .execute(
                                     r#"
@@ -475,8 +493,10 @@ impl CapitalProjectService {
         // Also update memory state
         {
             let mut inner = self.state.inner.write().await;
+            let mut next_due = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
             for (unit, share) in &unit_shares {
-                let due_id = format!("due-cap-{}-{}", project_id, unit.id);
+                next_due += 1;
+                let due_id = next_due.to_string();
                 inner.dues.push(DuesLiability {
                     id: due_id,
                     unit_id: unit.id.clone(),
@@ -541,14 +561,14 @@ impl CapitalProjectService {
         let disbursement_date = req.disbursement_date.unwrap_or_else(|| Utc::now().date_naive());
         let disbursement_method = req.disbursement_method.unwrap_or_else(|| "BANK_TRANSFER".to_string());
         let now = Utc::now();
-        let dis_id = format!("cdis-{}-{}", project_id, now.timestamp_millis());
+        let mut dis_id = String::new();
 
         // Insert into DB if available
         if let Some(pool) = &self.state.pool {
             if let Ok(client) = pool.get().await {
-                if let Ok(p_id) = project_id.trim_start_matches("cproj-").parse::<i64>() {
-                    client
-                        .execute(
+                if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
+                    let row_res = client
+                        .query_one(
                             r#"
                             INSERT INTO capital_contractor_disbursements (
                                 project_id, milestone_name, invoice_number, amount,
@@ -556,9 +576,10 @@ impl CapitalProjectService {
                                 payment_reference, disbursement_method, notes, created_at
                             )
                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                            RETURNING id
                             "#,
                             &[
-                                &p_id,
+                                &[&p_id][0],
                                 &req.milestone_name,
                                 &req.invoice_number,
                                 &req.amount,
@@ -571,9 +592,19 @@ impl CapitalProjectService {
                                 &now,
                             ],
                         )
-                        .await.map_err(|e| e.to_string())?;
+                        .await;
+                    if let Ok(row) = row_res {
+                        let id_val: i64 = row.get("id");
+                        dis_id = id_val.to_string();
+                    }
                 }
             }
+        }
+
+        if dis_id.is_empty() {
+            let inner = self.state.inner.read().await;
+            let max_id = inner.capital_disbursements.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
+            dis_id = (max_id + 1).to_string();
         }
 
         let disbursement = CapitalContractorDisbursement {
@@ -616,7 +647,7 @@ impl CapitalProjectService {
 
         if let Some(pool) = &self.state.pool {
             if let Ok(client) = pool.get().await {
-                if let Ok(p_id) = project_id.trim_start_matches("cproj-").parse::<i64>() {
+                if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
                     let rows_res = client
                         .query(
                             r#"
@@ -636,8 +667,8 @@ impl CapitalProjectService {
                             let id_num: i64 = r.get("id");
                             let p_id_num: i64 = r.get("project_id");
                             list.push(CapitalContractorDisbursement {
-                                id: format!("cdis-{}", id_num),
-                                project_id: format!("cproj-{}", p_id_num),
+                                id: id_num.to_string(),
+                                project_id: p_id_num.to_string(),
                                 milestone_name: r.get("milestone_name"),
                                 invoice_number: r.get("invoice_number"),
                                 amount: r.get("amount"),

@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
-use uuid::Uuid;
 
 use crate::models::{
     AllocationBreakdownItem, DebtAgingBracket, DebtAgingReport, DebtStatus,
@@ -737,9 +736,10 @@ impl PaymentTrackingService {
             .sum();
 
         // Register new owner user
-        let new_user_id = format!("usr-owner-{}", Uuid::new_v4().simple());
+        let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+        let new_user_id = (max_u + 1).to_string();
         let new_owner_email = req.new_owner_email.clone().unwrap_or_else(|| {
-            format!("malik.{}@begonya.com", Uuid::new_v4().simple())
+            format!("owner.{}@sitepulse.local", new_user_id)
         });
 
         let new_user = User {
@@ -893,7 +893,7 @@ fn build_receipt(
         on_behalf_of_role: if is_rent_offset_eligible { Some("OWNER".to_string()) } else { None },
         total_amount: ctx.amount,
         payment_channel: ctx.payment_channel.clone(),
-        channel_reference: ctx.channel_reference.clone().or_else(|| Some(format!("REF-{}", Uuid::new_v4().simple()))),
+        channel_reference: ctx.channel_reference.clone().or_else(|| Some(format!("REF-{}", sequence_number))),
         allocated_principal,
         allocated_penalty,
         allocated_advance: surplus,

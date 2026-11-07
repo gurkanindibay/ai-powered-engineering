@@ -78,9 +78,9 @@ pub fn create_pool() -> Option<Pool> {
 /// hard-coded name mappings and no hex fallback, so an unknown id can never be
 /// silently mapped onto some other row.
 pub fn parse_id_to_i64(s: &str) -> Option<i64> {
-    const PREFIXES: [&str; 15] = [
+    const PREFIXES: [&str; 21] = [
         "site-", "unit-", "d-", "b-", "borc-", "person-", "kisi-", "blk-", "blok-", "sba-", "txn-", "cproj-",
-        "cinst-", "usr-", "user-",
+        "cinst-", "cdis-", "usr-", "user-", "req-", "inv-", "match-", "ref-", "due-",
     ];
     let s = s.trim();
     let positive = |n: i64| if n > 0 { Some(n) } else { None };
@@ -1038,31 +1038,62 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
 pub async fn save_site(pool: &Pool, site: &Site) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let id_num = require_id("entity", &site.id)?;
-    client
-        .execute(
-            r#"
-            INSERT INTO sites (id, name, address, slug, status, plan_type, license_end_date)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (id) DO UPDATE SET
-                name = EXCLUDED.name,
-                address = EXCLUDED.address,
-                slug = EXCLUDED.slug,
-                status = EXCLUDED.status,
-                plan_type = EXCLUDED.plan_type,
-                license_end_date = EXCLUDED.license_end_date
-            "#,
-            &[
-                &id_num,
-                &site.name,
-                &site.address,
-                &site.slug,
-                &site.status,
-                &site.plan_type,
-                &site.license_end_date,
-            ],
-        )
-        .await?;
+    let maybe_id = parse_id_to_i64(&site.id);
+    let id_num = match maybe_id {
+        Some(id) if id > 0 => {
+            client
+                .execute(
+                    r#"
+                    INSERT INTO sites (id, name, address, slug, status, plan_type, license_end_date)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ON CONFLICT (id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        address = EXCLUDED.address,
+                        slug = EXCLUDED.slug,
+                        status = EXCLUDED.status,
+                        plan_type = EXCLUDED.plan_type,
+                        license_end_date = EXCLUDED.license_end_date
+                    "#,
+                    &[
+                        &id,
+                        &site.name,
+                        &site.address,
+                        &site.slug,
+                        &site.status,
+                        &site.plan_type,
+                        &site.license_end_date,
+                    ],
+                )
+                .await?;
+            id
+        }
+        _ => {
+            let row = client
+                .query_one(
+                    r#"
+                    INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (slug) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        address = EXCLUDED.address,
+                        status = EXCLUDED.status,
+                        plan_type = EXCLUDED.plan_type,
+                        license_end_date = EXCLUDED.license_end_date
+                    RETURNING id
+                    "#,
+                    &[
+                        &site.name,
+                        &site.address,
+                        &site.slug,
+                        &site.status,
+                        &site.plan_type,
+                        &site.license_end_date,
+                    ],
+                )
+                .await?;
+            row.get(0)
+        }
+    };
     info!("Saved site {} (numeric ID: {}) ({}) to PostgreSQL sites", site.id, id_num, site.name);
     Ok(())
 }
@@ -1331,28 +1362,54 @@ pub async fn save_dues_period(
     period: &crate::models::DuesPeriod,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let id_num = require_id("entity", &period.id)?;
     let site_id_num = require_id("entity", &period.site_id)?;
+    let maybe_id = parse_id_to_i64(&period.id);
 
-    client
-        .execute(
-            r#"
-            INSERT INTO dues_periods (id, site_id, period_name, due_date, status)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (site_id, period_name) DO UPDATE SET
-                due_date = EXCLUDED.due_date,
-                status = EXCLUDED.status
-            "#,
-            &[
-                &id_num,
-                &site_id_num,
-                &period.period_name,
-                &period.due_date,
-                &period.status,
-            ],
-        )
-        .await?;
-    info!("Saved dues period '{}' (numeric ID: {}) for site {} to PostgreSQL", period.period_name, id_num, period.site_id);
+    match maybe_id {
+        Some(id_num) if id_num > 0 => {
+            client
+                .execute(
+                    r#"
+                    INSERT INTO dues_periods (id, site_id, period_name, due_date, status)
+                    VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT (site_id, period_name) DO UPDATE SET
+                        due_date = EXCLUDED.due_date,
+                        status = EXCLUDED.status
+                    "#,
+                    &[
+                        &id_num,
+                        &site_id_num,
+                        &period.period_name,
+                        &period.due_date,
+                        &period.status,
+                    ],
+                )
+                .await?;
+            info!("Saved dues period '{}' (numeric ID: {}) for site {} to PostgreSQL", period.period_name, id_num, period.site_id);
+        }
+        _ => {
+            let row = client
+                .query_one(
+                    r#"
+                    INSERT INTO dues_periods (site_id, period_name, due_date, status)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (site_id, period_name) DO UPDATE SET
+                        due_date = EXCLUDED.due_date,
+                        status = EXCLUDED.status
+                    RETURNING id
+                    "#,
+                    &[
+                        &site_id_num,
+                        &period.period_name,
+                        &period.due_date,
+                        &period.status,
+                    ],
+                )
+                .await?;
+            let new_id: i64 = row.get(0);
+            info!("Saved dues period '{}' (auto-assigned ID: {}) for site {} to PostgreSQL", period.period_name, new_id, period.site_id);
+        }
+    }
     Ok(())
 }
 
@@ -1684,42 +1741,71 @@ pub async fn save_site_bank_account(
     account: &SiteBankAccount,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let id_num = require_id("entity", &account.id)?;
+    let maybe_id = parse_id_to_i64(&account.id);
     let site_id_num = require_id("entity", &account.site_id)?;
     let config_by_num = account.configured_by.as_deref().and_then(parse_id_to_i64);
 
-    client
-        .execute(
-            r#"
-            INSERT INTO site_bank_accounts (id, site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            ON CONFLICT (id) DO UPDATE SET
-                site_id = EXCLUDED.site_id,
-                bank_code = EXCLUDED.bank_code,
-                bank_name = EXCLUDED.bank_name,
-                iban = EXCLUDED.iban,
-                account_holder = EXCLUDED.account_holder,
-                statement_format = EXCLUDED.statement_format,
-                is_active = EXCLUDED.is_active,
-                configured_by = EXCLUDED.configured_by,
-                updated_at = CURRENT_TIMESTAMP
-            "#,
-            &[
-                &id_num,
-                &site_id_num,
-                &account.bank_code,
-                &account.bank_name,
-                &account.iban,
-                &account.account_holder,
-                &account.statement_format,
-                &account.is_active,
-                &config_by_num,
-                &account.created_at,
-                &account.updated_at,
-            ],
-        )
-        .await?;
-    info!("Saved site bank account {} (numeric ID: {}) to PostgreSQL", account.id, id_num);
+    match maybe_id {
+        Some(id_num) if id_num > 0 => {
+            client
+                .execute(
+                    r#"
+                    INSERT INTO site_bank_accounts (id, site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    ON CONFLICT (id) DO UPDATE SET
+                        site_id = EXCLUDED.site_id,
+                        bank_code = EXCLUDED.bank_code,
+                        bank_name = EXCLUDED.bank_name,
+                        iban = EXCLUDED.iban,
+                        account_holder = EXCLUDED.account_holder,
+                        statement_format = EXCLUDED.statement_format,
+                        is_active = EXCLUDED.is_active,
+                        configured_by = EXCLUDED.configured_by,
+                        updated_at = CURRENT_TIMESTAMP
+                    "#,
+                    &[
+                        &id_num,
+                        &site_id_num,
+                        &account.bank_code,
+                        &account.bank_name,
+                        &account.iban,
+                        &account.account_holder,
+                        &account.statement_format,
+                        &account.is_active,
+                        &config_by_num,
+                        &account.created_at,
+                        &account.updated_at,
+                    ],
+                )
+                .await?;
+            info!("Saved site bank account {} (numeric ID: {}) to PostgreSQL", account.id, id_num);
+        }
+        _ => {
+            let row = client
+                .query_one(
+                    r#"
+                    INSERT INTO site_bank_accounts (site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    RETURNING id
+                    "#,
+                    &[
+                        &site_id_num,
+                        &account.bank_code,
+                        &account.bank_name,
+                        &account.iban,
+                        &account.account_holder,
+                        &account.statement_format,
+                        &account.is_active,
+                        &config_by_num,
+                        &account.created_at,
+                        &account.updated_at,
+                    ],
+                )
+                .await?;
+            let new_id: i64 = row.get(0);
+            info!("Saved site bank account (auto-assigned ID: {}) to PostgreSQL", new_id);
+        }
+    }
     Ok(())
 }
 
@@ -2486,15 +2572,15 @@ pub async fn get_active_site_bank_account(
         let updated_at: Option<DateTime<Utc>> = row.get(10);
 
         return Ok(Some(SiteBankAccount {
-            id: format!("sba-{}", id),
-            site_id: format!("site-{}", site_id),
+            id: id.to_string(),
+            site_id: site_id.to_string(),
             bank_code,
             bank_name,
             iban,
             account_holder,
             statement_format,
             is_active,
-            configured_by: configured_by.map(|c| format!("usr-{}", c)),
+            configured_by: configured_by.map(|c| c.to_string()),
             created_at: created_at.unwrap_or_else(Utc::now),
             updated_at: updated_at.unwrap_or_else(Utc::now),
         }));
@@ -2523,8 +2609,8 @@ pub async fn get_blocks_for_site_from_db(
         let total_floors: i32 = row.get(3);
 
         list.push(BlockDto {
-            id: format!("b-{}", id),
-            site_id: format!("site-{}", s_id),
+            id: id.to_string(),
+            site_id: s_id.to_string(),
             block_name,
             total_floors,
         });
@@ -2545,46 +2631,37 @@ pub async fn sync_all_in_memory_to_db(
 
     // 2. Sync Blocks
     for block in &state.blocks {
-        let block_id_num = require_id("entity", &block.id)?;
         let site_id_num = require_id("entity", &block.site_id)?;
-        client
-            .execute(
-                r#"
-                INSERT INTO blocks (id, site_id, block_name, total_floors)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (id) DO UPDATE SET
-                    site_id = EXCLUDED.site_id,
-                    block_name = EXCLUDED.block_name,
-                    total_floors = EXCLUDED.total_floors
-                "#,
-                &[&block_id_num, &site_id_num, &block.block_name, &block.total_floors],
-            )
-            .await.map_err(|e| e.to_string())?;
+        if let Some(block_id_num) = parse_id_to_i64(&block.id) {
+            client
+                .execute(
+                    r#"
+                    INSERT INTO blocks (id, site_id, block_name, total_floors)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (id) DO UPDATE SET
+                        site_id = EXCLUDED.site_id,
+                        block_name = EXCLUDED.block_name,
+                        total_floors = EXCLUDED.total_floors
+                    "#,
+                    &[&block_id_num, &site_id_num, &block.block_name, &block.total_floors],
+                )
+                .await.map_err(|e| e.to_string())?;
+        } else {
+            client
+                .execute(
+                    r#"
+                    INSERT INTO blocks (site_id, block_name, total_floors)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT DO NOTHING
+                    "#,
+                    &[&site_id_num, &block.block_name, &block.total_floors],
+                )
+                .await.map_err(|e| e.to_string())?;
+        }
     }
 
     // 3. Sync Users and Persons
     for user in &state.users {
-        let user_id_num = require_id("entity", &user.id)?;
-        let p_type = match user.role {
-            Role::HomeOwner => "HOME_OWNER",
-            Role::HomeResident => "HOME_RESIDENT",
-            _ => "SITE_MANAGER",
-        };
-        client
-            .execute(
-                r#"
-                INSERT INTO persons (id, full_name, phone, email, person_type)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (id) DO UPDATE SET
-                    full_name = EXCLUDED.full_name,
-                    phone = EXCLUDED.phone,
-                    email = EXCLUDED.email,
-                    person_type = EXCLUDED.person_type
-                "#,
-                &[&user_id_num, &user.full_name, &user.phone, &user.email, &p_type],
-            )
-            .await.map_err(|e| e.to_string())?;
-
         save_user(pool, user).await.map_err(|e| e.to_string())?;
     }
 
