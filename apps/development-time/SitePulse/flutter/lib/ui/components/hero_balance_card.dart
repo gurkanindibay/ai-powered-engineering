@@ -494,7 +494,7 @@ class _IbanRow extends StatelessWidget {
   @override
   Widget build(BuildContext ctx) {
     final hasIban = iban.trim().isNotEmpty;
-    return GestureDetector(
+    return testId('btn_copy_iban', GestureDetector(
       onTap: hasIban ? _copyIban : null,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -505,7 +505,7 @@ class _IbanRow extends StatelessWidget {
             color: AppColors.textSecondary(ctx),
           ),
           const SizedBox(width: 5),
-          Text(
+          testId('virtual_iban_text', Text(
             hasIban ? 'Daire IBAN: $iban' : 'Sanal IBAN henüz tahsis edilmedi',
             style: TextStyle(
               color: AppColors.textSecondary(ctx),
@@ -513,7 +513,7 @@ class _IbanRow extends StatelessWidget {
               fontFamily: hasIban ? 'monospace' : null,
               letterSpacing: hasIban ? 0.3 : 0,
             ),
-          ),
+          )),
           if (hasIban) ...[
             const SizedBox(width: 5),
             Icon(
@@ -524,6 +524,6 @@ class _IbanRow extends StatelessWidget {
           ],
         ],
       ),
-    );
+    ));
   }
 }

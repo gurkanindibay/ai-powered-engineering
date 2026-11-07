@@ -40,7 +40,22 @@ For tests, build the app with `flutter build web --dart-define=E2E=true --dart-d
 - Wrap every element a scenario touches (existing `Key`s first) using the same id string. Commit screen by screen; `dashboard_screen.dart` is 8.5k lines, so keep those diffs small.
 - **Exit check:** a short Playwright probe finds `login_*` ids and dashboard ids after login.
 
-### Phase 2: Framework scaffold (`apps/development-time/SitePulse/e2e/`)
+### Phase 2: Framework scaffold (`apps/development-time/SitePulse/e2e/`) — ✅ DONE 2026-11-07
+
+**Result:** 12 P0 smoke tests (11 pass, 1 strict xfail for a confirmed backend bug), about 60 s for the whole run including stack start, stable across consecutive runs. As built:
+- `support/stack.py` reuses `scripts/api_system_check.py` (`Psql`, `Backend`). Throwaway database `sitepulse_e2e_<pid>`; release backend on :8180 with test-only secrets and a known bootstrap admin password; web bundle served in-process on :9190. Reset = truncate + system/test seed + backend restart (about 1 s), **before every test**.
+- `conftest.py`: session stack, per-test reset, `login_as(role)`, a page guard (fails on page errors and 5xx; 4xx recorded as `client_errors` in the JUnit properties).
+- `pages/`: login, shell (bottom navigation located by label, since `BottomNavigationBarItem` can't carry an id), resident home, manager (cockpit, residents tab, add-resident form, dues segments), SaaS admin.
+- Runner `scripts/gui_e2e.py` (`run` / `serve` / `build`, `--json`, `--headed`, `-m`, `-k`, `--browser`, `--env-file`).
+- Arrange steps that the API can't express (an already-overdue liability) write SQL and restart the backend; they're marked "SQL arrange" in `support/api.py`.
+
+**Findings while building it** (the tests report them, they don't hide them):
+1. `/api/v1/saas/stats` returns placeholders (`total_units = sites × 20`, volume = `80000 × sites`), `services/saas_tenant_service.rs:377`. Test `test_portfolio_stats_agree_with_site_list` is a strict xfail.
+2. The resident dashboard's `site_title` shows the block's id where its name should be ("Begonya Sitesi • 1 Blok D:14" instead of "A Blok"). Seen in the API on master `8d0d1d3`; no test yet.
+3. The client calls `/api/v1/saas/sites` from the login screen before authentication (401), and the homeowner dashboard calls manager-only endpoints `site-admin/overview` and `site-admin/home-owners` (403).
+4. The root `.gitignore` rule `**/bin/` keeps `backend/src/bin/hash_password.rs` out of git while `Cargo.toml` declares it, so `api_system_check.py` (and its gate in `run_tests.py`) can't build on a fresh clone or worktree.
+
+The original Phase 2 design follows, kept for reference:
 ```
 e2e/
   requirements.txt     # playwright, pytest, pytest-playwright, pytest-html (versions pinned)

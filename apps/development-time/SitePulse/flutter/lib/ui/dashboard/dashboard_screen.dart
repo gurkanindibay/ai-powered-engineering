@@ -211,7 +211,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               widget.controller.toggleTheme();
             },
           ),
-          IconButton(
+          testId('btn_header_logout', IconButton(
             tooltip: 'Çıkış Yap / Rol Değiştir',
             icon: const Icon(
               Icons.logout_rounded,
@@ -221,7 +221,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () {
               widget.controller.logout();
             },
-          ),
+          )),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: InkWell(
@@ -6208,7 +6208,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
                 ),
-                ElevatedButton(
+                testId('btn_save_new_resident', ElevatedButton(
                   onPressed: () async {
                     setDialogState(() {
                       emailError = null;
@@ -6393,7 +6393,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text('Kaydet & Şifre Üret', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
+                )),
               ],
             ),
             child: SingleChildScrollView(
@@ -6553,7 +6553,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             // Daire No (MUST BE TextField at index 0 in the dialog for test compatibility)
                             Expanded(
                               flex: 4,
-                              child: TextField(
+                              child: testId('add_resident_unit_field', TextField(
                                 controller: unitCtrl,
                                 keyboardType: TextInputType.number,
                                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
@@ -6567,7 +6567,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   fillColor: AppColors.surface(context),
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                 ),
-                              ),
+                              )),
                             ),
                           ],
                         ),
@@ -6858,7 +6858,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(height: 12),
 
                         // Person Fields (MUST maintain order: nameCtrl = 1, emailCtrl = 2, phoneCtrl = 3)
-                        TextField(
+                        testId('add_resident_name_field', TextField(
                           controller: nameCtrl,
                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                           decoration: InputDecoration(
@@ -6877,9 +6877,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             fillColor: AppColors.surface(context),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                        ),
+                        )),
                         const SizedBox(height: 12),
-                        TextField(
+                        testId('add_resident_email_field', TextField(
                           controller: emailCtrl,
                           keyboardType: TextInputType.emailAddress,
                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -6893,9 +6893,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             fillColor: AppColors.surface(context),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                        ),
+                        )),
                         const SizedBox(height: 12),
-                        TextField(
+                        testId('add_resident_phone_field', TextField(
                           controller: phoneCtrl,
                           keyboardType: TextInputType.phone,
                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -6909,7 +6909,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             fillColor: AppColors.surface(context),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                        ),
+                        )),
 
                         // Extra option for Ev Sakini: Relationship selector
                         if (selectedRole == 'RESIDENT') ...[
@@ -8309,7 +8309,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
-              ElevatedButton(
+              testId('btn_submit_change_password', ElevatedButton(
                 onPressed: isSubmitting
                     ? null
                     : () async {
@@ -8374,7 +8374,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: Text(isSubmitting ? 'Kaydediliyor...' : 'Şifreyi Güncelle', style: const TextStyle(fontWeight: FontWeight.bold)),
-              ),
+              )),
             ],
           ),
           child: Column(
@@ -8416,7 +8416,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              TextField(
+              testId('change_password_current', TextField(
                 controller: currentPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -8427,9 +8427,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('change_password_new', TextField(
                 controller: newPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -8440,9 +8440,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('change_password_confirm', TextField(
                 controller: confirmPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -8453,7 +8453,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
             ],
           ),
         ),

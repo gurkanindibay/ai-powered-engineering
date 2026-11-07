@@ -111,6 +111,21 @@ DB_PASS=... ./scripts/api_system_check.py --only cross_site_forbidden,restart_pe
 ```
 Uses `psql` when on PATH, otherwise `docker exec <--pg-container> psql`.
 
+## 5b-2. GUI End-to-End Suite (`gui_e2e.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/gui_e2e.py](file:///apps/development-time/SitePulse/scripts/gui_e2e.py) (symlinked to `scripts/gui_e2e.py`)
+- **Purpose:** Runs the Playwright GUI suite (`apps/development-time/SitePulse/e2e/`) in a real browser against an isolated stack: a throwaway database `sitepulse_e2e_<pid>`, the real backend on :8180 and the Flutter web E2E bundle (`--dart-define=E2E=true`) on :9190. It never touches the developer stack on :8080. The database is reset to the seed before every test; tests fail on uncaught page errors or backend 5xx. Scenario catalogue: `apps/development-time/SitePulse/docs/GUI_TEST_PLAN.md`.
+- **Writing tests:** locate widgets only through page objects (`e2e/pages/`) and `testId(...)` ids (`flutter/lib/testing/test_id.dart`); mark known product bugs and gaps `xfail(strict=True, reason=...)`.
+
+```bash
+./scripts/gui_e2e.py --env-file apps/development-time/SitePulse/backend/.env   # whole suite (DB_PASS from the file)
+DB_PASS=... ./scripts/gui_e2e.py run -m smoke --json                        # P0 only, JSON summary
+DB_PASS=... ./scripts/gui_e2e.py run -k login --headed                      # watch it in a browser window
+DB_PASS=... ./scripts/gui_e2e.py serve                                      # keep the stack up while writing tests
+./scripts/gui_e2e.py build                                                  # rebuild the E2E web bundle
+```
+Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/`. Exit codes: 0 pass, 1 test failures, 2 setup error.
+
 ## 5c. Full Verification Run (`run_tests.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)

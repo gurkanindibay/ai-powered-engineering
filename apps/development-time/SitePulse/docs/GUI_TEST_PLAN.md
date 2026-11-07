@@ -214,3 +214,25 @@ GUI-01-03 (account movements) was a false alarm: the section exists.
 3. ✅ Probe (`e2e/probe_semantics.py`) in real Chrome: ids are rendered as `flt-semantics-identifier`, and UI login as manager and homeowner reaches the dashboards with no page errors.
 4. ✅ Builder endpoints confirmed (Section 4). Still open: seed passwords for `mehmet.oz@begonya.com` and the SaaS bootstrap password; the probe uses only the manager and homeowner.
 5. Clipboard scenarios (GUI-03-02, 04-01, 07-01) need the Playwright `clipboard-read` permission in Chromium. On Firefox and WebKit they fall back to checking the toast only.
+
+## 7. Implemented tests (Phase 2, 2026-11-07)
+Run with `scripts/gui_e2e.py run -m smoke`. Each test carries `@pytest.mark.gui_id("<id>")`.
+
+| Scenario | Test | Result |
+|---|---|---|
+| GUI-06-01 | `test_epic06_auth.py::test_manager_login_reaches_cockpit` | pass |
+| GUI-06-02 | `test_epic06_auth.py::test_homeowner_login_reaches_dashboard` | pass |
+| GUI-06-03 | `test_epic06_auth.py::test_wrong_password_shows_error_and_stays_on_login` | pass |
+| GUI-06-06 | `test_epic06_auth.py::test_saas_admin_must_change_bootstrap_password` | pass |
+| GUI-06-08 | `test_epic06_auth.py::test_logout_returns_to_login_screen` | pass (header logout button) |
+| GUI-01-01 | `test_epic01_resident_dues.py::test_overdue_balance_matches_backend_total` | pass |
+| GUI-01-02 | `test_epic01_resident_dues.py::test_no_dues_shows_zero_balance_without_overdue_badge` | pass |
+| GUI-07-01 | `test_epic01_resident_dues.py::test_virtual_iban_shown_and_copied` | pass (clipboard checked in Chromium) |
+| GUI-02-03 | `test_epic02_manager.py::test_manager_adds_owner_resident` | pass (DB check on persons + units) |
+| GUI-10-01 | `test_epic02_manager.py::test_capital_segment_offers_project_creation` | pass |
+| GUI-03-01 | `test_epic03_saas.py::test_portfolio_lists_every_site` | pass |
+| GUI-03-01 | `test_epic03_saas.py::test_portfolio_stats_agree_with_site_list` | **xfail: backend bug** (placeholder stats) |
+
+Ids added in Phase 2: `btn_header_logout`, `virtual_iban_text`, `btn_copy_iban`, `btn_cockpit_house_types`, `btn_cockpit_add_resident`, `add_resident_{unit,name,email,phone}_field`, `btn_save_new_resident`, `change_password_{current,new,confirm}`, `btn_submit_change_password`.
+
+Remaining P0 from §3 not yet automated: GUI-03-02 (site onboarding), GUI-04-02/03 (approval queue), GUI-07-03 (bank upload), GUI-07-10 (period accrual), GUI-08-01/04 (move-in/out), GUI-09-01 (payment stream), GUI-10-02/04 (capital wizard and installment), GUI-X-01 (covered by the page guard).

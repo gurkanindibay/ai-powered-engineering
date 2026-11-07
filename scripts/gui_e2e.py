@@ -1,0 +1,1 @@
+../apps/development-time/SitePulse/scripts/gui_e2e.py
