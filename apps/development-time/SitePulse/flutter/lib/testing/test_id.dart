@@ -19,10 +19,15 @@ void enableE2ESemantics() {
 /// `Key` where one exists, so widget tests and browser tests share one name.
 /// Outside E2E builds the child is returned unchanged, so production
 /// semantics (screen readers) are not affected.
-Widget testId(String id, Widget child) {
+///
+/// [label] exposes a value the widget itself does not put in the semantics
+/// tree (e.g. `SelectableText`, which renders as an empty text area), so a
+/// test can read it from the node's `aria-label`.
+Widget testId(String id, Widget child, {String? label}) {
   if (!kE2E) return child;
   return Semantics(
     identifier: id,
+    label: label,
     container: true,
     explicitChildNodes: true,
     child: child,

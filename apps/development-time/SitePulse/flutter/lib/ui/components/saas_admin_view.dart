@@ -145,7 +145,7 @@ class SaasAdminView extends StatelessWidget {
                   onPressed: () => controller.fetchSaasSites(),
                 ),
                 const SizedBox(width: 6),
-                ElevatedButton.icon(
+                testId('btn_open_add_site', ElevatedButton.icon(
                   onPressed: onAddSiteTap,
                   icon: const Icon(Icons.add_business, size: 16),
                   label: const Text('Yeni Site Kaydet', style: TextStyle(fontSize: 12)),
@@ -155,7 +155,7 @@ class SaasAdminView extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
+                )),
               ],
             ),
           ],

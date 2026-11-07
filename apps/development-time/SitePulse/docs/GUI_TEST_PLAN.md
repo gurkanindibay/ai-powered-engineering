@@ -235,4 +235,36 @@ Run with `scripts/gui_e2e.py run -m smoke`. Each test carries `@pytest.mark.gui_
 
 Ids added in Phase 2: `btn_header_logout`, `virtual_iban_text`, `btn_copy_iban`, `btn_cockpit_house_types`, `btn_cockpit_add_resident`, `add_resident_{unit,name,email,phone}_field`, `btn_save_new_resident`, `change_password_{current,new,confirm}`, `btn_submit_change_password`.
 
-Remaining P0 from §3 not yet automated: GUI-03-02 (site onboarding), GUI-04-02/03 (approval queue), GUI-07-03 (bank upload), GUI-07-10 (period accrual), GUI-08-01/04 (move-in/out), GUI-09-01 (payment stream), GUI-10-02/04 (capital wizard and installment), GUI-X-01 (covered by the page guard).
+## 8. Phase 3: P0 complete (2026-11-07)
+All 21 P0 scenarios are automated: `scripts/gui_e2e.py run -m smoke` gives **19 passed, 4 strict xfail** (about 3 minutes including stack start). Stable on the last two consecutive runs (an earlier run exposed a race in `fill()` on prefilled fields; it now verifies the field value and retries). Every xfail names a confirmed product defect; it turns into a failure (XPASS) as soon as the defect is fixed, so the marker must then be removed.
+
+| Scenario | Test | Result |
+|---|---|---|
+| GUI-03-02 | `test_epic03_saas.py::test_onboarding_a_site_issues_working_manager_credentials` | pass (DB: slug, SITE_MANAGER with `must_change_password`, blocks; the shown password logs in) |
+| GUI-04-02 | `test_epic04_invitations.py::test_pending_registrations_are_listed_for_the_manager` | **xfail: gap**, the client never loads `/registration/pending` |
+| GUI-04-03 | `test_epic04_invitations.py::test_approving_a_registration_creates_an_active_account` | **xfail: gap**, same cause |
+| GUI-07-03 | `test_epic07_bank.py::test_statement_upload_matches_known_sender_and_flags_unknown` | pass (generated Kuveyt Türk .xlsx: 1 matched ₺1400.00, 1 unmatched ₺250.00) |
+| GUI-07-03 | `test_epic07_bank.py::test_confirming_matched_rows_records_the_payment` | **xfail: bug**, confirmation is client-only |
+| GUI-07-10 | `test_epic07_bank.py::test_period_accrual_charges_every_unit_once` | pass (N liabilities, duplicate blocked, count unchanged) |
+| GUI-08-01 | `test_epic08_occupancy.py::test_tenant_move_in` | pass (active TENANT occupancy, `units.tenant_person_id`) |
+| GUI-08-04 | `test_epic08_occupancy.py::test_tenant_move_out_keeps_history_and_debt` | pass (occupancy closed, `exit_balance` 1500.00, liability and person kept) |
+| GUI-09-01 | `test_epic09_payments.py::test_payment_stream_role_filter_shows_only_tenant_payments` | pass (role filter; ids equal the API's TENANT entries). The UI has no period filter, so that part of the scenario is not testable |
+| GUI-10-02 | `test_epic10_capital.py::test_project_budget_is_split_by_land_share_to_the_kurus` | pass (unit shares sum exactly to ₺500.000,00; unit 14's share is exact) |
+| GUI-10-04 | `test_epic10_capital.py::test_installment_accrual_charges_owners_only` | pass (OWNER / CAPITAL_DUES rows only, installment marked accrued) |
+| GUI-X-01 | conftest `page_guard` | applies to every test |
+
+New builders: `Api.change_password`, `submit_registration`, `move_in`, `create_period`, `accrue_period`, `record_manual_payment`, `payment_stream`; `Builders.tenant_debt` (SQL arrange). `support/bank_files.py` generates statement files in code, so there are no binary fixtures in git.
+
+New ids: `btn_open_add_site`, `add_site_{name,city,address,admin_name,admin_email,admin_phone}_field`, `site_credentials_password`, `btn_close_site_credentials`, `approval_credentials_password`, `btn_close_approval_dialog`, `pending_count_badge`, `pending_card_<id>`, `btn_approve_<id>`, `btn_reject_<id>`, `btn_open_accrual_dialog`, `accrual_dialog_period`, `btn_confirm_period_accrual`, `snackbar_accrual_result`, `btn_open_bank_import`, `btn_import_pick_file`, `import_summary_{matched,unmatched}`, `btn_confirm_matched_import`, `filter_{role,channel}_chip`, `filter_{role,channel}_option_<v>`, `payment_entry_<id>_<role>`, `radio_allocation_{by_land_share,equal}`, `chip_installments_<n>`, `installment_accrued_<n>`, `unit_share_<block>_<unit>`, `move_in_{name,email,phone}_field`, `btn_confirm_move_in`, `btn_confirm_move_out`. `testId()` gained an optional `label` for widgets that keep their text out of the semantics tree (`SelectableText`).
+
+**Findings from Phase 3** (in addition to the four in GUI_AUTOMATION_PLAN.md):
+5. **Approval queue never loads (gap, STORY-04-04/05).** No client code calls `GET /api/v1/registration/pending`. The badge stays at 0 whatever is submitted.
+6. **Statement confirmation is not persisted (bug, STORY-07-02).** "Eşleşenleri Onayla & Kaydet" changes only in-memory client state. After a reload the payment is gone, and no `payment_entries` or `paid_amount` change is written.
+7. **Operational dues are charged to TENANT on owner-occupied units.** `accrue-period` writes `debtor_type = TENANT` for units with no tenant. It also stores today's date as `due_date` instead of the period's (2026-10-15), while the dialog shows a hard-coded "₺1.400,00" and "15.10.2026".
+8. **Accrual dialog with no period.** When the site has no dues period, "Toplu Aidat Tahakkuku" still opens, shows an empty period and offers to accrue.
+9. **Unit-share API placeholders.** `GET /capital-projects/:id/unit-shares` returns the block id as `block` ("1") and placeholder owners (`person-2`, the same phone for every unit). The project's "Kat Malikleri" tab shows them. This is the same block-id issue as finding 2.
+10. **Inconsistent money formatting (GUI-X-06).** The import summary and the capital views print `₺1400.00` / `₺285714.29` (`toStringAsFixed` or `toString`), not the Turkish `₺1.400,00` used elsewhere.
+11. **Unreproduced:** once, on a long-lived exploration stack, the first `accrue-installment` call returned 400 "db error" (nothing was logged) and an identical retry succeeded. It has not happened on a clean stack. The service also reads every site's units (`inner.units`, no site filter) and inserts the per-unit rows without a transaction, so a mid-way failure would leave a partial accrual.
+
+Next: P1 scenarios, epic by epic (Phase 3 continues), then the Phase 4 wiring.
+
