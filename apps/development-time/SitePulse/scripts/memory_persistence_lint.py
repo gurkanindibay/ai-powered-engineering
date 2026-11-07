@@ -1,215 +1,83 @@
 #!/usr/bin/env python3
-"""
-SitePulse Memory-Persistence Audit & Linter
-Ensures strict consistency between in-memory Axum state and PostgreSQL persistence.
+"""SitePulse persistence lint: database results must never be discarded.
 
-Detects:
-1. Un-hydrated state fields in `load_all_from_db`.
-2. Destructive SQL overwrite anti-patterns (e.g. non-accumulating paid_amount).
-3. Obsolete conflict arbiter specifications (e.g. advance_balances(unit_id) instead of composite).
-4. Direct in-memory mutations lacking database write-paths in state-modifying services.
+The backend once held state in memory and wrote to PostgreSQL as a best-effort
+side effect, discarding errors with `let _ = ...` (131 sites). This lint fails
+the build when that pattern comes back. It checks the Rust sources for:
 
-Supports --json and --help flags.
+  discarded-db-result   `let _ = <db/client/tx call>` or `.await.ok();` on a database call
+  swallowed-load-error  `if let Ok(..) = client.query(..)` (a failed query is silently skipped)
+  missing-deny          src/lib.rs must keep `#![deny(unused_must_use)]`, so a bare
+                        `db_call().await;` statement does not compile
+  silent-default-id     `parse_id_to_i64(..).unwrap_or(<n>)` with n > 0 (writes to another row)
+
+Usage:
+    python3 scripts/memory_persistence_lint.py [--json] [--root PATH]
+
+Exit code 0 when clean, 1 when violations are found.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
 import re
 import sys
 from pathlib import Path
+from typing import Dict, List
 
-BACKEND_SRC = Path(__file__).resolve().parent.parent / "backend" / "src"
+DEFAULT_ROOT = Path(__file__).resolve().parent.parent / "backend"
 
-CRITICAL_PERSISTED_TABLES = [
-    "sites",
-    "blocks",
-    "units",
-    "users",
-    "dues_liabilities",
-    "payment_entries",
-    "payment_receipts",
-    "pending_registrations",
-    "occupancy_members",
-    "unit_occupancies",
-    "invitation_tokens",
-    "advance_balances",
-    "unit_sender_ibans",
-    "site_bank_accounts",
-    "reconciliation_queue",
+DB_CALL = r"(?:crate::db::\w+|db::\w+|client\s*\.\s*\w+|tx\s*\.\s*\w+|pool\s*\.\s*get|save_\w+|update_\w+|delete_\w+|record_\w+)"
+RULES = [
+    ("discarded-db-result", re.compile(r"let\s+_\s*=\s*" + DB_CALL), "result of a database call is discarded"),
+    ("discarded-db-result", re.compile(DB_CALL + r"\([^;]*?\)\s*\.await\s*\.ok\(\)\s*;", re.S), "database error converted to None and dropped"),
+    ("swallowed-load-error", re.compile(r"if\s+let\s+Ok\(\w+\)\s*=\s*client\s*\.\s*query"), "failed query is silently skipped"),
+    ("silent-default-id", re.compile(r"parse_id_to_i64\([^)]*\)\s*\.unwrap_or\(\s*[1-9]\d*\s*\)"), "unparseable id silently mapped to a real row"),
 ]
 
-def check_db_hydration(db_rs: str) -> list[dict]:
-    findings = []
-    # Check that each critical table is queried in load_all_from_db
-    load_func_match = re.search(r"pub async fn load_all_from_db\s*\(.*?\)\s*(?:->[^{]+)?\{(.*?)(?:\n\s*pub async fn|\Z)", db_rs, re.DOTALL)
-    if not load_func_match:
-        findings.append({
-            "check": "db_hydration_load_all_present",
-            "status": "FAIL",
-            "message": "Could not find `load_all_from_db` function in src/db.rs"
-        })
-        return findings
 
-    load_body = load_func_match.group(1)
-    for table in CRITICAL_PERSISTED_TABLES:
-        pattern = rf'FROM\s+{table}\b'
-        if not re.search(pattern, load_body, re.IGNORECASE):
-            findings.append({
-                "check": f"db_hydration_{table}",
-                "status": "FAIL",
-                "message": f"Table `{table}` is not hydrated in `load_all_from_db()`"
-            })
-        else:
-            findings.append({
-                "check": f"db_hydration_{table}",
-                "status": "PASS",
-                "message": f"Table `{table}` hydrated in `load_all_from_db()`"
-            })
+def lint(root: Path) -> List[Dict[str, object]]:
+    findings: List[Dict[str, object]] = []
+    for path in sorted((root / "src").rglob("*.rs")):
+        text = path.read_text(encoding="utf-8")
+        for rule, pattern, message in RULES:
+            for m in pattern.finditer(text):
+                line = text.count("\n", 0, m.start()) + 1
+                findings.append({"rule": rule, "file": str(path.relative_to(root)), "line": line,
+                                 "message": message, "code": text.splitlines()[line - 1].strip()[:160]})
+    lib = root / "src" / "lib.rs"
+    if not lib.exists() or "#![deny(unused_must_use)]" not in lib.read_text(encoding="utf-8"):
+        findings.append({"rule": "missing-deny", "file": "src/lib.rs", "line": 1,
+                         "message": "src/lib.rs must contain #![deny(unused_must_use)]", "code": ""})
     return findings
 
-def check_anti_patterns(db_rs: str) -> list[dict]:
-    findings = []
 
-    # 1. Check for dues_liabilities overwrite bug: `SET status = $2, paid_amount = $3`
-    if re.search(r"UPDATE\s+dues_liabilities\s+SET\s+status\s*=\s*\$2,\s*paid_amount\s*=\s*\$3\b", db_rs, re.IGNORECASE):
-        findings.append({
-            "check": "anti_pattern_dues_paid_amount_overwrite",
-            "status": "FAIL",
-            "message": "Found destructive `UPDATE dues_liabilities SET paid_amount = $3` without accumulation"
-        })
-    else:
-        findings.append({
-            "check": "anti_pattern_dues_paid_amount_overwrite",
-            "status": "PASS",
-            "message": "`dues_liabilities.paid_amount` safely accumulates payments"
-        })
+def run_all_checks(root: Path = DEFAULT_ROOT) -> List[Dict[str, str]]:
+    """Compatibility helper: one PASS/FAIL entry per rule."""
+    findings = lint(root)
+    rules = sorted({r for r, _, _ in RULES} | {"missing-deny"})
+    return [
+        {"check": rule, "status": "FAIL" if any(f["rule"] == rule for f in findings) else "PASS",
+         "message": "; ".join(f"{f['file']}:{f['line']}" for f in findings if f["rule"] == rule)}
+        for rule in rules
+    ]
 
-    # 2. Check advance_balances ON CONFLICT
-    if re.search(r"INSERT\s+INTO\s+advance_balances.*?ON\s+CONFLICT\s*\(\s*unit_id\s*\)", db_rs, re.DOTALL | re.IGNORECASE):
-        findings.append({
-            "check": "anti_pattern_advance_conflict_target",
-            "status": "FAIL",
-            "message": "Found invalid conflict target `ON CONFLICT (unit_id)` on `advance_balances` (requires debtor_type)"
-        })
-    else:
-        findings.append({
-            "check": "anti_pattern_advance_conflict_target",
-            "status": "PASS",
-            "message": "`advance_balances` uses correct composite conflict arbiter `(unit_id, debtor_type)`"
-        })
 
-    # 3. Check unit_sender_ibans ON CONFLICT
-    if re.search(r"INSERT\s+INTO\s+unit_sender_ibans.*?ON\s+CONFLICT\s*\(\s*sender_iban\s*\)", db_rs, re.DOTALL | re.IGNORECASE):
-        findings.append({
-            "check": "anti_pattern_sender_iban_conflict_target",
-            "status": "FAIL",
-            "message": "Found invalid conflict target `ON CONFLICT (sender_iban)` on `unit_sender_ibans` (requires unit_id)"
-        })
-    else:
-        findings.append({
-            "check": "anti_pattern_sender_iban_conflict_target",
-            "status": "PASS",
-            "message": "`unit_sender_ibans` uses correct unique composite arbiter `(unit_id, sender_iban)`"
-        })
-
-    return findings
-
-def check_payment_tracking_service(service_rs: str) -> list[dict]:
-    findings = []
-
-    # Check next_receipt_number checks state.pool
-    if "crate::db::get_next_receipt_sequence" in service_rs:
-        findings.append({
-            "check": "receipt_sequence_db_backed",
-            "status": "PASS",
-            "message": "Receipt sequence checks database sequence when pool is available"
-        })
-    else:
-        findings.append({
-            "check": "receipt_sequence_db_backed",
-            "status": "FAIL",
-            "message": "`next_receipt_number` does not query database sequence"
-        })
-
-    # Check record_and_allocate_payment persists receipt and entry
-    if "crate::db::save_payment_receipt" in service_rs and "crate::db::save_payment_entry" in service_rs:
-        findings.append({
-            "check": "payment_allocation_db_backed",
-            "status": "PASS",
-            "message": "Payment allocation persists receipt, entry, and allocations to DB"
-        })
-    else:
-        findings.append({
-            "check": "payment_allocation_db_backed",
-            "status": "FAIL",
-            "message": "`record_and_allocate_payment` does not persist receipt and entry to DB"
-        })
-
-    # Check inter_ledger_transfer persists virman
-    if "save_advance_ledger_entry" in service_rs:
-        findings.append({
-            "check": "advance_ledger_entry_tracked",
-            "status": "PASS",
-            "message": "Advance ledger entry audit trail is recorded on surplus and virman"
-        })
-    else:
-        findings.append({
-            "check": "advance_ledger_entry_tracked",
-            "status": "FAIL",
-            "message": "Missing `save_advance_ledger_entry` calls for advance sub-ledger audit trail"
-        })
-
-    return findings
-
-def run_all_checks() -> list[dict]:
-    db_rs_path = BACKEND_SRC / "db.rs"
-    service_rs_path = BACKEND_SRC / "services" / "payment_tracking_service.rs"
-
-    if not db_rs_path.exists():
-        return [{"check": "file_exists", "status": "FAIL", "message": f"{db_rs_path} not found"}]
-
-    db_rs = db_rs_path.read_text(encoding="utf-8")
-    service_rs = service_rs_path.read_text(encoding="utf-8") if service_rs_path.exists() else ""
-
-    results = []
-    results.extend(check_db_hydration(db_rs))
-    results.extend(check_anti_patterns(db_rs))
-    results.extend(check_payment_tracking_service(service_rs))
-    return results
-
-def main():
-    parser = argparse.ArgumentParser(description="Audit and lint Rust backend memory-persistence consistency.")
-    parser.add_argument("--json", action="store_true", help="Output results in structured JSON format.")
-    args = parser.parse_args()
-
-    results = run_all_checks()
-    failures = [r for r in results if r["status"] == "FAIL"]
-
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    parser.add_argument("--root", type=Path, default=DEFAULT_ROOT, help="Backend crate root (default: backend/)")
+    args = parser.parse_args(argv)
+    findings = lint(args.root)
     if args.json:
-        payload = {
-            "total_checks": len(results),
-            "passed": len(results) - len(failures),
-            "failed": len(failures),
-            "results": results,
-        }
-        print(json.dumps(payload, indent=2))
+        print(json.dumps({"passed": not findings, "violations": findings}, indent=2))
     else:
-        print("=" * 60)
-        print("SitePulse Memory-Persistence Architecture Linter")
-        print("=" * 60)
-        for r in results:
-            tag = "[ PASS ]" if r["status"] == "PASS" else "[ FAIL ]"
-            print(f"{tag:<9} {r['check']}: {r['message']}")
-        print("-" * 60)
-        print(f"Summary: {len(results) - len(failures)}/{len(results)} checks passed.")
-        if failures:
-            print(f"FAILED: {len(failures)} persistence checks violated.")
-        else:
-            print("ALL PERSISTENCE CHECKS OK.")
+        for f in findings:
+            print(f"{f['file']}:{f['line']}: [{f['rule']}] {f['message']}\n    {f['code']}")
+        print(f"\nPERSISTENCE LINT: {'OK' if not findings else f'{len(findings)} violation(s)'}")
+    return 0 if not findings else 1
 
-    if failures:
-        sys.exit(1)
-    sys.exit(0)
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

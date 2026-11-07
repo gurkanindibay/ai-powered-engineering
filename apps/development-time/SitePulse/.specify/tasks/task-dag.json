@@ -1,218 +1,494 @@
 {
-  "version": "1.0.0",
-  "project": "SitePulse Mobile (Android)",
+  "version": "2.0.0",
+  "project": "SitePulse",
   "tasks": [
     {
       "id": "task-01",
       "name": "Core Domain Models & Financial Value Objects",
       "module": "flutter-domain",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [],
       "spec_ref": "SPEC-001",
-      "description": "Implement Daire, Kisi, AidatBorcu, and Money value object with strict Decimal precision."
+      "description": "Implement Daire, Kisi, AidatBorcu, and Money value object with strict Decimal precision.",
+      "gates": [
+        "money-fixtures"
+      ],
+      "acceptance_tests": [
+        "flutter:test/calculate_dues_usecase_test.dart"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-02",
       "name": "KMK Statutory Delay Fee Calculation Engine",
       "module": "flutter-domain",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-01"
       ],
       "spec_ref": "SPEC-001",
-      "description": "Calculate 5% monthly delay penalty pro-rated per day per Article 20 of KMK with unit tests."
+      "description": "Calculate 5% monthly delay penalty pro-rated per day per Article 20 of KMK with unit tests.",
+      "gates": [
+        "money-fixtures"
+      ],
+      "acceptance_tests": [
+        "rust:integration_tests::when_overdue_by_10_days_then_calculates_exact_5_percent_pro_rated_penalty",
+        "rust:integration_tests::when_not_overdue_then_penalty_remains_zero",
+        "flutter:test/financial_fixture_test.dart",
+        "rust:financial_fixtures::penalty_cases_match_the_fixture"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-03",
       "name": "Dashboard State Management & ViewModel",
       "module": "flutter-ui",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-01",
         "task-02"
       ],
       "spec_ref": "SPEC-001",
-      "description": "Implement DashboardUiState and DashboardController with reactive ChangeNotifier."
+      "description": "Implement DashboardUiState and DashboardController with reactive ChangeNotifier.",
+      "gates": [],
+      "acceptance_tests": [
+        "flutter:test/dashboard_controller_test.dart"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-04",
       "name": "Material 3 Dashboard Flutter Screens",
       "module": "flutter-ui",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-03"
       ],
       "spec_ref": "SPEC-001",
-      "description": "Build Hero Balance Card, Quick Action Grid, and TopBar matching prototype.html."
+      "description": "Build Hero Balance Card, Quick Action Grid, and TopBar matching prototype.html.",
+      "gates": [],
+      "acceptance_tests": [
+        "flutter:test/widget_test.dart",
+        "flutter:test/zero_data_guidance_test.dart"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-05",
       "name": "PostgreSQL Schema & SQL Migrations",
       "module": "backend-db",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [],
       "spec_ref": "SPEC-001",
-      "description": "Design relational schema (siteler, bloklar, bagimsiz_bolumler, aidat_borclari) with NUMERIC(15, 2) columns."
+      "description": "Design relational schema (siteler, bloklar, bagimsiz_bolumler, aidat_borclari) with NUMERIC(15, 2) columns.",
+      "gates": [
+        "schema-integrity"
+      ],
+      "acceptance_tests": [
+        "rust:lib::migrations::tests::every_migration_file_is_registered_in_order",
+        "system:restart_persistence",
+        "system:sequences_survive_restart"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-06",
       "name": "Rust High-Precision Domain Models & Decimal Invariants",
       "module": "backend-rust",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-05"
       ],
       "spec_ref": "SPEC-001",
-      "description": "Implement Rust domain models (AidatBorcu, User, Site) with rust_decimal precision."
+      "description": "Implement Rust domain models (AidatBorcu, User, Site) with rust_decimal precision.",
+      "gates": [
+        "money-fixtures"
+      ],
+      "acceptance_tests": [
+        "rust:lib::services::dues_ledger::tests::payment_records_paid_amounts_and_never_reduces_the_debt",
+        "rust:financial_fixtures::waterfall_properties_hold_for_random_inputs"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-07",
       "name": "Axum Tokio REST API for Resident & Management Dashboard",
       "module": "backend-rust",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-06"
       ],
       "spec_ref": "SPEC-001",
-      "description": "Expose GET /api/v1/residents/{unitId}/dashboard and management endpoints in Rust Axum calculating real-time KMK interest."
+      "description": "Expose GET /api/v1/residents/{unitId}/dashboard and management endpoints in Rust Axum calculating real-time KMK interest.",
+      "gates": [
+        "api-system"
+      ],
+      "acceptance_tests": [
+        "rust:api_security_tests::every_protected_route_returns_401_without_a_token",
+        "rust:api_security_tests::site_managers_are_confined_to_their_site",
+        "rust:api_security_tests::residents_cannot_reach_admin_or_other_units",
+        "system:unauthenticated_routes_rejected",
+        "system:cross_site_forbidden"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-08",
       "name": "Offline Cache & Repository Layer",
       "module": "flutter-data",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-01",
         "task-07"
       ],
       "spec_ref": "SPEC-001",
-      "description": "Local database caching for resident dashboard data synchronized with Rust REST API."
+      "description": "Local database caching for resident dashboard data synchronized with Rust REST API.",
+      "gates": [],
+      "acceptance_tests": [
+        "flutter:test/e2e_quality_verification_test.dart"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-09",
       "name": "Action-Free Site Deletion Guard & Multi-Tenant Cleanup",
       "module": "full-stack",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-03",
         "task-07"
       ],
       "spec_ref": "SPEC-002",
-      "description": "Implement deletion of sites that have no associated actions, units, dues, or requests across Rust backend and Flutter UI with strict invariant guards."
+      "description": "Implement deletion of sites that have no associated actions, units, dues, or requests across Rust backend and Flutter UI with strict invariant guards.",
+      "gates": [],
+      "acceptance_tests": [
+        "rust:integration_tests::when_deleting_action_free_site_then_succeeds_and_removes_site",
+        "rust:integration_tests::when_deleting_site_with_active_units_or_actions_then_strictly_rejected"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-10",
       "name": "Site Manager Temporary Password Renewal",
       "module": "full-stack",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-03",
         "task-07"
       ],
       "spec_ref": "SPEC-002",
-      "description": "Allow SaaS Super Admins to generate or renew a temporary management password for site managers with forced password change on next login."
+      "description": "Allow SaaS Super Admins to generate or renew a temporary management password for site managers with forced password change on next login.",
+      "gates": [],
+      "acceptance_tests": [
+        "rust:integration_tests::when_resetting_admin_password_then_generates_new_temporary_password_and_forces_change",
+        "rust:integration_tests::when_resetting_admin_password_for_non_existent_site_then_fails"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-11",
       "name": "Zero-Approval Bank Statement (Excel / CSV / MT940) Parser",
       "module": "full-stack",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-04",
         "task-07"
       ],
       "spec_ref": "SPEC-003",
-      "description": "Zero-approval parser for Turkish bank statements (Excel, CSV, SWIFT MT940) with regex/NLP flat & resident matching, 100% confidence scoring, and automated dues reconciliation queue."
+      "description": "Zero-approval parser for Turkish bank statements (Excel, CSV, SWIFT MT940) with regex/NLP flat & resident matching, 100% confidence scoring, and automated dues reconciliation queue.",
+      "gates": [],
+      "acceptance_tests": [
+        "rust:integration_tests::when_parsing_turkish_bank_excel_then_matches_flat_and_amount",
+        "rust:integration_tests::when_parsing_mt940_statement_then_extracts_transactions_and_matches_due",
+        "flutter:test/bank_file_parser_test.dart",
+        "flutter:test/bank_statement_reconciliation_test.dart"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-12",
       "name": "Flat-Specific Virtual IBAN Allocation & Real-Time Bank Webhook Settlement",
       "module": "full-stack",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-07"
       ],
       "spec_ref": "SPEC-003",
-      "description": "Provision ISO 7064 MOD-97-10 validated Virtual IBANs (Kuveyt T\u00fcrk Sandbox) and real-time incoming transfer webhook settlement with HMAC signature and idempotency guard."
+      "description": "Provision ISO 7064 MOD-97-10 validated Virtual IBANs (Kuveyt Türk Sandbox) and real-time incoming transfer webhook settlement with HMAC signature and idempotency guard.",
+      "gates": [],
+      "acceptance_tests": [
+        "rust:integration_tests::when_unit_created_then_generates_unique_sanal_iban",
+        "rust:integration_tests::when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_generates_receipt",
+        "rust:integration_tests::when_webhook_is_unsigned_or_forged_then_it_is_rejected",
+        "rust:integration_tests::when_webhook_currency_is_not_try_then_it_is_rejected",
+        "system:webhook_signature_enforced"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-13",
       "name": "Advance Payment Allocation & Dynamic Hero Balance Display",
       "module": "full-stack",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-12"
       ],
       "spec_ref": "SPEC-003",
-      "description": "Credit payment surplus as advance balance, dynamically render positive balance on resident Hero Card, and track transactions in ledger."
+      "description": "Credit payment surplus as advance balance, dynamically render positive balance on resident Hero Card, and track transactions in ledger.",
+      "gates": [],
+      "acceptance_tests": [
+        "rust:integration_tests::when_excess_or_multiple_payments_delivered_then_credited_as_advance_payment",
+        "rust:integration_tests::when_new_dues_period_accrued_and_resident_has_advance_payment_then_automatically_offsets_debt"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-14",
       "name": "Automated Monthly Dues Batch Scheduler & Duplicate Accrual Guard",
       "module": "full-stack",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-13"
       ],
       "spec_ref": "SPEC-003",
-      "description": "Embedded Tokio background scheduler and site manager UI action for monthly dues accrual with strict duplicate prevention and automatic advance payment offsetting."
+      "description": "Embedded Tokio background scheduler and site manager UI action for monthly dues accrual with strict duplicate prevention and automatic advance payment offsetting.",
+      "gates": [],
+      "acceptance_tests": [
+        "rust:integration_tests::when_scheduler_batch_runs_then_accrues_and_prevents_duplicate_accrual",
+        "rust:integration_tests::when_utc_is_late_evening_then_accrual_uses_the_site_local_date",
+        "rust:integration_tests::when_dues_period_already_accrued_then_duplicate_accrual_is_prevented"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-15",
       "name": "Payment Tracking Domain Schema & Unified Multi-Channel Inflow Ledger",
       "module": "backend-db",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-12",
         "task-13",
         "task-14"
       ],
       "spec_ref": "SPEC-004",
-      "description": "Extend database schema with payment tracking indices, receipt numbers, and multi-channel collection transaction query APIs."
+      "description": "Extend database schema with payment tracking indices, receipt numbers, and multi-channel collection transaction query APIs.",
+      "gates": [
+        "schema-integrity"
+      ],
+      "acceptance_tests": [
+        "rust:integration_tests::when_querying_payment_stream_then_returns_filtered_entries_and_volume_kpis",
+        "system:concurrent_receipts_unique"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-16",
       "name": "Dual-Ledger FIFO Allocation & KMK Delay Penalty Waterfall Engine",
       "module": "backend-rust",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-15"
       ],
       "spec_ref": "SPEC-004",
-      "description": "Implement 4-tier waterfall allocation engine: KMK delay penalties first, operational dues second, capital dues third, and surplus to advance."
+      "description": "Implement 4-tier waterfall allocation engine: KMK delay penalties first, operational dues second, capital dues third, and surplus to advance.",
+      "gates": [
+        "money-fixtures"
+      ],
+      "acceptance_tests": [
+        "rust:integration_tests::when_payment_is_allocated_then_amount_owed_is_preserved_and_penalty_is_recorded",
+        "rust:integration_tests::when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tbk100_and_surplus_to_advance",
+        "rust:integration_tests::when_tenant_pays_without_capital_intent_then_owner_capital_dues_are_untouched",
+        "rust:financial_fixtures::allocation_cases_match_the_fixture"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-17",
       "name": "Sequential Digital Payment Receipt Generation & Voucher Verification",
       "module": "backend-rust",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-16"
       ],
       "spec_ref": "SPEC-004",
-      "description": "Generate monotonic sequentially numbered official payment receipts (#TAH-YYYY-XXXXXX) with verification hash."
+      "description": "Generate monotonic sequentially numbered official payment receipts (#TAH-YYYY-XXXXXX) with verification hash.",
+      "gates": [],
+      "acceptance_tests": [
+        "rust:integration_tests::when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_marks_rent_offset_eligible",
+        "system:concurrent_receipts_unique",
+        "system:idempotent_payment_retry"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-18",
       "name": "Site Manager Payment Tracking Dashboard & Debt Aging UI",
       "module": "flutter-ui",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-17"
       ],
       "spec_ref": "SPEC-004",
-      "description": "Build high-performance Flutter fullscreen Payment Tracking view with filters, collection rate KPIs, debt aging brackets, and receipt views."
+      "description": "Build high-performance Flutter fullscreen Payment Tracking view with filters, collection rate KPIs, debt aging brackets, and receipt views.",
+      "gates": [],
+      "acceptance_tests": [
+        "flutter:test/payment_tracking_and_aging_test.dart"
+      ],
+      "attempts": 0
     },
     {
       "id": "task-19",
       "name": "Occupancy Lifecycle Financial Handover & Move-Out Balance Freeze Hook",
       "module": "full-stack",
-      "status": "COMPLETED",
+      "status": "UNVERIFIED",
       "depends_on": [
         "task-18"
       ],
       "spec_ref": "SPEC-004",
-      "description": "Integrate Property & Occupancy Registry move-out action with Treasury Context to freeze tenant balance and shift future accruals to owner."
+      "description": "Integrate Property & Occupancy Registry move-out action with Treasury Context to freeze tenant balance and shift future accruals to owner.",
+      "gates": [],
+      "acceptance_tests": [
+        "rust:integration_tests::when_managing_occupancy_lifecycle_then_can_move_out_and_move_in_without_losing_history",
+        "rust:integration_tests::when_tenant_moves_out_then_household_members_are_archived_and_cleared_from_active_unit",
+        "flutter:test/occupancy_lifecycle_and_dual_ledger_test.dart"
+      ],
+      "attempts": 0
+    },
+    {
+      "id": "task-20",
+      "name": "Backend Persistence, Migrations & Verification Harness",
+      "module": "backend-db",
+      "status": "UNVERIFIED",
+      "depends_on": [
+        "task-05",
+        "task-07"
+      ],
+      "spec_ref": "EPIC-05",
+      "description": "PostgreSQL is the system of record; versioned migrations; closed-loop harness with evidence.",
+      "gates": [
+        "harness-selftest",
+        "persistence-lint",
+        "schema-integrity"
+      ],
+      "acceptance_tests": [
+        "system:restart_persistence",
+        "system:sequences_survive_restart",
+        "rust:lib::migrations::tests::every_migration_file_is_registered_in_order"
+      ],
+      "attempts": 0
+    },
+    {
+      "id": "task-21",
+      "name": "Identity, Authentication & Scoped Authorization",
+      "module": "backend-rust",
+      "status": "UNVERIFIED",
+      "depends_on": [
+        "task-07"
+      ],
+      "spec_ref": "EPIC-06",
+      "description": "Signed JWTs, argon2id passwords, verified Google ID tokens, role and tenant policy on every route.",
+      "gates": [
+        "api-system"
+      ],
+      "acceptance_tests": [
+        "rust:integration_tests::when_valid_password_registration_then_can_authenticate",
+        "rust:integration_tests::when_wrong_password_then_throws_exception",
+        "rust:integration_tests::when_valid_google_id_token_then_authenticates_and_links_account",
+        "rust:integration_tests::when_google_token_is_unsigned_then_account_takeover_is_impossible",
+        "rust:integration_tests::when_using_former_backdoor_or_placeholder_passwords_then_login_fails",
+        "rust:integration_tests::when_changing_password_then_policy_is_uniform_and_errors_do_not_enumerate_users",
+        "rust:integration_tests::when_registering_without_invite_or_with_unknown_invite_then_rejected",
+        "rust:lib::auth::tests::token_round_trip_and_tamper_detection",
+        "rust:lib::auth::tests::passwords_only_verify_against_argon2",
+        "rust:api_security_tests::forged_and_unsigned_tokens_are_rejected",
+        "rust:api_security_tests::profile_comes_from_the_token_not_the_query",
+        "system:forged_token_rejected"
+      ],
+      "attempts": 0
+    },
+    {
+      "id": "task-22",
+      "name": "Bank Integration, Webhooks & Automated Reconciliation",
+      "module": "full-stack",
+      "status": "UNVERIFIED",
+      "depends_on": [
+        "task-11",
+        "task-12"
+      ],
+      "spec_ref": "EPIC-07",
+      "description": "HMAC-signed bank webhooks, durable idempotency, reconciliation within the site.",
+      "gates": [],
+      "acceptance_tests": [
+        "rust:integration_tests::when_confirming_reconciliation_batch_then_updates_dues_and_ledger",
+        "rust:integration_tests::when_site_manager_configures_bank_account_then_format_is_automatically_set_by_bank",
+        "rust:integration_tests::when_sender_iban_is_remembered_subsequent_blank_desc_payment_auto_matches",
+        "rust:integration_tests::when_transfer_cannot_be_matched_then_enters_unmatched_pool_successfully",
+        "system:webhook_signature_enforced"
+      ],
+      "attempts": 0
+    },
+    {
+      "id": "task-23",
+      "name": "Occupancy Lifecycle & Dual-Ledger Responsibility",
+      "module": "full-stack",
+      "status": "UNVERIFIED",
+      "depends_on": [
+        "task-19"
+      ],
+      "spec_ref": "EPIC-08",
+      "description": "Owner/tenant liabilities separated; transfers are transactional and keep history.",
+      "gates": [],
+      "acceptance_tests": [
+        "rust:integration_tests::when_registering_new_owner_or_tenant_to_existing_unit_then_archives_previous_occupant_in_history",
+        "rust:integration_tests::when_property_ownership_transferred_then_old_owner_debt_frozen_and_tenant_lease_preserved",
+        "rust:integration_tests::when_transferring_property_ownership_then_freezes_old_debt_and_creates_occupancy_history",
+        "flutter:test/occupancy_lifecycle_and_dual_ledger_test.dart"
+      ],
+      "attempts": 0
+    },
+    {
+      "id": "task-24",
+      "name": "Payment Tracking, Receipts & Treasury",
+      "module": "backend-rust",
+      "status": "UNVERIFIED",
+      "depends_on": [
+        "task-16",
+        "task-17"
+      ],
+      "spec_ref": "EPIC-09",
+      "description": "Transactional payments, unique receipt numbers, idempotent retries, advance ledger per debtor.",
+      "gates": [
+        "money-fixtures"
+      ],
+      "acceptance_tests": [
+        "rust:integration_tests::when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_brackets",
+        "rust:integration_tests::when_inter_ledger_transfer_executed_then_deducts_advance_credits_capital_and_issues_receipt",
+        "rust:integration_tests::when_querying_payment_stream_then_returns_filtered_entries_and_volume_kpis",
+        "system:concurrent_receipts_unique",
+        "system:idempotent_payment_retry"
+      ],
+      "attempts": 0
+    },
+    {
+      "id": "task-25",
+      "name": "Capital Expenditure & Fixture Dues",
+      "module": "full-stack",
+      "status": "UNVERIFIED",
+      "depends_on": [
+        "task-16"
+      ],
+      "spec_ref": "EPIC-10",
+      "description": "Capital projects, installments and disbursements; capital dues are owner-only.",
+      "gates": [],
+      "acceptance_tests": [
+        "rust:integration_tests::when_creating_capital_project_with_installments_then_calculates_plan_correctly",
+        "rust:integration_tests::when_accruing_capital_installment_then_reconciles_penny_drift_exactly",
+        "rust:integration_tests::when_contractor_disbursement_recorded_then_updates_fund_balance",
+        "flutter:test/capital_expenditure_and_dues_e2e_test.dart",
+        "flutter:test/capital_projects_view_test.dart"
+      ],
+      "attempts": 0
     }
-  ]
+  ],
+  "schema": "task-dag.schema.json"
 }

@@ -77,7 +77,7 @@ impl RegistrationApprovalService {
             .iter()
             .find(|s| s.slug == slug)
             .map(|s| s.id.clone())
-            .unwrap_or_else(|| "site-1".to_string());
+            .unwrap_or_default();
 
         let item = PendingRegistrationResponse {
             request_id: request_id.clone(),
@@ -97,7 +97,7 @@ impl RegistrationApprovalService {
         drop(inner);
 
         if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::save_pending_registration(pool, &item).await;
+            crate::db::save_pending_registration(pool, &item).await.map_err(|e| e.to_string())?;
         }
 
         Ok(item)
@@ -106,13 +106,12 @@ impl RegistrationApprovalService {
     pub async fn get_pending_registrations(&self, site_id: &str) -> Vec<PendingRegistrationResponse> {
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
-                if let Ok(rows) = client
+                if let Some(rows) = crate::db::logged(client
                     .query(
                         "SELECT request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident, status, submitted_at FROM pending_registrations WHERE site_id = $1 AND status = 'PENDING' ORDER BY submitted_at DESC",
-                        &[&crate::db::parse_id_to_i64(site_id).unwrap_or(1)],
+                        &[&crate::db::parse_id_to_i64(site_id).unwrap_or(0)],
                     )
-                    .await
-                {
+                    .await, "registration_approval_service") {
                     if !rows.is_empty() {
                         return rows
                             .into_iter()
@@ -142,7 +141,7 @@ impl RegistrationApprovalService {
             .filter(|r| r.site_id == site_id && r.status == "PENDING")
             .cloned()
             .collect();
-        list.sort_by(|a, b| b.submitted_at.cmp(&a.submitted_at));
+        list.sort_by_key(|r| std::cmp::Reverse(r.submitted_at));
         list
     }
 
@@ -169,11 +168,11 @@ impl RegistrationApprovalService {
         drop(inner); // drop write lock before doing DB operations
 
         if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::update_pending_registration_status(pool, request_id, "APPROVED").await;
+            crate::db::update_pending_registration_status(pool, request_id, "APPROVED").await.map_err(|e| e.to_string())?;
         }
 
         let temp_pass = generate_resident_temporary_password();
-        let password_hash = format!("argon2id_hash_placeholder:{}", &temp_pass);
+        let password_hash = crate::auth::hash_password(&temp_pass);
 
         let clean_block = req
             .block
@@ -195,7 +194,7 @@ impl RegistrationApprovalService {
             ((req.unit_no - 1) / 4) + 1
         };
 
-        let site_numeric_id = crate::db::parse_id_to_i64(&req.site_id).unwrap_or(1);
+        let site_numeric_id = crate::db::require_id("entity", &req.site_id)?;
         let viban = crate::services::virtual_iban_service::VirtualIbanService::generate_virtual_iban(
             crate::services::virtual_iban_service::VirtualIbanService::KUVEYT_TURK_BANK_CODE,
             &site_numeric_id.to_string(),
@@ -223,13 +222,12 @@ impl RegistrationApprovalService {
 
                 block_numeric_id = if let Some(row) = existing_block {
                     row.get(0)
-                } else if let Ok(row) = client
+                } else if let Some(row) = crate::db::logged(client
                     .query_one(
                         "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10) RETURNING id",
                         &[&site_numeric_id, &formatted_block_name],
                     )
-                    .await
-                {
+                    .await, "registration_approval_service") {
                     row.get(0)
                 } else {
                     1
@@ -245,13 +243,12 @@ impl RegistrationApprovalService {
 
                 person_numeric_id = if let Some(row) = existing_person {
                     row.get(0)
-                } else if let Ok(row) = client
+                } else if let Some(row) = crate::db::logged(client
                     .query_one(
                         "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, $4) RETURNING id",
                         &[&req.full_name, &req.phone, &req.email, &person_type],
                     )
-                    .await
-                {
+                    .await, "registration_approval_service") {
                     row.get(0)
                 } else {
                     0
@@ -260,7 +257,7 @@ impl RegistrationApprovalService {
                 // Insert user
                 let user_role_str = "HOME_RESIDENT";
                 let person_id_opt: Option<i64> = if person_numeric_id > 0 { Some(person_numeric_id) } else { None };
-                if let Ok(user_row) = client
+                if let Some(user_row) = crate::db::logged(client
                     .query_one(
                         r#"
                         INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
@@ -275,13 +272,12 @@ impl RegistrationApprovalService {
                             &user_role_str,
                         ],
                     )
-                    .await
-                {
+                    .await, "registration_approval_service") {
                     user_numeric_id = user_row.get(0);
                 }
 
                 // Insert unit
-                if let Ok(unit_row) = client
+                if let Some(unit_row) = crate::db::logged(client
                     .query_one(
                         r#"
                         INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, virtual_iban)
@@ -302,8 +298,7 @@ impl RegistrationApprovalService {
                             &viban,
                         ],
                     )
-                    .await
-                {
+                    .await, "registration_approval_service") {
                     unit_numeric_id = unit_row.get(0);
                 }
             }
@@ -414,7 +409,7 @@ impl RegistrationApprovalService {
         drop(inner);
 
         if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::update_pending_registration_status(pool, request_id, "REJECTED").await;
+            crate::db::update_pending_registration_status(pool, request_id, "REJECTED").await.map_err(|e| e.to_string())?;
         }
 
         Ok(result)
@@ -422,10 +417,5 @@ impl RegistrationApprovalService {
 }
 
 fn generate_resident_temporary_password() -> String {
-    let part: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(4)
-        .map(char::from)
-        .collect();
-    format!("SP-SAKIN-{}", part.to_uppercase())
+    crate::auth::generate_temporary_password("SP-SAKIN-")
 }

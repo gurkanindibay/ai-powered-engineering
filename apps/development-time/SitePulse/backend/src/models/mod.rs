@@ -107,11 +107,32 @@ pub struct DuesLiability {
     pub id: String,
     pub unit_id: String,
     pub period: String,
+    /// Principal owed. Never reduced by payments (see `paid_principal`).
     pub principal_amount: Decimal,
+    /// Delay penalty accrued. Never reduced by payments (see `paid_penalty`).
     pub delay_penalty: Decimal,
+    /// Outstanding balance: principal + penalty - paid_principal - paid_penalty.
     pub total_amount: Decimal,
     pub due_date: NaiveDate,
     pub status: DebtStatus,
+    #[serde(default)]
+    pub paid_principal: Decimal,
+    #[serde(default)]
+    pub paid_penalty: Decimal,
+    /// `OWNER` or `TENANT`: who is liable.
+    #[serde(default = "default_debtor_type")]
+    pub debtor_type: String,
+    /// `OPERATIONAL_DUES` or `CAPITAL_DUES`.
+    #[serde(default = "default_expense_type")]
+    pub expense_type: String,
+}
+
+fn default_debtor_type() -> String {
+    "TENANT".to_string()
+}
+
+fn default_expense_type() -> String {
+    "OPERATIONAL_DUES".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,6 +231,13 @@ pub struct Site {
     pub status: String,
     pub plan_type: String,
     pub license_end_date: NaiveDate,
+    /// IANA time zone used for accrual dates (e.g. `Europe/Istanbul`).
+    #[serde(default = "default_site_timezone")]
+    pub timezone: String,
+}
+
+pub fn default_site_timezone() -> String {
+    "Europe/Istanbul".to_string()
 }
 
 // DTOs
@@ -475,31 +503,25 @@ pub struct UpdateHomeOwnerRequest {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[allow(dead_code)]
+#[derive(Default)]
 pub enum OccupancyStatus {
+    #[default]
     OwnerOccupied,
     TenantOccupied,
     Vacant,
 }
 
-impl Default for OccupancyStatus {
-    fn default() -> Self {
-        OccupancyStatus::OwnerOccupied
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[allow(dead_code)]
+#[derive(Default)]
 pub enum ExpenseType {
+    #[default]
     OperationalDues,
     CapitalDues,
 }
 
-impl Default for ExpenseType {
-    fn default() -> Self {
-        ExpenseType::OperationalDues
-    }
-}
 
 impl ExpenseType {
     #[allow(dead_code)]
@@ -514,16 +536,13 @@ impl ExpenseType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[allow(dead_code)]
+#[derive(Default)]
 pub enum DebtorType {
+    #[default]
     Tenant,
     Owner,
 }
 
-impl Default for DebtorType {
-    fn default() -> Self {
-        DebtorType::Tenant
-    }
-}
 
 impl DebtorType {
     #[allow(dead_code)]
@@ -1384,6 +1403,9 @@ pub struct RecordManualPaymentRequest {
     pub description: Option<String>,
     #[serde(default)]
     pub payment_date: Option<DateTime<Utc>>,
+    /// Client-generated key; retrying with the same key returns the first receipt.
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
 }
 
 fn default_payer_role() -> String {

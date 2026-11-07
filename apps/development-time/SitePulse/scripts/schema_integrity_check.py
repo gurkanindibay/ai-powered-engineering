@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
 """SitePulse Schema Integrity Gate.
 
-Replays both schema sources (`backend/db/init/00-*.sql` and `backend/migrations/V*.sql`)
-into throwaway databases, asserts they produce the same schema, and asserts that the
-integrity constraints reject the data they are meant to reject.
+`backend/migrations/V*.sql` is the only schema source (applied by the backend's
+migration runner). This gate:
 
-This guards against the historical failure mode where the docker init scripts, the
-versioned migrations and the Rust bootstrap (src/db.rs) drifted apart.
+1. replays every migration in version order into an empty database, loads the
+   seeds, and checks that the integrity constraints reject the data they are
+   meant to reject (and that the database-side rules do what they promise);
+2. runs an upgrade test: applies V1..V7, inserts rows the way V7-era code did,
+   applies the remaining migrations, and checks that the rows survived, the data
+   backfills ran, every constraint ended up validated, and the upgraded schema
+   is identical to a fresh install.
+
+Released migrations are append-only; nothing in this repository rewrites them.
+
+PostgreSQL access: `psql` on PATH using DB_HOST/DB_PORT/DB_USER/DB_PASS, or
+`docker exec <container> psql` (SITEPULSE_PG_CONTAINER, default sitepulse-postgres).
 
 Usage:
     python3 scripts/schema_integrity_check.py
@@ -17,31 +26,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
+import shutil
 import subprocess
 import sys
 
 BACKEND = pathlib.Path(__file__).resolve().parent.parent / "backend"
-INIT_DIR = BACKEND / "db" / "init"
 MIGRATIONS_DIR = BACKEND / "migrations"
-# db/init is the single editable source; the versioned migrations are generated
-# from it so the two trees cannot drift.
-SYNC_MAP = {
-    "00-01-init-schema.sql": "V1__init_schema.sql",
-    "00-02-saas-multi-tenancy.sql": "V2__saas_multi_tenancy.sql",
-    "00-03-auth-and-permission-providers.sql": "V3__auth_and_permission_providers.sql",
-    "00-04-site-bank-account.sql": "V4__site_bank_account.sql",
-    "00-05-payment-tracking-and-receipts.sql": "V5__payment_tracking_and_receipts.sql",
-    "00-06-capital-expenditure-and-fixtures.sql": "V6__capital_expenditure_and_fixtures.sql",
-    "00-07-viable-occupancy-ownership-and-identity.sql": "V7__viable_occupancy_ownership_and_identity.sql",
-    "00-08-referential-and-financial-integrity.sql": "V9__referential_and_financial_integrity.sql",
-    "00-09-ledger-and-referential-integrity.sql": "V10__ledger_and_referential_integrity.sql",
-    "00-10-consolidate-household-members.sql": "V11__consolidate_household_members.sql",
-    "00-11-financial-and-tenancy-remediation.sql": "V12__financial_and_tenancy_remediation.sql",
-}
+SEED_DIR = BACKEND / "db" / "seed"
+UPGRADE_FROM = 7
 
-CONTAINER = "sitepulse-postgres"
-DB_USER = "sitepulse_user"
+CONTAINER = os.environ.get("SITEPULSE_PG_CONTAINER", "sitepulse-postgres")
+DB_USER = os.environ.get("DB_USER", "sitepulse_user")
 ADMIN_DB = "postgres"
 
 SCHEMA_DUMP = """
@@ -58,7 +55,6 @@ FROM pg_indexes WHERE schemaname = 'public'
 ORDER BY 1
 """
 
-# Each entry must be rejected by the schema.
 NEGATIVE_CASES = [
     (
         "person_type domain",
@@ -150,18 +146,71 @@ NEGATIVE_CASES = [
     ),
 ]
 
+NEGATIVE_CASES += [
+    ("dues_liabilities rejects phantom unit (H11)",
+     "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date) VALUES (999999, 'P', 10, CURRENT_DATE)"),
+    ("blocks rejects phantom site (H11)", "INSERT INTO blocks (site_id, block_name, total_floors) VALUES (999999, 'Z', 1)"),
+    ("unit with financial history cannot be deleted (H12)",
+     "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount) SELECT id, 'OWNER', 'PAYMENT_SURPLUS', 5 FROM units LIMIT 1;"
+     " DELETE FROM units WHERE id = (SELECT unit_id FROM advance_ledger_entries LIMIT 1)"),
+    ("sites.status vocabulary (M3)", "UPDATE sites SET status = 'WHATEVER'"),
+    ("payment channel vocabulary (M3)",
+     "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel) SELECT site_id, id, 'X', 10, 'TELEPATHY' FROM units LIMIT 1"),
+    ("paid_amount must equal paid_principal + paid_penalty (M4)",
+     "INSERT INTO dues_liabilities (unit_id, period, principal_amount, paid_amount, due_date) SELECT id, 'P-M4', 100, 10, CURRENT_DATE FROM units LIMIT 1"),
+    ("advance balance cannot be negative (M4)",
+     "INSERT INTO advance_balances (unit_id, debtor_type, balance) SELECT id, 'OWNER', -1 FROM units LIMIT 1"),
+    ("e-mail uniqueness is case-insensitive (M8)",
+     "INSERT INTO users (email, role) SELECT UPPER(email), role FROM users WHERE email IS NOT NULL LIMIT 1"),
+    ("receipt counter cannot go negative (H3)",
+     "INSERT INTO receipt_counters (site_id, last_sequence) SELECT id, -1 FROM sites LIMIT 1"),
+]
 
-def sync_migrations() -> None:
-    for source, target in SYNC_MAP.items():
-        text = (INIT_DIR / source).read_text()
-        version = target.split("__")[0]
-        text = text.replace(f"-- {source.split('-')[0]}-{source.split('-')[1]}:", f"-- {version}:", 1)
-        (MIGRATIONS_DIR / target).write_text(text)
-        print(f"synced {source} -> {target}")
+# (name, statement, assertion query that must return 't')
+POSITIVE_CASES = [
+    ("national id is never stored in clear text (M6)",
+     "INSERT INTO persons (national_id, full_name, person_type) VALUES ('11111111110', 'PII Check', 'HOME_OWNER')",
+     "SELECT national_id IS NULL AND national_id_masked = '*******1110' AND length(national_id_hash) = 64 FROM persons WHERE full_name = 'PII Check'"),
+    ("unit owner follows the ownership history (M1)",
+     "INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, is_active)"
+     " SELECT (SELECT min(id) FROM units), id, 100, CURRENT_DATE, TRUE FROM persons WHERE full_name = 'PII Check'",
+     "SELECT owner_person_id = (SELECT id FROM persons WHERE full_name = 'PII Check') FROM units WHERE id = (SELECT min(id) FROM units)"),
+    ("no integrity violations on seeded data (M4)", "SELECT 1", "SELECT count(*) = 0 FROM v_integrity_violations"),
+]
+
+# Rows inserted the way the V7-era application wrote them (before V8 and later).
+V7_DATA = """
+INSERT INTO sites (id, name, address, slug) VALUES (1, 'Upgrade Site', 'Istanbul', 'upgrade-site');
+INSERT INTO blocks (id, site_id, block_name, total_floors) VALUES (1, 1, 'A Blok', 5);
+INSERT INTO persons (id, national_id, full_name, email, person_type) VALUES (1, '12345678901', 'Legacy Owner', 'legacy.owner@example.com', 'KAT_MALIKI');
+INSERT INTO units (id, block_id, site_id, unit_number, floor, land_share, owner_person_id) VALUES (1, 1, 1, 1, 1, 10, 1);
+INSERT INTO users (id, site_id, person_id, email, password_hash, role, must_change_password)
+    VALUES (1, 1, 1, 'Legacy.Owner@Example.com', 'ARGON2_HASH_legacy', 'HOME_OWNER', FALSE);
+INSERT INTO dues_liabilities (id, unit_id, period, principal_amount, delay_penalty, paid_amount, due_date, status)
+    VALUES (1, 1, 'Ocak 2026', 100.00, 5.00, 102.00, '2026-01-15', 'PENDING');
+"""
+
+UPGRADE_ASSERTIONS = [
+    ("legacy rows survive the upgrade",
+     "SELECT (SELECT count(*) FROM units) = 1 AND (SELECT count(*) FROM dues_liabilities) = 1 AND (SELECT count(*) FROM users WHERE id = 1) = 1"),
+    ("paid_penalty backfilled consistently", "SELECT bool_and(paid_amount = paid_principal + paid_penalty) FROM dues_liabilities"),
+    ("legacy person_type translated (V8)", "SELECT person_type = 'HOME_OWNER' FROM persons WHERE id = 1"),
+    ("legacy national id no longer in clear text (V15)", "SELECT national_id IS NULL AND national_id_masked IS NOT NULL FROM persons WHERE id = 1"),
+    ("e-mails lower-cased (V14)", "SELECT bool_and(email = lower(email)) FROM users"),
+    ("created_at is never NULL",
+     "SELECT count(*) = 0 FROM information_schema.columns c JOIN information_schema.tables t USING (table_schema, table_name)"
+     " WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE' AND c.column_name = 'created_at' AND c.is_nullable = 'YES'"),
+    ("every constraint is validated", "SELECT count(*) = 0 FROM pg_constraint WHERE connamespace = 'public'::regnamespace AND NOT convalidated"),
+]
 
 
 def psql(db: str, sql: str, stop: bool = True) -> subprocess.CompletedProcess:
-    cmd = ["docker", "exec", "-i", CONTAINER, "psql", "-U", DB_USER, "-d", db, "-X", "-q", "-t", "-A"]
+    if shutil.which("psql"):
+        dsn = (f"postgresql://{DB_USER}:{os.environ.get('DB_PASS', '')}@{os.environ.get('DB_HOST', '127.0.0.1')}:"
+               f"{os.environ.get('DB_PORT', '5432')}/{db}")
+        cmd = ["psql", dsn, "-X", "-q", "-t", "-A"]
+    else:
+        cmd = ["docker", "exec", "-i", CONTAINER, "psql", "-U", DB_USER, "-d", db, "-X", "-q", "-t", "-A"]
     if stop:
         cmd += ["-v", "ON_ERROR_STOP=1"]
     return subprocess.run(cmd, input=sql, capture_output=True, text=True)
@@ -188,80 +237,71 @@ def schema_of(db: str) -> list[str]:
     return result.stdout.strip().splitlines()
 
 
-def check(init_sql: list[pathlib.Path], migration_sql: list[pathlib.Path]) -> dict:
+def assert_true(db: str, query: str) -> tuple[bool, list[str]]:
+    result = psql(db, query)
+    if result.returncode != 0:
+        return False, [result.stderr.strip()]
+    return result.stdout.strip() == "t", [] if result.stdout.strip() == "t" else [f"returned {result.stdout.strip()!r}"]
+
+
+def migrations() -> list[pathlib.Path]:
+    files = sorted(MIGRATIONS_DIR.glob("V*__*.sql"), key=lambda p: int(p.stem.split("__")[0][1:]))
+    versions = [int(p.stem.split("__")[0][1:]) for p in files]
+    if versions != list(range(1, len(files) + 1)):
+        raise RuntimeError(f"migration versions are not contiguous from V1: {versions}")
+    return files
+
+
+def check() -> dict:
     findings: list[dict] = []
-    recreate("sitepulse_check_init")
-    recreate("sitepulse_check_mig")
+    files = migrations()
+    fresh, upgraded = "sitepulse_check_fresh", "sitepulse_check_upgrade"
+    recreate(fresh)
+    recreate(upgraded)
     try:
-        replay("sitepulse_check_init", init_sql)
-        replay("sitepulse_check_mig", migration_sql)
-
-        init_schema = schema_of("sitepulse_check_init")
-        mig_schema = schema_of("sitepulse_check_mig")
-        drift = sorted(set(init_schema).symmetric_difference(mig_schema))
-        findings.append(
-            {
-                "check": "db/init and migrations produce the same schema",
-                "ok": not drift,
-                "detail": drift[:20],
-            }
-        )
-
-        # Seed data is only needed to exercise the constraints below.
-        replay("sitepulse_check_init", sorted(INIT_DIR.glob("0[12]-*.sql")))
-
+        # 1. Fresh install + constraint behaviour.
+        replay(fresh, files)
+        fresh_schema = schema_of(fresh)
+        replay(fresh, sorted(SEED_DIR.glob("0[12]-*.sql")))
         for name, sql in NEGATIVE_CASES:
-            result = psql("sitepulse_check_init", sql)
-            findings.append(
-                {
-                    "check": f"rejects: {name}",
-                    "ok": result.returncode != 0,
-                    "detail": [] if result.returncode != 0 else ["statement was accepted"],
-                }
-            )
+            result = psql(fresh, f"BEGIN; {sql}; ROLLBACK;")
+            findings.append({"check": f"rejects: {name}", "ok": result.returncode != 0,
+                             "detail": [] if result.returncode != 0 else ["statement was accepted"]})
+        for name, sql, query in POSITIVE_CASES:
+            done = psql(fresh, sql)
+            ok, detail = (False, [done.stderr.strip()]) if done.returncode != 0 else assert_true(fresh, query)
+            findings.append({"check": f"enforces: {name}", "ok": ok, "detail": detail})
 
-        # Memory-persistence consistency checks
+        # 2. Upgrade path on existing rows.
+        old = [p for p in files if int(p.stem.split("__")[0][1:]) <= UPGRADE_FROM]
+        new = [p for p in files if int(p.stem.split("__")[0][1:]) > UPGRADE_FROM]
+        replay(upgraded, old)
+        data = psql(upgraded, V7_DATA)
+        findings.append({"check": f"upgrade: V{UPGRADE_FROM}-era rows load", "ok": data.returncode == 0, "detail": [data.stderr.strip()] if data.returncode else []})
         try:
-            sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-            from memory_persistence_lint import run_all_checks as run_persistence_checks
-            for pcheck in run_persistence_checks():
-                findings.append({
-                    "check": f"persistence: {pcheck['check']}",
-                    "ok": pcheck["status"] == "PASS",
-                    "detail": [] if pcheck["status"] == "PASS" else [pcheck["message"]],
-                })
-        except Exception as e:
-            findings.append({
-                "check": "persistence: linter_execution",
-                "ok": False,
-                "detail": [str(e)],
-            })
+            replay(upgraded, new)
+            findings.append({"check": f"upgrade: V{UPGRADE_FROM + 1}..V{len(files)} apply on existing rows", "ok": True, "detail": []})
+        except RuntimeError as exc:
+            findings.append({"check": f"upgrade: V{UPGRADE_FROM + 1}..V{len(files)} apply on existing rows", "ok": False, "detail": [str(exc)]})
+        for name, query in UPGRADE_ASSERTIONS:
+            ok, detail = assert_true(upgraded, query)
+            findings.append({"check": f"upgrade: {name}", "ok": ok, "detail": detail})
+        drift = sorted(set(fresh_schema).symmetric_difference(schema_of(upgraded)))
+        findings.append({"check": "upgrade: upgraded schema equals a fresh install", "ok": not drift, "detail": drift[:20]})
     finally:
-        psql("postgres", 'DROP DATABASE IF EXISTS "sitepulse_check_init";')
-        psql("postgres", 'DROP DATABASE IF EXISTS "sitepulse_check_mig";')
+        psql(ADMIN_DB, f'DROP DATABASE IF EXISTS "{fresh}";')
+        psql(ADMIN_DB, f'DROP DATABASE IF EXISTS "{upgraded}";')
     return {"ok": all(item["ok"] for item in findings), "findings": findings}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
-    parser.add_argument("--sync", action="store_true", help="Regenerate migrations/ from db/init/ then check")
     args = parser.parse_args()
-
-    if args.sync:
-        sync_migrations()
-
-    init_sql = sorted(INIT_DIR.glob("00-*.sql"))
-    migration_sql = sorted(MIGRATIONS_DIR.glob("V*.sql"), key=lambda p: int(p.stem.split("__")[0][1:]))
-    if not init_sql or not migration_sql:
-        print("schema sources not found", file=sys.stderr)
-        return 2
-
     try:
-        report = check(init_sql, migration_sql)
+        report = check()
     except RuntimeError as exc:
         report = {"ok": False, "findings": [{"check": "replay", "ok": False, "detail": [str(exc)]}]}
-
     if args.json:
         print(json.dumps(report, indent=2))
     else:

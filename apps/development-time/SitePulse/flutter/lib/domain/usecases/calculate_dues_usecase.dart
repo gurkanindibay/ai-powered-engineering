@@ -32,12 +32,13 @@ class CalculateDuesUseCase {
     final daysDecimal = Decimal.fromInt(daysOverdue);
     final monthDays = Decimal.fromInt(30);
 
-    // Rational exact calculation then rounded to 2 decimal places
+    // Exact rational calculation, rounded to 2 decimal places half away from
+    // zero (same rule as the backend). No floating point is involved: a
+    // double round-trip turns 1.005 into 1.00 and 2.675 into 2.67.
     final rationalPenalty = (dues.principalAmount * monthlyRate * daysDecimal) / monthDays;
-    final penaltyDouble = rationalPenalty.toDouble();
-    // Round half up to 2 decimal places
-    final roundedPenaltyStr = (penaltyDouble).toStringAsFixed(2);
-    final penalty = Decimal.parse(roundedPenaltyStr);
+    final hundred = Decimal.fromInt(100);
+    final kurus = (rationalPenalty * hundred.toRational()).round();
+    final penalty = (Decimal.fromBigInt(kurus) / hundred).toDecimal();
     final total = dues.principalAmount + penalty;
 
     return dues.copyWith(

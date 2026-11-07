@@ -13,6 +13,12 @@ pub struct ReconciliationService {
     dues_service: DuesCalculationService,
 }
 
+impl Default for ReconciliationService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReconciliationService {
     pub fn new() -> Self {
         Self {
@@ -107,8 +113,8 @@ impl ReconciliationService {
         }
 
         // If unit was found, verify if owner matches
-        if matched_unit.is_some() && matched_user.is_none() {
-            if let Some(owner_id) = matched_unit.unwrap().owner_user_id.as_deref() {
+        if let (Some(unit), None) = (matched_unit, matched_user) {
+            if let Some(owner_id) = unit.owner_user_id.as_deref() {
                 matched_user = users.iter().find(|u| u.id == owner_id);
             }
         }
@@ -304,17 +310,11 @@ impl ReconciliationService {
     pub fn normalize_turkish(input: &str) -> String {
         input
             .to_lowercase()
-            .replace('ı', "i")
-            .replace('İ', "i")
-            .replace('ğ', "g")
-            .replace('Ğ', "g")
-            .replace('ü', "u")
-            .replace('Ü', "u")
-            .replace('ş', "s")
-            .replace('Ş', "s")
-            .replace('ö', "o")
-            .replace('Ö', "o")
-            .replace('ç', "c")
-            .replace('Ç', "c")
+            .replace(['ı', 'İ'], "i")
+            .replace(['ğ', 'Ğ'], "g")
+            .replace(['ü', 'Ü'], "u")
+            .replace(['ş', 'Ş'], "s")
+            .replace(['ö', 'Ö'], "o")
+            .replace(['ç', 'Ç'], "c")
     }
 }

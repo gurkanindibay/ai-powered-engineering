@@ -18,6 +18,56 @@ use crate::services::{
 use crate::state::AppState;
 use uuid::Uuid;
 
+
+/// Snapshot of the in-memory ledger (liability payment state and advance
+/// balances), used to persist exactly what an in-memory operation changed.
+pub struct LedgerSnapshot {
+    dues: std::collections::HashMap<String, (Decimal, Decimal, Decimal, DebtStatus)>,
+    advances: std::collections::HashMap<String, Decimal>,
+}
+
+pub fn ledger_snapshot(inner: &crate::state::AppStateInner) -> LedgerSnapshot {
+    LedgerSnapshot {
+        dues: inner
+            .dues
+            .iter()
+            .map(|d| (d.id.clone(), (d.paid_principal, d.paid_penalty, d.delay_penalty, d.status)))
+            .collect(),
+        advances: inner.advance_payments.clone(),
+    }
+}
+
+/// Persists every liability and advance balance that differs from `before`.
+/// Errors are returned (and logged), never discarded.
+pub async fn persist_ledger_changes(
+    pool: &deadpool_postgres::Pool,
+    before: &LedgerSnapshot,
+    inner: &crate::state::AppStateInner,
+) -> Result<(), String> {
+    let mut errors: Vec<String> = Vec::new();
+    for d in &inner.dues {
+        let now = (d.paid_principal, d.paid_penalty, d.delay_penalty, d.status);
+        if before.dues.get(&d.id) != Some(&now) && crate::db::parse_id_to_i64(&d.id).is_some() {
+            if let Err(e) = crate::db::sync_due_payment_state(pool, d).await {
+                errors.push(format!("dues liability {}: {}", d.id, e));
+            }
+        }
+    }
+    for (unit, bal) in &inner.advance_payments {
+        if before.advances.get(unit) != Some(bal) {
+            if let Err(e) = crate::db::save_advance_balance(pool, unit, *bal).await {
+                errors.push(format!("advance balance {}: {}", unit, e));
+            }
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        tracing::error!("Ledger persistence failed: {}", errors.join("; "));
+        Err(format!("Ledger changes were not fully saved: {}", errors.join("; ")))
+    }
+}
+
 /// Domain Service / Rule: Advance Balance Auto-Offsetting
 /// When dues liabilities exist or arrive for a unit, any available advance balance
 /// (Avans Bakiye) is automatically deducted against the debt (FIFO order by due_date).
@@ -72,10 +122,10 @@ pub fn apply_advance_payments_offset(
             let due_id = due.id.clone();
 
             if *advance >= due_amount {
-                // Full settlement of this due liability
-                *advance -= due_amount;
-                due.status = DebtStatus::Paid;
-                total_offset_amount += due_amount;
+                // Full settlement of this due liability (penalty first, then principal)
+                let settled = crate::services::dues_ledger::settle(due, due_amount);
+                *advance -= settled.total();
+                total_offset_amount += settled.total();
                 auto_settled_count += 1;
 
                 let offset_txn_id = format!("TXN-ADV-OFFSET-{}", due_id);
@@ -107,10 +157,8 @@ pub fn apply_advance_payments_offset(
                 }
             } else {
                 // Partial deduction
-                let partial = *advance;
-                *advance = Decimal::ZERO;
-                due.principal_amount -= partial;
-                due.total_amount -= partial;
+                let partial = crate::services::dues_ledger::settle(due, *advance).total();
+                *advance -= partial;
                 total_offset_amount += partial;
 
                 let offset_txn_id = format!("TXN-ADV-PARTIAL-{}", due_id);
@@ -253,6 +301,7 @@ pub async fn get_resident_dashboard(
 ) -> impl IntoResponse {
     let calc_service = DuesCalculationService::new();
     let mut inner = state.inner.write().await;
+    let ledger_before = ledger_snapshot(&inner);
 
     let unit_opt = if let Some(u) = inner.units.iter().find(|u| u.id == unit_id || crate::db::parse_id_to_i64(&u.id) == crate::db::parse_id_to_i64(&unit_id)).cloned() {
         Some(u)
@@ -298,26 +347,7 @@ pub async fn get_resident_dashboard(
     let unit = match unit_opt {
         Some(u) => u,
         None => {
-            if crate::state::AppStateInner::should_seed_test_fixtures() {
-                let default_viban = VirtualIbanService::generate_virtual_iban(
-                    VirtualIbanService::KUVEYT_TURK_BANK_CODE,
-                    "site-1",
-                    "A",
-                    14,
-                );
-                IndependentUnit {
-                    id: unit_id.clone(),
-                    site_id: "site-1".to_string(),
-                    block_id: "A".to_string(),
-                    unit_number: 14,
-                    floor: 4,
-                    land_share: 24,
-                    owner_user_id: None,
-                    tenant_user_id: None,
-                    virtual_iban: Some(default_viban),
-                    house_type: Some("2+1".to_string()),
-                }
-            } else {
+            {
                 return (
                     StatusCode::NOT_FOUND,
                     Json(serde_json::json!({
@@ -331,6 +361,10 @@ pub async fn get_resident_dashboard(
 
     // Automatically apply available advance payments against any unpaid dues (FIFO)
     apply_advance_payments_offset(&mut inner, Some(&unit_id));
+    if let Some(ref pool) = state.pool {
+        // Errors are logged by persist_ledger_changes; the view is still served.
+        let _logged = persist_ledger_changes(pool, &ledger_before, &inner).await;
+    }
 
     let today = Utc::now().date_naive();
     let evaluated_dues: Vec<DuesLiability> = inner
@@ -472,8 +506,12 @@ pub async fn register_password(
 
 pub async fn change_password(
     State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
     Json(payload): Json<ChangePasswordRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, String)> {
+    if !payload.email.trim().eq_ignore_ascii_case(&claims.email) {
+        return Err((StatusCode::FORBIDDEN, "You can only change your own password".to_string()));
+    }
     let service = AuthService::new(state);
     service
         .change_password(payload)
@@ -482,21 +520,14 @@ pub async fn change_password(
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
-#[derive(Deserialize)]
-pub struct ProfileQuery {
-    pub user_id: Option<String>,
-}
-
+/// Returns the profile of the authenticated caller (identity comes from the token).
 pub async fn get_profile(
     State(state): State<AppState>,
-    Query(query): Query<ProfileQuery>,
+    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
 ) -> Result<Json<UserProfileResponse>, (StatusCode, String)> {
-    let user_id = query
-        .user_id
-        .unwrap_or_else(|| "usr-site-manager-1".to_string());
     let service = AuthService::new(state);
     service
-        .get_current_profile(&user_id)
+        .get_current_profile(&claims.sub)
         .await
         .map(Json)
         .map_err(|e| (StatusCode::NOT_FOUND, e))
@@ -581,7 +612,7 @@ pub async fn register_home_owner(
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<RegisterHomeOwnerRequest>,
 ) -> Result<(StatusCode, Json<HomeOwnerResponse>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .register_home_owner(&site_id, payload)
@@ -594,7 +625,7 @@ pub async fn get_home_owners(
     State(state): State<AppState>,
     Query(q): Query<SiteIdParam>,
 ) -> Json<Vec<HomeOwnerResponse>> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     Json(service.get_home_owners_for_site(&site_id).await)
 }
@@ -605,7 +636,7 @@ pub async fn update_home_owner(
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<crate::models::UpdateHomeOwnerRequest>,
 ) -> Result<Json<HomeOwnerResponse>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .update_home_owner(&site_id, &id, payload)
@@ -619,7 +650,7 @@ pub async fn delete_home_owner(
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .delete_home_owner(&site_id, &id)
@@ -634,7 +665,7 @@ pub async fn move_out_resident(
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<crate::models::MoveOutResidentRequest>,
 ) -> Result<Json<crate::models::OccupancyHistoryItem>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .move_out_resident(&site_id, &id, payload)
@@ -649,7 +680,7 @@ pub async fn move_in_resident(
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<crate::models::MoveInResidentRequest>,
 ) -> Result<Json<crate::models::OccupancyHistoryItem>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .move_in_resident(&site_id, &id, payload)
@@ -663,7 +694,7 @@ pub async fn get_unit_occupancy_history(
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
 ) -> Result<Json<Vec<crate::models::OccupancyHistoryItem>>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .get_unit_occupancy_history(&site_id, &id)
@@ -676,7 +707,7 @@ pub async fn get_house_types(
     State(state): State<AppState>,
     Query(q): Query<SiteIdParam>,
 ) -> Json<Vec<crate::models::HouseTypeTariff>> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     Json(service.get_house_types_for_site(&site_id).await)
 }
@@ -686,7 +717,7 @@ pub async fn create_house_type(
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<crate::models::CreateHouseTypeRequest>,
 ) -> Result<(StatusCode, Json<crate::models::HouseTypeTariff>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .create_or_update_house_type(&site_id, payload)
@@ -700,7 +731,7 @@ pub async fn delete_house_type(
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .delete_house_type(&site_id, &id)
@@ -713,7 +744,7 @@ pub async fn get_blocks(
     State(state): State<AppState>,
     Query(q): Query<SiteIdParam>,
 ) -> Json<Vec<crate::models::BlockDto>> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     Json(service.get_blocks_for_site(&site_id).await)
 }
@@ -723,7 +754,7 @@ pub async fn create_block(
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<crate::models::CreateBlockRequest>,
 ) -> Result<(StatusCode, Json<crate::models::BlockDto>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .create_or_update_block(&site_id, payload)
@@ -737,7 +768,7 @@ pub async fn generate_registration_link(
     State(state): State<AppState>,
     Query(q): Query<SiteIdParam>,
 ) -> Json<SiteInvitationLinkResponse> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = RegistrationApprovalService::new(state);
     Json(service.generate_invitation_link(&site_id).await)
 }
@@ -759,7 +790,7 @@ pub async fn get_pending_registrations(
     State(state): State<AppState>,
     Query(q): Query<SiteIdParam>,
 ) -> Json<Vec<PendingRegistrationResponse>> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = RegistrationApprovalService::new(state);
     Json(service.get_pending_registrations(&site_id).await)
 }
@@ -823,7 +854,7 @@ pub async fn add_unit_member(
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<crate::models::AddUnitMemberRequest>,
 ) -> Result<(StatusCode, Json<UnitMemberDto>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     let relationship = payload.relationship.unwrap_or_else(|| "Ev Sakini".to_string());
     service
@@ -845,7 +876,7 @@ pub async fn delete_unit_member(
     Path((unit_id, resident_id)): Path<(String, String)>,
     Query(q): Query<SiteIdParam>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .delete_unit_member(&site_id, &unit_id, &resident_id)
@@ -869,7 +900,7 @@ pub async fn update_unit_member(
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<UpdateUnitMemberRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     let relationship = payload.relationship.unwrap_or_else(|| "Ev Sakini".to_string());
     service
@@ -983,10 +1014,7 @@ pub async fn parse_bank_statement(
         .collect();
 
     let site_dues: Vec<DuesLiability> = inner
-        .dues
-        .iter()
-        .cloned()
-        .collect();
+        .dues.to_vec();
 
     let matches = recon_service.reconcile_transactions(&txns, &site_units, &site_users, &site_dues, today);
 
@@ -999,7 +1027,7 @@ pub async fn parse_bank_statement(
     if let Some(ref pool) = state.pool {
         let site_bank_id = active_account.as_ref().and_then(|a| crate::db::parse_id_to_i64(&a.id));
         for m in &matches {
-            let _ = crate::db::save_reconciliation_match_for_site(pool, m, &payload.site_id, site_bank_id).await;
+            crate::db::save_reconciliation_match_for_site(pool, m, &payload.site_id, site_bank_id).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
         }
     }
 
@@ -1032,6 +1060,7 @@ pub async fn confirm_reconciliation(
     Json(payload): Json<ConfirmReconciliationRequest>,
 ) -> Result<(StatusCode, Json<ConfirmReconciliationResponse>), (StatusCode, String)> {
     let mut inner = state.inner.write().await;
+    let ledger_before = ledger_snapshot(&inner);
     let mut confirmed_count = 0;
     let mut total_amount_cleared = Decimal::ZERO;
     let mut updated_unit_ids = Vec::new();
@@ -1140,7 +1169,8 @@ pub async fn confirm_reconciliation(
 
     if let Some(ref pool) = state.pool {
         let pool = pool.clone();
-        let matches_to_save: Vec<(String, Option<String>, Option<String>, Decimal, Option<String>, String)> = confirmed_matches
+        type PendingCollection = (String, Option<String>, Option<String>, Decimal, Option<String>, String);
+        let matches_to_save: Vec<PendingCollection> = confirmed_matches
             .iter()
             .map(|m| {
                 (
@@ -1153,14 +1183,9 @@ pub async fn confirm_reconciliation(
                 )
             })
             .collect();
-        let cleared = cleared_dues.clone();
         let confirmed_status_updates: Vec<(String, String, Option<String>)> = confirmed_matches
             .iter()
             .map(|m| (m.match_id.clone(), m.status_code.clone(), m.notes.clone()))
-            .collect();
-        let updated_advances: Vec<(String, Decimal)> = updated_unit_ids
-            .iter()
-            .map(|uid| (uid.clone(), inner.advance_payments.get(uid).copied().unwrap_or(Decimal::ZERO)))
             .collect();
         let remembered_to_save: Vec<(String, String)> = if payload.remember_sender_iban == Some(true) {
             confirmed_matches
@@ -1180,7 +1205,7 @@ pub async fn confirm_reconciliation(
         };
 
         for (txn_id, due_id, unit_id, amt, ref_no, desc) in matches_to_save {
-            let _ = crate::db::save_collection_transaction(
+            crate::db::save_collection_transaction(
                 &pool,
                 &txn_id,
                 due_id.as_deref(),
@@ -1189,25 +1214,22 @@ pub async fn confirm_reconciliation(
                 amt,
                 ref_no.as_deref(),
                 Some(&desc),
-            ).await;
-        }
-        for d_id in cleared {
-            let _ = crate::db::update_due_liability(&pool, &d_id, "PAID", Decimal::ZERO).await;
+            ).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
         }
         for (match_id, status_code, notes) in confirmed_status_updates {
-            let _ = crate::db::update_reconciliation_status(
+            crate::db::update_reconciliation_status(
                 &pool,
                 &match_id,
                 "Approved",
                 &status_code,
                 notes.as_deref(),
-            ).await;
+            ).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
         }
-        for (uid, bal) in updated_advances {
-            let _ = crate::db::save_advance_balance(&pool, &uid, bal).await;
-        }
+        persist_ledger_changes(&pool, &ledger_before, &inner)
+            .await
+            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
         for (uid, iban) in remembered_to_save {
-            let _ = crate::db::save_remembered_sender_iban(&pool, &uid, &iban, None, None).await;
+            crate::db::save_remembered_sender_iban(&pool, &uid, &iban, None, None).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
         }
     }
 
@@ -1244,7 +1266,7 @@ pub async fn remember_sender_iban(
     }
 
     if let Some(ref pool) = state.pool {
-        let _ = crate::db::save_remembered_sender_iban(pool, &payload.unit_id, &clean, payload.sender_name.as_deref(), None).await;
+        crate::db::save_remembered_sender_iban(pool, &payload.unit_id, &clean, payload.sender_name.as_deref(), None).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
     }
 
     Ok(Json(RememberSenderIbanResponse {
@@ -1333,7 +1355,7 @@ pub async fn add_unit_sender_iban(
     }
 
     if let Some(ref pool) = state.pool {
-        let _ = crate::db::save_remembered_sender_iban(pool, &unit_id, &clean, payload.label.as_deref(), payload.bank_name.as_deref()).await;
+        crate::db::save_remembered_sender_iban(pool, &unit_id, &clean, payload.label.as_deref(), payload.bank_name.as_deref()).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -1355,7 +1377,7 @@ pub async fn delete_unit_sender_iban(
     }
 
     if let Some(ref pool) = state.pool {
-        let _ = crate::db::delete_remembered_sender_iban(pool, &clean).await;
+        crate::db::delete_remembered_sender_iban(pool, &clean).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -1383,7 +1405,7 @@ pub async fn update_unit_payer_names(
     }
 
     if let Some(ref pool) = state.pool {
-        let _ = crate::db::save_unit_payer_names(pool, &unit_id, &cleaned_names).await;
+        crate::db::save_unit_payer_names(pool, &unit_id, &cleaned_names).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -1525,12 +1547,93 @@ pub async fn test_kuveyt_turk_connection(
 }
 
 // 11. Bank Incoming Webhook & Real-Time Virtual IBAN Settlement (STORY-07-03)
+/// Header carrying `hex(HMAC-SHA256(SITEPULSE_BANK_WEBHOOK_SECRET, raw_body))`.
+pub const BANK_WEBHOOK_SIGNATURE_HEADER: &str = "x-sitepulse-signature";
+
 pub async fn handle_bank_incoming_webhook(
     State(state): State<AppState>,
-    Json(payload): Json<BankIncomingWebhookRequest>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> Result<(StatusCode, Json<BankIncomingWebhookResponse>), (StatusCode, String)> {
+    let signature = headers.get(BANK_WEBHOOK_SIGNATURE_HEADER).and_then(|v| v.to_str().ok());
+    if !crate::auth::verify_webhook_signature(&body, signature) {
+        return Err((StatusCode::UNAUTHORIZED, "Invalid or missing webhook signature".to_string()));
+    }
+    let payload: BankIncomingWebhookRequest = serde_json::from_slice(&body)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid webhook payload: {}", e)))?;
+    validate_bank_webhook(&payload)?;
+
+    // Durable idempotency: the transaction id is claimed in PostgreSQL before any
+    // state changes, so a replay (even after a restart) is never applied twice.
+    if let Some(ref pool) = state.pool {
+        let claimed = crate::db::claim_bank_webhook_transaction(pool, &payload.transaction_id)
+            .await
+            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Could not record webhook: {}", e)))?;
+        if !claimed {
+            return Ok((
+                StatusCode::OK,
+                Json(duplicate_webhook_response(payload.transaction_id)),
+            ));
+        }
+    }
+    process_bank_incoming_webhook(state, payload).await
+}
+
+fn duplicate_webhook_response(transaction_id: String) -> BankIncomingWebhookResponse {
+    BankIncomingWebhookResponse {
+        status: "DUPLICATE_IGNORED".to_string(),
+        transaction_id,
+        matched_unit_id: String::new(),
+        matched_block: String::new(),
+        matched_unit_number: 0,
+        cleared_due_period: None,
+        cleared_amount: Decimal::ZERO,
+        remaining_debt: Decimal::ZERO,
+        advance_payment: Decimal::ZERO,
+        receipt_id: String::new(),
+        message: "Duplicate bank transaction notification ignored. Idempotency preserved.".to_string(),
+    }
+}
+
+fn validate_bank_webhook(payload: &BankIncomingWebhookRequest) -> Result<(), (StatusCode, String)> {
+    if payload.transaction_id.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "transaction_id is required".to_string()));
+    }
+    if payload.amount <= Decimal::ZERO || payload.amount.scale() > 2 {
+        return Err((StatusCode::BAD_REQUEST, "amount must be positive with at most 2 decimals".to_string()));
+    }
+    match payload.currency.as_deref().map(|c| c.trim().to_uppercase()) {
+        None => Ok(()),
+        Some(c) if c == "TRY" => Ok(()),
+        Some(c) => Err((StatusCode::UNPROCESSABLE_ENTITY, format!("Unsupported currency '{}'; only TRY is accepted", c))),
+    }
+}
+
+pub async fn process_bank_incoming_webhook(
+    state: AppState,
+    payload: BankIncomingWebhookRequest,
 ) -> Result<(StatusCode, Json<BankIncomingWebhookResponse>), (StatusCode, String)> {
     let clean_viban = payload.virtual_iban.replace(' ', "").to_uppercase();
     let mut inner = state.inner.write().await;
+    let ledger_before = ledger_snapshot(&inner);
+
+    // Any earlier delivery of this transaction id (matched or not) is a duplicate.
+    if inner.reconciliation_queue.iter().any(|m| m.transaction.transaction_id == payload.transaction_id) {
+        let unit = inner
+            .reconciliation_queue
+            .iter()
+            .find(|m| m.transaction.transaction_id == payload.transaction_id)
+            .and_then(|m| m.matched_unit_id.clone())
+            .and_then(|uid| inner.units.iter().find(|u| u.id == uid).cloned());
+        let mut resp = duplicate_webhook_response(payload.transaction_id);
+        if let Some(u) = unit {
+            resp.advance_payment = inner.advance_payments.get(&u.id).copied().unwrap_or(Decimal::ZERO);
+            resp.matched_unit_id = u.id;
+            resp.matched_block = u.block_id;
+            resp.matched_unit_number = u.unit_number;
+        }
+        return Ok((StatusCode::OK, Json(resp)));
+    }
 
     // 1. Match unit by Virtual IBAN or Remembered Sender IBAN or Regular IBAN + Description / Sender Roster
     let mut is_virtual_iban = false;
@@ -1708,17 +1811,10 @@ pub async fn handle_bank_incoming_webhook(
 
     if let Some(idx) = target_due_idx {
         let due = &mut inner.dues[idx];
-        if remaining_payment >= due.total_amount {
-            due.status = DebtStatus::Paid;
-            cleared_period = Some(due.period.clone());
-            cleared_amount = due.total_amount;
-            remaining_payment -= due.total_amount;
-        } else {
-            due.total_amount -= remaining_payment;
-            cleared_period = Some(due.period.clone());
-            cleared_amount = remaining_payment;
-            remaining_payment = Decimal::ZERO;
-        }
+        let settled = crate::services::dues_ledger::settle(due, remaining_payment);
+        cleared_period = Some(due.period.clone());
+        cleared_amount = settled.total();
+        remaining_payment -= settled.total();
     }
 
     // Any surplus or subsequent payment is credited to unit's advance payment ledger (Avans Bakiye)
@@ -1736,7 +1832,7 @@ pub async fn handle_bank_incoming_webhook(
         let txn_id = format!("txn-{}", Uuid::new_v4().simple());
         let ref_code = payload.transaction_id.clone();
         let desc = payload.description.clone().unwrap_or_else(|| format!("FAST Bank Transfer: {}", unit.id));
-        let _ = crate::db::save_collection_transaction(
+        crate::db::save_collection_transaction(
             pool,
             &txn_id,
             target_due_id.as_deref(),
@@ -1745,15 +1841,10 @@ pub async fn handle_bank_incoming_webhook(
             payload.amount,
             Some(&ref_code),
             Some(&desc),
-        ).await;
-        if let Some(ref d_id) = target_due_id {
-            let _ = crate::db::update_due_liability(
-                pool,
-                d_id,
-                "PAID",
-                payload.amount,
-            ).await;
-        }
+        ).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+        persist_ledger_changes(pool, &ledger_before, &inner)
+            .await
+            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
     }
 
     // 4. Calculate remaining debt
@@ -1915,7 +2006,7 @@ pub async fn create_dues_period(
     inner.dues_periods.push(new_period.clone());
 
     if let Some(ref pool) = state.pool {
-        let _ = crate::db::save_dues_period(pool, &new_period).await;
+        crate::db::save_dues_period(pool, &new_period).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
     }
 
     Ok((StatusCode::CREATED, Json(new_period)))
@@ -1927,6 +2018,7 @@ pub async fn accrue_monthly_dues(
     Json(payload): Json<AccrueDuesPeriodRequest>,
 ) -> Result<(StatusCode, Json<AccrueDuesPeriodResponse>), (StatusCode, String)> {
     let mut inner = state.inner.write().await;
+    let ledger_before = ledger_snapshot(&inner);
     let units_in_site: Vec<IndependentUnit> = inner
         .units
         .iter()
@@ -1959,7 +2051,7 @@ pub async fn accrue_monthly_dues(
         };
         inner.dues_periods.push(period_record.clone());
         if let Some(ref pool) = state.pool {
-            let _ = crate::db::save_dues_period(pool, &period_record).await;
+            crate::db::save_dues_period(pool, &period_record).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
         }
     }
 
@@ -1998,6 +2090,10 @@ pub async fn accrue_monthly_dues(
                 total_amount: effective_amount,
                 due_date: payload.due_date,
                 status: DebtStatus::Pending,
+                paid_principal: Decimal::ZERO,
+                paid_penalty: Decimal::ZERO,
+                debtor_type: "TENANT".to_string(),
+                expense_type: "OPERATIONAL_DUES".to_string(),
             });
             total_amount_accrued += effective_amount;
             newly_accrued_units_count += 1;
@@ -2012,7 +2108,7 @@ pub async fn accrue_monthly_dues(
             .cloned()
             .collect();
         for due in &dues_to_save {
-            let _ = crate::db::save_due_liability(pool, due).await;
+            crate::db::save_due_liability(pool, due).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
         }
     }
 
@@ -2038,6 +2134,11 @@ pub async fn accrue_monthly_dues(
 
     // Automatically apply available advance payments against newly accrued dues!
     let (auto_settled_count, total_offset) = apply_advance_payments_offset(&mut inner, None);
+    if let Some(ref pool) = state.pool {
+        persist_ledger_changes(pool, &ledger_before, &inner)
+            .await
+            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
+    }
 
     Ok((
         StatusCode::OK,
@@ -2066,6 +2167,7 @@ pub async fn record_homeowner_payment(
     Json(payload): Json<RecordHomeownerPaymentRequest>,
 ) -> Result<(StatusCode, Json<RecordHomeownerPaymentResponse>), (StatusCode, String)> {
     let mut inner = state.inner.write().await;
+    let ledger_before = ledger_snapshot(&inner);
 
     let unit = inner
         .units
@@ -2103,16 +2205,9 @@ pub async fn record_homeowner_payment(
             break;
         }
         let due = &mut inner.dues[idx];
-        if remaining_payment >= due.total_amount {
-            cleared_debt += due.total_amount;
-            remaining_payment -= due.total_amount;
-            due.status = DebtStatus::Paid;
-        } else {
-            due.principal_amount -= remaining_payment;
-            due.total_amount -= remaining_payment;
-            cleared_debt += remaining_payment;
-            remaining_payment = Decimal::ZERO;
-        }
+        let settled = crate::services::dues_ledger::settle(due, remaining_payment);
+        cleared_debt += settled.total();
+        remaining_payment -= settled.total();
     }
 
     // 2. If there is remaining payment (or if unit had no debt), credit to advance_payments!
@@ -2193,15 +2288,13 @@ pub async fn record_homeowner_payment(
             .find(|d| d.unit_id == unit_id && d.status == DebtStatus::Paid)
             .map(|d| d.id.clone());
         let rec = record.clone();
-        let adv_bal = total_unit_advance;
         let receipt_id_clone = receipt_id.clone();
         let res_name_clone = resident_name.clone();
         let msg_clone = message.clone();
         let p_method = payload.payment_method.clone();
         let is_card = p_method.to_uppercase().contains("CARD") || p_method.to_uppercase().contains("KART");
 
-        let _ = crate::db::save_homeowner_payment(&pool, &rec).await;
-        let _ = crate::db::save_advance_balance(&pool, &unit_id, adv_bal).await;
+        crate::db::save_homeowner_payment(&pool, &rec).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
 
         let r_match = ReconciliationMatch {
             match_id: format!("MATCH-{}", Uuid::new_v4().simple()),
@@ -2233,9 +2326,9 @@ pub async fn record_homeowner_payment(
             status_code: ReconciliationStatus::Approved.as_str().to_string(),
             notes: Some(msg_clone),
         };
-        let _ = crate::db::save_reconciliation_match(&pool, &r_match).await;
+        crate::db::save_reconciliation_match(&pool, &r_match).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
 
-        let _ = crate::db::save_collection_transaction(
+        crate::db::save_collection_transaction(
             &pool,
             &txn_id,
             matched_due_id.as_deref(),
@@ -2244,15 +2337,10 @@ pub async fn record_homeowner_payment(
             amount,
             ref_code.as_deref(),
             note.as_deref(),
-        ).await;
-        if let Some(ref d_id) = matched_due_id {
-            let _ = crate::db::update_due_liability(
-                &pool,
-                d_id,
-                "PAID",
-                amount,
-            ).await;
-        }
+        ).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+        persist_ledger_changes(&pool, &ledger_before, &inner)
+            .await
+            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
     }
 
     // Also record in reconciliation_queue as an approved digital receipt
@@ -2311,8 +2399,9 @@ pub async fn match_all_homeowner_payments(
     Json(payload): Json<MatchAllPaymentsRequest>,
 ) -> Result<(StatusCode, Json<MatchAllPaymentsResponse>), (StatusCode, String)> {
     let mut inner = state.inner.write().await;
+    let ledger_before = ledger_snapshot(&inner);
 
-    let target_site_id = payload.site_id.unwrap_or_else(|| "site-1".to_string());
+    let target_site_id = payload.site_id.unwrap_or_default();
     let mut total_processed = 0;
     let mut total_cleared = Decimal::ZERO;
     let mut total_advance = Decimal::ZERO;
@@ -2354,16 +2443,9 @@ pub async fn match_all_homeowner_payments(
                 break;
             }
             let due = &mut inner.dues[idx];
-            if remaining >= due.total_amount {
-                cleared += due.total_amount;
-                remaining -= due.total_amount;
-                due.status = DebtStatus::Paid;
-            } else {
-                due.principal_amount -= remaining;
-                due.total_amount -= remaining;
-                cleared += remaining;
-                remaining = Decimal::ZERO;
-            }
+            let settled = crate::services::dues_ledger::settle(due, remaining);
+            cleared += settled.total();
+            remaining -= settled.total();
         }
 
         let advance = remaining;
@@ -2401,16 +2483,12 @@ pub async fn match_all_homeowner_payments(
             .filter(|p| site_unit_ids.contains(&p.unit_id))
             .map(|p| (p.id.clone(), format!("{:?}", p.status), p.cleared_debt_amount, p.advance_credit_amount))
             .collect();
-        let unit_advances: Vec<(String, Decimal)> = site_unit_ids
-            .iter()
-            .map(|uid| (uid.clone(), inner.advance_payments.get(uid).copied().unwrap_or(Decimal::ZERO)))
-            .collect();
         for (pid, st, clr, adv) in updated_records {
-            let _ = crate::db::update_homeowner_payment_match(&pool, &pid, &st, clr, adv).await;
+            crate::db::update_homeowner_payment_match(&pool, &pid, &st, clr, adv).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
         }
-        for (uid, bal) in unit_advances {
-            let _ = crate::db::save_advance_balance(&pool, &uid, bal).await;
-        }
+        persist_ledger_changes(&pool, &ledger_before, &inner)
+            .await
+            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
     }
 
     Ok((
@@ -2451,12 +2529,14 @@ pub async fn reset_demo_data(
         );
     }
     if let Some(ref pool) = state.pool {
-        let _ = crate::db::reset_db_to_seed_data(pool).await;
+        if let Err(e) = crate::db::reset_db_to_seed_data(pool).await { tracing::error!("Database write failed: {}", e); }
     }
     let mut inner = state.inner.write().await;
     inner.reset_all_payments_and_balances();
     if let Some(ref pool) = state.pool {
-        crate::db::load_all_from_db(pool, &mut inner).await;
+        if let Err(e) = crate::db::load_all_from_db(pool, &mut inner).await {
+            tracing::error!("Reloading state from PostgreSQL failed: {}", e);
+        }
     }
     (
         StatusCode::OK,
@@ -2512,9 +2592,11 @@ pub async fn seed_test_fixtures(
         );
     }
     if let Some(ref pool) = state.pool {
-        let _ = crate::db::seed_test_data(pool).await;
+        if let Err(e) = crate::db::seed_test_data(pool).await { tracing::error!("Database write failed: {}", e); }
         let mut inner = state.inner.write().await;
-        crate::db::load_all_from_db(pool, &mut inner).await;
+        if let Err(e) = crate::db::load_all_from_db(pool, &mut inner).await {
+            tracing::error!("Reloading state from PostgreSQL failed: {}", e);
+        }
     } else {
         let mut inner = state.inner.write().await;
         inner.seed_test_fixtures();
@@ -2538,12 +2620,14 @@ pub async fn clear_all_data(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     if let Some(ref pool) = state.pool {
-        let _ = crate::db::wipe_all_db_data(pool).await;
+        if let Err(e) = crate::db::wipe_all_db_data(pool).await { tracing::error!("Database write failed: {}", e); }
     }
     let mut inner = state.inner.write().await;
     inner.clear_all_data();
     if let Some(ref pool) = state.pool {
-        crate::db::load_all_from_db(pool, &mut inner).await;
+        if let Err(e) = crate::db::load_all_from_db(pool, &mut inner).await {
+            tracing::error!("Reloading state from PostgreSQL failed: {}", e);
+        }
     }
     (
         StatusCode::OK,
@@ -2585,7 +2669,9 @@ pub async fn recreate_db(
     let mut inner = state.inner.write().await;
     inner.clear_all_data();
     if let Some(ref pool) = state.pool {
-        crate::db::load_all_from_db(pool, &mut inner).await;
+        if let Err(e) = crate::db::load_all_from_db(pool, &mut inner).await {
+            tracing::error!("Reloading state from PostgreSQL failed: {}", e);
+        }
     } else {
         inner.seed_test_fixtures();
     }
@@ -2629,7 +2715,9 @@ pub async fn reset_to_initial_state(
     let mut inner = state.inner.write().await;
     inner.clear_all_data();
     if let Some(ref pool) = state.pool {
-        crate::db::load_all_from_db(pool, &mut inner).await;
+        if let Err(e) = crate::db::load_all_from_db(pool, &mut inner).await {
+            tracing::error!("Reloading state from PostgreSQL failed: {}", e);
+        }
     } else {
         inner.seed_test_fixtures();
     }
@@ -2674,7 +2762,9 @@ pub async fn wipe_all_data(
     let mut inner = state.inner.write().await;
     inner.clear_all_data();
     if let Some(ref pool) = state.pool {
-        crate::db::load_all_from_db(pool, &mut inner).await;
+        if let Err(e) = crate::db::load_all_from_db(pool, &mut inner).await {
+            tracing::error!("Reloading state from PostgreSQL failed: {}", e);
+        }
     } else {
         inner.users.push(crate::models::User {
             id: "1".to_string(),
@@ -2682,9 +2772,9 @@ pub async fn wipe_all_data(
             full_name: "SaaS Platform Admin".to_string(),
             email: "admin@sitepulse.io".to_string(),
             phone: "+90 850 555 0000".to_string(),
-            password_hash: Some("ARGON2_HASH_admin123".to_string()),
+            password_hash: Some(crate::auth::hash_password(&crate::state::bootstrap_admin_password())),
             role: crate::models::Role::SaasAdmin,
-            must_change_password: false,
+            must_change_password: true,
             auth_provider: "LOCAL".to_string(),
             google_sub: None,
             avatar_url: None,
@@ -2766,38 +2856,38 @@ pub async fn purge_site_cascade(
             ),
         };
         let site_id_num = site_id.parse::<i64>().unwrap_or(-1);
-        let _ = client.execute(
+        if let Err(e) = client.execute(
             "DELETE FROM payment_entries WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1 OR site_id = $2)",
             &[&site_id_num, &site_id],
-        ).await;
-        let _ = client.execute(
+        ).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = client.execute(
             "DELETE FROM dues_liabilities WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1 OR site_id = $2)",
             &[&site_id_num, &site_id],
-        ).await;
-        let _ = client.execute(
+        ).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = client.execute(
             "DELETE FROM unit_occupancies WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1 OR site_id = $2)",
             &[&site_id_num, &site_id],
-        ).await;
-        let _ = client.execute(
+        ).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = client.execute(
             "DELETE FROM users WHERE site_id = $1 OR site_id = $2",
             &[&site_id_num, &site_id],
-        ).await;
-        let _ = client.execute(
+        ).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = client.execute(
             "DELETE FROM units WHERE site_id = $1 OR site_id = $2",
             &[&site_id_num, &site_id],
-        ).await;
-        let _ = client.execute(
+        ).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = client.execute(
             "DELETE FROM blocks WHERE site_id = $1 OR site_id = $2",
             &[&site_id_num, &site_id],
-        ).await;
-        let _ = client.execute(
+        ).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = client.execute(
             "DELETE FROM site_bank_accounts WHERE site_id = $1 OR site_id = $2",
             &[&site_id_num, &site_id],
-        ).await;
-        let _ = client.execute(
+        ).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = client.execute(
             "DELETE FROM sites WHERE id = $1 OR id::text = $2",
             &[&site_id_num, &site_id],
-        ).await;
+        ).await { tracing::error!("Database write failed: {}", e); }
     }
 
     let mut inner = state.inner.write().await;
@@ -2863,6 +2953,7 @@ pub async fn provision_site_units(
                 status: "ACTIVE".to_string(),
                 plan_type: "PREMIUM".to_string(),
                 license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
+                timezone: crate::models::default_site_timezone(),
             });
             s_id.clone()
         }
@@ -2877,6 +2968,7 @@ pub async fn provision_site_units(
             status: "ACTIVE".to_string(),
             plan_type: "PREMIUM".to_string(),
             license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
+            timezone: crate::models::default_site_timezone(),
         });
         s_id
     } else if let Some(first_site) = inner.sites.first() {
@@ -2891,6 +2983,7 @@ pub async fn provision_site_units(
             status: "ACTIVE".to_string(),
             plan_type: "PREMIUM".to_string(),
             license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
+            timezone: crate::models::default_site_timezone(),
         });
         s_id
     };
@@ -2932,7 +3025,7 @@ pub async fn provision_site_units(
             unit_number,
         );
 
-        let user_id = format!("usr-{}-{}", &site_id, i);
+        let user_id = format!("usr-{}-{}", site_id, i);
 
         // Add or update resident user
         if let Some(existing_user) = inner.users.iter_mut().find(|u| u.id == user_id) {
@@ -2946,9 +3039,9 @@ pub async fn provision_site_units(
                 full_name: resident_name.clone(),
                 email: email.clone(),
                 phone: phone.clone(),
-                password_hash: Some("ARGON2_HASH_123456".to_string()),
+                password_hash: Some(crate::auth::hash_password(&crate::auth::generate_temporary_password("SP-SAKIN-"))),
                 role: Role::HomeOwner,
-                must_change_password: false,
+                must_change_password: true,
                 auth_provider: "LOCAL".to_string(),
                 google_sub: None,
                 avatar_url: None,
@@ -3002,6 +3095,10 @@ pub async fn provision_site_units(
                     total_amount: monthly_dues,
                     due_date: Utc::now().date_naive() + chrono::Days::new(15),
                     status: DebtStatus::Pending,
+                    paid_principal: Decimal::ZERO,
+                    paid_penalty: Decimal::ZERO,
+                    debtor_type: "TENANT".to_string(),
+                    expense_type: "OPERATIONAL_DUES".to_string(),
                 });
             }
         }
@@ -3032,7 +3129,7 @@ pub async fn provision_site_units(
 
     if let Some(ref pool) = state.pool {
         let snapshot = inner.clone();
-        let _ = crate::db::sync_all_in_memory_to_db(pool, &snapshot).await;
+        if let Err(e) = crate::db::sync_all_in_memory_to_db(pool, &snapshot).await { tracing::error!("Database write failed: {}", e); }
     }
 
     let total_volume = monthly_dues * Decimal::from(units_count);
@@ -3332,7 +3429,12 @@ pub async fn get_site_overview(
     Query(query): Query<crate::models::SiteOverviewQuery>,
 ) -> impl IntoResponse {
     let mut inner = state.inner.write().await;
+    let ledger_before = ledger_snapshot(&inner);
     apply_advance_payments_offset(&mut inner, None);
+    if let Some(ref pool) = state.pool {
+        // Errors are logged by persist_ledger_changes; the view is still served.
+        let _logged = persist_ledger_changes(pool, &ledger_before, &inner).await;
+    }
 
     // 1. Resolve site
     let site = if let Some(ref s_id) = query.site_id {
@@ -3400,7 +3502,7 @@ pub async fn get_site_overview(
         }
     }
 
-    available_periods.sort_by(|a, b| period_sort_key(b).cmp(&period_sort_key(a)));
+    available_periods.sort_by_key(|p| std::cmp::Reverse(period_sort_key(p)));
 
     let selected_period = query.period.unwrap_or_else(|| {
         available_periods.first().cloned().unwrap_or_default()
@@ -3587,15 +3689,20 @@ pub async fn get_debt_aging_report(
     State(state): State<AppState>,
     Query(q): Query<SiteIdParam>,
 ) -> Json<crate::models::DebtAgingReport> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = crate::services::PaymentTrackingService::new(state);
     Json(service.get_debt_aging_report(&site_id).await)
 }
 
 pub async fn record_manual_payment(
     State(state): State<AppState>,
-    Json(payload): Json<crate::models::RecordManualPaymentRequest>,
+    headers: axum::http::HeaderMap,
+    Json(mut payload): Json<crate::models::RecordManualPaymentRequest>,
 ) -> Result<(StatusCode, Json<crate::models::PaymentReceipt>), (StatusCode, String)> {
+    // The standard `Idempotency-Key` header takes precedence over the body field.
+    if let Some(key) = headers.get("idempotency-key").and_then(|v| v.to_str().ok()) {
+        payload.idempotency_key = Some(key.to_string());
+    }
     let service = crate::services::PaymentTrackingService::new(state);
     service
         .record_and_allocate_payment(payload)
@@ -3618,16 +3725,21 @@ pub async fn inter_ledger_transfer(
 
 pub async fn get_payment_receipt(
     State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
 ) -> Result<Json<crate::models::PaymentReceipt>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_else(|| claims.site_id.clone());
     let service = crate::services::PaymentTrackingService::new(state);
-    service
-        .get_receipt(&site_id, &id)
-        .await
-        .map(Json)
-        .map_err(|e| (StatusCode::NOT_FOUND, e))
+    let receipt = service.get_receipt(&site_id, &id).await.map_err(|e| (StatusCode::NOT_FOUND, e))?;
+    // Residents may only read receipts issued for their own unit.
+    if !claims.is_site_staff() {
+        let own = claims.unit_id.as_deref().unwrap_or("");
+        if !crate::auth::same_id(own, &receipt.unit_id) {
+            return Err((StatusCode::NOT_FOUND, "Receipt not found".to_string()));
+        }
+    }
+    Ok(Json(receipt))
 }
 
 pub async fn transfer_unit_ownership(
@@ -3652,7 +3764,7 @@ pub async fn list_capital_projects(
     State(state): State<AppState>,
     Query(q): Query<SiteIdParam>,
 ) -> Json<Vec<CapitalProject>> {
-    let site_id = q.site_id.unwrap_or_else(|| "site-1".to_string());
+    let site_id = q.site_id.unwrap_or_default();
     let service = CapitalProjectService::new(state);
     Json(service.list_projects(&site_id).await)
 }

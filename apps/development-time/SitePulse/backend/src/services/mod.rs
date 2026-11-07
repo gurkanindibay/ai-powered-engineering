@@ -1,3 +1,4 @@
+pub mod dues_ledger;
 pub mod auth_service;
 pub mod bank_statement_parser;
 pub mod dues_calculation_service;

@@ -6,9 +6,10 @@ use uuid::Uuid;
 use crate::models::{
     AllocationBreakdownItem, DebtAgingBracket, DebtAgingReport, DebtStatus,
     InterLedgerTransferRequest, InterLedgerTransferResponse, OccupancyHistoryItem,
-    PaymentEntry, PaymentMatchStatus, PaymentReceipt, PaymentStreamFilter, PaymentStreamResponse,
+    DuesLiability, PaymentEntry, PaymentMatchStatus, PaymentReceipt, PaymentStreamFilter, PaymentStreamResponse,
     RecordManualPaymentRequest, Role, TransferOwnershipRequest, TransferOwnershipResponse, User,
 };
+use crate::services::dues_ledger;
 use crate::state::AppState;
 
 pub struct PaymentTrackingService {
@@ -79,7 +80,7 @@ impl PaymentTrackingService {
     /// Query multi-channel payment stream with rich multi-criteria filters
     pub async fn get_payment_stream(&self, filter: PaymentStreamFilter) -> PaymentStreamResponse {
         let inner = self.state.inner.read().await;
-        let target_site = filter.site_id.unwrap_or_else(|| "site-1".to_string());
+        let target_site = filter.site_id.unwrap_or_default();
 
         // Gather all payment entries (including synthesizing from homeowner_payments if empty)
         let mut all_entries = inner.payment_entries.clone();
@@ -96,7 +97,7 @@ impl PaymentTrackingService {
                 };
 
                 all_entries.push(PaymentEntry {
-                    id: crate::db::parse_id_to_i64(&hp.id).unwrap_or(1),
+                    id: crate::db::parse_id_to_i64(&hp.id).unwrap_or(0),
                     site_id: target_site.clone(),
                     unit_id: hp.unit_id.clone(),
                     unit_label: Some(unit_label),
@@ -262,7 +263,7 @@ impl PaymentTrackingService {
         }
 
         let mut brackets: Vec<DebtAgingBracket> = brackets_map.into_values().collect();
-        brackets.sort_by(|a, b| b.total_outstanding.cmp(&a.total_outstanding));
+        brackets.sort_by_key(|b| std::cmp::Reverse(b.total_outstanding));
 
         let total_current: Decimal = brackets.iter().map(|b| b.current_due).sum();
         let total_1_30_days: Decimal = brackets.iter().map(|b| b.overdue_1_30_days).sum();
@@ -283,256 +284,194 @@ impl PaymentTrackingService {
         }
     }
 
-    /// Record manual collection or bank transfer and run 4-tier waterfall FIFO allocation
+    /// Records a manual collection or bank transfer and allocates it with the
+    /// waterfall (penalties, then principal FIFO, surplus to the advance ledger).
+    ///
+    /// With PostgreSQL the whole payment is one transaction: the unit and its open
+    /// liabilities are locked (`FOR UPDATE`), the receipt number comes from the
+    /// per-site counter row, and receipt, entry, allocations, liability updates,
+    /// advance credit and idempotency key commit together. In-memory state is
+    /// updated only after the commit, from the committed values. Any failure is
+    /// returned to the caller and nothing is applied.
     pub async fn record_and_allocate_payment(
         &self,
         req: RecordManualPaymentRequest,
     ) -> Result<PaymentReceipt, String> {
-        let site_id = req.site_id.unwrap_or_else(|| "site-1".to_string());
+        let site_id = req
+            .site_id
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .ok_or_else(|| "site_id is required".to_string())?;
         let unit_id = req.unit_id.clone();
         let payment_amount = req.amount;
         let issued_at = req.payment_date.unwrap_or_else(Utc::now);
-
         if payment_amount <= Decimal::ZERO {
             return Err("Ödeme tutarı 0.00'dan büyük olmalıdır".to_string());
         }
+        if payment_amount.scale() > 2 {
+            return Err("Payment amount must have at most 2 decimal places".to_string());
+        }
+        let payer_role = req.payer_role.trim().to_uppercase();
+        if payer_role != dues_ledger::DEBTOR_OWNER && payer_role != dues_ledger::DEBTOR_TENANT {
+            return Err(format!("payer_role must be OWNER or TENANT, got '{}'", req.payer_role));
+        }
+        let idempotency_key = req.idempotency_key.as_deref().map(str::trim).filter(|k| !k.is_empty()).map(str::to_string);
 
-        let (receipt_number, sequence_number) = self.next_receipt_number(&site_id).await;
-
-        let mut inner = self.state.inner.write().await;
-
-        // Find unit
-        let unit = inner
-            .units
-            .iter()
-            .find(|u| u.id == unit_id)
-            .cloned()
-            .ok_or_else(|| format!("Daire bulunamadı: {}", unit_id))?;
-
-        let owner_name = unit.owner_user_id.as_ref().and_then(|oid| {
-            inner.users.iter().find(|u| &u.id == oid).map(|u| u.full_name.clone())
-        });
-
-        // Intent detection: check if capital dues keyword appears in description
         let desc = req.description.clone().unwrap_or_default();
-        let is_capital_intent = Self::is_capital_expenditure_intent(&desc);
+        // A tenant paying capital dues explicitly does so on behalf of the owner
+        // (TBK 314 rent offset); otherwise a tenant only settles tenant liabilities.
+        let on_behalf_of_owner = payer_role == dues_ledger::DEBTOR_TENANT && Self::is_capital_expenditure_intent(&desc);
+        let settling_role = if on_behalf_of_owner { dues_ledger::DEBTOR_OWNER } else { payer_role.as_str() };
+        let credit_debtor = settling_role.to_string();
 
-        // Find unpaid dues for this unit
-        let mut unpaid_indices: Vec<usize> = inner
-            .dues
-            .iter()
-            .enumerate()
-            .filter(|(_, d)| d.unit_id == unit_id && d.status != DebtStatus::Paid)
-            .map(|(i, _)| i)
-            .collect();
-
-        // Sort by due_date ascending (FIFO)
-        unpaid_indices.sort_by_key(|&i| inner.dues[i].due_date);
-
-        let mut remaining_funds = payment_amount;
-        let mut total_allocated_penalty = Decimal::ZERO;
-        let mut total_allocated_principal = Decimal::ZERO;
-        let mut allocation_breakdown: Vec<AllocationBreakdownItem> = Vec::new();
-
-        // 4-tier waterfall allocation
-        // Tier 1: Penalties first (statutory KMK 5% delay penalty)
-        for &idx in &unpaid_indices {
-            if remaining_funds <= Decimal::ZERO {
-                break;
-            }
-            let penalty = inner.dues[idx].delay_penalty;
-            if penalty > Decimal::ZERO {
-                let pay_penalty = penalty.min(remaining_funds);
-                inner.dues[idx].delay_penalty -= pay_penalty;
-                inner.dues[idx].total_amount -= pay_penalty;
-                remaining_funds -= pay_penalty;
-                total_allocated_penalty += pay_penalty;
-            }
-        }
-
-        // Tier 2: Principal liabilities (FIFO)
-        for &idx in &unpaid_indices {
-            if remaining_funds <= Decimal::ZERO {
-                break;
-            }
-            let principal = inner.dues[idx].principal_amount;
-            if principal > Decimal::ZERO {
-                let pay_principal = principal.min(remaining_funds);
-                inner.dues[idx].principal_amount -= pay_principal;
-                inner.dues[idx].total_amount -= pay_principal;
-                remaining_funds -= pay_principal;
-                total_allocated_principal += pay_principal;
-
-                if inner.dues[idx].total_amount <= Decimal::ZERO {
-                    inner.dues[idx].status = DebtStatus::Paid;
+        let (unit, owner_name) = {
+            let inner = self.state.inner.read().await;
+            if let Some(key) = idempotency_key.as_deref() {
+                if let Some(existing) = inner.payment_receipts.iter().find(|r| {
+                    r.site_id == site_id && r.channel_reference.as_deref() == Some(&format!("IDEMPOTENCY:{}", key))
+                }) {
+                    return Ok(existing.clone());
                 }
+            }
+            let unit = inner
+                .units
+                .iter()
+                .find(|u| crate::auth::same_id(&u.id, &unit_id) && crate::auth::same_id(&u.site_id, &site_id))
+                .cloned()
+                .ok_or_else(|| format!("Daire bulunamadı: {}", unit_id))?;
+            let owner_name = unit
+                .owner_user_id
+                .as_ref()
+                .and_then(|oid| inner.users.iter().find(|u| &u.id == oid).map(|u| u.full_name.clone()));
+            (unit, owner_name)
+        };
 
-                allocation_breakdown.push(AllocationBreakdownItem {
-                    due_id: Some(inner.dues[idx].id.clone()),
-                    period: inner.dues[idx].period.clone(),
-                    expense_type: if is_capital_intent { "CAPITAL_DUES".to_string() } else { "OPERATIONAL_DUES".to_string() },
-                    principal_paid: pay_principal,
-                    penalty_paid: Decimal::ZERO,
-                });
+        let calc = crate::services::DuesCalculationService::new();
+        let today = issued_at.date_naive();
+        let ctx = ReceiptContext {
+            site_id: site_id.clone(),
+            unit_id: unit.id.clone(),
+            payer_name: req.payer_name.clone(),
+            payer_role: payer_role.clone(),
+            payment_channel: req.payment_channel.clone(),
+            amount: payment_amount,
+            issued_at,
+            on_behalf_of_owner,
+            owner_name,
+            channel_reference: idempotency_key.as_ref().map(|k| format!("IDEMPOTENCY:{}", k)),
+        };
+
+        let (receipt, settled_dues, entry) = if let Some(ref pool) = self.state.pool {
+            let site_num = crate::db::require_id("site", &site_id)?;
+            let unit_num = crate::db::require_id("unit", &unit.id)?;
+            let mut client = pool.get().await.map_err(|e| format!("Database unavailable: {}", e))?;
+            let tx = client.transaction().await.map_err(|e| format!("Database unavailable: {}", e))?;
+            let db_err = |e: Box<dyn std::error::Error + Send + Sync>| format!("Payment was not recorded: {}", e);
+
+            if let Some(key) = idempotency_key.as_deref() {
+                if let Some(rid) = crate::db::tx_find_idempotent_receipt(&tx, site_num, key).await.map_err(db_err)? {
+                    drop(tx);
+                    return crate::db::get_payment_receipt_by_id(pool, rid)
+                        .await
+                        .map_err(db_err)?
+                        .ok_or_else(|| "Idempotent receipt not found".to_string());
+                }
+            }
+            if !crate::db::tx_lock_unit(&tx, unit_num, site_num).await.map_err(db_err)? {
+                return Err(format!("Daire bulunamadı: {}", unit_id));
+            }
+            let mut dues: Vec<DuesLiability> = crate::db::tx_load_open_dues(&tx, unit_num)
+                .await
+                .map_err(db_err)?
+                .into_iter()
+                .map(|d| calc.calculate_delay_penalty(d, today))
+                .collect();
+            let candidates = dues_ledger::open_dues_for(&dues, |_| true, settling_role);
+            let (lines, surplus) = dues_ledger::allocate_waterfall(&mut dues, &candidates, payment_amount);
+
+            let sequence = crate::db::tx_next_receipt_sequence(&tx, site_num).await.map_err(db_err)?;
+            let mut receipt = build_receipt(&ctx, &dues, &lines, surplus, sequence);
+            receipt.id = crate::db::tx_insert_receipt(&tx, &receipt, site_num, unit_num).await.map_err(db_err)?;
+            let mut entry = build_entry(&ctx, &unit, &receipt);
+            entry.id = crate::db::tx_insert_entry(&tx, &entry, site_num, unit_num).await.map_err(db_err)?;
+            for line in &lines {
+                let d = &dues[line.due_index];
+                crate::db::tx_settle_due(&tx, entry.id, d, line.settlement.principal, line.settlement.penalty)
+                    .await
+                    .map_err(db_err)?;
+            }
+            if surplus > Decimal::ZERO {
+                crate::db::tx_credit_advance(
+                    &tx,
+                    unit_num,
+                    &credit_debtor,
+                    "PAYMENT_SURPLUS",
+                    surplus,
+                    Some(&receipt.receipt_number),
+                    Some("Fazla ödeme avans bakiyesine aktarıldı"),
+                )
+                .await
+                .map_err(db_err)?;
+            }
+            if let Some(key) = idempotency_key.as_deref() {
+                crate::db::tx_store_idempotency_key(&tx, site_num, key, receipt.id).await.map_err(db_err)?;
+            }
+            tx.commit().await.map_err(|e| format!("Payment was not recorded: {}", e))?;
+            let touched: Vec<DuesLiability> = lines.iter().map(|l| dues[l.due_index].clone()).collect();
+            (receipt, touched, entry)
+        } else {
+            // No database (tests / demo): same allocation on the in-memory ledger.
+            let inner = self.state.inner.read().await;
+            let mut dues: Vec<DuesLiability> = inner
+                .dues
+                .iter()
+                .filter(|d| d.status != DebtStatus::Paid && crate::auth::same_id(&d.unit_id, &unit.id))
+                .cloned()
+                .map(|d| calc.calculate_delay_penalty(d, today))
+                .collect();
+            let next_seq = inner.payment_receipts.iter().filter(|r| r.site_id == site_id).map(|r| r.sequence_number).max().unwrap_or(0) + 1;
+            let next_receipt_id = inner.payment_receipts.iter().map(|r| r.id).max().unwrap_or(0) + 1;
+            let next_entry_id = inner.payment_entries.iter().map(|e| e.id).max().unwrap_or(0) + 1;
+            drop(inner);
+            let candidates = dues_ledger::open_dues_for(&dues, |_| true, settling_role);
+            let (lines, surplus) = dues_ledger::allocate_waterfall(&mut dues, &candidates, payment_amount);
+            let mut receipt = build_receipt(&ctx, &dues, &lines, surplus, next_seq);
+            receipt.id = next_receipt_id;
+            let mut entry = build_entry(&ctx, &unit, &receipt);
+            entry.id = next_entry_id;
+            let touched: Vec<DuesLiability> = lines.iter().map(|l| dues[l.due_index].clone()).collect();
+            (receipt, touched, entry)
+        };
+
+        // Apply the committed result to the in-memory view.
+        let mut inner = self.state.inner.write().await;
+        for settled in &settled_dues {
+            if let Some(d) = inner.dues.iter_mut().find(|d| crate::auth::same_id(&d.id, &settled.id)) {
+                let unit_key = d.unit_id.clone();
+                *d = settled.clone();
+                d.unit_id = unit_key;
             }
         }
-
-        // Tier 4: Surplus to advance balance (Avans Bakiye)
-        let allocated_advance = remaining_funds;
-        if allocated_advance > Decimal::ZERO {
-            let balance = inner.advance_payments.entry(unit_id.clone()).or_insert(Decimal::ZERO);
-            *balance += allocated_advance;
+        if receipt.allocated_advance > Decimal::ZERO {
+            *inner.advance_payments.entry(unit.id.clone()).or_insert(Decimal::ZERO) += receipt.allocated_advance;
         }
-
-        // Rent-offset qualification logic
-        let is_tenant_paying = req.payer_role == "TENANT";
-        let is_rent_offset_eligible = is_tenant_paying && is_capital_intent;
-        let on_behalf_of_name = if is_rent_offset_eligible { owner_name } else { None };
-        let on_behalf_of_role = if is_rent_offset_eligible { Some("OWNER".to_string()) } else { None };
-        let legal_statutory_note = if is_rent_offset_eligible {
-            Some(
-                "634 sayılı KMK Madde 20 & 22 uyarınca ana gayrimenkulün ortak demirbaş/yatırım giderleri bağımsız bölüm malikinin (Kat Maliki) yasal sorumluluğundadır. Kiracı tarafından ödenen bu tutar TBK Madde 314 gereğince kira bedelinden mahsuba uygundur."
-                    .to_string(),
-            )
-        } else {
-            None
-        };
-
-        let verification_hash = Self::compute_verification_hash(
-            &receipt_number,
-            &unit_id,
-            payment_amount,
-            &issued_at,
-        );
-
-        let receipt_id = (inner.payment_receipts.len() + 1) as i64;
-
-        let receipt = PaymentReceipt {
-            id: receipt_id,
-            site_id: site_id.clone(),
-            unit_id: unit_id.clone(),
-            receipt_number: receipt_number.clone(),
-            sequence_number,
-            payer_name: req.payer_name.clone(),
-            payer_role: req.payer_role.clone(),
-            on_behalf_of_name,
-            on_behalf_of_role,
-            total_amount: payment_amount,
-            payment_channel: req.payment_channel.clone(),
-            channel_reference: Some(format!("REF-{}", Uuid::new_v4().simple())),
-            allocated_principal: total_allocated_principal,
-            allocated_penalty: total_allocated_penalty,
-            allocated_advance,
-            allocation_breakdown,
-            is_rent_offset_eligible,
-            legal_statutory_note,
-            verification_hash,
-            issued_at,
-        };
-
         inner.payment_receipts.push(receipt.clone());
-
-        // Also record corresponding payment entry in stream
-        let entry_id = (inner.payment_entries.len() + 1) as i64;
-        let unit_label = format!("{} Blok D:{}", unit.block_id, unit.unit_number);
-        let entry = PaymentEntry {
-            id: entry_id,
-            site_id: site_id.clone(),
-            unit_id: unit_id.clone(),
-            unit_label: Some(unit_label),
-            payer_name: req.payer_name.clone(),
-            payer_role: req.payer_role.clone(),
-            receipt_id: Some(receipt_id),
-            receipt_number: Some(receipt_number.clone()),
-            amount: payment_amount,
-            payment_channel: req.payment_channel.clone(),
-            settlement_status: "SETTLED".to_string(),
-            description: req.description.clone(),
-            external_reference: Some(format!("REF-{}", Uuid::new_v4().simple())),
-            payment_date: issued_at,
-            created_at: Utc::now(),
-        };
-        inner.payment_entries.push(entry.clone());
-
-        // Also keep homeowner payment record in sync
+        inner.payment_entries.push(entry);
         inner.homeowner_payments.push(crate::models::HomeownerPaymentRecord {
-            id: format!("rec-{}", entry_id),
-            unit_id: unit_id.clone(),
+            id: format!("rec-{}", receipt.id),
+            unit_id: unit.id.clone(),
             block_id: unit.block_id.clone(),
             unit_number: unit.unit_number,
             homeowner_name: Some(req.payer_name.clone()),
             amount: payment_amount,
             payment_method: req.payment_channel.clone(),
-            reference_code: Some(receipt_number.clone()),
+            reference_code: Some(receipt.receipt_number.clone()),
             note: req.description.clone(),
             status: PaymentMatchStatus::MatchedDebt,
-            cleared_debt_amount: total_allocated_principal + total_allocated_penalty,
-            advance_credit_amount: allocated_advance,
+            cleared_debt_amount: receipt.allocated_principal + receipt.allocated_penalty,
+            advance_credit_amount: receipt.allocated_advance,
             created_at: issued_at,
         });
-
-        drop(inner);
-
-        if let Some(ref pool) = self.state.pool {
-            let db_rcp_id = match crate::db::save_payment_receipt(pool, &receipt).await {
-                Ok(id) => Some(id),
-                Err(e) => {
-                    tracing::warn!("Failed to persist payment receipt to DB: {}", e);
-                    None
-                }
-            };
-
-            let mut db_entry = entry.clone();
-            db_entry.receipt_id = db_rcp_id;
-
-            let db_entry_id = match crate::db::save_payment_entry(pool, &db_entry).await {
-                Ok(id) => id,
-                Err(e) => {
-                    tracing::warn!("Failed to persist payment entry to DB: {}", e);
-                    entry_id
-                }
-            };
-
-            for item in &receipt.allocation_breakdown {
-                if let Some(ref d_id) = item.due_id {
-                    let d_id_num = crate::db::parse_id_to_i64(d_id).unwrap_or(1);
-                    let _ = crate::db::record_due_allocation(
-                        pool,
-                        d_id_num,
-                        item.principal_paid,
-                        item.penalty_paid,
-                    )
-                    .await;
-                    let _ = crate::db::save_payment_allocation(
-                        pool,
-                        db_entry_id,
-                        d_id_num,
-                        item.principal_paid,
-                        item.penalty_paid,
-                    )
-                    .await;
-                }
-            }
-
-            if allocated_advance > Decimal::ZERO {
-                let debtor_type = if req.payer_role == "OWNER" { "OWNER" } else { "TENANT" };
-                let inner = self.state.inner.read().await;
-                let current_bal = inner.advance_payments.get(&unit_id).copied().unwrap_or(Decimal::ZERO);
-                drop(inner);
-                let _ = crate::db::save_advance_balance_with_type(pool, &unit_id, debtor_type, current_bal).await;
-                let _ = crate::db::save_advance_ledger_entry(
-                    pool,
-                    &unit_id,
-                    debtor_type,
-                    "PAYMENT_SURPLUS",
-                    allocated_advance,
-                    Some(&receipt_number),
-                    Some("Fazla ödeme avans bakiyesine aktarıldı"),
-                )
-                .await;
-            }
-        }
-
         Ok(receipt)
     }
 
@@ -541,213 +480,158 @@ impl PaymentTrackingService {
         &self,
         req: InterLedgerTransferRequest,
     ) -> Result<InterLedgerTransferResponse, String> {
-        let site_id = req.site_id.unwrap_or_else(|| "site-1".to_string());
+        let site_id = req.site_id.clone().filter(|s| !s.trim().is_empty()).ok_or_else(|| "site_id is required".to_string())?;
         let unit_id = req.unit_id.clone();
         let transfer_amount = req.amount;
-
-        if transfer_amount <= Decimal::ZERO {
+        if transfer_amount <= Decimal::ZERO || transfer_amount.scale() > 2 {
             return Err("Virman tutarı 0.00'dan büyük olmalıdır".to_string());
         }
 
-        let mut inner = self.state.inner.write().await;
-
-        let current_advance = inner.advance_payments.get(&unit_id).copied().unwrap_or(Decimal::ZERO);
-        if current_advance < transfer_amount {
-            return Err(format!(
-                "Yetersiz avans bakiyesi. Mevcut: ₺{:.2}, Talep Edilen: ₺{:.2}",
-                current_advance, transfer_amount
-            ));
-        }
-
-        // Deduct from advance balance
-        let remaining_advance = current_advance - transfer_amount;
-        inner.advance_payments.insert(unit_id.clone(), remaining_advance);
-
-        // Find unit
-        let unit = inner
-            .units
-            .iter()
-            .find(|u| u.id == unit_id)
-            .cloned()
-            .ok_or_else(|| format!("Daire bulunamadı: {}", unit_id))?;
-
-        let owner_name = unit.owner_user_id.as_ref().and_then(|oid| {
-            inner.users.iter().find(|u| &u.id == oid).map(|u| u.full_name.clone())
-        }).unwrap_or_else(|| "Kat Maliki".to_string());
-
-        // Offset unpaid capital dues or oldest debt for this unit
-        let mut unpaid_indices: Vec<usize> = inner
-            .dues
-            .iter()
-            .enumerate()
-            .filter(|(_, d)| d.unit_id == unit_id && d.status != DebtStatus::Paid)
-            .map(|(i, _)| i)
-            .collect();
-
-        unpaid_indices.sort_by_key(|&i| inner.dues[i].due_date);
-
-        let mut cleared_amount = Decimal::ZERO;
-        let mut remaining_funds = transfer_amount;
-        let mut breakdown: Vec<AllocationBreakdownItem> = Vec::new();
-
-        for &idx in &unpaid_indices {
-            if remaining_funds <= Decimal::ZERO {
-                break;
-            }
-            let debt = inner.dues[idx].total_amount;
-            let pay = debt.min(remaining_funds);
-            inner.dues[idx].total_amount -= pay;
-            inner.dues[idx].principal_amount = inner.dues[idx].principal_amount.saturating_sub(pay);
-            remaining_funds -= pay;
-            cleared_amount += pay;
-
-            if inner.dues[idx].total_amount <= Decimal::ZERO {
-                inner.dues[idx].status = DebtStatus::Paid;
-            }
-
-            breakdown.push(AllocationBreakdownItem {
-                due_id: Some(inner.dues[idx].id.clone()),
-                period: inner.dues[idx].period.clone(),
-                expense_type: "CAPITAL_DUES".to_string(),
-                principal_paid: pay,
-                penalty_paid: Decimal::ZERO,
-            });
-        }
-
-        // Monotonic receipt generation
-        let year = Utc::now().format("%Y").to_string();
-        let max_seq = inner
-            .payment_receipts
-            .iter()
-            .filter(|r| r.site_id == site_id)
-            .map(|r| r.sequence_number)
-            .max()
-            .unwrap_or(0);
-        let seq = max_seq + 1;
-        let receipt_number = format!("TAH-{}-{:06}", year, seq);
-
+        let (unit, owner_name) = {
+            let inner = self.state.inner.read().await;
+            let unit = inner
+                .units
+                .iter()
+                .find(|u| crate::auth::same_id(&u.id, &unit_id) && crate::auth::same_id(&u.site_id, &site_id))
+                .cloned()
+                .ok_or_else(|| format!("Daire bulunamadı: {}", unit_id))?;
+            let owner_name = unit
+                .owner_user_id
+                .as_ref()
+                .and_then(|oid| inner.users.iter().find(|u| &u.id == oid).map(|u| u.full_name.clone()))
+                .unwrap_or_else(|| "Kat Maliki".to_string());
+            (unit, owner_name)
+        };
         let now = Utc::now();
-        let verification_hash = Self::compute_verification_hash(
-            &receipt_number,
-            &unit_id,
-            transfer_amount,
-            &now,
-        );
-
-        let receipt_id = (inner.payment_receipts.len() + 1) as i64;
-        let receipt = PaymentReceipt {
-            id: receipt_id,
+        let calc = crate::services::DuesCalculationService::new();
+        let ctx = ReceiptContext {
             site_id: site_id.clone(),
-            unit_id: unit_id.clone(),
-            receipt_number: receipt_number.clone(),
-            sequence_number: seq,
+            unit_id: unit.id.clone(),
             payer_name: owner_name.clone(),
-            payer_role: "OWNER".to_string(),
-            on_behalf_of_name: None,
-            on_behalf_of_role: None,
-            total_amount: transfer_amount,
+            payer_role: dues_ledger::DEBTOR_OWNER.to_string(),
             payment_channel: "INTER_LEDGER".to_string(),
-            channel_reference: Some("Avans Mahsubu / Virman".to_string()),
-            allocated_principal: cleared_amount,
-            allocated_penalty: Decimal::ZERO,
-            allocated_advance: Decimal::ZERO,
-            allocation_breakdown: breakdown,
-            is_rent_offset_eligible: false,
-            legal_statutory_note: Some("Avans bakiyesinden demirbaş/ortak gider borcuna virman işlemi.".to_string()),
-            verification_hash: verification_hash.clone(),
+            amount: Decimal::ZERO,
             issued_at: now,
+            on_behalf_of_owner: false,
+            owner_name: None,
+            channel_reference: Some("Avans Mahsubu / Virman".to_string()),
+        };
+        let insufficient = |have: Decimal| {
+            format!("Yetersiz avans bakiyesi. Mevcut: ₺{:.2}, Talep Edilen: ₺{:.2}", have, transfer_amount)
         };
 
-        inner.payment_receipts.push(receipt.clone());
-
-        let entry_id = (inner.payment_entries.len() + 1) as i64;
-        let unit_label = format!("{} Blok D:{}", unit.block_id, unit.unit_number);
-        let entry = PaymentEntry {
-            id: entry_id,
-            site_id: site_id.clone(),
-            unit_id: unit_id.clone(),
-            unit_label: Some(unit_label),
-            payer_name: owner_name,
-            payer_role: "OWNER".to_string(),
-            receipt_id: Some(receipt_id),
-            receipt_number: Some(receipt_number.clone()),
-            amount: transfer_amount,
-            payment_channel: "INTER_LEDGER".to_string(),
-            settlement_status: "SETTLED".to_string(),
-            description: req.note.or_else(|| Some("Avans bakiyesinden demirbaş borcuna virman yapıldı".to_string())),
-            external_reference: Some(format!("VIRMAN-{}", Uuid::new_v4().simple())),
-            payment_date: now,
-            created_at: now,
-        };
-        inner.payment_entries.push(entry.clone());
-
-        drop(inner);
-
-        if let Some(ref pool) = self.state.pool {
-            let db_rcp_id = match crate::db::save_payment_receipt(pool, &receipt).await {
-                Ok(id) => Some(id),
-                Err(e) => {
-                    tracing::warn!("Failed to persist virman receipt to DB: {}", e);
-                    None
-                }
-            };
-
-            let mut db_entry = entry.clone();
-            db_entry.receipt_id = db_rcp_id;
-
-            let db_entry_id = match crate::db::save_payment_entry(pool, &db_entry).await {
-                Ok(id) => id,
-                Err(e) => {
-                    tracing::warn!("Failed to persist virman entry to DB: {}", e);
-                    entry_id
-                }
-            };
-
-            for item in &receipt.allocation_breakdown {
-                if let Some(ref d_id) = item.due_id {
-                    let d_id_num = crate::db::parse_id_to_i64(d_id).unwrap_or(1);
-                    let _ = crate::db::record_due_allocation(
-                        pool,
-                        d_id_num,
-                        item.principal_paid,
-                        item.penalty_paid,
-                    )
-                    .await;
-                    let _ = crate::db::save_payment_allocation(
-                        pool,
-                        db_entry_id,
-                        d_id_num,
-                        item.principal_paid,
-                        item.penalty_paid,
-                    )
-                    .await;
-                }
+        // Only the amount that actually clears debt leaves the advance balance.
+        let (receipt, settled, entry, remaining_advance) = if let Some(ref pool) = self.state.pool {
+            let site_num = crate::db::require_id("site", &site_id)?;
+            let unit_num = crate::db::require_id("unit", &unit.id)?;
+            let mut client = pool.get().await.map_err(|e| format!("Database unavailable: {}", e))?;
+            let tx = client.transaction().await.map_err(|e| format!("Database unavailable: {}", e))?;
+            let db_err = |e: Box<dyn std::error::Error + Send + Sync>| format!("Transfer was not recorded: {}", e);
+            if !crate::db::tx_lock_unit(&tx, unit_num, site_num).await.map_err(db_err)? {
+                return Err(format!("Daire bulunamadı: {}", unit_id));
             }
-
-            let _ = crate::db::save_advance_balance_with_type(pool, &unit_id, "OWNER", remaining_advance).await;
-            let _ = crate::db::save_advance_ledger_entry(
-                pool,
-                &unit_id,
-                "OWNER",
+            let owner_credit = crate::db::tx_lock_advance(&tx, unit_num, dues_ledger::DEBTOR_OWNER).await.map_err(db_err)?;
+            if owner_credit < transfer_amount {
+                return Err(insufficient(owner_credit));
+            }
+            let mut dues: Vec<DuesLiability> = crate::db::tx_load_open_dues(&tx, unit_num)
+                .await
+                .map_err(db_err)?
+                .into_iter()
+                .map(|d| calc.calculate_delay_penalty(d, now.date_naive()))
+                .collect();
+            let candidates = dues_ledger::open_dues_for(&dues, |_| true, dues_ledger::DEBTOR_OWNER);
+            let (lines, unused) = dues_ledger::allocate_waterfall(&mut dues, &candidates, transfer_amount);
+            let cleared = transfer_amount - unused;
+            if cleared <= Decimal::ZERO {
+                return Err("Mahsup edilecek açık borç bulunamadı".to_string());
+            }
+            let seq = crate::db::tx_next_receipt_sequence(&tx, site_num).await.map_err(db_err)?;
+            let mut c = ctx;
+            c.amount = cleared;
+            let mut receipt = build_receipt(&c, &dues, &lines, Decimal::ZERO, seq);
+            receipt.legal_statutory_note = Some("Avans bakiyesinden demirbaş/ortak gider borcuna virman işlemi.".to_string());
+            receipt.id = crate::db::tx_insert_receipt(&tx, &receipt, site_num, unit_num).await.map_err(db_err)?;
+            let mut entry = build_entry(&c, &unit, &receipt);
+            entry.description = req.note.clone().or_else(|| Some("Avans bakiyesinden borca virman yapıldı".to_string()));
+            entry.id = crate::db::tx_insert_entry(&tx, &entry, site_num, unit_num).await.map_err(db_err)?;
+            for line in &lines {
+                crate::db::tx_settle_due(&tx, entry.id, &dues[line.due_index], line.settlement.principal, line.settlement.penalty)
+                    .await
+                    .map_err(db_err)?;
+            }
+            crate::db::tx_debit_advance(
+                &tx,
+                unit_num,
+                dues_ledger::DEBTOR_OWNER,
                 "VIRMAN_DEBIT",
-                transfer_amount,
-                Some(&receipt_number),
-                Some("Demirbaş borcu mahsubu (virman)"),
+                cleared,
+                Some(&receipt.receipt_number),
+                Some("Borç mahsubu (virman)"),
             )
-            .await;
+            .await
+            .map_err(db_err)?;
+            tx.commit().await.map_err(|e| format!("Transfer was not recorded: {}", e))?;
+            let touched: Vec<DuesLiability> = lines.iter().map(|l| dues[l.due_index].clone()).collect();
+            let unit_total_left = {
+                let inner = self.state.inner.read().await;
+                inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO) - cleared
+            };
+            (receipt, touched, entry, unit_total_left)
+        } else {
+            let inner = self.state.inner.read().await;
+            let have = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
+            if have < transfer_amount {
+                return Err(insufficient(have));
+            }
+            let mut dues: Vec<DuesLiability> = inner
+                .dues
+                .iter()
+                .filter(|d| d.status != DebtStatus::Paid && crate::auth::same_id(&d.unit_id, &unit.id))
+                .cloned()
+                .collect();
+            let seq = inner.payment_receipts.iter().filter(|r| r.site_id == site_id).map(|r| r.sequence_number).max().unwrap_or(0) + 1;
+            let rid = inner.payment_receipts.iter().map(|r| r.id).max().unwrap_or(0) + 1;
+            let eid = inner.payment_entries.iter().map(|e| e.id).max().unwrap_or(0) + 1;
+            drop(inner);
+            let candidates = dues_ledger::open_dues_for(&dues, |_| true, dues_ledger::DEBTOR_OWNER);
+            let (lines, unused) = dues_ledger::allocate_waterfall(&mut dues, &candidates, transfer_amount);
+            let cleared = transfer_amount - unused;
+            if cleared <= Decimal::ZERO {
+                return Err("Mahsup edilecek açık borç bulunamadı".to_string());
+            }
+            let mut c = ctx;
+            c.amount = cleared;
+            let mut receipt = build_receipt(&c, &dues, &lines, Decimal::ZERO, seq);
+            receipt.id = rid;
+            receipt.legal_statutory_note = Some("Avans bakiyesinden demirbaş/ortak gider borcuna virman işlemi.".to_string());
+            let mut entry = build_entry(&c, &unit, &receipt);
+            entry.id = eid;
+            entry.description = req.note.clone().or_else(|| Some("Avans bakiyesinden borca virman yapıldı".to_string()));
+            let touched: Vec<DuesLiability> = lines.iter().map(|l| dues[l.due_index].clone()).collect();
+            (receipt, touched, entry, have - cleared)
+        };
+
+        let mut inner = self.state.inner.write().await;
+        for d in &settled {
+            if let Some(m) = inner.dues.iter_mut().find(|x| crate::auth::same_id(&x.id, &d.id)) {
+                let key = m.unit_id.clone();
+                *m = d.clone();
+                m.unit_id = key;
+            }
         }
+        inner.advance_payments.insert(unit.id.clone(), remaining_advance.max(Decimal::ZERO));
+        inner.payment_receipts.push(receipt.clone());
+        inner.payment_entries.push(entry);
 
         Ok(InterLedgerTransferResponse {
             success: true,
-            message: format!(
-                "₺{:.2} tutarındaki avans bakiyesi başarıyla demirbaş borcuna mahsup edildi.",
-                transfer_amount
-            ),
-            receipt_number,
-            transferred_amount: transfer_amount,
-            remaining_advance_balance: remaining_advance,
-            cleared_capital_due_amount: cleared_amount,
-            verification_hash,
+            message: format!("₺{:.2} tutarındaki avans bakiyesi başarıyla borca mahsup edildi.", receipt.total_amount),
+            receipt_number: receipt.receipt_number.clone(),
+            transferred_amount: receipt.total_amount,
+            remaining_advance_balance: remaining_advance.max(Decimal::ZERO),
+            cleared_capital_due_amount: receipt.allocated_principal + receipt.allocated_penalty,
+            verification_hash: receipt.verification_hash,
         })
     }
 
@@ -775,7 +659,7 @@ impl PaymentTrackingService {
 
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
-                let site_id_num = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+                let site_id_num = crate::db::require_id("entity", site_id)?;
                 let row_res = if let Some(n) = num_id {
                     client.query_opt(
                         "SELECT id, site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, on_behalf_of_name, on_behalf_of_role, total_amount, payment_channel, channel_reference, allocated_principal, allocated_penalty, allocated_advance, allocation_breakdown::text, is_rent_offset_eligible, legal_statutory_note, verification_hash, issued_at FROM payment_receipts WHERE (site_id = $1 OR $1 = 0) AND (id = $2 OR receipt_number = $3)",
@@ -824,7 +708,7 @@ impl PaymentTrackingService {
         &self,
         req: TransferOwnershipRequest,
     ) -> Result<TransferOwnershipResponse, String> {
-        let site_id = req.site_id.unwrap_or_else(|| "site-1".to_string());
+        let site_id = req.site_id.unwrap_or_default();
         let unit_id = req.unit_id.clone();
         let now = Utc::now();
         let transfer_date = req.transfer_date.unwrap_or_else(|| now.date_naive());
@@ -885,8 +769,20 @@ impl PaymentTrackingService {
             req.notes.as_deref().unwrap_or_default()
         );
 
-        let unit_num_i64 = crate::db::parse_id_to_i64(&unit_id).unwrap_or(1);
-        let old_person_id = crate::db::parse_id_to_i64(&old_owner_user_id.unwrap_or_default()).unwrap_or(1);
+        let unit_num_i64 = crate::db::require_id("entity", &unit_id)?;
+        // Resolve the previous owner's person id from the account itself; an
+        // unknown owner is recorded as 0 (never as someone else's person id).
+        let old_person_id = old_owner_user_id
+            .as_deref()
+            .and_then(|uid| {
+                inner
+                    .users
+                    .iter()
+                    .find(|u| u.id == uid)
+                    .and_then(|u| u.person_id)
+                    .or_else(|| uid.strip_prefix("person-").and_then(|n| n.parse().ok()))
+            })
+            .unwrap_or(0);
 
         let history_item = OccupancyHistoryItem {
             id: now.timestamp_millis(),
@@ -916,7 +812,7 @@ impl PaymentTrackingService {
         drop(inner);
 
         if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::transfer_unit_ownership_db(
+            crate::db::transfer_unit_ownership_db(
                 pool,
                 &unit_id,
                 &new_user,
@@ -924,7 +820,7 @@ impl PaymentTrackingService {
                 old_owner_exit_balance,
                 req.notes.as_deref(),
             )
-            .await;
+            .await.map_err(|e| e.to_string())?;
         }
 
         Ok(TransferOwnershipResponse {
@@ -939,5 +835,91 @@ impl PaymentTrackingService {
             new_owner_name: req.new_owner_name,
             transferred_at: now,
         })
+    }
+}
+
+/// Inputs shared by the persisted and in-memory payment paths.
+struct ReceiptContext {
+    site_id: String,
+    unit_id: String,
+    payer_name: String,
+    payer_role: String,
+    payment_channel: String,
+    amount: Decimal,
+    issued_at: DateTime<Utc>,
+    on_behalf_of_owner: bool,
+    owner_name: Option<String>,
+    channel_reference: Option<String>,
+}
+
+const RENT_OFFSET_NOTE: &str = "634 sayılı KMK Madde 20 & 22 uyarınca ana gayrimenkulün ortak demirbaş/yatırım giderleri bağımsız bölüm malikinin (Kat Maliki) yasal sorumluluğundadır. Kiracı tarafından ödenen bu tutar TBK Madde 314 gereğince kira bedelinden mahsuba uygundur.";
+
+fn build_receipt(
+    ctx: &ReceiptContext,
+    dues: &[DuesLiability],
+    lines: &[dues_ledger::AllocationLine],
+    surplus: Decimal,
+    sequence_number: i64,
+) -> PaymentReceipt {
+    let receipt_number = format!("TAH-{}-{:06}", ctx.issued_at.format("%Y"), sequence_number);
+    let allocation_breakdown: Vec<AllocationBreakdownItem> = lines
+        .iter()
+        .map(|l| {
+            let d = &dues[l.due_index];
+            AllocationBreakdownItem {
+                due_id: Some(d.id.clone()),
+                period: d.period.clone(),
+                // Taken from the liability itself, never guessed from the description.
+                expense_type: d.expense_type.clone(),
+                principal_paid: l.settlement.principal,
+                penalty_paid: l.settlement.penalty,
+            }
+        })
+        .collect();
+    let allocated_principal: Decimal = lines.iter().map(|l| l.settlement.principal).sum();
+    let allocated_penalty: Decimal = lines.iter().map(|l| l.settlement.penalty).sum();
+    let paid_capital = allocation_breakdown.iter().any(|b| b.expense_type == dues_ledger::EXPENSE_CAPITAL);
+    let is_rent_offset_eligible = ctx.on_behalf_of_owner && paid_capital;
+    PaymentReceipt {
+        id: 0,
+        site_id: ctx.site_id.clone(),
+        unit_id: ctx.unit_id.clone(),
+        verification_hash: PaymentTrackingService::compute_verification_hash(&receipt_number, &ctx.unit_id, ctx.amount, &ctx.issued_at),
+        receipt_number,
+        sequence_number,
+        payer_name: ctx.payer_name.clone(),
+        payer_role: ctx.payer_role.clone(),
+        on_behalf_of_name: if is_rent_offset_eligible { ctx.owner_name.clone() } else { None },
+        on_behalf_of_role: if is_rent_offset_eligible { Some("OWNER".to_string()) } else { None },
+        total_amount: ctx.amount,
+        payment_channel: ctx.payment_channel.clone(),
+        channel_reference: ctx.channel_reference.clone().or_else(|| Some(format!("REF-{}", Uuid::new_v4().simple()))),
+        allocated_principal,
+        allocated_penalty,
+        allocated_advance: surplus,
+        allocation_breakdown,
+        is_rent_offset_eligible,
+        legal_statutory_note: if is_rent_offset_eligible { Some(RENT_OFFSET_NOTE.to_string()) } else { None },
+        issued_at: ctx.issued_at,
+    }
+}
+
+fn build_entry(ctx: &ReceiptContext, unit: &crate::models::IndependentUnit, receipt: &PaymentReceipt) -> PaymentEntry {
+    PaymentEntry {
+        id: 0,
+        site_id: ctx.site_id.clone(),
+        unit_id: ctx.unit_id.clone(),
+        unit_label: Some(format!("{} Blok D:{}", unit.block_id, unit.unit_number)),
+        payer_name: ctx.payer_name.clone(),
+        payer_role: ctx.payer_role.clone(),
+        receipt_id: if receipt.id > 0 { Some(receipt.id) } else { None },
+        receipt_number: Some(receipt.receipt_number.clone()),
+        amount: ctx.amount,
+        payment_channel: ctx.payment_channel.clone(),
+        settlement_status: "SETTLED".to_string(),
+        description: None,
+        external_reference: receipt.channel_reference.clone(),
+        payment_date: ctx.issued_at,
+        created_at: Utc::now(),
     }
 }

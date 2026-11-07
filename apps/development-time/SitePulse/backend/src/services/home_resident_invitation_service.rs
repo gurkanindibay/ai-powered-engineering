@@ -39,7 +39,7 @@ impl HomeResidentInvitationService {
 
         let token_part: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
-            .take(6)
+            .take(24)
             .map(char::from)
             .collect();
         let token = format!("SP-HANE-{}", token_part.to_uppercase());
@@ -69,14 +69,18 @@ impl HomeResidentInvitationService {
         };
 
         drop(inner);
+        // Only a digest of the token is kept, in memory and in PostgreSQL.
+        let mut stored = response.clone();
+        stored.token = crate::auth::token_digest(&token);
+        stored.invite_url = String::new();
         let mut inner_write = self.state.inner.write().await;
-        inner_write
-            .unit_invite_tokens
-            .insert(token, response.clone());
+        inner_write.unit_invite_tokens.insert(stored.token.clone(), stored.clone());
         drop(inner_write);
 
         if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::save_invitation_token(pool, &response).await;
+            if let Err(e) = crate::db::save_invitation_token(pool, &stored).await {
+                tracing::error!("Failed to persist invitation token: {}", e);
+            }
         }
 
         response
@@ -106,25 +110,38 @@ impl HomeResidentInvitationService {
             ));
         }
 
-        let token_info = inner.unit_invite_tokens.get(&request.token);
-        let unit_id = token_info
-            .map(|t| t.unit_id.clone())
-            .unwrap_or_else(|| "d-14".to_string());
+        let digest = crate::auth::token_digest(request.token.trim());
+        let token_info = inner
+            .unit_invite_tokens
+            .get(&digest)
+            .cloned()
+            .ok_or_else(|| "Invitation token is invalid or has already been used.".to_string())?;
+        if token_info.expires_at < Utc::now() {
+            inner.unit_invite_tokens.remove(&digest);
+            return Err("Invitation token has expired.".to_string());
+        }
+        let unit_id = token_info.unit_id.clone();
+        let site_id = inner
+            .units
+            .iter()
+            .find(|u| crate::auth::same_id(&u.id, &unit_id))
+            .map(|u| u.site_id.clone())
+            .ok_or_else(|| "The invited unit no longer exists.".to_string())?;
+        inner.unit_invite_tokens.remove(&digest);
         let relationship = request
             .relationship
-            .or_else(|| token_info.map(|t| t.relationship.clone()))
-            .unwrap_or_else(|| "Sakin / Aile Üyesi".to_string());
+            .unwrap_or_else(|| token_info.relationship.clone());
 
         let resident_id = format!("usr-res-{}", &Uuid::new_v4().to_string()[..8]);
         let temp_pass = generate_temporary_password();
 
         let resident_user = User {
             id: resident_id.clone(),
-            site_id: "site-1".to_string(),
+            site_id,
             full_name: request.full_name.clone(),
             email: email_norm.clone(),
             phone: request.phone.clone().unwrap_or_else(|| "-".to_string()),
-            password_hash: Some(format!("HASH_{}", &temp_pass)),
+            password_hash: Some(crate::auth::hash_password(&temp_pass)),
             role: Role::HomeResident,
             must_change_password: true,
             auth_provider: "LOCAL".to_string(),
@@ -143,8 +160,8 @@ impl HomeResidentInvitationService {
             email: email_norm.clone(),
             is_owner: false,
             occupancy_id: None,
-                person_id: None,
-                resident_user_id: None,
+            person_id: None,
+            resident_user_id: None,
         };
 
         inner
@@ -156,8 +173,9 @@ impl HomeResidentInvitationService {
         drop(inner);
 
         if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::save_user(pool, &resident_user).await;
-            let _ = crate::db::save_unit_member(
+            crate::db::delete_invitation_token(pool, &digest).await.map_err(|e| e.to_string())?;
+            crate::db::save_user(pool, &resident_user).await.map_err(|e| format!("Failed to persist resident: {}", e))?;
+            crate::db::save_unit_member(
                 pool,
                 &unit_id,
                 &member_dto.full_name,
@@ -165,7 +183,8 @@ impl HomeResidentInvitationService {
                 &member_dto.phone,
                 &member_dto.email,
             )
-            .await;
+            .await
+            .map_err(|e| format!("Failed to persist household member: {}", e))?;
         }
 
         Ok(HomeResidentResponse {
@@ -184,7 +203,7 @@ impl HomeResidentInvitationService {
     pub async fn get_unit_members(&self, unit_id: &str) -> Vec<UnitMemberDto> {
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
-                if let Ok(rows) = client
+                if let Some(rows) = crate::db::logged(client
                     .query(
                         r#"
                         SELECT om.id, om.full_name, om.relationship, om.phone, om.email,
@@ -196,8 +215,7 @@ impl HomeResidentInvitationService {
                         "#,
                         &[&crate::db::parse_id_to_i64(unit_id).unwrap_or(0)],
                     )
-                    .await
-                {
+                    .await, "home_resident_invitation_service") {
                     if !rows.is_empty() {
                         return rows
                             .into_iter()
@@ -224,10 +242,5 @@ impl HomeResidentInvitationService {
 }
 
 fn generate_temporary_password() -> String {
-    let part: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(4)
-        .map(char::from)
-        .collect();
-    format!("SP-HANE-{}", part.to_uppercase())
+    crate::auth::generate_temporary_password("SP-HANE-")
 }

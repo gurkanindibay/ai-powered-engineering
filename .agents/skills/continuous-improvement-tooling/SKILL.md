@@ -98,3 +98,20 @@ When developing any feature:
 - [ ] **Step 4 - Test Execution:** Run the script locally and verify both table and JSON outputs.
 - [ ] **Step 5 - Register Skill:** Update `skills.md` and create/update `.agents/skills/<skill-name>/SKILL.md`.
 - [ ] **Step 6 - Reuse in Subsequent Tasks:** Call the tool in subsequent testing and verification steps.
+
+---
+
+## 6. Registered SitePulse Tools
+
+Use these before writing ad-hoc commands (details and examples in [skills.md](file:///skills.md)):
+
+| Tool | Path | Use it for |
+| :--- | :--- | :--- |
+| `run_tests.py` | `apps/development-time/SitePulse/scripts/run_tests.py` | The full gate run before concluding any change |
+| `api_system_check.py` | `apps/development-time/SitePulse/scripts/api_system_check.py` | HTTP auth, tenancy, webhook, concurrency and restart checks against a real DB |
+| `schema_integrity_check.py` | `apps/development-time/SitePulse/scripts/schema_integrity_check.py` | Migration replay, constraint tests and the upgrade test |
+| `memory_persistence_lint.py` | `apps/development-time/SitePulse/scripts/memory_persistence_lint.py` | Catching discarded database results |
+| `db_verify.py` | `apps/development-time/SitePulse/scripts/db_verify.py` | Inspecting and auditing a database (parameterised; non-zero exit on issues) |
+| `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |
+| `hash-password` | `apps/development-time/SitePulse/backend/src/bin/hash_password.rs` | argon2id hashes for seeds and resets |
+

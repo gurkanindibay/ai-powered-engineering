@@ -137,8 +137,8 @@ class PaymentTrackingPage extends StatefulWidget {
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () async {
-                    final amt = double.tryParse(amountCtrl.text.replaceAll(',', '.')) ?? 0.0;
-                    if (amt <= 0) {
+                    final amt = Decimal.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? Decimal.zero;
+                    if (amt <= Decimal.zero || amt.scale > 2) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Lütfen geçerli bir tutar girin')),
                       );
@@ -309,8 +309,8 @@ class PaymentTrackingPage extends StatefulWidget {
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () async {
-                    final amt = double.tryParse(amountCtrl.text.replaceAll(',', '.')) ?? 0.0;
-                    if (amt <= 0) return;
+                    final amt = Decimal.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? Decimal.zero;
+                    if (amt <= Decimal.zero || amt.scale > 2) return;
 
                     final res = await controller.executeInterLedgerTransfer(
                       unitId: unitId,

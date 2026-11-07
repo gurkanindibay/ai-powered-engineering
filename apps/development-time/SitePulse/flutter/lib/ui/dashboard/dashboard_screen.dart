@@ -8323,8 +8323,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           setDialogState(() => localError = 'Yeni şifreler birbiriyle uyuşmuyor.');
                           return;
                         }
-                        if (n1.length < 6) {
-                          setDialogState(() => localError = 'Yeni şifre en az 6 karakter olmalıdır.');
+                        if (n1.length < 10) {
+                          setDialogState(() => localError = 'Yeni şifre en az 10 karakter olmalıdır.');
                           return;
                         }
                         setDialogState(() {

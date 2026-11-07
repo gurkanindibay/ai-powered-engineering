@@ -13,15 +13,33 @@ use crate::models::{
 use crate::services::VirtualIbanService;
 use crate::state::AppStateInner;
 
+/// Builds the PostgreSQL pool from the environment.
+///
+/// * `DB_PASS` has no default: credentials never live in source code. Without
+///   it the backend refuses to start, unless `SITEPULSE_IN_MEMORY=true` asks for
+///   the database-less demo mode explicitly (never allowed in production).
+/// * `DB_SSLMODE=require` encrypts the connection with TLS (rustls, verified
+///   against the Mozilla root store). The default is `disable` for local
+///   development; production requires `require`.
 pub fn create_pool() -> Option<Pool> {
+    let in_memory = std::env::var("SITEPULSE_IN_MEMORY").map(|v| v == "true").unwrap_or(false);
+    let production = crate::state::AppStateInner::is_production();
+    let password = match std::env::var("DB_PASS") {
+        Ok(p) if !p.is_empty() => p,
+        _ if in_memory && !production => {
+            warn!("SITEPULSE_IN_MEMORY=true: running without PostgreSQL; nothing will be persisted");
+            return None;
+        }
+        _ => panic!("DB_PASS is required (set it in backend/.env); use SITEPULSE_IN_MEMORY=true for a database-less demo"),
+    };
     let host = std::env::var("DB_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
-    let port = std::env::var("DB_PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(5432);
+    let port = std::env::var("DB_PORT").ok().and_then(|p| p.parse::<u16>().ok()).unwrap_or(5432);
     let user = std::env::var("DB_USER").unwrap_or_else(|_| "sitepulse_user".to_string());
-    let password = std::env::var("DB_PASS").unwrap_or_else(|_| "sitepulse_secret".to_string());
     let dbname = std::env::var("DB_NAME").unwrap_or_else(|_| "sitepulse".to_string());
+    let ssl_mode = std::env::var("DB_SSLMODE").unwrap_or_else(|_| "disable".to_string()).to_lowercase();
+    if production && ssl_mode != "require" {
+        panic!("DB_SSLMODE=require is mandatory in production");
+    }
 
     let mut cfg = Config::new();
     cfg.host = Some(host);
@@ -29,73 +47,68 @@ pub fn create_pool() -> Option<Pool> {
     cfg.user = Some(user);
     cfg.password = Some(password);
     cfg.dbname = Some(dbname);
-    cfg.manager = Some(ManagerConfig {
-        recycling_method: RecyclingMethod::Fast,
-    });
+    cfg.manager = Some(ManagerConfig { recycling_method: RecyclingMethod::Fast });
 
-    match cfg.create_pool(Some(Runtime::Tokio1), NoTls) {
+    let pool = match ssl_mode.as_str() {
+        "require" => {
+            let roots = rustls::RootCertStore { roots: webpki_roots::TLS_SERVER_ROOTS.to_vec() };
+            let tls_config = rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(rustls::crypto::ring::default_provider()))
+                .with_safe_default_protocol_versions()
+                .expect("rustls protocol versions")
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+            cfg.create_pool(Some(Runtime::Tokio1), tokio_postgres_rustls::MakeRustlsConnect::new(tls_config))
+        }
+        "disable" => cfg.create_pool(Some(Runtime::Tokio1), NoTls),
+        other => panic!("Unsupported DB_SSLMODE '{}': use 'disable' or 'require'", other),
+    };
+    match pool {
         Ok(pool) => {
-            info!("PostgreSQL connection pool configured successfully");
+            info!("PostgreSQL connection pool configured (sslmode={})", ssl_mode);
             Some(pool)
         }
+        Err(e) => panic!("Failed to create PostgreSQL connection pool: {}", e),
+    }
+}
+
+/// Parses an in-memory id into its PostgreSQL BIGINT id.
+///
+/// Accepts a bare positive integer or a known prefix followed by one
+/// (`site-1`, `d-14`, `person-7`, ...). Anything else is `None`: there are no
+/// hard-coded name mappings and no hex fallback, so an unknown id can never be
+/// silently mapped onto some other row.
+pub fn parse_id_to_i64(s: &str) -> Option<i64> {
+    const PREFIXES: [&str; 15] = [
+        "site-", "unit-", "d-", "b-", "borc-", "person-", "kisi-", "blk-", "blok-", "sba-", "txn-", "cproj-",
+        "cinst-", "usr-", "user-",
+    ];
+    let s = s.trim();
+    let positive = |n: i64| if n > 0 { Some(n) } else { None };
+    if let Ok(n) = s.parse::<i64>() {
+        return positive(n);
+    }
+    PREFIXES
+        .iter()
+        .find_map(|p| s.strip_prefix(p))
+        .and_then(|rest| rest.parse::<i64>().ok())
+        .and_then(positive)
+}
+
+/// Turns a read error into `None` *after logging it*, for read paths that can
+/// fall back to cached data. Database errors are never dropped silently.
+pub fn logged<T, E: std::fmt::Display>(result: Result<T, E>, what: &str) -> Option<T> {
+    match result {
+        Ok(v) => Some(v),
         Err(e) => {
-            warn!("Failed to create PostgreSQL connection pool: {}", e);
+            tracing::error!("Database read failed ({}): {}", what, e);
             None
         }
     }
 }
 
-pub fn parse_id_to_i64(s: &str) -> Option<i64> {
-    if let Ok(num) = s.parse::<i64>() {
-        return Some(num);
-    }
-    if s == "blok-A" || s == "blk-A" || s == "A Blok" || s == "A" {
-        return Some(1);
-    }
-    if s == "blok-B" || s == "blk-B" || s == "B Blok" || s == "B" {
-        return Some(2);
-    }
-    if s == "blok-C" || s == "blk-C" || s == "C Blok" || s == "C" {
-        return Some(3);
-    }
-    if s == "blok-D" || s == "blk-D" || s == "D Blok" || s == "D" {
-        return Some(4);
-    }
-    if s == "usr-saas-root" {
-        return Some(1);
-    }
-    if s == "usr-site-manager-1" {
-        return Some(2);
-    }
-    if s == "usr-home-owner-1" {
-        return Some(3);
-    }
-
-    let stripped = s
-        .trim_start_matches("site-")
-        .trim_start_matches("blok-")
-        .trim_start_matches("blk-")
-        .trim_start_matches("kisi-")
-        .trim_start_matches("usr-")
-        .trim_start_matches("d-")
-        .trim_start_matches("b-")
-        .trim_start_matches("borc-")
-        .trim_start_matches("sba-")
-        .trim_start_matches("txn-")
-        .trim_start_matches("cproj-");
-
-    if let Ok(num) = stripped.parse::<i64>() {
-        return Some(num);
-    }
-
-    let hex_clean: String = stripped.chars().filter(|c| c.is_ascii_hexdigit()).take(12).collect();
-    if !hex_clean.is_empty() {
-        if let Ok(hex_num) = i64::from_str_radix(&hex_clean, 16) {
-            return Some(hex_num.abs());
-        }
-    }
-
-    None
+/// Like `parse_id_to_i64` but returns a descriptive error for use with `?`.
+pub fn require_id(kind: &str, s: &str) -> Result<i64, String> {
+    parse_id_to_i64(s).ok_or_else(|| format!("Invalid {} id: '{}'", kind, s))
 }
 
 pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -114,53 +127,39 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
         .is_some();
 
     if is_legacy {
-        info!("Detected legacy VARCHAR ID schema. Migrating to auto-increment BIGINT IDENTITY keys...");
-        client
-            .batch_execute(
-                r#"
-                DROP TABLE IF EXISTS collection_transactions, dues_liabilities, site_bank_accounts, units, users, persons, blocks, sites CASCADE;
-                "#,
-            )
-            .await?;
-        info!("Legacy tables dropped cleanly for migration.");
+        // Never drop data automatically: refuse to start and let an operator migrate.
+        return Err("Legacy VARCHAR-id schema detected in this database. Refusing to start: \
+                    migrate or restore it manually (SitePulse no longer drops tables at boot)."
+            .into());
     }
 
-    // Apply the versioned schema and hardening scripts. These SQL files are the
-    // single source of truth, shared with docker-entrypoint-initdb.d and
-    // scripts/reset-and-init-db.sh, so the Rust bootstrap can never drift from them.
-    for schema_sql in [
-        include_str!("../db/init/00-01-init-schema.sql"),
-        include_str!("../db/init/00-02-saas-multi-tenancy.sql"),
-        include_str!("../db/init/00-03-auth-and-permission-providers.sql"),
-        include_str!("../db/init/00-04-site-bank-account.sql"),
-        include_str!("../db/init/00-05-payment-tracking-and-receipts.sql"),
-        include_str!("../db/init/00-06-capital-expenditure-and-fixtures.sql"),
-        include_str!("../db/init/00-07-viable-occupancy-ownership-and-identity.sql"),
-        include_str!("../db/init/00-08-referential-and-financial-integrity.sql"),
-        include_str!("../db/init/00-09-ledger-and-referential-integrity.sql"),
-        include_str!("../db/init/00-10-consolidate-household-members.sql"),
-        include_str!("../db/init/00-11-financial-and-tenancy-remediation.sql"),
-    ] {
-        client.batch_execute(schema_sql).await?;
+    // Apply pending versioned migrations (backend/migrations is the only schema source).
+    drop(client);
+    let applied = crate::migrations::run(pool).await?;
+    if !applied.is_empty() {
+        info!("Applied schema migrations {:?}; schema is at V{}", applied, crate::migrations::latest_version());
     }
+    let client = pool.get().await?;
 
     // Seed system reference data (banks, configs, root SaaS admin).
     client
-        .batch_execute(include_str!("../db/init/01-system-seed.sql"))
+        .batch_execute(include_str!("../db/seed/01-system-seed.sql"))
         .await?;
 
     // 2. Synchronize sequences
     client
         .batch_execute(
             r#"
-            SELECT setval(pg_get_serial_sequence('sites', 'id'), COALESCE((SELECT MAX(id) FROM sites), 1));
-            SELECT setval(pg_get_serial_sequence('blocks', 'id'), COALESCE((SELECT MAX(id) FROM blocks), 1));
-            SELECT setval(pg_get_serial_sequence('persons', 'id'), COALESCE((SELECT MAX(id) FROM persons), 1));
-            SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 1));
-            SELECT setval(pg_get_serial_sequence('units', 'id'), COALESCE((SELECT MAX(id) FROM units), 1));
-            SELECT setval(pg_get_serial_sequence('site_bank_accounts', 'id'), COALESCE((SELECT MAX(id) FROM site_bank_accounts), 1));
-            SELECT setval(pg_get_serial_sequence('dues_liabilities', 'id'), 1, false);
-            SELECT setval(pg_get_serial_sequence('payment_entries', 'id'), 1, false);
+            DO $$
+            DECLARE r record;
+            BEGIN
+                FOR r IN SELECT table_name, column_name FROM information_schema.columns
+                         WHERE table_schema = 'public' AND is_identity = 'YES' LOOP
+                    EXECUTE format(
+                        'SELECT setval(pg_get_serial_sequence(%L, %L), COALESCE((SELECT MAX(%I) FROM %I), 0) + 1, false)',
+                        r.table_name, r.column_name, r.column_name, r.table_name);
+                END LOOP;
+            END $$;
             "#,
         )
         .await?;
@@ -175,7 +174,7 @@ pub async fn seed_test_data(pool: &Pool) -> Result<(), Box<dyn std::error::Error
     let client = pool.get().await?;
     info!("Seeding development test fixtures into PostgreSQL...");
     client
-        .batch_execute(include_str!("../db/init/02-test-seed.sql"))
+        .batch_execute(include_str!("../db/seed/02-test-seed.sql"))
         .await?;
     info!("Development test fixtures seeded successfully into PostgreSQL.");
     Ok(())
@@ -205,14 +204,16 @@ pub async fn reset_db_to_seed_data(pool: &Pool) -> Result<(), Box<dyn std::error
             DELETE FROM persons WHERE id NOT IN (1, 2, 3, 4);
             DELETE FROM site_bank_accounts WHERE id > 1;
 
-            SELECT setval(pg_get_serial_sequence('sites', 'id'), COALESCE((SELECT MAX(id) FROM sites), 1));
-            SELECT setval(pg_get_serial_sequence('blocks', 'id'), COALESCE((SELECT MAX(id) FROM blocks), 1));
-            SELECT setval(pg_get_serial_sequence('persons', 'id'), COALESCE((SELECT MAX(id) FROM persons), 1));
-            SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 1));
-            SELECT setval(pg_get_serial_sequence('units', 'id'), COALESCE((SELECT MAX(id) FROM units), 1));
-            SELECT setval(pg_get_serial_sequence('site_bank_accounts', 'id'), COALESCE((SELECT MAX(id) FROM site_bank_accounts), 1));
-            SELECT setval(pg_get_serial_sequence('dues_liabilities', 'id'), 1, false);
-            SELECT setval(pg_get_serial_sequence('payment_entries', 'id'), 1, false);
+            DO $$
+            DECLARE r record;
+            BEGIN
+                FOR r IN SELECT table_name, column_name FROM information_schema.columns
+                         WHERE table_schema = 'public' AND is_identity = 'YES' LOOP
+                    EXECUTE format(
+                        'SELECT setval(pg_get_serial_sequence(%L, %L), COALESCE((SELECT MAX(%I) FROM %I), 0) + 1, false)',
+                        r.table_name, r.column_name, r.column_name, r.table_name);
+                END LOOP;
+            END $$;
             "#,
         )
         .await?;
@@ -227,7 +228,7 @@ pub async fn recreate_db_schema_and_seed(pool: &Pool) -> Result<(), Box<dyn std:
         .batch_execute(
             r#"
             -- Dropping the schema (not a hand-maintained table list) keeps this in sync
-            -- with db/init automatically; init_db() recreates everything from the SQL files.
+            -- with the migrations automatically; init_db() recreates everything from them.
             DROP SCHEMA IF EXISTS public CASCADE;
             CREATE SCHEMA public;
             GRANT USAGE ON SCHEMA public TO PUBLIC;
@@ -247,7 +248,7 @@ pub async fn wipe_all_db_data(pool: &Pool) -> Result<(), Box<dyn std::error::Err
         .batch_execute(
             r#"
             -- Dropping the schema (not a hand-maintained table list) keeps this in sync
-            -- with db/init automatically; init_db() recreates everything from the SQL files.
+            -- with the migrations automatically; init_db() recreates everything from them.
             DROP SCHEMA IF EXISTS public CASCADE;
             CREATE SCHEMA public;
             GRANT USAGE ON SCHEMA public TO PUBLIC;
@@ -259,23 +260,23 @@ pub async fn wipe_all_db_data(pool: &Pool) -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
-pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
-    let client = match pool.get().await {
-        Ok(c) => c,
-        Err(e) => {
-            warn!("Could not acquire PostgreSQL connection for initial load: {}", e);
-            return;
-        }
-    };
+/// Replaces the element with the same id, or appends it. One copy per id.
+fn upsert_by_id<T>(items: &mut Vec<T>, item: T, id: impl Fn(&T) -> &String) {
+    let key = id(&item).clone();
+    if let Some(pos) = items.iter().position(|x| *id(x) == key) {
+        items[pos] = item;
+    } else {
+        items.push(item);
+    }
+}
+
+pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResult<()> {
+    let client = pool.get().await?;
 
     // 1. Load Sites
-    if let Ok(rows) = client
-        .query(
-            "SELECT id, name, address, slug, status, plan_type, license_end_date FROM sites",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT id, name, address, slug, status, plan_type, license_end_date, timezone FROM sites WHERE deleted_at IS NULL",
+            &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let name: String = row.get(1);
@@ -298,33 +299,20 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
                 plan_type,
                 license_end_date: license_end_date
                     .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
+                timezone: row.get::<_, Option<String>>(7).unwrap_or_else(crate::models::default_site_timezone),
             };
 
-            let legacy_id = format!("site-{}", id);
-            if let Some(pos) = state.sites.iter().position(|site| site.id == s.id || site.id == legacy_id) {
-                state.sites[pos] = s.clone();
-            } else {
-                state.sites.push(s.clone());
-            }
-            if !state.sites.iter().any(|site| site.id == legacy_id) {
-                let mut legacy_site = s;
-                legacy_site.id = legacy_id;
-                state.sites.push(legacy_site);
-            }
+            upsert_by_id(&mut state.sites, s, |x| &x.id);
         }
         info!("Loaded {} sites from PostgreSQL", state.sites.len());
     }
 
     // 2. Load Users
-    if let Ok(rows) = client
-        .query(
-            "SELECT u.id, u.site_id, COALESCE(p.full_name, ''), u.email, COALESCE(p.phone, ''), u.password_hash, u.role, u.must_change_password, u.auth_provider, u.google_sub, u.avatar_url, u.created_at, u.person_id
+    {
+        let rows = client.query("SELECT u.id, u.site_id, COALESCE(p.full_name, ''), u.email, COALESCE(p.phone, ''), u.password_hash, u.role, u.must_change_password, u.auth_provider, u.google_sub, u.avatar_url, u.created_at, u.person_id
              FROM users u
              LEFT JOIN persons p ON u.person_id = p.id",
-            &[],
-        )
-        .await
-    {
+            &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let site_id: Option<i64> = row.get(1);
@@ -342,7 +330,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
 
             let user = User {
                 id: id.to_string(),
-                site_id: site_id.map(|s| s.to_string()).unwrap_or_else(|| "1".to_string()),
+                site_id: site_id.map(|s| s.to_string()).unwrap_or_default(),
                 full_name,
                 email,
                 phone: phone.unwrap_or_default(),
@@ -356,35 +344,17 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
                 person_id,
             };
 
-            let legacy_id = match id {
-                1 => "usr-saas-root".to_string(),
-                2 => "usr-site-manager-1".to_string(),
-                3 => "usr-home-owner-1".to_string(),
-                _ => format!("usr-{}", id),
-            };
-
-            if let Some(pos) = state.users.iter().position(|u| u.id == user.id || u.id == legacy_id) {
-                state.users[pos] = user.clone();
-            } else {
-                state.users.push(user.clone());
-            }
-            if !state.users.iter().any(|u| u.id == legacy_id) {
-                let mut legacy_user = user;
-                legacy_user.id = legacy_id;
-                state.users.push(legacy_user);
-            }
+            // Drop any in-memory bootstrap copy of the same account.
+            state.users.retain(|u| u.id == user.id || !u.email.eq_ignore_ascii_case(&user.email));
+            upsert_by_id(&mut state.users, user, |x| &x.id);
         }
         info!("Loaded {} users from PostgreSQL", state.users.len());
     }
 
     // 2b. Load Persons into users state for resident resolution
-    if let Ok(rows) = client
-        .query(
-            "SELECT id, full_name, email, phone, person_type FROM persons",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT id, full_name, email, phone, person_type FROM persons",
+            &[],).await?;
         for row in rows {
             let p_id: i64 = row.get(0);
             let p_name: String = row.get(1);
@@ -393,9 +363,11 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
             let p_type: String = row.get(4);
             let role = Role::from_str_loose(&p_type);
 
+            // Persons live in their own id namespace (`person-<id>`) so they can
+            // never collide with, or overwrite, a real login account.
             let user = User {
-                id: p_id.to_string(),
-                site_id: "1".to_string(),
+                id: format!("person-{}", p_id),
+                site_id: String::new(),
                 full_name: p_name,
                 email: p_email.unwrap_or_else(|| format!("kisi-{}@sitepulse.local", p_id)),
                 phone: p_phone.unwrap_or_default(),
@@ -409,29 +381,15 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
                 person_id: Some(p_id),
             };
 
-            let legacy_p_id = format!("kisi-0{}", p_id);
-            if let Some(pos) = state.users.iter().position(|u| u.id == user.id || u.id == legacy_p_id) {
-                state.users[pos] = user.clone();
-            } else {
-                state.users.push(user.clone());
-            }
-            if !state.users.iter().any(|u| u.id == legacy_p_id) {
-                let mut legacy_u = user;
-                legacy_u.id = legacy_p_id;
-                state.users.push(legacy_u);
-            }
+            upsert_by_id(&mut state.users, user, |x| &x.id);
         }
         info!("Loaded {} persons into users from PostgreSQL", state.users.len());
     }
 
     // 3. Load Units
-    if let Ok(rows) = client
-        .query(
-            "SELECT id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, site_id, virtual_iban, house_type FROM units",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, site_id, virtual_iban, house_type FROM units",
+            &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let block_id: i64 = row.get(1);
@@ -448,7 +406,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
             let resolved_viban = virtual_iban.or_else(|| {
                 Some(VirtualIbanService::generate_virtual_iban(
                     VirtualIbanService::KUVEYT_TURK_BANK_CODE,
-                    &site_id.unwrap_or(1).to_string(),
+                    &site_id.map(|s| s.to_string()).unwrap_or_default(),
                     block_label,
                     unit_number,
                 ))
@@ -456,71 +414,39 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
 
             let unit = IndependentUnit {
                 id: id.to_string(),
-                site_id: site_id.unwrap_or(1).to_string(),
+                site_id: site_id.map(|s| s.to_string()).unwrap_or_default(),
                 block_id: block_id.to_string(),
                 unit_number,
                 floor,
                 land_share,
-                owner_user_id: owner_person_id.map(|p| p.to_string()),
-                tenant_user_id: tenant_person_id.map(|p| p.to_string()),
+                owner_user_id: owner_person_id.map(|p| format!("person-{}", p)),
+                tenant_user_id: tenant_person_id.map(|p| format!("person-{}", p)),
                 virtual_iban: resolved_viban,
                 house_type,
             };
 
-            // Register unit payer names (tenant takes precedence as primary resident payer if present, else owner)
-            let primary_pid = tenant_person_id.or(owner_person_id);
-            if let Some(p_id) = primary_pid {
-                let p_str = p_id.to_string();
-                let legacy_p = format!("kisi-0{}", p_id);
-                if let Some(p) = state.users.iter().find(|u| u.id == p_str || u.id == legacy_p) {
+            // Register unit payer names (tenant first as primary payer, then owner)
+            for (p_id, primary) in [(tenant_person_id, true), (owner_person_id, false)] {
+                let Some(p_id) = p_id else { continue };
+                let key = format!("person-{}", p_id);
+                if let Some(p) = state.users.iter().find(|u| u.id == key) {
+                    let name = p.full_name.clone();
                     let entry = state.unit_payer_names.entry(unit.id.clone()).or_default();
-                    if !entry.contains(&p.full_name) {
-                        entry.insert(0, p.full_name.clone());
-                    }
-                    let legacy_entry = state.unit_payer_names.entry(format!("d-{}", unit_number)).or_default();
-                    if !legacy_entry.contains(&p.full_name) {
-                        legacy_entry.insert(0, p.full_name.clone());
-                    }
-                }
-            }
-            if let Some(o_id) = owner_person_id {
-                let o_str = o_id.to_string();
-                let legacy_o = format!("kisi-0{}", o_id);
-                if let Some(p) = state.users.iter().find(|u| u.id == o_str || u.id == legacy_o) {
-                    let entry = state.unit_payer_names.entry(unit.id.clone()).or_default();
-                    if !entry.contains(&p.full_name) {
-                        entry.push(p.full_name.clone());
-                    }
-                    let legacy_entry = state.unit_payer_names.entry(format!("d-{}", unit_number)).or_default();
-                    if !legacy_entry.contains(&p.full_name) {
-                        legacy_entry.push(p.full_name.clone());
+                    if !entry.contains(&name) {
+                        if primary { entry.insert(0, name) } else { entry.push(name) }
                     }
                 }
             }
 
-            let legacy_id = format!("d-{}", unit_number);
-            if let Some(pos) = state.units.iter().position(|u| u.id == unit.id || u.id == legacy_id) {
-                state.units[pos] = unit.clone();
-            } else {
-                state.units.push(unit.clone());
-            }
-            if !state.units.iter().any(|u| u.id == legacy_id) {
-                let mut legacy_u = unit;
-                legacy_u.id = legacy_id;
-                state.units.push(legacy_u);
-            }
+            upsert_by_id(&mut state.units, unit, |x| &x.id);
         }
         info!("Loaded {} units from PostgreSQL", state.units.len());
     }
 
     // 3b. Load House Types (Tariffs)
-    if let Ok(rows) = client
-        .query(
-            "SELECT id, site_id, type_name, dues_amount, description FROM house_types",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT id, site_id, type_name, dues_amount, description FROM house_types",
+            &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let site_id: i64 = row.get(1);
@@ -552,13 +478,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 3c. Load Blocks
-    if let Ok(rows) = client
-        .query(
-            "SELECT id, site_id, block_name, total_floors FROM blocks",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT id, site_id, block_name, total_floors FROM blocks",
+            &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let site_id: i64 = row.get(1);
@@ -588,13 +510,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 4. Load Dues Liabilities
-    if let Ok(rows) = client
-        .query(
-            "SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_amount FROM dues_liabilities",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type FROM dues_liabilities",
+            &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let unit_id: i64 = row.get(1);
@@ -603,7 +521,10 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
             let due_date: NaiveDate = row.get(4);
             let status_str: String = row.get(5);
             let delay_penalty: Decimal = row.get(6);
-            let _paid_amount: Decimal = row.get(7);
+            let paid_principal: Decimal = row.get(7);
+            let paid_penalty: Decimal = row.get(8);
+            let debtor_type: String = row.get(9);
+            let expense_type: String = row.get(10);
 
             let status = match status_str.to_uppercase().as_str() {
                 "PAID" => DebtStatus::Paid,
@@ -611,7 +532,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
                 _ => DebtStatus::Pending,
             };
 
-            let due = DuesLiability {
+            let mut due = DuesLiability {
                 id: id.to_string(),
                 unit_id: unit_id.to_string(),
                 period,
@@ -619,43 +540,22 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
                 due_date,
                 status,
                 delay_penalty,
-                total_amount: principal_amount + delay_penalty,
+                total_amount: Decimal::ZERO,
+                paid_principal,
+                paid_penalty,
+                debtor_type,
+                expense_type,
             };
-
-            let legacy_id = format!("b-{}", id);
-            let legacy_borc_id = format!("borc-{}", id);
-            let legacy_unit_id = format!("d-{}", unit_id);
-
-            if let Some(pos) = state.dues.iter().position(|d| d.id == due.id || d.id == legacy_id || d.id == legacy_borc_id) {
-                state.dues[pos] = due.clone();
-            } else {
-                state.dues.push(due.clone());
-            }
-
-            if !state.dues.iter().any(|d| d.id == legacy_id) {
-                let mut leg_d = due.clone();
-                leg_d.id = legacy_id;
-                leg_d.unit_id = legacy_unit_id.clone();
-                state.dues.push(leg_d);
-            }
-            if !state.dues.iter().any(|d| d.id == legacy_borc_id) {
-                let mut leg_d = due;
-                leg_d.id = legacy_borc_id;
-                leg_d.unit_id = legacy_unit_id;
-                state.dues.push(leg_d);
-            }
+            crate::services::dues_ledger::refresh(&mut due);
+            upsert_by_id(&mut state.dues, due, |x| &x.id);
         }
         info!("Loaded {} dues liabilities from PostgreSQL", state.dues.len());
     }
 
     // 4b. Load Dues Periods
-    if let Ok(rows) = client
-        .query(
-            "SELECT id, site_id, period_name, due_date, status, created_at FROM dues_periods ORDER BY due_date ASC",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT id, site_id, period_name, due_date, status, created_at FROM dues_periods ORDER BY due_date ASC",
+            &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let site_id: i64 = row.get(1);
@@ -693,13 +593,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 5. Load Site Bank Accounts
-    if let Ok(rows) = client
-        .query(
-            "SELECT id, site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by, created_at, updated_at FROM site_bank_accounts",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT id, site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by, created_at, updated_at FROM site_bank_accounts",
+            &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let site_id: i64 = row.get(1);
@@ -747,13 +643,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
 
     // 6. Load the unified payment ledger (payment_entries) and derive the legacy
     // homeowner-payment view from it so existing endpoints keep working.
-    if let Ok(rows) = client
-        .query(
-            "SELECT id, site_id, unit_id, dues_liability_id, payer_name, payer_role, receipt_id, amount, payment_channel, settlement_status, description, external_reference, payment_date, created_at FROM payment_entries ORDER BY payment_date ASC",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT id, site_id, unit_id, dues_liability_id, payer_name, payer_role, receipt_id, amount, payment_channel, settlement_status, description, external_reference, payment_date, created_at FROM payment_entries ORDER BY payment_date ASC",
+            &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let site_id: i64 = row.get(1);
@@ -830,13 +722,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 6b. Load Payment Receipts
-    if let Ok(rows) = client
-        .query(
-            "SELECT id, site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, on_behalf_of_name, on_behalf_of_role, total_amount, payment_channel, channel_reference, allocated_principal, allocated_penalty, allocated_advance, allocation_breakdown::text, is_rent_offset_eligible, legal_statutory_note, verification_hash, issued_at FROM payment_receipts ORDER BY sequence_number ASC",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT id, site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, on_behalf_of_name, on_behalf_of_role, total_amount, payment_channel, channel_reference, allocated_principal, allocated_penalty, allocated_advance, allocation_breakdown::text, is_rent_offset_eligible, legal_statutory_note, verification_hash, issued_at FROM payment_receipts ORDER BY sequence_number ASC",
+            &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let site_id: i64 = row.get(1);
@@ -898,13 +786,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 7. Load Pending Registrations
-    if let Ok(rows) = client
-        .query(
-            "SELECT request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident, status, submitted_at FROM pending_registrations",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident, status, submitted_at FROM pending_registrations",
+            &[],).await?;
         for row in rows {
             let req = PendingRegistrationResponse {
                 request_id: row.get(0),
@@ -929,9 +813,8 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 8. Load Household Members (occupancy_members — the canonical table)
-    if let Ok(rows) = client
-        .query(
-            r#"
+    {
+        let rows = client.query(r#"
             SELECT uo.unit_id, om.id, om.full_name, om.relationship, om.phone, om.email,
                    om.occupancy_id, om.person_id, om.resident_user_id,
                    (uo.occupancy_type = 'OWNER') AS is_owner
@@ -940,10 +823,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
             WHERE uo.is_active = true
             ORDER BY om.id ASC
             "#,
-            &[],
-        )
-        .await
-    {
+            &[],).await?;
         for row in rows {
             let unit_id: i64 = row.get(0);
             let key = unit_id.to_string();
@@ -967,9 +847,8 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 8b. Load Occupancy History
-    if let Ok(rows) = client
-        .query(
-            r#"
+    {
+        let rows = client.query(r#"
             SELECT uo.id, uo.unit_id, uo.person_id, p.full_name, p.phone, p.email,
                    uo.occupancy_type, uo.start_date, uo.end_date, uo.is_active,
                    COALESCE(uo.exit_balance, 0.00), uo.notes, uo.created_at
@@ -977,10 +856,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
             JOIN persons p ON uo.person_id = p.id
             ORDER BY uo.start_date ASC
             "#,
-            &[],
-        )
-        .await
-    {
+            &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let unit_id: i64 = row.get(1);
@@ -1022,13 +898,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 9. Load Invitation Tokens
-    if let Ok(rows) = client
-        .query(
-            "SELECT token, site_id, unit_id, building, unit_number, relationship, invite_url, security_notice, expires_at FROM invitation_tokens",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT token, site_id, unit_id, building, unit_number, relationship, invite_url, security_notice, expires_at FROM invitation_tokens",
+            &[],).await?;
         for row in rows {
             let token: String = row.get(0);
             let unit_id: Option<i64> = row.get(2);
@@ -1054,13 +926,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 10. Load Advance Balances
-    if let Ok(rows) = client
-        .query(
-            "SELECT unit_id, balance FROM advance_balances",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT unit_id, balance FROM advance_balances",
+            &[],).await?;
         for row in rows {
             let unit_id: i64 = row.get(0);
             let balance: Decimal = row.get(1);
@@ -1070,13 +938,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 11. Load Unit Sender IBANs
-    if let Ok(rows) = client
-        .query(
-            "SELECT sender_iban, unit_id, label, bank_name FROM unit_sender_ibans",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT sender_iban, unit_id, label, bank_name FROM unit_sender_ibans",
+            &[],).await?;
         for row in rows {
             let sender_iban: String = row.get(0);
             let unit_id: i64 = row.get(1);
@@ -1090,13 +954,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 12. Load Unit Payer Names
-    if let Ok(rows) = client
-        .query(
-            "SELECT unit_id, payer_name FROM unit_payer_names",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT unit_id, payer_name FROM unit_payer_names",
+            &[],).await?;
         for row in rows {
             let unit_id: i64 = row.get(0);
             let payer_name: String = row.get(1);
@@ -1108,13 +968,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
     }
 
     // 13. Load Reconciliation Queue
-    if let Ok(rows) = client
-        .query(
-            "SELECT match_id, transaction_id, txn_date, amount, currency, description, sender_name, sender_iban, reference_no, matched_unit_id, matched_block, matched_unit_number, matched_resident_name, confidence_score, matched_due_id, outstanding_balance, amount_matches_balance, status, status_code, notes FROM reconciliation_queue ORDER BY txn_date ASC",
-            &[],
-        )
-        .await
     {
+        let rows = client.query("SELECT match_id, transaction_id, txn_date, amount, currency, description, sender_name, sender_iban, reference_no, matched_unit_id, matched_block, matched_unit_number, matched_resident_name, confidence_score, matched_due_id, outstanding_balance, amount_matches_balance, status, status_code, notes FROM reconciliation_queue ORDER BY txn_date ASC",
+            &[],).await?;
         for row in rows {
             let match_id: String = row.get(0);
             let transaction_id: String = row.get(1);
@@ -1177,11 +1033,12 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) {
         }
         info!("Loaded {} reconciliation queue items from PostgreSQL", state.reconciliation_queue.len());
     }
+    Ok(())
 }
 
 pub async fn save_site(pool: &Pool, site: &Site) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let id_num = parse_id_to_i64(&site.id).unwrap_or(1);
+    let id_num = require_id("entity", &site.id)?;
     client
         .execute(
             r#"
@@ -1210,9 +1067,33 @@ pub async fn save_site(pool: &Pool, site: &Site) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
+/// Marks a site deleted (soft delete); financial history is never removed.
+pub async fn soft_delete_site(pool: &Pool, site_id: &str) -> DbResult<()> {
+    let id = require_id("site", site_id)?;
+    let client = pool.get().await?;
+    let n = client
+        .execute("UPDATE sites SET status = 'DELETED', deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL", &[&id])
+        .await?;
+    if n == 0 {
+        return Err(format!("Site {} not found", site_id).into());
+    }
+    Ok(())
+}
+
+/// Whether a site may be used (exists, not deleted, not suspended).
+pub async fn site_is_active(pool: &Pool, site_id: &str) -> DbResult<bool> {
+    let Some(id) = parse_id_to_i64(site_id) else { return Ok(false) };
+    let client = pool.get().await?;
+    Ok(client
+        .query_opt("SELECT 1 FROM sites WHERE id = $1 AND deleted_at IS NULL AND status <> 'SUSPENDED'", &[&id])
+        .await?
+        .is_some())
+}
+
+/// Hard delete, used only by the development purge tooling.
 pub async fn delete_site(pool: &Pool, site_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let id_num = parse_id_to_i64(site_id).unwrap_or(0);
+    let id_num = require_id("entity", site_id)?;
     client.execute("DELETE FROM sites WHERE id = $1", &[&id_num]).await?;
     info!("Deleted site {} (numeric ID: {}) from PostgreSQL sites", site_id, id_num);
     Ok(())
@@ -1221,41 +1102,38 @@ pub async fn delete_site(pool: &Pool, site_id: &str) -> Result<(), Box<dyn std::
 pub async fn save_user(pool: &Pool, user: &User) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let role_str = user.role.as_str();
-    let id_num = parse_id_to_i64(&user.id).unwrap_or(1);
-    let site_id_num = parse_id_to_i64(&user.site_id);
-    
+    let email = user.email.trim().to_lowercase();
+    let site_id_num = if user.site_id.is_empty() { None } else { Some(require_id("site", &user.site_id)?) };
+
     // Resolve, link, and synchronize person_id
     let person_id: Option<i64> = if let Some(pid) = user.person_id {
         if !user.full_name.is_empty() {
-            let _ = client.execute(
-                "UPDATE persons SET full_name = $1, phone = $2 WHERE id = $3",
-                &[&user.full_name, &user.phone, &pid],
-            ).await;
+            client
+                .execute("UPDATE persons SET full_name = $1, phone = $2 WHERE id = $3", &[&user.full_name, &user.phone, &pid])
+                .await?;
         }
         Some(pid)
     } else {
-        let p_row = client
-            .query_opt("SELECT id FROM persons WHERE LOWER(email) = LOWER($1)", &[&user.email])
-            .await?;
+        let p_row = client.query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&email]).await?;
         if let Some(r) = p_row {
             let pid: i64 = r.get(0);
             if !user.full_name.is_empty() {
-                let _ = client.execute(
-                    "UPDATE persons SET full_name = $1, phone = $2 WHERE id = $3",
-                    &[&user.full_name, &user.phone, &pid],
-                ).await;
+                client
+                    .execute("UPDATE persons SET full_name = $1, phone = $2 WHERE id = $3", &[&user.full_name, &user.phone, &pid])
+                    .await?;
             }
             Some(pid)
         } else if !user.full_name.is_empty() {
             let p_type = match user.role {
                 Role::HomeOwner => "HOME_OWNER",
                 Role::HomeResident => "HOME_RESIDENT",
-                _ => "SITE_MANAGER",
+                Role::SaasAdmin => "SAAS_ADMIN",
+                Role::SiteManager => "SITE_MANAGER",
             };
             let row = client
                 .query_one(
                     "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, $4) RETURNING id",
-                    &[&user.full_name, &user.phone, &user.email.to_lowercase(), &p_type],
+                    &[&user.full_name, &user.phone, &email, &p_type],
                 )
                 .await?;
             Some(row.get(0))
@@ -1263,25 +1141,26 @@ pub async fn save_user(pool: &Pool, user: &User) -> Result<(), Box<dyn std::erro
             None
         }
     };
-    
+
+    // Accounts are identified by e-mail (unique, case-insensitive). The database
+    // assigns ids; an in-memory id is never used to pick the row to overwrite.
     let updated = client
         .execute(
             r#"
             UPDATE users SET
-                site_id = COALESCE($2, site_id),
-                password_hash = COALESCE($4, password_hash),
-                role = $5,
-                must_change_password = $6,
-                auth_provider = $7,
-                google_sub = COALESCE($8, google_sub),
-                avatar_url = COALESCE($9, avatar_url),
-                person_id = COALESCE($10, person_id)
-            WHERE id = $1 OR LOWER(email) = LOWER($3)
+                site_id = COALESCE($1, site_id),
+                password_hash = COALESCE($3, password_hash),
+                role = $4,
+                must_change_password = $5,
+                auth_provider = $6,
+                google_sub = COALESCE($7, google_sub),
+                avatar_url = COALESCE($8, avatar_url),
+                person_id = COALESCE($9, person_id)
+            WHERE LOWER(email) = $2
             "#,
             &[
-                &id_num,
                 &site_id_num,
-                &user.email,
+                &email,
                 &user.password_hash,
                 &role_str,
                 &user.must_change_password,
@@ -1292,28 +1171,16 @@ pub async fn save_user(pool: &Pool, user: &User) -> Result<(), Box<dyn std::erro
             ],
         )
         .await?;
-
     if updated == 0 {
         client
             .execute(
                 r#"
-                INSERT INTO users (id, site_id, email, password_hash, role, must_change_password, auth_provider, google_sub, avatar_url, person_id, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                ON CONFLICT (id) DO UPDATE SET
-                    site_id = EXCLUDED.site_id,
-                    email = EXCLUDED.email,
-                    password_hash = COALESCE(EXCLUDED.password_hash, users.password_hash),
-                    role = EXCLUDED.role,
-                    must_change_password = EXCLUDED.must_change_password,
-                    auth_provider = EXCLUDED.auth_provider,
-                    google_sub = COALESCE(EXCLUDED.google_sub, users.google_sub),
-                    avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
-                    person_id = COALESCE(EXCLUDED.person_id, users.person_id)
+                INSERT INTO users (site_id, email, password_hash, role, must_change_password, auth_provider, google_sub, avatar_url, person_id, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 "#,
                 &[
-                    &id_num,
                     &site_id_num,
-                    &user.email,
+                    &email,
                     &user.password_hash,
                     &role_str,
                     &user.must_change_password,
@@ -1326,14 +1193,13 @@ pub async fn save_user(pool: &Pool, user: &User) -> Result<(), Box<dyn std::erro
             )
             .await?;
     }
-    info!("Saved user {} (numeric ID: {}) ({}) to PostgreSQL users", user.id, id_num, user.email);
     Ok(())
 }
 
 pub async fn save_unit(pool: &Pool, unit: &IndependentUnit) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let id_num = parse_id_to_i64(&unit.id).unwrap_or(unit.unit_number as i64);
-    let site_id_num = parse_id_to_i64(&unit.site_id).unwrap_or(1);
+    let site_id_num = require_id("entity", &unit.site_id)?;
 
     // Ensure site exists in PostgreSQL before inserting unit
     let site_exists = client
@@ -1465,8 +1331,8 @@ pub async fn save_dues_period(
     period: &crate::models::DuesPeriod,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let id_num = parse_id_to_i64(&period.id).unwrap_or(1);
-    let site_id_num = parse_id_to_i64(&period.site_id).unwrap_or(1);
+    let id_num = require_id("entity", &period.id)?;
+    let site_id_num = require_id("entity", &period.site_id)?;
 
     client
         .execute(
@@ -1496,7 +1362,7 @@ pub async fn get_dues_periods_for_site_from_db(
     site_id: &str,
 ) -> Result<Vec<crate::models::DuesPeriod>, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let site_id_num = parse_id_to_i64(site_id).unwrap_or(1);
+    let site_id_num = require_id("entity", site_id)?;
     let rows = client
         .query(
             "SELECT id, site_id, period_name, due_date, status, created_at FROM dues_periods WHERE site_id = $1 ORDER BY due_date ASC",
@@ -1533,8 +1399,8 @@ pub async fn save_due_liability(
         DebtStatus::Overdue => "OVERDUE",
         DebtStatus::Pending => "PENDING",
     };
-    let due_id_num = parse_id_to_i64(&due.id).unwrap_or(101);
-    let unit_id_num = parse_id_to_i64(&due.unit_id).unwrap_or(14);
+    let due_id_num = require_id("entity", &due.id)?;
+    let unit_id_num = require_id("entity", &due.unit_id)?;
 
     client
         .execute(
@@ -1571,7 +1437,7 @@ pub async fn update_due_liability(
     paid_amount: Decimal,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let due_id_num = parse_id_to_i64(due_id).unwrap_or(101);
+    let due_id_num = require_id("entity", due_id)?;
     client
         .execute(
             r#"
@@ -1629,8 +1495,8 @@ pub async fn save_payment_receipt(
     receipt: &PaymentReceipt,
 ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let site_id_num = parse_id_to_i64(&receipt.site_id).unwrap_or(1);
-    let unit_id_num = parse_id_to_i64(&receipt.unit_id).unwrap_or(1);
+    let site_id_num = require_id("entity", &receipt.site_id)?;
+    let unit_id_num = require_id("entity", &receipt.unit_id)?;
     let breakdown_json_str = serde_json::to_string(&receipt.allocation_breakdown)?;
 
     let row = client
@@ -1683,7 +1549,7 @@ pub async fn get_next_receipt_sequence(
     site_id: &str,
 ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let site_id_num = parse_id_to_i64(site_id).unwrap_or(1);
+    let site_id_num = require_id("entity", site_id)?;
     let row = client
         .query_one(
             "SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM payment_receipts WHERE site_id = $1",
@@ -1699,8 +1565,8 @@ pub async fn save_payment_entry(
     entry: &PaymentEntry,
 ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let site_id_num = parse_id_to_i64(&entry.site_id).unwrap_or(1);
-    let unit_id_num = parse_id_to_i64(&entry.unit_id).unwrap_or(1);
+    let site_id_num = require_id("entity", &entry.site_id)?;
+    let unit_id_num = require_id("entity", &entry.unit_id)?;
 
     let row = client
         .query_one(
@@ -1756,6 +1622,7 @@ pub async fn save_payment_allocation(
     Ok(alloc_id)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn save_collection_transaction(
     pool: &Pool,
     _id: &str,
@@ -1817,8 +1684,8 @@ pub async fn save_site_bank_account(
     account: &SiteBankAccount,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let id_num = parse_id_to_i64(&account.id).unwrap_or(1);
-    let site_id_num = parse_id_to_i64(&account.site_id).unwrap_or(1);
+    let id_num = require_id("entity", &account.id)?;
+    let site_id_num = require_id("entity", &account.site_id)?;
     let config_by_num = account.configured_by.as_deref().and_then(parse_id_to_i64);
 
     client
@@ -1856,12 +1723,74 @@ pub async fn save_site_bank_account(
     Ok(())
 }
 
-pub async fn save_advance_balance(
-    pool: &Pool,
-    unit_id: &str,
-    balance: Decimal,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    save_advance_balance_with_type(pool, unit_id, "TENANT", balance).await
+/// Stores a unit's total advance balance without touching other debtors' credit.
+///
+/// `advance_balances` is per (unit, debtor_type) while the in-memory view keeps one
+/// total per unit. The TENANT bucket is set so that all buckets add up to `total`
+/// (owner credit is never overwritten), and every change is written to
+/// `advance_ledger_entries` so the balance stays tied to its ledger.
+pub async fn save_advance_balance(pool: &Pool, unit_id: &str, total: Decimal) -> DbResult<()> {
+    let unit = require_id("unit", unit_id)?;
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    let rows = tx
+        .query("SELECT debtor_type, balance FROM advance_balances WHERE unit_id = $1 FOR UPDATE", &[&unit])
+        .await?;
+    let mut tenant = Decimal::ZERO;
+    let mut others = Decimal::ZERO;
+    for r in rows {
+        let kind: String = r.get(0);
+        let bal: Decimal = r.get(1);
+        if kind == "TENANT" { tenant = bal } else { others += bal }
+    }
+    let new_tenant = (total - others).max(Decimal::ZERO);
+    let delta = new_tenant - tenant;
+    if delta != Decimal::ZERO {
+        tx.execute(
+            "INSERT INTO advance_balances (unit_id, debtor_type, balance, updated_at) VALUES ($1, 'TENANT', $2, CURRENT_TIMESTAMP)
+             ON CONFLICT (unit_id, debtor_type) DO UPDATE SET balance = EXCLUDED.balance, updated_at = CURRENT_TIMESTAMP",
+            &[&unit, &new_tenant],
+        )
+        .await?;
+        let entry_type = if delta > Decimal::ZERO { "PAYMENT_SURPLUS" } else { "OFFSET_APPLIED" };
+        tx.execute(
+            "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description, created_at)
+             VALUES ($1, 'TENANT', $2, $3, 'Advance balance change', CURRENT_TIMESTAMP)",
+            &[&unit, &entry_type, &delta.abs()],
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Writes a liability's payment state (absolute values from the ledger).
+pub async fn sync_due_payment_state(pool: &Pool, due: &DuesLiability) -> DbResult<()> {
+    let id = require_id("dues liability", &due.id)?;
+    let status = match due.status {
+        DebtStatus::Paid => "PAID",
+        _ if due.paid_principal + due.paid_penalty > Decimal::ZERO => "PARTIALLY_PAID",
+        DebtStatus::Overdue => "OVERDUE",
+        DebtStatus::Pending => "PENDING",
+    };
+    let client = pool.get().await?;
+    client
+        .execute(
+            r#"
+            UPDATE dues_liabilities
+            SET delay_penalty  = GREATEST(delay_penalty, $2, $4),
+                paid_principal = $3,
+                paid_penalty   = $4,
+                paid_amount    = $3 + $4,
+                status         = $5,
+                payment_date   = CASE WHEN $3 + $4 > paid_amount THEN CURRENT_TIMESTAMP ELSE payment_date END,
+                version        = version + 1
+            WHERE id = $1
+            "#,
+            &[&id, &due.delay_penalty, &due.paid_principal, &due.paid_penalty, &status],
+        )
+        .await?;
+    Ok(())
 }
 
 pub async fn save_advance_balance_with_type(
@@ -1871,7 +1800,7 @@ pub async fn save_advance_balance_with_type(
     balance: Decimal,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let unit_id_num = parse_id_to_i64(unit_id).unwrap_or(1);
+    let unit_id_num = require_id("entity", unit_id)?;
     client
         .execute(
             r#"
@@ -1898,7 +1827,7 @@ pub async fn save_advance_ledger_entry(
     description: Option<&str>,
 ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let unit_id_num = parse_id_to_i64(unit_id).unwrap_or(1);
+    let unit_id_num = require_id("entity", unit_id)?;
     let row = client
         .query_one(
             r#"
@@ -1918,7 +1847,7 @@ pub async fn save_pending_registration(
     req: &PendingRegistrationResponse,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let site_id_num = parse_id_to_i64(&req.site_id).unwrap_or(1);
+    let site_id_num = require_id("entity", &req.site_id)?;
     client
         .execute(
             r#"
@@ -1974,7 +1903,7 @@ pub async fn save_unit_member(
     email: &str,
 ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let u_num = parse_id_to_i64(unit_id).unwrap_or(1);
+    let u_num = require_id("entity", unit_id)?;
 
     // Household members live on an occupancy session; fall back to the active one.
     let occ_id: Option<i64> = client
@@ -2063,6 +1992,80 @@ pub async fn save_invitation_token(
     Ok(())
 }
 
+/// Records a bank webhook transaction id. Returns `false` when it was already processed.
+/// Removes every recoverable clear-text password from `users`: legacy placeholder
+/// formats (`ARGON2_HASH_x`, `HASH_x`, `argon2id_hash_placeholder:x`, plaintext) are
+/// re-hashed with argon2id and the account must change its password on next login.
+/// Unsalted SHA-256 digests cannot be upgraded, so those accounts are locked until
+/// an administrator resets them. Returns the number of rows changed.
+pub async fn upgrade_legacy_password_hashes(pool: &Pool) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let rows = client
+        .query("SELECT id, password_hash FROM users WHERE password_hash IS NOT NULL AND password_hash NOT LIKE '$argon2%'", &[])
+        .await?;
+    let mut changed = 0;
+    for row in rows {
+        let id: i64 = row.get(0);
+        let stored: String = row.get(1);
+        let new_hash = match crate::auth::legacy_plaintext(&stored) {
+            Some(plain) => crate::auth::hash_password(&plain),
+            None => crate::auth::hash_password(&uuid::Uuid::new_v4().to_string()),
+        };
+        changed += client
+            .execute("UPDATE users SET password_hash = $1, must_change_password = TRUE WHERE id = $2", &[&new_hash, &id])
+            .await?;
+    }
+    if changed > 0 {
+        warn!("Upgraded {} legacy password hash(es) to argon2id; affected users must change their password", changed);
+    }
+    Ok(changed)
+}
+
+/// Creates the first SaaS administrator when none exists (see `bootstrap_admin_password`).
+pub async fn ensure_bootstrap_admin(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let exists = client.query_opt("SELECT 1 FROM users WHERE role = 'SAAS_ADMIN' LIMIT 1", &[]).await?.is_some();
+    if exists {
+        return Ok(());
+    }
+    let email = std::env::var("SITEPULSE_BOOTSTRAP_ADMIN_EMAIL").unwrap_or_else(|_| "admin@sitepulse.io".to_string()).to_lowercase();
+    let hash = crate::auth::hash_password(&crate::state::bootstrap_admin_password());
+    let person_id: i64 = client
+        .query_one(
+            "INSERT INTO persons (full_name, email, person_type) VALUES ('SaaS Platform Admin', $1, 'SAAS_ADMIN')
+             ON CONFLICT (email) DO UPDATE SET full_name = persons.full_name RETURNING id",
+            &[&email],
+        )
+        .await?
+        .get(0);
+    client
+        .execute(
+            "INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
+             VALUES (NULL, $1, $2, $3, 'SAAS_ADMIN', TRUE)",
+            &[&person_id, &email, &hash],
+        )
+        .await?;
+    warn!("Created bootstrap SaaS administrator {}", email);
+    Ok(())
+}
+
+pub async fn claim_bank_webhook_transaction(pool: &Pool, transaction_id: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    let n = client
+        .execute(
+            "INSERT INTO processed_bank_webhooks (transaction_id) VALUES ($1) ON CONFLICT (transaction_id) DO NOTHING",
+            &[&transaction_id],
+        )
+        .await?;
+    Ok(n == 1)
+}
+
+pub async fn delete_invitation_token(pool: &Pool, token_digest: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let client = pool.get().await?;
+    client.execute("DELETE FROM invitation_tokens WHERE token = $1", &[&token_digest]).await?;
+    Ok(())
+}
+
 pub async fn save_remembered_sender_iban(
     pool: &Pool,
     iban: &str,
@@ -2071,12 +2074,12 @@ pub async fn save_remembered_sender_iban(
     bank_name: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let unit_id_num = parse_id_to_i64(unit_id).unwrap_or(1);
+    let unit_id_num = require_id("entity", unit_id)?;
     client
         .execute(
             r#"
-            INSERT INTO unit_sender_ibans (sender_iban, unit_id, label, bank_name, created_at)
-            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+            INSERT INTO unit_sender_ibans (sender_iban, unit_id, site_id, label, bank_name, created_at)
+            VALUES ($1, $2, (SELECT site_id FROM units WHERE id = $2), $3, $4, CURRENT_TIMESTAMP)
             ON CONFLICT (unit_id, sender_iban) DO UPDATE SET
                 label = EXCLUDED.label,
                 bank_name = EXCLUDED.bank_name
@@ -2106,15 +2109,15 @@ pub async fn save_unit_payer_names(
     names: &[String],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let unit_id_num = parse_id_to_i64(unit_id).unwrap_or(1);
+    let unit_id_num = require_id("entity", unit_id)?;
     client.execute("DELETE FROM unit_payer_names WHERE unit_id = $1", &[&unit_id_num]).await?;
     for name in names {
-        let _ = client
+        client
             .execute(
                 "INSERT INTO unit_payer_names (unit_id, payer_name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                 &[&unit_id_num, &name],
             )
-            .await;
+            .await.map_err(|e| e.to_string())?;
     }
     info!("Saved {} payer names for unit {} to PostgreSQL", names.len(), unit_id);
     Ok(())
@@ -2131,7 +2134,7 @@ pub async fn save_reconciliation_match_for_site(
     let confidence_i32 = m.confidence_score as i32;
     let matched_unit_num = m.matched_unit_id.as_deref().and_then(parse_id_to_i64);
     let matched_due_num = m.matched_due_id.as_deref().and_then(parse_id_to_i64);
-    let site_id_num = parse_id_to_i64(site_id).unwrap_or(1);
+    let site_id_num = require_id("entity", site_id)?;
     client
         .execute(
             r#"
@@ -2182,7 +2185,20 @@ pub async fn save_reconciliation_match(
     pool: &Pool,
     m: &ReconciliationMatch,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    save_reconciliation_match_for_site(pool, m, "1", None).await
+    // The site is derived from the matched unit; never defaulted to site 1.
+    let unit = m
+        .matched_unit_id
+        .as_deref()
+        .ok_or("reconciliation match has no unit; use save_reconciliation_match_for_site")?;
+    let unit_id = require_id("unit", unit)?;
+    let client = pool.get().await?;
+    let site: i64 = client
+        .query_opt("SELECT site_id FROM units WHERE id = $1", &[&unit_id])
+        .await?
+        .and_then(|r| r.get::<_, Option<i64>>(0))
+        .ok_or_else(|| format!("unit {} has no site", unit_id))?;
+    drop(client);
+    save_reconciliation_match_for_site(pool, m, &site.to_string(), None).await
 }
 
 pub async fn transfer_unit_ownership_db(
@@ -2193,33 +2209,30 @@ pub async fn transfer_unit_ownership_db(
     exit_balance: Decimal,
     notes: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
-    let unit_id_num = parse_id_to_i64(unit_id).unwrap_or(1);
+    let unit_id_num = require_id("unit", unit_id)?;
 
     // 1. Ensure new user is saved and person is created
     save_user(pool, new_user).await?;
 
-    // 2. Fetch new user person_id
-    let new_user_num = parse_id_to_i64(&new_user.id).unwrap_or(1);
-    let new_person_id: Option<i64> = client
-        .query_opt(
-            "SELECT person_id FROM users WHERE id = $1 OR LOWER(email) = LOWER($2)",
-            &[&new_user_num, &new_user.email],
-        )
+    // 2. All ownership changes commit together or not at all.
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    let new_person_id: Option<i64> = tx
+        .query_opt("SELECT person_id FROM users WHERE LOWER(email) = LOWER($1)", &[&new_user.email])
         .await?
         .and_then(|r| r.get(0));
 
     // 3. Deactivate old ownership in unit_ownerships
-    let _ = client
+    tx
         .execute(
             "UPDATE unit_ownerships SET is_active = false, end_date = $2 WHERE unit_id = $1 AND is_active = true",
             &[&unit_id_num, &transfer_date],
         )
-        .await;
+        .await?;
 
     // 4. Insert new ownership
     if let Some(pid) = new_person_id {
-        let _ = client
+        tx
             .execute(
                 r#"
                 INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, is_active, created_at)
@@ -2227,10 +2240,10 @@ pub async fn transfer_unit_ownership_db(
                 "#,
                 &[&unit_id_num, &pid, &transfer_date],
             )
-            .await;
+            .await?;
 
         // 5. Deactivate old owner occupancy if active
-        let _ = client
+        tx
             .execute(
                 r#"
                 UPDATE unit_occupancies
@@ -2239,18 +2252,19 @@ pub async fn transfer_unit_ownership_db(
                 "#,
                 &[&unit_id_num, &transfer_date, &exit_balance, &notes],
             )
-            .await;
+            .await?;
 
         // 6. Update units owner
-        let _ = client
+        tx
             .execute(
                 "UPDATE units SET owner_person_id = $2 WHERE id = $1",
                 &[&unit_id_num, &pid],
             )
-            .await;
+            .await?;
     }
 
     info!("Transferred ownership for unit {} to user {} in PostgreSQL", unit_id, new_user.email);
+    tx.commit().await?;
     Ok(())
 }
 
@@ -2278,7 +2292,7 @@ pub async fn save_homeowner_payment(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
 
-    let parsed_unit_id = parse_id_to_i64(&rec.unit_id).unwrap_or(1);
+    let parsed_unit_id = require_id("entity", &rec.unit_id)?;
     let site_id: i64 = client
         .query_opt("SELECT site_id FROM units WHERE id = $1", &[&parsed_unit_id])
         .await?
@@ -2371,13 +2385,8 @@ pub async fn get_user_by_email(
         let person_id: Option<i64> = row.try_get(12).ok().flatten();
 
         let user = User {
-            id: match id {
-                1 => "usr-saas-root".to_string(),
-                2 => "usr-site-manager-1".to_string(),
-                3 => "usr-home-owner-1".to_string(),
-                _ => format!("usr-{}", id),
-            },
-            site_id: site_id.map(|s| s.to_string()).unwrap_or_else(|| "1".to_string()),
+            id: id.to_string(),
+            site_id: site_id.map(|s| s.to_string()).unwrap_or_default(),
             full_name,
             email,
             phone: phone.unwrap_or_default(),
@@ -2431,13 +2440,8 @@ pub async fn get_user_by_id(
         let person_id: Option<i64> = row.try_get(12).ok().flatten();
 
         let user = User {
-            id: match id {
-                1 => "usr-saas-root".to_string(),
-                2 => "usr-site-manager-1".to_string(),
-                3 => "usr-home-owner-1".to_string(),
-                _ => format!("usr-{}", id),
-            },
-            site_id: site_id.map(|s| s.to_string()).unwrap_or_else(|| "1".to_string()),
+            id: id.to_string(),
+            site_id: site_id.map(|s| s.to_string()).unwrap_or_default(),
             full_name,
             email,
             phone: phone.unwrap_or_default(),
@@ -2460,7 +2464,7 @@ pub async fn get_active_site_bank_account(
     site_id: &str,
 ) -> Result<Option<SiteBankAccount>, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let site_id_num = parse_id_to_i64(site_id).unwrap_or(1);
+    let site_id_num = require_id("entity", site_id)?;
     let row = client
         .query_opt(
             "SELECT id, site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by, created_at, updated_at FROM site_bank_accounts WHERE site_id = $1 AND is_active = TRUE ORDER BY updated_at DESC LIMIT 1",
@@ -2503,7 +2507,7 @@ pub async fn get_blocks_for_site_from_db(
     site_id: &str,
 ) -> Result<Vec<BlockDto>, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let site_id_num = parse_id_to_i64(site_id).unwrap_or(1);
+    let site_id_num = require_id("entity", site_id)?;
     let rows = client
         .query(
             "SELECT id, site_id, block_name, total_floors FROM blocks WHERE site_id = $1 ORDER BY id ASC",
@@ -2536,14 +2540,14 @@ pub async fn sync_all_in_memory_to_db(
 
     // 1. Sync Sites
     for site in &state.sites {
-        let _ = save_site(pool, site).await;
+        save_site(pool, site).await.map_err(|e| e.to_string())?;
     }
 
     // 2. Sync Blocks
     for block in &state.blocks {
-        let block_id_num = parse_id_to_i64(&block.id).unwrap_or(1);
-        let site_id_num = parse_id_to_i64(&block.site_id).unwrap_or(1);
-        let _ = client
+        let block_id_num = require_id("entity", &block.id)?;
+        let site_id_num = require_id("entity", &block.site_id)?;
+        client
             .execute(
                 r#"
                 INSERT INTO blocks (id, site_id, block_name, total_floors)
@@ -2555,18 +2559,18 @@ pub async fn sync_all_in_memory_to_db(
                 "#,
                 &[&block_id_num, &site_id_num, &block.block_name, &block.total_floors],
             )
-            .await;
+            .await.map_err(|e| e.to_string())?;
     }
 
     // 3. Sync Users and Persons
     for user in &state.users {
-        let user_id_num = parse_id_to_i64(&user.id).unwrap_or(1);
+        let user_id_num = require_id("entity", &user.id)?;
         let p_type = match user.role {
             Role::HomeOwner => "HOME_OWNER",
             Role::HomeResident => "HOME_RESIDENT",
             _ => "SITE_MANAGER",
         };
-        let _ = client
+        client
             .execute(
                 r#"
                 INSERT INTO persons (id, full_name, phone, email, person_type)
@@ -2579,19 +2583,19 @@ pub async fn sync_all_in_memory_to_db(
                 "#,
                 &[&user_id_num, &user.full_name, &user.phone, &user.email, &p_type],
             )
-            .await;
+            .await.map_err(|e| e.to_string())?;
 
-        let _ = save_user(pool, user).await;
+        save_user(pool, user).await.map_err(|e| e.to_string())?;
     }
 
     // 4. Sync Units
     for unit in &state.units {
-        let _ = save_unit(pool, unit).await;
+        save_unit(pool, unit).await.map_err(|e| e.to_string())?;
     }
 
     // 5. Sync Dues Liabilities
     for due in &state.dues {
-        let _ = save_due_liability(pool, due).await;
+        save_due_liability(pool, due).await.map_err(|e| e.to_string())?;
     }
 
     // 6. Sync Remembered Sender IBANs & Payer Names
@@ -2599,22 +2603,358 @@ pub async fn sync_all_in_memory_to_db(
         let meta = state.sender_iban_metadata.get(iban);
         let label = meta.and_then(|m| m.0.as_deref());
         let bank = meta.and_then(|m| m.1.as_deref());
-        let _ = save_remembered_sender_iban(pool, iban, unit_id, label, bank).await;
+        save_remembered_sender_iban(pool, iban, unit_id, label, bank).await.map_err(|e| e.to_string())?;
     }
     for (unit_id, names) in &state.unit_payer_names {
-        let _ = save_unit_payer_names(pool, unit_id, names).await;
+        save_unit_payer_names(pool, unit_id, names).await.map_err(|e| e.to_string())?;
     }
 
     // 7. Sync Advance Balances
     for (unit_id, bal) in &state.advance_payments {
-        let _ = save_advance_balance(pool, unit_id, *bal).await;
+        save_advance_balance(pool, unit_id, *bal).await.map_err(|e| e.to_string())?;
     }
 
     // 8. Sync Payment Receipts
     for r in &state.payment_receipts {
-        let _ = save_payment_receipt(pool, r).await;
+        save_payment_receipt(pool, r).await.map_err(|e| e.to_string())?;
     }
 
     info!("Synchronized all in-memory state to PostgreSQL database successfully.");
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Transaction-scoped payment persistence (C7, H1–H4, H6, H9).
+// Every helper runs on the caller's transaction; nothing is committed until the
+// caller commits, and any error rolls the whole payment back.
+// ---------------------------------------------------------------------------
+
+pub type DbResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+/// Receipt previously issued for this idempotency key, if any.
+pub async fn tx_find_idempotent_receipt(tx: &deadpool_postgres::Transaction<'_>, site_id: i64, key: &str) -> DbResult<Option<i64>> {
+    Ok(tx
+        .query_opt(
+            "SELECT receipt_id FROM payment_idempotency_keys WHERE site_id = $1 AND idempotency_key = $2",
+            &[&site_id, &key],
+        )
+        .await?
+        .map(|r| r.get(0)))
+}
+
+pub async fn tx_store_idempotency_key(tx: &deadpool_postgres::Transaction<'_>, site_id: i64, key: &str, receipt_id: i64) -> DbResult<()> {
+    tx.execute(
+        "INSERT INTO payment_idempotency_keys (site_id, idempotency_key, receipt_id) VALUES ($1, $2, $3)",
+        &[&site_id, &key, &receipt_id],
+    )
+    .await?;
+    Ok(())
+}
+
+/// Locks the unit row and checks that it belongs to the site.
+pub async fn tx_lock_unit(tx: &deadpool_postgres::Transaction<'_>, unit_id: i64, site_id: i64) -> DbResult<bool> {
+    Ok(tx
+        .query_opt("SELECT id FROM units WHERE id = $1 AND site_id = $2 FOR UPDATE", &[&unit_id, &site_id])
+        .await?
+        .is_some())
+}
+
+/// Open liabilities of a unit, oldest first, locked for update.
+pub async fn tx_load_open_dues(tx: &deadpool_postgres::Transaction<'_>, unit_id: i64) -> DbResult<Vec<DuesLiability>> {
+    let rows = tx
+        .query(
+            r#"
+            SELECT id, period, principal_amount, delay_penalty, paid_principal, paid_penalty,
+                   due_date, status, debtor_type, expense_type
+            FROM dues_liabilities
+            WHERE unit_id = $1 AND status NOT IN ('PAID', 'CANCELLED')
+            ORDER BY due_date, id
+            FOR UPDATE
+            "#,
+            &[&unit_id],
+        )
+        .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let status: String = r.get(7);
+            let mut d = DuesLiability {
+                id: r.get::<_, i64>(0).to_string(),
+                unit_id: unit_id.to_string(),
+                period: r.get(1),
+                principal_amount: r.get(2),
+                delay_penalty: r.get(3),
+                total_amount: Decimal::ZERO,
+                due_date: r.get(6),
+                status: if status == "OVERDUE" { DebtStatus::Overdue } else { DebtStatus::Pending },
+                paid_principal: r.get(4),
+                paid_penalty: r.get(5),
+                debtor_type: r.get(8),
+                expense_type: r.get(9),
+            };
+            crate::services::dues_ledger::refresh(&mut d);
+            d
+        })
+        .collect())
+}
+
+/// Next receipt sequence for a site. The counter row is locked by the UPDATE
+/// until commit, so concurrent payments serialize and never share a number.
+pub async fn tx_next_receipt_sequence(tx: &deadpool_postgres::Transaction<'_>, site_id: i64) -> DbResult<i64> {
+    let row = tx
+        .query_one(
+            r#"
+            INSERT INTO receipt_counters (site_id, last_sequence)
+            VALUES ($1, COALESCE((SELECT MAX(sequence_number) FROM payment_receipts WHERE site_id = $1), 0) + 1)
+            ON CONFLICT (site_id) DO UPDATE SET last_sequence = receipt_counters.last_sequence + 1
+            RETURNING last_sequence
+            "#,
+            &[&site_id],
+        )
+        .await?;
+    Ok(row.get(0))
+}
+
+pub async fn tx_insert_receipt(tx: &deadpool_postgres::Transaction<'_>, receipt: &PaymentReceipt, site_id: i64, unit_id: i64) -> DbResult<i64> {
+    let breakdown = serde_json::to_string(&receipt.allocation_breakdown)?;
+    let row = tx
+        .query_one(
+            r#"
+            INSERT INTO payment_receipts (
+                site_id, unit_id, receipt_number, sequence_number,
+                payer_name, payer_role, on_behalf_of_name, on_behalf_of_role,
+                total_amount, payment_channel, channel_reference,
+                allocated_principal, allocated_penalty, allocated_advance,
+                allocation_breakdown, is_rent_offset_eligible, legal_statutory_note,
+                verification_hash, issued_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::text::jsonb, $16, $17, $18, $19)
+            RETURNING id
+            "#,
+            &[
+                &site_id,
+                &unit_id,
+                &receipt.receipt_number,
+                &receipt.sequence_number,
+                &receipt.payer_name,
+                &receipt.payer_role,
+                &receipt.on_behalf_of_name,
+                &receipt.on_behalf_of_role,
+                &receipt.total_amount,
+                &receipt.payment_channel,
+                &receipt.channel_reference,
+                &receipt.allocated_principal,
+                &receipt.allocated_penalty,
+                &receipt.allocated_advance,
+                &breakdown,
+                &receipt.is_rent_offset_eligible,
+                &receipt.legal_statutory_note,
+                &receipt.verification_hash,
+                &receipt.issued_at,
+            ],
+        )
+        .await?;
+    Ok(row.get(0))
+}
+
+pub async fn tx_insert_entry(tx: &deadpool_postgres::Transaction<'_>, entry: &PaymentEntry, site_id: i64, unit_id: i64) -> DbResult<i64> {
+    let row = tx
+        .query_one(
+            r#"
+            INSERT INTO payment_entries (
+                site_id, unit_id, payer_name, payer_role, receipt_id,
+                amount, payment_channel, settlement_status, description,
+                external_reference, payment_date, created_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING id
+            "#,
+            &[
+                &site_id,
+                &unit_id,
+                &entry.payer_name,
+                &entry.payer_role,
+                &entry.receipt_id,
+                &entry.amount,
+                &entry.payment_channel,
+                &entry.settlement_status,
+                &entry.description,
+                &entry.external_reference,
+                &entry.payment_date,
+                &entry.created_at,
+            ],
+        )
+        .await?;
+    Ok(row.get(0))
+}
+
+/// Records a settlement on a liability (paid amounts only; owed amounts untouched
+/// except that the accrued penalty is brought up to date) plus its allocation row.
+pub async fn tx_settle_due(
+    tx: &deadpool_postgres::Transaction<'_>,
+    entry_id: i64,
+    due: &DuesLiability,
+    principal: Decimal,
+    penalty: Decimal,
+) -> DbResult<()> {
+    let due_id = require_id("dues liability", &due.id)?;
+    let status = if due.status == DebtStatus::Paid { "PAID" } else { "PARTIALLY_PAID" };
+    let n = tx
+        .execute(
+            r#"
+            UPDATE dues_liabilities
+            SET delay_penalty  = $2,
+                paid_principal = paid_principal + $3,
+                paid_penalty   = paid_penalty + $4,
+                paid_amount    = paid_amount + $3 + $4,
+                status         = $5,
+                payment_date   = CURRENT_TIMESTAMP,
+                version        = version + 1
+            WHERE id = $1
+            "#,
+            &[&due_id, &due.delay_penalty, &principal, &penalty, &status],
+        )
+        .await?;
+    if n != 1 {
+        return Err(format!("dues liability {} disappeared during payment", due_id).into());
+    }
+    tx.execute(
+        "INSERT INTO payment_allocations (payment_entry_id, dues_liability_id, principal_amount, penalty_amount, created_at)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)",
+        &[&entry_id, &due_id, &principal, &penalty],
+    )
+    .await?;
+    Ok(())
+}
+
+/// Credits a unit's advance balance for one debtor type by `amount` (an increment,
+/// never an overwrite) and writes the matching ledger entry. Returns the new balance.
+pub async fn tx_credit_advance(
+    tx: &deadpool_postgres::Transaction<'_>,
+    unit_id: i64,
+    debtor_type: &str,
+    entry_type: &str,
+    amount: Decimal,
+    reference: Option<&str>,
+    description: Option<&str>,
+) -> DbResult<Decimal> {
+    let row = tx
+        .query_one(
+            r#"
+            INSERT INTO advance_balances (unit_id, debtor_type, balance, updated_at)
+            VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+            ON CONFLICT (unit_id, debtor_type) DO UPDATE SET
+                balance = advance_balances.balance + EXCLUDED.balance,
+                updated_at = CURRENT_TIMESTAMP
+            RETURNING balance
+            "#,
+            &[&unit_id, &debtor_type, &amount],
+        )
+        .await?;
+    tx.execute(
+        "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, reference_id, description, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)",
+        &[&unit_id, &debtor_type, &entry_type, &amount, &reference, &description],
+    )
+    .await?;
+    Ok(row.get(0))
+}
+
+pub async fn get_payment_receipt_by_id(pool: &Pool, receipt_id: i64) -> DbResult<Option<PaymentReceipt>> {
+    let client = pool.get().await?;
+    let row = client
+        .query_opt(
+            r#"
+            SELECT id, site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role,
+                   on_behalf_of_name, on_behalf_of_role, total_amount, payment_channel, channel_reference,
+                   allocated_principal, allocated_penalty, allocated_advance, allocation_breakdown::text,
+                   is_rent_offset_eligible, legal_statutory_note, verification_hash, issued_at
+            FROM payment_receipts WHERE id = $1
+            "#,
+            &[&receipt_id],
+        )
+        .await?;
+    let Some(r) = row else { return Ok(None) };
+    let breakdown: Option<String> = r.get(15);
+    Ok(Some(PaymentReceipt {
+        id: r.get(0),
+        site_id: r.get::<_, i64>(1).to_string(),
+        unit_id: r.get::<_, i64>(2).to_string(),
+        receipt_number: r.get(3),
+        sequence_number: r.get(4),
+        payer_name: r.get(5),
+        payer_role: r.get(6),
+        on_behalf_of_name: r.get(7),
+        on_behalf_of_role: r.get(8),
+        total_amount: r.get(9),
+        payment_channel: r.get(10),
+        channel_reference: r.get(11),
+        allocated_principal: r.get(12),
+        allocated_penalty: r.get(13),
+        allocated_advance: r.get(14),
+        allocation_breakdown: breakdown.and_then(|b| serde_json::from_str(&b).ok()).unwrap_or_default(),
+        is_rent_offset_eligible: r.get(16),
+        legal_statutory_note: r.get(17),
+        verification_hash: r.get(18),
+        issued_at: r.get(19),
+    }))
+}
+
+/// Locks and returns one debtor's advance balance for a unit (0 when absent).
+pub async fn tx_lock_advance(tx: &deadpool_postgres::Transaction<'_>, unit_id: i64, debtor_type: &str) -> DbResult<Decimal> {
+    Ok(tx
+        .query_opt(
+            "SELECT balance FROM advance_balances WHERE unit_id = $1 AND debtor_type = $2 FOR UPDATE",
+            &[&unit_id, &debtor_type],
+        )
+        .await?
+        .map(|r| r.get(0))
+        .unwrap_or(Decimal::ZERO))
+}
+
+/// Debits an advance balance (never below zero) and writes the ledger entry.
+pub async fn tx_debit_advance(
+    tx: &deadpool_postgres::Transaction<'_>,
+    unit_id: i64,
+    debtor_type: &str,
+    entry_type: &str,
+    amount: Decimal,
+    reference: Option<&str>,
+    description: Option<&str>,
+) -> DbResult<Decimal> {
+    let row = tx
+        .query_opt(
+            "UPDATE advance_balances SET balance = balance - $3, updated_at = CURRENT_TIMESTAMP
+             WHERE unit_id = $1 AND debtor_type = $2 AND balance >= $3 RETURNING balance",
+            &[&unit_id, &debtor_type, &amount],
+        )
+        .await?
+        .ok_or("insufficient advance balance")?;
+    tx.execute(
+        "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, reference_id, description, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)",
+        &[&unit_id, &debtor_type, &entry_type, &amount, &reference, &description],
+    )
+    .await?;
+    Ok(row.get(0))
+}
+
+/// Inserts an accrued liability and returns its id, or `None` when the unit
+/// already has one for this period and expense type (`uq_unit_period_expense`).
+pub async fn insert_accrued_due(pool: &Pool, due: &DuesLiability) -> DbResult<Option<i64>> {
+    let unit = require_id("unit", &due.unit_id)?;
+    let client = pool.get().await?;
+    let row = client
+        .query_opt(
+            r#"
+            INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type)
+            VALUES ($1, $2, $3, $4, 'PENDING', 0, $5, $6)
+            ON CONFLICT (unit_id, period, expense_type) WHERE capital_project_id IS NULL DO NOTHING
+            RETURNING id
+            "#,
+            &[&unit, &due.period, &due.principal_amount, &due.due_date, &due.debtor_type, &due.expense_type],
+        )
+        .await?;
+    Ok(row.map(|r| r.get(0)))
+}
+

@@ -1707,7 +1707,7 @@ class CapitalProjectItem {
   factory CapitalProjectItem.fromJson(Map<String, dynamic> json) {
     return CapitalProjectItem(
       id: json['id']?.toString() ?? '',
-      siteId: json['site_id']?.toString() ?? 'site-1',
+      siteId: json['site_id']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
       category: json['category']?.toString() ?? 'ELEVATOR',
       description: json['description']?.toString(),

@@ -13,7 +13,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SITEPULSE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKEND_DIR="$SITEPULSE_ROOT/backend"
-INIT_DIR="$BACKEND_DIR/db/init"
+MIGRATIONS_DIR="$BACKEND_DIR/migrations"
+SEED_DIR="$BACKEND_DIR/db/seed"
 
 MODE="with-site" # default: clean site hierarchy, zero payment periods
 FORCE_PROD=0
@@ -122,37 +123,29 @@ echo "  ✔ Database tables dropped cleanly."
 
 # 3. Apply schema definition files
 echo "▶ [2/4] Applying core database schema & migrations..."
-run_sql_file "$INIT_DIR/00-01-init-schema.sql"
-run_sql_file "$INIT_DIR/00-02-saas-multi-tenancy.sql"
-run_sql_file "$INIT_DIR/00-03-auth-and-permission-providers.sql"
-run_sql_file "$INIT_DIR/00-04-site-bank-account.sql"
-if [ -f "$INIT_DIR/00-05-payment-tracking-and-receipts.sql" ]; then
-    run_sql_file "$INIT_DIR/00-05-payment-tracking-and-receipts.sql"
-fi
-if [ -f "$INIT_DIR/00-06-capital-expenditure-and-fixtures.sql" ]; then
-    run_sql_file "$INIT_DIR/00-06-capital-expenditure-and-fixtures.sql"
-fi
-if [ -f "$INIT_DIR/00-07-viable-occupancy-ownership-and-identity.sql" ]; then
-    run_sql_file "$INIT_DIR/00-07-viable-occupancy-ownership-and-identity.sql"
-fi
-if [ -f "$INIT_DIR/00-08-referential-and-financial-integrity.sql" ]; then
-    run_sql_file "$INIT_DIR/00-08-referential-and-financial-integrity.sql"
-fi
-if [ -f "$INIT_DIR/00-09-ledger-and-referential-integrity.sql" ]; then
-    run_sql_file "$INIT_DIR/00-09-ledger-and-referential-integrity.sql"
-fi
-if [ -f "$INIT_DIR/00-10-consolidate-household-members.sql" ]; then
-    run_sql_file "$INIT_DIR/00-10-consolidate-household-members.sql"
-fi
-if [ -f "$INIT_DIR/00-11-financial-and-tenancy-remediation.sql" ]; then
-    run_sql_file "$INIT_DIR/00-11-financial-and-tenancy-remediation.sql"
-fi
-run_sql_file "$INIT_DIR/01-system-seed.sql"
+# backend/migrations is the only schema source. Each file is applied in version
+# order and recorded in schema_migrations with the same SHA-256 checksum the
+# backend's migration runner uses, so the backend will not re-apply them.
+run_sql_stdin << 'EOF'
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INT PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+EOF
+while IFS= read -r migration; do
+    name="$(basename "$migration")"
+    version="${name#V}"; version="${version%%__*}"
+    checksum="$(sha256sum "$migration" | cut -d' ' -f1)"
+    { echo "BEGIN;"; cat "$migration"; echo ";"
+      echo "INSERT INTO schema_migrations (version, name, checksum) VALUES ($version, '$name', '$checksum');"
+      echo "COMMIT;"; } | run_sql_stdin
+    echo "  ▶ Applied: $name"
+done < <(ls "$MIGRATIONS_DIR"/V*__*.sql | sort -V)
+run_sql_file "$SEED_DIR/01-system-seed.sql"
 
 # 4. Apply site data according to selected mode
 if [ "$MODE" = "with-site" ]; then
     echo "▶ [3/4] Applying baseline residential site hierarchy (Begonya Sitesi)..."
-    run_sql_file "$INIT_DIR/02-test-seed.sql"
+    run_sql_file "$SEED_DIR/02-test-seed.sql"
 else
     echo "▶ [3/4] Pure system mode selected: skipping mock site seeding."
 fi

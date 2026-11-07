@@ -9,32 +9,32 @@
 
 ## 1. Executive Completion Dashboard
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                              OVERALL COMPLETION METRICS                                │
-│                                                                                        │
-│   Total Epics: 7              Total User Stories: 41         Verification Gates: 8/8   │
-│   Stories Completed: 41       Stories Pending: 0             Automated Tests: 92/92    │
-│                                                                                        │
-│   ████████████████████████████████████████████████████████████████  100.0% COMPLETE    │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+> **Corrected on 7 Nov 2026.** The previous version of this page reported 41/41 stories and
+> 100% completion. That figure came from harness gates that could not fail (a brace counter and
+> a financial gate fed a hard-coded total) and from `run-tests.sh` printing fixed PASS lines.
+> See [docs/CODE_AND_DATABASE_FLAWS_REPORT.md](docs/CODE_AND_DATABASE_FLAWS_REPORT.md).
 
-### Epic Completion Summary
+| Measure | Value | Source |
+| :--- | :--- | :--- |
+| Task DAG nodes | 25 (19 original + 6 for EPIC-05 to EPIC-10) | `.specify/tasks/task-dag.json` |
+| Tasks with current evidence (COMPLETED) | **0**, all `UNVERIFIED` until CI records evidence | `harness/harness_cli.py status` |
+| Requirements in the RTM | 25, all `UNVERIFIED` | `docs/cmmi-pipeline/traceability-matrix.md` |
+| Status changes | only via `harness_cli.py verify --record` in CI, writing `.specify/evidence/<task>.json` | `.github/workflows/sitepulse-ci.yml` |
 
-| Epic ID | Epic Title | Module | Stories | Completed | Status | Coverage | Spec Document |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| **EPIC-01** | Resident Dues Management & Financial Transparency | `flutter-domain`, `flutter-ui`, `backend-rust`, `flutter-data` | 6 | 6 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-01-resident-dues-financial-management.md](.specify/requirements/EPIC-01-resident-dues-financial-management.md) |
-| **EPIC-02** | Site Manager Financial Oversight & Community Operations | `flutter-ui`, `flutter-domain`, `backend-rust` | 5 | 5 | 🟩 `100.0%` | Verified Live | [.specify/requirements/EPIC-02-site-manager-operations.md](.specify/requirements/EPIC-02-site-manager-operations.md) |
-| **EPIC-03** | SaaS Multi-Tenancy & Autonomous Site Onboarding | `backend-rust`, `flutter-ui` | 5 | 5 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-03-saas-multi-tenancy-onboarding.md](.specify/requirements/EPIC-03-saas-multi-tenancy-onboarding.md) |
-| **EPIC-04** | Digital Resident Self-Registration & Approval Queue | `backend-rust`, `flutter-ui`, `flutter-domain` | 7 | 7 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-04-invitation-approval-workflow.md](.specify/requirements/EPIC-04-invitation-approval-workflow.md) |
-| **EPIC-05** | Backend Persistence, REST APIs & Verification Harness | `backend-db`, `backend-rust`, `harness` | 6 | 6 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-05-backend-persistence-verification-harness.md](.specify/requirements/EPIC-05-backend-persistence-verification-harness.md) |
-| **EPIC-06** | Identity, Authentication & Scoped Permission Model | `backend-auth`, `backend-rust`, `flutter-ui` | 5 | 5 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-06-identity-access-auth.md](.specify/requirements/EPIC-06-identity-access-auth.md) |
-| **EPIC-07** | Bank Integration, Virtual IBAN & Dues Accrual | `backend-rust`, `flutter-ui`, `flutter-domain` | 7 | 7 | 🟩 `100.0%` | 100% Tests Green | [.specify/requirements/EPIC-07-bank-integration-and-automated-reconciliation.md](.specify/requirements/EPIC-07-bank-integration-and-automated-reconciliation.md) |
+A task becomes COMPLETED only when the global build gates, its own gates and its named acceptance
+tests all pass on the current commit. A story counts as done only when its requirement is VERIFIED
+against that evidence (`python3 harness/rtm_validator.py`).
+
+Last local run (7 Nov 2026, not recorded as evidence): every gate in `python3 scripts/run_tests.py`
+passed: backend tests, clippy `-D warnings`, money fixtures (Rust and Dart), Flutter analyze (no
+errors) and tests, persistence lint, schema integrity and upgrade test, and the API system check.
 
 ---
 
 ## 2. Granular Requirements Traceability & Coverage Matrix
+
+> Historical claims, kept for reference. The "Status" column below was never backed by
+> behavioural evidence; the authoritative status is the RTM and the task DAG described above.
 
 | Story ID | Epic | User Story Title | Target Role | Status | Implementation Artifacts | Verification Test Cases | Harness Gate |
 | :--- | :---: | :--- | :--- | :---: | :--- | :--- | :--- |

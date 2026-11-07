@@ -11,6 +11,12 @@ pub struct BankStatementParser {
     mt940_engine: Mt940Engine,
 }
 
+impl Default for BankStatementParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BankStatementParser {
     pub fn new() -> Self {
         Self {
@@ -200,8 +206,7 @@ impl BankStatementParser {
             .replace('₺', "")
             .replace("TL", "")
             .replace("TRY", "")
-            .replace('$', "")
-            .replace('€', "")
+            .replace(['$', '€'], "")
             .trim()
             .to_string();
 

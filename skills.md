@@ -45,27 +45,20 @@ This document lists the available skills and custom tools available to AI agents
 ## 1b. Schema Integrity Gate (`schema_integrity_check.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/schema_integrity_check.py](file:///apps/development-time/SitePulse/scripts/schema_integrity_check.py) (symlinked to `scripts/schema_integrity_check.py`)
-- **Purpose:** Replays the docker init scripts (`backend/db/init/00-*.sql`) and the versioned migrations (`backend/migrations/V*.sql`) into throwaway databases, asserts both produce the identical schema, and asserts the integrity constraints reject invalid data. Guards against the historical drift between `db/init`, `migrations/` and the Rust bootstrap in `backend/src/db.rs`.
+- **Purpose:** `backend/migrations/V*.sql` is the only schema source (applied by the backend's migration runner, `backend/src/migrations.rs`). The gate replays the migrations into a throwaway database and proves the constraints reject bad data, then runs an **upgrade test**: V1–V7, V7-era rows, then V8 onwards, asserting the rows survive, backfills run, every constraint is validated and the upgraded schema equals a fresh install.
 
 ### Capabilities:
-- **Schema congruence:** compares every column, constraint and index produced by both schema sources.
-- **Negative cases:** proves `person_type`/`expense_type` domains, unit↔block site consistency, active-occupancy openness, overpayment, duplicate capital installments, receipt allocation/sequence uniqueness, IBAN format and one-active-bank-per-site are all enforced.
+- **Negative cases:** domains and vocabularies, FKs (phantom unit/site), ledgers RESTRICT unit deletion, paid-amount invariants, case-insensitive e-mail uniqueness, receipt sequence uniqueness, IBAN format, one active bank account per site.
+- **Positive cases:** national ids never stored in clear text, unit owner follows the ownership history, `v_integrity_violations` empty on seed data.
+- **Upgrade path:** existing rows survive V8+; the upgraded schema has no drift from a fresh install.
 
 ### Quick Usage Examples:
 ```bash
-# Full gate (schema congruence + constraint rejection tests)
-./scripts/schema_integrity_check.py
-
-# Machine-readable output for CI
-./scripts/schema_integrity_check.py --json
-
-# Regenerate migrations/V*.sql from backend/db/init/00-*.sql, then verify
-./scripts/schema_integrity_check.py --sync
+./scripts/schema_integrity_check.py          # human-readable
+./scripts/schema_integrity_check.py --json   # CI
 ```
 
-`backend/db/init` is the single editable source for both schema and seed data:
-the `V*` base migrations are generated from it, and the Rust backend bootstraps
-by `include_str!`-ing the same files — never hand-edit more than one copy.
+Released migrations are append-only: add `V<n+1>__name.sql` and register it in `backend/src/migrations.rs` (a unit test fails if a file is not registered). Seeds live in `backend/db/seed/`.
 
 ---
 
@@ -96,26 +89,56 @@ by `include_str!`-ing the same files — never hand-edit more than one copy.
 
 ---
 
-## 5. Memory-Persistence Architecture Linter (`memory_persistence_lint.py`)
+## 5. Persistence Lint (`memory_persistence_lint.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/memory_persistence_lint.py](file:///apps/development-time/SitePulse/scripts/memory_persistence_lint.py) (symlinked to `scripts/memory_persistence_lint.py`)
-- **Purpose:** Continuous verification gate preventing memory vs. database duality bugs. Ensures that all in-memory entities are hydrated on startup, mutations persist to PostgreSQL, no destructive overwrites exist on monetary ledgers, and conflict targets match active schema constraints.
-
-### Capabilities:
-- Verifies hydration of all 15 critical tables in `load_all_from_db()`.
-- Catches destructive overwrites on `dues_liabilities.paid_amount`.
-- Verifies composite conflict arbiter `(unit_id, debtor_type)` on `advance_balances`.
-- Verifies unique composite conflict arbiter `(unit_id, sender_iban)` on `unit_sender_ibans`.
-- Asserts database-backed receipt sequences, payment entry allocations, and advance sub-ledger audit trail.
-- Integrated into `scripts/schema_integrity_check.py`.
+- **Purpose:** Fails when database results are discarded again: `let _ = <db call>`, `.await.ok();` on a DB call, `if let Ok(..) = client.query(..)`, `parse_id_to_i64(..).unwrap_or(n>0)`, or a missing `#![deny(unused_must_use)]` in `src/lib.rs`. (The original code had 215 such violations.)
 
 ### Quick Usage Examples:
 ```bash
-# Run human-readable lint report
 ./scripts/memory_persistence_lint.py
-
-# Emit JSON for automated CI/CD pipeline assertions
 ./scripts/memory_persistence_lint.py --json
+```
+
+## 5b. API System Check (`api_system_check.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/api_system_check.py](file:///apps/development-time/SitePulse/scripts/api_system_check.py) (symlinked to `scripts/api_system_check.py`)
+- **Purpose:** Creates a throwaway database, boots the real backend binary on a free port, seeds it, and checks over HTTP: every non-public route returns 401 without a token, forged tokens are rejected, cross-site access is 403, bank webhooks need a valid HMAC, 20 concurrent payments get unique receipt numbers, idempotent retries return the first receipt, and receipts/inserts survive a backend restart.
+
+```bash
+DB_PASS=... ./scripts/api_system_check.py                    # all checks
+DB_PASS=... ./scripts/api_system_check.py --only cross_site_forbidden,restart_persistence --json
+```
+Uses `psql` when on PATH, otherwise `docker exec <--pg-container> psql`.
+
+## 5c. Full Verification Run (`run_tests.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)
+- **Purpose:** Runs every harness gate with the real tools: harness self-tests, `cargo build`, `clippy -D warnings`, `cargo test`, the shared money fixtures (Rust + Dart), `flutter analyze`, `flutter test`, the persistence lint, the schema gate and the API system check. A missing toolchain fails; nothing is printed as passed unless the tool passed; nothing in the repo is modified.
+
+```bash
+DB_PASS=... ./scripts/run_tests.py            # everything
+./scripts/run_tests.py --skip-db              # DB gates reported as SKIPPED, not passed
+./scripts/run_tests.py --only rust-test,money-fixtures --json
+```
+
+## 5d. Harness CLI (`harness/harness_cli.py`)
+
+- **Purpose:** Task DAG scheduler and verification loop. `verify --task <id>` runs the global build gates, the task's `gates` and its named `acceptance_tests` (read-only). `--record` (CI only) writes `.specify/evidence/<task>.json` (git SHA, gate results, timestamps) and updates the status with a retry budget (FAILED, then BLOCKED). `python3 harness/rtm_validator.py` accepts a VERIFIED requirement only with passing evidence from the current commit.
+
+```bash
+python3 apps/development-time/SitePulse/harness/harness_cli.py status
+python3 apps/development-time/SitePulse/harness/harness_cli.py gates
+python3 apps/development-time/SitePulse/harness/harness_cli.py verify --task task-16 --no-global --json
+```
+
+## 5e. Password Hash Generator (`hash-password`)
+
+- **Binary:** `apps/development-time/SitePulse/backend/src/bin/hash_password.rs`
+- **Purpose:** Prints the argon2id PHC hash of a password read from stdin, for seed files and manual account resets. Plaintext and placeholder hashes are rejected by the backend.
+
+```bash
+echo -n 'new-password' | cargo run --quiet --bin hash-password   # from backend/
 ```
 
 ### Core Rules:

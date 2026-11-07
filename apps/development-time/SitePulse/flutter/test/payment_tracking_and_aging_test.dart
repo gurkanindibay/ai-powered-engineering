@@ -53,7 +53,7 @@ void main() {
         unitId: 'unit-1',
         payerName: 'Gürkan İndibay',
         payerRole: 'TENANT',
-        amount: 1250.00,
+        amount: Decimal.parse('1250.00'),
         paymentChannel: 'CASH',
         description: 'Elden nakit Ekim 2026 aidatı (Ref: ELDEN-MAKBUZ-001)',
       );
@@ -67,7 +67,7 @@ void main() {
     test('when executing inter-ledger transfer then returns success and receipt number', () async {
       final res = await controller.executeInterLedgerTransfer(
         unitId: 'unit-2',
-        amount: 500.00,
+        amount: Decimal.parse('500.00'),
         note: 'Fazla ödenen aidat avansı asansör demirbaşına aktarıldı',
       );
 

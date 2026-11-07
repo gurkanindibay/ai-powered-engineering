@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
+import '../../domain/services/api_client.dart';
 import '../../domain/services/bank_file_parser.dart';
 import '../../domain/usecases/calculate_dues_usecase.dart';
 
@@ -51,8 +51,6 @@ class DashboardController extends ChangeNotifier {
   /// Flag indicating whether the controller is operating under active test fixtures (for unit/widget testing)
   bool isTestMode = false;
 
-  /// Centralized API host resolver for web and native environments
-  String get apiHost => (kIsWeb && Uri.base.host.isNotEmpty && Uri.base.host != '0.0.0.0') ? Uri.base.host : 'localhost';
 
   ApartmentUnit _managerUnit = ApartmentUnit.empty;
   ApartmentUnit get activeUnit =>
@@ -277,9 +275,8 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '1';
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/house-types?site_id=$effectiveSiteId');
-        final response = await http.get(url).timeout(const Duration(seconds: 4));
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/house-types?site_id=$effectiveSiteId');
+        final response = await ApiClient.get(url).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
           _houseTypes = list.map((item) => HouseTypeTariff.fromJson(item as Map<String, dynamic>)).toList();
@@ -311,9 +308,8 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '1';
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/house-types?site_id=$effectiveSiteId');
-        final response = await http.post(
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/house-types?site_id=$effectiveSiteId');
+        final response = await ApiClient.post(
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
@@ -351,9 +347,8 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '1';
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/house-types/$id?site_id=$effectiveSiteId');
-        await http.delete(url).timeout(const Duration(seconds: 4));
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/house-types/$id?site_id=$effectiveSiteId');
+        await ApiClient.delete(url).timeout(const Duration(seconds: 4));
       } catch (e) {
         debugPrint('deleteHouseType error: $e');
       }
@@ -395,9 +390,8 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '1';
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/blocks?site_id=$effectiveSiteId');
-        final response = await http.get(url).timeout(const Duration(seconds: 4));
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/blocks?site_id=$effectiveSiteId');
+        final response = await ApiClient.get(url).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
           final seen = <String>{};
@@ -435,9 +429,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/blocks?site_id=$effectiveSiteId');
-        final response = await http.post(
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/blocks?site_id=$effectiveSiteId');
+        final response = await ApiClient.post(
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
@@ -670,9 +663,8 @@ class DashboardController extends ChangeNotifier {
     final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
     if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     try {
-      final host = apiHost;
-      final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria');
-      final response = await http.get(url).timeout(const Duration(seconds: 2));
+      final url = ApiClient.uri('/api/v1/residents/$effectiveUnitId/matching-criteria');
+      final response = await ApiClient.get(url).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         _matchingCriteria = UnitMatchingCriteria.fromJson(data);
@@ -693,9 +685,8 @@ class DashboardController extends ChangeNotifier {
     if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     final clean = iban.replaceAll(' ', '').toUpperCase();
     try {
-      final host = apiHost;
-      final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria/ibans');
-      final response = await http.post(
+      final url = ApiClient.uri('/api/v1/residents/$effectiveUnitId/matching-criteria/ibans');
+      final response = await ApiClient.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
@@ -736,9 +727,8 @@ class DashboardController extends ChangeNotifier {
     if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     final clean = iban.replaceAll(' ', '').toUpperCase();
     try {
-      final host = apiHost;
-      final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria/ibans/$clean');
-      final response = await http.delete(url).timeout(const Duration(seconds: 3));
+      final url = ApiClient.uri('/api/v1/residents/$effectiveUnitId/matching-criteria/ibans/$clean');
+      final response = await ApiClient.delete(url).timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -764,9 +754,8 @@ class DashboardController extends ChangeNotifier {
     final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
     if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     try {
-      final host = apiHost;
-      final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/matching-criteria/payer-names');
-      final response = await http.put(
+      final url = ApiClient.uri('/api/v1/residents/$effectiveUnitId/matching-criteria/payer-names');
+      final response = await ApiClient.put(
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'payer_names': names}),
@@ -790,9 +779,8 @@ class DashboardController extends ChangeNotifier {
   Future<bool> resetAllDemoData() async {
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/system/reset-demo-data');
-        await http.post(url).timeout(const Duration(seconds: 3));
+        final url = ApiClient.uri('/api/v1/system/reset-demo-data');
+        await ApiClient.post(url).timeout(const Duration(seconds: 3));
       } catch (e) {
         debugPrint('resetAllDemoData remote error: $e');
       }
@@ -838,9 +826,8 @@ class DashboardController extends ChangeNotifier {
   Future<bool> accrueTestDue([String? unitId]) async {
     final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
     try {
-      final host = apiHost;
-      final url = Uri.parse('http://$host:8080/api/v1/system/accrue-test-due');
-      await http.post(url).timeout(const Duration(seconds: 3));
+      final url = ApiClient.uri('/api/v1/system/accrue-test-due');
+      await ApiClient.post(url).timeout(const Duration(seconds: 3));
     } catch (e) {
       debugPrint('accrueTestDue remote error: $e');
     }
@@ -858,9 +845,8 @@ class DashboardController extends ChangeNotifier {
     fetchUnitMatchingCriteria(effectiveUnitId);
     fetchHouseholdMembers(effectiveUnitId);
     try {
-      final host = apiHost;
-      final url = Uri.parse('http://$host:8080/api/v1/residents/$effectiveUnitId/dashboard');
-      final response = await http.get(url).timeout(const Duration(seconds: 2));
+      final url = ApiClient.uri('/api/v1/residents/$effectiveUnitId/dashboard');
+      final response = await ApiClient.get(url).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
 
@@ -931,9 +917,8 @@ class DashboardController extends ChangeNotifier {
     }
     if (effectiveSiteId == null || effectiveSiteId.isEmpty) return;
     try {
-      final host = apiHost;
-      final url = Uri.parse('http://$host:8080/api/v1/bank/statements/reconciliation-queue?site_id=$effectiveSiteId');
-      final response = await http.get(url).timeout(const Duration(seconds: 2));
+      final url = Uri.parse('${ApiClient.baseUrl}/api/v1/bank/statements/reconciliation-queue?site_id=$effectiveSiteId');
+      final response = await ApiClient.get(url).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
         final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>?;
         if (list != null) {
@@ -966,7 +951,6 @@ class DashboardController extends ChangeNotifier {
   Future<void> fetchSiteManagerOverview({String? siteId, String? period}) async {
     if (isTestMode) return;
     try {
-      final host = apiHost;
       final queryParams = <String, String>{};
       if (siteId != null && siteId.isNotEmpty) {
         queryParams['site_id'] = siteId;
@@ -975,8 +959,8 @@ class DashboardController extends ChangeNotifier {
         queryParams['period'] = period;
       }
 
-      final uri = Uri.http('$host:8080', '/api/v1/site-admin/overview', queryParams);
-      final response = await http.get(uri).timeout(const Duration(seconds: 2));
+      final uri = ApiClient.uri('/api/v1/site-admin/overview', queryParams);
+      final response = await ApiClient.get(uri).timeout(const Duration(seconds: 2));
 
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -1122,8 +1106,8 @@ class DashboardController extends ChangeNotifier {
   Future<void> fetchSaasSites() async {
     if (isTestMode) return;
     try {
-      final url = Uri.parse('http://$apiHost:8080/api/v1/saas/sites');
-      final response = await http.get(url).timeout(const Duration(seconds: 4));
+      final url = ApiClient.uri('/api/v1/saas/sites');
+      final response = await ApiClient.get(url).timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
@@ -1172,8 +1156,7 @@ class DashboardController extends ChangeNotifier {
         : (_currentManagedSite?.id.isNotEmpty == true
             ? _currentManagedSite!.id
             : (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : (_saasSites.isNotEmpty ? _saasSites.first.id : '1')));
-    final host = apiHost;
-    final url = Uri.parse('http://$host:8080/api/v1/dues/accrue-period');
+    final url = ApiClient.uri('/api/v1/dues/accrue-period');
     final dueAmount = amount ?? Decimal.parse('1400.00');
     final dt = dueDate ?? DateTime.now();
     final formattedDueDate =
@@ -1211,7 +1194,7 @@ class DashboardController extends ChangeNotifier {
     }
 
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
@@ -1326,8 +1309,7 @@ class DashboardController extends ChangeNotifier {
         : (_currentManagedSite?.id.isNotEmpty == true
             ? _currentManagedSite!.id
             : (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : (_saasSites.isNotEmpty ? _saasSites.first.id : '1')));
-    final host = apiHost;
-    final url = Uri.parse('http://$host:8080/api/v1/dues/periods');
+    final url = ApiClient.uri('/api/v1/dues/periods');
     final formattedDueDate =
         "${dueDate.year.toString().padLeft(4, '0')}-${dueDate.month.toString().padLeft(2, '0')}-${dueDate.day.toString().padLeft(2, '0')}";
 
@@ -1348,7 +1330,7 @@ class DashboardController extends ChangeNotifier {
     }
 
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
@@ -1431,6 +1413,7 @@ class DashboardController extends ChangeNotifier {
   }
 
   void logout() {
+    ApiClient.setAccessToken(null);
     _isAuthenticated = false;
     _authMessage = null;
     _provisionedCredentials = null;
@@ -1468,7 +1451,7 @@ class DashboardController extends ChangeNotifier {
       if (ho != null) {
         _activeUnit = ApartmentUnit(
           id: ho.unitId.isNotEmpty ? ho.unitId : 'unit-${ho.unitNo}',
-          siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+          siteId: siteId ?? _currentManagedSite?.id ?? '',
           siteName: _currentManagedSite?.name ?? 'Sitemiz',
           block: ho.block,
           unitNo: ho.unitNo,
@@ -1489,7 +1472,7 @@ class DashboardController extends ChangeNotifier {
       if (flat != null) {
         _activeUnit = ApartmentUnit(
           id: flat.id,
-          siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+          siteId: siteId ?? _currentManagedSite?.id ?? '',
           siteName: _currentManagedSite?.name ?? 'Sitemiz',
           block: flat.block,
           unitNo: flat.unitNo,
@@ -1505,7 +1488,7 @@ class DashboardController extends ChangeNotifier {
       }
       _activeUnit = ApartmentUnit(
         id: unitId,
-        siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+        siteId: siteId ?? _currentManagedSite?.id ?? '',
         siteName: _currentManagedSite?.name ?? 'Sitemiz',
         block: 'A Blok',
         unitNo: int.tryParse(unitId.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1,
@@ -1528,7 +1511,7 @@ class DashboardController extends ChangeNotifier {
     if (ho != null) {
       _activeUnit = ApartmentUnit(
         id: ho.unitId.isNotEmpty ? ho.unitId : 'unit-${ho.unitNo}',
-        siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+        siteId: siteId ?? _currentManagedSite?.id ?? '',
         siteName: _currentManagedSite?.name ?? 'Sitemiz',
         block: ho.block,
         unitNo: ho.unitNo,
@@ -1547,7 +1530,7 @@ class DashboardController extends ChangeNotifier {
     if (_provisionedHomeOwner != null && _provisionedHomeOwner!.email.toLowerCase() == email.toLowerCase()) {
       _activeUnit = ApartmentUnit(
         id: 'unit-${_provisionedHomeOwner!.unitNo}',
-        siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+        siteId: siteId ?? _currentManagedSite?.id ?? '',
         siteName: _currentManagedSite?.name ?? 'Sitemiz',
         block: _provisionedHomeOwner!.block,
         unitNo: _provisionedHomeOwner!.unitNo,
@@ -1570,7 +1553,7 @@ class DashboardController extends ChangeNotifier {
       )!;
       _activeUnit = ApartmentUnit(
         id: f.id,
-        siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+        siteId: siteId ?? _currentManagedSite?.id ?? '',
         siteName: _currentManagedSite?.name ?? 'Sitemiz',
         block: f.block,
         unitNo: f.unitNo,
@@ -1592,7 +1575,7 @@ class DashboardController extends ChangeNotifier {
           final f = _flatsList.first;
           _activeUnit = ApartmentUnit(
             id: f.id,
-            siteId: siteId ?? _currentManagedSite?.id ?? 'site-1',
+            siteId: siteId ?? _currentManagedSite?.id ?? '',
             siteName: _currentManagedSite?.name ?? 'Sitemiz',
             block: f.block,
             unitNo: f.unitNo,
@@ -1654,7 +1637,7 @@ class DashboardController extends ChangeNotifier {
   void loginAsHomeOwner(HomeOwnerItem owner) {
     _activeUnit = ApartmentUnit(
       id: owner.unitId.isNotEmpty ? owner.unitId : 'unit-${owner.unitNo}',
-      siteId: _currentManagedSite?.id ?? 'site-1',
+      siteId: _currentManagedSite?.id ?? '',
       siteName: _currentManagedSite?.name ?? 'Sitemiz',
       block: owner.block,
       unitNo: owner.unitNo,
@@ -1683,7 +1666,7 @@ class DashboardController extends ChangeNotifier {
     final p = _provisionedHomeOwner!;
     _activeUnit = ApartmentUnit(
       id: 'unit-${p.unitNo}',
-      siteId: _currentManagedSite?.id ?? 'site-1',
+      siteId: _currentManagedSite?.id ?? '',
       siteName: _currentManagedSite?.name ?? 'Sitemiz',
       block: p.block,
       unitNo: p.unitNo,
@@ -1763,9 +1746,8 @@ class DashboardController extends ChangeNotifier {
     // 1. Try remote authentication if not test mode
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/auth/login');
-        final response = await http.post(
+        final url = ApiClient.uri('/api/v1/auth/login');
+        final response = await ApiClient.post(
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
@@ -1776,6 +1758,7 @@ class DashboardController extends ChangeNotifier {
 
         if (response.statusCode == 200) {
           final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+          ApiClient.setAccessToken(data['access_token']?.toString());
           final userData = data['user'] as Map<String, dynamic>?;
           if (userData != null) {
             final roleStr = userData['role']?.toString().toUpperCase() ?? '';
@@ -1939,8 +1922,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final url = Uri.parse('http://$apiHost:8080/api/v1/saas/sites');
-        final response = await http.post(
+        final url = ApiClient.uri('/api/v1/saas/sites');
+        final response = await ApiClient.post(
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
@@ -2058,9 +2041,8 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
 
     if (!isTestMode) {
-      final host = apiHost;
-      final url = Uri.parse('http://$host:8080/api/v1/saas/sites/$siteId');
-      http.delete(url).catchError((e) {
+      final url = ApiClient.uri('/api/v1/saas/sites/$siteId');
+      ApiClient.delete(url).catchError((e) {
         debugPrint('deleteSite remote sync notice: $e');
       });
     }
@@ -2106,8 +2088,7 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/saas/sites/$siteId');
+        final url = ApiClient.uri('/api/v1/saas/sites/$siteId');
         final payload = <String, dynamic>{};
         if (name != null) payload['site_name'] = name;
         if (address != null) payload['address'] = address;
@@ -2118,7 +2099,7 @@ class DashboardController extends ChangeNotifier {
         if (adminPhone != null) payload['site_admin_phone'] = adminPhone;
         if (blocks != null) payload['blocks'] = blocks;
 
-        final response = await http.put(
+        final response = await ApiClient.put(
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode(payload),
@@ -2164,9 +2145,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/saas/sites/$siteId/reset-admin-password');
-        final response = await http.post(url).timeout(const Duration(seconds: 5));
+        final url = ApiClient.uri('/api/v1/saas/sites/$siteId/reset-admin-password');
+        final response = await ApiClient.post(url).timeout(const Duration(seconds: 5));
         if (response.statusCode == 200) {
           final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
           if (data['temporary_password'] != null) {
@@ -2211,17 +2191,16 @@ class DashboardController extends ChangeNotifier {
       return false;
     }
 
-    if (newPassword.trim().length < 6) {
-      _authMessage = 'Yeni şifre en az 6 karakter olmalıdır.';
+    if (newPassword.trim().length < 10) {
+      _authMessage = 'Yeni şifre en az 10 karakter olmalıdır.';
       notifyListeners();
       return false;
     }
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/auth/change-password');
-        final response = await http.post(
+        final url = ApiClient.uri('/api/v1/auth/change-password');
+        final response = await ApiClient.post(
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
@@ -2232,6 +2211,8 @@ class DashboardController extends ChangeNotifier {
         ).timeout(const Duration(seconds: 5));
 
         if (response.statusCode == 200) {
+          final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+          ApiClient.setAccessToken(data['access_token']?.toString());
           _userSession = _userSession.copyWith(mustChangePassword: false);
           _authMessage = 'Şifreniz başarıyla güncellendi.';
           notifyListeners();
@@ -2288,9 +2269,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
-        final response = await http.post(
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
+        final response = await ApiClient.post(
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
@@ -2516,9 +2496,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
-        final response = await http.get(url).timeout(const Duration(seconds: 4));
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
+        final response = await ApiClient.get(url).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final List<dynamic> list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
           final seenKeys = <String>{};
@@ -2603,9 +2582,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners/$unitId?site_id=$effectiveSiteId');
-        final response = await http.put(
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/home-owners/$unitId?site_id=$effectiveSiteId');
+        final response = await ApiClient.put(
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
@@ -2764,9 +2742,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/home-owners/$unitId?site_id=$effectiveSiteId');
-        final response = await http.delete(
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/home-owners/$unitId?site_id=$effectiveSiteId');
+        final response = await ApiClient.delete(
           url,
           headers: {'Content-Type': 'application/json'},
         ).timeout(const Duration(seconds: 4));
@@ -2812,9 +2789,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/home-residents/members/$effectiveUnitId');
-        final response = await http.get(url).timeout(const Duration(seconds: 3));
+        final url = ApiClient.uri('/api/v1/home-residents/members/$effectiveUnitId');
+        final response = await ApiClient.get(url).timeout(const Duration(seconds: 3));
         if (response.statusCode == 200) {
           final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
           final members = list.map((m) => UnitResidentMember.fromJson(m as Map<String, dynamic>)).toList();
@@ -2841,9 +2817,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/home-residents/members/$effectiveUnitId/$residentId?site_id=$effectiveSiteId');
-        final response = await http.delete(url).timeout(const Duration(seconds: 4));
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/home-residents/members/$effectiveUnitId/$residentId?site_id=$effectiveSiteId');
+        final response = await ApiClient.delete(url).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200 || response.statusCode == 204) {
           await fetchHouseholdMembers(effectiveUnitId);
           await fetchHomeOwners(siteId: effectiveSiteId);
@@ -2880,9 +2855,8 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/home-residents/members/$unitId/$residentId?site_id=$effectiveSiteId');
-        final response = await http.put(
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/home-residents/members/$unitId/$residentId?site_id=$effectiveSiteId');
+        final response = await ApiClient.put(
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
@@ -2958,9 +2932,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final memberUrl = Uri.parse('http://$host:8080/api/v1/home-residents/members/$effectiveUnitId?site_id=$effectiveSiteId');
-        final response = await http.post(
+        final memberUrl = Uri.parse('${ApiClient.baseUrl}/api/v1/home-residents/members/$effectiveUnitId?site_id=$effectiveSiteId');
+        final response = await ApiClient.post(
           memberUrl,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
@@ -3009,9 +2982,8 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/units/$unitId/move-out?site_id=$effectiveSiteId');
-        final response = await http.post(
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/units/$unitId/move-out?site_id=$effectiveSiteId');
+        final response = await ApiClient.post(
           url,
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'notes': notes}),
@@ -3064,9 +3036,8 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/units/$unitId/move-in?site_id=$effectiveSiteId');
-        final response = await http.post(
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/units/$unitId/move-in?site_id=$effectiveSiteId');
+        final response = await ApiClient.post(
           url,
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
@@ -3135,9 +3106,8 @@ class DashboardController extends ChangeNotifier {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/site-admin/units/$unitId/occupancy-history?site_id=$effectiveSiteId');
-        final response = await http.get(url).timeout(const Duration(seconds: 4));
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/units/$unitId/occupancy-history?site_id=$effectiveSiteId');
+        final response = await ApiClient.get(url).timeout(const Duration(seconds: 4));
 
         if (response.statusCode == 200) {
           final List<dynamic> list = jsonDecode(response.body);
@@ -3162,9 +3132,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final url = Uri.parse('http://$host:8080/api/v1/registration/approve/$requestId');
-        final response = await http.post(url).timeout(const Duration(seconds: 4));
+        final url = ApiClient.uri('/api/v1/registration/approve/$requestId');
+        final response = await ApiClient.post(url).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
           if (data['temporary_password'] != null && data['temporary_password'].toString().isNotEmpty) {
@@ -3856,15 +3825,14 @@ class DashboardController extends ChangeNotifier {
     // Dispatch to Rust Backend to persist reconciliation settlement
     if (isTestMode) return;
     try {
-      final host = apiHost;
-      final url = Uri.parse('http://$host:8080/api/v1/bank/statements/confirm-reconciliation');
+      final url = ApiClient.uri('/api/v1/bank/statements/confirm-reconciliation');
       final payload = {
         'site_id': _currentManagedSite?.id ?? _activeUnit.siteId,
         'match_ids': matchIds,
         'optional_message': optionalHostMessage,
         'remember_sender_iban': rememberSenderIban,
       };
-      await http.post(
+      await ApiClient.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode(payload),
@@ -3892,9 +3860,8 @@ class DashboardController extends ChangeNotifier {
   }) async {
     if (isTestMode) return;
     try {
-      final host = apiHost;
-      final url = Uri.parse('http://$host:8080/api/v1/bank/remembered-ibans');
-      await http.post(
+      final url = ApiClient.uri('/api/v1/bank/remembered-ibans');
+      await ApiClient.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
@@ -4037,9 +4004,8 @@ class DashboardController extends ChangeNotifier {
     // Sync with backend API
     if (isTestMode) return;
     try {
-      final host = apiHost;
-      final url = Uri.parse('http://$host:8080/api/v1/payments/record');
-      final response = await http.post(
+      final url = ApiClient.uri('/api/v1/payments/record');
+      final response = await ApiClient.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
@@ -4170,7 +4136,7 @@ class DashboardController extends ChangeNotifier {
     _isPaymentStreamLoading = true;
     notifyListeners();
 
-    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
     final queryParams = <String, String>{
       'site_id': effectiveSiteId,
     };
@@ -4182,9 +4148,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.http('$host:8080', '/api/v1/payments/stream', queryParams);
-        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        final uri = ApiClient.uri('/api/v1/payments/stream', queryParams);
+        final response = await ApiClient.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final jsonMap = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
           _paymentStream = PaymentStreamResponseDto.fromJson(jsonMap);
@@ -4271,12 +4236,11 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<DebtAgingReportDto> fetchDebtAgingReport({String? siteId}) async {
-    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.parse('http://$host:8080/api/v1/payments/debt-aging?site_id=$effectiveSiteId');
-        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        final uri = Uri.parse('${ApiClient.baseUrl}/api/v1/payments/debt-aging?site_id=$effectiveSiteId');
+        final response = await ApiClient.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final jsonMap = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
           _debtAgingReport = DebtAgingReportDto.fromJson(jsonMap);
@@ -4317,14 +4281,14 @@ class DashboardController extends ChangeNotifier {
 
   Future<PaymentReceiptDto?> recordManualPayment({
     required String unitId,
-    required double amount,
+    required Decimal amount,
     required String payerName,
     required String payerRole,
     required String paymentChannel,
     String? description,
     String? siteId,
   }) async {
-    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
     final payload = {
       'site_id': effectiveSiteId,
       'unit_id': unitId,
@@ -4337,13 +4301,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.parse('http://$host:8080/api/v1/payments/record-manual');
-        final response = await http.post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode(payload),
-        ).timeout(const Duration(seconds: 4));
+        final uri = ApiClient.uri('/api/v1/payments/record-manual');
+        final response = await ApiClient.postIdempotent(uri, body: json.encode(payload));
 
         if (response.statusCode == 201 || response.statusCode == 200) {
           final jsonMap = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -4352,9 +4311,12 @@ class DashboardController extends ChangeNotifier {
           await fetchDebtAgingReport(siteId: effectiveSiteId);
           return receipt;
         }
+        debugPrint('recordManualPayment rejected: ${response.statusCode} ${utf8.decode(response.bodyBytes)}');
       } catch (e) {
         debugPrint('recordManualPayment error: $e');
       }
+      // Never show a receipt for a payment the server did not confirm.
+      return null;
     }
 
     final receipt = PaymentReceiptDto(
@@ -4365,9 +4327,9 @@ class DashboardController extends ChangeNotifier {
       sequenceNumber: 99,
       payerName: payerName,
       payerRole: payerRole,
-      totalAmount: Decimal.parse(amount.toStringAsFixed(2)),
+      totalAmount: amount,
       paymentChannel: paymentChannel,
-      allocatedPrincipal: Decimal.parse(amount.toStringAsFixed(2)),
+      allocatedPrincipal: amount,
       allocatedPenalty: Decimal.zero,
       allocatedAdvance: Decimal.zero,
       isRentOffsetEligible: payerRole == 'TENANT' && (description?.toUpperCase().contains('DEMİRBAŞ') ?? false),
@@ -4379,11 +4341,11 @@ class DashboardController extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> executeInterLedgerTransfer({
     required String unitId,
-    required double amount,
+    required Decimal amount,
     String? note,
     String? siteId,
   }) async {
-    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
     final payload = {
       'site_id': effectiveSiteId,
       'unit_id': unitId,
@@ -4393,13 +4355,12 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.parse('http://$host:8080/api/v1/payments/inter-ledger-transfer');
-        final response = await http.post(
+        final uri = ApiClient.uri('/api/v1/payments/inter-ledger-transfer');
+        final response = await ApiClient.post(
           uri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode(payload),
-        ).timeout(const Duration(seconds: 4));
+        ).timeout(const Duration(seconds: 8));
 
         if (response.statusCode == 200) {
           final res = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -4407,9 +4368,11 @@ class DashboardController extends ChangeNotifier {
           await fetchDebtAgingReport(siteId: effectiveSiteId);
           return res;
         }
+        debugPrint('executeInterLedgerTransfer rejected: ${response.statusCode}');
       } catch (e) {
         debugPrint('executeInterLedgerTransfer error: $e');
       }
+      return null;
     }
 
     return {
@@ -4421,12 +4384,11 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<PaymentReceiptDto?> fetchReceipt(String identifier, {String? siteId}) async {
-    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.parse('http://$host:8080/api/v1/payments/receipts/$identifier?site_id=$effectiveSiteId');
-        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        final uri = Uri.parse('${ApiClient.baseUrl}/api/v1/payments/receipts/$identifier?site_id=$effectiveSiteId');
+        final response = await ApiClient.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final jsonMap = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
           _selectedReceipt = PaymentReceiptDto.fromJson(jsonMap);
@@ -4466,7 +4428,7 @@ class DashboardController extends ChangeNotifier {
     String? notes,
     String? siteId,
   }) async {
-    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
     final payload = {
       'site_id': effectiveSiteId,
       'unit_id': unitId,
@@ -4478,9 +4440,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.parse('http://$host:8080/api/v1/site-admin/units/$unitId/transfer-ownership');
-        final response = await http.post(
+        final uri = ApiClient.uri('/api/v1/site-admin/units/$unitId/transfer-ownership');
+        final response = await ApiClient.post(
           uri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode(payload),
@@ -4542,13 +4503,12 @@ class DashboardController extends ChangeNotifier {
     _capitalProjectError = null;
     notifyListeners();
 
-    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.http('$host:8080', '/api/v1/capital-projects', {'site_id': effectiveSiteId});
-        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        final uri = ApiClient.uri('/api/v1/capital-projects', {'site_id': effectiveSiteId});
+        final response = await ApiClient.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final rawList = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
           _capitalProjects = rawList.map((e) => CapitalProjectItem.fromJson(e as Map<String, dynamic>)).toList();
@@ -4737,9 +4697,8 @@ class DashboardController extends ChangeNotifier {
   Future<List<CapitalProjectInstallmentItem>> fetchCapitalInstallments(String projectId) async {
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.parse('http://$host:8080/api/v1/capital-projects/$projectId/installments');
-        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        final uri = ApiClient.uri('/api/v1/capital-projects/$projectId/installments');
+        final response = await ApiClient.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final raw = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
           _capitalInstallments = raw.map((e) => CapitalProjectInstallmentItem.fromJson(e as Map<String, dynamic>)).toList();
@@ -4759,9 +4718,8 @@ class DashboardController extends ChangeNotifier {
   Future<List<CapitalContractorDisbursementItem>> fetchCapitalDisbursements(String projectId) async {
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.parse('http://$host:8080/api/v1/capital-projects/$projectId/disbursements');
-        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        final uri = ApiClient.uri('/api/v1/capital-projects/$projectId/disbursements');
+        final response = await ApiClient.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final raw = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
           _capitalDisbursements = raw.map((e) => CapitalContractorDisbursementItem.fromJson(e as Map<String, dynamic>)).toList();
@@ -4781,9 +4739,8 @@ class DashboardController extends ChangeNotifier {
   Future<List<UnitCapitalShareItem>> fetchUnitCapitalShares(String projectId) async {
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.parse('http://$host:8080/api/v1/capital-projects/$projectId/unit-shares');
-        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        final uri = ApiClient.uri('/api/v1/capital-projects/$projectId/unit-shares');
+        final response = await ApiClient.get(uri).timeout(const Duration(seconds: 4));
         if (response.statusCode == 200) {
           final raw = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
           _unitCapitalShares = raw.map((e) => UnitCapitalShareItem.fromJson(e as Map<String, dynamic>)).toList();
@@ -4815,7 +4772,7 @@ class DashboardController extends ChangeNotifier {
     Decimal? contractAmount,
     List<Map<String, dynamic>>? installments,
   }) async {
-    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? 'site-1';
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
     final payload = {
       'site_id': effectiveSiteId,
       'title': title,
@@ -4835,9 +4792,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.parse('http://$host:8080/api/v1/capital-projects');
-        final response = await http.post(
+        final uri = ApiClient.uri('/api/v1/capital-projects');
+        final response = await ApiClient.post(
           uri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode(payload),
@@ -4902,9 +4858,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.parse('http://$host:8080/api/v1/capital-projects/$projectId/accrue-installment');
-        final response = await http.post(
+        final uri = ApiClient.uri('/api/v1/capital-projects/$projectId/accrue-installment');
+        final response = await ApiClient.post(
           uri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode(payload),
@@ -4979,9 +4934,8 @@ class DashboardController extends ChangeNotifier {
 
     if (!isTestMode) {
       try {
-        final host = apiHost;
-        final uri = Uri.parse('http://$host:8080/api/v1/capital-projects/$projectId/disbursements');
-        final response = await http.post(
+        final uri = ApiClient.uri('/api/v1/capital-projects/$projectId/disbursements');
+        final response = await ApiClient.post(
           uri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode(payload),

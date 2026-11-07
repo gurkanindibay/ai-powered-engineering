@@ -1,5 +1,5 @@
 use chrono::Utc;
-use rand::{distributions::Alphanumeric, Rng};
+
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
@@ -65,11 +65,12 @@ impl SaasTenantService {
             status: "ACTIVE".to_string(),
             plan_type: plan.clone(),
             license_end_date: license_end,
+            timezone: crate::models::default_site_timezone(),
         };
         inner.sites.push(new_site.clone());
 
         let temp_pass = generate_secure_temporary_password();
-        let password_hash = format!("ARGON2_HASH_{}", &temp_pass);
+        let password_hash = crate::auth::hash_password(&temp_pass);
 
         let user_id = format!("usr-{}", &Uuid::new_v4().to_string()[..8]);
         let admin_user = User {
@@ -104,17 +105,17 @@ impl SaasTenantService {
         }
 
         if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::save_site(pool, &new_site).await;
-            let _ = crate::db::save_user(pool, &admin_user).await;
+            crate::db::save_site(pool, &new_site).await.map_err(|e| e.to_string())?;
+            crate::db::save_user(pool, &admin_user).await.map_err(|e| e.to_string())?;
             if let Ok(client) = pool.get().await {
-                let numeric_site = crate::db::parse_id_to_i64(&site_id).unwrap_or(1);
+                let numeric_site = crate::db::require_id("entity", &site_id)?;
                 for bname in &blocks_list {
-                    let _ = client
+                    client
                         .execute(
                             "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10) ON CONFLICT DO NOTHING",
                             &[&numeric_site, bname],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 }
             }
         }
@@ -138,13 +139,12 @@ impl SaasTenantService {
     pub async fn get_all_sites(&self) -> Vec<SaasSiteSummaryDto> {
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
-                if let Ok(rows) = client
+                if let Some(rows) = crate::db::logged(client
                     .query(
                         "SELECT s.id, s.name, s.slug, s.address, s.status, s.plan_type, s.license_end_date FROM sites s ORDER BY s.id ASC",
                         &[],
                     )
-                    .await
-                {
+                    .await, "saas_tenant_service") {
                     let mut result = Vec::new();
                     for row in rows {
                         let id: i64 = row.get(0);
@@ -176,19 +176,20 @@ impl SaasTenantService {
                             None => ("Unassigned".to_string(), "-".to_string(), "-".to_string()),
                         };
 
-                        let unit_count_row = client
+                        let unit_count_row = crate::db::logged(client
                             .query_one("SELECT COUNT(*) FROM units WHERE site_id = $1", &[&id])
-                            .await
-                            .ok();
+                            .await, "saas_tenant_service");
                         let total_units: i64 = unit_count_row.map(|r| r.get(0)).unwrap_or(0);
 
-                        let dues_volume_row = client
-                            .query_one(
-                                "SELECT COALESCE(SUM(principal_amount), 0) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id = $1",
-                                &[&id],
-                            )
-                            .await
-                            .ok();
+                        let dues_volume_row = crate::db::logged(
+                            client
+                                .query_one(
+                                    "SELECT COALESCE(SUM(principal_amount), 0) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id = $1",
+                                    &[&id],
+                                )
+                                .await,
+                            "site dues volume",
+                        );
                         let monthly_dues_volume: Decimal = dues_volume_row
                             .map(|r| r.get(0))
                             .unwrap_or(Decimal::ZERO);
@@ -348,18 +349,14 @@ impl SaasTenantService {
             ));
         }
 
-        // Invariant passed: purge site
-        inner.sites.remove(site_idx);
-
-        // Purge unactivated tenant admin user(s) created for this site
-        inner.users.retain(|u| (u.site_id != actual_site_id && crate::db::parse_id_to_i64(&u.site_id) != crate::db::parse_id_to_i64(&actual_site_id)) || u.role == Role::SaasAdmin);
-
+        // Invariants passed: soft-delete. The row (and anything that references it)
+        // is kept for audit; the site disappears from listings and its users can
+        // no longer sign in. The database is updated first, memory only on success.
         if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::delete_site(pool, site_id).await;
-            if actual_site_id != site_id {
-                let _ = crate::db::delete_site(pool, &actual_site_id).await;
-            }
+            crate::db::soft_delete_site(pool, &actual_site_id).await.map_err(|e| e.to_string())?;
         }
+        inner.sites.remove(site_idx);
+        inner.users.retain(|u| !crate::auth::same_id(&u.site_id, &actual_site_id) || u.role == Role::SaasAdmin);
 
         Ok(())
     }
@@ -492,20 +489,20 @@ impl SaasTenantService {
 
         // Synchronous PostgreSQL persistence
         if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::save_site(pool, &updated_site).await;
+            crate::db::save_site(pool, &updated_site).await.map_err(|e| e.to_string())?;
             if let Some(ref u) = admin_user_to_save {
-                let _ = crate::db::save_user(pool, u).await;
+                crate::db::save_user(pool, u).await.map_err(|e| e.to_string())?;
             }
             if let Ok(client) = pool.get().await {
-                let numeric_site = crate::db::parse_id_to_i64(&actual_site_id).unwrap_or(1);
-                let _ = client.execute("DELETE FROM blocks WHERE site_id = $1", &[&numeric_site]).await;
+                let numeric_site = crate::db::require_id("entity", &actual_site_id)?;
+                client.execute("DELETE FROM blocks WHERE site_id = $1", &[&numeric_site]).await.map_err(|e| e.to_string())?;
                 for bname in &updated_blocks {
-                    let _ = client
+                    client
                         .execute(
                             "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10)",
                             &[&numeric_site, bname],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 }
             }
         }
@@ -532,11 +529,11 @@ impl SaasTenantService {
         site_id: &str,
     ) -> Result<SiteAdminPasswordResetResponse, String> {
         let temp_pass = generate_secure_temporary_password();
-        let password_hash = format!("ARGON2_HASH_{}", &temp_pass);
+        let password_hash = crate::auth::hash_password(&temp_pass);
 
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
-                let numeric_site = crate::db::parse_id_to_i64(site_id).unwrap_or(0);
+                let numeric_site = crate::db::require_id("entity", site_id)?;
                 let site_row_opt = client
                     .query_opt(
                         "SELECT id, name FROM sites WHERE id = $1 OR id::text = $2",
@@ -633,7 +630,7 @@ impl SaasTenantService {
         };
 
         if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::save_user(pool, &updated_user).await;
+            crate::db::save_user(pool, &updated_user).await.map_err(|e| e.to_string())?;
         }
 
         Ok(SiteAdminPasswordResetResponse {
@@ -671,15 +668,5 @@ pub fn to_slug(input: &str) -> String {
 }
 
 fn generate_secure_temporary_password() -> String {
-    let part1: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(4)
-        .map(char::from)
-        .collect();
-    let part2: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(4)
-        .map(char::from)
-        .collect();
-    format!("SP-{}-{}", part1.to_uppercase(), part2.to_uppercase())
+    crate::auth::generate_temporary_password("SP-")
 }

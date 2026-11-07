@@ -31,7 +31,7 @@ impl CapitalProjectService {
             return Err("Toplam proje bütçesi sıfırdan büyük olmalıdır.".to_string());
         }
 
-        let site_id = req.site_id.unwrap_or_else(|| "site-1".to_string());
+        let site_id = req.site_id.unwrap_or_default();
         let category = req.category.unwrap_or_else(|| "ELEVATOR".to_string());
         let allocation_basis = req.allocation_basis.unwrap_or_else(|| "BY_LAND_SHARE".to_string());
         let target_start_date = req.target_start_date.unwrap_or_else(|| Utc::now().date_naive());
@@ -54,7 +54,7 @@ impl CapitalProjectService {
                         RETURNING id
                         "#,
                         &[
-                            &crate::db::parse_id_to_i64(&site_id).unwrap_or(1),
+                            &crate::db::require_id("entity", &site_id)?,
                             &req.title,
                             &category,
                             &req.description,
@@ -128,7 +128,7 @@ impl CapitalProjectService {
                 if let Some(pool) = &self.state.pool {
                     if let Ok(client) = pool.get().await {
                         if let Ok(p_id) = project_id_str.trim_start_matches("cproj-").parse::<i64>() {
-                            let _ = client
+                            client
                                 .execute(
                                     r#"
                                     INSERT INTO capital_project_installments (
@@ -148,7 +148,7 @@ impl CapitalProjectService {
                                         &now,
                                     ],
                                 )
-                                .await;
+                                .await.map_err(|e| e.to_string())?;
                         }
                     }
                 }
@@ -437,7 +437,7 @@ impl CapitalProjectService {
                 if let Ok(p_id) = project_id.trim_start_matches("cproj-").parse::<i64>() {
                     for (unit, share) in &unit_shares {
                         if let Ok(u_id) = unit.id.trim_start_matches("d-").parse::<i64>() {
-                            let _ = client
+                            client
                                 .execute(
                                     r#"
                                     INSERT INTO dues_liabilities (
@@ -457,17 +457,17 @@ impl CapitalProjectService {
                                         &now,
                                     ],
                                 )
-                                .await;
+                                .await.map_err(|e| e.to_string())?;
                         }
                     }
 
                     // Mark installment accrued in DB
-                    let _ = client
+                    client
                         .execute(
                             "UPDATE capital_project_installments SET is_accrued = TRUE, accrued_at = $1 WHERE project_id = $2 AND installment_number = $3",
                             &[&now, &p_id, &installment_number],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 }
             }
         }
@@ -486,6 +486,10 @@ impl CapitalProjectService {
                     total_amount: *share,
                     due_date: installment.due_date,
                     status: DebtStatus::Pending,
+                    paid_principal: Decimal::ZERO,
+                    paid_penalty: Decimal::ZERO,
+                    debtor_type: "OWNER".to_string(),
+                    expense_type: "CAPITAL_DUES".to_string(),
                 });
             }
 
@@ -543,7 +547,7 @@ impl CapitalProjectService {
         if let Some(pool) = &self.state.pool {
             if let Ok(client) = pool.get().await {
                 if let Ok(p_id) = project_id.trim_start_matches("cproj-").parse::<i64>() {
-                    let _ = client
+                    client
                         .execute(
                             r#"
                             INSERT INTO capital_contractor_disbursements (
@@ -567,7 +571,7 @@ impl CapitalProjectService {
                                 &now,
                             ],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 }
             }
         }
