@@ -28,4 +28,6 @@ def test_theme_choice_on_login_screen_holds_after_login(login_page, login_as, pa
 
     login_as("manager")
     ManagerCockpit(page).wait()
-    assert text_of(by_id(page, "btn_header_toggle_theme")) == chosen
+    # Theme now lives in the profile sheet (the app bar keeps only the avatar).
+    from pages import Shell
+    assert text_of(Shell(page).open_profile().theme_toggle) == chosen

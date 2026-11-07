@@ -2,6 +2,7 @@ import '../../testing/test_id.dart';
 import 'dart:async';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import 'package:flutter/services.dart';
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
@@ -18,14 +19,24 @@ import '../components/virtual_iban_card.dart';
 import '../components/house_types_modal.dart';
 import '../residents/owners_residents_module_page.dart';
 import '../theme/app_theme.dart';
+import '../design_system/sp_skeleton.dart';
 import 'dashboard_controller.dart';
 
+import '../design_system/money_formatter.dart';
+import '../design_system/sp_feedback.dart';
 class DashboardScreen extends StatefulWidget {
   final DashboardController controller;
+
+  /// Tab shown when the screen is driven by the app router (URL per tab).
+  /// When null the screen keeps its own tab state (widget tests, embedding).
+  final int? selectedTab;
+  final ValueChanged<int>? onTabSelected;
 
   const DashboardScreen({
     super.key,
     required this.controller,
+    this.selectedTab,
+    this.onTabSelected,
   });
 
   @override
@@ -33,7 +44,18 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  int _selectedTabIndex = 0;
+  int _localTabIndex = 0;
+  Object? _lastSessionShape;
+
+  int get _selectedTabIndex => widget.selectedTab ?? _localTabIndex;
+
+  void _selectTab(int index) {
+    if (widget.onTabSelected != null) {
+      widget.onTabSelected!(index);
+    } else {
+      setState(() => _localTabIndex = index);
+    }
+  }
   String _homeOwnerSearchQuery = '';
   String _homeOwnerBlockFilter = 'ALL';
   String _homeOwnerOccupancyFilter = 'ALL';
@@ -67,17 +89,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _onControllerUpdate() {
     if (!mounted) return;
+    // Changing the manager path changes the tab set; go back to Home explicitly
+    // instead of keeping an index that now means a different tab.
+    final shape = (widget.controller.userRole, widget.controller.siteAdminPath);
+    if (_lastSessionShape != null && _lastSessionShape != shape && widget.onTabSelected == null) {
+      _localTabIndex = 0;
+    }
+    _lastSessionShape = shape;
     setState(() {});
 
     // Check for auth message
     if (widget.controller.authMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(widget.controller.authMessage!),
-          backgroundColor: AppColors.accentCyan,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      SpToast.info(context, widget.controller.authMessage!);
       widget.controller.clearAuthMessage();
     }
 
@@ -118,66 +141,126 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  /// Navigation destinations for the current role. Profile is not a tab: it
+  /// lives behind the avatar in the app bar.
+  List<_NavDestination> _destinations(bool isHomeRole) {
     final session = widget.controller.userSession;
-    final isHomeRole = session.role == UserRole.homeOwner || session.role == UserRole.homeResident;
+    final isManagerCockpit = widget.controller.userRole == UserRole.siteManager &&
+        widget.controller.siteAdminPath == SiteAdminActivePath.managerCockpit;
+    final unmatched = widget.controller.unmatchedBankCount;
+    return [
+      const _NavDestination(
+        id: 'nav_home',
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        label: 'Ana Sayfa',
+      ),
+      if (isManagerCockpit)
+        _NavDestination(
+          id: 'nav_dues',
+          icon: Icons.payments_outlined,
+          activeIcon: Icons.payments_rounded,
+          label: 'Aidat Yönetimi',
+          badgeCount: unmatched,
+          badgeSemantics: unmatched > 0 ? '$unmatched eşleşmemiş banka hareketi' : null,
+        ),
+      _NavDestination(
+        id: isHomeRole || !isManagerCockpit && session.role == UserRole.siteManager
+            ? 'nav_my_flat'
+            : (session.role == UserRole.saasAdmin ? 'nav_sites' : 'nav_residents'),
+        icon: isHomeRole || session.role == UserRole.siteManager && !isManagerCockpit
+            ? Icons.door_front_door_outlined
+            : (session.role == UserRole.siteManager ? Icons.group_outlined : Icons.domain_outlined),
+        activeIcon: isHomeRole || session.role == UserRole.siteManager && !isManagerCockpit
+            ? Icons.door_front_door_rounded
+            : (session.role == UserRole.siteManager ? Icons.group_rounded : Icons.domain_rounded),
+        label: isHomeRole || session.role == UserRole.siteManager && !isManagerCockpit
+            ? 'Dairem'
+            : (session.role == UserRole.saasAdmin ? 'Siteler' : 'Sakinler & Malikler'),
+      ),
+    ];
+  }
 
-    return Scaffold(
-      backgroundColor: widget.controller.isDarkMode ? AppColors.darkBackground : AppColors.lightBackground,
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
+  Widget _navIcon(_NavDestination d, {required bool active}) {
+    final icon = Icon(active ? d.activeIcon : d.icon);
+    final withBadge = d.badgeCount > 0
+        ? Badge(
+            label: Text('${d.badgeCount}'),
+            backgroundColor: AppColors.warningFill,
+            textColor: AppColors.onFill,
+            child: icon,
+          )
+        : icon;
+    // A bar shows either the active or the inactive icon, so each tab has one id node.
+    return testId(d.id, withBadge);
+  }
+
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    final session = widget.controller.userSession;
+    final initial = session.fullName.trim().isEmpty ? '?' : session.fullName.trim().substring(0, 1).toUpperCase();
+    return AppBar(
+      titleSpacing: AppSpacing.lg,
+      title: Row(
+        children: [
+          ExcludeSemantics(
+            child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: AppColors.accentCyan.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.flash_on, color: AppColors.accentCyan, size: 20),
+              child: const Icon(Icons.domain_rounded, color: AppColors.accentCyan, size: 20),
             ),
-            const SizedBox(width: 8),
-            Text(
-              'SitePulse',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                letterSpacing: -0.5,
-                color: AppColors.textPrimary(context),
-              ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(
+            'SitePulse',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              letterSpacing: -0.5,
+              color: AppColors.textPrimary(context),
             ),
-            const SizedBox(width: 8),
-            Container(
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Flexible(
+            child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: AppColors.card(context),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(AppRadius.chip),
                 border: Border.all(color: AppColors.border(context)),
               ),
               child: Text(
                 session.role.displayName,
-                style: TextStyle(fontSize: 10, color: AppColors.textSecondary(context), fontWeight: FontWeight.w500),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context), fontWeight: FontWeight.w500),
               ),
             ),
-            if (session.role == UserRole.siteManager && session.siteName.isNotEmpty) ...[
-              const SizedBox(width: 6),
-              Flexible(
+          ),
+          if (session.role == UserRole.siteManager && session.siteName.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            Flexible(
+              child: Tooltip(
+                message: session.siteName,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppColors.accentCyan.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(AppRadius.chip),
                     border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.apartment, size: 12, color: AppColors.accentCyan),
+                      const ExcludeSemantics(child: Icon(Icons.apartment, size: 14, color: AppColors.accentCyan)),
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
                           session.siteName,
-                          style: const TextStyle(fontSize: 11, color: AppColors.accentCyan, fontWeight: FontWeight.w600),
+                          style: TextStyle(fontSize: 12, color: AppColors.primaryText(context), fontWeight: FontWeight.w600),
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -185,79 +268,94 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ),
-            ],
+            ),
           ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: widget.controller.isOffline ? 'Çevrimiçi Yap' : 'Çevrimdışı Simüle Et',
-            icon: Icon(
-              widget.controller.isOffline ? Icons.wifi_off : Icons.wifi,
-              color: widget.controller.isOffline ? AppColors.accentOrange : AppColors.accentGreen,
-              size: 20,
-            ),
-            onPressed: () {
-              widget.controller.toggleOfflineMode(!widget.controller.isOffline);
-            },
-          ),
-          testId('btn_header_toggle_theme', IconButton(
-            tooltip: 'Tema Değiştir',
-            icon: Icon(
-              widget.controller.isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              color: AppColors.textSecondary(context),
-              size: 20,
-            ),
-            onPressed: () {
-              widget.controller.toggleTheme();
-            },
-          ), label: widget.controller.isDarkMode ? 'theme:dark' : 'theme:light'),
-          testId('btn_header_logout', IconButton(
-            tooltip: 'Çıkış Yap / Rol Değiştir',
-            icon: const Icon(
-              Icons.logout_rounded,
-              color: AppColors.accentRed,
-              size: 20,
-            ),
-            onPressed: () {
-              widget.controller.logout();
-            },
-          )),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: testId('btn_open_profile', InkWell(
-              onTap: () => _openProfileSheet(context),
-              borderRadius: BorderRadius.circular(20),
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: AppColors.primary,
-                child: Text(
-                  (session.fullName.trim().isEmpty ? '?' : session.fullName.trim().substring(0, 1).toUpperCase()),
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                ),
-              ),
-            )),
-          ),
         ],
       ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            if (widget.controller.userRole == UserRole.saasAdmin) {
-              await widget.controller.fetchSaasSites();
-            } else {
-              await widget.controller.fetchResidentDashboard();
-              await widget.controller.fetchHomeOwners();
-            }
-          },
-          color: AppColors.accentCyan,
-          child: SingleChildScrollView(
-            // Resets scroll position per tab; not an automation target. testid-lint: ignore
-            key: ValueKey('tab_scroll_$_selectedTabIndex'),
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: AppSpacing.sm),
+          child: testId('btn_open_profile', IconButton(
+            tooltip: 'Profil, tema ve çıkış',
+            onPressed: () => _openProfileSheet(context),
+            icon: CircleAvatar(
+              radius: 16,
+              backgroundColor: AppColors.primaryFill,
+              child: Text(
+                initial,
+                style: const TextStyle(color: AppColors.onFill, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+            ),
+          )),
+        ),
+      ],
+    );
+  }
+
+  /// Page-level offline state (inline banner, not a snackbar).
+  Widget _buildOfflineBanner() {
+    return testId('offline_banner', Semantics(
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.accentOrange.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          border: Border.all(color: AppColors.accentOrange.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.cloud_off_rounded, color: AppColors.warningText(context), size: 20),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text(
+                'Çevrimdışısınız. Gösterilen bilgiler son eşitlemeden (${widget.controller.lastSyncTime}); '
+                'bağlantı gelince yenilenecek.',
+                style: TextStyle(fontSize: 14, color: AppColors.textPrimary(context)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.controller.userSession;
+    final isHomeRole = session.role == UserRole.homeOwner || session.role == UserRole.homeResident;
+    final destinations = _destinations(isHomeRole);
+    final safeIndex = _selectedTabIndex >= destinations.length ? 0 : _selectedTabIndex;
+    final wide = MediaQuery.sizeOf(context).width >= AppBreakpoints.expanded;
+
+    final content = RefreshIndicator(
+      onRefresh: () async {
+        if (widget.controller.userRole == UserRole.saasAdmin) {
+          await widget.controller.fetchSaasSites();
+        } else {
+          await widget.controller.fetchResidentDashboard();
+          await widget.controller.fetchHomeOwners();
+        }
+      },
+      color: AppColors.accentCyan,
+      child: SingleChildScrollView(
+        // Resets scroll position per tab; not an automation target. testid-lint: ignore
+        key: ValueKey('tab_scroll_$safeIndex'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.symmetric(
+          horizontal: wide ? AppSpacing.xl : AppSpacing.screenGutter,
+          vertical: AppSpacing.md,
+        ),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: AppBreakpoints.maxContentWidth),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (widget.controller.isOffline) _buildOfflineBanner(),
                 if (session.mustChangePassword) _buildMustChangePasswordBanner(),
                 _buildCurrentTabContent(isHomeRole),
               ],
@@ -265,82 +363,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface(context),
-          border: Border(top: BorderSide(color: AppColors.border(context), width: 1)),
-        ),
-        child: Builder(
-          builder: (context) {
-            final isManagerCockpit = widget.controller.userRole == UserRole.siteManager &&
-                widget.controller.siteAdminPath == SiteAdminActivePath.managerCockpit;
-            final maxIndex = isManagerCockpit ? 2 : 1;
-            final safeIndex = _selectedTabIndex > maxIndex ? 0 : _selectedTabIndex;
+    );
 
-            return BottomNavigationBar(
-              currentIndex: safeIndex,
-              onTap: (index) {
-                final profileIndex = isManagerCockpit ? 3 : 2;
-                if (index == profileIndex) {
-                  _openProfileSheet(context);
-                } else {
-                  setState(() {
-                    _selectedTabIndex = index;
-                  });
-                }
-              },
-              backgroundColor: Colors.transparent,
-              selectedItemColor: AppColors.isDark(context) ? AppColors.accentCyan : AppColors.lightTextPrimary,
-              unselectedItemColor: AppColors.textSecondary(context),
-              selectedFontSize: 11,
-              unselectedFontSize: 11,
-              type: BottomNavigationBarType.fixed,
-              elevation: 0,
-              items: [
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.dashboard_outlined),
-                  activeIcon: Icon(Icons.dashboard),
-                  label: 'Ana Sayfa',
-                ),
-                if (isManagerCockpit)
-                  BottomNavigationBarItem(
-                    icon: Badge(
-                      isLabelVisible: widget.controller.unmatchedBankCount > 0,
-                      label: Text('${widget.controller.unmatchedBankCount}'),
-                      backgroundColor: AppColors.accentOrange,
-                      child: const Icon(Icons.payments_outlined),
-                    ),
-                    activeIcon: Badge(
-                      isLabelVisible: widget.controller.unmatchedBankCount > 0,
-                      label: Text('${widget.controller.unmatchedBankCount}'),
-                      backgroundColor: AppColors.accentOrange,
-                      child: const Icon(Icons.payments),
-                    ),
-                    label: 'Aidat Yönetimi',
+    return Scaffold(
+      appBar: _buildAppBar(context),
+      body: SafeArea(
+        child: wide
+            ? Row(
+                children: [
+                  NavigationRail(
+                    selectedIndex: safeIndex,
+                    onDestinationSelected: _selectTab,
+                    labelType: NavigationRailLabelType.all,
+                    minWidth: 88,
+                    indicatorColor: AppColors.accentCyan.withValues(alpha: 0.18),
+                    destinations: [
+                      for (final d in destinations)
+                        NavigationRailDestination(
+                          icon: _navIcon(d, active: false),
+                          selectedIcon: _navIcon(d, active: true),
+                          label: Text(d.label),
+                        ),
+                    ],
                   ),
-                BottomNavigationBarItem(
-                  icon: Icon(isHomeRole ? Icons.home_outlined : (session.role == UserRole.siteManager ? Icons.people_alt_outlined : Icons.apartment_outlined)),
-                  activeIcon: Icon(isHomeRole ? Icons.home : (session.role == UserRole.siteManager ? Icons.people_alt : Icons.apartment)),
-                  label: isHomeRole ? 'Dairem' : (session.role == UserRole.saasAdmin ? 'Siteler' : 'Sakinler & Malikler'),
-                ),
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.person_outline),
-                  activeIcon: Icon(Icons.person),
-                  label: 'Profil & Yetki',
-                ),
-              ],
-            );
-          },
-        ),
+                  VerticalDivider(width: 1, thickness: 1, color: AppColors.border(context)),
+                  Expanded(child: content),
+                ],
+              )
+            : content,
       ),
+      bottomNavigationBar: wide
+          ? null
+          : Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface(context),
+                border: Border(top: BorderSide(color: AppColors.border(context), width: 1)),
+              ),
+              child: BottomNavigationBar(
+                currentIndex: safeIndex,
+                onTap: _selectTab,
+                backgroundColor: Colors.transparent,
+                selectedItemColor: AppColors.isDark(context) ? AppColors.primaryTextDark : AppColors.lightTextPrimary,
+                unselectedItemColor: AppColors.textSecondary(context),
+                selectedFontSize: 12,
+                unselectedFontSize: 12,
+                selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                type: BottomNavigationBarType.fixed,
+                elevation: 0,
+                items: [
+                  for (final d in destinations)
+                    BottomNavigationBarItem(
+                      icon: _navIcon(d, active: false),
+                      activeIcon: _navIcon(d, active: true),
+                      label: d.label,
+                      tooltip: d.badgeSemantics ?? d.label,
+                    ),
+                ],
+              ),
+            ),
     );
   }
 
   Widget _buildSiteManagerPathSwitcher() {
     final currentPath = widget.controller.siteAdminPath;
+    final siteName = widget.controller.userSession.siteName;
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(4),
+      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.xs),
       decoration: BoxDecoration(
         color: AppColors.surface(context),
         borderRadius: BorderRadius.circular(14),
@@ -349,87 +438,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         children: [
           Expanded(
-            child: testId('role_path_manager_cockpit', InkWell(
-              onTap: () {
-                if (currentPath != SiteAdminActivePath.managerCockpit) {
-                  widget.controller.setSiteAdminPath(SiteAdminActivePath.managerCockpit);
-                }
-              },
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
-                decoration: BoxDecoration(
-                  color: currentPath == SiteAdminActivePath.managerCockpit
-                      ? AppColors.primary
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.apartment,
-                      size: 16,
-                      color: currentPath == SiteAdminActivePath.managerCockpit
-                          ? Colors.white
-                          : AppColors.textSecondary(context),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${widget.controller.userSession.siteName} Yönetimi',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: currentPath == SiteAdminActivePath.managerCockpit
-                            ? Colors.white
-                            : AppColors.textSecondary(context),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            child: testId('role_path_manager_cockpit', _PathSegment(
+              selected: currentPath == SiteAdminActivePath.managerCockpit,
+              icon: Icons.apartment_rounded,
+              label: '$siteName Yönetimi',
+              semanticsLabel: 'Site yönetimi: $siteName',
+              onTap: () => widget.controller.setSiteAdminPath(SiteAdminActivePath.managerCockpit),
             )),
           ),
           Expanded(
-            child: testId('role_path_my_flat', InkWell(
-              onTap: () {
-                if (currentPath != SiteAdminActivePath.myFlatOwner) {
-                  widget.controller.setSiteAdminPath(SiteAdminActivePath.myFlatOwner);
-                }
-              },
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
-                decoration: BoxDecoration(
-                  color: currentPath == SiteAdminActivePath.myFlatOwner
-                      ? AppColors.accentCyan
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.home,
-                      size: 16,
-                      color: currentPath == SiteAdminActivePath.myFlatOwner
-                          ? Colors.black87
-                          : AppColors.textSecondary(context),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Kendi Dairem (Kat Maliki)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: currentPath == SiteAdminActivePath.myFlatOwner
-                            ? Colors.black87
-                            : AppColors.textSecondary(context),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            child: testId('role_path_my_flat', _PathSegment(
+              selected: currentPath == SiteAdminActivePath.myFlatOwner,
+              icon: Icons.door_front_door_rounded,
+              label: 'Kendi Dairem (Kat Maliki)',
+              semanticsLabel: 'Kendi dairem, kat maliki görünümü',
+              onTap: () => widget.controller.setSiteAdminPath(SiteAdminActivePath.myFlatOwner),
             )),
           ),
         ],
@@ -457,97 +480,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     switch (widget.controller.userRole) {
       case UserRole.homeOwner:
       case UserRole.homeResident:
-        final hasNoUnit = widget.controller.activeUnit.id.isEmpty;
-        if (hasNoUnit) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildNoHomeownerGuidanceCard(),
-              const SizedBox(height: 18),
-              _buildHesapHareketleriSection(),
-            ],
-          );
-        }
-        final dues = widget.controller.primaryDues;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            HeroBalanceCard(
-              dues: dues,
-              siteName: widget.controller.activeUnit.siteAdi,
-              unitName: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
-              isOffline: widget.controller.isOffline,
-              advancePayment: widget.controller.activeUnit.advancePayment,
-              virtualIban: widget.controller.activeUnit.virtualIban,
-              onPayPressed: () => _showPaymentDialog(dues),
-              onDetailPressed: () => _showDuesDetailDialog(dues),
-            ),
-            const SizedBox(height: 16),
-            ResidentActionsRow(
-              isOwner: widget.controller.userRole == UserRole.homeOwner,
-              onReceiptsTap: _showReceiptsDialog,
-              onInviteTap: () {
-                widget.controller.generateUnitInviteLink();
-              },
-              onRequestsTap: _showIssueReportDialog,
-              onAnnouncementsTap: _showAnnouncementsDialog,
-            ),
-            const SizedBox(height: 18),
-            _buildHesapHareketleriSection(),
-            const SizedBox(height: 16),
-            _buildDairemHouseholdCard(),
-            const SizedBox(height: 16),
-            UnitMatchingCriteriaCard(controller: widget.controller),
-          ],
-        );
+        return _buildResidentHome(isOwner: widget.controller.userRole == UserRole.homeOwner);
       case UserRole.siteManager:
         final currentPath = widget.controller.siteAdminPath;
         if (currentPath == SiteAdminActivePath.myFlatOwner) {
-          final hasNoUnit = widget.controller.activeUnit.id.isEmpty;
-          if (hasNoUnit) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSiteManagerPathSwitcher(),
-                _buildNoHomeownerGuidanceCard(),
-                const SizedBox(height: 18),
-                _buildHesapHareketleriSection(),
-              ],
-            );
-          }
-          final dues = widget.controller.primaryDues;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSiteManagerPathSwitcher(),
-              HeroBalanceCard(
-                dues: dues,
-                siteName: widget.controller.activeUnit.siteAdi,
-                unitName: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
-                isOffline: widget.controller.isOffline,
-                advancePayment: widget.controller.activeUnit.advancePayment,
-                virtualIban: widget.controller.activeUnit.virtualIban,
-                onPayPressed: () => _showPaymentDialog(dues),
-                onDetailPressed: () => _showDuesDetailDialog(dues),
-              ),
-              const SizedBox(height: 16),
-              ResidentActionsRow(
-                isOwner: true,
-                onReceiptsTap: _showReceiptsDialog,
-                onInviteTap: () {
-                  widget.controller.generateUnitInviteLink();
-                },
-                onRequestsTap: _showIssueReportDialog,
-                onAnnouncementsTap: _showAnnouncementsDialog,
-              ),
-              const SizedBox(height: 18),
-              _buildHesapHareketleriSection(),
-              const SizedBox(height: 16),
-              _buildDairemHouseholdCard(),
-              const SizedBox(height: 16),
-              UnitMatchingCriteriaCard(controller: widget.controller),
-            ],
-          );
+          // A manager viewing their own flat sees exactly the owner's home.
+          return _buildResidentHome(isOwner: true, header: _buildSiteManagerPathSwitcher());
         } else {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -557,16 +495,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 controller: widget.controller,
                 onAddResidentTap: _showAddResidentDialog,
                 onManageHouseTypesTap: _showManageHouseTypesDialog,
-                onManageHomeOwnersTap: () {
-                  setState(() {
-                    _selectedTabIndex = 2;
-                  });
-                },
-                onNavigateToDuesTab: () {
-                  setState(() {
-                    _selectedTabIndex = 1;
-                  });
-                },
+                onManageHomeOwnersTap: () => _selectTab(2),
+                onNavigateToDuesTab: () => _selectTab(1),
               ),
             ],
           );
@@ -580,6 +510,76 @@ class _DashboardScreenState extends State<DashboardScreen> {
           onResetPasswordTap: _confirmResetAdminPassword,
         );
     }
+  }
+
+  /// Resident / owner home: balance and how to pay first, then activity and household.
+  /// Wide screens (>= 840 dp) use two columns so the page is not one stretched phone column.
+  Widget _buildResidentHome({required bool isOwner, Widget? header}) {
+    final hasNoUnit = widget.controller.activeUnit.id.isEmpty;
+    if (hasNoUnit) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ?header,
+          _buildNoHomeownerGuidanceCard(),
+          const SizedBox(height: 18),
+          _buildAccountActivitySection(),
+        ],
+      );
+    }
+    final dues = widget.controller.primaryDues;
+    final unit = widget.controller.activeUnit;
+    final primary = <Widget>[
+      HeroBalanceCard(
+        dues: dues,
+        siteName: unit.siteName,
+        unitName: '${unit.block} Blok D:${unit.unitNo}',
+        isOffline: widget.controller.isOffline,
+        advancePayment: unit.advancePayment,
+        virtualIban: unit.virtualIban,
+        onPayPressed: () => _showPaymentDialog(dues),
+        onDetailPressed: () => _showDuesDetailDialog(dues),
+      ),
+      const SizedBox(height: 16),
+      ResidentActionsRow(
+        isOwner: isOwner,
+        onReceiptsTap: _showReceiptsDialog,
+        onInviteTap: widget.controller.generateUnitInviteLink,
+        onRequestsTap: _showIssueReportDialog,
+        onAnnouncementsTap: _showAnnouncementsDialog,
+      ),
+    ];
+    final secondary = <Widget>[
+      _buildAccountActivitySection(),
+      const SizedBox(height: 16),
+      _buildMyUnitHouseholdCard(),
+      const SizedBox(height: 16),
+      UnitMatchingCriteriaCard(controller: widget.controller),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= AppBreakpoints.expanded) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ?header,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: primary)),
+                  const SizedBox(width: AppSpacing.xl),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: secondary)),
+                ],
+              ),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [?header, ...primary, const SizedBox(height: 18), ...secondary],
+        );
+      },
+    );
   }
 
   Widget _buildNoHomeownerGuidanceCard() {
@@ -632,12 +632,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('💡', style: TextStyle(fontSize: 14)),
+                const ExcludeSemantics(child: Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppColors.accentOrange)),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     'Daireniz tanımlandığında adınıza tahakkuk eden aidatlar, Sanal IBAN ve hesap hareketleriniz burada listelenir.',
-                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                   ),
                 ),
               ],
@@ -658,11 +658,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: TextStyle(color: AppColors.textPrimary(context), fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          _buildDairemHouseholdCard(),
+          _buildMyUnitHouseholdCard(),
           const SizedBox(height: 16),
           VirtualIbanCard(
             iban: widget.controller.activeUnit.virtualIban ?? 'TR64 0020 5000 0986 3791 6000 14',
-            unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+            unitDesc: '${widget.controller.activeUnit.block} Blok D:${widget.controller.activeUnit.unitNo}',
           ),
           const SizedBox(height: 16),
           UnitMatchingCriteriaCard(controller: widget.controller),
@@ -680,11 +680,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: TextStyle(color: AppColors.textPrimary(context), fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            _buildDairemHouseholdCard(),
+            _buildMyUnitHouseholdCard(),
             const SizedBox(height: 16),
             VirtualIbanCard(
               iban: widget.controller.activeUnit.virtualIban ?? 'TR91 0020 5000 0986 3791 6000 01',
-              unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+              unitDesc: '${widget.controller.activeUnit.block} Blok D:${widget.controller.activeUnit.unitNo}',
             ),
             const SizedBox(height: 16),
             UnitMatchingCriteriaCard(controller: widget.controller),
@@ -807,7 +807,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           '${widget.controller.userSession.siteName} • Toplam $totalCount bağımsız bölüm (${homeOwners.length} kayıtlı)',
                           style: TextStyle(
                             color: AppColors.textSecondary(context),
-                            fontSize: 11,
+                            fontSize: 12,
                           ),
                         ),
                       ],
@@ -822,7 +822,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       );
                     },
                     icon: const Icon(Icons.fullscreen, size: 16),
-                    label: const Text('Tam Ekran Modu', style: TextStyle(fontSize: 11)),
+                    label: const Text('Tam Ekran Modu', style: TextStyle(fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.accentCyan,
                       side: const BorderSide(color: AppColors.accentCyan),
@@ -844,7 +844,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     icon: const Icon(Icons.person_add_outlined, size: 15),
                     label: const Text('Yeni Sakin Ekle', style: TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accentCyan,
+                      backgroundColor: AppColors.primaryFill,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -927,11 +927,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               _buildOccupancyFilterChip('Tümü ($totalUnits)', 'ALL'),
               const SizedBox(width: 6),
-              _buildOccupancyFilterChip('👥 Kiracılı ($tenantCount)', 'TENANT'),
+              _buildOccupancyFilterChip('Kiracılı ($tenantCount)', 'TENANT'),
               const SizedBox(width: 6),
-              _buildOccupancyFilterChip('🔑 Malik Mukim ($ownerCount)', 'OWNER'),
+              _buildOccupancyFilterChip('Malik Mukim ($ownerCount)', 'OWNER'),
               const SizedBox(width: 6),
-              _buildOccupancyFilterChip('🚪 Boş Daire ($vacantCount)', 'VACANT'),
+              _buildOccupancyFilterChip('Boş Daire ($vacantCount)', 'VACANT'),
               const SizedBox(width: 8),
               Container(width: 1, height: 16, color: AppColors.border(context)),
               const SizedBox(width: 8),
@@ -945,7 +945,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         // List of residents
         if (isLoading)
-          const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+          const SpSkeletonList()
         else if (filtered.isEmpty)
           Container(
             padding: const EdgeInsets.all(24),
@@ -1022,9 +1022,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Text(
                   'Doluluk: %$occupancyRate',
-                  style: const TextStyle(
-                    color: AppColors.accentGreen,
-                    fontSize: 10,
+                  style: TextStyle(
+                    color: AppColors.successText(context),
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1064,7 +1064,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppColors.textSecondary(context),
-            fontSize: 9,
+            fontSize: 12,
           ),
         ),
       ],
@@ -1084,7 +1084,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       selectedColor: AppColors.accentCyan.withOpacity(0.2),
       checkmarkColor: AppColors.accentCyan,
       labelStyle: TextStyle(
-        color: isSelected ? AppColors.accentCyan : AppColors.textSecondary(context),
+        color: isSelected ? AppColors.primaryText(context) : AppColors.textSecondary(context),
         fontSize: 12,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
@@ -1106,7 +1106,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         selectedColor: AppColors.accentCyan.withOpacity(0.2),
         checkmarkColor: AppColors.accentCyan,
         labelStyle: TextStyle(
-          color: isSelected ? AppColors.accentCyan : AppColors.textSecondary(context),
+          color: isSelected ? AppColors.primaryText(context) : AppColors.textSecondary(context),
           fontSize: 12,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
@@ -1183,7 +1183,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         badgeLabel,
                         style: TextStyle(
                           color: statusColor,
-                          fontSize: 11,
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1196,10 +1196,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Flexible(
-                            child: Text(
+                          Text(
                               ho.unitNo > 0
                                   ? '${ho.block} • Daire ${ho.unitNo}'
                                   : '${ho.block} • Daire Atanmadı',
@@ -1208,10 +1210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
                               ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
                           ),
-                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
@@ -1222,7 +1221,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               statusLabel,
                               style: TextStyle(
                                 color: statusColor,
-                                fontSize: 10,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -1232,7 +1231,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(height: 2),
                       Text(
                         'Kat ${ho.floor}${ho.houseType != null && ho.houseType!.isNotEmpty ? ' • ${ho.houseType}' : ''} • Arsa Payı: ${ho.landShare}',
-                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                       ),
                     ],
                   ),
@@ -1242,7 +1241,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '₺${ho.monthlyDues.toStringAsFixed(2)}',
+                      formatTry(ho.monthlyDues),
                       style: TextStyle(
                         color: AppColors.textPrimary(context),
                         fontSize: 14,
@@ -1251,15 +1250,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     Text(
                       'Aidat (İşletme)',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     ),
                     if (ho.capitalDuesBalance > Decimal.zero) ...[
                       const SizedBox(height: 1),
                       Text(
-                        '₺${ho.capitalDuesBalance.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: AppColors.accentOrange,
-                          fontSize: 11,
+                        formatTry(ho.capitalDuesBalance),
+                        style: TextStyle(
+                          color: AppColors.warningText(context),
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1308,7 +1307,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 OutlinedButton.icon(
                   onPressed: () => _showEditHomeOwnerDialog(ho),
                   icon: const Icon(Icons.edit_outlined, size: 13),
-                  label: const Text('Düzenle', style: TextStyle(fontSize: 11)),
+                  label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.accentCyan,
                     side: const BorderSide(color: AppColors.accentCyan),
@@ -1348,9 +1347,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Expanded(
                             child: Text(
                               ho.activeResponsibleRoleLabel,
-                              style: const TextStyle(
-                                color: AppColors.accentCyan,
-                                fontSize: 11,
+                              style: TextStyle(
+                                color: AppColors.primaryText(context),
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
                               overflow: TextOverflow.ellipsis,
@@ -1361,7 +1360,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             key: Key('module_set_responsible_${ho.unitId}'),
                             onPressed: () => _showSelectPrimaryResponsibleDialog(ho),
                             icon: const Icon(Icons.swap_horiz, size: 14, color: AppColors.accentCyan),
-                            label: const Text('Sorumluyu Seç', style: TextStyle(fontSize: 11, color: AppColors.accentCyan, fontWeight: FontWeight.bold)),
+                            label: Text('Sorumluyu Seç', style: TextStyle(fontSize: 12, color: AppColors.primaryText(context), fontWeight: FontWeight.bold)),
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               minimumSize: const Size(0, 24),
@@ -1391,7 +1390,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               const SizedBox(width: 4),
                               Text(
                                 ho.activeResponsiblePhone.isNotEmpty ? ho.activeResponsiblePhone : 'Telefon Yok',
-                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                               ),
                             ],
                           ),
@@ -1402,7 +1401,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               const SizedBox(width: 4),
                               Text(
                                 ho.activeResponsibleEmail.isNotEmpty ? ho.activeResponsibleEmail : 'E-posta Yok',
-                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                               ),
                             ],
                           ),
@@ -1452,8 +1451,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         child: Text(
                                           'Sakinler (${ho.tenantFullName ?? 'Kiracı'})',
                                           style: TextStyle(
-                                            color: cardTab == 0 ? AppColors.accentGreen : AppColors.textSecondary(context),
-                                            fontSize: 11,
+                                            color: cardTab == 0 ? AppColors.successText(context) : AppColors.textSecondary(context),
+                                            fontSize: 12,
                                             fontWeight: FontWeight.bold,
                                           ),
                                           overflow: TextOverflow.ellipsis,
@@ -1486,8 +1485,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         child: Text(
                                           'Kat Maliki (${ho.ownerFullName.isNotEmpty ? ho.ownerFullName : 'Ev Sahibi'})',
                                           style: TextStyle(
-                                            color: cardTab == 1 ? AppColors.accentCyan : AppColors.textSecondary(context),
-                                            fontSize: 11,
+                                            color: cardTab == 1 ? AppColors.primaryText(context) : AppColors.textSecondary(context),
+                                            fontSize: 12,
                                             fontWeight: FontWeight.bold,
                                           ),
                                           overflow: TextOverflow.ellipsis,
@@ -1518,12 +1517,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 children: [
                                   const Icon(Icons.key, size: 15, color: AppColors.accentGreen),
                                   const SizedBox(width: 6),
-                                  const Expanded(
+                                  Expanded(
                                     child: Text(
                                       'Fiilen İkamet Eden Kiracı (Birincil Muhatap)',
                                       style: TextStyle(
-                                        color: AppColors.accentGreen,
-                                        fontSize: 11,
+                                        color: AppColors.successText(context),
+                                        fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                       ),
                                       overflow: TextOverflow.ellipsis,
@@ -1536,11 +1535,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       color: AppColors.accentGreen.withOpacity(0.12),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
-                                    child: const Text(
+                                    child: Text(
                                       'Kiracı',
                                       style: TextStyle(
-                                        color: AppColors.accentGreen,
-                                        fontSize: 10,
+                                        color: AppColors.successText(context),
+                                        fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -1576,7 +1575,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 const SizedBox(width: 4),
                                                 Text(
                                                   ho.tenantPhone != null && ho.tenantPhone!.isNotEmpty ? ho.tenantPhone! : (ho.phone.isNotEmpty ? ho.phone : 'Telefon Yok'),
-                                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                                 ),
                                               ],
                                             ),
@@ -1587,7 +1586,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 const SizedBox(width: 4),
                                                 Text(
                                                   ho.tenantEmail != null && ho.tenantEmail!.isNotEmpty ? ho.tenantEmail! : (ho.email.isNotEmpty ? ho.email : 'E-posta Yok'),
-                                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                                 ),
                                               ],
                                             ),
@@ -1607,7 +1606,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     key: Key('edit_residents_${ho.unitId}'),
                                     onPressed: () => _showEditHomeOwnerDialog(ho, initialTab: 0),
                                     icon: const Icon(Icons.edit_outlined, size: 12),
-                                    label: const Text('Sakinleri Düzenle', style: TextStyle(fontSize: 11)),
+                                    label: const Text('Sakinleri Düzenle', style: TextStyle(fontSize: 12)),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: AppColors.accentGreen,
                                       side: const BorderSide(color: AppColors.accentGreen),
@@ -1620,7 +1619,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     key: Key('move_out_resident_${ho.unitId}'),
                                     onPressed: () => _showMoveOutDialog(ho),
                                     icon: const Icon(Icons.logout, size: 12),
-                                    label: const Text('Tahliye (Move-Out)', style: TextStyle(fontSize: 11)),
+                                    label: const Text('Tahliye (Move-Out)', style: TextStyle(fontSize: 12)),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: AppColors.accentOrange,
                                       side: const BorderSide(color: AppColors.accentOrange),
@@ -1651,20 +1650,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 children: [
                                   const Icon(Icons.family_restroom, size: 14, color: AppColors.accentPurple),
                                   const SizedBox(width: 6),
-                                  Text(
-                                    'Hane Sakinleri / Birlikte Yaşayanlar (${ho.householdResidents.length})',
-                                    style: TextStyle(
-                                      color: AppColors.textPrimary(context),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
+                                  Expanded(
+                                    child: Text(
+                                      'Hane Sakinleri / Birlikte Yaşayanlar (${ho.householdResidents.length})',
+                                      style: TextStyle(
+                                        color: AppColors.textPrimary(context),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
-                                  const Spacer(),
                                   testId('add_resident_to_${ho.unitId}', TextButton.icon(
                                     key: Key('add_resident_to_${ho.unitId}'),
                                     onPressed: () => _showAddHouseholdMemberDialog(ho),
                                     icon: const Icon(Icons.person_add_alt_1, size: 14, color: AppColors.accentPurple),
-                                    label: const Text('+ Hane Sakini Ekle', style: TextStyle(color: AppColors.accentPurple, fontSize: 11, fontWeight: FontWeight.bold)),
+                                    label: const Text('+ Hane Sakini Ekle', style: TextStyle(color: AppColors.accentPurple, fontSize: 12, fontWeight: FontWeight.bold)),
                                     style: TextButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       minimumSize: const Size(0, 24),
@@ -1693,7 +1693,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           '${m.fullName} • ${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
                                           style: TextStyle(
                                             color: AppColors.textSecondary(context),
-                                            fontSize: 11,
+                                            fontSize: 12,
                                           ),
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -1722,7 +1722,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 const SizedBox(height: 4),
                                 Text(
                                   'Henüz kayıtlı ek hane sakini bulunmuyor.',
-                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontStyle: FontStyle.italic),
+                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontStyle: FontStyle.italic),
                                 ),
                               ],
                             ],
@@ -1744,12 +1744,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 children: [
                                   const Icon(Icons.vpn_key_outlined, size: 15, color: AppColors.accentCyan),
                                   const SizedBox(width: 6),
-                                  const Expanded(
+                                  Expanded(
                                     child: Text(
                                       'Kat Maliki (Daire Mülk Sahibi)',
                                       style: TextStyle(
-                                        color: AppColors.accentCyan,
-                                        fontSize: 11,
+                                        color: AppColors.primaryText(context),
+                                        fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                       ),
                                       overflow: TextOverflow.ellipsis,
@@ -1762,11 +1762,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       color: AppColors.accentCyan.withOpacity(0.12),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
-                                    child: const Text(
+                                    child: Text(
                                       'Ev Sahibi',
                                       style: TextStyle(
-                                        color: AppColors.accentCyan,
-                                        fontSize: 10,
+                                        color: AppColors.primaryText(context),
+                                        fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -1802,7 +1802,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 const SizedBox(width: 4),
                                                 Text(
                                                   ho.phone.isNotEmpty ? ho.phone : 'Telefon Yok',
-                                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                                 ),
                                               ],
                                             ),
@@ -1813,7 +1813,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 const SizedBox(width: 4),
                                                 Text(
                                                   ho.email.isNotEmpty ? ho.email : 'E-posta Yok',
-                                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                                 ),
                                               ],
                                             ),
@@ -1833,7 +1833,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     key: Key('edit_owner_${ho.unitId}'),
                                     onPressed: () => _showEditHomeOwnerDialog(ho, initialTab: 1),
                                     icon: const Icon(Icons.edit_outlined, size: 12),
-                                    label: const Text('Kat Malikini Düzenle', style: TextStyle(fontSize: 11)),
+                                    label: const Text('Kat Malikini Düzenle', style: TextStyle(fontSize: 12)),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: AppColors.accentCyan,
                                       side: const BorderSide(color: AppColors.accentCyan),
@@ -1846,10 +1846,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     key: Key('module_transfer_ownership_${ho.unitId}'),
                                     onPressed: () => _showTransferOwnershipDialog(ho),
                                     icon: const Icon(Icons.real_estate_agent, size: 12),
-                                    label: const Text('Mülk Devri (Satış)', style: TextStyle(fontSize: 11)),
+                                    label: const Text('Mülk Devri (Satış)', style: TextStyle(fontSize: 12)),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.teal,
-                                      side: const BorderSide(color: Colors.teal),
+                                      foregroundColor: AppColors.accentGreen,
+                                      side: const BorderSide(color: AppColors.accentGreen),
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                       minimumSize: const Size(0, 28),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1893,7 +1893,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   isVacant ? 'İkamet Durumu' : 'Fiilen İkamet Eden Kat Maliki (Birincil Muhatap)',
                                   style: TextStyle(
                                     color: statusColor,
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                   ),
                                   overflow: TextOverflow.ellipsis,
@@ -1910,7 +1910,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   isVacant ? 'Boş' : 'Malik (Mukim)',
                                   style: TextStyle(
                                     color: statusColor,
-                                    fontSize: 10,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -1947,7 +1947,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               const SizedBox(width: 4),
                                               Text(
                                                 ho.phone.isNotEmpty ? ho.phone : 'Telefon Yok',
-                                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                               ),
                                             ],
                                           ),
@@ -1958,7 +1958,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               const SizedBox(width: 4),
                                               Text(
                                                 ho.email.isNotEmpty ? ho.email : 'E-posta Yok',
-                                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                               ),
                                             ],
                                           ),
@@ -1973,7 +1973,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             key: Key('edit_residents_${ho.unitId}'),
                                             onPressed: () => _showEditHomeOwnerDialog(ho, initialTab: 0),
                                             icon: const Icon(Icons.edit_outlined, size: 12),
-                                            label: const Text('Sakinleri Düzenle', style: TextStyle(fontSize: 11)),
+                                            label: const Text('Sakinleri Düzenle', style: TextStyle(fontSize: 12)),
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: AppColors.accentCyan,
                                               side: const BorderSide(color: AppColors.accentCyan),
@@ -1986,7 +1986,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             key: Key('add_resident_member_to_${ho.unitId}'),
                                             onPressed: () => _showAddHouseholdMemberDialog(ho),
                                             icon: const Icon(Icons.person_add_alt_1, size: 12),
-                                            label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11)),
+                                            label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 12)),
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: AppColors.accentPurple,
                                               side: const BorderSide(color: AppColors.accentPurple),
@@ -2001,7 +2001,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             icon: const Icon(Icons.key, size: 12),
                                             label: Text(
                                               isTenant ? 'Yeni Kiracı Girişi (Move-In)' : 'Kiracı Tanımla (Move-In)',
-                                              style: const TextStyle(fontSize: 11),
+                                              style: const TextStyle(fontSize: 12),
                                             ),
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: AppColors.accentGreen,
@@ -2015,7 +2015,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             key: Key('move_out_resident_${ho.unitId}'),
                                             onPressed: () => _showMoveOutDialog(ho),
                                             icon: const Icon(Icons.logout, size: 12),
-                                            label: const Text('Sakin Ayrılışı (Move-Out)', style: TextStyle(fontSize: 11)),
+                                            label: const Text('Sakin Ayrılışı (Move-Out)', style: TextStyle(fontSize: 12)),
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: AppColors.accentOrange,
                                               side: const BorderSide(color: AppColors.accentOrange),
@@ -2032,9 +2032,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         key: Key('move_in_btn_${ho.unitId}'),
                                         onPressed: () => _showMoveInDialog(ho),
                                         icon: const Icon(Icons.person_add_alt, size: 13),
-                                        label: const Text('Yeni Sakin / Kiracı Girişi (Move-In)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        label: const Text('Yeni Sakin / Kiracı Girişi (Move-In)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppColors.accentGreen,
+                                          backgroundColor: AppColors.successFill,
                                           foregroundColor: Colors.white,
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                           minimumSize: const Size(0, 28),
@@ -2075,7 +2075,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         'Kat Maliki (Mülk Sahibi): ',
                                         style: TextStyle(
                                           color: AppColors.textSecondary(context),
-                                          fontSize: 11,
+                                          fontSize: 12,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
@@ -2096,7 +2096,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     const SizedBox(height: 2),
                                     Text(
                                       '${ho.phone.isNotEmpty ? ho.phone : ''}${ho.phone.isNotEmpty && ho.email.isNotEmpty ? ' • ' : ''}${ho.email.isNotEmpty ? ho.email : ''}',
-                                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ],
@@ -2130,7 +2130,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   'Hane Sakinleri / Birlikte Yaşayanlar (${ho.householdResidents.length})',
                                   style: TextStyle(
                                     color: AppColors.textPrimary(context),
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                   ),
                                   overflow: TextOverflow.ellipsis,
@@ -2141,7 +2141,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 key: Key('add_resident_to_${ho.unitId}'),
                                 onPressed: () => _showAddHouseholdMemberDialog(ho),
                                 icon: const Icon(Icons.add, size: 14, color: AppColors.accentPurple),
-                                label: const Text('+ Sakin Ekle', style: TextStyle(color: AppColors.accentPurple, fontSize: 11, fontWeight: FontWeight.bold)),
+                                label: const Text('+ Sakin Ekle', style: TextStyle(color: AppColors.accentPurple, fontSize: 12, fontWeight: FontWeight.bold)),
                                 style: TextButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   minimumSize: const Size(0, 24),
@@ -2170,7 +2170,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       '${m.fullName} • ${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
                                       style: TextStyle(
                                         color: AppColors.textSecondary(context),
-                                        fontSize: 11,
+                                        fontSize: 12,
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -2216,7 +2216,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   key: Key('quick_add_resident_${ho.unitId}'),
                   onPressed: () => _showAddHouseholdMemberDialog(ho),
                   icon: const Icon(Icons.family_restroom, size: 13, color: AppColors.accentPurple),
-                  label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11)),
+                  label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.accentPurple,
                     side: const BorderSide(color: AppColors.accentPurple),
@@ -2235,7 +2235,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         : isTenant
                             ? 'Yeni Kiracı Girişi (Move-In)'
                             : 'Kiracı Tanımla (Move-In)',
-                    style: const TextStyle(fontSize: 11),
+                    style: const TextStyle(fontSize: 12),
                   ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.accentGreen,
@@ -2249,7 +2249,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   key: Key('module_history_ho_${ho.unitId}'),
                   onPressed: () => _showUnitOccupancyHistoryDialog(ho),
                   icon: const Icon(Icons.history, size: 13, color: AppColors.accentCyan),
-                  label: const Text('Daire Tarihçesi', style: TextStyle(fontSize: 11)),
+                  label: const Text('Daire Tarihçesi', style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.accentCyan,
                     side: const BorderSide(color: AppColors.accentCyan),
@@ -2262,7 +2262,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   key: Key('module_iban_ho_${ho.unitId}'),
                   onPressed: () => _showVirtualIbanDetailsDialog(ho),
                   icon: const Icon(Icons.account_balance, size: 13, color: AppColors.accentPurple),
-                  label: const Text('Sanal IBAN', style: TextStyle(fontSize: 11)),
+                  label: const Text('Sanal IBAN', style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.accentPurple,
                     side: const BorderSide(color: AppColors.accentPurple),
@@ -2274,11 +2274,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 testId('transfer_ownership_${ho.unitId}', OutlinedButton.icon(
                   key: Key('transfer_ownership_${ho.unitId}'),
                   onPressed: () => _showTransferOwnershipDialog(ho),
-                  icon: const Icon(Icons.real_estate_agent, size: 13, color: Colors.teal),
-                  label: const Text('Mülk Devri', style: TextStyle(fontSize: 11)),
+                  icon: const Icon(Icons.real_estate_agent, size: 13, color: AppColors.accentGreen),
+                  label: const Text('Mülk Devri', style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.teal,
-                    side: const BorderSide(color: Colors.teal),
+                    foregroundColor: AppColors.accentGreen,
+                    side: const BorderSide(color: AppColors.accentGreen),
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     minimumSize: const Size(0, 30),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -2288,7 +2288,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   key: Key('module_delete_ho_${ho.unitId}'),
                   onPressed: () => _confirmDeleteHomeOwner(ho),
                   icon: const Icon(Icons.delete_outline, size: 13, color: AppColors.accentRed),
-                  label: const Text('Sil', style: TextStyle(fontSize: 11)),
+                  label: const Text(AppStrings.delete, style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.accentRed,
                     side: const BorderSide(color: AppColors.accentRed),
@@ -2338,7 +2338,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Kapat'),
+                  child: const Text(AppStrings.close),
                 ),
               ],
             ),
@@ -2346,7 +2346,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isLoading)
-                  const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+                  const SpSkeletonList()
                 else if (items.isEmpty)
                   Container(
                     padding: const EdgeInsets.all(24),
@@ -2415,8 +2415,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               child: Text(
                                 h.isActive ? 'Aktif' : 'Ayrıldı',
                                 style: TextStyle(
-                                  color: h.isActive ? AppColors.accentGreen : AppColors.textSecondary(context),
-                                  fontSize: 11,
+                                  color: h.isActive ? AppColors.successText(context) : AppColors.textSecondary(context),
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -2431,15 +2431,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         if (h.exitBalance > Decimal.zero) ...[
                           const SizedBox(height: 4),
                           Text(
-                            'Kapanış Bakiyesi: ₺${h.exitBalance.toStringAsFixed(2)} Borç',
-                            style: const TextStyle(color: AppColors.accentRed, fontSize: 12, fontWeight: FontWeight.bold),
+                            'Kapanış Bakiyesi: ${formatTry(h.exitBalance)} Borç',
+                            style: TextStyle(color: AppColors.dangerText(context), fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                         ],
                         if (h.notes != null && h.notes!.isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Text(
                             'Not: ${h.notes}',
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontStyle: FontStyle.italic),
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontStyle: FontStyle.italic),
                           ),
                         ],
                       ],
@@ -2483,7 +2483,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Vazgeç'),
+                  child: const Text(AppStrings.cancel),
                 ),
                 testId('btn_confirm_move_out', FilledButton.icon(
                   onPressed: isSaving ? null : () async {
@@ -2500,9 +2500,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       if (ok && ctx.mounted) {
                         Navigator.pop(ctx);
                         messenger.showSnackBar(
-                          const SnackBar(
+                          appSnackBar(
                             content: Text('Sakin ayrılışı kaydedildi. Daire boş durumuna getirildi.'),
-                            backgroundColor: AppColors.accentGreen,
+                            backgroundColor: AppColors.successFill,
                           ),
                         );
                       } else if (ctx.mounted) {
@@ -2529,7 +2529,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       : const Icon(Icons.check, size: 16),
                   label: const Text('Tahliyeyi Onayla'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.accentOrange,
+                    backgroundColor: AppColors.warningFill,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -2549,9 +2549,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Sakin Ayrılış Bilgilendirmesi',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.accentOrange),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.warningText(context)),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -2573,7 +2573,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 if (errorMsg != null) ...[
                   const SizedBox(height: 8),
-                  Text(errorMsg!, style: const TextStyle(color: AppColors.accentRed, fontSize: 12)),
+                  Text(errorMsg!, style: TextStyle(color: AppColors.dangerText(context), fontSize: 12)),
                 ],
               ],
             ),
@@ -2617,7 +2617,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Vazgeç'),
+                  child: const Text(AppStrings.cancel),
                 ),
                 testId('btn_confirm_move_in', FilledButton.icon(
                   onPressed: isSaving ? null : () async {
@@ -2644,9 +2644,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       if (ok && ctx.mounted) {
                         Navigator.pop(ctx);
                         messenger.showSnackBar(
-                          const SnackBar(
+                          appSnackBar(
                             content: Text('Yeni sakin başarıyla eklendi ve oturum başlatıldı.'),
-                            backgroundColor: AppColors.accentGreen,
+                            backgroundColor: AppColors.successFill,
                           ),
                         );
                       } else if (ctx.mounted) {
@@ -2673,7 +2673,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       : const Icon(Icons.save, size: 16),
                   label: const Text('Kaydet & Girişi Başlat'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.accentGreen,
+                    backgroundColor: AppColors.successFill,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -2730,7 +2730,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 if (errorMsg != null) ...[
                   const SizedBox(height: 8),
-                  Text(errorMsg!, style: const TextStyle(color: AppColors.accentRed, fontSize: 12)),
+                  Text(errorMsg!, style: TextStyle(color: AppColors.dangerText(context), fontSize: 12)),
                 ],
               ],
             ),
@@ -2778,7 +2778,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Vazgeç'),
+                  child: const Text(AppStrings.cancel),
                 ),
                 ElevatedButton(
                   onPressed: isSaving
@@ -2811,9 +2811,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             if (ok && ctx.mounted) {
                               Navigator.pop(ctx);
                               messenger.showSnackBar(
-                                const SnackBar(
+                                appSnackBar(
                                   content: Text('Hane sakini başarıyla güncellendi.'),
-                                  backgroundColor: AppColors.accentGreen,
+                                  backgroundColor: AppColors.successFill,
                                 ),
                               );
                             } else if (ctx.mounted) {
@@ -2843,7 +2843,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   child: isSaving
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('Kaydet', style: TextStyle(fontWeight: FontWeight.bold)),
+                      : const Text(AppStrings.save, style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -2860,7 +2860,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: AppColors.accentRed),
                       ),
-                      child: Text(generalError!, style: const TextStyle(color: AppColors.accentRed, fontSize: 13)),
+                      child: Text(generalError!, style: TextStyle(color: AppColors.dangerText(context), fontSize: 13)),
                     ),
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
@@ -2947,7 +2947,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       title: 'Hane Sakinini Sil',
       message: '${member.fullName} (${member.relationship}) adlı hane sakini kaydını ${ho.block} Blok Daire ${ho.unitNo} listesinden silmek istediğinize emin misiniz?',
       confirmLabel: 'Evet, Sil',
-      cancelLabel: 'Vazgeç',
+      cancelLabel: AppStrings.cancel,
       confirmColor: AppColors.accentRed,
       icon: Icons.person_remove_outlined,
       iconColor: AppColors.accentRed,
@@ -2959,7 +2959,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            appSnackBar(
               content: Text(success ? 'Hane sakini başarıyla silindi.' : 'Hane sakini silinirken bir hata oluştu.'),
               backgroundColor: success ? AppColors.accentGreen : AppColors.accentRed,
             ),
@@ -2970,8 +2970,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showAddHouseholdMemberDialog([HomeOwnerItem? ho]) {
-    final effectiveBlock = ho?.block ?? (widget.controller.activeUnit.blok.isNotEmpty ? widget.controller.activeUnit.blok : 'A');
-    final effectiveUnitNo = ho?.unitNo ?? (widget.controller.activeUnit.daireNo > 0 ? widget.controller.activeUnit.daireNo : 1);
+    final effectiveBlock = ho?.block ?? (widget.controller.activeUnit.block.isNotEmpty ? widget.controller.activeUnit.block : 'A');
+    final effectiveUnitNo = ho?.unitNo ?? (widget.controller.activeUnit.unitNo > 0 ? widget.controller.activeUnit.unitNo : 1);
     final effectiveUnitId = ho?.unitId ?? (widget.controller.activeUnit.id.isNotEmpty ? widget.controller.activeUnit.id : 'd-$effectiveUnitNo');
 
     final nameCtrl = TextEditingController();
@@ -3008,7 +3008,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Vazgeç'),
+                  child: const Text(AppStrings.cancel),
                 ),
                 testId('household_save_button', ElevatedButton(
                   key: const Key('household_save_button'),
@@ -3045,9 +3045,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             if (ok && ctx.mounted) {
                               Navigator.pop(ctx);
                               messenger.showSnackBar(
-                                const SnackBar(
+                                appSnackBar(
                                   content: Text('Hane sakini başarıyla eklendi.'),
-                                  backgroundColor: AppColors.accentGreen,
+                                  backgroundColor: AppColors.successFill,
                                 ),
                               );
                             } else if (ctx.mounted) {
@@ -3077,7 +3077,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   child: isSaving
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('Kaydet', style: TextStyle(fontWeight: FontWeight.bold)),
+                      : const Text(AppStrings.save, style: TextStyle(fontWeight: FontWeight.bold)),
                 )),
               ],
             ),
@@ -3094,7 +3094,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: AppColors.accentRed),
                       ),
-                      child: Text(generalError!, style: const TextStyle(color: AppColors.accentRed, fontSize: 13)),
+                      child: Text(generalError!, style: TextStyle(color: AppColors.dangerText(context), fontSize: 13)),
                     ),
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
@@ -3202,7 +3202,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Vazgeç'),
+              child: const Text(AppStrings.cancel),
             ),
           ],
         ),
@@ -3249,7 +3249,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               const SizedBox(height: 2),
                               Text(
                                 'Kiracı: ${resident.tenantFullName ?? 'Bilinmiyor'}',
-                                style: const TextStyle(color: AppColors.accentOrange, fontSize: 12, fontWeight: FontWeight.w600),
+                                style: TextStyle(color: AppColors.warningText(context), fontSize: 12, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -3278,16 +3278,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Navigator.pop(parentCtx);
                               }
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
+                                appSnackBar(
                                   content: Text('Kiracı daireden başarıyla çıkarıldı. Daire boş duruma getirildi.'),
-                                  backgroundColor: AppColors.accentGreen,
+                                  backgroundColor: AppColors.successFill,
                                 ),
                               );
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
+                                appSnackBar(
                                   content: Text('Kiracı çıkarılırken bir hata oluştu.'),
-                                  backgroundColor: AppColors.accentRed,
+                                  backgroundColor: AppColors.dangerFill,
                                 ),
                               );
                             }
@@ -3296,7 +3296,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         icon: const Icon(Icons.logout, size: 16),
                         label: const Text('Kiracıyı Daireden Çıkar'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accentOrange,
+                          backgroundColor: AppColors.warningFill,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -3342,7 +3342,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               const SizedBox(height: 2),
                               Text(
                                 'Malik: ${resident.ownerFullName}',
-                                style: const TextStyle(color: AppColors.accentRed, fontSize: 12, fontWeight: FontWeight.w600),
+                                style: TextStyle(color: AppColors.dangerText(context), fontSize: 12, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -3368,23 +3368,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Navigator.pop(parentCtx);
                               }
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
+                                appSnackBar(
                                   content: Text('Kat maliki ve daire başarıyla silindi.'),
-                                  backgroundColor: AppColors.accentGreen,
+                                  backgroundColor: AppColors.successFill,
                                 ),
                               );
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
+                                appSnackBar(
                                   content: Text('Silme işlemi sırasında bir hata oluştu.'),
-                                  backgroundColor: AppColors.accentRed,
+                                  backgroundColor: AppColors.dangerFill,
                                 ),
                               );
                             }
                           }
                         },
                         icon: const Icon(Icons.delete_forever, size: 16, color: AppColors.accentRed),
-                        label: const Text('Daireyi ve Kat Malikini Tamamen Sil', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold)),
+                        label: Text('Daireyi ve Kat Malikini Tamamen Sil', style: TextStyle(color: AppColors.dangerText(context), fontWeight: FontWeight.bold)),
                         style: OutlinedButton.styleFrom(
                           side: const BorderSide(color: AppColors.accentRed),
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -3415,7 +3415,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       title: 'Kat Malikini Sil',
       message: '${resident.ownerFullName} (${resident.block} Blok Daire ${resident.unitNo}) kaydını ve bağlı tüm aidat ve tahakkuk kayıtlarını silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.',
       confirmLabel: 'Evet, Sil',
-      cancelLabel: 'Vazgeç',
+      cancelLabel: AppStrings.cancel,
       confirmColor: AppColors.accentRed,
       icon: Icons.delete_forever,
       iconColor: AppColors.accentRed,
@@ -3428,17 +3428,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Navigator.pop(parentCtx);
             }
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+              appSnackBar(
                 content: Text('Kat maliki başarıyla silindi.'),
-                backgroundColor: AppColors.accentGreen,
+                backgroundColor: AppColors.successFill,
                 duration: Duration(seconds: 3),
               ),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+              appSnackBar(
                 content: Text('Kat maliki silinirken bir hata oluştu.'),
-                backgroundColor: AppColors.accentRed,
+                backgroundColor: AppColors.dangerFill,
                 duration: Duration(seconds: 3),
               ),
             );
@@ -3454,7 +3454,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       title: 'Kiracıyı Daireden Çıkar',
       message: '${resident.tenantFullName ?? 'Kiracı'} adlı sakinin ${resident.block} Blok Daire ${resident.unitNo} kaydından çıkarılmasını ve dairenin boş durumuna getirilmesini onaylıyor musunuz?',
       confirmLabel: 'Evet, Çıkar',
-      cancelLabel: 'Vazgeç',
+      cancelLabel: AppStrings.cancel,
       confirmColor: AppColors.accentOrange,
       icon: Icons.logout,
       iconColor: AppColors.accentOrange,
@@ -3470,16 +3470,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Navigator.pop(editCtx);
             }
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+              appSnackBar(
                 content: Text('Kiracı başarıyla çıkarıldı. Daire boş duruma getirildi.'),
-                backgroundColor: AppColors.accentGreen,
+                backgroundColor: AppColors.successFill,
               ),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+              appSnackBar(
                 content: Text('Kiracı çıkarılırken bir hata oluştu.'),
-                backgroundColor: AppColors.accentRed,
+                backgroundColor: AppColors.dangerFill,
               ),
             );
           }
@@ -3549,7 +3549,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   key: const Key('edit_ho_delete_button'),
                   onPressed: isSaving ? null : () => _confirmDeleteHomeOwner(resident, parentCtx: ctx),
                   icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.accentRed),
-                  label: const Text('Sil', style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold)),
+                  label: Text(AppStrings.delete, style: TextStyle(color: AppColors.dangerText(context), fontWeight: FontWeight.bold)),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: AppColors.accentRed),
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -3668,9 +3668,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             if (success && ctx.mounted) {
                               Navigator.pop(ctx);
                               messenger.showSnackBar(
-                                const SnackBar(
+                                appSnackBar(
                                   content: Text('Sakin bilgileri başarıyla güncellendi.'),
-                                  backgroundColor: AppColors.accentGreen,
+                                  backgroundColor: AppColors.successFill,
                                 ),
                               );
                             } else if (ctx.mounted) {
@@ -3693,7 +3693,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           }
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentCyan,
+                    backgroundColor: AppColors.primaryFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -3704,7 +3704,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           height: 20,
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
-                      : const Text('Kaydet', style: TextStyle(fontWeight: FontWeight.bold)),
+                      : const Text(AppStrings.save, style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -3723,7 +3723,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       child: Text(
                         generalError!,
-                        style: const TextStyle(color: AppColors.accentRed, fontSize: 13),
+                        style: TextStyle(color: AppColors.dangerText(context), fontSize: 13),
                       ),
                     ),
 
@@ -3793,7 +3793,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     Text(
                                       'Sakinler',
                                       style: TextStyle(
-                                        color: activeDialogTab == 0 ? AppColors.accentGreen : AppColors.textSecondary(context),
+                                        color: activeDialogTab == 0 ? AppColors.successText(context) : AppColors.textSecondary(context),
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -3824,7 +3824,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     Text(
                                       'Kat Maliki',
                                       style: TextStyle(
-                                        color: activeDialogTab == 1 ? AppColors.accentCyan : AppColors.textSecondary(context),
+                                        color: activeDialogTab == 1 ? AppColors.primaryText(context) : AppColors.textSecondary(context),
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -3909,11 +3909,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     color: AppColors.accentGreen.withOpacity(0.12),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: const Text(
+                                  child: Text(
                                     'Kiracı',
                                     style: TextStyle(
-                                      color: AppColors.accentGreen,
-                                      fontSize: 11,
+                                      color: AppColors.successText(context),
+                                      fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -3967,9 +3967,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               child: TextButton.icon(
                                 onPressed: isSaving ? null : () => _confirmRemoveTenantFromEdit(resident, ctx),
                                 icon: const Icon(Icons.logout, size: 14, color: AppColors.accentOrange),
-                                label: const Text(
+                                label: Text(
                                   'Kiracıyı Daireden Çıkar (Move-Out)',
-                                  style: TextStyle(color: AppColors.accentOrange, fontSize: 12, fontWeight: FontWeight.bold),
+                                  style: TextStyle(color: AppColors.warningText(context), fontSize: 12, fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ),
@@ -4058,7 +4058,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               ),
                                               Text(
                                                 '${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}${m.email.isNotEmpty ? ' • ${m.email}' : ''}',
-                                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                               ),
                                             ],
                                           ),
@@ -4075,7 +4075,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         testId('dialog_delete_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                           key: Key('dialog_delete_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                           icon: const Icon(Icons.close, size: 16, color: AppColors.accentRed),
-                                          tooltip: 'Sil',
+                                          tooltip: AppStrings.delete,
                                           onPressed: () {
                                             _confirmDeleteHouseholdMember(currentHo, m);
                                             setDialogState(() {});
@@ -4145,11 +4145,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     color: AppColors.accentCyan.withOpacity(0.12),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: const Text(
+                                  child: Text(
                                     'Ev Sahibi',
                                     style: TextStyle(
-                                      color: AppColors.accentCyan,
-                                      fontSize: 11,
+                                      color: AppColors.primaryText(context),
+                                      fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -4328,7 +4328,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             ),
                                             Text(
                                               '${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}${m.email.isNotEmpty ? ' • ${m.email}' : ''}',
-                                              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                             ),
                                           ],
                                         ),
@@ -4345,7 +4345,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       testId('dialog_delete_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                         key: Key('dialog_delete_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                         icon: const Icon(Icons.close, size: 16, color: AppColors.accentRed),
-                                        tooltip: 'Sil',
+                                        tooltip: AppStrings.delete,
                                         onPressed: () {
                                           _confirmDeleteHouseholdMember(currentHo, m);
                                           setDialogState(() {});
@@ -4399,7 +4399,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   isTenant
                                       ? 'Mevcut kiracıyı arşivleyip yeni bir kiracı için oturum başlatır.'
                                       : 'Daire kiraya verildiğinde veya yeni kiracı taşındığında oturum başlatır.',
-                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                 ),
                               ],
                             ),
@@ -4414,10 +4414,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             icon: const Icon(Icons.key, size: 14),
                             label: Text(
                               isTenant ? 'Kiracı Girişini Başlat' : 'Kiracı Girişini Başlat',
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentGreen,
+                              backgroundColor: AppColors.successFill,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               minimumSize: const Size(0, 32),
@@ -4445,7 +4445,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       items: houseTypes.map((ht) {
                         return DropdownMenuItem<String>(
                           value: ht.typeName,
-                          child: Text('${ht.typeName} (₺${ht.duesAmount.toStringAsFixed(2)})'),
+                          child: Text('${ht.typeName} (${formatTry(ht.duesAmount)})'),
                         );
                       }).toList(),
                       onChanged: (val) {
@@ -4470,7 +4470,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           color: AppColors.accentCyan.withOpacity(0.12),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.lock, size: 10, color: AppColors.accentCyan),
@@ -4478,8 +4478,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Text(
                               'Konut tipine bağlı',
                               style: TextStyle(
-                                color: AppColors.accentCyan,
-                                fontSize: 10,
+                                color: AppColors.primaryText(context),
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -4502,7 +4502,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const Icon(Icons.currency_lira, size: 18, color: AppColors.accentCyan),
                         const SizedBox(width: 8),
                         Text(
-                          '₺${duesCtrl.text}',
+                          MoneyFormatter.tryParse(duesCtrl.text) == null
+                              ? duesCtrl.text
+                              : formatTry(MoneyFormatter.tryParse(duesCtrl.text)!),
                           style: TextStyle(
                             color: AppColors.textPrimary(context),
                             fontSize: 15,
@@ -4524,7 +4526,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 4),
                   Text(
                     'Ödenecek aidat tutarı seçilen konut tipinin tarifesine göre sisteme otomatik işlenir.',
-                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                   ),
 
                   const SizedBox(height: 14),
@@ -4556,7 +4558,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildHesapHareketleriSection() {
+  Widget _buildAccountActivitySection() {
     final transactions = widget.controller.accountTransactions;
 
     return Column(
@@ -4565,7 +4567,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
+            Flexible(child: Text(
               'HESAP HAREKETLERİ →',
               style: TextStyle(
                 color: AppColors.textSecondary(context),
@@ -4573,7 +4575,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.8,
               ),
-            ),
+            )),
             InkWell(
               onTap: _showReceiptsDialog,
               child: Text(
@@ -4609,7 +4611,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(height: 4),
                         Text(
                           'Yapılan aidat tahakkukları veya banka transferleri burada listelenir.',
-                          style: TextStyle(color: AppColors.textSecondary(context).withValues(alpha: 0.8), fontSize: 11),
+                          style: TextStyle(color: AppColors.textSecondary(context).withValues(alpha: 0.8), fontSize: 12),
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -4620,7 +4622,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: transactions.asMap().entries.map((entry) {
               final index = entry.key;
               final item = entry.value;
-              final color = item.isCredit ? const Color(0xFF10B981) : const Color(0xFFEF4444);
+              final color = item.isCredit ? AppColors.accentGreen : AppColors.accentRed;
               final icon = item.isCredit
                   ? (item.title.contains('FAST') ? Icons.flash_on : Icons.check_circle_outline)
                   : Icons.apartment;
@@ -4665,7 +4667,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   item.subtitle,
                                   style: TextStyle(
                                     color: AppColors.textSecondary(context),
-                                    fontSize: 11,
+                                    fontSize: 12,
                                   ),
                                 ),
                               ],
@@ -4687,7 +4689,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 item.date,
                                 style: TextStyle(
                                   color: AppColors.textSecondary(context),
-                                  fontSize: 10,
+                                  fontSize: 12,
                                 ),
                               ),
                             ],
@@ -4713,7 +4715,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildDairemHouseholdCard() {
+  Widget _buildMyUnitHouseholdCard() {
     final residents = widget.controller.unitResidents;
     final isHomeUser = widget.controller.userRole == UserRole.homeOwner ||
         widget.controller.userRole == UserRole.homeResident ||
@@ -4730,17 +4732,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Expanded(
-                child: Row(
+              Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.people_outline, color: AppColors.accentCyan, size: 20),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        'Hane Sakinleri (${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo})',
+                        'Hane Sakinleri (${widget.controller.activeUnit.block} Blok D:${widget.controller.activeUnit.unitNo})',
                         style: TextStyle(
                           color: AppColors.textPrimary(context),
                           fontSize: 14,
@@ -4751,10 +4756,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ],
                 ),
-              ),
               if (isHomeUser)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
                     testId('btn_manual_add_resident', ElevatedButton.icon(
                       key: const Key('btn_manual_add_resident'),
@@ -4762,10 +4767,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       icon: const Icon(Icons.person_add_alt_1, size: 13, color: Colors.white),
                       label: const Text(
                         'Sakin Ekle',
-                        style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: AppColors.primaryFill,
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -4777,9 +4782,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       key: const Key('btn_invite_resident_link'),
                       onPressed: () => widget.controller.generateUnitInviteLink(),
                       icon: const Icon(Icons.share, size: 13, color: AppColors.accentOrange),
-                      label: const Text(
+                      label: Text(
                         'Davet Linki',
-                        style: TextStyle(color: AppColors.accentOrange, fontSize: 11),
+                        style: TextStyle(color: AppColors.warningText(context), fontSize: 12),
                       ),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: AppColors.accentOrange),
@@ -4810,7 +4815,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Text(
                     'Yukarıdaki "Sakin Ekle" veya "Davet Linki" butonlarını kullanarak hane sakinlerinizi ekleyebilirsiniz.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textSecondary(context).withValues(alpha: 0.8), fontSize: 11),
+                    style: TextStyle(color: AppColors.textSecondary(context).withValues(alpha: 0.8), fontSize: 12),
                   ),
                 ],
               ),
@@ -4840,19 +4845,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           Text(
                             r.relationship,
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                           ),
                           if (r.phone.isNotEmpty || r.email.isNotEmpty)
                             Text(
                               [if (r.phone.isNotEmpty) r.phone, if (r.email.isNotEmpty) r.email].join(' • '),
-                              style: TextStyle(color: AppColors.textSecondary(context).withValues(alpha: 0.7), fontSize: 10),
+                              style: TextStyle(color: AppColors.textSecondary(context).withValues(alpha: 0.7), fontSize: 12),
                             ),
                         ],
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+                    Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
@@ -4864,8 +4867,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: Text(
                             r.isOwner ? 'Malik' : 'Sakin',
                             style: TextStyle(
-                              color: r.isOwner ? AppColors.accentCyan : AppColors.textSecondary(context),
-                              fontSize: 11,
+                              color: r.isOwner ? AppColors.primaryText(context) : AppColors.textSecondary(context),
+                              fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -4881,8 +4884,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             onPressed: () => _confirmDeleteHouseholdResident(r),
                           )),
                         ],
-                      ],
-                    ),
+                      ])),
                   ],
                 ),
               )),
@@ -4902,7 +4904,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Vazgeç'),
+            child: const Text(AppStrings.cancel),
           ),
           testId('btn_confirm_delete_resident', ElevatedButton(
             key: const Key('btn_confirm_delete_resident'),
@@ -4911,15 +4913,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               final success = await widget.controller.deleteHouseholdMember(residentId: member.id);
               if (success && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                  appSnackBar(
                     content: Text('Hane sakini başarıyla kaldırıldı.'),
-                    backgroundColor: AppColors.accentGreen,
+                    backgroundColor: AppColors.successFill,
                   ),
                 );
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentRed),
-            child: const Text('Sil', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.dangerFill),
+            child: const Text(AppStrings.delete, style: TextStyle(color: Colors.white)),
           )),
         ],
       ),
@@ -4933,13 +4935,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showPaymentDialog(AidatBorcu dues, {CheckoutPaymentMethod initialMethod = CheckoutPaymentMethod.card}) {
+  void _showPaymentDialog(DuesLiability dues, {CheckoutPaymentMethod initialMethod = CheckoutPaymentMethod.card}) {
     AppFullscreenPage.push(
       context: context,
       builder: (ctx) => PaymentCheckoutDialog(
         dues: dues,
-        siteName: widget.controller.activeUnit.siteAdi,
-        unitDesc: '${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+        siteName: widget.controller.activeUnit.siteName,
+        unitDesc: '${widget.controller.activeUnit.block} Blok D:${widget.controller.activeUnit.unitNo}',
         virtualIban: widget.controller.userRole == UserRole.siteManager &&
                 widget.controller.siteAdminPath == SiteAdminActivePath.myFlatOwner
             ? 'TR12 0006 2000 0000 0000 0001'
@@ -4951,20 +4953,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             unitNo: widget.controller.activeUnit.unitNo,
             amount: paidAmount,
             paymentMethod: 'CREDIT_CARD',
-            note: '${dues.donem} Aidat Kart Ödemesi',
+            note: '${dues.period} Aidat Kart Ödemesi',
           );
-          final snackMsg = paidAmount > dues.toplamTutar && dues.toplamTutar > Decimal.zero
-              ? '₺${paidAmount.toStringAsFixed(2)} tutarındaki kart ödemeniz alındı! Borcunuz kapatıldı, ₺${(paidAmount - dues.toplamTutar).toStringAsFixed(2)} avans bakiyenize aktarıldı.'
-              : (paidAmount < dues.toplamTutar
-                  ? '₺${paidAmount.toStringAsFixed(2)} tutarındaki kısmi ödemeniz alındı. Kalan borç: ₺${(dues.toplamTutar - paidAmount).toStringAsFixed(2)}'
-                  : (dues.toplamTutar <= Decimal.zero
-                      ? '₺${paidAmount.toStringAsFixed(2)} tutarı avans bakiyenize başarıyla aktarıldı.'
-                      : '₺${paidAmount.toStringAsFixed(2)} tutarındaki kart ödemeniz başarıyla alındı! Borcunuz kapatıldı.'));
+          final snackMsg = paidAmount > dues.totalAmount && dues.totalAmount > Decimal.zero
+              ? '${formatTry(paidAmount)} tutarındaki kart ödemeniz alındı! Borcunuz kapatıldı, ${formatTry((paidAmount - dues.totalAmount))} avans bakiyenize aktarıldı.'
+              : (paidAmount < dues.totalAmount
+                  ? '${formatTry(paidAmount)} tutarındaki kısmi ödemeniz alındı. Kalan borç: ${formatTry((dues.totalAmount - paidAmount))}'
+                  : (dues.totalAmount <= Decimal.zero
+                      ? '${formatTry(paidAmount)} tutarı avans bakiyenize başarıyla aktarıldı.'
+                      : '${formatTry(paidAmount)} tutarındaki kart ödemeniz başarıyla alındı! Borcunuz kapatıldı.'));
 
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            appSnackBar(
               content: Text(snackMsg),
-              backgroundColor: AppColors.accentGreen,
+              backgroundColor: AppColors.successFill,
               duration: const Duration(seconds: 4),
             ),
           );
@@ -4973,9 +4975,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showDuesDetailDialog(AidatBorcu dues) {
+  void _showDuesDetailDialog(DuesLiability dues) {
     final advPayment = widget.controller.activeUnit.advancePayment ?? Decimal.zero;
-    final totalDebt = dues.toplamTutar;
+    final totalDebt = dues.totalAmount;
     final hasDebt = totalDebt > Decimal.zero;
     final duesList = widget.controller.duesList;
 
@@ -4984,7 +4986,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         context: context,
         builder: (ctx) => AppFullscreenPage(
           title: 'Hesap & Bakiye Özeti',
-          subtitle: '${widget.controller.activeUnit.siteAdi} • ${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+          subtitle: '${widget.controller.activeUnit.siteName} • ${widget.controller.activeUnit.block} Blok D:${widget.controller.activeUnit.unitNo}',
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -4999,12 +5001,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentGreen,
+                  backgroundColor: AppColors.successFill,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text(AppStrings.close, style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -5035,10 +5037,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Borç Durumu: Güncel',
                             style: TextStyle(
-                              color: AppColors.accentGreen,
+                              color: AppColors.successText(context),
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
                             ),
@@ -5074,32 +5076,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
+                        Flexible(child: Text(
                           'Mevcut Avans Bakiyesi (Alacak)',
                           style: TextStyle(
                             color: AppColors.textSecondary(context),
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
-                        ),
+                        )),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             color: AppColors.accentGreen.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Text(
+                          child: Text(
                             'Kullanıma Hazır',
-                            style: TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                            style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '+₺${advPayment.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: AppColors.accentGreen,
+                      '+${formatTry(advPayment)}',
+                      style: TextStyle(
+                        color: AppColors.successText(context),
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
@@ -5123,7 +5125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               'Avans bakiyeniz, gelecek aylarda yeni aidatlar tahakkuk ettiğinde (ör. ay başında) otomatik olarak borçtan mahsup edilir. Herhangi bir ek işlem yapmanıza gerek kalmaz.',
                               style: TextStyle(
                                 color: AppColors.textPrimary(context),
-                                fontSize: 11.5,
+                                fontSize: 12,
                                 height: 1.4,
                               ),
                             ),
@@ -5182,15 +5184,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     isPaid ? 'Ödendi • Borç Bulunmuyor' : 'Vadesi: ${d.dueDate.day}.${d.dueDate.month}.${d.dueDate.year}',
                                     style: TextStyle(
                                       color: AppColors.textSecondary(context),
-                                      fontSize: 11,
+                                      fontSize: 12,
                                     ),
                                   ),
                                 ],
                               ),
-                              Row(
-                                children: [
+                              Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                                   Text(
-                                    '₺${d.principalAmount.toStringAsFixed(2)}',
+                                    formatTry(d.principalAmount),
                                     style: TextStyle(
                                       color: AppColors.textPrimary(context),
                                       fontSize: 13.5,
@@ -5209,14 +5210,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     child: Text(
                                       isPaid ? 'Ödendi' : 'Bekliyor',
                                       style: TextStyle(
-                                        color: isPaid ? AppColors.accentGreen : AppColors.accentRed,
-                                        fontSize: 10.5,
+                                        color: isPaid ? AppColors.successText(context) : AppColors.dangerText(context),
+                                        fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ),
-                                ],
-                              ),
+                                ])),
                             ],
                           ),
                         ),
@@ -5242,7 +5242,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         context: context,
         builder: (ctx) => AppFullscreenPage(
           title: 'Aidat Borç Detayı',
-          subtitle: '${dues.donem} • KMK Madde 20 Yasal Gecikme Cetveli',
+          subtitle: '${dues.period} • KMK Madde 20 Yasal Gecikme Cetveli',
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -5257,12 +5257,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentCyan,
+                  backgroundColor: AppColors.primaryFill,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text(AppStrings.close, style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -5281,14 +5281,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Text('Kat Mülkiyeti Kanunu (KMK) Madde 20 Uyarınca:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 12),
-                    Text('• Dönem: ${dues.donem}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
+                    Text('• Dönem: ${dues.period}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
                     const SizedBox(height: 8),
-                    Text('• Ana Para Aidat: ₺${dues.anaPara.toStringAsFixed(2)}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text('• Ana Para Aidat: ${formatTry(dues.principalAmount)}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
-                    Text('• Son Ödeme Tarihi: ${dues.sonOdemeTarihi.day.toString().padLeft(2, '0')}.${dues.sonOdemeTarihi.month.toString().padLeft(2, '0')}.${dues.sonOdemeTarihi.year}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
-                    if (dues.gecikmeTazminati > Decimal.zero) ...[
+                    Text('• Son Ödeme Tarihi: ${dues.dueDate.day.toString().padLeft(2, '0')}.${dues.dueDate.month.toString().padLeft(2, '0')}.${dues.dueDate.year}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
+                    if (dues.delayPenalty > Decimal.zero) ...[
                       const SizedBox(height: 8),
-                      testId('penalty_days', Text('• Gecikme Durumu: ${dues.gecikenGunSayisi} Gün Gecikme', style: const TextStyle(color: AppColors.accentRed, fontSize: 13, fontWeight: FontWeight.w500))),
+                      testId('penalty_days', Text('• Gecikme Durumu: ${dues.daysOverdue} Gün Gecikme', style: TextStyle(color: AppColors.dangerText(context), fontSize: 13, fontWeight: FontWeight.w500))),
                       const SizedBox(height: 8),
                       Text('• Aylık Yasal Gecikme Oranı: %5 (KMK Madde 20/c)', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
                       const SizedBox(height: 14),
@@ -5301,8 +5301,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           border: Border.all(color: AppColors.accentRed.withValues(alpha: 0.2)),
                         ),
                         child: testId('penalty_formula', Text(
-                          '• Gecikme Tazminatı: (${dues.anaPara.toStringAsFixed(0)} * 0.05 / 30) * ${dues.gecikenGunSayisi} = ₺${dues.gecikmeTazminati.toStringAsFixed(2)}',
-                          style: const TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold, fontSize: 12.5),
+                          '• Gecikme Tazminatı: (${formatTry(dues.principalAmount)} × %5 / 30) * ${dues.daysOverdue} = ${formatTry(dues.delayPenalty)}',
+                          style: TextStyle(color: AppColors.dangerText(context), fontWeight: FontWeight.bold, fontSize: 12.5),
                         )),
                       ),
                     ],
@@ -5312,8 +5312,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Ödenecek Toplam Tutar:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        Text('₺${dues.toplamTutar.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold, fontSize: 16)),
+                        Flexible(child: const Text('Ödenecek Toplam Tutar:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                        Flexible(child: Text(formatTry(dues.totalAmount), style: TextStyle(color: AppColors.dangerText(context), fontWeight: FontWeight.bold, fontSize: 16))),
                       ],
                     ),
                   ],
@@ -5335,7 +5335,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (ctx) => AppFullscreenPage(
         title: 'Ödeme Makbuzları & Dekontlar',
-        subtitle: '${widget.controller.activeUnit.siteAdi} • ${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}',
+        subtitle: '${widget.controller.activeUnit.siteName} • ${widget.controller.activeUnit.block} Blok D:${widget.controller.activeUnit.unitNo}',
         icon: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -5350,12 +5350,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
+                backgroundColor: AppColors.primaryFill,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(AppStrings.close, style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -5424,7 +5424,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 2),
                   Text(
                     '${tx.date} • ${tx.subtitle}',
-                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
@@ -5436,8 +5436,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Text(
                   tx.amountStr,
-                  style: const TextStyle(
-                    color: AppColors.accentGreen,
+                  style: TextStyle(
+                    color: AppColors.successText(context),
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
                   ),
@@ -5446,11 +5446,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
+                    Text(
                       'Görüntüle',
                       style: TextStyle(
-                        color: AppColors.accentCyan,
-                        fontSize: 10.5,
+                        color: AppColors.primaryText(context),
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -5486,12 +5486,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
+                backgroundColor: AppColors.primaryFill,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(AppStrings.close, style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -5508,24 +5508,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
+                  Flexible(child: Text(
                     'TAHSİLAT MAKBUZU',
                     style: TextStyle(
                       color: AppColors.textSecondary(context),
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.0,
                     ),
-                  ),
+                  )),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: AppColors.accentGreen.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Text(
+                    child: Text(
                       'ONAYLANDI',
-                      style: TextStyle(color: AppColors.accentGreen, fontSize: 10.5, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -5536,8 +5536,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     testId('home_receipt_amount', Text(
                       tx.amountStr,
-                      style: const TextStyle(
-                        color: AppColors.accentGreen,
+                      style: TextStyle(
+                        color: AppColors.successText(context),
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
@@ -5561,7 +5561,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 8),
               _buildReceiptRow('İşlem Tarihi:', tx.date),
               const SizedBox(height: 8),
-              _buildReceiptRow('Site & Daire:', '${widget.controller.activeUnit.siteAdi.isNotEmpty ? widget.controller.activeUnit.siteAdi : widget.controller.siteName} • ${widget.controller.activeUnit.blok} Blok D:${widget.controller.activeUnit.daireNo}'),
+              _buildReceiptRow('Site & Daire:', '${widget.controller.activeUnit.siteName.isNotEmpty ? widget.controller.activeUnit.siteName : widget.controller.siteName} • ${widget.controller.activeUnit.block} Blok D:${widget.controller.activeUnit.unitNo}'),
               const SizedBox(height: 8),
               _buildReceiptRow('Ödeyen:', widget.controller.activeUnit.ownerName.isNotEmpty ? widget.controller.activeUnit.ownerName : (widget.controller.isTestMode ? 'Ahmet Yılmaz' : 'Daire Sakini')),
               const SizedBox(height: 8),
@@ -5582,7 +5582,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: Text(
                         'Bu makbuz SitePulse elektronik aidat yönetim sistemi tarafından doğrulanmıştır.',
-                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10.5),
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                       ),
                     ),
                   ],
@@ -5600,10 +5600,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
+        Flexible(child: Text(
           label,
           style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-        ),
+        )),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -5644,21 +5644,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   side: BorderSide(color: AppColors.border(context)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+                child: Text(AppStrings.cancel, style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                    appSnackBar(
                       content: Text('Talebiniz #TLP-842 numarasıyla site yönetimine iletildi.'),
-                      backgroundColor: AppColors.accentGreen,
+                      backgroundColor: AppColors.successFill,
                       duration: Duration(seconds: 3),
                     ),
                   );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentCyan,
+                  backgroundColor: AppColors.primaryFill,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -5757,12 +5757,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
+                backgroundColor: AppColors.primaryFill,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(AppStrings.close, style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -5826,7 +5826,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Text(
                   tag,
-                  style: TextStyle(color: tagColor, fontSize: 10, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: tagColor, fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(width: 8),
@@ -5834,7 +5834,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Text(
                   date,
                   textAlign: TextAlign.end,
-                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -5877,7 +5877,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Clipboard.setData(ClipboardData(text: invite.inviteUrl));
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Davet linki kopyalandı!'), backgroundColor: AppColors.accentGreen),
+                  appSnackBar(content: Text('Davet linki kopyalandı!'), backgroundColor: AppColors.successFill),
                 );
               },
               style: OutlinedButton.styleFrom(
@@ -5885,7 +5885,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 side: BorderSide(color: AppColors.border(context)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Linki Kopyala', style: TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.w600)),
+              child: Text('Linki Kopyala', style: TextStyle(color: AppColors.primaryText(context), fontWeight: FontWeight.w600)),
             )),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
@@ -5895,7 +5895,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Kapat', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(AppStrings.close, style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -5963,12 +5963,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             testId('btn_close_approval_dialog', ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentGreen,
+                backgroundColor: AppColors.successFill,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(AppStrings.ok, style: TextStyle(fontWeight: FontWeight.bold)),
             )),
           ],
         ),
@@ -5989,7 +5989,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               child: testId('approval_credentials_password', SelectableText(
                 info.temporaryPassword,
-                style: const TextStyle(color: AppColors.accentGreen, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                style: TextStyle(color: AppColors.successText(context), fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
               ), label: info.temporaryPassword),
             ),
             const SizedBox(height: 14),
@@ -6029,12 +6029,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 widget.controller.fetchSaasSites();
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
+                backgroundColor: AppColors.primaryFill,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(AppStrings.ok, style: TextStyle(fontWeight: FontWeight.bold)),
             )),
           ],
         ),
@@ -6055,7 +6055,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               child: testId('site_credentials_password', SelectableText(
                 creds.temporaryPassword,
-                style: const TextStyle(color: AppColors.accentCyan, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                style: TextStyle(color: AppColors.primaryText(context), fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
               ), label: creds.temporaryPassword),
             ),
           ],
@@ -6084,12 +6084,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             testId('btn_close_resident_provisioned', ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentGreen,
+                backgroundColor: AppColors.successFill,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(AppStrings.ok, style: TextStyle(fontWeight: FontWeight.bold)),
             )),
           ],
         ),
@@ -6108,7 +6108,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               child: SelectableText(
                 creds.temporaryPassword,
-                style: const TextStyle(color: AppColors.accentGreen, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                style: TextStyle(color: AppColors.successText(context), fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
               ),
             ),
           ],
@@ -6294,7 +6294,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                    'Yeni $roleLabel atandığında mevcut sakin tahliye edilmiş olarak geçmişe arşivlenecek ve yeni $roleLabel aktif sakin olarak sisteme işlenecektir.\n\n'
                                    'Bu işlemi onaylıyor musunuz?',
                           confirmLabel: 'Evet, Yeni $roleLabel Ata',
-                          cancelLabel: 'Vazgeç',
+                          cancelLabel: AppStrings.cancel,
                           confirmColor: AppColors.accentCyan,
                           icon: Icons.swap_horiz_rounded,
                           iconColor: AppColors.accentCyan,
@@ -6388,7 +6388,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     }
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentGreen,
+                    backgroundColor: AppColors.successFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -6412,12 +6412,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                          const Icon(Icons.error_outline, color: AppColors.accentRed, size: 20),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               generalError!,
-                              style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
+                              style: TextStyle(color: AppColors.dangerText(context), fontSize: 13, fontWeight: FontWeight.w600),
                             ),
                           ),
                         ],
@@ -6457,11 +6457,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const Spacer(),
                             if (currentTariff != null)
                               Text(
-                                '₺${currentTariff.duesAmount}/ay',
-                                style: const TextStyle(
-                                  color: AppColors.accentGreen,
+                                '${formatTry(currentTariff.duesAmount)}/ay',
+                                style: TextStyle(
+                                  color: AppColors.successText(context),
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 11,
+                                  fontSize: 12,
                                 ),
                               ),
                           ],
@@ -6481,7 +6481,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                 decoration: InputDecoration(
                                   labelText: 'Blok Seçiniz',
-                                  labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                  labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                   filled: true,
                                   isDense: true,
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -6541,7 +6541,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             });
                                           }
                                         },
-                                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan),
+                                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryFill),
                                         child: const Text('Ekle', style: TextStyle(color: Colors.white)),
                                       ),
                                     ],
@@ -6561,7 +6561,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 decoration: InputDecoration(
                                   labelText: 'Daire No',
                                   hintText: 'Örn: 14',
-                                  labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                  labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                   filled: true,
                                   isDense: true,
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -6587,7 +6587,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                 decoration: InputDecoration(
                                   labelText: 'Konut Tipi (Daire Tipi)',
-                                  labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                  labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                   filled: true,
                                   isDense: true,
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -6609,11 +6609,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           ),
                                         ),
                                         Text(
-                                          '₺${ht.duesAmount} / ay',
-                                          style: const TextStyle(
+                                          '${formatTry(ht.duesAmount)} / ay',
+                                          style: TextStyle(
                                             fontWeight: FontWeight.bold,
-                                            fontSize: 11,
-                                            color: AppColors.accentGreen,
+                                            fontSize: 12,
+                                            color: AppColors.successText(context),
                                           ),
                                         ),
                                       ],
@@ -6640,7 +6640,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               child: const Text(
                                 '+ Tarifeler',
-                                style: TextStyle(color: AppColors.accentPurple, fontSize: 11, fontWeight: FontWeight.bold),
+                                style: TextStyle(color: AppColors.accentPurple, fontSize: 12, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ],
@@ -6730,7 +6730,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 isResidentOwner
                                     ? 'Malik oturuyor (Fiilen ikamet eden sakin ve işletme aidatı sorumlusu)'
                                     : 'Evde oturmuyor (Yalnızca mülk sahibi / demirbaş sorumlusu)',
-                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                               ),
                               value: isResidentOwner,
                               activeThumbColor: AppColors.accentGreen,
@@ -6756,8 +6756,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      '✓ Malik Oturuyor: Kat maliki bu dairede bizzat ikamet etmektedir. Bu daire için ayrıca kiracı tanımlanamaz.',
-                                      style: TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                                      'Malik Oturuyor: Kat maliki bu dairede bizzat ikamet etmektedir. Bu daire için ayrıca kiracı tanımlanamaz.',
+                                      style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.bold),
                                     ),
                                   ),
                                 ],
@@ -6782,7 +6782,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       Expanded(
                                         child: Text(
                                           'Kat maliki evde oturmuyor. Dairenin güncel kullanım durumunu seçiniz:',
-                                          style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11, fontWeight: FontWeight.w600),
+                                          style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.w600),
                                         ),
                                       ),
                                     ],
@@ -6828,7 +6828,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Expanded(
                                   child: Text(
                                     'Kiracı (Fiilen İkamet Eden Sakin — Birincil Muhatap): İşletme aidatı borçları ve bildirimler doğrudan kiracıya yönlendirilir.',
-                                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11, fontWeight: FontWeight.w500),
+                                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.w500),
                                   ),
                                 ),
                               ],
@@ -6849,7 +6849,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Expanded(
                                   child: Text(
                                     'Hane Sakini: Dairede ikamet eden aile üyesi veya birey. Hane sakini olarak eklenir, ayrı daire borçlandırması yapılmaz.',
-                                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11),
+                                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                   ),
                                 ),
                               ],
@@ -6964,7 +6964,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     child: Text(
                                       'Kat Maliki (Ev Sahibi / Mülk Sahibi) Bilgileri (Opsiyonel)',
                                       style: TextStyle(
-                                        color: AppColors.accentCyan,
+                                        color: AppColors.primaryText(context),
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
                                       ),
@@ -7124,7 +7124,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             testId('add_co_resident_btn', OutlinedButton.icon(
                               key: const Key('add_co_resident_btn'),
                               icon: const Icon(Icons.person_add_alt_1, size: 14, color: AppColors.accentCyan),
-                              label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.accentCyan)),
+                              label: Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryText(context))),
                               onPressed: () {
                                 setDialogState(() {
                                   pendingResidents.add(_PendingResidentEntry());
@@ -7142,7 +7142,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(height: 4),
                         Text(
                           'Dairede birlikte ikamet eden diğer aile bireylerini (eş, çocuk, anne/baba vb.) ekleyebilirsiniz.',
-                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                         ),
                         const SizedBox(height: 8),
                         if (pendingResidents.isEmpty)
@@ -7161,7 +7161,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Expanded(
                                   child: Text(
                                     'Henüz hane sakini eklenmedi. Birlikte yaşayan aile bireylerini eklemek için "+ Hane Sakini Ekle" butonuna tıklayınız.',
-                                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                   ),
                                 ),
                               ],
@@ -7192,12 +7192,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         ),
                                         child: Text(
                                           'Hane Sakini #${idx + 1}',
-                                          style: const TextStyle(color: AppColors.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
+                                          style: TextStyle(color: AppColors.primaryText(context), fontSize: 12, fontWeight: FontWeight.bold),
                                         ),
                                       ),
                                       const Spacer(),
                                       IconButton(
-                                        icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                                        icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.accentRed),
                                         tooltip: 'Hane Sakinini Kaldır',
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
@@ -7219,7 +7219,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                           decoration: InputDecoration(
                                             labelText: 'Ad Soyad *',
-                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                             hintText: 'Örn: Zeynep Yılmaz',
                                             filled: true,
                                             isDense: true,
@@ -7238,7 +7238,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                           decoration: InputDecoration(
                                             labelText: 'Yakınlık',
-                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                             filled: true,
                                             isDense: true,
                                             contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -7270,7 +7270,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                           decoration: InputDecoration(
                                             labelText: 'Telefon (Opsiyonel)',
-                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                             hintText: 'Örn: 0532 ...',
                                             filled: true,
                                             isDense: true,
@@ -7287,7 +7287,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                           decoration: InputDecoration(
                                             labelText: 'E-posta (Opsiyonel)',
-                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                             hintText: 'Örn: sakin@...',
                                             filled: true,
                                             isDense: true,
@@ -7375,7 +7375,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       email: ho.email,
                     );
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('${ho.ownerFullName} aktif sorumlu olarak belirlendi.')),
+                      appSnackBar(content: Text('${ho.ownerFullName} aktif sorumlu olarak belirlendi.')),
                     );
                   },
                 ),
@@ -7402,7 +7402,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         email: ho.tenantEmail ?? ho.email,
                       );
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('${ho.tenantFullName} aktif sorumlu olarak belirlendi.')),
+                        appSnackBar(content: Text('${ho.tenantFullName} aktif sorumlu olarak belirlendi.')),
                       );
                     },
                   ),
@@ -7432,7 +7432,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               email: m.email,
                             );
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('${m.fullName} aktif sorumlu olarak belirlendi.')),
+                              appSnackBar(content: Text('${m.fullName} aktif sorumlu olarak belirlendi.')),
                             );
                           },
                         ),
@@ -7465,12 +7465,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 OutlinedButton(
                   onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
-                  child: const Text('Vazgeç'),
+                  child: const Text(AppStrings.cancel),
                 ),
                 testId('module_confirm_transfer_ownership_btn', ElevatedButton(
                   key: const Key('module_confirm_transfer_ownership_btn'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
+                    backgroundColor: AppColors.successFill,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: isSubmitting
@@ -7479,7 +7479,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           final newName = nameCtrl.text.trim();
                           if (newName.isEmpty) {
                             ScaffoldMessenger.of(ctx).showSnackBar(
-                              const SnackBar(content: Text('Lütfen yeni malikin adını ve soyadını giriniz.')),
+                              appSnackBar(content: Text('Lütfen yeni malikin adını ve soyadını giriniz.')),
                             );
                             return;
                           }
@@ -7496,16 +7496,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             if (res != null && ctx.mounted) {
                               Navigator.pop(ctx);
                               messenger.showSnackBar(
-                                SnackBar(
+                                appSnackBar(
                                   content: Text(res['message']?.toString() ?? 'Mülk tapu devri başarıyla tamamlandı.'),
-                                  backgroundColor: Colors.teal,
+                                  backgroundColor: AppColors.successFill,
                                 ),
                               );
                             }
                           } catch (e) {
                             if (ctx.mounted) {
                               ScaffoldMessenger.of(ctx).showSnackBar(
-                                SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.redAccent),
+                                appSnackBar(content: Text('Hata: $e'), backgroundColor: AppColors.dangerFill),
                               );
                             }
                           } finally {
@@ -7536,7 +7536,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.info_outline, color: Colors.teal, size: 20),
+                            const Icon(Icons.info_outline, color: AppColors.accentGreen, size: 20),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -7552,7 +7552,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           '• Devir anına kadar olan tüm ödenmemiş borçlar ve avanslar eski malik hesabında dondurulur ve arşivlenir.\n'
                           '• Yeni kat maliki tapu tescil tarihi itibarıyla tahakkuk edecek aidat ve demirbaşlardan sorumlu olur.\n'
                           '${ho.isTenantOccupied ? "• Dairedeki aktif kiracının (${ho.tenantFullName ?? 'Kiracı'}) sözleşmesi ve sorumluluğu aynen devam eder." : "• Daire mülk sahibi kullanımında görünmektedir."}',
-                          style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 11, height: 1.4),
+                          style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12, height: 1.4),
                         ),
                       ],
                     ),
@@ -7625,7 +7625,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Kapat'),
+              child: const Text(AppStrings.close),
             ),
           ],
         ),
@@ -7642,14 +7642,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Daireye Özel Tahsisli Sanal IBAN', style: TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 12)),
+                  Text('Daireye Özel Tahsisli Sanal IBAN', style: TextStyle(color: AppColors.primaryText(context), fontWeight: FontWeight.bold, fontSize: 12)),
                   const SizedBox(height: 8),
                   Text(
                     widget.controller.activeUnit.virtualIban ?? 'TR91 0020 5000 0986 3791 6000 01',
                     style: TextStyle(color: AppColors.textPrimary(ctx), fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
-                  Text('Bu IBAN numarasına gönderilen tüm FAST/Havale ödemeleri %100 doğrulukla doğrudan bu dairenin aidat borcuna mahsup edilir.', style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 11)),
+                  Text('Bu IBAN numarasına gönderilen tüm FAST/Havale ödemeleri %100 doğrulukla doğrudan bu dairenin aidat borcuna mahsup edilir.', style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12)),
                 ],
               ),
             ),
@@ -7754,9 +7754,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             widget.controller.fetchSaasSites();
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
+                                appSnackBar(
                                   content: Text('$siteName sitesi başarıyla veritabanına kaydedildi.'),
-                                  backgroundColor: AppColors.accentGreen,
+                                  backgroundColor: AppColors.successFill,
                                 ),
                               );
                             }
@@ -7780,7 +7780,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         }
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentCyan,
+                  backgroundColor: AppColors.primaryFill,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -7806,16 +7806,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   decoration: BoxDecoration(
                     color: Colors.redAccent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.redAccent),
+                    border: Border.all(color: AppColors.accentRed),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                      const Icon(Icons.error_outline, color: AppColors.accentRed, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           localError!,
-                          style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
+                          style: TextStyle(color: AppColors.dangerText(context), fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -7865,7 +7865,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 decoration: InputDecoration(
                   labelText: 'Bloklar (Virgülle ayırarak giriniz: A Blok, B Blok)',
                   helperText: 'Sitede yer alan blokları belirleyin. Sakin eklerken bu bloklar seçilecektir.',
-                  helperStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                  helperStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                   labelStyle: TextStyle(color: AppColors.textSecondary(context)),
                   filled: true,
                   fillColor: AppColors.card(context),
@@ -7893,7 +7893,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 decoration: InputDecoration(
                   labelText: 'Yönetici E-posta',
                   helperText: 'Yöneticinin sisteme giriş yapacağı benzersiz e-posta adresi.',
-                  helperStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                  helperStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                   labelStyle: TextStyle(color: AppColors.textSecondary(context)),
                   filled: true,
                   fillColor: AppColors.card(context),
@@ -7964,9 +7964,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   final adminName = adminNameCtrl.text.trim();
                   if (siteName.isEmpty || adminName.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
+                      appSnackBar(
                         content: Text('Lütfen Site Adı ve Yönetici Ad Soyad alanlarını doldurunuz.'),
-                        backgroundColor: Colors.redAccent,
+                        backgroundColor: AppColors.dangerFill,
                       ),
                     );
                     return;
@@ -7988,7 +7988,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentGreen,
+                  backgroundColor: AppColors.successFill,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -8096,7 +8096,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 decoration: InputDecoration(
                   labelText: 'Bloklar (Virgülle ayırarak giriniz: A Blok, B Blok)',
                   helperText: 'Sitede yer alan blokları belirleyin.',
-                  helperStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                  helperStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                   labelStyle: TextStyle(color: AppColors.textSecondary(context)),
                   filled: true,
                   fillColor: AppColors.card(context),
@@ -8173,7 +8173,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               testId('btn_ack_delete_blocked', ElevatedButton(
                 onPressed: () => Navigator.pop(ctx),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentCyan,
+                  backgroundColor: AppColors.primaryFill,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -8196,17 +8196,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       title: 'Siteyi Sil',
       message: '${site.name} sitesini platformdan tamamen silmek istediğinize emin misiniz?\n\nBu sitede henüz herhangi bir daire veya finansal hareket bulunmamaktadır. Bu işlem geri alınamaz.',
       confirmLabel: 'Evet, Sil',
-      cancelLabel: 'Vazgeç',
-      confirmColor: Colors.redAccent,
+      cancelLabel: AppStrings.cancel,
+      confirmColor: AppColors.accentRed,
       icon: Icons.delete_forever,
-      iconColor: Colors.redAccent,
+      iconColor: AppColors.accentRed,
     ).then((confirmed) {
       if (confirmed == true && mounted) {
         widget.controller.deleteSite(site.id);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          appSnackBar(
             content: Text('${site.name} başarıyla silindi.'),
-            backgroundColor: AppColors.accentGreen,
+            backgroundColor: AppColors.successFill,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -8220,7 +8220,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       title: 'Geçici Şifre Yenile',
       message: '${site.name} yöneticisi ${site.adminName} (${site.adminEmail}) için yeni bir geçici yönetim şifresi üretilecektir.\n\nMevcut şifre geçersiz kılınır ve yönetici sisteme girdiğinde yeni şifre belirlemeye yönlendirilir.\n\nOnaylıyor musunuz?',
       confirmLabel: 'Şifreyi Yenile',
-      cancelLabel: 'Vazgeç',
+      cancelLabel: AppStrings.cancel,
       confirmColor: AppColors.accentCyan,
       icon: Icons.lock_reset,
       iconColor: AppColors.accentCyan,
@@ -8237,25 +8237,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFD97706).withOpacity(0.15),
+        color: AppColors.accentOrange.withOpacity(0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD97706).withOpacity(0.8), width: 1.5),
+        border: Border.all(color: AppColors.accentOrange.withOpacity(0.8), width: 1.5),
       ),
       child: Row(
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 24),
+          const Icon(Icons.warning_amber_rounded, color: AppColors.accentOrange, size: 24),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Geçici Şifre İle Giriş Yapıldı',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFD97706), fontSize: 13),
+                  style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.warningText(context), fontSize: 13),
                 ),
                 Text(
                   'Hesap güvenliğiniz için lütfen yeni bir kalıcı şifre belirleyiniz.',
-                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                 ),
               ],
             ),
@@ -8265,12 +8265,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             key: const Key('btn_open_change_password'),
             onPressed: _showChangePasswordDialog,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFD97706),
+              backgroundColor: AppColors.warningFill,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Text('Şifre Değiştir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+            child: const Text('Şifre Değiştir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
           )),
         ],
       ),
@@ -8343,9 +8343,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           if (ok && ctx.mounted) {
                             Navigator.pop(ctx);
                             messenger.showSnackBar(
-                              const SnackBar(
+                              appSnackBar(
                                 content: Text('Şifreniz başarıyla güncellendi.'),
-                                backgroundColor: Colors.green,
+                                backgroundColor: AppColors.successFill,
                               ),
                             );
                             if (mounted) setState(() {});
@@ -8369,7 +8369,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         }
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentCyan,
+                  backgroundColor: AppColors.primaryFill,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -8388,14 +8388,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   decoration: BoxDecoration(
                     color: Colors.redAccent.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.redAccent),
+                    border: Border.all(color: AppColors.accentRed),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
+                      const Icon(Icons.error_outline, color: AppColors.accentRed, size: 16),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(localError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                        child: Text(localError!, style: TextStyle(color: AppColors.dangerText(context), fontSize: 12)),
                       ),
                     ],
                   ),
@@ -8485,3 +8485,85 @@ class _PendingResidentEntry {
   }
 }
 
+/// One navigation destination (bottom bar on phones, rail on wide screens).
+class _NavDestination {
+  final String id;
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final int badgeCount;
+  final String? badgeSemantics;
+
+  const _NavDestination({
+    required this.id,
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    this.badgeCount = 0,
+    this.badgeSemantics,
+  });
+}
+
+/// One half of the manager's "site management / my flat" switch.
+///
+/// Announces itself as a selectable button with its selected state, keeps a
+/// 48 dp target, and ellipsizes long site names (full name in the tooltip).
+class _PathSegment extends StatelessWidget {
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final String semanticsLabel;
+  final VoidCallback onTap;
+
+  const _PathSegment({
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.semanticsLabel,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? AppColors.onFill : AppColors.textSecondary(context);
+    return Semantics(
+      button: true,
+      selected: selected,
+      inMutuallyExclusiveGroup: true,
+      label: semanticsLabel,
+      excludeSemantics: true,
+      onTap: selected ? null : onTap,
+      child: Tooltip(
+        message: label,
+        child: InkWell(
+          onTap: selected ? null : onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: AnimatedContainer(
+            duration: MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 150),
+            constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primaryFill : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 18, color: foreground),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: foreground),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

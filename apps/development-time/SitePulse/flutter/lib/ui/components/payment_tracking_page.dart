@@ -1,12 +1,16 @@
 import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import 'package:decimal/decimal.dart';
 import '../../domain/models/dues_models.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
+import '../design_system/sp_skeleton.dart';
 import 'app_fullscreen_page.dart';
 import 'bank_statement_reconciliation_page.dart';
 
+import '../design_system/money_formatter.dart';
+import '../design_system/sp_feedback.dart';
 class PaymentTrackingPage extends StatefulWidget {
   final DashboardController controller;
   final String? initialUnitId;
@@ -78,7 +82,7 @@ class PaymentTrackingPage extends StatefulWidget {
       case 'CREDIT_CARD':
         return Colors.purple;
       case 'MANUAL_CASH':
-        return Colors.green;
+        return AppColors.accentGreen;
       case 'INTER_LEDGER':
         return Colors.orange;
       default:
@@ -134,14 +138,14 @@ class PaymentTrackingPage extends StatefulWidget {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: AppColors.primary,
+                    backgroundColor: AppColors.primaryFill,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () async {
                     final amt = Decimal.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? Decimal.zero;
                     if (amt <= Decimal.zero || amt.scale > 2) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Lütfen geçerli bir tutar girin')),
+                        appSnackBar(content: Text('Lütfen geçerli bir tutar girin')),
                       );
                       return;
                     }
@@ -261,15 +265,15 @@ class PaymentTrackingPage extends StatefulWidget {
                     spacing: 6,
                     children: [
                       ActionChip(
-                        label: const Text('Eylül Aidatı', style: TextStyle(fontSize: 11)),
+                        label: const Text('Eylül Aidatı', style: TextStyle(fontSize: 12)),
                         onPressed: () => setDialogState(() => descCtrl.text = 'Eylül 2026 Aidat Ödemesi'),
                       ),
                       ActionChip(
-                        label: const Text('Demirbaş - Asansör', style: TextStyle(fontSize: 11)),
+                        label: const Text('Demirbaş - Asansör', style: TextStyle(fontSize: 12)),
                         onPressed: () => setDialogState(() => descCtrl.text = 'Demirbaş - Asansör Revizyon Payı'),
                       ),
                       ActionChip(
-                        label: const Text('Çatı Onarımı', style: TextStyle(fontSize: 11)),
+                        label: const Text('Çatı Onarımı', style: TextStyle(fontSize: 12)),
                         onPressed: () => setDialogState(() => descCtrl.text = 'Çatı Onarım Demirbaş Katkısı'),
                       ),
                     ],
@@ -322,7 +326,7 @@ class PaymentTrackingPage extends StatefulWidget {
                     if (ctx.mounted) Navigator.pop(ctx);
                     if (res != null && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(res['message']?.toString() ?? 'Virman başarılı')),
+                        appSnackBar(content: Text(res['message']?.toString() ?? 'Virman başarılı')),
                       );
                       onCompleted?.call();
                       final rcp = res['receipt_number']?.toString();
@@ -420,16 +424,16 @@ class PaymentTrackingPage extends StatefulWidget {
               style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
               onPressed: () {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Makbuz PDF formatında dışa aktarıldı.')),
+                  appSnackBar(content: Text('Makbuz PDF formatında dışa aktarıldı.')),
                 );
               },
             )),
             ElevatedButton.icon(
               icon: const Icon(Icons.check),
-              label: const Text('Kapat'),
+              label: const Text(AppStrings.close),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                backgroundColor: AppColors.primary,
+                backgroundColor: AppColors.primaryFill,
                 foregroundColor: Colors.white,
               ),
               onPressed: () => Navigator.pop(ctx),
@@ -480,7 +484,7 @@ class PaymentTrackingPage extends StatefulWidget {
                           ),
                           child: testId('receipt_number', Text(
                             receipt.receiptNumber,
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                            style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText(context)),
                           )),
                         ),
                       ],
@@ -494,11 +498,11 @@ class PaymentTrackingPage extends StatefulWidget {
                       ),
                       child: Column(
                         children: [
-                          const Text('TOPLAM TAHSİLAT TUTARI', style: TextStyle(fontSize: 11, letterSpacing: 1.1)),
+                          const Text('TOPLAM TAHSİLAT TUTARI', style: TextStyle(fontSize: 12, letterSpacing: 1.1)),
                           const SizedBox(height: 4),
                           testId('receipt_total', Text(
-                            '₺${receipt.totalAmount}',
-                            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.accentGreen),
+                            formatTry(receipt.totalAmount),
+                            style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.successText(context)),
                           )),
                         ],
                       ),
@@ -518,10 +522,10 @@ class PaymentTrackingPage extends StatefulWidget {
                       child: Text('Mahsup ve Tahsisat Detayı', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
                     const SizedBox(height: 8),
-                    testId('receipt_allocated_principal', _buildReceiptRowStatic(ctx, 'Ana Para Borcu:', '₺${receipt.allocatedPrincipal}')),
-                    testId('receipt_allocated_penalty', _buildReceiptRowStatic(ctx, 'Gecikme Zammı (KMK %5):', '₺${receipt.allocatedPenalty}')),
+                    testId('receipt_allocated_principal', _buildReceiptRowStatic(ctx, 'Ana Para Borcu:', formatTry(receipt.allocatedPrincipal))),
+                    testId('receipt_allocated_penalty', _buildReceiptRowStatic(ctx, 'Gecikme Zammı (KMK %5):', formatTry(receipt.allocatedPenalty))),
                     if (receipt.allocatedAdvance > Decimal.zero)
-                      testId('receipt_allocated_advance', _buildReceiptRowStatic(ctx, 'Avans Bakiyesine Aktarılan:', '₺${receipt.allocatedAdvance}')),
+                      testId('receipt_allocated_advance', _buildReceiptRowStatic(ctx, 'Avans Bakiyesine Aktarılan:', formatTry(receipt.allocatedAdvance))),
                     if (receipt.isRentOffsetEligible) ...[
                       const SizedBox(height: 16),
                       Container(
@@ -540,7 +544,7 @@ class PaymentTrackingPage extends StatefulWidget {
                                 SizedBox(width: 6),
                                 Text(
                                   'KİRA MAHSUBU UYGUNLUK BİLDİRİMİ',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.purple),
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.purple),
                                 ),
                               ],
                             ),
@@ -548,7 +552,7 @@ class PaymentTrackingPage extends StatefulWidget {
                             testId('receipt_rent_offset_note', Text(
                               receipt.legalStatutoryNote ??
                                   '634 sayılı KMK Madde 20 & 22 uyarınca ortak demirbaş giderleri Kat Maliki sorumluluğundadır. Kiracı tarafından ödenen bu tutar TBK Madde 314 gereği kira bedelinden mahsup edilebilir.',
-                              style: const TextStyle(fontSize: 11, height: 1.3),
+                              style: const TextStyle(fontSize: 12, height: 1.3),
                             )),
                           ],
                         ),
@@ -568,13 +572,13 @@ class PaymentTrackingPage extends StatefulWidget {
                             children: [
                               Icon(Icons.verified, color: AppColors.primary, size: 14),
                               SizedBox(width: 4),
-                              Text('SHA-256 Dijital Doğrulama Kodu', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                              Text('SHA-256 Dijital Doğrulama Kodu', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                             ],
                           ),
                           const SizedBox(height: 4),
                           SelectableText(
                             receipt.verificationHash,
-                            style: const TextStyle(fontSize: 9, fontFamily: 'monospace', color: Colors.grey),
+                            style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.grey),
                           ),
                         ],
                       ),
@@ -595,8 +599,8 @@ class PaymentTrackingPage extends StatefulWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
-          Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          Flexible(child: Text(label, style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)))),
+          Flexible(child: Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
         ],
       ),
     );
@@ -692,7 +696,7 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                 label: const Text('Nakit/Banka Girişi'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  backgroundColor: AppColors.primary,
+                  backgroundColor: AppColors.primaryFill,
                   foregroundColor: Colors.white,
                 ),
                 onPressed: () => PaymentTrackingPage.openRecordManualPayment(
@@ -759,8 +763,8 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
 
   Widget _buildKpiSummaryHeader() {
     final stream = widget.controller.paymentStream;
-    final totalVol = stream?.totalVolume.toString() ?? '0.00';
-    final settledVol = stream?.settledVolume.toString() ?? '0.00';
+    final totalVol = stream?.totalVolume ?? Decimal.zero;
+    final settledVol = stream?.settledVolume ?? Decimal.zero;
     final count = stream?.totalCount ?? 0;
 
     return Container(
@@ -798,18 +802,18 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                     Text(
                       'TOPLAM TAHSİLAT HACMİ',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.1,
                         color: AppColors.textSecondary(context),
                       ),
                     ),
                     Text(
-                      '₺$totalVol',
-                      style: const TextStyle(
+                      formatTry(totalVol),
+                      style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.accentGreen,
+                        color: AppColors.successText(context),
                       ),
                     ),
                   ],
@@ -828,10 +832,10 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                     const SizedBox(width: 4),
                     Text(
                       '$count İşlem',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.accentGreen,
+                        color: AppColors.successText(context),
                       ),
                     ),
                   ],
@@ -848,9 +852,9 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Otomatik Eşleşen', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
+                    Text('Otomatik Eşleşen', style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
                     const SizedBox(height: 2),
-                    Text('₺$settledVol', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                    Text(formatTry(settledVol), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -858,9 +862,9 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Mutabakat Oranı', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
+                    Text('Mutabakat Oranı', style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
                     const SizedBox(height: 2),
-                    const Text('100% Güven', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                    Text('100% Güven', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primaryText(context))),
                   ],
                 ),
               ),
@@ -868,7 +872,7 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Mevzuat Uyumu', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
+                    Text('Mevzuat Uyumu', style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
                     const SizedBox(height: 2),
                     const Text('KMK Mad. 20', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.orange)),
                   ],
@@ -964,12 +968,12 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                     children: [
                       Text(
                         'Banka Ekstresinde Eşleşme Bekleyen ${unmatchedBank.length} İşlem Var',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.accentOrange),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.warningText(context)),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'İçe aktarılan ekstredeki ödemeleri dairelerle eşleştirip canlı kasaya işleyin.',
-                        style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
                       ),
                     ],
                   ),
@@ -981,7 +985,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                     _loadData();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentOrange,
+                    backgroundColor: AppColors.warningFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
@@ -1005,7 +1009,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                   _loadData();
                 },
                 icon: const Icon(Icons.upload_file, size: 14, color: AppColors.accentCyan),
-                label: const Text('Ekstre Yükle / Eşleştir', style: TextStyle(fontSize: 12, color: AppColors.accentCyan)),
+                label: Text('Ekstre Yükle / Eşleştir', style: TextStyle(fontSize: 12, color: AppColors.primaryText(context))),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.accentCyan),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1086,7 +1090,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
 
   Widget _buildEntriesList(PaymentStreamResponseDto? stream) {
     if (widget.controller.isPaymentStreamLoading) {
-      return const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()));
+      return const SpSkeletonList();
     }
     if (stream == null || stream.entries.isEmpty) {
       return _buildEmptyState('Bu filtrelere uygun tahsilat kaydı bulunamadı.');
@@ -1193,9 +1197,9 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                             child: Text(
                               isTenant ? 'Kiracı' : 'Kat Maliki',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: isTenant ? Colors.indigo : Colors.teal,
+                                color: isTenant ? Colors.indigo : AppColors.successText(context),
                               ),
                             ),
                           ),
@@ -1213,17 +1217,17 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '+₺${entry.amount}',
-                      style: const TextStyle(
+                      '+${formatTry(entry.amount)}',
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.accentGreen,
+                        color: AppColors.successText(context),
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '${entry.paymentDate.day}.${entry.paymentDate.month}.${entry.paymentDate.year}',
-                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
                     ),
                   ],
                 ),
@@ -1255,10 +1259,10 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                         const SizedBox(width: 4),
                         Text(
                           '#${entry.receiptNumber}',
-                          style: const TextStyle(
-                            fontSize: 11,
+                          style: TextStyle(
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
+                            color: AppColors.primaryText(context),
                           ),
                         ),
                       ],
@@ -1281,7 +1285,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                         SizedBox(width: 4),
                         Text(
                           'Kira Mahsubu (KMK 20)',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purple),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple),
                         ),
                       ],
                     ),
@@ -1392,7 +1396,7 @@ class DebtAgingWidget extends StatelessWidget {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         controller.fetchDebtAgingReport();
       });
-      return const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()));
+      return const SpSkeletonList();
     }
 
     final column = Column(
@@ -1406,10 +1410,10 @@ class DebtAgingWidget extends StatelessWidget {
           mainAxisSpacing: 10,
           childAspectRatio: 2.2,
           children: [
-            testId('aging_bucket_current', _buildAgingSummaryTile(context, 'Vadesi Gelmemiş', '₺${report.totalCurrent}', Colors.blue, 'Normal döngü')),
-            testId('aging_bucket_1_30', _buildAgingSummaryTile(context, '1 - 30 Gün Gecikmiş', '₺${report.total1to30Days}', Colors.amber.shade700, 'Hatırlatma SMS')),
-            testId('aging_bucket_31_60', _buildAgingSummaryTile(context, '31 - 60 Gün Gecikmiş', '₺${report.total31to60Days}', Colors.orange.shade800, 'İhtar mektubu')),
-            testId('aging_bucket_60_plus', _buildAgingSummaryTile(context, '60+ Gün (Yasal Takip)', '₺${report.total60PlusDays}', Colors.red.shade700, 'Hukuki takip adayı')),
+            testId('aging_bucket_current', _buildAgingSummaryTile(context, 'Vadesi Gelmemiş', formatTry(report.totalCurrent), Colors.blue, 'Normal döngü')),
+            testId('aging_bucket_1_30', _buildAgingSummaryTile(context, '1 - 30 Gün Gecikmiş', formatTry(report.total1to30Days), Colors.amber.shade700, 'Hatırlatma SMS')),
+            testId('aging_bucket_31_60', _buildAgingSummaryTile(context, '31 - 60 Gün Gecikmiş', formatTry(report.total31to60Days), Colors.orange.shade800, 'İhtar mektubu')),
+            testId('aging_bucket_60_plus', _buildAgingSummaryTile(context, '60+ Gün (Yasal Takip)', formatTry(report.total60PlusDays), Colors.red.shade700, 'Hukuki takip adayı')),
           ],
         ),
         const SizedBox(height: 12),
@@ -1426,9 +1430,9 @@ class DebtAgingWidget extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('KMK %5 Gecikme Zammı', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
+                    Text('KMK %5 Gecikme Zammı', style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
                     const SizedBox(height: 2),
-                    testId('aging_total_penalty', Text('+₺${report.totalPenalty}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red))),
+                    testId('aging_total_penalty', Text('+${formatTry(report.totalPenalty)}', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.dangerText(context)))),
                   ],
                 ),
               ),
@@ -1438,9 +1442,9 @@ class DebtAgingWidget extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Toplam Açık Alacak', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
+                    Text('Toplam Açık Alacak', style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
                     const SizedBox(height: 2),
-                    testId('aging_grand_total', Text('₺${report.grandTotal}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primary))),
+                    testId('aging_grand_total', Text(formatTry(report.grandTotal), style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primaryText(context)))),
                   ],
                 ),
               ),
@@ -1451,14 +1455,14 @@ class DebtAgingWidget extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
+            Flexible(child: const Text(
               'Daire Bazlı Borç Yaşlandırma',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            Text(
+            )),
+            Flexible(child: Text(
               '${report.brackets.length} Daire Borçlu',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
-            ),
+            )),
           ],
         ),
         const SizedBox(height: 10),
@@ -1512,7 +1516,7 @@ class DebtAgingWidget extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary(context)),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary(context)),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1520,7 +1524,7 @@ class DebtAgingWidget extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(amount, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-          Text(subtitle, style: TextStyle(fontSize: 10, color: AppColors.textSecondary(context))),
+          Text(subtitle, style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
         ],
       ),
     );
@@ -1556,13 +1560,13 @@ class DebtAgingWidget extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '₺${bracket.totalOutstanding}',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
+                    formatTry(bracket.totalOutstanding),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.dangerText(context)),
                   ),
                   if (bracket.accruedDelayPenalty > Decimal.zero)
                     Text(
-                      '+₺${bracket.accruedDelayPenalty} Faiz',
-                      style: const TextStyle(fontSize: 10, color: Colors.redAccent),
+                      '+${formatTry(bracket.accruedDelayPenalty)} Faiz',
+                      style: TextStyle(fontSize: 12, color: AppColors.dangerText(context)),
                     ),
                 ],
               ),
@@ -1572,13 +1576,13 @@ class DebtAgingWidget extends StatelessWidget {
           Row(
             children: [
               if (bracket.currentDue > Decimal.zero)
-                _buildBracketPill('Cari: ₺${bracket.currentDue}', Colors.blue),
+                _buildBracketPill('Cari: ${formatTry(bracket.currentDue)}', Colors.blue),
               if (bracket.overdue1to30Days > Decimal.zero)
-                _buildBracketPill('1-30g: ₺${bracket.overdue1to30Days}', Colors.amber.shade700),
+                _buildBracketPill('1-30g: ${formatTry(bracket.overdue1to30Days)}', Colors.amber.shade700),
               if (bracket.overdue31to60Days > Decimal.zero)
-                _buildBracketPill('31-60g: ₺${bracket.overdue31to60Days}', Colors.orange.shade800),
+                _buildBracketPill('31-60g: ${formatTry(bracket.overdue31to60Days)}', Colors.orange.shade800),
               if (bracket.overdue60PlusDays > Decimal.zero)
-                _buildBracketPill('60+g: ₺${bracket.overdue60PlusDays}', Colors.red.shade700),
+                _buildBracketPill('60+g: ${formatTry(bracket.overdue60PlusDays)}', Colors.red.shade700),
             ],
           ),
         ],
@@ -1594,7 +1598,7 @@ class DebtAgingWidget extends StatelessWidget {
         color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+      child: Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
     );
   }
 }

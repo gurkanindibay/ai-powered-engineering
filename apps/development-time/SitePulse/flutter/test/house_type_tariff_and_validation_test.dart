@@ -106,6 +106,8 @@ void main() {
       // Tap 'Manuel Sakin Ekle' button
       final addResidentBtn = find.text('Manuel Sakin Ekle').first;
       expect(addResidentBtn, findsOneWidget);
+      await tester.ensureVisible(addResidentBtn);
+      await tester.pumpAndSettle();
       await tester.tap(addResidentBtn);
       await tester.pumpAndSettle();
 
@@ -115,10 +117,12 @@ void main() {
 
       // Verify that dues amount text field is NOT present, but House Type dropdown and info banner ARE present
       expect(find.text('Aylık Aidat Tutarı (TL)'), findsNothing);
-      expect(find.text('₺1000 / ay'), findsWidgets);
+      expect(find.text('₺1.000,00 / ay'), findsWidgets);
 
       // Attempt to save empty form
       final saveBtn = find.text('Kaydet & Şifre Üret');
+      await tester.ensureVisible(saveBtn);
+      await tester.pumpAndSettle();
       await tester.tap(saveBtn);
       await tester.pumpAndSettle();
 
@@ -132,6 +136,8 @@ void main() {
 
       // Enter invalid email
       await tester.enterText(find.widgetWithText(TextField, 'E-posta (Doğrulama zorunlu)'), 'invalid-email');
+      await tester.ensureVisible(saveBtn);
+      await tester.pumpAndSettle();
       await tester.tap(saveBtn);
       await tester.pumpAndSettle();
 
@@ -140,6 +146,8 @@ void main() {
       // Enter valid email and invalid phone
       await tester.enterText(find.widgetWithText(TextField, 'E-posta (Doğrulama zorunlu)'), 'ahmet@example.com');
       await tester.enterText(find.widgetWithText(TextField, 'Telefon (Doğrulama zorunlu)'), '1234');
+      await tester.ensureVisible(saveBtn);
+      await tester.pumpAndSettle();
       await tester.tap(saveBtn);
       await tester.pumpAndSettle();
 
@@ -147,6 +155,8 @@ void main() {
 
       // Enter valid phone (Turkish mobile format)
       await tester.enterText(find.widgetWithText(TextField, 'Telefon (Doğrulama zorunlu)'), '0532 555 11 22');
+      await tester.ensureVisible(saveBtn);
+      await tester.pumpAndSettle();
       await tester.tap(saveBtn);
       await tester.pumpAndSettle();
 
@@ -170,6 +180,8 @@ void main() {
       // Tap 'Konut Tipleri & Tarifeler' button
       final tariffsBtn = find.text('Konut Tipleri & Tarifeler').first;
       expect(tariffsBtn, findsOneWidget);
+      await tester.ensureVisible(tariffsBtn);
+      await tester.pumpAndSettle();
       await tester.tap(tariffsBtn);
       await tester.pumpAndSettle();
 
@@ -179,7 +191,7 @@ void main() {
       expect(find.text('2+1'), findsOneWidget);
       expect(find.text('3+1'), findsOneWidget);
       expect(find.text('Dublex'), findsOneWidget);
-      expect(find.text('₺1800'), findsOneWidget);
+      expect(find.text('₺1.800,00'), findsOneWidget);
     });
 
     testWidgets('Manuel Sakin Ekle dialog presents blocks in dropdown and allows block selection', (tester) async {
@@ -198,6 +210,8 @@ void main() {
       await tester.pumpAndSettle();
 
       final addResidentBtn = find.text('Manuel Sakin Ekle').first;
+      await tester.ensureVisible(addResidentBtn);
+      await tester.pumpAndSettle();
       await tester.tap(addResidentBtn);
       await tester.pumpAndSettle();
 
@@ -209,6 +223,8 @@ void main() {
       expect(find.text('A Blok'), findsWidgets);
 
       // Tap dropdown to open options
+      await tester.ensureVisible(blockDropdown);
+      await tester.pumpAndSettle();
       await tester.tap(blockDropdown);
       await tester.pumpAndSettle();
 
@@ -216,6 +232,8 @@ void main() {
       expect(find.text('C Blok'), findsWidgets);
 
       // Select B Blok
+      await tester.ensureVisible(find.text('B Blok').last);
+      await tester.pumpAndSettle();
       await tester.tap(find.text('B Blok').last);
       await tester.pumpAndSettle();
 
@@ -226,6 +244,8 @@ void main() {
       await tester.enterText(find.widgetWithText(TextField, 'Telefon (Doğrulama zorunlu)'), '0544 111 22 33');
 
       final saveBtn = find.text('Kaydet & Şifre Üret');
+      await tester.ensureVisible(saveBtn);
+      await tester.pumpAndSettle();
       await tester.tap(saveBtn);
       await tester.pumpAndSettle();
 
@@ -251,6 +271,8 @@ void main() {
       // Find "Yeni Site Kaydet" button
       final addSiteBtn = find.text('Yeni Site Kaydet');
       expect(addSiteBtn, findsOneWidget);
+      await tester.ensureVisible(addSiteBtn);
+      await tester.pumpAndSettle();
       await tester.tap(addSiteBtn);
       await tester.pumpAndSettle();
 
@@ -268,6 +290,8 @@ void main() {
       await tester.enterText(find.widgetWithText(TextField, 'Yönetici E-posta'), 'serkan@camlica.com');
 
       final submitBtn = find.text('Siteyi Kaydet & Yetkilendir');
+      await tester.ensureVisible(submitBtn);
+      await tester.pumpAndSettle();
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
@@ -279,6 +303,8 @@ void main() {
 
       // Dismiss credentials dialog if open
       if (find.text('Tamam').evaluate().isNotEmpty) {
+        await tester.ensureVisible(find.text('Tamam'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Tamam'));
         await tester.pumpAndSettle();
       }

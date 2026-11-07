@@ -1,12 +1,16 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../../domain/services/bank_file_picker.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
+import '../design_system/sp_semantics.dart';
 import 'app_fullscreen_page.dart';
 import 'manual_unit_assignment_page.dart';
 
+import '../design_system/money_formatter.dart';
+import '../design_system/sp_feedback.dart';
 class BankStatementReconciliationPage extends StatefulWidget {
   final DashboardController controller;
 
@@ -131,11 +135,11 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
             label: Text(
               _selectedMatchIds.isEmpty
                   ? 'Seçili İşlem Yok'
-                  : 'Seçilenleri Onayla & Aidatları Düş (₺${selectedTotal.toStringAsFixed(2)})',
+                  : 'Seçilenleri Onayla & Aidatları Düş (${formatTry(selectedTotal)})',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentGreen,
+              backgroundColor: AppColors.successFill,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -252,7 +256,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                                       'Format: $formatStr',
                                       style: TextStyle(
                                         color: formatColor,
-                                        fontSize: 11,
+                                        fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -264,7 +268,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                                 'IBAN: $iban • $holder',
                                 style: TextStyle(
                                   color: AppColors.textSecondary(context),
-                                  fontSize: 11,
+                                  fontSize: 12,
                                   fontFamily: 'monospace',
                                 ),
                               ),
@@ -275,7 +279,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                         OutlinedButton.icon(
                           onPressed: () => _showChangeBankAccountDialog(context),
                           icon: const Icon(Icons.edit, size: 13),
-                          label: const Text('Değiştir', style: TextStyle(fontSize: 11)),
+                          label: const Text('Değiştir', style: TextStyle(fontSize: 12)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.accentCyan,
                             side: BorderSide(color: AppColors.accentCyan.withOpacity(0.5)),
@@ -290,7 +294,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                       'Tek aktif banka hesabı kuralı geçerlidir. Banka değiştirildiğinde yeni bankanın ekstre formatı otomatik olarak izinli hale gelir.',
                       style: TextStyle(
                         color: AppColors.textSecondary(context).withOpacity(0.7),
-                        fontSize: 10,
+                        fontSize: 12,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -316,7 +320,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   Expanded(
                     child: Text(
                       widget.controller.bankStatementError!,
-                      style: const TextStyle(color: AppColors.accentRed, fontSize: 12, fontWeight: FontWeight.w600),
+                      style: TextStyle(color: AppColors.dangerText(context), fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                   ),
                   IconButton(
@@ -370,7 +374,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                             : 'Kuveyt Türk (.xlsx), İş Bankası (.xls), CSV veya MT940',
                         style: TextStyle(
                           color: AppColors.textSecondary(context),
-                          fontSize: 11,
+                          fontSize: 12,
                         ),
                       ),
                     ],
@@ -392,7 +396,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                         });
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
+                            appSnackBar(
                               content: Row(
                                 children: [
                                   const Icon(Icons.error_outline, color: Colors.white),
@@ -405,7 +409,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                                   ),
                                 ],
                               ),
-                              backgroundColor: AppColors.accentRed,
+                              backgroundColor: AppColors.dangerFill,
                               duration: const Duration(seconds: 5),
                             ),
                           );
@@ -418,9 +422,9 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                       });
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
+                          appSnackBar(
                             content: Text('${picked.name} başarıyla yüklendi ve dairelerle eşleştirildi!'),
-                            backgroundColor: AppColors.accentGreen,
+                            backgroundColor: AppColors.successFill,
                           ),
                         );
                       }
@@ -429,7 +433,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   icon: const Icon(Icons.upload_file, size: 16),
                   label: const Text('Dosya Yükle'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentCyan,
+                    backgroundColor: AppColors.primaryFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -446,7 +450,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           // 3. Text Area
           Container(
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+              color: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: AppColors.border(context)),
             ),
@@ -482,7 +486,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   });
                   if (mounted && widget.controller.bankStatementError != null) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
+                      appSnackBar(
                         content: Row(
                           children: [
                             const Icon(Icons.error_outline, color: Colors.white),
@@ -495,7 +499,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                             ),
                           ],
                         ),
-                        backgroundColor: AppColors.accentRed,
+                        backgroundColor: AppColors.dangerFill,
                         duration: const Duration(seconds: 4),
                       ),
                     );
@@ -660,7 +664,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                               '$alreadyUploadedCount aidat işlemi daha önce zaten yüklenmiş / ödenmiş olarak tespit edildi. Mükerrer tahsilatı önlemek için bu işlemler onaya sunulmadı.',
                               style: const TextStyle(
                                 color: Colors.blue,
-                                fontSize: 11,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -685,9 +689,9 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                           Expanded(
                             child: Text(
                               '$unmatchedCount işlem daire ile eşleşmedi. Aşağıdaki "Daire Seç & Eşle" butonundan ilgili daireyi belirleyin.',
-                              style: const TextStyle(
-                                color: AppColors.accentOrange,
-                                fontSize: 11,
+                              style: TextStyle(
+                                color: AppColors.warningText(context),
+                                fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -704,13 +708,13 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                       children: [
                         _buildFilterTab('Tümü (${queue.length})', 'ALL'),
                         const SizedBox(width: 8),
-                        _buildFilterTab('🟢 Eşleşenler ($matchedCount)', 'MATCHED'),
+                        _buildFilterTab('Eşleşenler ($matchedCount)', 'MATCHED'),
                         const SizedBox(width: 8),
-                        _buildFilterTab('🔵 Zaten Yüklenenler ($alreadyUploadedCount)', 'ALREADY_UPLOADED'),
+                        _buildFilterTab('Zaten Yüklenenler ($alreadyUploadedCount)', 'ALREADY_UPLOADED'),
                         const SizedBox(width: 8),
-                        _buildFilterTab('🟠 Eşleşmeyenler ($unmatchedCount)', 'UNMATCHED'),
+                        _buildFilterTab('Eşleşmeyenler ($unmatchedCount)', 'UNMATCHED'),
                         const SizedBox(width: 8),
-                        _buildFilterTab('⚪ Giderler ($expenseCount)', 'GIDER'),
+                        _buildFilterTab('Giderler ($expenseCount)', 'GIDER'),
                       ],
                     ),
                   ),
@@ -724,8 +728,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
+              Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                   Text(
                     _filterStatus == 'MATCHED'
                         ? 'Eşleşen İşlemler'
@@ -749,11 +752,10 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                     ),
                     child: Text(
                       '${displayedQueue.length}',
-                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),
-                ],
-              ),
+                ])),
               if (displayedQueue.isNotEmpty)
                 TextButton(
                   onPressed: () {
@@ -768,7 +770,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   },
                   child: Text(
                     _selectedMatchIds.isNotEmpty ? 'Seçimi Düzenle' : 'Tümünü Seç',
-                    style: const TextStyle(fontSize: 12, color: AppColors.accentCyan),
+                    style: TextStyle(fontSize: 12, color: AppColors.primaryText(context)),
                   ),
                 ),
             ],
@@ -838,8 +840,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
+              Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
@@ -860,9 +861,9 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                         color: isAlreadyUploaded
                             ? Colors.blueAccent
                             : (item.confidenceScore == 100
-                                ? AppColors.accentGreen
-                                : (isUnmatched ? AppColors.accentOrange : AppColors.accentOrange)),
-                        fontSize: 11,
+                                ? AppColors.successText(context)
+                                : (isUnmatched ? AppColors.warningText(context) : AppColors.warningText(context))),
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -890,19 +891,18 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                               : (isUnmatched ? 'ESLESTIRILEMEDI' : item.status)),
                       style: TextStyle(
                         color: isApproved
-                            ? AppColors.accentGreen
+                            ? AppColors.successText(context)
                             : (isAlreadyUploaded
                                 ? Colors.blueAccent
                                 : (isExpense
                                     ? Colors.grey
-                                    : (isUnmatched ? AppColors.accentOrange : AppColors.accentCyan))),
-                        fontSize: 11,
+                                    : (isUnmatched ? AppColors.warningText(context) : AppColors.primaryText(context)))),
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                ],
-              ),
+                ])),
               if (!isApproved && !isExpense && !isUnmatched && !isAlreadyUploaded)
                 Checkbox(
                   value: isSelected,
@@ -937,7 +937,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                           'Mükerrer Kayıt',
                           style: TextStyle(
                             color: Colors.blueAccent,
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -970,7 +970,9 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      runSpacing: 2,
                       children: [
                         Icon(
                           isUnmatched ? Icons.home_work_outlined : Icons.apartment,
@@ -981,7 +983,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                         Text(
                           item.matchedUnitDesc,
                           style: TextStyle(
-                            color: isUnmatched ? AppColors.accentOrange : AppColors.accentCyan,
+                            color: isUnmatched ? AppColors.warningText(context) : AppColors.primaryText(context),
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
                           ),
@@ -996,7 +998,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                           ),
                         ],
                       ],
-                    ),
+),
                     if (item.notes != null) ...[
                       const SizedBox(height: 2),
                       Text(
@@ -1004,8 +1006,8 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                         style: TextStyle(
                           color: isAlreadyUploaded
                               ? Colors.blueAccent
-                              : (isUnmatched ? AppColors.accentOrange : AppColors.accentGreen),
-                          fontSize: 11,
+                              : (isUnmatched ? AppColors.warningText(context) : AppColors.successText(context)),
+                          fontSize: 12,
                         ),
                       ),
                     ],
@@ -1013,14 +1015,14 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                '₺${item.transaction.amount.toStringAsFixed(2)}',
+              Flexible(child: Text(
+                formatTry(item.transaction.amount),
                 style: TextStyle(
-                  color: isExpense ? Colors.redAccent : AppColors.textPrimary(context),
+                  color: isExpense ? AppColors.dangerText(context) : AppColors.textPrimary(context),
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
-              ),
+              )),
             ],
           ),
 
@@ -1034,7 +1036,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                 icon: const Icon(Icons.add_home_work_outlined, size: 16),
                 label: const Text('Daire Seç & Eşle'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentOrange,
+                  backgroundColor: AppColors.warningFill,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1051,11 +1053,11 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   TextButton.icon(
                     onPressed: () => _showSingleItemConfirmationDialog(context, item),
                     icon: const Icon(Icons.check_circle_outline, size: 15, color: AppColors.accentGreen),
-                    label: const Text(
+                    label: Text(
                       'Eşleşmeyi Onayla',
                       style: TextStyle(
-                        color: AppColors.accentGreen,
-                        fontSize: 11,
+                        color: AppColors.successText(context),
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1070,11 +1072,11 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                 TextButton.icon(
                   onPressed: () => _openManualAssignment(context, item),
                   icon: const Icon(Icons.edit_note, size: 15, color: AppColors.accentCyan),
-                  label: const Text(
+                  label: Text(
                     'Daireyi Değiştir',
                     style: TextStyle(
-                      color: AppColors.accentCyan,
-                      fontSize: 11,
+                      color: AppColors.primaryText(context),
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -1137,11 +1139,11 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           ? ' Ev sahibine (${selectedFlat.residentName}) bilgilendirme mesajı iletildi.'
           : '';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        appSnackBar(
           content: Text(
             '${item.transaction.senderName ?? "İşlem"} -> $flatDesc (${selectedFlat.residentName}) ile eşleştirildi ve onaylandı!$msgNote',
           ),
-          backgroundColor: AppColors.accentGreen,
+          backgroundColor: AppColors.successFill,
         ),
       );
     }
@@ -1158,7 +1160,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     bool sendMessage = true;
     final messageController = TextEditingController(
       text:
-          'Sayın $residentName, $unitDesc nolu bağımsız bölümünüze ait ₺${txn.amount.toStringAsFixed(2)} tutarındaki aidat ödemeniz onaylanmış ve kayıtlara işlenmiştir. Teşekkür ederiz.',
+          'Sayın $residentName, $unitDesc nolu bağımsız bölümünüze ait ${formatTry(txn.amount)} tutarındaki aidat ödemeniz onaylanmış ve kayıtlara işlenmiştir. Teşekkür ederiz.',
     );
 
     final confirmed = await showDialog<bool>(
@@ -1237,8 +1239,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  children: [
+                                Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                                     const Icon(Icons.apartment, color: AppColors.accentCyan, size: 16),
                                     const SizedBox(width: 6),
                                     Text(
@@ -1249,18 +1250,17 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                                       ' • $residentName',
                                       style: TextStyle(color: AppColors.textSecondary(dialogCtx), fontSize: 12),
                                     ),
-                                  ],
-                                ),
-                                Text(
-                                  '₺${txn.amount.toStringAsFixed(2)}',
-                                  style: const TextStyle(color: AppColors.accentGreen, fontSize: 15, fontWeight: FontWeight.bold),
-                                ),
+                                  ])),
+                                Flexible(child: Text(
+                                  formatTry(txn.amount),
+                                  style: TextStyle(color: AppColors.successText(context), fontSize: 15, fontWeight: FontWeight.bold),
+                                )),
                               ],
                             ),
                             const SizedBox(height: 6),
                             Text(
                               txn.description,
-                              style: TextStyle(color: AppColors.textSecondary(dialogCtx), fontSize: 11),
+                              style: TextStyle(color: AppColors.textSecondary(dialogCtx), fontSize: 12),
                             ),
                           ],
                         ),
@@ -1307,7 +1307,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                           decoration: InputDecoration(
                             hintText: 'Ev sahibine iletilecek mesaj metnini düzenleyebilirsiniz...',
                             filled: true,
-                            fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                            fillColor: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(color: AppColors.border(dialogCtx)),
@@ -1329,7 +1329,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
-                              child: const Text('Vazgeç'),
+                              child: const Text(AppStrings.cancel),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -1339,7 +1339,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                               icon: const Icon(Icons.check, size: 16),
                               label: const Text('Eşleştirmeyi Onayla'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.accentGreen,
+                                backgroundColor: AppColors.successFill,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1368,11 +1368,11 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
         _selectedMatchIds.remove(item.matchId);
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        appSnackBar(
           content: Text(
             widget.controller.reconciliationSuccessMessage ?? 'Banka işlemi başarıyla onaylandı!',
           ),
-          backgroundColor: AppColors.accentGreen,
+          backgroundColor: AppColors.successFill,
         ),
       );
     }
@@ -1475,8 +1475,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                             return Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  children: [
+                                Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                                     const Icon(Icons.apartment, size: 14, color: AppColors.accentCyan),
                                     const SizedBox(width: 6),
                                     Text(
@@ -1486,15 +1485,14 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                                     if (item.matchedResidentName != null) ...[
                                       Text(
                                         ' • ${item.matchedResidentName}',
-                                        style: TextStyle(color: AppColors.textSecondary(dialogCtx), fontSize: 11),
+                                        style: TextStyle(color: AppColors.textSecondary(dialogCtx), fontSize: 12),
                                       ),
                                     ],
-                                  ],
-                                ),
-                                Text(
-                                  '₺${item.transaction.amount.toStringAsFixed(2)}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.accentGreen),
-                                ),
+                                  ])),
+                                Flexible(child: Text(
+                                  formatTry(item.transaction.amount),
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.successText(context)),
+                                )),
                               ],
                             );
                           },
@@ -1506,8 +1504,8 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Toplam Onaylanacak:', style: TextStyle(color: AppColors.textSecondary(dialogCtx), fontSize: 12, fontWeight: FontWeight.w600)),
-                          Text('₺${totalAmount.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.accentGreen, fontSize: 16, fontWeight: FontWeight.bold)),
+                          Flexible(child: Text('Toplam Onaylanacak:', style: TextStyle(color: AppColors.textSecondary(dialogCtx), fontSize: 12, fontWeight: FontWeight.w600))),
+                          Flexible(child: Text(formatTry(totalAmount), style: TextStyle(color: AppColors.successText(context), fontSize: 16, fontWeight: FontWeight.bold))),
                         ],
                       ),
 
@@ -1553,7 +1551,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                           decoration: InputDecoration(
                             hintText: 'Ev sahiplerine iletilecek mesaj metnini düzenleyebilirsiniz...',
                             filled: true,
-                            fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                            fillColor: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(color: AppColors.border(dialogCtx)),
@@ -1575,7 +1573,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
-                              child: const Text('Vazgeç'),
+                              child: const Text(AppStrings.cancel),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -1585,7 +1583,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                               icon: const Icon(Icons.check, size: 16),
                               label: const Text('Onayla ve Kaydet'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.accentGreen,
+                                backgroundColor: AppColors.successFill,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1614,11 +1612,11 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
         _selectedMatchIds.clear();
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        appSnackBar(
           content: Text(
             widget.controller.reconciliationSuccessMessage ?? 'Banka işlemleri başarıyla onaylandı!',
           ),
-          backgroundColor: AppColors.accentGreen,
+          backgroundColor: AppColors.successFill,
         ),
       );
     }
@@ -1652,7 +1650,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: color,
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1670,12 +1668,12 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           ),
           const SizedBox(height: 2),
           Text(
-            '₺${amount.toStringAsFixed(2)}',
+            formatTry(amount),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: AppColors.textSecondary(context),
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -1686,7 +1684,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
 
   Widget _buildFilterTab(String label, String filterKey) {
     final isSelected = _filterStatus == filterKey;
-    return InkWell(
+    return selectableSemantics(selected: isSelected, child: InkWell(
       onTap: () {
         setState(() {
           _filterStatus = filterKey;
@@ -1711,7 +1709,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           ),
         ),
       ),
-    );
+    ));
   }
 
   void _showChangeBankAccountDialog(BuildContext context) {
@@ -1788,7 +1786,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          color: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: AppColors.border(context)),
                         ),
@@ -1820,9 +1818,9 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                                       ),
                                       child: Text(
                                         bank.statementFormat,
-                                        style: const TextStyle(
-                                          color: AppColors.accentCyan,
-                                          fontSize: 10,
+                                        style: TextStyle(
+                                          color: AppColors.primaryText(context),
+                                          fontSize: 12,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
@@ -1857,9 +1855,9 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                             Expanded(
                               child: Text(
                                 'Bu banka için ekstre formatı otomatik olarak ${selectedBank.statementFormat} (${selectedBank.fileExtension}) olarak tanımlanacaktır.',
-                                style: const TextStyle(
-                                  color: AppColors.accentCyan,
-                                  fontSize: 11,
+                                style: TextStyle(
+                                  color: AppColors.primaryText(context),
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -1889,7 +1887,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                           hintText: 'TR000000000000000000000000',
                           hintStyle: TextStyle(color: AppColors.textSecondary(context).withOpacity(0.5)),
                           filled: true,
-                          fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          fillColor: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -1918,7 +1916,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                           hintText: 'Örn. Site Yönetimi',
                           hintStyle: TextStyle(color: AppColors.textSecondary(context).withOpacity(0.5)),
                           filled: true,
-                          fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          fillColor: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -1942,7 +1940,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                               Expanded(
                                 child: Text(
                                   dialogError!,
-                                  style: const TextStyle(color: AppColors.accentRed, fontSize: 11),
+                                  style: TextStyle(color: AppColors.dangerText(context), fontSize: 12),
                                 ),
                               ),
                             ],
@@ -1956,7 +1954,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                           TextButton(
                             onPressed: () => Navigator.of(dialogCtx).pop(),
                             child: Text(
-                              'Vazgeç',
+                              AppStrings.cancel,
                               style: TextStyle(color: AppColors.textSecondary(context)),
                             ),
                           ),
@@ -1972,11 +1970,11 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                                 Navigator.of(dialogCtx).pop();
 
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
+                                  appSnackBar(
                                     content: Text(
                                       'Banka hesabı ${selectedBank.displayName} olarak güncellendi. Yeni ekstre formatı: ${selectedBank.statementFormat}',
                                     ),
-                                    backgroundColor: AppColors.accentGreen,
+                                    backgroundColor: AppColors.successFill,
                                   ),
                                 );
                               } else {
@@ -1988,7 +1986,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                             icon: const Icon(Icons.check, size: 16),
                             label: const Text('Kaydet & Formatı Uygula'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentCyan,
+                              backgroundColor: AppColors.primaryFill,
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),

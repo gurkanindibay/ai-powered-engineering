@@ -8,6 +8,7 @@ from pages import DuesManagement, ManagerCockpit, PaymentStream, ResidentHome, R
 from support.api import ApiError
 from support.bank_files import StatementRow, kuveyt_xlsx
 from support.flutter import by_id, by_id_prefix, fill, input_value, text_of
+from support.money import format_try, last_amount
 
 A14_IBAN = "TR620020500009863791600001"
 
@@ -18,8 +19,8 @@ def _unit_id(stack, block: str, number: int) -> str:
 
 
 def _plain(text: str) -> Decimal:
-    """Amount printed with Decimal.toString after the last '₺' (e.g. 'Vadesi Gelmemiş₺42000Normal döngü')."""
-    return Decimal(re.match(r"[0-9.]+", text.rsplit("₺", 1)[1]).group(0))
+    """Amount after the last '₺' (e.g. 'Vadesi Gelmemiş₺42.000,00Normal döngü')."""
+    return last_amount(text)
 
 
 # ------------------------------------------------------------------ EPIC-06
@@ -64,8 +65,6 @@ def test_google_sign_in_redirects_to_the_provider(login_page, page):
 @pytest.mark.edge
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-05")
-@pytest.mark.xfail(strict=True, reason="GAP (STORY-01-06): there is no offline banner; HeroBalanceCard takes "
-                   "isOffline but never uses it, and a real browser offline state is not detected")
 def test_offline_state_shows_a_banner_and_keeps_the_balance(login_as, page, context, builders):
     builders.overdue_dues(principal=Decimal("1400.00"), days_overdue=10)
     login_as("homeowner")
@@ -96,7 +95,7 @@ def test_penalty_detail_shows_days_and_the_penalty_amount(login_as, page, builde
 
     assert "10 Gün" in text_of(by_id(page, "penalty_days"))
     formula = text_of(by_id(page, "penalty_formula"))
-    assert formula.endswith(f"₺{expected_penalty:.2f}"), (formula, expected_penalty)
+    assert formula.endswith(format_try(expected_penalty)), (formula, expected_penalty)
 
 
 # ------------------------------------------------------------------ EPIC-02
@@ -325,9 +324,6 @@ def test_reload_never_leaves_a_broken_screen(login_as, page):
 
 @pytest.mark.edge
 @pytest.mark.gui_id("GUI-X-06")
-@pytest.mark.xfail(strict=True, reason="BUG: several views print amounts with Decimal.toString/toStringAsFixed "
-                   "('₺42000', '₺1400.00', '₺53.67') instead of the Turkish format ₺1.234,56 (capital tiles, debt "
-                   "aging, receipts, import summary)")
 def test_every_amount_uses_the_turkish_format(login_as, page, tenant_paid_capital):
     login_as("manager")
     ManagerCockpit(page).wait()

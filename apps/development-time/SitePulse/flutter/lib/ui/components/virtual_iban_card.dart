@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 
+import '../design_system/sp_feedback.dart';
 class VirtualIbanCard extends StatelessWidget {
   final String iban;
   final String unitDesc;
@@ -29,8 +31,7 @@ class VirtualIbanCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
+              Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -59,24 +60,23 @@ class VirtualIbanCard extends StatelessWidget {
                         'FAST / EFT ile 7/24 Kesintisiz',
                         style: TextStyle(
                           color: AppColors.textSecondary(context),
-                          fontSize: 11,
+                          fontSize: 12,
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
+                ])),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.accentGreen.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
+                child: Text(
                   '%100 Otomatik Eşleşme',
                   style: TextStyle(
-                    color: AppColors.accentGreen,
-                    fontSize: 10,
+                    color: AppColors.successText(context),
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -111,10 +111,10 @@ class VirtualIbanCard extends StatelessWidget {
                     Clipboard.setData(ClipboardData(text: iban.replaceAll(' ', '')));
                     onIbanCopied?.call();
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
+                      appSnackBar(
                         content: Text('Sanal IBAN panoya kopyalandı!'),
                         duration: Duration(seconds: 2),
-                        backgroundColor: AppColors.accentGreen,
+                        backgroundColor: AppColors.successFill,
                       ),
                     );
                   },
@@ -125,15 +125,15 @@ class VirtualIbanCard extends StatelessWidget {
                       color: AppColors.accentCyan.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.copy, size: 14, color: AppColors.accentCyan),
                         SizedBox(width: 4),
                         Text(
-                          'Kopyala',
+                          AppStrings.copy,
                           style: TextStyle(
-                            color: AppColors.accentCyan,
+                            color: AppColors.primaryText(context),
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -150,7 +150,7 @@ class VirtualIbanCard extends StatelessWidget {
             'Bu IBAN sadece $unitDesc için tanımlanmıştır. Açıklamaya hiçbir şey yazmasanız dahi ödemeniz anında sistemde onaylanır.',
             style: TextStyle(
               color: AppColors.textSecondary(context),
-              fontSize: 11,
+              fontSize: 12,
               height: 1.4,
             ),
           ),

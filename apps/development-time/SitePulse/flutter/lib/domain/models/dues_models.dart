@@ -1,4 +1,5 @@
 import 'package:decimal/decimal.dart';
+import '../formatting/money_formatter.dart';
 
 enum DebtStatus {
   pending('Pending'),
@@ -7,15 +8,8 @@ enum DebtStatus {
 
   final String label;
   const DebtStatus(this.label);
-
-  // Backwards compatibility getters
-  static DebtStatus get bekliyor => DebtStatus.pending;
-  static DebtStatus get gecikmede => DebtStatus.overdue;
-  static DebtStatus get odendi => DebtStatus.paid;
 }
 
-// Backwards compatibility alias
-typedef BorcDurumu = DebtStatus;
 
 class DuesLiability {
   final String id;
@@ -40,16 +34,6 @@ class DuesLiability {
     required this.status,
   });
 
-  // Backwards compatibility getters
-  String get daireId => unitId;
-  String get donem => period;
-  Decimal get anaPara => principalAmount;
-  Decimal get gecikmeTazminati => delayPenalty;
-  Decimal get toplamTutar => totalAmount;
-  DateTime get sonOdemeTarihi => dueDate;
-  int get gecikenGunSayisi => daysOverdue;
-  DebtStatus get durum => status;
-
   DuesLiability copyWith({
     String? id,
     String? unitId,
@@ -60,32 +44,21 @@ class DuesLiability {
     DateTime? dueDate,
     int? daysOverdue,
     DebtStatus? status,
-    // Backwards compatibility params
-    String? daireId,
-    String? donem,
-    Decimal? anaPara,
-    Decimal? gecikmeTazminati,
-    Decimal? toplamTutar,
-    DateTime? sonOdemeTarihi,
-    int? gecikenGunSayisi,
-    DebtStatus? durum,
   }) {
     return DuesLiability(
       id: id ?? this.id,
-      unitId: unitId ?? daireId ?? this.unitId,
-      period: period ?? donem ?? this.period,
-      principalAmount: principalAmount ?? anaPara ?? this.principalAmount,
-      delayPenalty: delayPenalty ?? gecikmeTazminati ?? this.delayPenalty,
-      totalAmount: totalAmount ?? toplamTutar ?? this.totalAmount,
-      dueDate: dueDate ?? sonOdemeTarihi ?? this.dueDate,
-      daysOverdue: daysOverdue ?? gecikenGunSayisi ?? this.daysOverdue,
-      status: status ?? durum ?? this.status,
+      unitId: unitId ?? this.unitId,
+      period: period ?? this.period,
+      principalAmount: principalAmount ?? this.principalAmount,
+      delayPenalty: delayPenalty ?? this.delayPenalty,
+      totalAmount: totalAmount ?? this.totalAmount,
+      dueDate: dueDate ?? this.dueDate,
+      daysOverdue: daysOverdue ?? this.daysOverdue,
+      status: status ?? this.status,
     );
   }
 }
 
-// Backwards compatibility alias
-typedef AidatBorcu = DuesLiability;
 
 class ApartmentUnit {
   final String id;
@@ -126,15 +99,7 @@ class ApartmentUnit {
     this.advancePayment,
   });
 
-  // Backwards compatibility getters
-  String get siteAdi => siteName;
-  String get blok => block;
-  int get daireNo => unitNo;
-  int get kat => floor;
-  int get arsaPayi => landShare;
-  String get malikAdi => ownerName;
-  String get kiraciAdi => tenantName;
-  Decimal get avansBakiye => advancePayment ?? Decimal.zero;
+  Decimal get advanceBalance => advancePayment ?? Decimal.zero;
   bool get hasAdvancePayment => (advancePayment ?? Decimal.zero) > Decimal.zero;
   String get displayLabel => block.isNotEmpty && unitNo > 0 ? '$block Blok D:$unitNo' : '';
   String get unitNumber => unitNo > 0 ? unitNo.toString() : '';
@@ -168,8 +133,6 @@ class ApartmentUnit {
   }
 }
 
-// Backwards compatibility alias
-typedef Daire = ApartmentUnit;
 
 class AccountTransactionItem {
   final String id;
@@ -188,10 +151,7 @@ class AccountTransactionItem {
     required this.isCredit,
   });
 
-  String get amountStr {
-    final formatted = amount.toStringAsFixed(2).replaceAll('.', ',');
-    return isCredit ? '+₺$formatted' : '₺$formatted';
-  }
+  String get amountStr => isCredit ? MoneyFormatter.formatCredit(amount) : MoneyFormatter.format(amount.abs());
 
   factory AccountTransactionItem.fromJson(Map<String, dynamic> json) {
     return AccountTransactionItem(

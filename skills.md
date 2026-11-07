@@ -136,6 +136,17 @@ Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/
 ./scripts/testid_lint.py --json
 ```
 
+## 5b-3b. UI Style Lint (`ui_style_lint.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/ui_style_lint.py](file:///apps/development-time/SitePulse/scripts/ui_style_lint.py) (symlinked to `scripts/ui_style_lint.py`)
+- **Purpose:** Enforces the design-system rules from `docs/UX_UI_EVALUATION_REPORT.md` on `flutter/lib/ui`. Hard rules fail on any hit: font sizes below 12 px, amounts printed by hand (`'₺${x.toStringAsFixed(2)}'`, `'₺$x'`; use `formatTry`/`MoneyFormatter`), emoji in string literals, and the `Icons.g_mobiledata` stand-in. Ratchet rules count literal `fontSize:` and `Color(0x…)` outside `ui/theme` and `ui/design_system`; the counts in `scripts/ui_style_baseline.json` may only go down. Comments are ignored. Gate `ui-style-lint` in `run_tests.py`.
+
+```bash
+./scripts/ui_style_lint.py                    # exit 1 with file:line:[rule] for every finding
+./scripts/ui_style_lint.py --json
+./scripts/ui_style_lint.py --update-baseline  # after removing literals: record the lower counts
+```
+
 ## 5b-4. GUI Traceability (`gui_traceability.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/gui_traceability.py](file:///apps/development-time/SitePulse/scripts/gui_traceability.py) (symlinked to `scripts/gui_traceability.py`)

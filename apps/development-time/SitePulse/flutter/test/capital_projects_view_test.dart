@@ -2,9 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
-import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/ui/components/capital_projects_view.dart';
-import 'package:sitepulse/ui/components/dues_management_view.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_screen.dart';
 import 'test_fixtures.dart';
@@ -53,12 +51,16 @@ void main() {
       // Tap on Aidat Yönetimi bottom tab
       final duesNavTab = find.text('Aidat Yönetimi');
       expect(duesNavTab, findsOneWidget);
+      await tester.ensureVisible(duesNavTab);
+      await tester.pumpAndSettle();
       await tester.tap(duesNavTab);
       await tester.pumpAndSettle();
 
       // Find and tap on Segment 4: Demirbaş & Yatırım
       final demirbasTab = find.byKey(const Key('segment_tab_4'));
       expect(demirbasTab, findsOneWidget);
+      await tester.ensureVisible(demirbasTab);
+      await tester.pumpAndSettle();
       await tester.tap(demirbasTab);
       await tester.pumpAndSettle();
 
@@ -97,8 +99,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // Switch to Subtab 1: Kat Malikleri
-      final maliklerSubtab = find.byKey(const Key('subtab_button_1'));
-      await tester.tap(maliklerSubtab);
+      final ownersSubtab = find.byKey(const Key('subtab_button_1'));
+      await tester.ensureVisible(ownersSubtab);
+      await tester.pumpAndSettle();
+      await tester.tap(ownersSubtab);
       await tester.pumpAndSettle();
 
       // Verify owner share distribution list
@@ -108,6 +112,8 @@ void main() {
 
       // Switch to Subtab 2: Müteahhit Hakedişleri
       final hakedisSubtab = find.byKey(const Key('subtab_button_2'));
+      await tester.ensureVisible(hakedisSubtab);
+      await tester.pumpAndSettle();
       await tester.tap(hakedisSubtab);
       await tester.pumpAndSettle();
 

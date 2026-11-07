@@ -3,6 +3,7 @@ import pytest
 
 from pages import DuesManagement, ManagerCockpit, ResidentsTab
 from support.flutter import by_id
+from support.money import last_amount
 
 
 @pytest.mark.smoke
@@ -192,8 +193,8 @@ def test_house_type_tariff_rejects_more_than_two_decimals(login_as, page, stack)
 # ---------------------------------------------------------------- GUI-02-01 (P0)
 
 def _cockpit_amount(page, test_id: str) -> Decimal:
-    # e.g. '₺1400' or '/ ₺2800' (the cockpit prints whole lira)
-    return Decimal(text_of(by_id(page, test_id)).rsplit("₺", 1)[1].strip())
+    # e.g. '₺1.400,00' or '/ ₺2.800,00' (MoneyFormatter, kuruş kept)
+    return last_amount(text_of(by_id(page, test_id)))
 
 
 def _accrue_october(api, actors, amount: Decimal):
@@ -247,8 +248,6 @@ def test_cockpit_counts_a_payment_as_collected(login_as, page, api, actors, stac
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-01")
-@pytest.mark.xfail(strict=True, reason="BUG: the cockpit prints amounts with toStringAsFixed(0), so kuruş are lost "
-                   "(2 × ₺1.400,55 accrued is shown as '₺2801' instead of ₺2.801,10)")
 def test_cockpit_amounts_keep_kurus(login_as, page, api, actors):
     _accrue_october(api, actors, Decimal("1400.55"))
     _, shown_expected, _ = _cockpit_figures(login_as, page)

@@ -1,11 +1,15 @@
 import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
+import '../design_system/sp_semantics.dart';
 import 'app_fullscreen_page.dart';
 
+import '../design_system/money_formatter.dart';
+import '../design_system/sp_feedback.dart';
 class CapitalProjectsView extends StatefulWidget {
   final DashboardController controller;
 
@@ -83,7 +87,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '₺${budget.toString()} tutarındaki $installmentNumber. taksit tüm bağımsız bölümlere borç olarak tahakkuk ettirilecektir.',
+              '${formatTry(budget)} tutarındaki $installmentNumber. taksit tüm bağımsız bölümlere borç olarak tahakkuk ettirilecektir.',
               style: TextStyle(color: AppColors.textPrimary(ctx), fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -103,8 +107,8 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                     child: Text(
                       'KMK Madde 20/b uyarınca demirbaş borçları münhasıran Kat Maliklerine (Ev Sahipleri) yansıtılır. Kiracılar muaftır. Arsa payı dağılımında kuruş sapması garantilenir.',
                       style: TextStyle(
-                        color: AppColors.accentOrange,
-                        fontSize: 11,
+                        color: AppColors.warningText(context),
+                        fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -117,12 +121,12 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary(ctx))),
+            child: Text(AppStrings.cancel, style: TextStyle(color: AppColors.textSecondary(ctx))),
           ),
           testId('btn_confirm_accrual_dialog', ElevatedButton(
             key: const Key('btn_confirm_accrual_dialog'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentCyan,
+              backgroundColor: AppColors.primaryFill,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
@@ -138,9 +142,9 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          appSnackBar(
             content: Text(res['message']?.toString() ?? 'Taksit başarıyla tahakkuk ettirildi.'),
-            backgroundColor: AppColors.accentGreen,
+            backgroundColor: AppColors.successFill,
           ),
         );
       }
@@ -246,7 +250,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                         key: const Key('btn_open_capital_project_wizard'),
                         onPressed: _openProjectWizard,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accentCyan,
+                          backgroundColor: AppColors.primaryFill,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -271,7 +275,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                               child: _buildMetricTile(
                                 context,
                                 'Toplam Bütçe',
-                                '₺${totalBudgetSum.toString()}',
+                                formatTry(totalBudgetSum),
                                 Icons.calculate_outlined,
                                 AppColors.textPrimary(context),
                                 metricId: 'budget',
@@ -282,7 +286,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                               child: _buildMetricTile(
                                 context,
                                 'Tahsil Edilen',
-                                '₺${totalCollectedSum.toString()}',
+                                formatTry(totalCollectedSum),
                                 Icons.arrow_downward_rounded,
                                 AppColors.accentGreen,
                                 metricId: 'collected',
@@ -293,7 +297,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                               child: _buildMetricTile(
                                 context,
                                 'Hakediş Ödemeleri',
-                                '₺${totalDisbursedSum.toString()}',
+                                formatTry(totalDisbursedSum),
                                 Icons.arrow_upward_rounded,
                                 AppColors.accentOrange,
                                 metricId: 'disbursed',
@@ -304,7 +308,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                               child: _buildMetricTile(
                                 context,
                                 'Kalan Rezerv Fon',
-                                '₺${totalReserveFund.toString()}',
+                                formatTry(totalReserveFund),
                                 Icons.shield_outlined,
                                 AppColors.accentCyan,
                                 metricId: 'reserve',
@@ -322,7 +326,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                 child: _buildMetricTile(
                                   context,
                                   'Toplam Bütçe',
-                                  '₺${totalBudgetSum.toString()}',
+                                  formatTry(totalBudgetSum),
                                   Icons.calculate_outlined,
                                   AppColors.textPrimary(context),
                                   metricId: 'budget',
@@ -333,7 +337,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                 child: _buildMetricTile(
                                   context,
                                   'Tahsil Edilen',
-                                  '₺${totalCollectedSum.toString()}',
+                                  formatTry(totalCollectedSum),
                                   Icons.arrow_downward_rounded,
                                   AppColors.accentGreen,
                                   metricId: 'collected',
@@ -348,7 +352,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                 child: _buildMetricTile(
                                   context,
                                   'Hakediş Ödemeleri',
-                                  '₺${totalDisbursedSum.toString()}',
+                                  formatTry(totalDisbursedSum),
                                   Icons.arrow_upward_rounded,
                                   AppColors.accentOrange,
                                   metricId: 'disbursed',
@@ -359,7 +363,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                 child: _buildMetricTile(
                                   context,
                                   'Kalan Rezerv Fon',
-                                  '₺${totalReserveFund.toString()}',
+                                  formatTry(totalReserveFund),
                                   Icons.shield_outlined,
                                   AppColors.accentCyan,
                                   metricId: 'reserve',
@@ -414,7 +418,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                 proj.title,
                                 style: TextStyle(
                                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                  color: isSelected ? AppColors.accentCyan : AppColors.textPrimary(context),
+                                  color: isSelected ? AppColors.primaryText(context) : AppColors.textPrimary(context),
                                   fontSize: 13,
                                 ),
                               ),
@@ -430,9 +434,9 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                 child: Text(
                                   '%${proj.collectionProgressPercentage.toStringAsFixed(0)}',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: isSelected ? AppColors.accentCyan : AppColors.textSecondary(context),
+                                    color: isSelected ? AppColors.primaryText(context) : AppColors.textSecondary(context),
                                   ),
                                 ),
                               ),
@@ -502,9 +506,9 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                           ),
                                           child: Text(
                                             activeProj.categoryLabel,
-                                            style: const TextStyle(
-                                              color: AppColors.accentCyan,
-                                              fontSize: 11,
+                                            style: TextStyle(
+                                              color: AppColors.primaryText(context),
+                                              fontSize: 12,
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
@@ -525,7 +529,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    'Bütçe: ₺${activeProj.totalBudget.toString()}',
+                                    'Bütçe: ${formatTry(activeProj.totalBudget)}',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 15,
@@ -557,22 +561,22 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
+                              Flexible(child: Text(
                                 'Tahsilat İlerlemesi',
                                 style: TextStyle(
                                   color: AppColors.textSecondary(context),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                 ),
-                              ),
-                              Text(
-                                '₺${activeProj.collectedAmount.toString()} / ₺${activeProj.totalBudget.toString()} (%${activeProj.collectionProgressPercentage.toStringAsFixed(1)})',
+                              )),
+                              Flexible(child: Text(
+                                '${formatTry(activeProj.collectedAmount)} / ${formatTry(activeProj.totalBudget)} (%${activeProj.collectionProgressPercentage.toStringAsFixed(1)})',
                                 style: TextStyle(
-                                  color: AppColors.accentCyan,
+                                  color: AppColors.primaryText(context),
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
-                              ),
+                              )),
                             ],
                           ),
                           const SizedBox(height: 6),
@@ -598,15 +602,15 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: _buildSubTabButton(0, '🗓️ Taksit Planı (${installments.length})'),
+                            child: _buildSubTabButton(0, 'Taksit Planı (${installments.length})'),
                           ),
                           const SizedBox(width: 6),
                           Expanded(
-                            child: _buildSubTabButton(1, '👥 Kat Malikleri (${shares.length})'),
+                            child: _buildSubTabButton(1, 'Kat Malikleri (${shares.length})'),
                           ),
                           const SizedBox(width: 6),
                           Expanded(
-                            child: _buildSubTabButton(2, '🏗️ Hakedişler (${disbursements.length})'),
+                            child: _buildSubTabButton(2, 'Hakedişler (${disbursements.length})'),
                           ),
                         ],
                       ),
@@ -640,7 +644,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                         onPressed: _openProjectWizard,
                         icon: const Icon(Icons.add),
                         label: const Text('İlk Demirbaş Projesini Başlat'),
-                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan),
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryFill),
                       )),
                     ],
                   ),
@@ -682,9 +686,9 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isHighlight ? AppColors.accentCyan : AppColors.textSecondary(context),
+                    color: isHighlight ? AppColors.primaryText(context) : AppColors.textSecondary(context),
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -697,7 +701,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.bold,
-              color: isHighlight ? AppColors.accentCyan : color,
+              color: isHighlight ? AppColors.primaryText(context) : color,
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -708,7 +712,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
 
   Widget _buildSubTabButton(int index, String label) {
     final isSelected = _activeSubTab == index;
-    return testId('subtab_button_$index', InkWell(
+    return testId('subtab_button_$index', selectableSemantics(selected: isSelected, child: InkWell(
       key: Key('subtab_button_$index'),
       onTap: () => setState(() => _activeSubTab = index),
       borderRadius: BorderRadius.circular(8),
@@ -728,7 +732,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
           ),
         ),
       ),
-    ));
+    )));
   }
 
   Widget _buildSubTabContent(
@@ -745,18 +749,18 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              Flexible(child: Text(
                 'Taksitlendirme Planı (${installments.length} Taksit)',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                   color: AppColors.textPrimary(context),
                 ),
-              ),
-              Text(
-                'Toplam: ₺${proj.totalBudget.toString()}',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.accentCyan, fontSize: 13),
-              ),
+              )),
+              Flexible(child: Text(
+                'Toplam: ${formatTry(proj.totalBudget)}',
+                style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText(context), fontSize: 13),
+              )),
             ],
           ),
           const SizedBox(height: 12),
@@ -815,7 +819,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '₺${inst.installmentBudget.toString()}',
+                          formatTry(inst.installmentBudget),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
@@ -830,9 +834,9 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                               color: AppColors.accentGreen.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: const Text(
+                            child: Text(
                               'Tahakkuk Etti',
-                              style: TextStyle(color: AppColors.accentGreen, fontSize: 10, fontWeight: FontWeight.bold),
+                              style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                           ))
                         else
@@ -840,13 +844,13 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                             key: Key('btn_accrue_installment_${inst.installmentNumber}'),
                             onPressed: () => _handleAccrueInstallment(proj.id, inst.installmentNumber, inst.installmentBudget),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentCyan,
+                              backgroundColor: AppColors.primaryFill,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                               elevation: 0,
                             ),
-                            child: const Text('Tahakkuk Ettir', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            child: const Text('Tahakkuk Ettir', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           )),
                       ],
                     ),
@@ -883,9 +887,9 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                   color: AppColors.accentCyan.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Text(
+                child: Text(
                   'Yalnızca Ev Sahipleri Borçlandırılır (KMK 20)',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.accentCyan),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryText(context)),
                 ),
               ),
             ],
@@ -915,7 +919,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                       ),
                       child: Text(
                         '${share.block}-${share.unitNumber}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.accentCyan, fontSize: 12),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText(context), fontSize: 12),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -933,8 +937,8 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                           ),
                           const SizedBox(height: 2),
                           testId('unit_share_${share.block}_${share.unitNumber}', Text(
-                            'Arsa Payı: ${share.landShare}/1000 • Toplam Pay: ₺${share.totalProjectShare.toString()}',
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            'Arsa Payı: ${share.landShare}/1000 • Toplam Pay: ${formatTry(share.totalProjectShare)}',
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                           )),
                         ],
                       ),
@@ -943,20 +947,20 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          'Ödenen: ₺${share.totalPaid.toString()}',
-                          style: const TextStyle(
+                          'Ödenen: ${formatTry(share.totalPaid)}',
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
-                            color: AppColors.accentGreen,
+                            color: AppColors.successText(context),
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          share.isSettled ? 'Tamamı Ödendi' : 'Kalan: ₺${share.remainingDebt.toString()}',
+                          share.isSettled ? 'Tamamı Ödendi' : 'Kalan: ${formatTry(share.remainingDebt)}',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: share.isSettled ? AppColors.accentGreen : AppColors.accentOrange,
+                            color: share.isSettled ? AppColors.successText(context) : AppColors.warningText(context),
                           ),
                         ),
                       ],
@@ -992,7 +996,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                 key: const Key('btn_record_disbursement'),
                 onPressed: () => _openDisbursementModal(proj.id),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentOrange,
+                  backgroundColor: AppColors.warningFill,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1055,7 +1059,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                             const SizedBox(height: 2),
                             Text(
                               'Alıcı: ${d.recipientName} • Fatura: ${d.invoiceNumber ?? 'Belirtilmedi'}',
-                              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                             ),
                           ],
                         ),
@@ -1064,17 +1068,17 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            '₺${d.amount.toString()}',
-                            style: const TextStyle(
+                            formatTry(d.amount),
+                            style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
-                              color: AppColors.accentOrange,
+                              color: AppColors.warningText(context),
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             '${d.disbursementDate.year}-${d.disbursementDate.month.toString().padLeft(2, '0')}-${d.disbursementDate.day.toString().padLeft(2, '0')}',
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                           ),
                         ],
                       ),
@@ -1155,7 +1159,7 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
     final budgetVal = Decimal.tryParse(_budgetController.text.trim());
     if (budgetVal == null || budgetVal <= Decimal.zero) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lütfen geçerli bir bütçe tutarı giriniz.')),
+        appSnackBar(content: Text('Lütfen geçerli bir bütçe tutarı giriniz.')),
       );
       return;
     }
@@ -1205,9 +1209,9 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
 
     if (created != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        appSnackBar(
           content: Text('${created.title} projesi başarıyla oluşturuldu.'),
-          backgroundColor: AppColors.accentGreen,
+          backgroundColor: AppColors.successFill,
         ),
       );
       Navigator.of(context).pop();
@@ -1398,7 +1402,7 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
                 key: const Key('btn_submit_capital_project'),
                 onPressed: _isSubmitting ? null : _submit,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentCyan,
+                  backgroundColor: AppColors.primaryFill,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
@@ -1467,7 +1471,7 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
     if (!_formKey.currentState!.validate()) return;
     final amt = Decimal.tryParse(_amountController.text.trim());
     if (amt == null || amt <= Decimal.zero) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Geçerli bir tutar girin.')));
+      ScaffoldMessenger.of(context).showSnackBar(appSnackBar(content: Text('Geçerli bir tutar girin.')));
       return;
     }
 
@@ -1487,9 +1491,9 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
     if (res != null && mounted) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('₺${amt.toString()} hakediş ödemesi başarıyla kaydedildi.'),
-          backgroundColor: AppColors.accentGreen,
+        appSnackBar(
+          content: Text('${formatTry(amt)} hakediş ödemesi başarıyla kaydedildi.'),
+          backgroundColor: AppColors.successFill,
         ),
       );
       Navigator.of(context).pop();
@@ -1606,7 +1610,7 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
                   key: const Key('btn_submit_disbursement'),
                   onPressed: _isSubmitting ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentOrange,
+                    backgroundColor: AppColors.warningFill,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),

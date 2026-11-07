@@ -1,4 +1,5 @@
 import 'package:decimal/decimal.dart';
+import '../formatting/money_formatter.dart';
 
 /// High-precision Monetary Value Object adhering to workspace directives.
 /// Guarantees zero floating-point arithmetic drift in financial operations.
@@ -51,11 +52,8 @@ class Money implements Comparable<Money> {
   @override
   int get hashCode => amount.hashCode ^ currency.hashCode;
 
-  /// Returns formatted Turkish Lira string (e.g. "₺1423.33")
-  String toFormattedString() {
-    final fixedStr = amount.toStringAsFixed(2);
-    return '₺$fixedStr';
-  }
+  /// Turkish Lira in the app-wide format (e.g. "₺1.423,33").
+  String toFormattedString() => MoneyFormatter.format(amount);
 
   @override
   String toString() => toFormattedString();

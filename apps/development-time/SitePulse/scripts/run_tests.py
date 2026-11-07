@@ -35,7 +35,7 @@ from harness.loop.verification_gates import GATES, run_gate  # noqa: E402
 
 ORDER = [
     "harness-selftest", "rust-build", "rust-clippy", "rust-test", "money-fixtures",
-    "flutter-analyze", "flutter-test", "persistence-lint", "testid-lint", "schema-integrity", "api-system",
+    "flutter-analyze", "flutter-test", "persistence-lint", "testid-lint", "ui-style-lint", "schema-integrity", "api-system",
     "gui-e2e",
 ]
 DB_GATES = {"schema-integrity", "api-system", "gui-e2e"}

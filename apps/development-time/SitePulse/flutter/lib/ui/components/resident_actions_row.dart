@@ -82,7 +82,7 @@ class ResidentActionsRow extends StatelessWidget {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: testId('resident_action_$actionId', InkWell(
+        child: testId('resident_action_$actionId', MergeSemantics(child: Semantics(button: true, child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),
           child: Container(
@@ -121,7 +121,7 @@ class ResidentActionsRow extends StatelessWidget {
                             badgeText,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 8,
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -134,7 +134,7 @@ class ResidentActionsRow extends StatelessWidget {
                   label,
                   style: TextStyle(
                     color: AppColors.textPrimary(context),
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                   textAlign: TextAlign.center,
@@ -144,7 +144,7 @@ class ResidentActionsRow extends StatelessWidget {
               ],
             ),
           ),
-        )),
+        )))),
       ),
     );
   }

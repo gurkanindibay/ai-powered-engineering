@@ -160,6 +160,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | GUI-X-04 | Homeowner, Manager | P1 | At 375×812 (mobile): login, dashboard, payment checkout and residents module work with no horizontal scroll | — |
 | GUI-X-05 | Any | P2 | Browser reload on the dashboard keeps or restores the session as designed | — |
 | GUI-X-06 | Any | P2 | Every amount shown uses the Turkish format `₺1.234,56` with 2 decimals | — |
+| GUI-X-07 | Manager | P1 | Each tab has its own URL (`/manager/home`, `/manager/residents`, `/manager/dues`); browser back returns to the previous tab | ✅ |
 
 ### Excluded (no GUI surface)
 EPIC-05 (05-01 … 05-06): schema, concurrency, REST, harness and RTM. Covered by `run_tests.py` gates, `schema_integrity_check.py`, `api_system_check.py` and `harness/tests`.
@@ -363,3 +364,18 @@ New ids: `hero_detail_button`, `penalty_days`, `penalty_formula`, `aging_bucket_
 
 Phase 4 (gate, lint, traceability) is done; see GUI_AUTOMATION_PLAN.md. Per-story GUI status: `COMPLETION_STATUS.md`, section "GUI end-to-end coverage".
 
+## 11. UX/UI remediation (2026-11-07, `docs/UX_UI_EVALUATION_REPORT.md`)
+
+The UI changes from the UX report changed what some tests look for. The suite was updated with them:
+
+| Change in the app | Test change |
+|---|---|
+| Logout moved from the app bar into the profile sheet and now asks for confirmation (`btn_logout` → `btn_confirm_logout` / `btn_confirm_cancel`); `btn_header_logout` is gone | `Shell.logout()` goes avatar → profile → confirm. New: `test_logout_asks_for_confirmation_and_cancel_keeps_the_session` (GUI-06-08) |
+| "Profil & Yetki" is no longer a navigation tab; destinations carry `nav_<home\|dues\|residents\|my_flat\|sites>` ids and render as a rail from 840 dp | `Shell.nav()` clicks `nav_<key>`; `nav_tab_count()` counts `nav_*`. GUI-06-10 expects 3 tabs (cockpit) and 2 (own flat) |
+| Theme toggle moved from the app bar to the profile sheet (`btn_profile_toggle_theme`, still labelled `theme:dark`/`theme:light`); the theme follows the system until chosen and the choice is saved | GUI-X-02 reads the label from the profile sheet |
+| URL per role and tab (`Router`, hash URLs): `/resident/home`, `/manager/dues`, `/manager/my-flat/home`, `/admin/sites` | New GUI-X-07 `test_each_tab_has_a_url_and_browser_back_returns_to_it` |
+| Real browser offline/online events drive an inline `offline_banner` | GUI-01-05 strict xfail removed (finding 34, offline part, fixed) |
+| One `MoneyFormatter` (`Decimal`, `₺1.423,33`) for every amount, including the import summary, capital views, cockpit and receipts | GUI-X-06 and GUI-02-01 "keeps kuruş" strict xfails removed (findings 10 and the rounding half of 36 fixed). The parsers in `pages/manager.py`, `test_epic02/07/09/10` and `test_p2_edge.py` now read the Turkish format through `support.money.last_amount` |
+| Login tab labels lost their emoji prefixes | none (tests use ids) |
+
+Still open from §8–§10: the cockpit's paid-flat totals (36, first half), the lump ledger row (GUI-01-03), and every other strict xfail. Their reasons are unchanged.

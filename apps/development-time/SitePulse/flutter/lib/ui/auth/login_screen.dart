@@ -1,11 +1,15 @@
 import '../../testing/test_id.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
 
+import '../design_system/money_formatter.dart';
+import '../design_system/brand_marks.dart';
+import '../design_system/sp_feedback.dart';
 enum LoginTab {
   quickAll,
   homeOwner,
@@ -31,6 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscureGeneralPassword = true;
 
   bool get _shouldShowDemoPersonas => widget.controller.isTestMode;
+  bool get _showQuickLoginTab => kShowDevTools || widget.controller.isTestMode;
 
   late final TextEditingController _emailController;
   late final TextEditingController _passwordController;
@@ -125,13 +130,41 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.clear();
     _passwordController.clear();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      appSnackBar(
         content: Text('Giriş önbelleği ve form alanları temizlendi.'),
         duration: Duration(seconds: 2),
       ),
     );
     setState(() {});
   }
+
+  void _submitHomeowner() => _performPasswordLogin(
+        email: _homeownerEmailController.text,
+        password: _homeownerPasswordController.text,
+        targetRole: UserRole.homeOwner,
+      );
+
+  void _submitManager() => _performPasswordLogin(
+        email: _managerEmailController.text,
+        password: _managerPasswordController.text,
+        targetRole: UserRole.siteManager,
+        adminPath: _selectedAdminPath,
+      );
+
+  void _submitSaas() {
+    // Offline test mode has no backend; everywhere else the credentials are
+    // checked by /auth/login, which issues the bearer token every API call needs.
+    if (widget.controller.isTestMode) {
+      widget.controller.loginAs(role: UserRole.saasAdmin);
+    } else {
+      _performPasswordLogin(email: _saasEmailController.text, password: _saasPasswordController.text);
+    }
+  }
+
+  void _submitGeneral() => _performPasswordLogin(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
 
   Future<void> _performPasswordLogin({
     required String email,
@@ -147,19 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _localError = msg;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
-              SizedBox(width: 8),
-              Text(msg),
-            ],
-          ),
-          backgroundColor: Color(0xFFD97706),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      SpToast.warning(context, msg);
       return;
     }
 
@@ -184,7 +205,7 @@ class _LoginScreenState extends State<LoginScreen> {
           _localError = errorMsg;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          appSnackBar(
             content: Row(
               children: [
                 const Icon(Icons.error_outline, color: Colors.white, size: 18),
@@ -197,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFFDC2626),
+            backgroundColor: AppColors.dangerFill,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 4),
           ),
@@ -210,9 +231,9 @@ class _LoginScreenState extends State<LoginScreen> {
           _localError = errorMsg;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          appSnackBar(
             content: Text(errorMsg),
-            backgroundColor: const Color(0xFFDC2626),
+            backgroundColor: AppColors.dangerFill,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -235,23 +256,23 @@ class _LoginScreenState extends State<LoginScreen> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFEF4444).withOpacity(0.12),
+        color: AppColors.accentRed.withOpacity(0.12),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.6), width: 1.5),
+        border: Border.all(color: AppColors.accentRed.withOpacity(0.6), width: 1.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline, color: Color(0xFFEF4444), size: 22),
+          const Icon(Icons.error_outline, color: AppColors.accentRed, size: 22),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Giriş Yapılamadı',
                   style: TextStyle(
-                    color: Color(0xFFEF4444),
+                    color: AppColors.dangerText(context),
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                   ),
@@ -269,8 +290,8 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
           IconButton(
-            tooltip: 'Kapat',
-            icon: const Icon(Icons.close, size: 16, color: Color(0xFFEF4444)),
+            tooltip: AppStrings.close,
+            icon: const Icon(Icons.close, size: 16, color: AppColors.accentRed),
             onPressed: () {
               setState(() {
                 _localError = null;
@@ -336,7 +357,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               child: Text(
                 'Giriş & Rol Seçimi',
-                style: TextStyle(fontSize: 10, color: AppColors.textSecondary(context), fontWeight: FontWeight.w500),
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context), fontWeight: FontWeight.w500),
               ),
             ),
           ],
@@ -354,7 +375,9 @@ class _LoginScreenState extends State<LoginScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: SafeArea(
+      body: AutofillGroup(
+        // One group so password managers fill and save the visible login form.
+        child: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Column(
@@ -367,7 +390,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 decoration: BoxDecoration(
                   gradient: isDark
                       ? const LinearGradient(
-                          colors: [Color(0xFF1E1B4B), Color(0xFF0F172A)],
+                          colors: [Color(0xFF1E1B4B), AppColors.lightTextPrimary],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         )
@@ -392,9 +415,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           child: Text(
                             _shouldShowDemoPersonas ? 'AI-Powered Engineering Demo' : 'SitePulse Portal',
-                            style: const TextStyle(
-                              color: AppColors.accentCyan,
-                              fontSize: 11,
+                            style: TextStyle(
+                              color: AppColors.primaryText(context),
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -446,6 +469,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -454,30 +478,33 @@ class _LoginScreenState extends State<LoginScreen> {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          _buildRoleTabButton(
-            tab: LoginTab.quickAll,
-            label: 'Tümü & Hızlı Giriş',
-            icon: Icons.bolt,
-            color: AppColors.accentCyan,
-          ),
-          const SizedBox(width: 8),
+          // Quick login with demo users is a developer/test aid only.
+          if (_showQuickLoginTab) ...[
+            _buildRoleTabButton(
+              tab: LoginTab.quickAll,
+              label: 'Tümü & Hızlı Giriş',
+              icon: Icons.bolt,
+              color: AppColors.accentCyan,
+            ),
+            const SizedBox(width: 8),
+          ],
           _buildRoleTabButton(
             tab: LoginTab.homeOwner,
-            label: '🏠 Kat Maliki Girişi',
+            label: 'Kat Maliki Girişi',
             icon: Icons.home,
             color: AppColors.accentGreen,
           ),
           const SizedBox(width: 8),
           _buildRoleTabButton(
             tab: LoginTab.siteManager,
-            label: '🏢 Site Yöneticisi Girişi',
+            label: 'Site Yöneticisi Girişi',
             icon: Icons.apartment,
             color: AppColors.accentCyan,
           ),
           const SizedBox(width: 8),
           _buildRoleTabButton(
             tab: LoginTab.saasAdmin,
-            label: '🌐 SaaS Admin',
+            label: 'SaaS Admin',
             icon: Icons.hub,
             color: AppColors.accentPurple,
           ),
@@ -493,7 +520,13 @@ class _LoginScreenState extends State<LoginScreen> {
     required Color color,
   }) {
     final isSelected = _selectedTab == tab;
-    return testId('login_tab_${tab.name}', InkWell(
+    return testId('login_tab_${tab.name}', Semantics(
+      button: true,
+      selected: isSelected,
+      inMutuallyExclusiveGroup: true,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
       onTap: () {
         setState(() {
           _selectedTab = tab;
@@ -504,6 +537,7 @@ class _LoginScreenState extends State<LoginScreen> {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
+        constraints: const BoxConstraints(minHeight: kMinTouchTarget),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? color.withOpacity(0.18) : AppColors.surface(context),
@@ -521,15 +555,15 @@ class _LoginScreenState extends State<LoginScreen> {
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? color : AppColors.textPrimary(context),
-                fontSize: 12,
+                color: AppColors.textPrimary(context),
+                fontSize: 13,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
               ),
             ),
           ],
         ),
       ),
-    ));
+    )));
   }
 
   // =========================================================================
@@ -581,8 +615,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
+                  Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                       const Icon(Icons.lock_outline, color: AppColors.accentGreen, size: 18),
                       const SizedBox(width: 8),
                       Text(
@@ -593,15 +626,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
-                  ),
+                    ])),
                   testId('btn_clear_login_cache_homeowner', TextButton.icon(
                     key: const Key('btn_clear_login_cache_homeowner'),
                     onPressed: _clearCacheAndForm,
                     icon: const Icon(Icons.cleaning_services_outlined, size: 13, color: AppColors.accentGreen),
-                    label: const Text(
+                    label: Text(
                       'Temizle',
-                      style: TextStyle(fontSize: 11, color: AppColors.accentGreen),
+                      style: TextStyle(fontSize: 12, color: AppColors.successText(context)),
                     ),
                   )),
                 ],
@@ -610,7 +642,12 @@ class _LoginScreenState extends State<LoginScreen> {
               _buildErrorBanner(context),
               testId('login_homeowner_email', TextField(
                 controller: _homeownerEmailController,
-                onChanged: (_) {
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.email, AutofillHints.username],
+                textInputAction: TextInputAction.next,
+                                onChanged: (_) {
                   if (_localError != null || widget.controller.authMessage != null) {
                     setState(() => _localError = null);
                     widget.controller.clearAuthMessage();
@@ -629,6 +666,9 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 12),
               testId('login_homeowner_password', TextField(
                 controller: _homeownerPasswordController,
+                autofillHints: const [AutofillHints.password],
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) { if (!_isSubmitting) _submitHomeowner(); },
                 obscureText: _obscureHomeownerPassword,
                 onChanged: (_) {
                   if (_localError != null || widget.controller.authMessage != null) {
@@ -643,6 +683,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   prefixIcon: const Icon(Icons.lock_outline, size: 18),
                   suffixIcon: IconButton(
+                    tooltip: _obscureHomeownerPassword ? 'Şifreyi göster' : 'Şifreyi gizle',
                     icon: Icon(
                       _obscureHomeownerPassword ? Icons.visibility_off : Icons.visibility,
                       size: 18,
@@ -658,11 +699,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: testId('login_homeowner_submit', ElevatedButton.icon(
                   onPressed: _isSubmitting
                       ? null
-                      : () => _performPasswordLogin(
-                            email: _homeownerEmailController.text,
-                            password: _homeownerPasswordController.text,
-                            targetRole: UserRole.homeOwner,
-                          ),
+                      : _submitHomeowner,
                   icon: _isSubmitting
                       ? const SizedBox(
                           width: 16,
@@ -675,7 +712,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentGreen,
+                    backgroundColor: AppColors.successFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -687,7 +724,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 width: double.infinity,
                 child: testId('btn_google_sign_in', OutlinedButton.icon(
                   onPressed: () => widget.controller.loginWithGoogle(),
-                  icon: const Icon(Icons.g_mobiledata, size: 22),
+                  icon: const GoogleMark(size: 18),
                   label: const Text('Google ile Giriş Yap'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 11),
@@ -781,8 +818,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
+                  Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                       const Icon(Icons.admin_panel_settings, color: AppColors.accentCyan, size: 18),
                       const SizedBox(width: 8),
                       Text(
@@ -793,15 +829,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
-                  ),
+                    ])),
                   testId('btn_clear_login_cache_manager', TextButton.icon(
                     key: const Key('btn_clear_login_cache_manager'),
                     onPressed: _clearCacheAndForm,
                     icon: const Icon(Icons.cleaning_services_outlined, size: 13, color: AppColors.accentCyan),
-                    label: const Text(
+                    label: Text(
                       'Temizle',
-                      style: TextStyle(fontSize: 11, color: AppColors.accentCyan),
+                      style: TextStyle(fontSize: 12, color: AppColors.primaryText(context)),
                     ),
                   )),
                 ],
@@ -810,7 +845,12 @@ class _LoginScreenState extends State<LoginScreen> {
               _buildErrorBanner(context),
               testId('login_manager_email', TextField(
                 controller: _managerEmailController,
-                onChanged: (_) {
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.email, AutofillHints.username],
+                textInputAction: TextInputAction.next,
+                                onChanged: (_) {
                   if (_localError != null || widget.controller.authMessage != null) {
                     setState(() => _localError = null);
                     widget.controller.clearAuthMessage();
@@ -829,6 +869,9 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 12),
               testId('login_manager_password', TextField(
                 controller: _managerPasswordController,
+                autofillHints: const [AutofillHints.password],
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) { if (!_isSubmitting) _submitManager(); },
                 obscureText: _obscureManagerPassword,
                 onChanged: (_) {
                   if (_localError != null || widget.controller.authMessage != null) {
@@ -843,6 +886,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   prefixIcon: const Icon(Icons.lock_outline, size: 18),
                   suffixIcon: IconButton(
+                    tooltip: _obscureManagerPassword ? 'Şifreyi göster' : 'Şifreyi gizle',
                     icon: Icon(
                       _obscureManagerPassword ? Icons.visibility_off : Icons.visibility,
                       size: 18,
@@ -863,12 +907,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: testId('login_manager_submit', ElevatedButton.icon(
                   onPressed: _isSubmitting
                       ? null
-                      : () => _performPasswordLogin(
-                            email: _managerEmailController.text,
-                            password: _managerPasswordController.text,
-                            targetRole: UserRole.siteManager,
-                            adminPath: _selectedAdminPath,
-                          ),
+                      : _submitManager,
                   icon: _isSubmitting
                       ? const SizedBox(
                           width: 16,
@@ -881,7 +920,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentCyan,
+                    backgroundColor: AppColors.primaryFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -940,7 +979,12 @@ class _LoginScreenState extends State<LoginScreen> {
               _buildErrorBanner(context),
               testId('login_saas_email', TextField(
                 controller: _saasEmailController,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.email, AutofillHints.username],
+                textInputAction: TextInputAction.next,
+                                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
                   labelText: 'Süper Yönetici E-posta',
                   labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
@@ -952,6 +996,9 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 12),
               testId('login_saas_password', TextField(
                 controller: _saasPasswordController,
+                autofillHints: const [AutofillHints.password],
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) { if (!_isSubmitting) _submitSaas(); },
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
@@ -968,23 +1015,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: testId('login_saas_submit', ElevatedButton.icon(
                   onPressed: _isSubmitting
                       ? null
-                      : () {
-                          // Offline test mode has no backend; everywhere else the
-                          // credentials are checked by /auth/login, which issues the
-                          // bearer token every API call needs.
-                          if (widget.controller.isTestMode) {
-                            widget.controller.loginAs(role: UserRole.saasAdmin);
-                          } else {
-                            _performPasswordLogin(
-                              email: _saasEmailController.text,
-                              password: _saasPasswordController.text,
-                            );
-                          }
-                        },
+                      : _submitSaas,
                   icon: const Icon(Icons.admin_panel_settings, size: 18),
                   label: const Text('SaaS Paneline Gir', style: TextStyle(fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentPurple,
+                    backgroundColor: AppColors.purpleFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1110,8 +1145,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
+                      Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                           const Icon(Icons.lock_open_rounded, size: 18, color: AppColors.accentCyan),
                           const SizedBox(width: 8),
                           Text(
@@ -1122,8 +1156,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                        ],
-                      ),
+                        ])),
                       Icon(
                         _showManualLogin ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                         color: AppColors.textSecondary(context),
@@ -1140,7 +1173,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       TextField(
                         controller: _emailController,
-                        style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.email, AutofillHints.username],
+                textInputAction: TextInputAction.next,
+                                        style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                         decoration: InputDecoration(
                           labelText: 'E-posta Adresi',
                           labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
@@ -1151,6 +1189,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 10),
                       TextField(
                         controller: _passwordController,
+                autofillHints: const [AutofillHints.password],
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) { if (!_isSubmitting) _submitGeneral(); },
                         obscureText: _obscureGeneralPassword,
                         style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                         decoration: InputDecoration(
@@ -1158,6 +1199,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           suffixIcon: IconButton(
+                            tooltip: _obscureGeneralPassword ? 'Şifreyi göster' : 'Şifreyi gizle',
                             icon: Icon(
                               _obscureGeneralPassword ? Icons.visibility_off : Icons.visibility,
                               size: 18,
@@ -1175,12 +1217,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: ElevatedButton(
                           onPressed: _isSubmitting
                               ? null
-                              : () => _performPasswordLogin(
-                                    email: _emailController.text,
-                                    password: _passwordController.text,
-                                  ),
+                              : _submitGeneral,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accentCyan,
+                            backgroundColor: AppColors.primaryFill,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1196,7 +1235,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         width: double.infinity,
                         child: OutlinedButton.icon(
                           onPressed: () => widget.controller.loginWithGoogle(),
-                          icon: const Icon(Icons.g_mobiledata, size: 22),
+                          icon: const GoogleMark(size: 18),
                           label: const Text('Google ile Giriş Yap'),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 11),
@@ -1283,20 +1322,18 @@ class _LoginScreenState extends State<LoginScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
+              Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                   const Icon(Icons.star, color: AppColors.accentGreen, size: 18),
                   const SizedBox(width: 6),
                   Text(
                     'Yeni Eklenen Kat Maliki',
                     style: TextStyle(
-                      color: AppColors.accentGreen,
+                      color: AppColors.successText(context),
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
+                ])),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -1305,7 +1342,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: Text(
                   '${p.block} D:${p.unitNo}',
-                  style: const TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -1331,7 +1368,7 @@ class _LoginScreenState extends State<LoginScreen> {
               icon: const Icon(Icons.check_circle_outline, size: 18),
               label: Text('${p.ownerName} Olarak Hemen Gir', style: const TextStyle(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentGreen,
+                backgroundColor: AppColors.successFill,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 11),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1357,20 +1394,18 @@ class _LoginScreenState extends State<LoginScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
+              Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                   const Icon(Icons.apartment, color: AppColors.accentCyan, size: 18),
                   const SizedBox(width: 6),
                   Text(
                     'Yeni Oluşturulan Site Yöneticisi',
                     style: TextStyle(
-                      color: AppColors.accentCyan,
+                      color: AppColors.primaryText(context),
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
+                ])),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -1379,7 +1414,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: Text(
                   p.siteName,
-                  style: const TextStyle(color: AppColors.accentCyan, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppColors.primaryText(context), fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -1405,7 +1440,7 @@ class _LoginScreenState extends State<LoginScreen> {
               icon: const Icon(Icons.check_circle_outline, size: 18),
               label: Text('${p.siteName} Yöneticisi Olarak Gir', style: const TextStyle(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
+                backgroundColor: AppColors.primaryFill,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 11),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1447,7 +1482,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     Text(
                       ho.email,
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     ),
                   ],
                 ),
@@ -1464,7 +1499,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text('Giriş Yap', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                child: const Text('Giriş Yap', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               ),
             ],
           ),
@@ -1502,8 +1537,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                     Text(
-                      'Aylık Aidat: ₺${f.amountDue}',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                      'Aylık Aidat: ${formatTry(f.amountDue)}',
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     ),
                   ],
                 ),
@@ -1520,7 +1555,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text('Giriş Yap', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                child: const Text('Giriş Yap', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               ),
             ],
           ),
@@ -1559,7 +1594,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     Text(
                       'Yönetici: ${site.adminName} (${site.adminEmail})',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     ),
                   ],
                 ),
@@ -1575,7 +1610,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     _localError = null;
                   });
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
+                    appSnackBar(
                       content: Text('${site.name} yöneticisi (${site.adminEmail}) seçildi. Lütfen şifrenizi giriniz.'),
                       duration: const Duration(seconds: 2),
                     ),
@@ -1588,7 +1623,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text('Yönetici Seç', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                child: const Text('Yönetici Seç', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               ),
             ],
           ),
@@ -1617,7 +1652,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   'Giriş Yolu Seçimi (Yönetici aynı zamanda kat malikidir):',
                   style: TextStyle(
                     color: AppColors.textPrimary(context),
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1663,7 +1698,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '🏢 Site Yönetim Paneli',
+                          'Site Yönetim Paneli',
                           style: TextStyle(
                             color: AppColors.textPrimary(context),
                             fontSize: 12,
@@ -1672,7 +1707,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         Text(
                           'Site genel tahsilat, sakin onayları ve blok yönetimi',
-                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                         ),
                       ],
                     ),
@@ -1721,7 +1756,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '🏠 Kendi Dairem (Kat Maliki)',
+                          'Kendi Dairem (Kat Maliki)',
                           style: TextStyle(
                             color: AppColors.textPrimary(context),
                             fontSize: 12,
@@ -1730,7 +1765,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         Text(
                           'B Blok D:1 yönetici dairesi aidat ödemesi, sanal IBAN ve hane yönetimi',
-                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                         ),
                       ],
                     ),
@@ -1795,7 +1830,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           Text(
                             name,
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
@@ -1815,8 +1850,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Text(
                   badgeText,
                   style: TextStyle(
-                    color: badgeColor,
-                    fontSize: 10,
+                    color: AppColors.accentText(context, badgeColor),
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1826,7 +1861,7 @@ class _LoginScreenState extends State<LoginScreen> {
           const SizedBox(height: 8),
           Text(
             subtitle,
-            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, height: 1.3),
+            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, height: 1.3),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -1835,7 +1870,7 @@ class _LoginScreenState extends State<LoginScreen> {
               onPressed: onLogin,
               style: ElevatedButton.styleFrom(
                 backgroundColor: badgeColor.withOpacity(0.15),
-                foregroundColor: badgeColor,
+                foregroundColor: AppColors.accentText(context, badgeColor),
                 elevation: 0,
                 side: BorderSide(color: badgeColor.withOpacity(0.4)),
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1896,7 +1931,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           Text(
                             'Mehmet Demir (mehmet.demir@begonya.com)',
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
@@ -1913,11 +1948,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppColors.accentCyan.withValues(alpha: 0.4)),
                 ),
-                child: const Text(
+                child: Text(
                   'Yönetici & Maliki',
                   style: TextStyle(
-                    color: AppColors.accentCyan,
-                    fontSize: 10,
+                    color: AppColors.primaryText(context),
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1949,7 +1984,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
+                backgroundColor: AppColors.primaryFill,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 11),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

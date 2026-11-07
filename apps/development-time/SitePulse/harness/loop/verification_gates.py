@@ -117,6 +117,8 @@ GATES: Dict[str, List[CommandSpec]] = {
     "api-system": [CommandSpec(["python3", "scripts/api_system_check.py", "--json"], ".", 900)],
     # Every widget Key in flutter/lib/ui must have the same id as a GUI automation testId.
     "testid-lint": [CommandSpec(["python3", "scripts/testid_lint.py", "--json"], ".", 120)],
+    # Design-system rules (12 px floor, MoneyFormatter, no emoji icons, ratchet on literal styles).
+    "ui-style-lint": [CommandSpec(["python3", "scripts/ui_style_lint.py", "--json"], ".", 120)],
     # Browser end-to-end suite (e2e/): isolated DB, release backend, Flutter E2E web build, Chrome.
     # Strict xfails pin known product defects; an unexpected pass (XPASS) fails the gate.
     "gui-e2e": [CommandSpec(["python3", "scripts/gui_e2e.py", "run", "--json"], ".", 3600)],

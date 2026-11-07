@@ -1,5 +1,6 @@
 import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 
 /// Papara-Style Full-Screen Page Component for SitePulse.
@@ -88,7 +89,7 @@ class AppFullscreenPage extends StatelessWidget {
     required String title,
     required String message,
     String confirmLabel = 'Onayla',
-    String cancelLabel = 'Vazgeç',
+    String cancelLabel = AppStrings.cancel,
     Color confirmColor = AppColors.accentRed,
     IconData icon = Icons.warning_amber_rounded,
     Color iconColor = AppColors.accentRed,
@@ -103,7 +104,7 @@ class AppFullscreenPage extends StatelessWidget {
             color: AppColors.textPrimary(ctx),
             size: 20,
           ),
-          tooltip: 'Geri Dön',
+          tooltip: AppStrings.back,
           onPressed: () => Navigator.pop(ctx, false),
         ),
         bottomBar: Container(
@@ -207,7 +208,7 @@ class AppFullscreenPage extends StatelessWidget {
                 color: AppColors.textPrimary(context),
                 size: 20,
               ),
-              tooltip: 'Geri Dön',
+              tooltip: AppStrings.back,
               onPressed: () => Navigator.pop(context),
             ),
         title: Row(
@@ -236,7 +237,7 @@ class AppFullscreenPage extends StatelessWidget {
                       subtitle!,
                       style: TextStyle(
                         color: AppColors.textSecondary(context),
-                        fontSize: 11,
+                        fontSize: 12,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),

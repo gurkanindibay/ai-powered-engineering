@@ -102,9 +102,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap on Tab 2 ("Sakinler & Malikler")
-      final yonetimTab = find.text('Sakinler & Malikler');
-      expect(yonetimTab, findsOneWidget);
-      await tester.tap(yonetimTab);
+      final residentsTab = find.text('Sakinler & Malikler');
+      expect(residentsTab, findsOneWidget);
+      await tester.ensureVisible(residentsTab);
+      await tester.pumpAndSettle();
+      await tester.tap(residentsTab);
       await tester.pumpAndSettle();
 
       // Verify directory header and search bar
@@ -116,6 +118,8 @@ void main() {
       expect(editButtons, findsWidgets);
 
       // Tap the first "Düzenle" button to open edit modal
+      await tester.ensureVisible(editButtons.first);
+      await tester.pumpAndSettle();
       await tester.tap(editButtons.first);
       await tester.pumpAndSettle();
 
@@ -166,8 +170,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // Go to Sakinler & Malikler tab
-      final yonetimTab = find.text('Sakinler & Malikler');
-      await tester.tap(yonetimTab);
+      final residentsTab = find.text('Sakinler & Malikler');
+      await tester.ensureVisible(residentsTab);
+      await tester.pumpAndSettle();
+      await tester.tap(residentsTab);
       await tester.pumpAndSettle();
 
       // Find the delete icon button for this homeowner
@@ -175,6 +181,8 @@ void main() {
       expect(deleteBtn, findsOneWidget);
 
       // Tap delete button
+      await tester.ensureVisible(deleteBtn);
+      await tester.pumpAndSettle();
       await tester.tap(deleteBtn);
       await tester.pumpAndSettle();
 
@@ -184,6 +192,8 @@ void main() {
       expect(find.text('Vazgeç'), findsOneWidget);
 
       // Confirm deletion
+      await tester.ensureVisible(find.text('Evet, Sil'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Evet, Sil'));
       await tester.pumpAndSettle();
 
@@ -359,6 +369,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Go to Sakinler & Malikler tab
+      await tester.ensureVisible(find.text('Sakinler & Malikler'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Sakinler & Malikler'));
       await tester.pumpAndSettle();
 
@@ -368,6 +380,8 @@ void main() {
 
       // Tap Düzenle on this card
       final editBtn = find.text('Düzenle').first;
+      await tester.ensureVisible(editBtn);
+      await tester.pumpAndSettle();
       await tester.tap(editBtn);
       await tester.pumpAndSettle();
 
@@ -418,11 +432,15 @@ void main() {
       await tester.pumpAndSettle();
 
       // Go to Sakinler & Malikler tab
+      await tester.ensureVisible(find.text('Sakinler & Malikler'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Sakinler & Malikler'));
       await tester.pumpAndSettle();
 
       // Tap delete on this unit
       final deleteBtn = find.byKey(const Key('delete_ho_unit-ui-tenant-delete-test'));
+      await tester.ensureVisible(deleteBtn);
+      await tester.pumpAndSettle();
       await tester.tap(deleteBtn);
       await tester.pumpAndSettle();
 
@@ -476,6 +494,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Go to Sakinler & Malikler tab
+      await tester.ensureVisible(find.text('Sakinler & Malikler'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Sakinler & Malikler'));
       await tester.pumpAndSettle();
 
@@ -529,6 +549,8 @@ void main() {
       await tester.enterText(tenantNameField, 'Canan Can Düzenlendi');
 
       // Tap Kaydet
+      await tester.ensureVisible(find.text('Kaydet'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Kaydet'));
       await tester.pumpAndSettle();
 
@@ -578,6 +600,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Go to Sakinler & Malikler tab
+      await tester.ensureVisible(find.text('Sakinler & Malikler'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Sakinler & Malikler'));
       await tester.pumpAndSettle();
 
@@ -612,6 +636,8 @@ void main() {
       // Save new household resident
       final saveMemberBtn = find.byKey(const Key('household_save_button'));
       expect(saveMemberBtn, findsOneWidget);
+      await tester.ensureVisible(saveMemberBtn);
+      await tester.pumpAndSettle();
       await tester.tap(saveMemberBtn);
       await tester.pumpAndSettle();
 

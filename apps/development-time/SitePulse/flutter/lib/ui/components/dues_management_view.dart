@@ -1,10 +1,12 @@
 import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../../domain/services/bank_file_picker.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
+import '../design_system/sp_semantics.dart';
 import 'app_fullscreen_page.dart';
 import 'bank_statement_reconciliation_page.dart';
 import 'capital_projects_view.dart';
@@ -12,6 +14,8 @@ import 'manual_unit_assignment_page.dart';
 import 'payment_tracking_page.dart';
 import '../residents/owners_residents_module_page.dart';
 
+import '../design_system/money_formatter.dart';
+import '../design_system/sp_feedback.dart';
 class DuesManagementView extends StatefulWidget {
   final DashboardController controller;
   final int initialSegment;
@@ -75,7 +79,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
       if (!success) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            appSnackBar(
               content: testId('snackbar_import_error', Row(
                 children: [
                   const Icon(Icons.error_outline, color: Colors.white),
@@ -88,7 +92,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   ),
                 ],
               )),
-              backgroundColor: AppColors.accentRed,
+              backgroundColor: AppColors.dangerFill,
               duration: const Duration(seconds: 5),
             ),
           );
@@ -121,14 +125,14 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
+                    Flexible(child: Text(
                       'Banka Ekstresi / Excel İçe Aktar',
                       style: TextStyle(
                         color: AppColors.textPrimary(context),
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
-                    ),
+                    )),
                     IconButton(
                       icon: const Icon(Icons.close, size: 20),
                       onPressed: () => Navigator.pop(ctx),
@@ -221,7 +225,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                           ),
                           Text(
                             fileName,
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                           ),
                         ],
                       ),
@@ -240,20 +244,18 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
+                      Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                           const Icon(Icons.check_circle, color: AppColors.accentGreen, size: 18),
                           const SizedBox(width: 8),
                           Text(
                             'Eşleşen Daireler (${matchedItems.length})',
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.accentGreen, fontSize: 13),
+                            style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.successText(context), fontSize: 13),
                           ),
-                        ],
-                      ),
-                      Text(
-                        '₺${matchedSum.toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.accentGreen, fontSize: 14),
-                      ),
+                        ])),
+                      Flexible(child: Text(
+                        formatTry(matchedSum),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.successText(context), fontSize: 14),
+                      )),
                     ],
                   ),
                 )),
@@ -268,20 +270,18 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
+                      Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                           const Icon(Icons.help_outline, color: AppColors.accentOrange, size: 18),
                           const SizedBox(width: 8),
                           Text(
                             'Eşleşemeyen (${unmatchedItems.length})',
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.accentOrange, fontSize: 13),
+                            style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.warningText(context), fontSize: 13),
                           ),
-                        ],
-                      ),
-                      Text(
-                        '₺${unmatchedSum.toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.accentOrange, fontSize: 14),
-                      ),
+                        ])),
+                      Flexible(child: Text(
+                        formatTry(unmatchedSum),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.warningText(context), fontSize: 14),
+                      )),
                     ],
                   ),
                 )),
@@ -297,20 +297,18 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
+                        Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                             const Icon(Icons.receipt_long, color: Colors.blueGrey, size: 18),
                             const SizedBox(width: 8),
                             Text(
                               'Gider / Masraf (${expenseItems.length})',
                               style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.blueGrey, fontSize: 12),
                             ),
-                          ],
-                        ),
-                        const Text(
+                          ])),
+                        Flexible(child: const Text(
                           'Aidattan Düşüldü',
-                          style: TextStyle(color: Colors.blueGrey, fontSize: 11),
-                        ),
+                          style: TextStyle(color: Colors.blueGrey, fontSize: 12),
+                        )),
                       ],
                     ),
                   ),
@@ -327,16 +325,16 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                         await widget.controller.confirmReconciliation(ids);
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
+                          appSnackBar(
                             content: Text('${matchedItems.length} dairenin aidat tahsilatı onaylandı!'),
-                            backgroundColor: AppColors.accentGreen,
+                            backgroundColor: AppColors.successFill,
                           ),
                         );
                       },
                       icon: const Icon(Icons.done_all, size: 16),
                       label: Text('Eşleşenleri Onayla & Kaydet (${matchedItems.length})'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accentGreen,
+                        backgroundColor: AppColors.successFill,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -373,7 +371,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                             builder: (_) => BankStatementReconciliationPage(controller: widget.controller),
                           );
                         },
-                        child: const Text('Tam Ekran Detay', style: TextStyle(fontSize: 12, color: AppColors.accentCyan)),
+                        child: Text('Tam Ekran Detay', style: TextStyle(fontSize: 12, color: AppColors.primaryText(context))),
                       ),
                     ),
                   ],
@@ -426,11 +424,11 @@ class _DuesManagementViewState extends State<DuesManagementView> {
             ? ' Ev sahibine (${selectedFlat.residentName}) bilgilendirme mesajı iletildi.'
             : '';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          appSnackBar(
             content: Text(
               '${item.transaction.senderName ?? "İşlem"} -> $flatDesc (${selectedFlat.residentName}) ile eşleştirildi ve onaylandı!$msgNote',
             ),
-            backgroundColor: AppColors.accentGreen,
+            backgroundColor: AppColors.successFill,
           ),
         );
       }
@@ -494,7 +492,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Tahakkuk Dönemi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
+                            Flexible(child: Text('Tahakkuk Dönemi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13))),
                             testId('accrual_dialog_period', Text(selectedMonth, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
                           ],
                         ),
@@ -502,16 +500,16 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Daire Başı Aidat:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
-                            const Text('₺1.400,00', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.accentGreen, fontSize: 13)),
+                            Flexible(child: Text('Daire Başı Aidat:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13))),
+                            Flexible(child: Text('₺1.400,00', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.successText(context), fontSize: 13))),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Son Ödeme Tarihi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
-                            const Text('15.10.2026', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                            Flexible(child: Text('Son Ödeme Tarihi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13))),
+                            Flexible(child: const Text('15.10.2026', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
                           ],
                         ),
                       ],
@@ -535,7 +533,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                             'Avans bakiyesi bulunan daireler tahakkuk anında otomatik olarak mahsup edilecektir. Mükerrer tahakkuklar sistem tarafından engellenir.',
                             style: TextStyle(
                               color: AppColors.textPrimary(context),
-                              fontSize: 11,
+                              fontSize: 12,
                               height: 1.3,
                             ),
                           ),
@@ -548,11 +546,11 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               actions: [
                 TextButton(
                   onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
-                  child: const Text('Vazgeç'),
+                  child: const Text(AppStrings.cancel),
                 ),
                 testId('btn_confirm_period_accrual', ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentGreen,
+                    backgroundColor: AppColors.successFill,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
@@ -568,7 +566,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                             final alreadyAccrued = result['already_accrued'] == true;
                             final msg = result['message'] as String? ?? '';
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
+                              appSnackBar(
                                 content: testId('snackbar_accrual_result', Row(
                                   children: [
                                     Icon(
@@ -758,7 +756,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   icon: const Icon(Icons.event_repeat, size: 14),
                   label: const Text('Toplu Aidat Tahakkuku', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentGreen,
+                    backgroundColor: AppColors.successFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -769,7 +767,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   icon: const Icon(Icons.upload_file, size: 14),
                   label: const Text('Excel / Ekstre Yükle', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentCyan,
+                    backgroundColor: AppColors.primaryFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -844,7 +842,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
             color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
             gradient: isDark
                 ? const LinearGradient(
-                    colors: [Color(0xFF1E293B), Color(0xFF121317)],
+                    colors: [Color(0xFF1E293B), AppColors.darkBackground],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   )
@@ -862,10 +860,10 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
+                  Flexible(child: Text(
                     '$selectedMonth Tahsilat Performansı',
                     style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13, fontWeight: FontWeight.w500),
-                  ),
+                  )),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
@@ -876,7 +874,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                       summary.totalExpected == Decimal.zero
                           ? '₺0 Borç — Güncel'
                           : '%${summary.collectionPercentage} Tahsil Edildi',
-                      style: const TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -887,12 +885,12 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 textBaseline: TextBaseline.alphabetic,
                 children: [
                   Text(
-                    '₺${summary.totalCollected.toStringAsFixed(0)}',
+                    formatTry(summary.totalCollected),
                     style: TextStyle(color: AppColors.textPrimary(context), fontSize: 26, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '/ ₺${summary.totalExpected.toStringAsFixed(0)} Toplam',
+                    '/ ${formatTry(summary.totalExpected)} Toplam',
                     style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14),
                   ),
                 ],
@@ -915,7 +913,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   _buildStatTile('Toplam Daire', '${summary.totalUnitsCount}', AppColors.textPrimary(context)),
                   _buildStatTile('Ödeyen Kişi', '${summary.paidUnitsCount} Daire', AppColors.accentGreen),
                   _buildStatTile('Ödemeyen / Geciken', '${summary.overdueUnitsCount} Daire', AppColors.accentRed),
-                  _buildStatTile('Kalan Borç', '₺${summary.totalOverdueAmount.toStringAsFixed(0)}', AppColors.accentOrange),
+                  _buildStatTile('Kalan Borç', formatTry(summary.totalOverdueAmount), AppColors.accentOrange),
                 ],
               ),
             ],
@@ -934,15 +932,15 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           ),
           child: Row(
             children: [
-              Expanded(child: _buildSegmentTab(0, '📋 Daire Aidat Durumları')),
+              Expanded(child: _buildSegmentTab(0, 'Daire Aidat Durumları')),
               const SizedBox(width: 4),
-              Expanded(child: _buildSegmentTab(1, '💳 Canlı Kasa')),
+              Expanded(child: _buildSegmentTab(1, 'Canlı Kasa')),
               const SizedBox(width: 4),
               Expanded(child: _buildSegmentTab(2, '⏳ Yaşlandırma')),
               const SizedBox(width: 4),
-              Expanded(child: _buildSegmentTab(3, '🏦 Eşleşmeyenler', count: unmatchedItems.length)),
+              Expanded(child: _buildSegmentTab(3, 'Eşleşmeyenler', count: unmatchedItems.length)),
               const SizedBox(width: 4),
-              Expanded(child: _buildSegmentTab(4, '🏗️ Demirbaş & Yatırım')),
+              Expanded(child: _buildSegmentTab(4, 'Demirbaş & Yatırım')),
             ],
           ),
         ),
@@ -968,8 +966,8 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   Expanded(
                     child: Text(
                       'Banka hesabında henüz daireyle eşleşmemiş ${unmatchedItems.length} adet transfer bulunuyor. Daireleri belirlemek için tıklayın.',
-                      style: const TextStyle(
-                        color: AppColors.accentOrange,
+                      style: TextStyle(
+                        color: AppColors.warningText(context),
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1000,7 +998,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
   Widget _buildSegmentTab(int index, String label, {int count = 0}) {
     final isSelected = _activeSegment == index;
-    return testId('segment_tab_$index', InkWell(
+    return testId('segment_tab_$index', selectableSemantics(selected: isSelected, child: InkWell(
       key: Key('segment_tab_$index'),
       onTap: () {
         setState(() => _activeSegment = index);
@@ -1042,8 +1040,8 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 child: Text(
                   '$count',
                   style: TextStyle(
-                    color: isSelected ? AppColors.accentCyan : Colors.white,
-                    fontSize: 10,
+                    color: isSelected ? AppColors.primaryText(context) : Colors.white,
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1052,14 +1050,14 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           ],
         ),
       ),
-    ));
+    )));
   }
 
   Widget _buildStatTile(String label, String value, Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10)),
+        Text(label, style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
         const SizedBox(height: 2),
         Text(value, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold)),
       ],
@@ -1095,14 +1093,14 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 border: Border.all(color: AppColors.accentCyan.withOpacity(0.3)),
               ),
               child: Row(
-                children: const [
+                children: [
                   Icon(Icons.people_alt_outlined, size: 16, color: AppColors.accentCyan),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Kat Malikleri & Sakinler Yönetim Modülü',
                       style: TextStyle(
-                        color: AppColors.accentCyan,
+                        color: AppColors.primaryText(context),
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1120,9 +1118,9 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           children: [
             _buildFilterChip('Tümü ($totalCount)', 'ALL', currentFilter),
             const SizedBox(width: 6),
-            _buildFilterChip('🟢 Ödeyen ($paidCount)', 'PAID', currentFilter),
+            _buildFilterChip('Ödeyen ($paidCount)', 'PAID', currentFilter),
             const SizedBox(width: 6),
-            _buildFilterChip('🔴 Geciken ($overdueCount)', 'OVERDUE', currentFilter),
+            _buildFilterChip('Geciken ($overdueCount)', 'OVERDUE', currentFilter),
           ],
         ),
 
@@ -1238,7 +1236,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               icon: const Icon(Icons.add_circle_outline, size: 18),
               label: const Text('İlk Aidat Dönemini Başlat'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentGreen,
+                backgroundColor: AppColors.successFill,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1255,12 +1253,12 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('💡', style: TextStyle(fontSize: 14)),
+                  const ExcludeSemantics(child: Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppColors.accentOrange)),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       'KMK Madde 20 uyarınca vadesinde ödenmeyen aidatlara aylık %5 gecikme tazminatı uygulanır.',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     ),
                   ),
                 ],
@@ -1312,12 +1310,12 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('💡', style: TextStyle(fontSize: 14)),
+                  const ExcludeSemantics(child: Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppColors.accentOrange)),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       'Yönetici kokpitinden sakin davet bağlantısı oluşturarak veya manuel ekleme yaparak başlayabilirsiniz.',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     ),
                   ),
                 ],
@@ -1368,7 +1366,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
   Widget _buildFilterChip(String label, String filterKey, String currentFilter) {
     final isSelected = currentFilter == filterKey;
-    return testId('dues_filter_$filterKey', InkWell(
+    return testId('dues_filter_$filterKey', selectableSemantics(selected: isSelected, child: InkWell(
       onTap: () => widget.controller.setFlatFilter(filterKey),
       borderRadius: BorderRadius.circular(10),
       child: Container(
@@ -1382,12 +1380,12 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           label,
           style: TextStyle(
             color: isSelected ? Colors.white : AppColors.textPrimary(context),
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
           ),
         ),
       ),
-    ));
+    )));
   }
 
   Widget _buildFlatStatusCard(FlatPaymentStatus flat) {
@@ -1406,8 +1404,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
+          Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
               Container(
                 width: 38,
                 height: 38,
@@ -1442,13 +1439,12 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   ),
                 ],
               ),
-            ],
-          ),
+            ])),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '₺${flat.amountDue.toStringAsFixed(2)}',
+                formatTry(flat.amountDue),
                 style: TextStyle(
                   color: AppColors.textPrimary(context),
                   fontSize: 14,
@@ -1467,8 +1463,8 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                       ? (flat.amountDue == Decimal.zero ? 'BORÇ YOK' : 'ÖDENDİ (${flat.paidDateStr ?? "Banka"})')
                       : '${flat.daysOverdue} Gün Gecikti',
                   style: TextStyle(
-                    color: flat.isPaid ? AppColors.accentGreen : AppColors.accentRed,
-                    fontSize: 10,
+                    color: flat.isPaid ? AppColors.successText(context) : AppColors.dangerText(context),
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1493,14 +1489,14 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: const [
+                      children: [
                         Icon(Icons.add, size: 12, color: AppColors.accentGreen),
                         SizedBox(width: 2),
                         Text(
                           'Tahsilat Gir',
                           style: TextStyle(
-                            color: AppColors.accentGreen,
-                            fontSize: 10,
+                            color: AppColors.successText(context),
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -1522,14 +1518,14 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 },
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
+                  children: [
                     Icon(Icons.person_search, size: 12, color: AppColors.accentCyan),
                     SizedBox(width: 2),
                     Text(
                       'Sakin Modülü →',
                       style: TextStyle(
-                        color: AppColors.accentCyan,
-                        fontSize: 10,
+                        color: AppColors.primaryText(context),
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1552,7 +1548,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+            color: isDark ? AppColors.lightTextPrimary : const Color(0xFFF1F5F9),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -1562,7 +1558,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               Expanded(
                 child: Text(
                   'Aşağıdaki transferler banka ekstresinde mevcut fakat açıklamada daire veya sakin adı bulunamadığı için otomatik eşleştirilemedi. "Daire Seç & Eşle" butonuna tıklayarak ilgili daireye atayabilirsiniz.',
-                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                 ),
               ),
             ],
@@ -1591,7 +1587,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   SizedBox(height: 2),
                   Text(
                     'Tüm gelen transferler daireleriyle başarıyla eşleştirildi.',
-                    style: TextStyle(color: Colors.grey, fontSize: 11),
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                 ],
               ),
@@ -1626,15 +1622,15 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   color: AppColors.accentOrange.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
+                child: Text(
                   'Daire Belirlenemedi',
-                  style: TextStyle(color: AppColors.accentOrange, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppColors.warningText(context), fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ),
-              Text(
+              Flexible(child: Text(
                 '${item.transaction.date.day.toString().padLeft(2, '0')}.${item.transaction.date.month.toString().padLeft(2, '0')}.${item.transaction.date.year}',
-                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
-              ),
+                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+              )),
             ],
           ),
           const SizedBox(height: 8),
@@ -1646,14 +1642,14 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              Flexible(child: Text(
                 'Referans: ${item.transaction.transactionId}',
-                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
-              ),
-              Text(
-                '₺${item.transaction.amount.toStringAsFixed(2)}',
+                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+              )),
+              Flexible(child: Text(
+                formatTry(item.transaction.amount),
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              )),
             ],
           ),
           const SizedBox(height: 12),
@@ -1664,7 +1660,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               icon: const Icon(Icons.add_home_work_outlined, size: 16),
               label: const Text('Daire Seç & Eşle'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentOrange,
+                backgroundColor: AppColors.warningFill,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

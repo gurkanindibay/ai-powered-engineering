@@ -186,6 +186,8 @@ void main() {
       // Tap on confirmation button in bottom bar
       final confirmButton = find.textContaining('Seçilenleri Onayla');
       expect(confirmButton, findsOneWidget);
+      await tester.ensureVisible(confirmButton);
+      await tester.pumpAndSettle();
       await tester.tap(confirmButton);
       await tester.pumpAndSettle();
 
@@ -196,6 +198,8 @@ void main() {
       // Confirm in dialog
       final dialogConfirmBtn = find.text('Onayla ve Kaydet');
       expect(dialogConfirmBtn, findsOneWidget);
+      await tester.ensureVisible(dialogConfirmBtn);
+      await tester.pumpAndSettle();
       await tester.tap(dialogConfirmBtn);
       await tester.pumpAndSettle();
 
@@ -260,8 +264,8 @@ void main() {
       expect(find.text('Gider / Masraf'), findsOneWidget);
 
       // Filter tabs
-      expect(find.textContaining('🟢 Eşleşenler'), findsOneWidget);
-      expect(find.textContaining('🟠 Eşleşmeyenler'), findsOneWidget);
+      expect(find.textContaining('Eşleşenler'), findsOneWidget);
+      expect(find.textContaining('Eşleşmeyenler'), findsOneWidget);
     });
 
     test('when transaction belongs to already paid flat then marks status as ZATEN_YUKLENDI and prevents double collection', () {
@@ -362,6 +366,8 @@ void main() {
       );
 
       // Open page
+      await tester.ensureVisible(find.text('Open Assignment'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Open Assignment'));
       await tester.pumpAndSettle();
 
@@ -370,6 +376,8 @@ void main() {
       // Tap on a flat to match (e.g. B Blok D:3)
       final flatCard = find.text('B Blok D:3');
       expect(flatCard, findsOneWidget);
+      await tester.ensureVisible(flatCard);
+      await tester.pumpAndSettle();
       await tester.tap(flatCard);
       await tester.pumpAndSettle();
 
@@ -380,6 +388,8 @@ void main() {
       // Confirm match
       final confirmBtn = find.text('Eşleştirmeyi Onayla');
       expect(confirmBtn, findsOneWidget);
+      await tester.ensureVisible(confirmBtn);
+      await tester.pumpAndSettle();
       await tester.tap(confirmBtn);
       await tester.pumpAndSettle();
 

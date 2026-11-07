@@ -5,6 +5,7 @@ import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
 
+import '../design_system/money_formatter.dart';
 class ManagerCockpitView extends StatelessWidget {
   final DashboardController controller;
   final VoidCallback onAddResidentTap;
@@ -83,9 +84,9 @@ class ManagerCockpitView extends StatelessWidget {
                           ),
                           child: Text(
                             '${controller.currentManagedSite?.totalUnits ?? controller.flatsList.length} Daire',
-                            style: const TextStyle(
-                              color: AppColors.accentCyan,
-                              fontSize: 10,
+                            style: TextStyle(
+                              color: AppColors.primaryText(context),
+                              fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -154,7 +155,7 @@ class ManagerCockpitView extends StatelessWidget {
             color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
             gradient: isDark
                 ? const LinearGradient(
-                    colors: [Color(0xFF1E293B), Color(0xFF121317)],
+                    colors: [Color(0xFF1E293B), AppColors.darkBackground],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   )
@@ -176,8 +177,11 @@ class ManagerCockpitView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
                   PopupMenuButton<String>(
                     tooltip: 'Dönem Seç',
@@ -211,14 +215,16 @@ class ManagerCockpitView extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
+                          Flexible(child: Text(
                             '${controller.selectedDuesMonth} Tahsilat Durumu',
+ maxLines: 2,
+ overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: AppColors.textPrimary(context),
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
-                          ),
+                          )),
                           const SizedBox(width: 4),
                           const Icon(Icons.arrow_drop_down, size: 18, color: AppColors.accentCyan),
                         ],
@@ -236,27 +242,27 @@ class ManagerCockpitView extends StatelessWidget {
                     child: testId('cockpit_collection_badge', Text(
                       summary.totalExpected == Decimal.zero
                           ? (summary.totalAdvanceBalance > Decimal.zero
-                              ? '₺${summary.totalAdvanceBalance.toStringAsFixed(0)} Avans Mevcut'
+                              ? '${formatTry(summary.totalAdvanceBalance)} Avans Mevcut'
                               : '₺0 Borç — Güncel')
                           : '%${summary.collectionPercentage} Tahsil Edildi',
                       style: TextStyle(
                         color: summary.totalExpected == Decimal.zero && summary.totalAdvanceBalance > Decimal.zero
-                            ? AppColors.accentCyan
-                            : AppColors.accentGreen,
+                            ? AppColors.primaryText(context)
+                            : AppColors.successText(context),
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     )),
                   ),
-                ],
-              ),
+                ]),
               const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   testId('cockpit_collected_amount', Text(
-                    '₺${summary.totalCollected.toStringAsFixed(0)}',
+                    formatTry(summary.totalCollected),
                     style: TextStyle(
                       color: AppColors.textPrimary(context),
                       fontSize: 32,
@@ -265,7 +271,7 @@ class ManagerCockpitView extends StatelessWidget {
                   )),
                   const SizedBox(width: 8),
                   testId('cockpit_expected_amount', Text(
-                    '/ ₺${summary.totalExpected.toStringAsFixed(0)}',
+                    '/ ${formatTry(summary.totalExpected)}',
                     style: TextStyle(
                       color: AppColors.textSecondary(context),
                       fontSize: 18,
@@ -286,9 +292,9 @@ class ManagerCockpitView extends StatelessWidget {
                           const Icon(Icons.account_balance_wallet, size: 14, color: AppColors.accentCyan),
                           const SizedBox(width: 5),
                           Text(
-                            '+₺${summary.totalAdvanceBalance.toStringAsFixed(0)} Avans',
-                            style: const TextStyle(
-                              color: AppColors.accentCyan,
+                            '+${formatTry(summary.totalAdvanceBalance)} Avans',
+                            style: TextStyle(
+                              color: AppColors.primaryText(context),
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
                             ),
@@ -297,8 +303,7 @@ class ManagerCockpitView extends StatelessWidget {
                       ),
                     ),
                   ],
-                ],
-              ),
+                ]),
               const SizedBox(height: 14),
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
@@ -310,17 +315,19 @@ class ManagerCockpitView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
                   _buildMetricTile(context, 'Toplam Daire', '${summary.totalUnitsCount}'),
                   _buildMetricTile(context, 'Ödeyen', '${summary.paidUnitsCount}', color: AppColors.accentGreen),
                   _buildMetricTile(context, 'Geciken', '${summary.overdueUnitsCount}', color: AppColors.accentRed),
-                  _buildMetricTile(context, 'Kalan Borç', '₺${summary.totalOverdueAmount.toStringAsFixed(0)}', color: AppColors.accentOrange),
+                  _buildMetricTile(context, 'Kalan Borç', formatTry(summary.totalOverdueAmount), color: AppColors.accentOrange),
                   if (summary.totalAdvanceBalance > Decimal.zero)
-                    _buildMetricTile(context, 'Toplam Avans', '₺${summary.totalAdvanceBalance.toStringAsFixed(0)}', color: AppColors.accentCyan),
-                ],
-              ),
+                    _buildMetricTile(context, 'Toplam Avans', formatTry(summary.totalAdvanceBalance), color: AppColors.accentCyan),
+                ]),
               if (onNavigateToDuesTab != null) ...[
                 const SizedBox(height: 14),
                 testId('btn_open_unified_dues_center', InkWell(
@@ -339,14 +346,16 @@ class ManagerCockpitView extends StatelessWidget {
                       children: [
                         const Icon(Icons.account_balance_wallet_outlined, size: 16, color: AppColors.accentCyan),
                         const SizedBox(width: 8),
-                        const Text(
+                        Flexible(child: Text(
                           'Detaylı Daire Aidat & Kasa Yönetimi',
+ maxLines: 2,
+ overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: AppColors.accentCyan,
+                            color: AppColors.primaryText(context),
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
-                        ),
+                        )),
                         const SizedBox(width: 6),
                         const Icon(Icons.arrow_forward, size: 14, color: AppColors.accentCyan),
                       ],
@@ -397,7 +406,7 @@ class ManagerCockpitView extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           'Banka ekstresinden gelen transferleri dairelerle eşleştirmek için dokunun.',
-                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                         ),
                       ],
                     ),
@@ -421,14 +430,16 @@ class ManagerCockpitView extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                Flexible(child: Text(
                   'Onay Bekleyen Başvurular',
+ maxLines: 2,
+ overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: AppColors.textPrimary(context),
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
-                ),
+                )),
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -438,7 +449,7 @@ class ManagerCockpitView extends StatelessWidget {
                   ),
                   child: testId('pending_count_badge', Text(
                     '${pendingList.length}',
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                   )),
                 ),
               ],
@@ -469,9 +480,9 @@ class ManagerCockpitView extends StatelessWidget {
                 testId('btn_cockpit_add_resident', TextButton.icon(
                   onPressed: onAddResidentTap,
                   icon: const Icon(Icons.add, size: 16, color: AppColors.accentCyan),
-                  label: const Text(
+                  label: Text(
                     'Manuel Sakin Ekle',
-                    style: TextStyle(color: AppColors.accentCyan, fontSize: 12),
+                    style: TextStyle(color: AppColors.primaryText(context), fontSize: 12),
                   ),
                 )),
               ],
@@ -504,7 +515,7 @@ class ManagerCockpitView extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         'Kat malikleri davet bağlantısıyla başvurduğunda burada listelenir. Doğrudan sakin kaydetmek için "Manuel Sakin Ekle" butonunu kullanabilirsiniz.',
-                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                       ),
                     ],
                   ),
@@ -585,7 +596,7 @@ class ManagerCockpitView extends StatelessWidget {
       children: [
         Text(
           label,
-          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
         ),
         const SizedBox(height: 2),
         Text(
@@ -615,18 +626,18 @@ class ManagerCockpitView extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              Flexible(child: Text(
                 '${req.block} D:${req.unitNo} • ${req.isResident ? 'Ev Sakini' : 'Kat Maliki'}',
-                style: const TextStyle(
-                  color: AppColors.accentCyan,
+                style: TextStyle(
+                  color: AppColors.primaryText(context),
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
                 ),
-              ),
-              Text(
+              )),
+              Flexible(child: Text(
                 req.timeAgoStr,
-                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
-              ),
+                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+              )),
             ],
           ),
           const SizedBox(height: 6),
@@ -654,7 +665,7 @@ class ManagerCockpitView extends StatelessWidget {
                   icon: const Icon(Icons.check, size: 16),
                   label: const Text('Onayla & Şifre Üret', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentGreen,
+                    backgroundColor: AppColors.successFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

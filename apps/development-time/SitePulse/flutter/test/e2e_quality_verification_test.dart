@@ -1,13 +1,12 @@
-import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
-import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/main.dart';
 import 'package:sitepulse/ui/components/bank_statement_reconciliation_page.dart';
 import 'package:sitepulse/ui/components/payment_checkout_dialog.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'test_fixtures.dart';
+import 'ui_test_helpers.dart';
 
 DashboardController _createE2EController({bool startAuthenticated = false}) {
   final controller = DashboardController(startAuthenticated: startAuthenticated);
@@ -46,6 +45,8 @@ void main() {
       // 3. Open "Yeni Site Kaydet" Dialog
       final addSiteBtn = find.text('Yeni Site Kaydet');
       expect(addSiteBtn, findsOneWidget);
+      await tester.ensureVisible(addSiteBtn);
+      await tester.pumpAndSettle();
       await tester.tap(addSiteBtn);
       await tester.pumpAndSettle();
 
@@ -60,12 +61,16 @@ void main() {
       // Tap "Siteyi Kaydet & Yetkilendir"
       final submitBtn = find.text('Siteyi Kaydet & Yetkilendir');
       expect(submitBtn, findsOneWidget);
+      await tester.ensureVisible(submitBtn);
+      await tester.pumpAndSettle();
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
       // Verify provisioned credentials dialog appears and dismiss
       expect(find.text('Yeni Site & Yönetici Hazır!'), findsOneWidget);
       expect(find.textContaining('Nilüfer Sitesi'), findsWidgets);
+      await tester.ensureVisible(find.text('Tamam'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Tamam'));
       await tester.pumpAndSettle();
 
@@ -83,10 +88,14 @@ void main() {
       expect(find.text('Geçici Şifre Yenile'), findsOneWidget);
       final confirmResetBtn = find.text('Şifreyi Yenile');
       expect(confirmResetBtn, findsOneWidget);
+      await tester.ensureVisible(confirmResetBtn);
+      await tester.pumpAndSettle();
       await tester.tap(confirmResetBtn);
       await tester.pumpAndSettle();
 
       expect(find.text('Geçici Yönetim Şifresi Yenilendi!'), findsOneWidget);
+      await tester.ensureVisible(find.text('Tamam'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Tamam'));
       await tester.pumpAndSettle();
 
@@ -101,6 +110,8 @@ void main() {
       expect(find.text('Siteyi Sil'), findsOneWidget);
       final confirmDeleteBtn = find.text('Evet, Sil');
       expect(confirmDeleteBtn, findsOneWidget);
+      await tester.ensureVisible(confirmDeleteBtn);
+      await tester.pumpAndSettle();
       await tester.tap(confirmDeleteBtn);
       await tester.pumpAndSettle();
 
@@ -109,10 +120,8 @@ void main() {
       expect(controller.saasSites.any((s) => s.name == 'Nilüfer Sitesi'), isFalse);
 
       // 6. Logout and return to clean login screen
-      final logoutBtn = find.byTooltip('Çıkış Yap / Rol Değiştir');
-      expect(logoutBtn, findsOneWidget);
-      await tester.tap(logoutBtn);
-      await tester.pumpAndSettle();
+      // Logout lives in the profile sheet and asks for confirmation.
+      await logOutThroughProfile(tester);
 
       expect(controller.isAuthenticated, isFalse);
     });
@@ -161,6 +170,8 @@ void main() {
 
       // Dismiss approval modal
       expect(find.text('Başvuru Onaylandı!'), findsOneWidget);
+      await tester.ensureVisible(find.text('Tamam'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Tamam'));
       await tester.pumpAndSettle();
 
@@ -171,6 +182,8 @@ void main() {
       // 3. Switch to Aidat Yönetimi bottom tab
       final duesTab = find.text('Aidat Yönetimi');
       expect(duesTab, findsOneWidget);
+      await tester.ensureVisible(duesTab);
+      await tester.pumpAndSettle();
       await tester.tap(duesTab);
       await tester.pumpAndSettle();
 
@@ -179,6 +192,8 @@ void main() {
       // 4. Test Toplu Aidat Tahakkuku Dialog
       final bulkAccrueBtn = find.text('Toplu Aidat Tahakkuku');
       expect(bulkAccrueBtn, findsOneWidget);
+      await tester.ensureVisible(bulkAccrueBtn);
+      await tester.pumpAndSettle();
       await tester.tap(bulkAccrueBtn);
       await tester.pumpAndSettle();
 
@@ -189,6 +204,8 @@ void main() {
       // Trigger accrual
       final executeAccrualBtn = find.widgetWithText(ElevatedButton, 'Tahakkuk Ettir');
       expect(executeAccrualBtn, findsOneWidget);
+      await tester.ensureVisible(executeAccrualBtn);
+      await tester.pumpAndSettle();
       await tester.tap(executeAccrualBtn);
       await tester.pumpAndSettle();
       expect(find.byType(SnackBar), findsOneWidget);
@@ -198,6 +215,8 @@ void main() {
 
       final reconPageBtn = find.textContaining('Daireleri belirlemek için tıklayın.');
       expect(reconPageBtn, findsOneWidget);
+      await tester.ensureVisible(reconPageBtn);
+      await tester.pumpAndSettle();
       await tester.tap(reconPageBtn);
       await tester.pumpAndSettle();
 
@@ -207,6 +226,8 @@ void main() {
       // 6. Navigate to Fullscreen BankStatementReconciliationPage via Aidat Yönetimi tab
       final duesTabBtn = find.text('Aidat Yönetimi');
       expect(duesTabBtn, findsOneWidget);
+      await tester.ensureVisible(duesTabBtn);
+      await tester.pumpAndSettle();
       await tester.tap(duesTabBtn);
       await tester.pumpAndSettle();
 
@@ -232,6 +253,8 @@ void main() {
       // Return back to Dues Management using back button
       final backBtn = find.byIcon(Icons.arrow_back_ios_new_rounded);
       expect(backBtn, findsOneWidget);
+      await tester.ensureVisible(backBtn);
+      await tester.pumpAndSettle();
       await tester.tap(backBtn);
       await tester.pumpAndSettle();
 
@@ -240,6 +263,8 @@ void main() {
       // Return back to Cockpit via footer bar
       final homeTab = find.text('Ana Sayfa');
       expect(homeTab, findsOneWidget);
+      await tester.ensureVisible(homeTab);
+      await tester.pumpAndSettle();
       await tester.tap(homeTab);
       await tester.pumpAndSettle();
     });
@@ -280,6 +305,8 @@ void main() {
       // 3. Complete Payment Checkout Flow
       final payBtn = find.text('Hemen Öde');
       expect(payBtn, findsOneWidget);
+      await tester.ensureVisible(payBtn);
+      await tester.pumpAndSettle();
       await tester.tap(payBtn);
       await tester.pumpAndSettle();
 
@@ -297,6 +324,8 @@ void main() {
         of: find.byType(PaymentCheckoutDialog),
         matching: find.text('Sanal IBAN'),
       );
+      await tester.ensureVisible(ibanMethodBtn);
+      await tester.pumpAndSettle();
       await tester.tap(ibanMethodBtn);
       await tester.pumpAndSettle();
 
@@ -308,6 +337,8 @@ void main() {
       // Dismiss dialog cleanly
       final backBtn = find.byIcon(Icons.arrow_back_ios_new_rounded);
       expect(backBtn, findsOneWidget);
+      await tester.ensureVisible(backBtn);
+      await tester.pumpAndSettle();
       await tester.tap(backBtn);
       await tester.pumpAndSettle();
 
@@ -316,22 +347,30 @@ void main() {
       // 4. Open Dekontlar (Receipts) Dialog
       final receiptsBtn = find.text('Dekontlar');
       expect(receiptsBtn, findsOneWidget);
+      await tester.ensureVisible(receiptsBtn);
+      await tester.pumpAndSettle();
       await tester.tap(receiptsBtn);
       await tester.pumpAndSettle();
 
       expect(find.text('Ödeme Makbuzları & Dekontlar'), findsOneWidget);
+      await tester.ensureVisible(find.text('Kapat'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Kapat'));
       await tester.pumpAndSettle();
 
       // 5. Open Hane Sakini Invite Dialog from ResidentActionsRow
       final inviteBtn = find.text('Sakin Davet');
       expect(inviteBtn, findsOneWidget);
+      await tester.ensureVisible(inviteBtn);
+      await tester.pumpAndSettle();
       await tester.tap(inviteBtn);
       await tester.pumpAndSettle();
 
       // Verify invite link generation and scope
       expect(find.text('Hane Sakini Davet Linki'), findsOneWidget);
       expect(find.textContaining('bağımsız bölümüne erişim yetkisi verir'), findsOneWidget);
+      await tester.ensureVisible(find.text('Kapat'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Kapat'));
       await tester.pumpAndSettle();
 
@@ -351,7 +390,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Select Site Manager and choose Kendi Dairem (Kat Maliki)
-      final myFlatOption = find.textContaining('🏠 Kendi Dairem (Kat Maliki)');
+      final myFlatOption = find.textContaining('Kendi Dairem (Kat Maliki)');
       expect(myFlatOption, findsOneWidget);
       await tester.ensureVisible(myFlatOption);
       await tester.pumpAndSettle();
@@ -376,6 +415,8 @@ void main() {
       // 3. Toggle back to Manager Cockpit path
       final switchCockpitBtn = find.textContaining('Yönetimi').first;
       expect(switchCockpitBtn, findsOneWidget);
+      await tester.ensureVisible(switchCockpitBtn);
+      await tester.pumpAndSettle();
       await tester.tap(switchCockpitBtn);
       await tester.pumpAndSettle();
 
@@ -401,6 +442,8 @@ void main() {
       // 1. Switch to Aidat Yönetimi under zero periods
       final duesTab = find.text('Aidat Yönetimi');
       expect(duesTab, findsOneWidget);
+      await tester.ensureVisible(duesTab);
+      await tester.pumpAndSettle();
       await tester.tap(duesTab);
       await tester.pumpAndSettle();
 

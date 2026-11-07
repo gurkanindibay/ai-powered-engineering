@@ -58,8 +58,7 @@ def test_virtual_iban_shown_and_copied(login_as, page, api, actors, stack, brows
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-03")
 @pytest.mark.xfail(strict=True, reason="BUG (STORY-01-05): account movements show one lump row "
-                   "('Eylül 2026 Aidatı ₺1423,33') instead of separate principal and KMK penalty lines, and drop the "
-                   "thousands separator")
+                   "('Eylül 2026 Aidatı ₺1.423,33') instead of separate principal and KMK penalty lines")
 def test_account_movements_itemise_principal_and_penalty(login_as, page, builders):
     from support.flutter import by_id_prefix, text_of
     builders.overdue_dues(principal=Decimal("1400.00"), days_overdue=10)

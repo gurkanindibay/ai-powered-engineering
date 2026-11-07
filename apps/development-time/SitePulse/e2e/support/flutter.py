@@ -79,5 +79,5 @@ def input_value(page: Page, test_id: str) -> str:
 
 
 def nav_tab_count(page: Page) -> int:
-    """Number of bottom navigation items (they carry aria-current, see pages.Shell)."""
-    return page.locator("flt-semantics[role=button][aria-current]").count()
+    """Number of navigation destinations (bottom bar or rail; each is tagged nav_<key>, see pages.Shell)."""
+    return by_id_prefix(page, "nav_").count()

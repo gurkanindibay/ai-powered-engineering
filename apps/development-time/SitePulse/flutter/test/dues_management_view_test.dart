@@ -70,6 +70,8 @@ void main() {
       expect(duesTabFinder, findsOneWidget);
 
       // Tap on Aidat Yönetimi tab
+      await tester.ensureVisible(duesTabFinder);
+      await tester.pumpAndSettle();
       await tester.tap(duesTabFinder);
       await tester.pumpAndSettle();
 
@@ -81,14 +83,16 @@ void main() {
       expect(find.text('Ödemeyen / Geciken'), findsOneWidget);
 
       // Verify dual section segment control
-      expect(find.text('📋 Daire Aidat Durumları'), findsOneWidget);
-      expect(find.textContaining('🏦 Eşleşmeyenler'), findsOneWidget);
+      expect(find.text('Daire Aidat Durumları'), findsOneWidget);
+      expect(find.textContaining('Eşleşmeyenler'), findsOneWidget);
 
       // Verify alert banner for unmatched bank transfers is visible
       expect(find.textContaining('Banka hesabında henüz daireyle eşleşmemiş'), findsOneWidget);
 
       // Tap on Unmatched Bank Pool segment
-      await tester.tap(find.textContaining('🏦 Eşleşmeyenler'));
+      await tester.ensureVisible(find.textContaining('Eşleşmeyenler'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Eşleşmeyenler'));
       await tester.pumpAndSettle();
 
       // Verify unmatched cards and Daire Seç & Eşle button
@@ -109,6 +113,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap on Excel / Ekstre Yükle button
+      await tester.ensureVisible(find.text('Excel / Ekstre Yükle'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Excel / Ekstre Yükle'));
       await tester.pumpAndSettle();
 
@@ -132,17 +138,22 @@ void main() {
       // Tap on Toplu Aidat Tahakkuku button
       final accrueBtn = find.text('Toplu Aidat Tahakkuku');
       expect(accrueBtn, findsOneWidget);
+      await tester.ensureVisible(accrueBtn);
+      await tester.pumpAndSettle();
       await tester.tap(accrueBtn);
       await tester.pumpAndSettle();
 
       // Verify dialog is shown
       expect(find.text('Toplu Aidat Tahakkuku'), findsNWidgets(2)); // Button + Dialog Title
       expect(find.text('Tahakkuk Dönemi:'), findsOneWidget);
-      expect(find.text('₺1.400,00'), findsOneWidget);
+      // The dialog shows the per-unit amount in the Turkish format (other cards show it too).
+      expect(find.text('₺1.400,00'), findsWidgets);
       expect(find.textContaining('Mükerrer tahakkuklar sistem tarafından engellenir'), findsOneWidget);
       expect(find.text('Tahakkuk Ettir'), findsOneWidget);
 
       // Confirm accrual
+      await tester.ensureVisible(find.text('Tahakkuk Ettir'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Tahakkuk Ettir'));
       await tester.pumpAndSettle();
 

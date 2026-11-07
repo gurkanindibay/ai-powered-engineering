@@ -133,12 +133,44 @@ def test_homeowner_sees_no_manager_actions_and_api_refuses_them(login_as, page, 
 def test_manager_switches_between_cockpit_and_own_flat(login_as, page):
     login_as("manager")
     ManagerCockpit(page).wait()
-    assert nav_tab_count(page) == 4
+    assert nav_tab_count(page) == 3  # Ana Sayfa, Aidat Yönetimi, Sakinler & Malikler (Profile is the avatar)
 
     by_id(page, "role_path_my_flat").click()
     by_id(page, "btn_open_unified_dues_center").wait_for(state="detached", timeout=10_000)
-    assert nav_tab_count(page) == 3  # no 'Aidat Yönetimi' in the owner view
+    assert nav_tab_count(page) == 2  # Ana Sayfa, Dairem: no 'Aidat Yönetimi' in the owner view
 
     by_id(page, "role_path_manager_cockpit").click()
     ManagerCockpit(page).wait()
-    assert nav_tab_count(page) == 4
+    assert nav_tab_count(page) == 3
+
+
+@pytest.mark.core
+@pytest.mark.role_homeowner
+@pytest.mark.gui_id("GUI-06-08")
+def test_logout_asks_for_confirmation_and_cancel_keeps_the_session(login_as, page):
+    login_as("homeowner")
+    ResidentHome(page).wait()
+    assert by_id(page, "btn_header_logout").count() == 0  # no one-tap logout in the app bar
+
+    Shell(page).open_profile().logout(confirm=False)
+    page.wait_for_timeout(500)
+    assert by_id(page, "login_tab_quickAll").count() == 0
+    by_id(page, "btn_logout").wait_for(timeout=5_000)  # still on the profile sheet, still signed in
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-X-07")
+def test_each_tab_has_a_url_and_browser_back_returns_to_it(login_as, page):
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    page.wait_for_url("**/manager/home", timeout=10_000)
+
+    Shell(page).nav("residents")
+    page.wait_for_url("**/manager/residents", timeout=10_000)
+    Shell(page).nav("dues")
+    page.wait_for_url("**/manager/dues", timeout=10_000)
+
+    page.go_back()
+    page.wait_for_url("**/manager/residents", timeout=10_000)
+    by_id(page, "add_resident_btn").wait_for(timeout=15_000)
