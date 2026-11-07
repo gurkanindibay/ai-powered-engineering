@@ -362,6 +362,8 @@ New ids: `hero_detail_button`, `penalty_days`, `penalty_formula`, `aging_bucket_
 **Correction (found by the coverage gap report, `GUI_COVERAGE_GAPS.md`):** GUI-02-01 had no test although §8 counted all P0 as automated. It now has three tests in `test_epic02_manager.py`: one passing smoke test, plus strict xfails for finding 36.
 36. **Cockpit totals are wrong after a payment, and kuruş are lost.** The cockpit drops paid flats from its totals ("₺0 / ₺1400", "%0" instead of ₺1.400 / ₺2.800, %50) and rounds amounts to whole lira (`toStringAsFixed(0)`).
 
+37. **Remove-tenant lookup mixes unit and person ids.** `update_home_owner` looks the unit up with `id = $1 OR owner_person_id = $1 OR tenant_person_id = $1`, mixing unit and person ids, and silently falls back to in-memory state when the lookup fails. The response is 200 with a unit id that differs from the database, and the tenant is not removed. It is intermittent (seen only in full-suite runs); GUI-08-08 is a non-strict xfail.
+
 Phase 4 (gate, lint, traceability) is done; see GUI_AUTOMATION_PLAN.md. Per-story GUI status: `COMPLETION_STATUS.md`, section "GUI end-to-end coverage".
 
 ## 11. UX/UI remediation (2026-11-07, `docs/UX_UI_EVALUATION_REPORT.md`)
