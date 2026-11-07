@@ -407,26 +407,44 @@ fn encode_component(s: &str) -> String {
     out
 }
 
-/// Checks tenant-identifying fields in a JSON body (top level only).
-async fn check_body_scope(state: &AppState, claims: &Claims, body: &serde_json::Value) -> Result<(), Response> {
-    let Some(obj) = body.as_object() else { return Ok(()) };
-    for key in ["site_id", "siteId"] {
-        if let Some(v) = obj.get(key) {
-            let s = json_id(v);
-            if !s.is_empty() {
-                check_site_access(claims, &s)?;
+/// Recursively checks tenant-identifying fields in a JSON body (including nested objects and arrays).
+fn check_body_scope<'a>(
+    state: &'a AppState,
+    claims: &'a Claims,
+    body: &'a serde_json::Value,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), Response>> + Send + 'a>> {
+    Box::pin(async move {
+        match body {
+            serde_json::Value::Object(obj) => {
+                for key in ["site_id", "siteId"] {
+                    if let Some(v) = obj.get(key) {
+                        let s = json_id(v);
+                        if !s.is_empty() {
+                            check_site_access(claims, &s)?;
+                        }
+                    }
+                }
+                for key in ["unit_id", "unitId", "matched_unit_id"] {
+                    if let Some(v) = obj.get(key) {
+                        let s = json_id(v);
+                        if !s.is_empty() {
+                            check_unit_access(state, claims, &s).await?;
+                        }
+                    }
+                }
+                for child in obj.values() {
+                    check_body_scope(state, claims, child).await?;
+                }
             }
-        }
-    }
-    for key in ["unit_id", "unitId", "matched_unit_id"] {
-        if let Some(v) = obj.get(key) {
-            let s = json_id(v);
-            if !s.is_empty() {
-                check_unit_access(state, claims, &s).await?;
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    check_body_scope(state, claims, item).await?;
+                }
             }
+            _ => {}
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 fn json_id(v: &serde_json::Value) -> String {

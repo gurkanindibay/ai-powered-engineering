@@ -210,26 +210,58 @@ pub async fn save_advance_balance(pool: &Pool, unit_id: &str, total: Decimal) ->
         .query("SELECT debtor_type, balance FROM advance_balances WHERE unit_id = $1 FOR UPDATE", &[&unit])
         .await?;
     let mut tenant = Decimal::ZERO;
-    let mut others = Decimal::ZERO;
+    let mut owner = Decimal::ZERO;
     for r in rows {
         let kind: String = r.get(0);
         let bal: Decimal = r.get(1);
-        if kind == "TENANT" { tenant = bal } else { others += bal }
+        if kind == "TENANT" { tenant = bal } else { owner += bal }
     }
-    let new_tenant = (total - others).max(Decimal::ZERO);
-    let delta = new_tenant - tenant;
-    if delta != Decimal::ZERO {
+    if total >= owner {
+        let new_tenant = total - owner;
+        let delta = new_tenant - tenant;
+        if delta != Decimal::ZERO {
+            tx.execute(
+                "INSERT INTO advance_balances (unit_id, debtor_type, balance, updated_at) VALUES ($1, 'TENANT', $2, CURRENT_TIMESTAMP)
+                 ON CONFLICT (unit_id, debtor_type) DO UPDATE SET balance = EXCLUDED.balance, updated_at = CURRENT_TIMESTAMP",
+                &[&unit, &new_tenant],
+            )
+            .await?;
+            let entry_type = if delta > Decimal::ZERO { "PAYMENT_SURPLUS" } else { "OFFSET_APPLIED" };
+            tx.execute(
+                "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description, created_at)
+                 VALUES ($1, 'TENANT', $2, $3, 'Advance balance change', CURRENT_TIMESTAMP)",
+                &[&unit, &entry_type, &delta.abs()],
+            )
+            .await?;
+        }
+    } else {
+        if tenant != Decimal::ZERO {
+            let zero = Decimal::ZERO;
+            tx.execute(
+                "INSERT INTO advance_balances (unit_id, debtor_type, balance, updated_at) VALUES ($1, 'TENANT', $2, CURRENT_TIMESTAMP)
+                 ON CONFLICT (unit_id, debtor_type) DO UPDATE SET balance = EXCLUDED.balance, updated_at = CURRENT_TIMESTAMP",
+                &[&unit, &zero],
+            )
+            .await?;
+            tx.execute(
+                "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description, created_at)
+                 VALUES ($1, 'TENANT', 'OFFSET_APPLIED', $2, 'Advance balance change', CURRENT_TIMESTAMP)",
+                &[&unit, &tenant],
+            )
+            .await?;
+        }
+        let delta_owner = total - owner;
         tx.execute(
-            "INSERT INTO advance_balances (unit_id, debtor_type, balance, updated_at) VALUES ($1, 'TENANT', $2, CURRENT_TIMESTAMP)
+            "INSERT INTO advance_balances (unit_id, debtor_type, balance, updated_at) VALUES ($1, 'OWNER', $2, CURRENT_TIMESTAMP)
              ON CONFLICT (unit_id, debtor_type) DO UPDATE SET balance = EXCLUDED.balance, updated_at = CURRENT_TIMESTAMP",
-            &[&unit, &new_tenant],
+            &[&unit, &total],
         )
         .await?;
-        let entry_type = if delta > Decimal::ZERO { "PAYMENT_SURPLUS" } else { "OFFSET_APPLIED" };
+        let entry_type = if delta_owner > Decimal::ZERO { "PAYMENT_SURPLUS" } else { "OFFSET_APPLIED" };
         tx.execute(
             "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description, created_at)
-             VALUES ($1, 'TENANT', $2, $3, 'Advance balance change', CURRENT_TIMESTAMP)",
-            &[&unit, &entry_type, &delta.abs()],
+             VALUES ($1, 'OWNER', $2, $3, 'Advance balance change', CURRENT_TIMESTAMP)",
+            &[&unit, &entry_type, &delta_owner.abs()],
         )
         .await?;
     }
