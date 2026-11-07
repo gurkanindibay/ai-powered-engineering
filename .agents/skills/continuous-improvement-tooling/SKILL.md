@@ -110,6 +110,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `run_tests.py` | `apps/development-time/SitePulse/scripts/run_tests.py` | The full gate run before concluding any change |
 | `api_system_check.py` | `apps/development-time/SitePulse/scripts/api_system_check.py` | HTTP auth, tenancy, webhook, concurrency and restart checks against a real DB |
 | `schema_integrity_check.py` | `apps/development-time/SitePulse/scripts/schema_integrity_check.py` | Migration replay, constraint tests and the upgrade test |
+| `gui_e2e.py` | `apps/development-time/SitePulse/scripts/gui_e2e.py` | Playwright GUI suite in a real browser against an isolated stack (`serve` mode for writing tests) |
 | `memory_persistence_lint.py` | `apps/development-time/SitePulse/scripts/memory_persistence_lint.py` | Catching discarded database results |
 | `db_verify.py` | `apps/development-time/SitePulse/scripts/db_verify.py` | Inspecting and auditing a database (parameterised; non-zero exit on issues) |
 | `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |

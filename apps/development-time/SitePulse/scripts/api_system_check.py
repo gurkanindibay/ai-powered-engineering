@@ -106,10 +106,14 @@ def free_port() -> int:
 
 
 class Backend:
-    def __init__(self, db_name: str, port: int, log_dir: Path):
+    def __init__(self, db_name: str, port: int, log_dir: Path, extra_env: Optional[Dict[str, str]] = None,
+                 profile: str = "debug", log_prefix: str = "api_system_check"):
         self.db_name = db_name
         self.port = port
         self.log_dir = log_dir
+        self.extra_env = extra_env or {}
+        self.profile = profile
+        self.log_prefix = log_prefix
         self.proc: Optional[subprocess.Popen] = None
         self.boots = 0
 
@@ -118,8 +122,9 @@ class Backend:
         return f"http://127.0.0.1:{self.port}"
 
     def binary(self) -> Path:
-        path = BACKEND / "target" / "debug" / "sitepulse-backend"
-        build = subprocess.run(["cargo", "build", "--locked", "--bin", "sitepulse-backend"], cwd=BACKEND, capture_output=True, text=True)
+        path = BACKEND / "target" / self.profile / "sitepulse-backend"
+        argv = ["cargo", "build", "--locked", "--bin", "sitepulse-backend"] + (["--release"] if self.profile == "release" else [])
+        build = subprocess.run(argv, cwd=BACKEND, capture_output=True, text=True)
         if build.returncode != 0:
             raise SetupError("cargo build failed:\n" + build.stderr[-3000:])
         return path
@@ -136,8 +141,9 @@ class Backend:
             "SITEPULSE_ENABLE_DEV_ROUTES": "false",
             "APP_ENV": "development",
             "RUST_LOG": "warn",
+            **self.extra_env,
         }
-        log = open(self.log_dir / f"api_system_check_boot{self.boots}.log", "w")
+        log = open(self.log_dir / f"{self.log_prefix}_boot{self.boots}.log", "w")
         self.proc = subprocess.Popen([str(self.binary())], cwd=BACKEND, env=env, stdout=log, stderr=subprocess.STDOUT)
         deadline = time.time() + 90
         while time.time() < deadline:

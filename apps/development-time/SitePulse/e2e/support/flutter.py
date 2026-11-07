@@ -38,6 +38,13 @@ def fill(page: Page, test_id: str, value: str) -> None:
     target.type(value)
 
 
+def text_of(locator: Locator) -> str:
+    """Text Flutter exposes for a tagged widget (its semantics label or text content)."""
+    locator.first.wait_for(state="attached")
+    return locator.first.evaluate(
+        "e => (e.getAttribute('aria-label') || e.textContent || '').trim()")
+
+
 def visible_ids(page: Page) -> list[str]:
     """All automation ids currently in the DOM (for diagnostics)."""
     return page.eval_on_selector_all(

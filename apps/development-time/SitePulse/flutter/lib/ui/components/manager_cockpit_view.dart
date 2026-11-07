@@ -458,22 +458,22 @@ class ManagerCockpitView extends StatelessWidget {
                     ),
                   )),
                 if (onManageHouseTypesTap != null)
-                  TextButton.icon(
+                  testId('btn_cockpit_house_types', TextButton.icon(
                     onPressed: onManageHouseTypesTap,
                     icon: const Icon(Icons.home_work_outlined, size: 16, color: AppColors.accentPurple),
                     label: const Text(
                       'Konut Tipleri & Tarifeler',
                       style: TextStyle(color: AppColors.accentPurple, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
-                  ),
-                TextButton.icon(
+                  )),
+                testId('btn_cockpit_add_resident', TextButton.icon(
                   onPressed: onAddResidentTap,
                   icon: const Icon(Icons.add, size: 16, color: AppColors.accentCyan),
                   label: const Text(
                     'Manuel Sakin Ekle',
                     style: TextStyle(color: AppColors.accentCyan, fontSize: 12),
                   ),
-                ),
+                )),
               ],
             ),
           ],
