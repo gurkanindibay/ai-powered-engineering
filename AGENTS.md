@@ -36,3 +36,15 @@ The workspace is strictly partitioned into two paradigms:
 6. **Tool Crystallization & Continuous Improvement**:
    - When developing features, fixing bugs, or executing complex verification tasks, evaluate whether a custom script, diagnostic query, or verification procedure has recurring value across future development iterations.
    - If so, do not leave it as an ephemeral scratch script; crystallize it into a permanent, production-grade Python tool under `scripts/`, support `--help` and `--json`, document it in [skills.md](file:///skills.md), and register it in [.agents/skills/continuous-improvement-tooling](file:///.agents/skills/continuous-improvement-tooling/SKILL.md) so subsequent iterations can immediately leverage it.
+
+7. **Graphify Knowledge Graph Navigation & Maintenance**:
+   - This workspace uses a Graphify knowledge graph under `graphify-out/` to map architecture, code relationships, and cross-file dependencies.
+   - **Querying the Graph**:
+     - For broad context and architecture questions, consult the graph before heavy grepping: `graphify query "<question>"`
+     - To trace shortest paths and component interactions: `graphify path "<ComponentA>" "<ComponentB>"`
+     - To explain a specific module, node, or concept: `graphify explain "<Concept>"`
+     - For high-level architecture overviews, consult [graphify-out/GRAPH_REPORT.md](file:///graphify-out/GRAPH_REPORT.md) or navigate `graphify-out/wiki/index.md` (if generated).
+   - **Maintenance & Updates**:
+     - After completing code modifications, keep the graph synchronized with: `graphify update .` (local Tree-sitter AST, zero LLM cost).
+     - To re-index the full repository with docs and images, ensure `GEMINI_API_KEY` is loaded (e.g. from `.env`) or run `graphify . --code-only` for fast, keyless local AST extraction.
+
