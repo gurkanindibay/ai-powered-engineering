@@ -1,0 +1,35 @@
+import 'package:flutter/semantics.dart';
+import 'package:flutter/widgets.dart';
+
+/// True only in builds made with `--dart-define=E2E=true` (GUI automation).
+const bool kE2E = bool.fromEnvironment('E2E');
+
+/// Turns on the semantics tree so Flutter web renders DOM nodes that a
+/// browser automation tool (Playwright) can find. No-op outside E2E builds.
+void enableE2ESemantics() {
+  if (kE2E) {
+    SemanticsBinding.instance.ensureSemantics();
+  }
+}
+
+/// Tags [child] with a stable automation id.
+///
+/// In E2E builds Flutter web renders it as the DOM attribute
+/// `flt-semantics-identifier="<id>"`. Use the same string as the widget's
+/// `Key` where one exists, so widget tests and browser tests share one name.
+/// Outside E2E builds the child is returned unchanged, so production
+/// semantics (screen readers) are not affected.
+///
+/// [label] exposes a value the widget itself does not put in the semantics
+/// tree (e.g. `SelectableText`, which renders as an empty text area), so a
+/// test can read it from the node's `aria-label`.
+Widget testId(String id, Widget child, {String? label}) {
+  if (!kE2E) return child;
+  return Semantics(
+    identifier: id,
+    label: label,
+    container: true,
+    explicitChildNodes: true,
+    child: child,
+  );
+}

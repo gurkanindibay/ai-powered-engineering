@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import 'package:decimal/decimal.dart';
 import '../../domain/models/dues_models.dart';
@@ -232,7 +233,7 @@ class ManagerCockpitView extends StatelessWidget {
                           : AppColors.accentGreen.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(
+                    child: testId('cockpit_collection_badge', Text(
                       summary.totalExpected == Decimal.zero
                           ? (summary.totalAdvanceBalance > Decimal.zero
                               ? '₺${summary.totalAdvanceBalance.toStringAsFixed(0)} Avans Mevcut'
@@ -245,7 +246,7 @@ class ManagerCockpitView extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
-                    ),
+                    )),
                   ),
                 ],
               ),
@@ -254,22 +255,22 @@ class ManagerCockpitView extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text(
+                  testId('cockpit_collected_amount', Text(
                     '₺${summary.totalCollected.toStringAsFixed(0)}',
                     style: TextStyle(
                       color: AppColors.textPrimary(context),
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                     ),
-                  ),
+                  )),
                   const SizedBox(width: 8),
-                  Text(
+                  testId('cockpit_expected_amount', Text(
                     '/ ₺${summary.totalExpected.toStringAsFixed(0)}',
                     style: TextStyle(
                       color: AppColors.textSecondary(context),
                       fontSize: 18,
                     ),
-                  ),
+                  )),
                   if (summary.totalAdvanceBalance > Decimal.zero) ...[
                     const SizedBox(width: 12),
                     Container(
@@ -322,7 +323,7 @@ class ManagerCockpitView extends StatelessWidget {
               ),
               if (onNavigateToDuesTab != null) ...[
                 const SizedBox(height: 14),
-                InkWell(
+                testId('btn_open_unified_dues_center', InkWell(
                   key: const Key('btn_open_unified_dues_center'),
                   onTap: onNavigateToDuesTab,
                   borderRadius: BorderRadius.circular(12),
@@ -351,7 +352,7 @@ class ManagerCockpitView extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
+                )),
               ],
             ],
           ),
@@ -359,7 +360,7 @@ class ManagerCockpitView extends StatelessWidget {
 
         if (controller.unmatchedBankCount > 0 && onNavigateToDuesTab != null) ...[
           const SizedBox(height: 14),
-          InkWell(
+          testId('dashboard_unmatched_bank_alert', InkWell(
             key: const Key('dashboard_unmatched_bank_alert'),
             onTap: onNavigateToDuesTab,
             borderRadius: BorderRadius.circular(16),
@@ -405,7 +406,7 @@ class ManagerCockpitView extends StatelessWidget {
                 ],
               ),
             ),
-          ),
+          )),
         ],
 
         const SizedBox(height: 20),
@@ -435,10 +436,10 @@ class ManagerCockpitView extends StatelessWidget {
                     color: pendingList.isNotEmpty ? AppColors.accentOrange : AppColors.border(context),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(
+                  child: testId('pending_count_badge', Text(
                     '${pendingList.length}',
                     style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
+                  )),
                 ),
               ],
             ),
@@ -447,7 +448,7 @@ class ManagerCockpitView extends StatelessWidget {
               runSpacing: 4,
               children: [
                 if (onManageHomeOwnersTap != null)
-                  TextButton.icon(
+                  testId('btn_cockpit_manage_residents', TextButton.icon(
                     key: const Key('btn_cockpit_manage_residents'),
                     onPressed: onManageHomeOwnersTap,
                     icon: const Icon(Icons.people_alt_outlined, size: 16, color: AppColors.accentSky),
@@ -455,24 +456,24 @@ class ManagerCockpitView extends StatelessWidget {
                       'Sakin & Malik Listesi',
                       style: TextStyle(color: AppColors.accentSky, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
-                  ),
+                  )),
                 if (onManageHouseTypesTap != null)
-                  TextButton.icon(
+                  testId('btn_cockpit_house_types', TextButton.icon(
                     onPressed: onManageHouseTypesTap,
                     icon: const Icon(Icons.home_work_outlined, size: 16, color: AppColors.accentPurple),
                     label: const Text(
                       'Konut Tipleri & Tarifeler',
                       style: TextStyle(color: AppColors.accentPurple, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
-                  ),
-                TextButton.icon(
+                  )),
+                testId('btn_cockpit_add_resident', TextButton.icon(
                   onPressed: onAddResidentTap,
                   icon: const Icon(Icons.add, size: 16, color: AppColors.accentCyan),
                   label: const Text(
                     'Manuel Sakin Ekle',
                     style: TextStyle(color: AppColors.accentCyan, fontSize: 12),
                   ),
-                ),
+                )),
               ],
             ),
           ],
@@ -600,7 +601,7 @@ class ManagerCockpitView extends StatelessWidget {
   }
 
   Widget _buildPendingRequestCard(BuildContext context, RegistrationRequestItem req) {
-    return Container(
+    return testId('pending_card_${req.id}', Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -646,7 +647,7 @@ class ManagerCockpitView extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
+                child: testId('btn_approve_${req.id}', ElevatedButton.icon(
                   onPressed: () {
                     controller.approveRegistration(req.id);
                   },
@@ -658,10 +659,10 @@ class ManagerCockpitView extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
+                )),
               ),
               const SizedBox(width: 8),
-              OutlinedButton(
+              testId('btn_reject_${req.id}', OutlinedButton(
                 onPressed: () => controller.rejectRegistration(req.id),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.accentRed,
@@ -670,11 +671,11 @@ class ManagerCockpitView extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
                 child: const Text('Reddet', style: TextStyle(fontSize: 12)),
-              ),
+              )),
             ],
           ),
         ],
       ),
-    );
+    ));
   }
 }

@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/dues_models.dart';
@@ -75,7 +76,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Row(
+              content: testId('snackbar_import_error', Row(
                 children: [
                   const Icon(Icons.error_outline, color: Colors.white),
                   const SizedBox(width: 8),
@@ -86,7 +87,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     ),
                   ),
                 ],
-              ),
+              )),
               backgroundColor: AppColors.accentRed,
               duration: const Duration(seconds: 5),
             ),
@@ -140,7 +141,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
                 ),
                 const SizedBox(height: 16),
-                ListTile(
+                testId('btn_import_pick_file', ListTile(
                   leading: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -155,7 +156,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     Navigator.pop(ctx);
                     _handleFileUpload();
                   },
-                ),
+                )),
 
               ],
             ),
@@ -229,7 +230,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 ),
                 const SizedBox(height: 16),
                 // Breakdown Cards
-                Container(
+                testId('import_summary_matched', Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: AppColors.accentGreen.withOpacity(0.08),
@@ -255,9 +256,9 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                       ),
                     ],
                   ),
-                ),
+                )),
                 const SizedBox(height: 8),
-                Container(
+                testId('import_summary_unmatched', Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: AppColors.accentOrange.withOpacity(0.08),
@@ -283,7 +284,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                       ),
                     ],
                   ),
-                ),
+                )),
                 if (expenseItems.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Container(
@@ -319,7 +320,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 if (matchedItems.isNotEmpty)
                   SizedBox(
                     width: double.infinity,
-                    child: ElevatedButton.icon(
+                    child: testId('btn_confirm_matched_import', ElevatedButton.icon(
                       onPressed: () async {
                         final ids = matchedItems.map((m) => m.matchId).toList();
                         Navigator.pop(ctx);
@@ -340,7 +341,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                    ),
+                    )),
                   ),
                 const SizedBox(height: 8),
                 Row(
@@ -494,7 +495,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text('Tahakkuk Dönemi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
-                            Text(selectedMonth, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            testId('accrual_dialog_period', Text(selectedMonth, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -549,7 +550,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
                   child: const Text('Vazgeç'),
                 ),
-                ElevatedButton(
+                testId('btn_confirm_period_accrual', ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accentGreen,
                     foregroundColor: Colors.white,
@@ -568,7 +569,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                             final msg = result['message'] as String? ?? '';
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Row(
+                                content: testId('snackbar_accrual_result', Row(
                                   children: [
                                     Icon(
                                       alreadyAccrued ? Icons.info_outline : Icons.check_circle,
@@ -582,7 +583,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                                       ),
                                     ),
                                   ],
-                                ),
+                                )),
                                 backgroundColor:
                                     alreadyAccrued ? AppColors.accentOrange : AppColors.accentGreen,
                                 duration: const Duration(seconds: 4),
@@ -597,7 +598,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
                       : const Text('Tahakkuk Ettir'),
-                ),
+                )),
               ],
             );
           },
@@ -752,7 +753,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               runSpacing: 6,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                ElevatedButton.icon(
+                testId('btn_open_accrual_dialog', ElevatedButton.icon(
                   onPressed: _showAccrueDuesDialog,
                   icon: const Icon(Icons.event_repeat, size: 14),
                   label: const Text('Toplu Aidat Tahakkuku', style: TextStyle(fontSize: 12)),
@@ -762,8 +763,8 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
-                ElevatedButton.icon(
+                )),
+                testId('btn_open_bank_import', ElevatedButton.icon(
                   onPressed: _showImportOptionsDialog,
                   icon: const Icon(Icons.upload_file, size: 14),
                   label: const Text('Excel / Ekstre Yükle', style: TextStyle(fontSize: 12)),
@@ -773,8 +774,8 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
-                ElevatedButton.icon(
+                )),
+                testId('action_payment_tracking', ElevatedButton.icon(
                   key: const Key('action_payment_tracking'),
                   onPressed: () {
                     setState(() => _activeSegment = 1);
@@ -788,8 +789,8 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
-                PopupMenuButton<String>(
+                )),
+                testId('btn_dues_more_actions', PopupMenuButton<String>(
                   tooltip: 'Diğer Kasa İşlemleri',
                   icon: const Icon(Icons.more_vert, size: 20),
                   onSelected: (val) {
@@ -818,18 +819,18 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'virman',
-                      child: Row(
+                      child: testId('menu_item_virman', const Row(
                         children: [
                           Icon(Icons.swap_horiz, size: 16, color: Colors.indigo),
                           SizedBox(width: 8),
                           Text('Virman (Aidat ⇄ Demirbaş)', style: TextStyle(fontSize: 12)),
                         ],
-                      ),
+                      )),
                     ),
                   ],
-                ),
+                )),
               ],
             ),
           ],
@@ -999,7 +1000,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
   Widget _buildSegmentTab(int index, String label, {int count = 0}) {
     final isSelected = _activeSegment == index;
-    return InkWell(
+    return testId('segment_tab_$index', InkWell(
       key: Key('segment_tab_$index'),
       onTap: () {
         setState(() => _activeSegment = index);
@@ -1051,7 +1052,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildStatTile(String label, String value, Color color) {
@@ -1077,7 +1078,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
         // Referral Button to Owners & Residents Module
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: InkWell(
+          child: testId('dues_to_residents_module_btn', InkWell(
             key: const Key('dues_to_residents_module_btn'),
             onTap: () {
               AppFullscreenPage.push(
@@ -1111,7 +1112,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 ],
               ),
             ),
-          ),
+          )),
         ),
 
         // Filter Chips & Search Bar
@@ -1367,7 +1368,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
   Widget _buildFilterChip(String label, String filterKey, String currentFilter) {
     final isSelected = currentFilter == filterKey;
-    return InkWell(
+    return testId('dues_filter_$filterKey', InkWell(
       onTap: () => widget.controller.setFlatFilter(filterKey),
       borderRadius: BorderRadius.circular(10),
       child: Container(
@@ -1386,7 +1387,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           ),
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildFlatStatusCard(FlatPaymentStatus flat) {
@@ -1508,7 +1509,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   ),
                 ),
               ],
-              InkWell(
+              testId('dues_flat_resident_module_${flat.id}', InkWell(
                 key: Key('dues_flat_resident_module_${flat.id}'),
                 onTap: () {
                   AppFullscreenPage.push(
@@ -1534,7 +1535,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     ),
                   ],
                 ),
-              ),
+              )),
             ],
           ),
         ],
@@ -1658,7 +1659,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton.icon(
+            child: testId('btn_assign_unmatched_${item.matchId}', ElevatedButton.icon(
               onPressed: () => _openManualAssignment(item),
               icon: const Icon(Icons.add_home_work_outlined, size: 16),
               label: const Text('Daire Seç & Eşle'),
@@ -1669,7 +1670,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
-            ),
+            )),
           ),
         ],
       ),

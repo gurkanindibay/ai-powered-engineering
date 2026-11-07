@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
@@ -27,6 +28,7 @@ class ResidentActionsRow extends StatelessWidget {
           context,
           icon: Icons.receipt_long_outlined,
           label: 'Dekontlar',
+          actionId: 'receipts',
           color: AppColors.primary,
           onTap: onReceiptsTap,
         ),
@@ -35,6 +37,7 @@ class ResidentActionsRow extends StatelessWidget {
           context,
           icon: Icons.person_add_alt_1_outlined,
           label: 'Sakin Davet',
+          actionId: 'invite',
           color: AppColors.accentOrange,
           badgeText: isOwner ? 'Malik' : 'Sakin',
           badgeColor: AppColors.accentOrange,
@@ -45,6 +48,7 @@ class ResidentActionsRow extends StatelessWidget {
           context,
           icon: Icons.build_circle_outlined,
           label: 'Talep / Arıza',
+          actionId: 'requests',
           color: AppColors.accentCyan,
           badgeText: 'Bildir',
           badgeColor: AppColors.accentCyan,
@@ -55,6 +59,7 @@ class ResidentActionsRow extends StatelessWidget {
           context,
           icon: Icons.campaign_outlined,
           label: 'Duyurular',
+          actionId: 'announcements',
           color: AppColors.accentGreen,
           badgeText: '3 Yeni',
           badgeColor: AppColors.accentGreen,
@@ -70,13 +75,14 @@ class ResidentActionsRow extends StatelessWidget {
     required String label,
     required Color color,
     required VoidCallback onTap,
+    required String actionId,
     String? badgeText,
     Color? badgeColor,
   }) {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: InkWell(
+        child: testId('resident_action_$actionId', InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),
           child: Container(
@@ -138,7 +144,7 @@ class ResidentActionsRow extends StatelessWidget {
               ],
             ),
           ),
-        ),
+        )),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/auth_models.dart';
 import '../theme/app_theme.dart';
@@ -325,7 +326,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton.icon(
+              child: testId('btn_change_password_sheet', OutlinedButton.icon(
                 key: const Key('btn_change_password_sheet'),
                 onPressed: () => _showChangePasswordDialog(context),
                 icon: const Icon(Icons.password, color: AppColors.accentCyan, size: 18),
@@ -338,12 +339,12 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-              ),
+              )),
             ),
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton.icon(
+              child: testId('btn_logout', OutlinedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
                   widget.controller.logout();
@@ -358,7 +359,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-              ),
+              )),
             ),
           ],
         ),
@@ -398,7 +399,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                 ),
                 child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
-              ElevatedButton(
+              testId('btn_submit_profile_change_password', ElevatedButton(
                 onPressed: isSubmitting
                     ? null
                     : () async {
@@ -449,7 +450,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: Text(isSubmitting ? 'Kaydediliyor...' : 'Şifreyi Güncelle', style: const TextStyle(fontWeight: FontWeight.bold)),
-              ),
+              )),
             ],
           ),
           child: Column(
@@ -491,7 +492,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                 ),
               ),
               const SizedBox(height: 14),
-              TextField(
+              testId('profile_change_password_current', TextField(
                 controller: currentPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -502,9 +503,9 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('profile_change_password_new', TextField(
                 controller: newPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -515,9 +516,9 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('profile_change_password_confirm', TextField(
                 controller: confirmPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -528,7 +529,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
             ],
           ),
         ),
