@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -116,7 +117,7 @@ class HeroBalanceCard extends StatelessWidget {
           const SizedBox(height: 14),
 
           // ── 2. Label ─────────────────────────────────────────────────
-          Text(
+          testId('hero_balance_label', Text(
             mainLabel,
             style: TextStyle(
               color: hasAdvance ? const Color(0xFF10B981) : AppColors.textSecondary(context),
@@ -124,11 +125,11 @@ class HeroBalanceCard extends StatelessWidget {
               fontWeight: FontWeight.w600,
               letterSpacing: 0.2,
             ),
-          ),
+          )),
           const SizedBox(height: 8),
 
           // ── 3. Amount — full width, centered, 32px ────────────────────
-          Text(
+          testId('hero_balance_amount', Text(
             amountText,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -137,7 +138,7 @@ class HeroBalanceCard extends StatelessWidget {
               fontWeight: FontWeight.w800,
               letterSpacing: -1.0,
             ),
-          ),
+          )),
           const SizedBox(height: 8),
 
           // ── 4. Status Pill ────────────────────────────────────────────
@@ -153,14 +154,14 @@ class HeroBalanceCard extends StatelessWidget {
                   width: 1,
                 ),
               ),
-              child: Text(
+              child: testId('hero_overdue_badge', Text(
                 '10 Gün Gecikme (%5 KMK)',
                 style: const TextStyle(
                   color: Color(0xFFEF4444),
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
-              ),
+              )),
             )
           else if (hasAdvance)
             Container(
@@ -340,13 +341,13 @@ class HeroBalanceCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _ActionButton(
+                child: testId('btn_pay_now', _ActionButton(
                   label: hasAdvance || debtDouble <= 0 ? 'Avans Yükle' : 'Hemen Öde',
                   icon: hasAdvance || debtDouble <= 0 ? Icons.add_card_outlined : Icons.payments_outlined,
                   filled: true,
                   color: hasAdvance || debtDouble <= 0 ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                   onTap: onPayPressed,
-                ),
+                )),
               ),
               const SizedBox(width: 10),
               // Detay / Hesap Özeti — ghost outline (secondary)

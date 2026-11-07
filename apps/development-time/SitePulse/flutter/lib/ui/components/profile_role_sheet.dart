@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/auth_models.dart';
 import '../theme/app_theme.dart';
@@ -325,7 +326,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton.icon(
+              child: testId('btn_change_password_sheet', OutlinedButton.icon(
                 key: const Key('btn_change_password_sheet'),
                 onPressed: () => _showChangePasswordDialog(context),
                 icon: const Icon(Icons.password, color: AppColors.accentCyan, size: 18),
@@ -338,12 +339,12 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-              ),
+              )),
             ),
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton.icon(
+              child: testId('btn_logout', OutlinedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
                   widget.controller.logout();
@@ -358,7 +359,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-              ),
+              )),
             ),
           ],
         ),

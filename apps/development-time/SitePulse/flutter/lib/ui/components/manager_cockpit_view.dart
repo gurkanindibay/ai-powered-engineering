@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import 'package:decimal/decimal.dart';
 import '../../domain/models/dues_models.dart';
@@ -322,7 +323,7 @@ class ManagerCockpitView extends StatelessWidget {
               ),
               if (onNavigateToDuesTab != null) ...[
                 const SizedBox(height: 14),
-                InkWell(
+                testId('btn_open_unified_dues_center', InkWell(
                   key: const Key('btn_open_unified_dues_center'),
                   onTap: onNavigateToDuesTab,
                   borderRadius: BorderRadius.circular(12),
@@ -351,7 +352,7 @@ class ManagerCockpitView extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
+                )),
               ],
             ],
           ),
@@ -359,7 +360,7 @@ class ManagerCockpitView extends StatelessWidget {
 
         if (controller.unmatchedBankCount > 0 && onNavigateToDuesTab != null) ...[
           const SizedBox(height: 14),
-          InkWell(
+          testId('dashboard_unmatched_bank_alert', InkWell(
             key: const Key('dashboard_unmatched_bank_alert'),
             onTap: onNavigateToDuesTab,
             borderRadius: BorderRadius.circular(16),
@@ -405,7 +406,7 @@ class ManagerCockpitView extends StatelessWidget {
                 ],
               ),
             ),
-          ),
+          )),
         ],
 
         const SizedBox(height: 20),
@@ -447,7 +448,7 @@ class ManagerCockpitView extends StatelessWidget {
               runSpacing: 4,
               children: [
                 if (onManageHomeOwnersTap != null)
-                  TextButton.icon(
+                  testId('btn_cockpit_manage_residents', TextButton.icon(
                     key: const Key('btn_cockpit_manage_residents'),
                     onPressed: onManageHomeOwnersTap,
                     icon: const Icon(Icons.people_alt_outlined, size: 16, color: AppColors.accentSky),
@@ -455,7 +456,7 @@ class ManagerCockpitView extends StatelessWidget {
                       'Sakin & Malik Listesi',
                       style: TextStyle(color: AppColors.accentSky, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
-                  ),
+                  )),
                 if (onManageHouseTypesTap != null)
                   TextButton.icon(
                     onPressed: onManageHouseTypesTap,

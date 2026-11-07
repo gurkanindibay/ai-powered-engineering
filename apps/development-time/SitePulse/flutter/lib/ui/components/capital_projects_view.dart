@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/dues_models.dart';
@@ -118,7 +119,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary(ctx))),
           ),
-          ElevatedButton(
+          testId('btn_confirm_accrual_dialog', ElevatedButton(
             key: const Key('btn_confirm_accrual_dialog'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accentCyan,
@@ -127,7 +128,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Tahakkuk Ettir'),
-          ),
+          )),
         ],
       ),
     );
@@ -241,7 +242,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton.icon(
+                      testId('btn_open_capital_project_wizard', ElevatedButton.icon(
                         key: const Key('btn_open_capital_project_wizard'),
                         onPressed: _openProjectWizard,
                         style: ElevatedButton.styleFrom(
@@ -256,7 +257,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                           'Yeni Proje Başlat',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
-                      ),
+                      )),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -377,7 +378,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                     final isSelected = activeProj?.id == proj.id;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8.0),
-                      child: InkWell(
+                      child: testId('project_tab_${proj.id}', InkWell(
                         key: Key('project_tab_${proj.id}'),
                         onTap: () => widget.controller.selectCapitalProject(proj),
                         borderRadius: BorderRadius.circular(12),
@@ -430,7 +431,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                             ],
                           ),
                         ),
-                      ),
+                      )),
                     );
                   }).toList(),
                 ),
@@ -626,13 +627,13 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                         style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14),
                       ),
                       const SizedBox(height: 16),
-                      ElevatedButton.icon(
+                      testId('btn_open_first_capital_project', ElevatedButton.icon(
                         key: const Key('btn_open_first_capital_project'),
                         onPressed: _openProjectWizard,
                         icon: const Icon(Icons.add),
                         label: const Text('İlk Demirbaş Projesini Başlat'),
                         style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCyan),
-                      ),
+                      )),
                     ],
                   ),
                 ),
@@ -698,7 +699,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
 
   Widget _buildSubTabButton(int index, String label) {
     final isSelected = _activeSubTab == index;
-    return InkWell(
+    return testId('subtab_button_$index', InkWell(
       key: Key('subtab_button_$index'),
       onTap: () => setState(() => _activeSubTab = index),
       borderRadius: BorderRadius.circular(8),
@@ -718,7 +719,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
           ),
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildSubTabContent(
@@ -826,7 +827,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                             ),
                           )
                         else
-                          ElevatedButton(
+                          testId('btn_accrue_installment_${inst.installmentNumber}', ElevatedButton(
                             key: Key('btn_accrue_installment_${inst.installmentNumber}'),
                             onPressed: () => _handleAccrueInstallment(proj.id, inst.installmentNumber, inst.installmentBudget),
                             style: ElevatedButton.styleFrom(
@@ -837,7 +838,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                               elevation: 0,
                             ),
                             child: const Text('Tahakkuk Ettir', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                          ),
+                          )),
                       ],
                     ),
                   ],
@@ -978,7 +979,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                 ),
               ),
               const SizedBox(width: 8),
-              ElevatedButton.icon(
+              testId('btn_record_disbursement', ElevatedButton.icon(
                 key: const Key('btn_record_disbursement'),
                 onPressed: () => _openDisbursementModal(proj.id),
                 style: ElevatedButton.styleFrom(
@@ -990,7 +991,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                 ),
                 icon: const Icon(Icons.add, size: 14),
                 label: const Text('Hakediş Kaydet', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              ),
+              )),
             ],
           ),
           const SizedBox(height: 12),
@@ -1225,7 +1226,7 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
             // Proje Başlığı
             Text('Proje Başlığı *', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
             const SizedBox(height: 6),
-            TextFormField(
+            testId('input_capital_project_title', TextFormField(
               key: const Key('input_capital_project_title'),
               controller: _titleController,
               decoration: InputDecoration(
@@ -1235,13 +1236,13 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
               ),
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Başlık zorunludur' : null,
-            ),
+            )),
             const SizedBox(height: 16),
 
             // Kategori
             Text('Demirbaş Kategorisi', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
             const SizedBox(height: 6),
-            DropdownButtonFormField<String>(
+            testId('dropdown_capital_project_category', DropdownButtonFormField<String>(
               key: const Key('dropdown_capital_project_category'),
               value: _selectedCategory,
               decoration: InputDecoration(
@@ -1261,13 +1262,13 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
               onChanged: (val) {
                 if (val != null) setState(() => _selectedCategory = val);
               },
-            ),
+            )),
             const SizedBox(height: 16),
 
             // Toplam Bütçe
             Text('Toplam Proje Bütçesi (₺) *', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
             const SizedBox(height: 6),
-            TextFormField(
+            testId('input_capital_project_budget', TextFormField(
               key: const Key('input_capital_project_budget'),
               controller: _budgetController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1282,7 +1283,7 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
                 if (Decimal.tryParse(v.trim()) == null) return 'Geçerli bir tutar girin';
                 return null;
               },
-            ),
+            )),
             const SizedBox(height: 16),
 
             // Paylaşım Esası
@@ -1384,7 +1385,7 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
             SizedBox(
               width: double.infinity,
               height: 48,
-              child: ElevatedButton(
+              child: testId('btn_submit_capital_project', ElevatedButton(
                 key: const Key('btn_submit_capital_project'),
                 onPressed: _isSubmitting ? null : _submit,
                 style: ElevatedButton.styleFrom(
@@ -1399,7 +1400,7 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
                         'Demirbaş Projesini ve Taksit Planını Başlat',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                       ),
-              ),
+              )),
             ),
           ],
         ),
@@ -1520,15 +1521,15 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  IconButton(
+                  testId('btn_close_disbursement_modal', IconButton(
                     key: const Key('btn_close_disbursement_modal'),
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.of(context).pop(),
-                  ),
+                  )),
                 ],
               ),
               const SizedBox(height: 12),
-              TextFormField(
+              testId('input_disbursement_milestone', TextFormField(
                 key: const Key('input_disbursement_milestone'),
                 controller: _milestoneController,
                 decoration: InputDecoration(
@@ -1539,9 +1540,9 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                 ),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Aşama tanımı zorunludur' : null,
-              ),
+              )),
               const SizedBox(height: 10),
-              TextFormField(
+              testId('input_disbursement_amount', TextFormField(
                 key: const Key('input_disbursement_amount'),
                 controller: _amountController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1552,9 +1553,9 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                 ),
                 validator: (v) => (v == null || Decimal.tryParse(v.trim()) == null) ? 'Geçerli tutar girin' : null,
-              ),
+              )),
               const SizedBox(height: 10),
-              TextFormField(
+              testId('input_disbursement_recipient', TextFormField(
                 key: const Key('input_disbursement_recipient'),
                 controller: _recipientController,
                 decoration: InputDecoration(
@@ -1564,9 +1565,9 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                 ),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Alıcı zorunludur' : null,
-              ),
+              )),
               const SizedBox(height: 10),
-              TextFormField(
+              testId('input_disbursement_iban', TextFormField(
                 key: const Key('input_disbursement_iban'),
                 controller: _ibanController,
                 decoration: InputDecoration(
@@ -1577,7 +1578,7 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                 ),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'IBAN zorunludur' : null,
-              ),
+              )),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _invoiceController,
@@ -1592,7 +1593,7 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
               SizedBox(
                 width: double.infinity,
                 height: 48,
-                child: ElevatedButton(
+                child: testId('btn_submit_disbursement', ElevatedButton(
                   key: const Key('btn_submit_disbursement'),
                   onPressed: _isSubmitting ? null : _submit,
                   style: ElevatedButton.styleFrom(
@@ -1603,7 +1604,7 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
                   child: _isSubmitting
                       ? const CircularProgressIndicator(color: Colors.white)
                       : const Text('Hakediş Ödemesini Kaydet', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
+                )),
               ),
             ],
           ),

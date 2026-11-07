@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import 'package:decimal/decimal.dart';
 import '../../domain/models/dues_models.dart';
@@ -651,7 +652,7 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
               tooltip: 'Yenile',
               onPressed: _loadData,
             ),
-            IconButton(
+            testId('action_open_bank_reconciliation', IconButton(
               key: const Key('action_open_bank_reconciliation'),
               icon: const Icon(Icons.receipt_long),
               tooltip: 'Banka Ekstresi & Eşleştirme (Excel/MT940)',
@@ -659,7 +660,7 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                 await BankStatementReconciliationPage.open(context, controller: widget.controller);
                 _loadData();
               },
-            ),
+            )),
             IconButton(
               icon: const Icon(Icons.add_card),
               tooltip: 'Manuel Tahsilat Girişi',
@@ -937,7 +938,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (unmatchedBank.isNotEmpty) ...[
-          Container(
+          testId('banner_unmatched_bank_transactions', Container(
             key: const Key('banner_unmatched_bank_transactions'),
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(12),
@@ -973,7 +974,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                     ],
                   ),
                 ),
-                ElevatedButton(
+                testId('btn_resolve_unmatched_bank', ElevatedButton(
                   key: const Key('btn_resolve_unmatched_bank'),
                   onPressed: () async {
                     await BankStatementReconciliationPage.open(context, controller: widget.controller);
@@ -987,17 +988,17 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   child: const Text('Eşleştirmeyi Çöz'),
-                ),
+                )),
               ],
             ),
-          ),
+          )),
         ],
         // Filter bar
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              OutlinedButton.icon(
+              testId('btn_stream_upload_bank_statement', OutlinedButton.icon(
                 key: const Key('btn_stream_upload_bank_statement'),
                 onPressed: () async {
                   await BankStatementReconciliationPage.open(context, controller: widget.controller);
@@ -1010,7 +1011,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-              ),
+              )),
               const SizedBox(width: 8),
               _buildFilterChip(
                 label: 'Kanal: ${PaymentTrackingPage.channelLabel(_selectedChannel)}',
