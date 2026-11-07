@@ -1,6 +1,6 @@
 # SitePulse GUI Automation: Plan to Build the Test Plan and Browser Test Suite
 
-Status: v2, in progress. Phases 0–3 are done (all 83 scenarios automated; X-03 zero-data guidance is covered by GUI-03-03); Phase 4 is next. Facts were checked against the code on 2026-11-07.
+Status: v2. Phases 0–4 are done (all 83 scenarios automated; X-03 zero-data guidance is covered by GUI-03-03). Open: CI runner for the gui-e2e gate. Facts were checked against the code on 2026-11-07.
 
 **Goal:** a written GUI test plan, plus an automated suite that opens a real browser, logs in as each role and runs every user-facing scenario in the epics against the real backend and database.
 
@@ -88,11 +88,12 @@ e2e/
 
 Rule for money: every amount shown on screen is parsed to `Decimal` and, for P0/P1, compared with the API or database value.
 
-### Phase 4: Wiring it into the repo
-- Add an optional `gui-e2e` gate to `scripts/run_tests.py`. With `--skip-gui` or no running stack it is reported SKIPPED, never PASSED, matching how `--skip-db` already behaves.
-- Add a "GUI test" column to `COMPLETION_STATUS.md`.
-- Add a harness lint: every `Key('x')` in `lib/ui` has a matching `testId('x')`.
-- Document in `skills.md`, register in `.agents/skills/continuous-improvement-tooling`, and run `graphify update .`.
+### Phase 4: Wiring it into the repo — ✅ DONE 2026-11-07
+- **`gui-e2e` gate** in `scripts/run_tests.py` (and `harness/loop/verification_gates.py`): runs `scripts/gui_e2e.py run --json`; any failure, setup error or unexpected XPASS fails it. `--skip-gui` (or `--skip-db`, since it needs PostgreSQL) reports it as SKIPPED, never as passed.
+- **`testid-lint` gate**: `scripts/testid_lint.py` fails when a `Key('<id>')` under `flutter/lib/ui` has no `testId('<id>', ...)`. Unwrappable constructors are skipped; state-only keys carry `// testid-lint: ignore`. Self-tests: `harness/tests/test_testid_lint.py`.
+- **Traceability**: each test records its `gui_ids` in the JUnit report (`e2e/conftest.py`). `scripts/gui_traceability.py --write-status` writes the generated "GUI end-to-end coverage" section of `COMPLETION_STATUS.md` (story → scenarios → pass/xfail/fail → status). `harness/tests/test_gui_traceability.py` fails if a story has neither a scenario nor a written exclusion.
+- Documented in `skills.md` (5b-3, 5b-4, 5c), registered in `.agents/skills/continuous-improvement-tooling`, root symlinks in `scripts/`.
+- Not done (open decision §6): running `gui-e2e` in GitHub Actions, which needs PostgreSQL, Rust, Flutter and Chrome on the runner.
 
 ## 4. Risks and mitigations
 - **Missing ids on new widgets:** the lint in Phase 4.

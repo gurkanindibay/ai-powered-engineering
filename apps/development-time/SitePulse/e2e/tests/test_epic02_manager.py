@@ -187,3 +187,69 @@ def test_house_type_tariff_rejects_more_than_two_decimals(login_as, page, stack)
 
     assert by_id(page, "house_type_error").count() == 1
     assert stack.sql("SELECT dues_amount FROM house_types WHERE site_id = 1 AND type_name = '2+1';") == "1400.00"
+
+
+# ---------------------------------------------------------------- GUI-02-01 (P0)
+
+def _cockpit_amount(page, test_id: str) -> Decimal:
+    # e.g. '₺1400' or '/ ₺2800' (the cockpit prints whole lira)
+    return Decimal(text_of(by_id(page, test_id)).rsplit("₺", 1)[1].strip())
+
+
+def _accrue_october(api, actors, amount: Decimal):
+    manager = api.login(**actors["manager"])
+    api.create_period(manager, "Ekim 2026", "2026-11-30")  # not yet due: no penalty
+    api.accrue_period(manager, "Ekim 2026", amount, "2026-11-30")
+    return manager
+
+
+def _cockpit_figures(login_as, page) -> tuple[Decimal, Decimal, str]:
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    by_id(page, "cockpit_collection_badge").wait_for(timeout=15_000)
+    return (_cockpit_amount(page, "cockpit_collected_amount"), _cockpit_amount(page, "cockpit_expected_amount"),
+            text_of(by_id(page, "cockpit_collection_badge")))
+
+
+@pytest.mark.smoke
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-02-01")
+def test_cockpit_shows_the_accrued_total_before_any_payment(login_as, page, api, actors, stack):
+    _accrue_october(api, actors, Decimal("1400.00"))
+    expected = Decimal(stack.sql("SELECT sum(principal_amount) FROM dues_liabilities WHERE period = 'Ekim 2026';"))
+
+    collected, shown_expected, badge = _cockpit_figures(login_as, page)
+
+    assert (collected, shown_expected) == (Decimal("0"), expected)
+    assert badge.startswith("%0 ")
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-02-01")
+@pytest.mark.xfail(strict=True, reason="BUG (STORY-02-01): the cockpit drops paid flats from its totals: with 2 × "
+                   "₺1.400,00 accrued and B Blok D:3 paid it shows '₺0 / ₺1400' and '%0' instead of ₺1.400 / ₺2.800 "
+                   "and %50 (same root cause as the dues roster's 'Tümü (1)' of 2)")
+def test_cockpit_counts_a_payment_as_collected(login_as, page, api, actors, stack):
+    manager = _accrue_october(api, actors, Decimal("1400.00"))
+    b3 = stack.sql("SELECT u.id FROM units u JOIN blocks b ON b.id = u.block_id "
+                   "WHERE b.block_name = 'B Blok' AND u.unit_number = 3;")
+    api.record_manual_payment(manager, b3, Decimal("1400.00"), "Mehmet Öz", payer_role="OWNER")
+    expected = Decimal(stack.sql("SELECT sum(principal_amount) FROM dues_liabilities WHERE period = 'Ekim 2026';"))
+    collected = Decimal(stack.sql("SELECT sum(paid_amount) FROM dues_liabilities WHERE period = 'Ekim 2026';"))
+    rate = (collected * 100 / expected).quantize(Decimal("1"))
+
+    shown = _cockpit_figures(login_as, page)
+
+    assert shown[:2] == (collected, expected) and shown[2].startswith(f"%{rate}"), (shown, collected, expected, rate)
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-02-01")
+@pytest.mark.xfail(strict=True, reason="BUG: the cockpit prints amounts with toStringAsFixed(0), so kuruş are lost "
+                   "(2 × ₺1.400,55 accrued is shown as '₺2801' instead of ₺2.801,10)")
+def test_cockpit_amounts_keep_kurus(login_as, page, api, actors):
+    _accrue_october(api, actors, Decimal("1400.55"))
+    _, shown_expected, _ = _cockpit_figures(login_as, page)
+    assert shown_expected == Decimal("2801.10")

@@ -138,3 +138,13 @@ class E2EStack:
     # -- helpers -----------------------------------------------------------
     def sql(self, statement: str) -> str:
         return self.psql.run(self.db_name, statement)
+
+    def wait_sql(self, statement: str, expected: str, timeout_s: float = 10.0) -> str:
+        """Poll a query until it returns `expected` (UI actions persist asynchronously); returns the last value."""
+        import time
+        deadline = time.monotonic() + timeout_s
+        value = self.sql(statement)
+        while value != expected and time.monotonic() < deadline:
+            time.sleep(0.3)
+            value = self.sql(statement)
+        return value

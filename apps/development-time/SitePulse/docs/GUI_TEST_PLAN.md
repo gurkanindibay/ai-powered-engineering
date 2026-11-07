@@ -358,5 +358,8 @@ New ids: `hero_detail_button`, `penalty_days`, `penalty_formula`, `aging_bucket_
 34. **Google sign-in is simulated, and there's no offline banner.**
 35. **The session is not persisted.** A browser reload always returns to the login screen. The test accepts this as the current design; the stories do not say otherwise.
 
-Next: Phase 4 wiring (`run_tests.py` gate, the Key/testId lint, the "GUI test" column in `COMPLETION_STATUS.md`).
+**Correction (found by the coverage gap report, `GUI_COVERAGE_GAPS.md`):** GUI-02-01 had no test although §8 counted all P0 as automated. It now has three tests in `test_epic02_manager.py`: one passing smoke test, plus strict xfails for finding 36.
+36. **Cockpit totals are wrong after a payment, and kuruş are lost.** The cockpit drops paid flats from its totals ("₺0 / ₺1400", "%0" instead of ₺1.400 / ₺2.800, %50) and rounds amounts to whole lira (`toStringAsFixed(0)`).
+
+Phase 4 (gate, lint, traceability) is done; see GUI_AUTOMATION_PLAN.md. Per-story GUI status: `COMPLETION_STATUS.md`, section "GUI end-to-end coverage".
 

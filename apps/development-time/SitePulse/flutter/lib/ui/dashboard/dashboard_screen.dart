@@ -251,6 +251,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
           color: AppColors.accentCyan,
           child: SingleChildScrollView(
+            // Resets scroll position per tab; not an automation target. testid-lint: ignore
             key: ValueKey('tab_scroll_$_selectedTabIndex'),
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

@@ -126,14 +126,36 @@ DB_PASS=... ./scripts/gui_e2e.py serve                                      # ke
 ```
 Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/`. Exit codes: 0 pass, 1 test failures, 2 setup error.
 
+## 5b-3. testId Lint (`testid_lint.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/testid_lint.py](file:///apps/development-time/SitePulse/scripts/testid_lint.py) (symlinked to `scripts/testid_lint.py`)
+- **Purpose:** Fails when a widget `Key('<id>')` under `flutter/lib/ui` has no `testId('<id>', ...)` with the same id in the same file, so new widgets cannot become invisible to the GUI suite. Constructors that cannot carry a Semantics wrapper (DropdownMenuItem, Tab, Expanded, ...) are skipped; a key that only resets state is exempted with `// testid-lint: ignore`. Gate `testid-lint` in `run_tests.py`.
+
+```bash
+./scripts/testid_lint.py           # exit 1 and file:line for every missing testId
+./scripts/testid_lint.py --json
+```
+
+## 5b-4. GUI Traceability (`gui_traceability.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/gui_traceability.py](file:///apps/development-time/SitePulse/scripts/gui_traceability.py) (symlinked to `scripts/gui_traceability.py`)
+- **Purpose:** Joins the stories (`.specify/requirements`), the scenario catalogue (`docs/GUI_TEST_PLAN.md` §3) and the last GUI run (`e2e/.artifacts/junit.xml`, where each test records its `gui_ids`) into a per-story status: PASS, DEFECT (strict xfail), FAIL, NOT RUN, GAP, EXCLUDED or MISSING. `--write-status` refreshes the generated section in `COMPLETION_STATUS.md`. Exit 1 on FAIL or MISSING.
+
+```bash
+./scripts/gui_traceability.py                  # table
+./scripts/gui_traceability.py --write-status   # after a GUI run
+./scripts/gui_traceability.py --json
+```
+
 ## 5c. Full Verification Run (`run_tests.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)
-- **Purpose:** Runs every harness gate with the real tools: harness self-tests, `cargo build`, `clippy -D warnings`, `cargo test`, the shared money fixtures (Rust + Dart), `flutter analyze`, `flutter test`, the persistence lint, the schema gate and the API system check. A missing toolchain fails; nothing is printed as passed unless the tool passed; nothing in the repo is modified.
+- **Purpose:** Runs every harness gate with the real tools: harness self-tests, `cargo build`, `clippy -D warnings`, `cargo test`, the shared money fixtures (Rust + Dart), `flutter analyze`, `flutter test`, the persistence lint, the testId lint, the schema gate, the API system check and the browser suite (`gui-e2e`, about 15 minutes; an unexpected XPASS fails it). A missing toolchain fails; nothing is printed as passed unless the tool passed; nothing in the repo is modified.
 
 ```bash
 DB_PASS=... ./scripts/run_tests.py            # everything
-./scripts/run_tests.py --skip-db              # DB gates reported as SKIPPED, not passed
+./scripts/run_tests.py --skip-db              # DB gates (incl. gui-e2e) reported as SKIPPED, not passed
+DB_PASS=... ./scripts/run_tests.py --skip-gui # everything except the browser suite
 ./scripts/run_tests.py --only rust-test,money-fixtures --json
 ```
 
