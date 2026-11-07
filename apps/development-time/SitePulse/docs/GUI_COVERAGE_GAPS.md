@@ -11,12 +11,12 @@ Date: 2026-11-07. Scope: the browser suite in `e2e/` (Playwright, real backend a
 | Catalogued scenarios | 83 (P0 21, P1 46, P2 16) |
 | Scenarios with at least one test | 83 (GUI-X-01 is enforced by the conftest page guard on every test; GUI-X-03 is tagged on GUI-03-03's test) |
 | Tests | 96 runs from 94 test functions (two are parameterised per role) |
-| Expected to pass / strict xfail | 54 / 42 |
+| Expected to pass / xfail | 53 / 43 (42 strict, plus the non-strict GUI-08-08, finding 37) |
 | Scenarios verified only by xfail (behaviour not confirmed) | 28 |
 | Scenarios with both a passing test and a pinned defect | 11 |
-| User stories | 62: see the generated "GUI end-to-end coverage" section in `COMPLETION_STATUS.md` |
+| User stories (62) | 19 pass, 33 with at least one pinned defect, 1 gap (no GUI), 9 excluded, 0 failing or missing (generated section in `COMPLETION_STATUS.md`) |
 
-Latest full run: see §8.
+Latest full run: all gates pass (§8).
 
 ## 2. Gap found while writing this report: GUI-02-01 had no test
 
@@ -103,7 +103,12 @@ These screens and actions exist in the app but no catalogued scenario or test ex
 
 `python3 scripts/run_tests.py --only testid-lint,harness-selftest,gui-e2e` (2026-11-07): testid-lint and harness-selftest PASSED. gui-e2e FAILED: 96 tests, **52 passed, 42 strict xfail, 2 failed** in 12 minutes.
 
-**Open issue:** GUI-08-07 (residents search) and GUI-08-08 (remove the tenant only) fail in every full-suite run but pass on their own, with the P2 file alone, and with the EPIC-09, EPIC-10 and P2 files together. Their screenshots show the search returning the right single card and the tenant-removal dialog closing without effect. The per-test reset truncates every table and restarts the backend, and the theme toggle is not persisted, so the leak is not yet found. Both tests now report the ids on screen and the database rows when they fail, so the next full run will show what differs.
+**Resolved (2026-11-07):** the long-run failures were diagnosed with request capture in the tests.
+- **GUI-08-07 (residents search):** a test problem. The wait counted the same card id twice under load; it now compares unique ids and passes in full runs.
+- **GUI-06-06:** a test race. The test checked the new password before the backend had stored it; it now waits for the `change-password` response.
+- **GUI-08-08 (remove tenant only):** a backend defect, finding 37. `SiteAdminService::update_home_owner` looks the unit up with `id = $1 OR owner_person_id = $1 OR tenant_person_id = $1`, mixing unit and person ids. It swallows a failed lookup and falls back to in-memory state, then answers 200 with the unit labelled `unit_id 2` (database id 1) while the database keeps the tenant. Because it only shows up in long runs, the test is a **non-strict** xfail (the only one).
+
+Final gate run (`run_tests.py --only testid-lint,harness-selftest,gui-e2e`): **all three PASSED**; gui-e2e 96 tests, 53 passed, 43 xfail, 0 failed, 12 minutes.
 
 ## 9. Recommended next steps (in order)
 
