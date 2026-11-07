@@ -240,7 +240,7 @@ class ComplexCollectionSummary {
   int get collectionRatePercent {
     if (totalExpected == Decimal.zero) return 0;
     final ratio = (totalCollected * Decimal.fromInt(100) / totalExpected);
-    return ratio.toDouble().round();
+    return ratio.round().toInt();
   }
 
   int get collectionPercentage => collectionRatePercent;
@@ -1730,8 +1730,12 @@ class CapitalProjectItem {
 
   double get collectionProgressPercentage {
     if (totalBudget <= Decimal.zero) return 0.0;
-    final pct = (collectedAmount / totalBudget).toDouble() * 100.0;
-    return pct.clamp(0.0, 100.0);
+    final pct = (collectedAmount * Decimal.fromInt(100) / totalBudget)
+        .toDecimal(scaleOnInfinitePrecision: 10);
+    final hundred = Decimal.fromInt(100);
+    // Ratio is clamped in Decimal; only the dimensionless percentage is
+    // converted to double for progress-bar widgets.
+    return (pct > hundred ? hundred : pct).toDouble();
   }
 
   factory CapitalProjectItem.fromJson(Map<String, dynamic> json) {

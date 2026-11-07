@@ -57,6 +57,22 @@ class Money implements Comparable<Money> {
     return '₺$fixedStr';
   }
 
+  /// Returns Turkish-locale currency string (e.g. "₺1.423,33"), computed
+  /// exactly from the Decimal amount without any floating-point conversion.
+  String toTurkishString() {
+    final isNegative = amount < Decimal.zero;
+    final parts = amount.abs().toStringAsFixed(2).split('.');
+    final intPart = parts[0];
+    final buffer = StringBuffer();
+    for (int i = 0; i < intPart.length; i++) {
+      if (i > 0 && (intPart.length - i) % 3 == 0) {
+        buffer.write('.');
+      }
+      buffer.write(intPart[i]);
+    }
+    return '${isNegative ? '-' : ''}₺${buffer.toString()},${parts[1]}';
+  }
+
   @override
   String toString() => toFormattedString();
 }
