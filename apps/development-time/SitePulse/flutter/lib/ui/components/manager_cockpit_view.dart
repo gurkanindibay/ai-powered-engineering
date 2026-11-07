@@ -436,10 +436,10 @@ class ManagerCockpitView extends StatelessWidget {
                     color: pendingList.isNotEmpty ? AppColors.accentOrange : AppColors.border(context),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(
+                  child: testId('pending_count_badge', Text(
                     '${pendingList.length}',
                     style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
+                  )),
                 ),
               ],
             ),
@@ -601,7 +601,7 @@ class ManagerCockpitView extends StatelessWidget {
   }
 
   Widget _buildPendingRequestCard(BuildContext context, RegistrationRequestItem req) {
-    return Container(
+    return testId('pending_card_${req.id}', Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -647,7 +647,7 @@ class ManagerCockpitView extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
+                child: testId('btn_approve_${req.id}', ElevatedButton.icon(
                   onPressed: () {
                     controller.approveRegistration(req.id);
                   },
@@ -659,10 +659,10 @@ class ManagerCockpitView extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
+                )),
               ),
               const SizedBox(width: 8),
-              OutlinedButton(
+              testId('btn_reject_${req.id}', OutlinedButton(
                 onPressed: () => controller.rejectRegistration(req.id),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.accentRed,
@@ -671,11 +671,11 @@ class ManagerCockpitView extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
                 child: const Text('Reddet', style: TextStyle(fontSize: 12)),
-              ),
+              )),
             ],
           ),
         ],
       ),
-    );
+    ));
   }
 }

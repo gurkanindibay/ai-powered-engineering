@@ -815,7 +815,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                         ),
                         const SizedBox(height: 4),
                         if (inst.isAccrued)
-                          Container(
+                          testId('installment_accrued_${inst.installmentNumber}', Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: AppColors.accentGreen.withOpacity(0.15),
@@ -825,7 +825,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                               'Tahakkuk Etti',
                               style: TextStyle(color: AppColors.accentGreen, fontSize: 10, fontWeight: FontWeight.bold),
                             ),
-                          )
+                          ))
                         else
                           testId('btn_accrue_installment_${inst.installmentNumber}', ElevatedButton(
                             key: Key('btn_accrue_installment_${inst.installmentNumber}'),
@@ -923,10 +923,10 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
+                          testId('unit_share_${share.block}_${share.unitNumber}', Text(
                             'Arsa Payı: ${share.landShare}/1000 • Toplam Pay: ₺${share.totalProjectShare.toString()}',
                             style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
-                          ),
+                          )),
                         ],
                       ),
                     ),
@@ -1289,22 +1289,22 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
             // Paylaşım Esası
             Text('Paylaşım Esası (KMK Standartları)', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
             const SizedBox(height: 6),
-            RadioListTile<String>(
+            testId('radio_allocation_by_land_share', RadioListTile<String>(
               title: const Text('Arsa Payı Oranında (KMK Madde 20/b - Yasal Standart)'),
               subtitle: const Text('Her bağımsız bölüm tapudaki arsa payı nispetinde borçlandırılır.'),
               value: 'BY_LAND_SHARE',
               groupValue: _allocationBasis,
               activeColor: AppColors.accentCyan,
               onChanged: (v) => setState(() => _allocationBasis = v!),
-            ),
-            RadioListTile<String>(
+            )),
+            testId('radio_allocation_equal', RadioListTile<String>(
               title: const Text('Bağımsız Bölüm Başına Eşit'),
               subtitle: const Text('Bütçe tüm dairelere eşit olarak bölünür.'),
               value: 'EQUAL_PER_UNIT',
               groupValue: _allocationBasis,
               activeColor: AppColors.accentCyan,
               onChanged: (v) => setState(() => _allocationBasis = v!),
-            ),
+            )),
             const SizedBox(height: 16),
 
             // Taksit Sayısı
@@ -1317,7 +1317,7 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
                   final isSelected = _installmentsCount == cnt;
                   return Padding(
                     padding: const EdgeInsets.only(right: 8.0),
-                    child: InkWell(
+                    child: testId('chip_installments_$cnt', InkWell(
                       onTap: () => setState(() => _installmentsCount = cnt),
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
@@ -1335,7 +1335,7 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
                           ),
                         ),
                       ),
-                    ),
+                    )),
                   );
                 }).toList(),
               ),

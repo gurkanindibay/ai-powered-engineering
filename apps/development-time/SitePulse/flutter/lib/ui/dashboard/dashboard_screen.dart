@@ -2484,7 +2484,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   child: const Text('Vazgeç'),
                 ),
-                FilledButton.icon(
+                testId('btn_confirm_move_out', FilledButton.icon(
                   onPressed: isSaving ? null : () async {
                     setDialogState(() {
                       isSaving = true;
@@ -2532,7 +2532,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
               ],
             ),
             child: Column(
@@ -2618,7 +2618,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   child: const Text('Vazgeç'),
                 ),
-                FilledButton.icon(
+                testId('btn_confirm_move_in', FilledButton.icon(
                   onPressed: isSaving ? null : () async {
                     if (nameCtrl.text.trim().isEmpty || emailCtrl.text.trim().isEmpty) {
                       setDialogState(() {
@@ -2676,7 +2676,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
               ],
             ),
             child: Column(
@@ -2695,29 +2695,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                TextField(
+                testId('move_in_name_field', TextField(
                   controller: nameCtrl,
                   decoration: InputDecoration(
                     labelText: 'Sakin Adı Soyadı *',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
                 const SizedBox(height: 12),
-                TextField(
+                testId('move_in_email_field', TextField(
                   controller: emailCtrl,
                   decoration: InputDecoration(
                     labelText: 'E-posta Adresi *',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
                 const SizedBox(height: 12),
-                TextField(
+                testId('move_in_phone_field', TextField(
                   controller: phoneCtrl,
                   decoration: InputDecoration(
                     labelText: 'Telefon Numarası',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
                 const SizedBox(height: 12),
                 TextField(
                   controller: notesCtrl,
@@ -5959,7 +5959,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            ElevatedButton(
+            testId('btn_close_approval_dialog', ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accentGreen,
@@ -5968,7 +5968,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
+            )),
           ],
         ),
         child: Column(
@@ -5986,10 +5986,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.accentGreen),
               ),
-              child: SelectableText(
+              child: testId('approval_credentials_password', SelectableText(
                 info.temporaryPassword,
                 style: const TextStyle(color: AppColors.accentGreen, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
-              ),
+              ), label: info.temporaryPassword),
             ),
             const SizedBox(height: 14),
             Text('Şifre ve giriş linki ${info.email} adresine SMS ve e-posta olarak iletildi.', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, height: 1.4)),
@@ -6022,7 +6022,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            ElevatedButton(
+            testId('btn_close_site_credentials', ElevatedButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 widget.controller.fetchSaasSites();
@@ -6034,7 +6034,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
+            )),
           ],
         ),
         child: Column(
@@ -6052,10 +6052,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.accentCyan),
               ),
-              child: SelectableText(
+              child: testId('site_credentials_password', SelectableText(
                 creds.temporaryPassword,
                 style: const TextStyle(color: AppColors.accentCyan, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
-              ),
+              ), label: creds.temporaryPassword),
             ),
           ],
         ),
@@ -7821,7 +7821,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ],
-              TextField(
+              testId('add_site_name_field', TextField(
                 controller: nameCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
@@ -7831,9 +7831,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('add_site_city_field', TextField(
                 controller: cityCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
@@ -7843,9 +7843,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('add_site_address_field', TextField(
                 controller: addressCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
@@ -7855,7 +7855,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
               testId('add_site_blocks_field', TextField(
                 key: const Key('add_site_blocks_field'),
@@ -7873,7 +7873,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               )),
               const SizedBox(height: 12),
-              TextField(
+              testId('add_site_admin_name_field', TextField(
                 controller: adminNameCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
@@ -7883,9 +7883,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('add_site_admin_email_field', TextField(
                 controller: adminEmailCtrl,
                 keyboardType: TextInputType.emailAddress,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -7898,9 +7898,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('add_site_admin_phone_field', TextField(
                 controller: adminPhoneCtrl,
                 keyboardType: TextInputType.phone,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -7911,7 +7911,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
             ],
           ),
         ),

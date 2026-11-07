@@ -1,6 +1,6 @@
 # SitePulse GUI Automation: Plan to Build the Test Plan and Browser Test Suite
 
-Status: DRAFT v2 (nothing implemented yet). Facts in this version were checked against the code on 2026-11-07.
+Status: v2, in progress. Phases 0–2 and the P0 part of Phase 3 are done. Facts were checked against the code on 2026-11-07.
 
 **Goal:** a written GUI test plan, plus an automated suite that opens a real browser, logs in as each role and runs every user-facing scenario in the epics against the real backend and database.
 
@@ -72,7 +72,7 @@ e2e/
 - Reports: JUnit XML, an HTML report, and Playwright traces/videos for failed tests, written to `e2e/.artifacts/` (gitignored).
 - Runner `scripts/gui_e2e.py` (Python, `--help`, `--json`) with `--build` (build the E2E web bundle), `--serve`, `--browser chrome|chromium|firefox|webkit`, `--headed`, `--marker`, `--base-url`, `--api-url`, `--skip-stack`. It checks `:8080/health` and the web port before running.
 
-### Phase 3: Scenarios (P0 first, then P1, then P2)
+### Phase 3: Scenarios (P0 first, then P1, then P2) — P0 ✅ DONE 2026-11-07 (19 pass, 4 strict xfail; GUI_TEST_PLAN.md §8), P1/P2 next
 | Epic | Example scenarios |
 |---|---|
 | EPIC-06 Auth | Login per role; wrong password shows `login_error_banner`; clear login cache; SaaS admin forced password change on first login; change password from the profile sheet; logout; role switch |

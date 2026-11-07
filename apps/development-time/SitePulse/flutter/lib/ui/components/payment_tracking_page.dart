@@ -1013,17 +1013,17 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                 ),
               )),
               const SizedBox(width: 8),
-              _buildFilterChip(
+              testId('filter_channel_chip', _buildFilterChip(
                 label: 'Kanal: ${PaymentTrackingPage.channelLabel(_selectedChannel)}',
                 icon: Icons.filter_alt,
                 onTap: _showChannelFilterDialog,
-              ),
+              )),
               const SizedBox(width: 8),
-              _buildFilterChip(
+              testId('filter_role_chip', _buildFilterChip(
                 label: 'Rol: ${PaymentTrackingPage.roleLabel(_selectedRole)}',
                 icon: Icons.person_outline,
                 onTap: _showRoleFilterDialog,
-              ),
+              )),
               const SizedBox(width: 8),
               _buildFilterChip(
                 label: 'Durum: ${PaymentTrackingPage.settlementLabel(_selectedSettlement)}',
@@ -1098,7 +1098,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final entry = stream.entries[index];
-        return _buildPaymentEntryCard(entry);
+        return testId('payment_entry_${entry.id}_${entry.payerRole}', _buildPaymentEntryCard(entry));
       },
     );
   }
@@ -1320,14 +1320,14 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
       builder: (ctx) => SimpleDialog(
         title: const Text('Ödeme Kanalı Filtresi'),
         children: channels.map((c) {
-          return SimpleDialogOption(
+          return testId('filter_channel_option_$c', SimpleDialogOption(
             onPressed: () {
               Navigator.pop(ctx);
               setState(() => _selectedChannel = c);
               _loadData();
             },
             child: Text(PaymentTrackingPage.channelLabel(c)),
-          );
+          ));
         }).toList(),
       ),
     );
@@ -1340,14 +1340,14 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
       builder: (ctx) => SimpleDialog(
         title: const Text('Ödeyen Rolü Filtresi'),
         children: roles.map((r) {
-          return SimpleDialogOption(
+          return testId('filter_role_option_$r', SimpleDialogOption(
             onPressed: () {
               Navigator.pop(ctx);
               setState(() => _selectedRole = r);
               _loadData();
             },
             child: Text(PaymentTrackingPage.roleLabel(r)),
-          );
+          ));
         }).toList(),
       ),
     );
