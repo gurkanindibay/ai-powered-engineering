@@ -36,6 +36,15 @@ RULES = [
     ("silent-default-id", re.compile(r"parse_id_to_i64\([^)]*\)\s*\.unwrap_or\(\s*[1-9]\d*\s*\)"), "unparseable id silently mapped to a real row"),
 ]
 
+# Service layer must not contain direct database queries or raw SQL; persistence belongs in the repository/db layer.
+SERVICE_REPOSITORY_ENFORCED = {
+    "saas_tenant_service.rs",
+}
+SERVICE_REPOSITORY_RULES = [
+    ("service-repository-boundary", re.compile(r"client\s*\.\s*(?:query|execute|query_one|query_opt)"), "raw database client query executed in service layer; must be in repository/db layer"),
+    ("service-repository-boundary", re.compile(r'r?#?"\s*(?:SELECT\s+|INSERT\s+INTO\s+|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b', re.IGNORECASE), "raw SQL statement in service layer; must be in repository/db layer"),
+]
+
 
 def lint(root: Path) -> List[Dict[str, object]]:
     findings: List[Dict[str, object]] = []
@@ -46,6 +55,12 @@ def lint(root: Path) -> List[Dict[str, object]]:
                 line = text.count("\n", 0, m.start()) + 1
                 findings.append({"rule": rule, "file": str(path.relative_to(root)), "line": line,
                                  "message": message, "code": text.splitlines()[line - 1].strip()[:160]})
+        if path.name in SERVICE_REPOSITORY_ENFORCED:
+            for rule, pattern, message in SERVICE_REPOSITORY_RULES:
+                for m in pattern.finditer(text):
+                    line = text.count("\n", 0, m.start()) + 1
+                    findings.append({"rule": rule, "file": str(path.relative_to(root)), "line": line,
+                                     "message": message, "code": text.splitlines()[line - 1].strip()[:160]})
     lib = root / "src" / "lib.rs"
     if not lib.exists() or "#![deny(unused_must_use)]" not in lib.read_text(encoding="utf-8"):
         findings.append({"rule": "missing-deny", "file": "src/lib.rs", "line": 1,
@@ -56,7 +71,7 @@ def lint(root: Path) -> List[Dict[str, object]]:
 def run_all_checks(root: Path = DEFAULT_ROOT) -> List[Dict[str, str]]:
     """Compatibility helper: one PASS/FAIL entry per rule."""
     findings = lint(root)
-    rules = sorted({r for r, _, _ in RULES} | {"missing-deny"})
+    rules = sorted({r for r, _, _ in RULES} | {r for r, _, _ in SERVICE_REPOSITORY_RULES} | {"missing-deny"})
     return [
         {"check": rule, "status": "FAIL" if any(f["rule"] == rule for f in findings) else "PASS",
          "message": "; ".join(f"{f['file']}:{f['line']}" for f in findings if f["rule"] == rule)}
