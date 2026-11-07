@@ -24,6 +24,7 @@ import 'dashboard_controller.dart';
 
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
+import '../components/sp_dialog_pages.dart';
 class DashboardScreen extends StatefulWidget {
   final DashboardController controller;
 
@@ -896,6 +897,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             prefixIcon: const Icon(Icons.search, size: 18),
             suffixIcon: _homeOwnerSearchQuery.isNotEmpty
                 ? IconButton(
+                    tooltip: 'Aramayı temizle',
                     icon: const Icon(Icons.clear, size: 16),
                     onPressed: () {
                       setState(() {
@@ -3563,7 +3565,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('İptal'),
+                  child: const Text(AppStrings.cancel),
                 ),
                 ElevatedButton(
                   onPressed: isSaving
@@ -4894,9 +4896,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _confirmDeleteHouseholdResident(UnitResidentMember member) {
-    showDialog(
+    showSpPage(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => SpAlertPage(
         backgroundColor: AppColors.surface(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Hane Sakinini Sil', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -6207,7 +6209,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     side: BorderSide(color: AppColors.border(context)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+                  child: Text(AppStrings.cancel, style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
                 ),
                 testId('btn_save_new_resident', ElevatedButton(
                   onPressed: () async {
@@ -6511,9 +6513,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               icon: const Icon(Icons.add_circle, color: AppColors.accentCyan, size: 20),
                               onPressed: () {
                                 final newBlockCtrl = TextEditingController();
-                                showDialog(
+                                showSpPage(
                                   context: context,
-                                  builder: (dCtx) => AlertDialog(
+                                  builder: (dCtx) => SpAlertPage(
                                     backgroundColor: AppColors.card(context),
                                     title: Text('Yeni Blok Tanımla', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 15)),
                                     content: TextField(
@@ -6528,7 +6530,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     actions: [
                                       TextButton(
                                         onPressed: () => Navigator.pop(dCtx),
-                                        child: const Text('İptal'),
+                                        child: const Text(AppStrings.cancel),
                                       ),
                                       ElevatedButton(
                                         onPressed: () async {
@@ -7319,13 +7321,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showSelectPrimaryResponsibleDialog(HomeOwnerItem ho) {
-    showModalBottomSheet(
+    showSpSheetPage(
       context: context,
-      isScrollControlled: true,
       backgroundColor: AppColors.surface(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) {
         return SafeArea(
           child: SingleChildScrollView(
@@ -7694,7 +7692,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   side: BorderSide(color: AppColors.border(context)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+                child: Text(AppStrings.cancel, style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
               testId('btn_save_new_site', ElevatedButton(
                 key: const Key('btn_save_new_site'),
@@ -7955,7 +7953,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   side: BorderSide(color: AppColors.border(context)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+                child: Text(AppStrings.cancel, style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
               testId('btn_save_site_edit', ElevatedButton(
                 key: const Key('btn_save_site_edit'),
@@ -8308,7 +8306,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   side: BorderSide(color: AppColors.border(context)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+                child: Text(AppStrings.cancel, style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
               testId('btn_submit_change_password', ElevatedButton(
                 onPressed: isSubmitting

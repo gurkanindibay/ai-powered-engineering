@@ -10,6 +10,7 @@ import 'app_fullscreen_page.dart';
 
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
+import 'sp_dialog_pages.dart';
 class CapitalProjectsView extends StatefulWidget {
   final DashboardController controller;
 
@@ -46,10 +47,9 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
   }
 
   void _openDisbursementModal(String projectId) {
-    showModalBottomSheet(
+    showSpSheetPage(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.card(context),
       builder: (_) => RecordDisbursementModal(
         controller: widget.controller,
         projectId: projectId,
@@ -58,9 +58,9 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
   }
 
   Future<void> _handleAccrueInstallment(String projectId, int installmentNumber, Decimal budget) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSpPage<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => SpAlertPage(
         backgroundColor: AppColors.card(ctx),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
@@ -1502,17 +1502,8 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.card(context),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.all(20),
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -1534,11 +1525,6 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  testId('btn_close_disbursement_modal', IconButton(
-                    key: const Key('btn_close_disbursement_modal'),
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  )),
                 ],
               ),
               const SizedBox(height: 12),

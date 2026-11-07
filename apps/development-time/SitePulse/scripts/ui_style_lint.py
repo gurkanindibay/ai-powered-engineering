@@ -8,6 +8,10 @@ Hard rules (any finding fails):
 * `emoji-icon`   no emoji inside string literals (they render differently per platform);
                  use an `Icon` instead.
 * `stand-in-icon` no `Icons.g_mobiledata` stand-in for the Google mark (use `GoogleMark`).
+* `no-popup`     no floating popup or partial sheet (`showDialog`, `showModalBottomSheet`,
+                 `AlertDialog`, `SimpleDialog`, `Dialog`, ...): the constitution mandates
+                 full-screen pages. Use `AppFullscreenPage` or `showSpPage` + `SpAlertPage` /
+                 `SpDialogPage` / `SpSelectionPage` (`ui/components/sp_dialog_pages.dart`).
 
 Ratchet rules (counts may only go down; `--update-baseline` records a lower count):
 * `literal-font-size` literal `fontSize:` values outside ui/theme and ui/design_system.
@@ -40,6 +44,12 @@ LITERAL_FONT_RE = re.compile(r"\bfontSize\s*:\s*\d")
 RAW_COLOR_RE = re.compile(r"\bColor\(0x[0-9A-Fa-f]{6,8}\)")
 STAND_IN_RE = re.compile(r"\bIcons\.g_mobiledata\b")
 MONEY_IN_STRING_RE = re.compile(r"₺\$(?:\{[^}]*?\.toStringAsFixed\(|\{(?!formatTry\(|MoneyFormatter\.)|[A-Za-z_])")
+POPUP_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:showDialog|showModalBottomSheet|showBottomSheet|showGeneralDialog|showCupertinoDialog"
+    r"|showCupertinoModalPopup|AlertDialog|SimpleDialog|Dialog|CupertinoAlertDialog)\s*(?:<[^>()]*>)?\("
+)
+# The deprecated sheet container is the one place that still wraps showModalBottomSheet.
+POPUP_EXEMPT_FILES = ("components/app_modal_sheet.dart",)
 EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF☀-➿\U0001F1E6-\U0001F1FF]")
 
 
@@ -132,6 +142,9 @@ def lint(ui_root: Path, baseline_path: Path | None = None) -> dict:
                 add("font-floor", m.start())
         for m in STAND_IN_RE.finditer(code):
             add("stand-in-icon", m.start())
+        if rel not in POPUP_EXEMPT_FILES:
+            for m in POPUP_RE.finditer(code):
+                add("no-popup", m.start())
         for m in MONEY_IN_STRING_RE.finditer(strings):
             add("money-format", m.start())
         for m in EMOJI_RE.finditer(strings):

@@ -112,7 +112,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `schema_integrity_check.py` | `apps/development-time/SitePulse/scripts/schema_integrity_check.py` | Migration replay, constraint tests and the upgrade test |
 | `gui_e2e.py` | `apps/development-time/SitePulse/scripts/gui_e2e.py` | Playwright GUI suite in a real browser against an isolated stack (`serve` mode for writing tests) |
 | `testid_lint.py` | `apps/development-time/SitePulse/scripts/testid_lint.py` | Every widget `Key` has a matching GUI `testId` (gate `testid-lint`) |
-| `ui_style_lint.py` | `apps/development-time/SitePulse/scripts/ui_style_lint.py` | Design-system rules: 12 px floor, `MoneyFormatter` for amounts, no emoji icons; ratchet on literal font sizes and colours (gate `ui-style-lint`) |
+| `ui_style_lint.py` | `apps/development-time/SitePulse/scripts/ui_style_lint.py` | Design-system rules: 12 px floor, `MoneyFormatter` for amounts, no emoji icons, no popups/partial sheets (`no-popup`); ratchet on literal font sizes and colours (gate `ui-style-lint`) |
 | `gui_traceability.py` | `apps/development-time/SitePulse/scripts/gui_traceability.py` | Story → GUI scenario → test status; refreshes the section in `COMPLETION_STATUS.md` |
 | `memory_persistence_lint.py` | `apps/development-time/SitePulse/scripts/memory_persistence_lint.py` | Catching discarded database results |
 | `db_verify.py` | `apps/development-time/SitePulse/scripts/db_verify.py` | Inspecting and auditing a database (parameterised; non-zero exit on issues) |

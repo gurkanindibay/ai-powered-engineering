@@ -311,8 +311,8 @@ void main() {
       expect(find.text('Aşama tanımı zorunludur'), findsOneWidget);
       expect(find.text('Geçerli tutar girin'), findsOneWidget);
 
-      // Dismiss modal cleanly via close button
-      final closeBtn = find.byKey(const Key('btn_close_disbursement_modal'));
+      // Dismiss the full-screen page cleanly via its back button
+      final closeBtn = find.byKey(const Key('btn_page_back'));
       expect(closeBtn, findsOneWidget);
       await tester.ensureVisible(closeBtn);
       await tester.pumpAndSettle();

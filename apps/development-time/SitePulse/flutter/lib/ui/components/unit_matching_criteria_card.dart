@@ -7,6 +7,7 @@ import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
 
 import '../design_system/sp_feedback.dart';
+import 'sp_dialog_pages.dart';
 /// Card component allowing homeowners to see their automated payment
 /// matching criteria (Virtual IBAN, registered sender IBANs, payer names, and description format)
 /// and modify them at will.
@@ -30,11 +31,11 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
     final labelController = TextEditingController();
     final bankController = TextEditingController();
 
-    showDialog(
+    showSpPage(
       context: context,
       builder: (dialogCtx) {
         final isDark = AppColors.isDark(dialogCtx);
-        return Dialog(
+        return SpDialogPage(
           backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Container(
@@ -65,11 +66,6 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(dialogCtx),
-                        icon: const Icon(Icons.close, size: 20),
-                        color: AppColors.textSecondary(dialogCtx),
                       ),
                     ],
                   ),
@@ -208,13 +204,13 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
     final names = List<String>.from(currentNames);
     final nameController = TextEditingController();
 
-    showDialog(
+    showSpPage(
       context: context,
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             final isDark = AppColors.isDark(ctx);
-            return Dialog(
+            return SpDialogPage(
               backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               child: Container(
@@ -240,11 +236,6 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                                 ),
                               ),
                             ])),
-                          IconButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            icon: const Icon(Icons.close, size: 20),
-                            color: AppColors.textSecondary(ctx),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 10),
@@ -368,9 +359,9 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
   }
 
   void _confirmDeleteIban(BuildContext context, RegisteredSenderIban ibanItem) {
-    showDialog(
+    showSpPage(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
+      builder: (dialogCtx) => SpAlertPage(
         backgroundColor: AppColors.surface(dialogCtx),
         title: const Text('IBAN Tanımını Kaldır'),
         content: Text(

@@ -298,6 +298,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
               ),
               suffixIcon: _amountCtrl.text.isNotEmpty
                   ? IconButton(
+                      tooltip: 'Tutarı temizle',
                       icon: const Icon(Icons.clear, size: 16),
                       onPressed: () {
                         _amountCtrl.text = '';

@@ -11,6 +11,7 @@ import 'manual_unit_assignment_page.dart';
 
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
+import 'sp_dialog_pages.dart';
 class BankStatementReconciliationPage extends StatefulWidget {
   final DashboardController controller;
 
@@ -324,6 +325,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                     ),
                   ),
                   IconButton(
+                    tooltip: AppStrings.close,
                     icon: const Icon(Icons.close, color: AppColors.accentRed, size: 16),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -1163,14 +1165,14 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           'Sayın $residentName, $unitDesc nolu bağımsız bölümünüze ait ${formatTry(txn.amount)} tutarındaki aidat ödemeniz onaylanmış ve kayıtlara işlenmiştir. Teşekkür ederiz.',
     );
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSpPage<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
             final isDark = AppColors.isDark(dialogCtx);
-            return Dialog(
+            return SpDialogPage(
               backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               child: Container(
@@ -1215,11 +1217,6 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                                 ),
                               ],
                             ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(dialogCtx, false),
-                            icon: const Icon(Icons.close, size: 20),
-                            color: AppColors.textSecondary(dialogCtx),
                           ),
                         ],
                       ),
@@ -1395,14 +1392,14 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
           'Sayın Kat Sakini, aidat ödemeniz banka ekstresi ile eşleştirilmiş ve tahsilatınız muhasebeleştirilmiştir. Teşekkür ederiz.',
     );
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSpPage<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
             final isDark = AppColors.isDark(dialogCtx);
-            return Dialog(
+            return SpDialogPage(
               backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               child: Container(
@@ -1447,11 +1444,6 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                                 ),
                               ],
                             ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(dialogCtx, false),
-                            icon: const Icon(Icons.close, size: 20),
-                            color: AppColors.textSecondary(dialogCtx),
                           ),
                         ],
                       ),
@@ -1721,12 +1713,12 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     final holderController = TextEditingController(text: currentAccount?.accountHolder ?? (widget.controller.siteName.isNotEmpty ? '${widget.controller.siteName} Yönetimi' : ''));
     String? dialogError;
 
-    showDialog(
+    showSpPage(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
-            return Dialog(
+            return SpDialogPage(
               backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               child: Container(

@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import 'app_fullscreen_page.dart';
 
 import '../design_system/money_formatter.dart';
+import 'sp_dialog_pages.dart';
 class ManualUnitAssignmentPage extends StatefulWidget {
   final List<FlatPaymentStatus> flats;
   final ReconciliationQueueItem item;
@@ -282,14 +283,14 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
           'Sayın ${flat.residentName}, ${flat.flatDesc} nolu dairenize ait ${formatTry(txn.amount)} tutarındaki aidat ödemeniz banka hareketleri ile eşleştirilmiş ve onaylanmıştır. Teşekkür ederiz.',
     );
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showSpPage<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
             final isDark = AppColors.isDark(dialogCtx);
-            return Dialog(
+            return SpDialogPage(
               backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               child: Container(
@@ -334,11 +335,6 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                                 ),
                               ],
                             ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(dialogCtx, false),
-                            icon: const Icon(Icons.close, size: 20),
-                            color: AppColors.textSecondary(dialogCtx),
                           ),
                         ],
                       ),

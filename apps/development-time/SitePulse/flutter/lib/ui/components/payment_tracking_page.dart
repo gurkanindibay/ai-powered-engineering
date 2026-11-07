@@ -11,6 +11,7 @@ import 'bank_statement_reconciliation_page.dart';
 
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
+import 'sp_dialog_pages.dart';
 class PaymentTrackingPage extends StatefulWidget {
   final DashboardController controller;
   final String? initialUnitId;
@@ -1060,6 +1061,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
             prefixIcon: const Icon(Icons.search, size: 20),
             suffixIcon: _searchController.text.isNotEmpty
                 ? IconButton(
+                    tooltip: 'Aramayı temizle',
                     icon: const Icon(Icons.clear, size: 18),
                     onPressed: () {
                       _searchController.clear();
@@ -1319,9 +1321,9 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
 
   void _showChannelFilterDialog() {
     final channels = ['ALL', 'VIRTUAL_IBAN', 'BANK_STATEMENT', 'CREDIT_CARD', 'MANUAL_CASH', 'INTER_LEDGER'];
-    showDialog(
+    showSpPage(
       context: context,
-      builder: (ctx) => SimpleDialog(
+      builder: (ctx) => SpSelectionPage(
         title: const Text('Ödeme Kanalı Filtresi'),
         children: channels.map((c) {
           return testId('filter_channel_option_$c', SimpleDialogOption(
@@ -1339,9 +1341,9 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
 
   void _showRoleFilterDialog() {
     final roles = ['ALL', 'TENANT', 'OWNER'];
-    showDialog(
+    showSpPage(
       context: context,
-      builder: (ctx) => SimpleDialog(
+      builder: (ctx) => SpSelectionPage(
         title: const Text('Ödeyen Rolü Filtresi'),
         children: roles.map((r) {
           return testId('filter_role_option_$r', SimpleDialogOption(
@@ -1359,9 +1361,9 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
 
   void _showSettlementFilterDialog() {
     final statuses = ['ALL', 'SETTLED', 'UNMATCHED'];
-    showDialog(
+    showSpPage(
       context: context,
-      builder: (ctx) => SimpleDialog(
+      builder: (ctx) => SpSelectionPage(
         title: const Text('Mutabakat Durumu Filtresi'),
         children: statuses.map((s) {
           return SimpleDialogOption(
