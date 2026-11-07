@@ -46,7 +46,8 @@ impl AuthService {
         {
             let inner = self.state.inner.read().await;
             if let Some(u) = inner.units.iter().find(|un| {
-                un.owner_user_id.as_deref() == Some(&user.id) || un.tenant_user_id.as_deref() == Some(&user.id)
+                (un.site_id == user.site_id || crate::auth::same_id(&un.site_id, &user.site_id))
+                    && (un.owner_user_id.as_deref() == Some(&user.id) || un.tenant_user_id.as_deref() == Some(&user.id))
             }) {
                 return Some(u.id.clone());
             }
@@ -54,6 +55,11 @@ impl AuthService {
                 if members.iter().any(|m| {
                     m.email.eq_ignore_ascii_case(&user.email)
                 }) {
+                    if let Some(u) = inner.units.iter().find(|u| &u.id == unit_id || crate::auth::same_id(&u.id, unit_id)) {
+                        if !crate::auth::same_id(&u.site_id, &user.site_id) {
+                            continue;
+                        }
+                    }
                     return Some(unit_id.clone());
                 }
             }
@@ -61,20 +67,40 @@ impl AuthService {
         let pool = self.state.pool.as_ref()?;
         let client = pool.get().await.ok()?;
         let email = user.email.to_lowercase();
-        let row = client
-            .query_opt(
-                r#"
-                SELECT u.id FROM units u
-                LEFT JOIN persons op ON u.owner_person_id = op.id
-                LEFT JOIN persons tp ON u.tenant_person_id = tp.id
-                WHERE LOWER(op.email) = $1 OR LOWER(tp.email) = $1
-                ORDER BY u.id
-                LIMIT 1
-                "#,
-                &[&email],
-            )
-            .await
-            .ok()??;
+        let site_id_num = crate::db::parse_id_to_i64(&user.site_id);
+
+        let row = if let Some(sid) = site_id_num {
+            client
+                .query_opt(
+                    r#"
+                    SELECT u.id FROM units u
+                    LEFT JOIN persons op ON u.owner_person_id = op.id
+                    LEFT JOIN persons tp ON u.tenant_person_id = tp.id
+                    WHERE (LOWER(op.email) = $1 OR LOWER(tp.email) = $1)
+                      AND u.site_id = $2
+                    ORDER BY u.id
+                    LIMIT 1
+                    "#,
+                    &[&email, &sid],
+                )
+                .await
+                .ok()??
+        } else {
+            client
+                .query_opt(
+                    r#"
+                    SELECT u.id FROM units u
+                    LEFT JOIN persons op ON u.owner_person_id = op.id
+                    LEFT JOIN persons tp ON u.tenant_person_id = tp.id
+                    WHERE LOWER(op.email) = $1 OR LOWER(tp.email) = $1
+                    ORDER BY u.id
+                    LIMIT 1
+                    "#,
+                    &[&email],
+                )
+                .await
+                .ok()??
+        };
         Some(row.get::<_, i64>(0).to_string())
     }
 
