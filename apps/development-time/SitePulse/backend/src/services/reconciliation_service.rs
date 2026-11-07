@@ -34,18 +34,42 @@ impl ReconciliationService {
         dues: &[DuesLiability],
         evaluation_date: NaiveDate,
     ) -> Vec<ReconciliationMatch> {
+        self.reconcile_transactions_with_site(None, transactions, units, users, dues, evaluation_date)
+    }
+
+    pub fn reconcile_transactions_with_site(
+        &self,
+        site_id: Option<&str>,
+        transactions: &[BankTransactionItem],
+        units: &[IndependentUnit],
+        users: &[User],
+        dues: &[DuesLiability],
+        evaluation_date: NaiveDate,
+    ) -> Vec<ReconciliationMatch> {
         let mut results = Vec::new();
 
         for txn in transactions {
-            let matched = self.match_single_transaction(txn, units, users, dues, evaluation_date);
+            let matched = self.match_single_transaction_with_site(site_id, txn, units, users, dues, evaluation_date);
             results.push(matched);
         }
 
         results
     }
 
-    fn match_single_transaction(
+    pub fn match_single_transaction(
         &self,
+        txn: &BankTransactionItem,
+        units: &[IndependentUnit],
+        users: &[User],
+        dues: &[DuesLiability],
+        evaluation_date: NaiveDate,
+    ) -> ReconciliationMatch {
+        self.match_single_transaction_with_site(None, txn, units, users, dues, evaluation_date)
+    }
+
+    fn match_single_transaction_with_site(
+        &self,
+        site_override: Option<&str>,
         txn: &BankTransactionItem,
         units: &[IndependentUnit],
         users: &[User],
@@ -220,8 +244,15 @@ impl ReconciliationService {
 
         let match_id = format!("MATCH-{}", txn.transaction_id);
 
+        let site_id = site_override
+            .map(|s| s.to_string())
+            .or_else(|| matched_unit.map(|u| u.site_id.clone()))
+            .or_else(|| units.first().map(|u| u.site_id.clone()))
+            .unwrap_or_else(|| "1".to_string());
+
         ReconciliationMatch {
             match_id,
+            site_id,
             transaction: txn.clone(),
             matched_unit_id: matched_unit.map(|u| u.id.clone()),
             matched_block: matched_unit.map(|u| u.block_id.clone()),

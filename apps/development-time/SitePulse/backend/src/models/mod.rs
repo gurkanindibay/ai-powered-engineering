@@ -930,6 +930,8 @@ pub struct BankTransactionItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReconciliationMatch {
     pub match_id: String,
+    #[serde(default)]
+    pub site_id: String,
     pub transaction: BankTransactionItem,
     pub matched_unit_id: Option<String>,
     pub matched_block: Option<String>,
@@ -1328,6 +1330,14 @@ pub struct PaymentStreamFilter {
     pub start_date: Option<NaiveDate>,
     #[serde(default)]
     pub end_date: Option<NaiveDate>,
+    #[serde(default)]
+    pub page: Option<usize>,
+    #[serde(default)]
+    pub page_size: Option<usize>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub offset: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
