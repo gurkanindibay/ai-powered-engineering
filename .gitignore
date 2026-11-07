@@ -47,4 +47,6 @@ Thumbs.db
 apps/development-time/SitePulse/backend/keys/*
 .env
 *.env
+.envrc
+graphify-out
 
