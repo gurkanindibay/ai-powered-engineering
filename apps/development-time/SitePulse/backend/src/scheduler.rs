@@ -53,77 +53,108 @@ pub fn tariff_for(inner: &crate::state::AppStateInner, unit: &crate::models::Ind
 ///   `uq_unit_period_expense` is the duplicate guard) and only then added to
 ///   memory with its database id, so accruals survive restarts.
 pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::DateTime<Utc>) -> (usize, usize) {
-    let mut inner = state.inner.write().await;
-    let ledger_before = crate::handlers::ledger_snapshot(&inner);
-    let sites: Vec<(String, String)> = inner.sites.iter().map(|s| (s.id.clone(), s.timezone.clone())).collect();
+    // 1. Inspect state with a READ lock to collect units needing accrual without blocking readers
+    let candidates: Vec<(String, DuesLiability)> = {
+        let inner = state.inner.read().await;
+        let sites: Vec<(String, String)> = inner.sites.iter().map(|s| (s.id.clone(), s.timezone.clone())).collect();
+        let mut to_accrue = Vec::new();
 
-    let mut total_newly_accrued = 0;
-    let mut total_sites_accrued = 0;
+        for (site_id, timezone) in sites {
+            let local = site_local_date(&timezone, now);
+            let period = format_turkish_month_year(local);
+            let due_date = NaiveDate::from_ymd_opt(local.year(), local.month(), 15).unwrap_or(local);
+            let units_in_site: Vec<_> = inner.units.iter().filter(|u| u.site_id == site_id).collect();
 
-    for (site_id, timezone) in sites {
-        let local = site_local_date(&timezone, now);
-        let period = format_turkish_month_year(local);
-        let due_date = NaiveDate::from_ymd_opt(local.year(), local.month(), 15).unwrap_or(local);
-        let units_in_site: Vec<_> = inner.units.iter().filter(|u| u.site_id == site_id).cloned().collect();
-
-        let mut site_newly_accrued = 0;
-        for unit in &units_in_site {
-            let already = inner
-                .dues
-                .iter()
-                .any(|d| d.unit_id == unit.id && d.period == period && d.expense_type == "OPERATIONAL_DUES");
-            if already {
-                continue;
-            }
-            let Some(amount) = tariff_for(&inner, unit) else {
-                tracing::warn!("[Scheduler] Unit {} in site {} has no house-type tariff; dues not accrued", unit.id, site_id);
-                continue;
-            };
-            let debtor = if unit.tenant_user_id.is_some() { "TENANT" } else { "OWNER" };
-            let mut due = DuesLiability {
-                id: String::new(),
-                unit_id: unit.id.clone(),
-                period: period.clone(),
-                principal_amount: amount,
-                delay_penalty: Decimal::ZERO,
-                total_amount: amount,
-                due_date,
-                status: DebtStatus::Pending,
-                paid_principal: Decimal::ZERO,
-                paid_penalty: Decimal::ZERO,
-                debtor_type: debtor.to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
-            };
-            if let Some(ref pool) = state.pool {
-                match crate::db::insert_accrued_due(pool, &due).await {
-                    Ok(Some(id)) => due.id = id.to_string(),
-                    Ok(None) => continue, // already accrued in the database
-                    Err(e) => {
-                        tracing::error!("[Scheduler] Accrual for unit {} failed: {}", unit.id, e);
-                        continue;
-                    }
+            for unit in units_in_site {
+                let already = inner
+                    .dues
+                    .iter()
+                    .any(|d| d.unit_id == unit.id && d.period == period && d.expense_type == "OPERATIONAL_DUES");
+                if already {
+                    continue;
                 }
-            } else {
-                let max_d = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
-                due.id = (max_d + 1).to_string();
+                let Some(amount) = tariff_for(&inner, unit) else {
+                    tracing::warn!("[Scheduler] Unit {} in site {} has no house-type tariff; dues not accrued", unit.id, site_id);
+                    continue;
+                };
+                let debtor = if unit.tenant_user_id.is_some() { "TENANT" } else { "OWNER" };
+                to_accrue.push((site_id.clone(), DuesLiability {
+                    id: String::new(),
+                    unit_id: unit.id.clone(),
+                    period: period.clone(),
+                    principal_amount: amount,
+                    delay_penalty: Decimal::ZERO,
+                    total_amount: amount,
+                    due_date,
+                    status: DebtStatus::Pending,
+                    paid_principal: Decimal::ZERO,
+                    paid_penalty: Decimal::ZERO,
+                    debtor_type: debtor.to_string(),
+                    expense_type: "OPERATIONAL_DUES".to_string(),
+                }));
             }
-            inner.dues.push(due);
-            site_newly_accrued += 1;
         }
+        to_accrue
+    };
 
-        if site_newly_accrued > 0 {
-            total_sites_accrued += 1;
-            total_newly_accrued += site_newly_accrued;
-            tracing::info!("[Scheduler] Accrued {} units for site '{}' for period '{}'", site_newly_accrued, site_id, period);
+    if candidates.is_empty() {
+        return (0, 0);
+    }
+
+    // 2. Perform DB operations without holding the global memory lock
+    let mut persisted_dues: Vec<(String, DuesLiability)> = Vec::new();
+    let mut sites_accrued_set = std::collections::HashSet::new();
+
+    for (site_id, mut due) in candidates {
+        if let Some(ref pool) = state.pool {
+            match crate::db::insert_accrued_due(pool, &due).await {
+                Ok(Some(id)) => {
+                    due.id = id.to_string();
+                    sites_accrued_set.insert(site_id.clone());
+                    persisted_dues.push((site_id, due));
+                }
+                Ok(None) => continue, // already accrued in DB
+                Err(e) => {
+                    tracing::error!("[Scheduler] Accrual for unit {} failed: {}", due.unit_id, e);
+                    continue;
+                }
+            }
+        } else {
+            sites_accrued_set.insert(site_id.clone());
+            persisted_dues.push((site_id, due));
         }
     }
 
-    if total_newly_accrued > 0 {
+    if persisted_dues.is_empty() {
+        return (0, 0);
+    }
+
+    // 3. Briefly acquire WRITE lock to record new liabilities and apply advance offsets
+    let total_sites_accrued = sites_accrued_set.len();
+    let total_newly_accrued = persisted_dues.len();
+
+    {
+        let mut inner = state.inner.write().await;
+        let ledger_before = crate::handlers::ledger_snapshot(&inner);
+
+        for (site_id, mut due) in persisted_dues {
+            if due.id.is_empty() {
+                let max_d = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
+                due.id = (max_d + 1).to_string();
+            }
+            let p = due.period.clone();
+            let u_id = due.unit_id.clone();
+            inner.dues.push(due);
+            tracing::info!("[Scheduler] Accrued unit {} for site '{}' for period '{}'", u_id, site_id, p);
+        }
+
         let (auto_settled_count, total_offset) = apply_advance_payments_offset(&mut inner, None);
-        tracing::info!("[Scheduler] Advance offset: {} dues settled, total ₺{}", auto_settled_count, total_offset);
-        if let Some(ref pool) = state.pool {
-            if let Err(e) = crate::handlers::persist_ledger_changes(pool, &ledger_before, &inner).await {
-                tracing::error!("[Scheduler] {}", e);
+        if auto_settled_count > 0 {
+            tracing::info!("[Scheduler] Advance offset: {} dues settled, total ₺{}", auto_settled_count, total_offset);
+            if let Some(ref pool) = state.pool {
+                if let Err(e) = crate::handlers::persist_ledger_changes(pool, &ledger_before, &inner).await {
+                    tracing::error!("[Scheduler] {}", e);
+                }
             }
         }
     }

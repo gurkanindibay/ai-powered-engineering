@@ -1,4 +1,4 @@
-use deadpool_postgres::{Config, ManagerConfig, Pool, RecyclingMethod, Runtime};
+use deadpool_postgres::{Config, ManagerConfig, Pool, PoolConfig, RecyclingMethod, Runtime, Timeouts};
 use tokio_postgres::NoTls;
 use tracing::{info, warn};
 
@@ -38,6 +38,9 @@ pub fn create_pool() -> Option<Pool> {
     cfg.password = Some(password);
     cfg.dbname = Some(dbname);
     cfg.manager = Some(ManagerConfig { recycling_method: RecyclingMethod::Fast });
+    let mut pool_cfg = PoolConfig::default();
+    pool_cfg.timeouts = Timeouts::wait_millis(10_000);
+    cfg.pool = Some(pool_cfg);
 
     let pool = match ssl_mode.as_str() {
         "require" => {
