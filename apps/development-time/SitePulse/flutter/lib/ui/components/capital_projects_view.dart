@@ -274,6 +274,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                 '₺${totalBudgetSum.toString()}',
                                 Icons.calculate_outlined,
                                 AppColors.textPrimary(context),
+                                metricId: 'budget',
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -284,6 +285,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                 '₺${totalCollectedSum.toString()}',
                                 Icons.arrow_downward_rounded,
                                 AppColors.accentGreen,
+                                metricId: 'collected',
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -294,6 +296,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                 '₺${totalDisbursedSum.toString()}',
                                 Icons.arrow_upward_rounded,
                                 AppColors.accentOrange,
+                                metricId: 'disbursed',
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -304,6 +307,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                 '₺${totalReserveFund.toString()}',
                                 Icons.shield_outlined,
                                 AppColors.accentCyan,
+                                metricId: 'reserve',
                                 isHighlight: true,
                               ),
                             ),
@@ -321,6 +325,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                   '₺${totalBudgetSum.toString()}',
                                   Icons.calculate_outlined,
                                   AppColors.textPrimary(context),
+                                  metricId: 'budget',
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -331,6 +336,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                   '₺${totalCollectedSum.toString()}',
                                   Icons.arrow_downward_rounded,
                                   AppColors.accentGreen,
+                                  metricId: 'collected',
                                 ),
                               ),
                             ],
@@ -345,6 +351,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                   '₺${totalDisbursedSum.toString()}',
                                   Icons.arrow_upward_rounded,
                                   AppColors.accentOrange,
+                                  metricId: 'disbursed',
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -355,6 +362,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
                                   '₺${totalReserveFund.toString()}',
                                   Icons.shield_outlined,
                                   AppColors.accentCyan,
+                                  metricId: 'reserve',
                                   isHighlight: true,
                                 ),
                               ),
@@ -652,8 +660,9 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
     IconData icon,
     Color color, {
     bool isHighlight = false,
+    String? metricId,
   }) {
-    return Container(
+    return testId('capital_metric_${metricId ?? "unnamed"}', Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isHighlight
@@ -694,7 +703,7 @@ class _CapitalProjectsViewState extends State<CapitalProjectsView> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildSubTabButton(int index, String label) {

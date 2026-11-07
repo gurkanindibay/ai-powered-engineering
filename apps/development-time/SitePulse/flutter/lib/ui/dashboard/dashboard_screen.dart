@@ -200,7 +200,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               widget.controller.toggleOfflineMode(!widget.controller.isOffline);
             },
           ),
-          IconButton(
+          testId('btn_header_toggle_theme', IconButton(
             tooltip: 'Tema Değiştir',
             icon: Icon(
               widget.controller.isDarkMode ? Icons.light_mode : Icons.dark_mode,
@@ -210,7 +210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () {
               widget.controller.toggleTheme();
             },
-          ),
+          ), label: widget.controller.isDarkMode ? 'theme:dark' : 'theme:light'),
           testId('btn_header_logout', IconButton(
             tooltip: 'Çıkış Yap / Rol Değiştir',
             icon: const Icon(
@@ -224,7 +224,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           )),
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: InkWell(
+            child: testId('btn_open_profile', InkWell(
               onTap: () => _openProfileSheet(context),
               borderRadius: BorderRadius.circular(20),
               child: CircleAvatar(
@@ -235,7 +235,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                 ),
               ),
-            ),
+            )),
           ),
         ],
       ),
@@ -348,7 +348,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         children: [
           Expanded(
-            child: InkWell(
+            child: testId('role_path_manager_cockpit', InkWell(
               onTap: () {
                 if (currentPath != SiteAdminActivePath.managerCockpit) {
                   widget.controller.setSiteAdminPath(SiteAdminActivePath.managerCockpit);
@@ -387,10 +387,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-            ),
+            )),
           ),
           Expanded(
-            child: InkWell(
+            child: testId('role_path_my_flat', InkWell(
               onTap: () {
                 if (currentPath != SiteAdminActivePath.myFlatOwner) {
                   widget.controller.setSiteAdminPath(SiteAdminActivePath.myFlatOwner);
@@ -429,7 +429,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-            ),
+            )),
           ),
         ],
       ),
@@ -2373,7 +2373,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   )
                 else
-                  ...items.map((h) => Container(
+                  ...items.map((h) => testId('history_item_${h.id}', Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -2443,7 +2443,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ],
                     ),
-                  )),
+                  ))),
               ],
             ),
           );
@@ -4626,7 +4626,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               return Column(
                 children: [
-                  InkWell(
+                  testId('ledger_row_$index', InkWell(
                     onTap: item.isCredit ? () => _showSingleReceiptDetailDialog(item) : null,
                     borderRadius: BorderRadius.circular(12),
                     child: Padding(
@@ -4694,7 +4694,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ),
                     ),
-                  ),
+                  )),
                   if (index < transactions.length - 1)
                     Divider(
                       height: 1,
@@ -5287,7 +5287,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Text('• Son Ödeme Tarihi: ${dues.sonOdemeTarihi.day.toString().padLeft(2, '0')}.${dues.sonOdemeTarihi.month.toString().padLeft(2, '0')}.${dues.sonOdemeTarihi.year}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
                     if (dues.gecikmeTazminati > Decimal.zero) ...[
                       const SizedBox(height: 8),
-                      Text('• Gecikme Durumu: ${dues.gecikenGunSayisi} Gün Gecikme', style: const TextStyle(color: AppColors.accentRed, fontSize: 13, fontWeight: FontWeight.w500)),
+                      testId('penalty_days', Text('• Gecikme Durumu: ${dues.gecikenGunSayisi} Gün Gecikme', style: const TextStyle(color: AppColors.accentRed, fontSize: 13, fontWeight: FontWeight.w500))),
                       const SizedBox(height: 8),
                       Text('• Aylık Yasal Gecikme Oranı: %5 (KMK Madde 20/c)', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
                       const SizedBox(height: 14),
@@ -5299,10 +5299,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: AppColors.accentRed.withValues(alpha: 0.2)),
                         ),
-                        child: Text(
+                        child: testId('penalty_formula', Text(
                           '• Gecikme Tazminatı: (${dues.anaPara.toStringAsFixed(0)} * 0.05 / 30) * ${dues.gecikenGunSayisi} = ₺${dues.gecikmeTazminati.toStringAsFixed(2)}',
                           style: const TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold, fontSize: 12.5),
-                        ),
+                        )),
                       ),
                     ],
                     const SizedBox(height: 14),
@@ -5533,14 +5533,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Center(
                 child: Column(
                   children: [
-                    Text(
+                    testId('home_receipt_amount', Text(
                       tx.amountStr,
                       style: const TextStyle(
                         color: AppColors.accentGreen,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
-                    ),
+                    )),
                     const SizedBox(height: 4),
                     Text(
                       tx.title,
@@ -5556,7 +5556,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 18),
               Divider(color: AppColors.border(context)),
               const SizedBox(height: 12),
-              _buildReceiptRow('İşlem / Makbuz No:', tx.id),
+              testId('home_receipt_number', _buildReceiptRow('İşlem / Makbuz No:', tx.id)),
               const SizedBox(height: 8),
               _buildReceiptRow('İşlem Tarihi:', tx.date),
               const SizedBox(height: 8),
@@ -5871,7 +5871,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            OutlinedButton(
+            testId('btn_copy_invite_link', OutlinedButton(
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: invite.inviteUrl));
                 Navigator.pop(ctx);
@@ -5885,7 +5885,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Linki Kopyala', style: TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.w600)),
-            ),
+            )),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
@@ -5909,10 +5909,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.border(context)),
               ),
-              child: SelectableText(
+              child: testId('invite_link_text', SelectableText(
                 invite.inviteUrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontFamily: 'monospace'),
-              ),
+              ), label: invite.inviteUrl),
             ),
             const SizedBox(height: 14),
             Container(
@@ -5928,10 +5928,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const Icon(Icons.shield_outlined, size: 18, color: AppColors.accentOrange),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
+                    child: testId('invite_security_notice', Text(
                       invite.securityNotice,
                       style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, height: 1.4),
-                    ),
+                    )),
                   ),
                 ],
               ),
@@ -6080,7 +6080,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            ElevatedButton(
+            testId('btn_close_resident_provisioned', ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accentGreen,
@@ -6089,7 +6089,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
+            )),
           ],
         ),
         child: Column(
@@ -8169,7 +8169,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           bottomBar: AppFullscreenPage.buildBottomBar(
             context: ctx,
             children: [
-              ElevatedButton(
+              testId('btn_ack_delete_blocked', ElevatedButton(
                 onPressed: () => Navigator.pop(ctx),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accentCyan,
@@ -8178,7 +8178,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: const Text('Anladım', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
+              )),
             ],
           ),
           child: Text(

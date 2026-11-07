@@ -350,7 +350,7 @@ class _LoginScreenState extends State<LoginScreen> {
               size: 20,
             ),
             onPressed: () => widget.controller.toggleTheme(),
-          )),
+          ), label: isDark ? 'theme:dark' : 'theme:light'),
           const SizedBox(width: 8),
         ],
       ),

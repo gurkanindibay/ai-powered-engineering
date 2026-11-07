@@ -29,22 +29,25 @@ def wait_for_app(page: Page, timeout_ms: int = 30_000) -> None:
 def fill(page: Page, test_id: str, value: str) -> None:
     """Replace the text of a TextField tagged with test_id."""
     field = by_id(page, test_id)
-    target = field.locator("input, textarea").first
-    if target.count() == 0:
-        target = field
-    # Flutter syncs its editing state asynchronously; a select-all issued too early can miss
-    # prefilled text. Verify the DOM value and retry instead of trusting one attempt.
+    field.first.wait_for(state="attached")
+    # Flutter web creates the DOM <input> only while the field has focus, and syncs its editing
+    # state asynchronously; a select-all issued too early can miss prefilled text. So focus first,
+    # use the input once it exists, and verify the DOM value instead of trusting one attempt.
     for _ in range(3):
-        target.click()
+        field.first.click()
+        target = field.locator("input, textarea").first
+        try:
+            target.wait_for(state="attached", timeout=3_000)
+        except Exception:
+            target = page.locator("input:focus, textarea:focus").first
         target.press("Control+a")
         target.press("Delete")
-        if target.evaluate("e => e.value ?? ''") != "":
+        if (target.evaluate("e => e.value ?? ''") or "") != "":
             continue
         target.type(value)
         if target.evaluate("e => e.value ?? ''") == value:
             return
-    raise AssertionError(f"could not set {test_id!r} to {value!r} "
-                         f"(field shows {target.evaluate('e => e.value ?? null')!r})")
+    raise AssertionError(f"could not set {test_id!r} to {value!r}")
 
 
 def text_of(locator: Locator) -> str:
@@ -65,3 +68,16 @@ def visible_ids(page: Page) -> list[str]:
     return page.eval_on_selector_all(
         f"[{ID_ATTR}]", f"els => els.map(e => e.getAttribute('{ID_ATTR}'))"
     )
+
+
+def input_value(page: Page, test_id: str) -> str:
+    """Current text of the TextField tagged with test_id (the DOM input's value)."""
+    field = by_id(page, test_id)
+    field.first.wait_for(state="attached")
+    target = field.locator("input, textarea").first
+    return target.evaluate("e => e.value ?? ''") if target.count() else ""
+
+
+def nav_tab_count(page: Page) -> int:
+    """Number of bottom navigation items (they carry aria-current, see pages.Shell)."""
+    return page.locator("flt-semantics[role=button][aria-current]").count()

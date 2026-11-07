@@ -30,6 +30,27 @@ class SaasAdmin:
         fill(self.page, "change_password_confirm", new)
         by_id(self.page, "btn_submit_change_password").click()
 
+    def site_name(self, site_id: str) -> str:
+        return text_of(by_id(self.page, f"site_card_name_{site_id}"))
+
+    def edit_site(self, site_id: str, name: str, address: str, admin_phone: str) -> None:
+        by_id(self.page, f"btn_edit_site_{site_id}").click()
+        by_id(self.page, "edit_site_name_field").wait_for(timeout=10_000)
+        fill(self.page, "edit_site_name_field", name)
+        fill(self.page, "edit_site_address_field", address)
+        fill(self.page, "edit_site_admin_phone_field", admin_phone)
+        by_id(self.page, "btn_save_site_edit").click()
+        by_id(self.page, "btn_save_site_edit").wait_for(state="detached", timeout=15_000)
+
+    def delete_site(self, site_id: str) -> None:
+        by_id(self.page, f"btn_delete_site_{site_id}").click()
+        by_id(self.page, "btn_confirmation_confirm").click()
+
+    def reset_admin_password(self, site_id: str) -> "SiteCredentials":
+        by_id(self.page, f"btn_reset_admin_password_{site_id}").click()
+        by_id(self.page, "btn_confirmation_confirm").click()
+        return SiteCredentials(self.page).wait()
+
     def open_add_site(self) -> "AddSiteForm":
         by_id(self.page, "btn_open_add_site").click()
         return AddSiteForm(self.page).wait()

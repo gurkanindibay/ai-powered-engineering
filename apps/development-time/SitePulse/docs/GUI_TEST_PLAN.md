@@ -266,5 +266,97 @@ New ids: `btn_open_add_site`, `add_site_{name,city,address,admin_name,admin_emai
 10. **Inconsistent money formatting (GUI-X-06).** The import summary and the capital views print `₺1400.00` / `₺285714.29` (`toStringAsFixed` or `toString`), not the Turkish `₺1.400,00` used elsewhere.
 11. **Unreproduced:** once, on a long-lived exploration stack, the first `accrue-installment` call returned 400 "db error" (nothing was logged) and an identical retry succeeded. It has not happened on a clean stack. The service also reads every site's units (`inner.units`, no site filter) and inserts the per-unit rows without a transaction, so a mid-way failure would leave a partial accrual.
 
-Next: P1 scenarios, epic by epic (Phase 3 continues), then the Phase 4 wiring.
+## 9. Phase 3: P1 complete (2026-11-07, after merging master `a10646a`)
+All 46 P1 scenarios are automated. `scripts/gui_e2e.py run -m core` gives **26 passed, 28 strict xfail** (about 7½ minutes); the P0 smoke suite is unchanged at 19 passed, 4 strict xfail. Each new xfail was re-run with `--runxfail` to confirm it fails on the assertion its reason names, not on a test error. Shared xfail reasons live in `e2e/support/known_issues.py`.
+
+| Epic | Scenarios automated | Passing | Strict xfail (defect or gap) |
+|---|---|---|---|
+| EPIC-06 | 06-05 (×2 roles), 06-07, 06-08, 06-09, 06-10 | all | — |
+| EPIC-03 | 03-03, 03-04, 03-05, 03-06, 03-07, 03-08 | 03-03, 03-04, 03-06, 03-07, 03-08 | 03-05 |
+| EPIC-02 | 02-02, 02-05, 02-06, 02-07, 02-08 | 02-05 (no history), 02-08 (save, negative amount) | 02-02, 02-05 (refused delete), 02-06, 02-07, 02-08 (>2 decimals) |
+| EPIC-01 | 01-03, 01-04 | — | 01-03, 01-04 |
+| EPIC-04 | 04-01, 04-04, 04-05, 04-06 | 04-06 (link shown and copied) | 04-01, 04-04, 04-05, 04-06 (site/unit/token) |
+| EPIC-07 | 07-02, 07-04, 07-07, 07-08, 07-09 | 07-02 | 07-04, 07-07, 07-08, 07-09 |
+| EPIC-08 | 08-02, 08-05, 08-06 | 08-05, 08-06 (new owner) | 08-02 (×2), 08-06 (previous owner's period) |
+| EPIC-10 | 10-03, 10-06, 10-11 | 10-03 | 10-06, 10-11 |
+| Cross-cutting | X-04 (×2 roles) | all | — |
+
+Second pass (the remaining ten):
+
+| Scenario | Test | Result |
+|---|---|---|
+| GUI-07-05 | `test_epic07_bank.py::test_unmatched_row_is_assigned_to_a_unit_by_hand` | pass (UI flow) |
+| GUI-07-05 | `…::test_manual_assignment_records_the_payment` | **xfail: bug**, assignment is client-only |
+| GUI-07-05 | `…::test_confirming_matched_rows_keeps_the_unmatched_ones` | **xfail: bug**, unmatched rows dropped |
+| GUI-08-03 | `test_epic08_occupancy.py::test_household_members_are_added` | pass (API lists both members) |
+| GUI-08-03 | `…::test_household_members_survive_a_backend_restart` | **xfail: bug**, memory only |
+| GUI-09-02 / 09-04 | `test_epic09_receipts.py::test_receipt_shows_number_and_penalty_principal_advance_split` | pass (TAH number, penalty → principal → advance equals the API, sums to the total) |
+| GUI-09-04 | `…::test_homeowner_receipt_shows_the_issued_receipt_number` | **xfail: bug** |
+| GUI-09-03 | `…::test_tenant_statement_lists_operational_items_only` | **xfail: gap** |
+| GUI-10-05 | `test_epic10_capital.py::test_disbursement_within_collected_cash_updates_the_reserve` | pass (disbursed 1000, reserve 3000, DB row) |
+| GUI-10-07 | `…::test_owner_fast_payment_raises_the_projects_collected_amount` | pass (collected 4000, DB paid 4000) |
+| GUI-10-09 | `…::test_virman_dialog_offers_real_units_and_advances` | **xfail: bug**, hard-coded units |
+| GUI-10-10 | `…::test_owner_dashboard_shows_capital_dues_separately` | **xfail: gap** |
+| GUI-X-02 | `test_cross_cutting.py::test_theme_choice_on_login_screen_holds_after_login` | pass |
+
+New builders: `Api.create_site`, `webhook_transfer` (signed with the E2E webhook secret), `move_out`; `Builders.foreign_site_unit` (SQL arrange). New page objects: `ProfileSheet`, SaaS card actions (edit, delete, reset password). `AddResidentForm.save()` now dismisses the "Sakin Kaydedildi!" confirmation.
+
+New ids: `btn_open_profile`, `role_path_{manager_cockpit,my_flat}`, `profile_change_password_{current,new,confirm}`, `btn_submit_profile_change_password`, `btn_reset_admin_password_<id>`, `btn_delete_site_<id>`, `site_delete_locked_<id>`, `site_card_name_<id>`, `btn_ack_delete_blocked`, `btn_confirmation_{confirm,cancel}` (shared confirmation page and sheet), `btn_edit_house_type_<type>`, `house_type_{name,amount}_field`, `btn_save_house_type`, `house_type_error`, `dues_filter_<ALL|PAID|OVERDUE>`, `ledger_row_<n>`, `resident_action_<receipts|invite|requests|announcements>`, `invite_link_text`, `invite_security_notice`, `btn_copy_invite_link`, `btn_close_resident_provisioned`, `checkout_option_{card,virtual_iban}`, `checkout_fast_note`, `hero_advance_pill`, `snackbar_import_error`, `history_item_<id>`.
+
+**Findings from the P1 pass** (continuing the numbering of §8):
+12. **Period accrual breaks the next ledger insert.** `accrue-period` writes `dues_liabilities` rows with explicit ids and leaves the identity sequence behind (ids 1 and 2 exist, next sequence value 1). The next identity insert, such as `accrue-installment`, fails with 400 "db error" until the sequence passes the existing ids. This explains finding 11, which is now reproduced.
+13. **FAST webhook ignores the KMK penalty.** Paying the full total (₺1.423,33) leaves ₺23,33 open. Overpaying ₺2.860,67 shows an advance of ₺1.460,67, which is the payment minus the principal only. This contradicts the penalty → principal → advance order (STORY-09-02).
+14. **Bank account never loaded, so the format guard is off.** The client only posts the bank account; it never reads it. An MT940 `.sta` is accepted for the Kuveyt Türk EXCEL account.
+15. **Site edit not saved, but shown as saved.** `PUT /saas/sites/1` answers 400, `updateSite` returns true anyway, and the card shows the new name. Nothing is stored.
+16. **Refused delete still removes the card.** Deleting a unit with ledger history gets a 400 from the backend, but the card disappears.
+17. **Overdue filter loses flats.** With both units overdue the badge says "Geciken (2)" but one card is listed, "Tümü" shows 1 of 2, the total is wrong, and the days-overdue figure disagrees with the due date.
+18. **Client-only flows:** `rejectRegistration` makes no API call, and the unit invite link is built in the client (slug `sitemiz`, unit id instead of number "A Blok Blok D:2", a token the backend never issued).
+19. **No overdraw guard on disbursements.** A ₺120.000,00 contractor disbursement is recorded with ₺0 collected.
+20. **Ownership history incomplete.** A transfer writes a `unit_ownerships` row for the new owner only; the previous owner's period is not recorded, and the seed creates no initial ownership rows.
+21. **Validation gaps:** house type amounts with more than two decimals are accepted; account movements lump principal and penalty into one row without a thousands separator.
+22. **`must_change_password` not enforced server-side.** The SaaS admin could create a site through the API while still on the bootstrap password.
+23. **UI gaps:** managers have no site invite link (only home users have "Davet Linki"), and the "Duyurular" tile shows a hard-coded "3 Yeni" badge.
+
+24. **Manual unit assignment not persisted.** Assigning an unmatched statement row to a unit clears it on screen but writes no payment. Confirming the matched rows of an import also silently drops its unmatched rows from "🏦 Eşleşmeyenler".
+25. **Household members are memory-only.** They are kept in backend memory (no `occupancy_members` or `persons` row, `resident_id` "0", a placeholder e-mail when none is given) and are lost on restart.
+26. **Homeowner receipt number is wrong.** It shows the bank transaction id instead of the issued receipt number (`DKN-…`/`TAH-…`). Receipt amounts are printed unformatted (`₺2000`, `₺53.67`). "Paylaş / PDF" only shows a toast; no file is produced.
+27. **Virman dialog is hard-coded.** It offers units `d-14` "Mevcut Avans: ₺3.000,00" and `d-1` regardless of the site's units and balances.
+28. **No tenant statement (ekstre)** in the UI or the API.
+29. **No owner capital breakdown.** The owner's dashboard folds capital dues into one balance, with no capital line or project detail.
+
+E2E-only test hooks added: the theme toggles carry `theme:dark` / `theme:light` labels, since the page is canvas-rendered. `fill()` now focuses the field before looking for its `<input>`, because Flutter creates the input only on focus.
+
+## 10. Phase 3: P2 complete (2026-11-07)
+All 16 P2 scenarios are automated in `e2e/tests/test_p2_edge.py` (marker `edge`): **8 passed, 8 strict xfail**. Every xfail was run with `--runxfail` and fails on the assertion its reason names.
+
+| Scenario | Result |
+|---|---|
+| GUI-06-04 empty password → error banner, no `/auth/login` request | pass |
+| GUI-06-11 Google sign-in reaches the provider | **xfail: gap**, simulated login, no OAuth redirect |
+| GUI-01-05 offline banner, balance kept | **xfail: gap**, no offline banner; `isOffline` is unused |
+| GUI-01-06 penalty detail (days, amount) | **xfail: bug**, detail says "0 Gün Gecikme" for a 10-day-old debt |
+| GUI-02-04 resident added to an occupied unit → warning, cancel saves nothing | pass |
+| GUI-04-07 co-resident joins via a unit invite | **xfail: bug**, "unit 2 has no active occupancy session" |
+| GUI-04-08 empty approval queue | pass (trivially, given finding 5) |
+| GUI-07-06 payer-name alias auto-matches | **xfail: bug**, the stored alias is ignored by matching |
+| GUI-08-07 residents module search by name and unit | pass |
+| GUI-08-08 remove the tenant only | pass (owner kept, occupancy closed) |
+| GUI-09-05 / GUI-10-08 tenant pays capital: on-behalf owner + TBK 314 note | pass |
+| GUI-09-06 aging buckets + penalty = grand total | pass |
+| GUI-09-06 aging total = open ledger | **xfail: bug**, partial payments ignored (₺42.000 shown, ₺41.000 open) |
+| GUI-09-07 virman from a real unit's advance | **xfail: bug**, hard-coded units (finding 27) |
+| GUI-X-05 reload never leaves a broken screen | pass (the session is not persisted: reload returns to login) |
+| GUI-X-06 Turkish money format everywhere | **xfail: bug** (finding 10) |
+
+New ids: `hero_detail_button`, `penalty_days`, `penalty_formula`, `aging_bucket_{current,1_30,31_60,60_plus}`, `aging_total_penalty`, `aging_grand_total`, `receipt_on_behalf`, `receipt_rent_offset_note`, `btn_edit_payer_names`, `payer_name_input`, `btn_add_payer_name`, `btn_save_payer_names`, `btn_dues_more_actions`, `menu_item_virman`.
+
+**Findings from P2:**
+30. **Penalty detail shows 0 days.** The detail dialog says "0 Gün Gecikme" for a debt that is 10 days overdue.
+31. **Debt aging ignores partial payments.**
+32. **Payer-name aliases are ignored.** They are saved (`unit_payer_names`) but never used when a statement is matched.
+33. **Owner-occupied units can't take co-residents.** They have no `unit_occupancies` row, so unit-invite registration fails ("no active occupancy session").
+34. **Google sign-in is simulated, and there's no offline banner.**
+35. **The session is not persisted.** A browser reload always returns to the login screen. The test accepts this as the current design; the stories do not say otherwise.
+
+Next: Phase 4 wiring (`run_tests.py` gate, the Key/testId lint, the "GUI test" column in `COMPLETION_STATUS.md`).
 
