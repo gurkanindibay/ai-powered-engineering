@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -204,21 +205,21 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: _buildMethodSelectorOption(
+                    child: testId('checkout_option_card', _buildMethodSelectorOption(
                       method: CheckoutPaymentMethod.card,
                       icon: Icons.credit_card,
                       title: 'Kredi Kartı',
                       subtitle: '3D Secure',
-                    ),
+                    )),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _buildMethodSelectorOption(
+                    child: testId('checkout_option_virtual_iban', _buildMethodSelectorOption(
                       method: CheckoutPaymentMethod.virtualIban,
                       icon: Icons.account_balance,
                       title: 'Sanal IBAN',
                       subtitle: 'FAST / Havale',
-                    ),
+                    )),
                   ),
                 ],
               ),
@@ -817,10 +818,10 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
               const Icon(Icons.info_outline, size: 16, color: AppColors.accentCyan),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
+                child: testId('checkout_fast_note', Text(
                   'Açıklama alanına hiçbir şey yazmanıza gerek yoktur. Bu IBAN sadece dairenize özeldir ve gönderdiğiniz tutar FAST ile saniyeler içinde aidat borcunuzu kapatır.',
                   style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11, height: 1.35),
-                ),
+                )),
               ),
             ],
           ),

@@ -2,6 +2,8 @@
 import pytest
 
 from pages import ManagerCockpit, ResidentHome, SaasAdmin, Shell
+from support.api import ApiError
+from support.flutter import by_id, input_value, nav_tab_count
 
 
 @pytest.mark.smoke
@@ -57,3 +59,86 @@ def test_saas_admin_must_change_bootstrap_password(login_as, login_page, page, a
     assert session.user["must_change_password"] is False
     with pytest.raises(Exception):
         api.login(actors["saas"]["email"], actors["saas"]["password"])
+
+
+# ---------------------------------------------------------------- P1 (core)
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-06-05")
+@pytest.mark.parametrize("role, tab", [("homeowner", "homeOwner"), ("manager", "siteManager")])
+def test_clear_login_cache_empties_the_fields(login_page, page, role, tab):
+    prefix = {"homeowner": "homeowner", "manager": "manager"}[role]
+    by_id(page, f"login_tab_{tab}").click()
+    by_id(page, f"btn_clear_login_cache_{role}").click()
+    page.wait_for_function(
+        "id => (document.querySelector(`[flt-semantics-identifier=\"${id}\"] input`)?.value ?? '') === ''",
+        arg=f"login_{prefix}_email", timeout=10_000)
+    assert input_value(page, f"login_{prefix}_email") == ""
+    assert input_value(page, f"login_{prefix}_password") == ""
+
+
+@pytest.mark.core
+@pytest.mark.role_homeowner
+@pytest.mark.gui_id("GUI-06-07")
+def test_homeowner_changes_password_from_profile_and_logs_in_again(login_as, login_page, page, api, actors):
+    homeowner = actors["homeowner"]
+    new_password = "E2E-Homeowner-Changed-7"
+    login_as("homeowner")
+    ResidentHome(page).wait()
+
+    profile = Shell(page).open_profile()
+    profile.change_password(homeowner["password"], new_password)
+    profile.logout()
+    by_id(page, "login_tab_quickAll").wait_for(timeout=10_000)
+    login_page.login("homeowner", homeowner["email"], new_password)
+
+    ResidentHome(page).wait()
+    with pytest.raises(ApiError):
+        api.login(homeowner["email"], homeowner["password"])
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-06-08")
+def test_profile_logout_and_browser_back_stay_logged_out(login_as, page):
+    login_as("manager")
+    ManagerCockpit(page).wait()
+
+    Shell(page).open_profile().logout()
+    by_id(page, "login_tab_quickAll").wait_for(timeout=10_000)
+    page.go_back()
+    page.wait_for_timeout(1_500)
+    assert by_id(page, "btn_open_unified_dues_center").count() == 0
+
+
+@pytest.mark.core
+@pytest.mark.role_homeowner
+@pytest.mark.gui_id("GUI-06-09")
+def test_homeowner_sees_no_manager_actions_and_api_refuses_them(login_as, page, api, actors):
+    login_as("homeowner")
+    ResidentHome(page).wait()
+    for manager_only in ("btn_open_unified_dues_center", "btn_cockpit_manage_residents", "role_path_manager_cockpit",
+                         "btn_open_add_site"):
+        assert by_id(page, manager_only).count() == 0, manager_only
+
+    homeowner = api.login(**actors["homeowner"])
+    with pytest.raises(ApiError, match="-> 403"):
+        api.call("GET", f"/api/v1/site-admin/home-owners?site_id={homeowner.user['site_id']}", homeowner.token)
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-06-10")
+def test_manager_switches_between_cockpit_and_own_flat(login_as, page):
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    assert nav_tab_count(page) == 4
+
+    by_id(page, "role_path_my_flat").click()
+    by_id(page, "btn_open_unified_dues_center").wait_for(state="detached", timeout=10_000)
+    assert nav_tab_count(page) == 3  # no 'Aidat Yönetimi' in the owner view
+
+    by_id(page, "role_path_manager_cockpit").click()
+    ManagerCockpit(page).wait()
+    assert nav_tab_count(page) == 4

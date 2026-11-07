@@ -2,10 +2,8 @@
 import pytest
 
 from pages import ManagerCockpit
+from support.known_issues import PENDING_QUEUE_GAP
 
-PENDING_QUEUE_GAP = ("GAP: the client never loads GET /api/v1/registration/pending; the cockpit queue is only "
-                     "filled by DashboardController.setPendingRegistrationsForTesting, so submitted "
-                     "registrations never reach the manager (flutter/lib/ui/dashboard/dashboard_controller.dart)")
 
 
 @pytest.fixture

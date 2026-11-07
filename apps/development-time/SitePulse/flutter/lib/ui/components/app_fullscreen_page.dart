@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
@@ -116,7 +117,7 @@ class AppFullscreenPage extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
+                  child: testId('btn_confirmation_cancel', OutlinedButton(
                     onPressed: () => Navigator.pop(ctx, false),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -127,11 +128,11 @@ class AppFullscreenPage extends StatelessWidget {
                       cancelLabel,
                       style: TextStyle(color: AppColors.textPrimary(ctx), fontWeight: FontWeight.w600),
                     ),
-                  ),
+                  )),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton(
+                  child: testId('btn_confirmation_confirm', ElevatedButton(
                     onPressed: () => Navigator.pop(ctx, true),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: confirmColor,
@@ -144,7 +145,7 @@ class AppFullscreenPage extends StatelessWidget {
                       confirmLabel,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                  ),
+                  )),
                 ),
               ],
             ),

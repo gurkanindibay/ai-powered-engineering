@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/dues_models.dart';
@@ -188,7 +189,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                 child: Material(
                   color: Colors.transparent,
                   borderRadius: BorderRadius.circular(14),
-                  child: ListTile(
+                  child: testId('assign_flat_${flat.id}', ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                     leading: Container(
                       padding: const EdgeInsets.all(8),
@@ -257,7 +258,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                     ),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.accentCyan),
                     onTap: () => _confirmAssignment(flat),
-                  ),
+                  )),
                 ),
               );
             }),
@@ -553,7 +554,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: ElevatedButton.icon(
+                            child: testId('btn_confirm_assignment', ElevatedButton.icon(
                               onPressed: () => Navigator.pop(dialogCtx, true),
                               icon: const Icon(Icons.check, size: 16),
                               label: const Text('Eşleştirmeyi Onayla'),
@@ -563,7 +564,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
-                            ),
+                            )),
                           ),
                         ],
                       ),

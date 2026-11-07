@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../domain/models/dues_models.dart';
@@ -284,7 +285,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                       Row(
                         children: [
                           Expanded(
-                            child: TextField(
+                            child: testId('payer_name_input', TextField(
                               controller: nameController,
                               style: TextStyle(fontSize: 13, color: AppColors.textPrimary(ctx)),
                               decoration: InputDecoration(
@@ -297,10 +298,10 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                                 ),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               ),
-                            ),
+                            )),
                           ),
                           const SizedBox(width: 8),
-                          ElevatedButton(
+                          testId('btn_add_payer_name', ElevatedButton(
                             onPressed: () {
                               final text = nameController.text.trim();
                               if (text.isNotEmpty && !names.contains(text)) {
@@ -317,7 +318,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                             child: const Text('Ekle'),
-                          ),
+                          )),
                         ],
                       ),
                       const SizedBox(height: 22),
@@ -333,7 +334,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: ElevatedButton.icon(
+                            child: testId('btn_save_payer_names', ElevatedButton.icon(
                               onPressed: () {
                                 widget.controller.updateUnitPayerNames(names: names);
                                 Navigator.pop(ctx);
@@ -351,7 +352,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                                 foregroundColor: Colors.white,
                                 textStyle: const TextStyle(fontWeight: FontWeight.bold),
                               ),
-                            ),
+                            )),
                           ),
                         ],
                       ),
@@ -678,14 +679,14 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                   ),
                 ],
               ),
-              TextButton.icon(
+              testId('btn_edit_payer_names', TextButton.icon(
                 onPressed: () => _showEditPayerNamesDialog(context, criteria.registeredPayerNames),
                 icon: const Icon(Icons.edit, size: 13, color: AppColors.accentGreen),
                 label: const Text(
                   'Düzenle',
                   style: TextStyle(fontSize: 11.5, color: AppColors.accentGreen, fontWeight: FontWeight.bold),
                 ),
-              ),
+              )),
             ],
           ),
           const SizedBox(height: 4),

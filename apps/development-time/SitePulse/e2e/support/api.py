@@ -7,6 +7,8 @@ in-memory state reloads; such builders are marked "SQL arrange".
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import urllib.error
 import urllib.parse
@@ -14,7 +16,7 @@ import urllib.request
 from dataclasses import dataclass
 from decimal import Decimal
 
-from .stack import E2EStack, api_base
+from .stack import WEBHOOK_SECRET, E2EStack, api_base
 
 
 class ApiError(RuntimeError):
@@ -70,6 +72,28 @@ class Api:
                         body={"email": email, "current_password": current, "new_password": new})
         return Session(out["access_token"], out["user"])
 
+    def create_site(self, saas: Session, name: str, admin_email: str, admin_name: str = "Murat Yıldırım",
+                    blocks: tuple[str, ...] = ("A Blok",)) -> dict:
+        """SaaS onboarding through the API; returns site_id and the manager's temporary_password."""
+        return self.call("POST", "/api/v1/saas/sites", saas.token, body={
+            "site_name": name, "address": "Kadıköy, İstanbul", "site_admin_full_name": admin_name,
+            "site_admin_email": admin_email, "site_admin_phone": "+90 532 000 00 00", "plan_type": "STANDARD",
+            "blocks": list(blocks)})
+
+    def webhook_transfer(self, virtual_iban: str, amount: Decimal, transaction_id: str,
+                         description: str = "FAST transfer") -> dict:
+        """Signed bank webhook for an incoming FAST transfer (STORY-07-03); replays are idempotent."""
+        body = json.dumps({"transaction_id": transaction_id, "virtual_iban": virtual_iban, "amount": str(amount),
+                           "currency": "TRY", "description": description}).encode()
+        req = urllib.request.Request(self.base + "/api/v1/bank/webhook/incoming-transfer", data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("X-SitePulse-Signature", hmac.new(WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest())
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode() or "{}")
+        except urllib.error.HTTPError as exc:
+            raise ApiError(f"webhook -> {exc.code}: {exc.read().decode()[:300]}") from None
+
     def submit_registration(self, slug: str, full_name: str, email: str, block: str, unit_no: int,
                             floor: int = 1, phone: str = "+90 532 000 00 00", is_resident: bool = False) -> dict:
         """Public self-registration form (STORY-04-03); the request waits for the manager."""
@@ -82,6 +106,10 @@ class Api:
         return self.call("POST", f"/api/v1/site-admin/units/{unit_id}/move-in?site_id={session.user['site_id']}",
                          session.token, body={"role": role, "full_name": full_name, "email": email, "phone": phone})
 
+    def move_out(self, session: Session, unit_id: str) -> dict:
+        return self.call("POST", f"/api/v1/site-admin/units/{unit_id}/move-out?site_id={session.user['site_id']}",
+                         session.token, body={"notes": "E2E move-out"})
+
     def create_period(self, session: Session, name: str, due_date: str) -> dict:
         return self.call("POST", "/api/v1/dues/periods", session.token,
                          body={"site_id": session.user["site_id"], "period_name": name, "due_date": due_date})
@@ -89,6 +117,23 @@ class Api:
     def accrue_period(self, session: Session, period: str, amount: Decimal, due_date: str) -> dict:
         return self.call("POST", "/api/v1/dues/accrue-period", session.token, body={
             "site_id": session.user["site_id"], "period": period, "amount": str(amount), "due_date": due_date})
+
+    def create_capital_project(self, session: Session, title: str, budget: Decimal,
+                               basis: str = "BY_LAND_SHARE", installments: int = 1,
+                               first_due: str = "2026-11-30") -> dict:
+        """Capital project with equal installments (the last one absorbs the kuruş remainder)."""
+        per = (budget / installments).quantize(Decimal("0.01"), rounding="ROUND_DOWN")
+        items = [{"installment_number": i, "total_installments": installments, "due_date": first_due,
+                  "installment_budget": str(per if i < installments else budget - per * (installments - 1))}
+                 for i in range(1, installments + 1)]
+        return self.call("POST", "/api/v1/capital-projects", session.token, body={
+            "site_id": session.user["site_id"], "title": title, "category": "OTHER", "total_budget": str(budget),
+            "allocation_basis": basis, "contract_amount": str(budget), "installments": items})
+
+    def accrue_installment(self, session: Session, project_id: str, number: int) -> dict:
+        return self.call("POST", f"/api/v1/capital-projects/{project_id}/accrue-installment"
+                                 f"?site_id={session.user['site_id']}", session.token,
+                         body={"installment_number": number})
 
     def record_manual_payment(self, session: Session, unit_id: str, amount: Decimal, payer_name: str,
                               payer_role: str = "OWNER", channel: str = "MANUAL_CASH",
@@ -133,3 +178,20 @@ class Builders:
             f"{int(occupancy_id)}, {amount}, CURRENT_DATE - 5, 'PENDING') RETURNING id;").splitlines()[0]
         self.stack.restart_backend()
         return {"liability_id": liability_id, "occupancy_id": occupancy_id, "person_id": person_id}
+
+    def foreign_site_unit(self, slug: str = "kardelen-rezidans") -> str:
+        """SQL arrange: a block, owner and unit on another tenant; returns the unit id."""
+        site_id = self.stack.sql(f"SELECT id FROM sites WHERE slug = '{slug}';")
+        block_id = self.stack.sql(
+            f"INSERT INTO blocks (site_id, block_name, total_floors) VALUES ({int(site_id)}, 'K Blok', 5) "
+            "RETURNING id;").splitlines()[0]
+        person_id = self.stack.sql(
+            "INSERT INTO persons (national_id, full_name, phone, email, person_type) VALUES "
+            "('77777777777', 'Kardelen Maliki', '+90 532 777 77 77', 'kardelen.malik@e2e.test', 'HOME_OWNER') "
+            "RETURNING id;").splitlines()[0]
+        unit_id = self.stack.sql(
+            "INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, virtual_iban) "
+            f"VALUES ({int(block_id)}, {int(site_id)}, 5, 2, 20, {int(person_id)}, 'TR620020500009863791600099') "
+            "RETURNING id;").splitlines()[0]
+        self.stack.restart_backend()
+        return unit_id

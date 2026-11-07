@@ -164,7 +164,7 @@ class HeroBalanceCard extends StatelessWidget {
               )),
             )
           else if (hasAdvance)
-            Container(
+            testId('hero_advance_pill', Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -190,7 +190,7 @@ class HeroBalanceCard extends StatelessWidget {
                   ),
                 ],
               ),
-            )
+            ))
           else if (dues.donem.isEmpty || debtDouble <= 0)
             Container(
               padding:
@@ -352,14 +352,14 @@ class HeroBalanceCard extends StatelessWidget {
               const SizedBox(width: 10),
               // Detay / Hesap Özeti — ghost outline (secondary)
               Expanded(
-                child: _ActionButton(
+                child: testId('hero_detail_button', _ActionButton(
                   label: hasAdvance || debtDouble <= 0 ? 'Hesap Özeti' : 'Borç Detayı',
                   icon: hasAdvance || debtDouble <= 0 ? Icons.account_balance_wallet_outlined : Icons.receipt_long_outlined,
                   filled: false,
                   color: AppColors.textPrimary(context),
                   borderColor: AppColors.border(context),
                   onTap: onDetailPressed,
-                ),
+                )),
               ),
             ],
           ),

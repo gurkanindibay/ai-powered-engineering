@@ -252,7 +252,7 @@ class SaasAdminView extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          testId('site_card_name_${site.id}', Text(
                             site.name,
                             style: TextStyle(
                               color: AppColors.textPrimary(context),
@@ -260,7 +260,7 @@ class SaasAdminView extends StatelessWidget {
                               fontWeight: FontWeight.bold,
                             ),
                             overflow: TextOverflow.ellipsis,
-                          ),
+                          )),
                           Text(
                             '${site.city} • ${site.totalUnits} Daire',
                             style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
@@ -372,7 +372,7 @@ class SaasAdminView extends StatelessWidget {
                       const SizedBox(width: 8),
                     ],
                     if (onResetPasswordTap != null)
-                      InkWell(
+                      testId('btn_reset_admin_password_${site.id}', InkWell(
                         onTap: () => onResetPasswordTap!(site),
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
@@ -398,11 +398,11 @@ class SaasAdminView extends StatelessWidget {
                             ],
                           ),
                         ),
-                      ),
+                      )),
                     if (onDeleteSiteTap != null) ...[
                       const SizedBox(width: 8),
                       if (!site.hasActions)
-                        InkWell(
+                        testId('btn_delete_site_${site.id}', InkWell(
                           onTap: () => onDeleteSiteTap!(site),
                           borderRadius: BorderRadius.circular(8),
                           child: Container(
@@ -421,9 +421,9 @@ class SaasAdminView extends StatelessWidget {
                               ],
                             ),
                           ),
-                        )
+                        ))
                       else
-                        Tooltip(
+                        testId('site_delete_locked_${site.id}', Tooltip(
                           message: 'Bu siteye ait aktif daire veya işlem kaydı bulunduğundan silinemez.',
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -441,7 +441,7 @@ class SaasAdminView extends StatelessWidget {
                               ],
                             ),
                           ),
-                        ),
+                        )),
                     ],
                   ],
                 ),

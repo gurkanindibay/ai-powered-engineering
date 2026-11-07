@@ -399,7 +399,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                 ),
                 child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
-              ElevatedButton(
+              testId('btn_submit_profile_change_password', ElevatedButton(
                 onPressed: isSubmitting
                     ? null
                     : () async {
@@ -450,7 +450,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: Text(isSubmitting ? 'Kaydediliyor...' : 'Şifreyi Güncelle', style: const TextStyle(fontWeight: FontWeight.bold)),
-              ),
+              )),
             ],
           ),
           child: Column(
@@ -492,7 +492,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                 ),
               ),
               const SizedBox(height: 14),
-              TextField(
+              testId('profile_change_password_current', TextField(
                 controller: currentPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -503,9 +503,9 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('profile_change_password_new', TextField(
                 controller: newPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -516,9 +516,9 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('profile_change_password_confirm', TextField(
                 controller: confirmPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -529,7 +529,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
             ],
           ),
         ),

@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/dues_models.dart';
@@ -131,10 +132,10 @@ Future<void> showManageHouseTypesFullscreen(BuildContext context, DashboardContr
                               ],
                             ),
                           ),
-                          IconButton(
+                          testId('btn_edit_house_type_${item.typeName}', IconButton(
                             icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.accentPurple),
                             onPressed: () => _showEditHouseTypeDialog(context, controller, item, setDialogState),
-                          ),
+                          )),
                           IconButton(
                             icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.accentRed),
                             onPressed: () async {
@@ -202,7 +203,7 @@ void _showEditHouseTypeDialog(BuildContext context, DashboardController controll
                 ),
                 child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
-              ElevatedButton(
+              testId('btn_save_house_type', ElevatedButton(
                 onPressed: () async {
                   final typeName = typeNameCtrl.text.trim();
                   final duesText = duesCtrl.text.trim();
@@ -246,7 +247,7 @@ void _showEditHouseTypeDialog(BuildContext context, DashboardController controll
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: const Text('Kaydet', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
+              )),
             ],
           ),
           child: SingleChildScrollView(
@@ -267,20 +268,20 @@ void _showEditHouseTypeDialog(BuildContext context, DashboardController controll
                         const Icon(Icons.error_outline, color: AppColors.accentRed, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(errorText!, style: const TextStyle(color: AppColors.accentRed, fontSize: 13)),
+                          child: testId('house_type_error', Text(errorText!, style: const TextStyle(color: AppColors.accentRed, fontSize: 13))),
                         ),
                       ],
                     ),
                   ),
-                TextField(
+                testId('house_type_name_field', TextField(
                   controller: typeNameCtrl,
                   decoration: InputDecoration(
                     labelText: 'Konut Tipi Adı (örn: 1+1, 2+1, 3+1, Dubleks)',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
                 const SizedBox(height: 16),
-                TextField(
+                testId('house_type_amount_field', TextField(
                   controller: duesCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
@@ -288,7 +289,7 @@ void _showEditHouseTypeDialog(BuildContext context, DashboardController controll
                     prefixText: '₺ ',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
                 const SizedBox(height: 16),
                 TextField(
                   controller: descCtrl,

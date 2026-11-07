@@ -76,7 +76,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Row(
+              content: testId('snackbar_import_error', Row(
                 children: [
                   const Icon(Icons.error_outline, color: Colors.white),
                   const SizedBox(width: 8),
@@ -87,7 +87,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     ),
                   ),
                 ],
-              ),
+              )),
               backgroundColor: AppColors.accentRed,
               duration: const Duration(seconds: 5),
             ),
@@ -790,7 +790,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 )),
-                PopupMenuButton<String>(
+                testId('btn_dues_more_actions', PopupMenuButton<String>(
                   tooltip: 'Diğer Kasa İşlemleri',
                   icon: const Icon(Icons.more_vert, size: 20),
                   onSelected: (val) {
@@ -819,18 +819,18 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'virman',
-                      child: Row(
+                      child: testId('menu_item_virman', const Row(
                         children: [
                           Icon(Icons.swap_horiz, size: 16, color: Colors.indigo),
                           SizedBox(width: 8),
                           Text('Virman (Aidat ⇄ Demirbaş)', style: TextStyle(fontSize: 12)),
                         ],
-                      ),
+                      )),
                     ),
                   ],
-                ),
+                )),
               ],
             ),
           ],
@@ -1368,7 +1368,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
   Widget _buildFilterChip(String label, String filterKey, String currentFilter) {
     final isSelected = currentFilter == filterKey;
-    return InkWell(
+    return testId('dues_filter_$filterKey', InkWell(
       onTap: () => widget.controller.setFlatFilter(filterKey),
       borderRadius: BorderRadius.circular(10),
       child: Container(
@@ -1387,7 +1387,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           ),
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildFlatStatusCard(FlatPaymentStatus flat) {
@@ -1659,7 +1659,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton.icon(
+            child: testId('btn_assign_unmatched_${item.matchId}', ElevatedButton.icon(
               onPressed: () => _openManualAssignment(item),
               icon: const Icon(Icons.add_home_work_outlined, size: 16),
               label: const Text('Daire Seç & Eşle'),
@@ -1670,7 +1670,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
-            ),
+            )),
           ),
         ],
       ),

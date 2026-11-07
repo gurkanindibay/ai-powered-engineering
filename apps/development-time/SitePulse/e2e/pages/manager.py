@@ -74,7 +74,12 @@ class AddResidentForm:
         return self
 
     def save(self) -> None:
+        """Save, then dismiss the 'Sakin Kaydedildi!' confirmation so the list is visible again."""
         by_id(self.page, "btn_save_new_resident").click()
+        close = by_id(self.page, "btn_close_resident_provisioned")
+        close.wait_for(timeout=15_000)
+        close.click()
+        close.wait_for(state="detached", timeout=10_000)
 
 
 class DuesManagement:
