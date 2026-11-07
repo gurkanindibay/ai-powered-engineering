@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
@@ -340,7 +341,7 @@ class SaasAdminView extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     if (onEditSiteTap != null) ...[
-                      InkWell(
+                      testId('btn_edit_site_${site.id}', InkWell(
                         key: Key('btn_edit_site_${site.id}'),
                         onTap: () => onEditSiteTap!(site),
                         borderRadius: BorderRadius.circular(8),
@@ -367,7 +368,7 @@ class SaasAdminView extends StatelessWidget {
                             ],
                           ),
                         ),
-                      ),
+                      )),
                       const SizedBox(width: 8),
                     ],
                     if (onResetPasswordTap != null)

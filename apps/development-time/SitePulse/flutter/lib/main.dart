@@ -3,9 +3,11 @@ import 'ui/auth/login_screen.dart';
 import 'ui/dashboard/dashboard_controller.dart';
 import 'ui/dashboard/dashboard_screen.dart';
 import 'ui/theme/app_theme.dart';
+import 'testing/test_id.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  enableE2ESemantics();
   final controller = DashboardController(startAuthenticated: false);
   runApp(SitePulseApp(controller: controller));
 }

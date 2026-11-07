@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/dues_models.dart';
@@ -774,7 +775,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
-                ElevatedButton.icon(
+                testId('action_payment_tracking', ElevatedButton.icon(
                   key: const Key('action_payment_tracking'),
                   onPressed: () {
                     setState(() => _activeSegment = 1);
@@ -788,7 +789,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
+                )),
                 PopupMenuButton<String>(
                   tooltip: 'Diğer Kasa İşlemleri',
                   icon: const Icon(Icons.more_vert, size: 20),
@@ -999,7 +1000,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
 
   Widget _buildSegmentTab(int index, String label, {int count = 0}) {
     final isSelected = _activeSegment == index;
-    return InkWell(
+    return testId('segment_tab_$index', InkWell(
       key: Key('segment_tab_$index'),
       onTap: () {
         setState(() => _activeSegment = index);
@@ -1051,7 +1052,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildStatTile(String label, String value, Color color) {
@@ -1077,7 +1078,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
         // Referral Button to Owners & Residents Module
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: InkWell(
+          child: testId('dues_to_residents_module_btn', InkWell(
             key: const Key('dues_to_residents_module_btn'),
             onTap: () {
               AppFullscreenPage.push(
@@ -1111,7 +1112,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 ],
               ),
             ),
-          ),
+          )),
         ),
 
         // Filter Chips & Search Bar
@@ -1508,7 +1509,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   ),
                 ),
               ],
-              InkWell(
+              testId('dues_flat_resident_module_${flat.id}', InkWell(
                 key: Key('dues_flat_resident_module_${flat.id}'),
                 onTap: () {
                   AppFullscreenPage.push(
@@ -1534,7 +1535,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     ),
                   ],
                 ),
-              ),
+              )),
             ],
           ),
         ],

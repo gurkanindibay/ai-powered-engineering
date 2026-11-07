@@ -1,0 +1,5 @@
+{
+  "_comment": "Dev-only seed accounts (backend/src/state.rs, backend/db/seed/02-test-seed.sql). Copy to actors.json (gitignored) to override. Never put real credentials here.",
+  "manager": {"email": "mehmet.demir@begonya.com", "password": "mehmet123"},
+  "homeowner": {"email": "ahmet.yilmaz@begonya.com", "password": "ahmet123"}
+}
