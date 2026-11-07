@@ -366,7 +366,8 @@ fn create_auth_response(user: &User, unit_id: Option<&str>) -> AuthResponse {
     let permissions = Permission::permissions_for_role(user.role);
     let summary = UserSummary {
         id: user.id.clone(),
-        full_name: user.full_name.clone(),
+        // Accounts without a linked person (e.g. a seeded admin) have no name yet.
+        full_name: if user.full_name.trim().is_empty() { user.email.clone() } else { user.full_name.clone() },
         email: user.email.clone(),
         phone: user.phone.clone(),
         role: user.role,

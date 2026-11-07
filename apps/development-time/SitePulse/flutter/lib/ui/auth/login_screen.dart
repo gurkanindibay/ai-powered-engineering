@@ -965,9 +965,21 @@ class _LoginScreenState extends State<LoginScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    widget.controller.loginAs(role: UserRole.saasAdmin);
-                  },
+                  onPressed: _isSubmitting
+                      ? null
+                      : () {
+                          // Offline test mode has no backend; everywhere else the
+                          // credentials are checked by /auth/login, which issues the
+                          // bearer token every API call needs.
+                          if (widget.controller.isTestMode) {
+                            widget.controller.loginAs(role: UserRole.saasAdmin);
+                          } else {
+                            _performPasswordLogin(
+                              email: _saasEmailController.text,
+                              password: _saasPasswordController.text,
+                            );
+                          }
+                        },
                   icon: const Icon(Icons.admin_panel_settings, size: 18),
                   label: const Text('SaaS Paneline Gir', style: TextStyle(fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
