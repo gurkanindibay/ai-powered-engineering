@@ -1,0 +1,4 @@
+.venv/
+.artifacts/
+fixtures/actors.json
+__pycache__/

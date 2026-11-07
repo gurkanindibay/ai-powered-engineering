@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/dues_models.dart';
@@ -126,7 +127,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
           bottomBar: AppFullscreenPage.buildBottomBar(
             context: context,
             children: [
-              OutlinedButton.icon(
+              testId('module_bottom_close_btn', OutlinedButton.icon(
                 key: const Key('module_bottom_close_btn'),
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.arrow_back, size: 16),
@@ -137,8 +138,8 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-              ),
-              ElevatedButton.icon(
+              )),
+              testId('module_add_new_resident_btn', ElevatedButton.icon(
                 key: const Key('module_add_new_resident_btn'),
                 onPressed: () => _openAddResident(context),
                 icon: const Icon(Icons.person_add_alt_1, size: 18),
@@ -149,7 +150,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-              ),
+              )),
             ],
           ),
           child: Column(
@@ -168,7 +169,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
               const SizedBox(height: 16),
 
               // Search Input
-              TextField(
+              testId('module_search_input', TextField(
                 key: const Key('module_search_input'),
                 onChanged: (val) {
                   setState(() {
@@ -197,7 +198,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     borderSide: BorderSide(color: AppColors.border(context)),
                   ),
                 ),
-              ),
+              )),
 
               const SizedBox(height: 12),
 
@@ -585,7 +586,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          TextButton.icon(
+                          testId('module_set_responsible_${ho.unitId}', TextButton.icon(
                             key: Key('module_set_responsible_${ho.unitId}'),
                             onPressed: () => _showSelectPrimaryResponsibleDialog(ho),
                             icon: const Icon(Icons.swap_horiz, size: 14, color: AppColors.accentCyan),
@@ -595,7 +596,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               minimumSize: const Size(0, 24),
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                          ),
+                          )),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -653,7 +654,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: InkWell(
+                        child: testId('module_tab_residents_${ho.unitId}', InkWell(
                           key: Key('module_tab_residents_${ho.unitId}'),
                           onTap: () => setState(() => _unitTabs[ho.unitId] = 0),
                           borderRadius: BorderRadius.circular(8),
@@ -683,11 +684,11 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               ],
                             ),
                           ),
-                        ),
+                        )),
                       ),
                       const SizedBox(width: 4),
                       Expanded(
-                        child: InkWell(
+                        child: testId('module_tab_owner_${ho.unitId}', InkWell(
                           key: Key('module_tab_owner_${ho.unitId}'),
                           onTap: () => setState(() => _unitTabs[ho.unitId] = 1),
                           borderRadius: BorderRadius.circular(8),
@@ -717,7 +718,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               ],
                             ),
                           ),
-                        ),
+                        )),
                       ),
                     ],
                   ),
@@ -752,7 +753,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 ),
                               ),
                               const SizedBox(width: 6),
-                              OutlinedButton.icon(
+                              testId('module_edit_residents_${ho.unitId}', OutlinedButton.icon(
                                 key: Key('module_edit_residents_${ho.unitId}'),
                                 onPressed: () => _openEditHomeOwner(ho, initialTab: 0),
                                 icon: const Icon(Icons.edit_outlined, size: 11),
@@ -763,9 +764,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   minimumSize: const Size(0, 24),
                                 ),
-                              ),
+                              )),
                               const SizedBox(width: 4),
-                              OutlinedButton.icon(
+                              testId('module_move_out_${ho.unitId}', OutlinedButton.icon(
                                 key: Key('module_move_out_${ho.unitId}'),
                                 onPressed: () => _openMoveOut(ho),
                                 icon: const Icon(Icons.logout, size: 11),
@@ -776,7 +777,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   minimumSize: const Size(0, 24),
                                 ),
-                              ),
+                              )),
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -810,7 +811,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11),
                             ),
                           ),
-                          ElevatedButton.icon(
+                          testId('module_move_in_${ho.unitId}', ElevatedButton.icon(
                             key: Key('module_move_in_${ho.unitId}'),
                             onPressed: () => _openMoveIn(ho),
                             icon: const Icon(Icons.person_add_alt, size: 12),
@@ -821,7 +822,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               minimumSize: const Size(0, 28),
                             ),
-                          ),
+                          )),
                         ],
                       ),
                     ),
@@ -850,7 +851,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 ),
                               ),
                               const SizedBox(width: 6),
-                              OutlinedButton.icon(
+                              testId('module_edit_owner_res_${ho.unitId}', OutlinedButton.icon(
                                 key: Key('module_edit_owner_res_${ho.unitId}'),
                                 onPressed: () => _openEditHomeOwner(ho, initialTab: 0),
                                 icon: const Icon(Icons.edit_outlined, size: 11),
@@ -861,9 +862,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   minimumSize: const Size(0, 24),
                                 ),
-                              ),
+                              )),
                               const SizedBox(width: 4),
-                              OutlinedButton.icon(
+                              testId('module_add_tenant_${ho.unitId}', OutlinedButton.icon(
                                 key: Key('module_add_tenant_${ho.unitId}'),
                                 onPressed: () => _openMoveIn(ho),
                                 icon: const Icon(Icons.person_add_alt, size: 11),
@@ -874,9 +875,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   minimumSize: const Size(0, 24),
                                 ),
-                              ),
+                              )),
                               const SizedBox(width: 4),
-                              OutlinedButton.icon(
+                              testId('module_move_out_owner_${ho.unitId}', OutlinedButton.icon(
                                 key: Key('module_move_out_owner_${ho.unitId}'),
                                 onPressed: () => _openMoveOut(ho),
                                 icon: const Icon(Icons.logout, size: 11),
@@ -887,7 +888,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   minimumSize: const Size(0, 24),
                                 ),
-                              ),
+                              )),
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -928,7 +929,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            TextButton.icon(
+                            testId('module_add_resident_to_${ho.unitId}', TextButton.icon(
                               key: Key('module_add_resident_to_${ho.unitId}'),
                               onPressed: () => _openAddHouseholdMember(ho),
                               icon: const Icon(Icons.add, size: 14, color: AppColors.accentPurple),
@@ -938,7 +939,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 minimumSize: const Size(0, 24),
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
-                            ),
+                            )),
                           ],
                         ),
                         if (ho.householdResidents.isNotEmpty) ...[
@@ -963,23 +964,23 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    IconButton(
+                                    testId('module_edit_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                       key: Key('module_edit_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                       icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.accentCyan),
                                       tooltip: '${m.fullName} düzenle',
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
                                       onPressed: () => _openEditHouseholdMember(ho, m),
-                                    ),
+                                    )),
                                     const SizedBox(width: 6),
-                                    IconButton(
+                                    testId('module_delete_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                       key: Key('module_delete_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                       icon: const Icon(Icons.close, size: 14, color: AppColors.accentRed),
                                       tooltip: '${m.fullName} sil',
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
                                       onPressed: () => _confirmDeleteHouseholdMember(ho, m),
-                                    ),
+                                    )),
                                   ],
                                 ),
                               )),
@@ -1017,7 +1018,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            OutlinedButton.icon(
+                            testId('module_edit_owner_${ho.unitId}', OutlinedButton.icon(
                               key: Key('module_edit_owner_${ho.unitId}'),
                               onPressed: () => _openEditHomeOwner(ho, initialTab: 1),
                               icon: const Icon(Icons.edit_outlined, size: 11),
@@ -1028,9 +1029,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 minimumSize: const Size(0, 24),
                               ),
-                            ),
+                            )),
                             const SizedBox(width: 4),
-                            OutlinedButton.icon(
+                            testId('module_transfer_ownership_${ho.unitId}', OutlinedButton.icon(
                               key: Key('module_transfer_ownership_${ho.unitId}'),
                               onPressed: () => _openTransferOwnership(ho),
                               icon: const Icon(Icons.real_estate_agent, size: 11),
@@ -1041,7 +1042,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 minimumSize: const Size(0, 24),
                               ),
-                            ),
+                            )),
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -1071,7 +1072,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    OutlinedButton.icon(
+                    testId('module_quick_add_resident_${ho.unitId}', OutlinedButton.icon(
                       key: Key('module_quick_add_resident_${ho.unitId}'),
                       onPressed: () => _openAddHouseholdMember(ho),
                       icon: const Icon(Icons.family_restroom, size: 13, color: AppColors.accentPurple),
@@ -1083,8 +1084,8 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         minimumSize: const Size(0, 30),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                    ),
-                    OutlinedButton.icon(
+                    )),
+                    testId('module_quick_move_in_${ho.unitId}', OutlinedButton.icon(
                       key: Key('module_quick_move_in_${ho.unitId}'),
                       onPressed: () => _openMoveIn(ho),
                       icon: const Icon(Icons.key, size: 13, color: AppColors.accentGreen),
@@ -1103,8 +1104,8 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         minimumSize: const Size(0, 30),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                    ),
-                    OutlinedButton.icon(
+                    )),
+                    testId('module_history_ho_${ho.unitId}', OutlinedButton.icon(
                       key: Key('module_history_ho_${ho.unitId}'),
                       onPressed: () => _openUnitHistory(ho),
                       icon: const Icon(Icons.history, size: 13, color: AppColors.accentCyan),
@@ -1116,8 +1117,8 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         minimumSize: const Size(0, 30),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                    ),
-                    OutlinedButton.icon(
+                    )),
+                    testId('module_iban_ho_${ho.unitId}', OutlinedButton.icon(
                       key: Key('module_iban_ho_${ho.unitId}'),
                       onPressed: () => _openIbanDetails(ho),
                       icon: const Icon(Icons.account_balance, size: 13, color: AppColors.accentPurple),
@@ -1129,8 +1130,8 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         minimumSize: const Size(0, 30),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                    ),
-                    OutlinedButton.icon(
+                    )),
+                    testId('module_delete_ho_${ho.unitId}', OutlinedButton.icon(
                       key: Key('module_delete_ho_${ho.unitId}'),
                       onPressed: () => _openDeleteUnit(ho),
                       icon: const Icon(Icons.delete_outline, size: 13, color: AppColors.accentRed),
@@ -1142,7 +1143,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         minimumSize: const Size(0, 30),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                    ),
+                    )),
                   ],
                 ),
               ],
@@ -1349,7 +1350,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   },
                   child: const Text('Vazgeç'),
                 ),
-                ElevatedButton(
+                testId('module_save_new_resident_btn', ElevatedButton(
                   key: const Key('module_save_new_resident_btn'),
                   onPressed: () async {
                     setDlgState(() => formError = null);
@@ -1465,7 +1466,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     }
                   },
                   child: const Text('Kaydet'),
-                ),
+                )),
               ],
             ),
             child: SingleChildScrollView(
@@ -1541,7 +1542,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                           children: [
                             Expanded(
                               flex: 5,
-                              child: DropdownButtonFormField<String>(
+                              child: testId('module_new_resident_block', DropdownButtonFormField<String>(
                                 key: const Key('module_new_resident_block'),
                                 value: selectedBlock,
                                 dropdownColor: AppColors.card(context),
@@ -1556,12 +1557,12 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 onChanged: (val) {
                                   if (val != null) setDlgState(() => selectedBlock = val);
                                 },
-                              ),
+                              )),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               flex: 4,
-                              child: TextField(
+                              child: testId('module_new_resident_unit', TextField(
                                 key: const Key('module_new_resident_unit'),
                                 controller: unitCtrl,
                                 keyboardType: TextInputType.number,
@@ -1572,13 +1573,13 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                   border: OutlineInputBorder(),
                                   contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 ),
-                              ),
+                              )),
                             ),
                           ],
                         ),
                         if (currentHouseTypes.isNotEmpty) ...[
                           const SizedBox(height: 10),
-                          DropdownButtonFormField<String>(
+                          testId('module_new_resident_house_type', DropdownButtonFormField<String>(
                             key: const Key('module_new_resident_house_type'),
                             value: selectedHouseType,
                             isDense: true,
@@ -1598,7 +1599,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             onChanged: (val) {
                               if (val != null) setDlgState(() => selectedHouseType = val);
                             },
-                          ),
+                          )),
                         ],
                       ],
                     ),
@@ -1655,7 +1656,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        TextField(
+                        testId('module_new_resident_name', TextField(
                           key: const Key('module_new_resident_name'),
                           controller: ownerNameCtrl,
                           decoration: const InputDecoration(
@@ -1664,9 +1665,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             filled: true,
                             border: OutlineInputBorder(),
                           ),
-                        ),
+                        )),
                         const SizedBox(height: 10),
-                        TextField(
+                        testId('module_new_resident_phone', TextField(
                           key: const Key('module_new_resident_phone'),
                           controller: ownerPhoneCtrl,
                           keyboardType: TextInputType.phone,
@@ -1676,9 +1677,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             filled: true,
                             border: OutlineInputBorder(),
                           ),
-                        ),
+                        )),
                         const SizedBox(height: 10),
-                        TextField(
+                        testId('module_new_resident_email', TextField(
                           key: const Key('module_new_resident_email'),
                           controller: ownerEmailCtrl,
                           keyboardType: TextInputType.emailAddress,
@@ -1688,7 +1689,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             filled: true,
                             border: OutlineInputBorder(),
                           ),
-                        ),
+                        )),
                       ],
                     ),
                   ),
@@ -1730,7 +1731,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         const SizedBox(height: 10),
                         SizedBox(
                           width: double.infinity,
-                          child: SegmentedButton<String>(
+                          child: testId('module_occupancy_status_selector', SegmentedButton<String>(
                             key: const Key('module_occupancy_status_selector'),
                             segments: const [
                               ButtonSegment<String>(
@@ -1753,7 +1754,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             onSelectionChanged: (newSel) {
                               setDlgState(() => occupancyStatus = newSel.first);
                             },
-                          ),
+                          )),
                         ),
                         const SizedBox(height: 10),
 
@@ -1805,7 +1806,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                   style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
                                 ),
                                 const SizedBox(height: 10),
-                                TextField(
+                                testId('module_new_tenant_name', TextField(
                                   key: const Key('module_new_tenant_name'),
                                   controller: tenantNameCtrl,
                                   decoration: const InputDecoration(
@@ -1814,9 +1815,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                     filled: true,
                                     border: OutlineInputBorder(),
                                   ),
-                                ),
+                                )),
                                 const SizedBox(height: 8),
-                                TextField(
+                                testId('module_new_tenant_phone', TextField(
                                   key: const Key('module_new_tenant_phone'),
                                   controller: tenantPhoneCtrl,
                                   keyboardType: TextInputType.phone,
@@ -1826,9 +1827,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                     filled: true,
                                     border: OutlineInputBorder(),
                                   ),
-                                ),
+                                )),
                                 const SizedBox(height: 8),
-                                TextField(
+                                testId('module_new_tenant_email', TextField(
                                   key: const Key('module_new_tenant_email'),
                                   controller: tenantEmailCtrl,
                                   keyboardType: TextInputType.emailAddress,
@@ -1838,7 +1839,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                     filled: true,
                                     border: OutlineInputBorder(),
                                   ),
-                                ),
+                                )),
                               ],
                             ),
                           ),
@@ -1895,7 +1896,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            OutlinedButton.icon(
+                            testId('module_add_co_resident_btn', OutlinedButton.icon(
                               key: const Key('module_add_co_resident_btn'),
                               icon: const Icon(Icons.person_add_alt_1, size: 14, color: AppColors.accentCyan),
                               label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.accentCyan)),
@@ -1910,7 +1911,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 side: const BorderSide(color: AppColors.accentCyan),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
-                            ),
+                            )),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -2113,7 +2114,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   onPressed: () => Navigator.pop(ctx),
                   child: const Text('Vazgeç'),
                 ),
-                ElevatedButton(
+                testId('module_save_edit_resident_btn', ElevatedButton(
                   key: const Key('module_save_edit_resident_btn'),
                   onPressed: () async {
                     try {
@@ -2162,7 +2163,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     }
                   },
                   child: const Text('Kaydet'),
-                ),
+                )),
               ],
             ),
             child: SingleChildScrollView(
@@ -2188,7 +2189,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         const SizedBox(height: 8),
                         SizedBox(
                           width: double.infinity,
-                          child: SegmentedButton<String>(
+                          child: testId('module_edit_occupancy_role_selector', SegmentedButton<String>(
                             key: const Key('module_edit_occupancy_role_selector'),
                             segments: const [
                               ButtonSegment<String>(
@@ -2211,7 +2212,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             onSelectionChanged: (newSelection) {
                               setDlgState(() => occupancyMode = newSelection.first);
                             },
-                          ),
+                          )),
                         ),
                       ],
                     ),
@@ -2338,7 +2339,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                ElevatedButton.icon(
+                                testId('module_edit_dialog_add_household_member', ElevatedButton.icon(
                                   key: const Key('module_edit_dialog_add_household_member'),
                                   onPressed: () {
                                     _openAddHouseholdMember(currentHo);
@@ -2352,7 +2353,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     minimumSize: const Size(0, 28),
                                   ),
-                                ),
+                                )),
                               ],
                             ),
                             const SizedBox(height: 10),
@@ -2445,7 +2446,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
               context: ctx,
               children: [
                 OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
-                ElevatedButton(
+                testId('module_save_household_btn', ElevatedButton(
                   key: const Key('module_save_household_btn'),
                   onPressed: () async {
                     final name = nameCtrl.text.trim();
@@ -2475,19 +2476,19 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     }
                   },
                   child: const Text('Ekle'),
-                ),
+                )),
               ],
             ),
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  TextField(
+                  testId('module_member_name_input', TextField(
                     key: const Key('module_member_name_input'),
                     controller: nameCtrl,
                     decoration: const InputDecoration(labelText: 'Ad Soyad *', filled: true, border: OutlineInputBorder()),
-                  ),
+                  )),
                   const SizedBox(height: 12),
-                  TextField(
+                  testId('module_member_relation_input', TextField(
                     key: const Key('module_member_relation_input'),
                     controller: relationCtrl,
                     decoration: const InputDecoration(
@@ -2495,18 +2496,18 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       filled: true,
                       border: OutlineInputBorder(),
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 12),
-                  TextField(
+                  testId('module_member_phone_input', TextField(
                     key: const Key('module_member_phone_input'),
                     controller: phoneCtrl,
                     keyboardType: TextInputType.phone,
                     decoration: const InputDecoration(labelText: 'Telefon', filled: true, border: OutlineInputBorder()),
-                  ),
+                  )),
                   const SizedBox(height: 12),
                   Material(
                     color: Colors.transparent,
-                    child: SwitchListTile(
+                    child: testId('module_member_set_primary_switch', SwitchListTile(
                       key: const Key('module_member_set_primary_switch'),
                       contentPadding: EdgeInsets.zero,
                       dense: true,
@@ -2517,7 +2518,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       onChanged: (val) {
                         setDlgState(() => setAsPrimary = val);
                       },
-                    ),
+                    )),
                   ),
                 ],
               ),
@@ -2606,7 +2607,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
           context: ctx,
           children: [
             OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
-            ElevatedButton(
+            testId('module_confirm_move_out_btn', ElevatedButton(
               key: const Key('module_confirm_move_out_btn'),
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentOrange, foregroundColor: Colors.white),
               onPressed: () async {
@@ -2619,7 +2620,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                 }
               },
               child: const Text('Tahliyeyi Onayla'),
-            ),
+            )),
           ],
         ),
         child: Column(
@@ -2655,7 +2656,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
               context: ctx,
               children: [
                 OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
-                ElevatedButton(
+                testId('module_confirm_move_in_btn', ElevatedButton(
                   key: const Key('module_confirm_move_in_btn'),
                   onPressed: () async {
                     final name = nameCtrl.text.trim();
@@ -2676,7 +2677,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     }
                   },
                   child: const Text('Girişi Tamamla'),
-                ),
+                )),
               ],
             ),
             child: SingleChildScrollView(
@@ -2690,7 +2691,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
-                    child: SegmentedButton<String>(
+                    child: testId('module_move_in_role_selector', SegmentedButton<String>(
                       key: const Key('module_move_in_role_selector'),
                       segments: const [
                         ButtonSegment<String>(
@@ -2708,7 +2709,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       onSelectionChanged: (newSelection) {
                         setDlgState(() => selectedRole = newSelection.first);
                       },
-                    ),
+                    )),
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -2862,7 +2863,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
                   child: const Text('Vazgeç'),
                 ),
-                ElevatedButton(
+                testId('module_confirm_transfer_ownership_btn', ElevatedButton(
                   key: const Key('module_confirm_transfer_ownership_btn'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal,
@@ -2912,7 +2913,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   child: isSubmitting
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                       : const Text('Tapu Devrini Onayla'),
-                ),
+                )),
               ],
             ),
             child: SingleChildScrollView(
@@ -2958,7 +2959,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     style: TextStyle(color: AppColors.textPrimary(ctx), fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
+                  testId('module_transfer_new_owner_name_input', TextField(
                     key: const Key('module_transfer_new_owner_name_input'),
                     controller: nameCtrl,
                     decoration: const InputDecoration(
@@ -2966,9 +2967,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       prefixIcon: Icon(Icons.person, size: 18),
                       border: OutlineInputBorder(),
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 12),
-                  TextField(
+                  testId('module_transfer_new_owner_phone_input', TextField(
                     key: const Key('module_transfer_new_owner_phone_input'),
                     controller: phoneCtrl,
                     keyboardType: TextInputType.phone,
@@ -2977,9 +2978,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       prefixIcon: Icon(Icons.phone, size: 18),
                       border: OutlineInputBorder(),
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 12),
-                  TextField(
+                  testId('module_transfer_new_owner_email_input', TextField(
                     key: const Key('module_transfer_new_owner_email_input'),
                     controller: emailCtrl,
                     keyboardType: TextInputType.emailAddress,
@@ -2988,9 +2989,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       prefixIcon: Icon(Icons.email, size: 18),
                       border: OutlineInputBorder(),
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 12),
-                  TextField(
+                  testId('module_transfer_notes_input', TextField(
                     key: const Key('module_transfer_notes_input'),
                     controller: notesCtrl,
                     maxLines: 3,
@@ -2999,7 +3000,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       prefixIcon: Icon(Icons.note_alt_outlined, size: 18),
                       border: OutlineInputBorder(),
                     ),
-                  ),
+                  )),
                 ],
               ),
             ),

@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'dart:async';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
@@ -199,7 +200,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               widget.controller.toggleOfflineMode(!widget.controller.isOffline);
             },
           ),
-          IconButton(
+          testId('btn_header_toggle_theme', IconButton(
             tooltip: 'Tema Değiştir',
             icon: Icon(
               widget.controller.isDarkMode ? Icons.light_mode : Icons.dark_mode,
@@ -209,8 +210,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () {
               widget.controller.toggleTheme();
             },
-          ),
-          IconButton(
+          ), label: widget.controller.isDarkMode ? 'theme:dark' : 'theme:light'),
+          testId('btn_header_logout', IconButton(
             tooltip: 'Çıkış Yap / Rol Değiştir',
             icon: const Icon(
               Icons.logout_rounded,
@@ -220,10 +221,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () {
               widget.controller.logout();
             },
-          ),
+          )),
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: InkWell(
+            child: testId('btn_open_profile', InkWell(
               onTap: () => _openProfileSheet(context),
               borderRadius: BorderRadius.circular(20),
               child: CircleAvatar(
@@ -234,7 +235,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                 ),
               ),
-            ),
+            )),
           ),
         ],
       ),
@@ -250,6 +251,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
           color: AppColors.accentCyan,
           child: SingleChildScrollView(
+            // Resets scroll position per tab; not an automation target. testid-lint: ignore
             key: ValueKey('tab_scroll_$_selectedTabIndex'),
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -347,7 +349,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         children: [
           Expanded(
-            child: InkWell(
+            child: testId('role_path_manager_cockpit', InkWell(
               onTap: () {
                 if (currentPath != SiteAdminActivePath.managerCockpit) {
                   widget.controller.setSiteAdminPath(SiteAdminActivePath.managerCockpit);
@@ -386,10 +388,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-            ),
+            )),
           ),
           Expanded(
-            child: InkWell(
+            child: testId('role_path_my_flat', InkWell(
               onTap: () {
                 if (currentPath != SiteAdminActivePath.myFlatOwner) {
                   widget.controller.setSiteAdminPath(SiteAdminActivePath.myFlatOwner);
@@ -428,7 +430,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-            ),
+            )),
           ),
         ],
       ),
@@ -811,7 +813,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                   ),
-                  OutlinedButton.icon(
+                  testId('open_owners_residents_module', OutlinedButton.icon(
                     key: const Key('open_owners_residents_module'),
                     onPressed: () {
                       AppFullscreenPage.push(
@@ -828,7 +830,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       minimumSize: const Size(0, 30),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                  ),
+                  )),
                 ],
               ),
               const SizedBox(height: 8),
@@ -836,7 +838,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 spacing: 8,
                 runSpacing: 6,
                 children: [
-                  ElevatedButton.icon(
+                  testId('add_resident_btn', ElevatedButton.icon(
                     key: const Key('add_resident_btn'),
                     onPressed: _showAddResidentDialog,
                     icon: const Icon(Icons.person_add_outlined, size: 15),
@@ -848,7 +850,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       minimumSize: const Size(0, 30),
                     ),
-                  ),
+                  )),
                   OutlinedButton.icon(
                     onPressed: _showManageHouseTypesDialog,
                     icon: const Icon(Icons.home_work_outlined, size: 15),
@@ -1266,42 +1268,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(width: 10),
                 // Unit-Level Action Buttons inside Header
-                IconButton(
+                testId('history_ho_${ho.unitId}', IconButton(
                   key: Key('history_ho_${ho.unitId}'),
                   icon: const Icon(Icons.history, size: 18, color: AppColors.accentCyan),
                   tooltip: 'Daire İkamet & Sakin Tarihçesi',
                   padding: const EdgeInsets.all(4),
                   constraints: const BoxConstraints(),
                   onPressed: () => _showUnitOccupancyHistoryDialog(ho),
-                ),
+                )),
                 const SizedBox(width: 4),
                 if (!isVacant)
-                  IconButton(
+                  testId('move_out_ho_${ho.unitId}', IconButton(
                     key: Key('move_out_ho_${ho.unitId}'),
                     icon: const Icon(Icons.logout_outlined, size: 18, color: AppColors.accentOrange),
                     tooltip: 'Sakin Ayrılışı (Move-Out)',
                     padding: const EdgeInsets.all(4),
                     constraints: const BoxConstraints(),
                     onPressed: () => _showMoveOutDialog(ho),
-                  )
+                  ))
                 else
-                  IconButton(
+                  testId('move_in_ho_${ho.unitId}', IconButton(
                     key: Key('move_in_ho_${ho.unitId}'),
                     icon: const Icon(Icons.person_add_alt, size: 18, color: AppColors.accentGreen),
                     tooltip: 'Yeni Sakin / Giriş (Move-In)',
                     padding: const EdgeInsets.all(4),
                     constraints: const BoxConstraints(),
                     onPressed: () => _showMoveInDialog(ho),
-                  ),
+                  )),
                 const SizedBox(width: 4),
-                IconButton(
+                testId('delete_ho_${ho.unitId}', IconButton(
                   key: Key('delete_ho_${ho.unitId}'),
                   icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.accentRed),
                   tooltip: 'Kat Malikini Sil',
                   padding: const EdgeInsets.all(4),
                   constraints: const BoxConstraints(),
                   onPressed: () => _confirmDeleteHomeOwner(ho),
-                ),
+                )),
                 const SizedBox(width: 6),
                 OutlinedButton.icon(
                   onPressed: () => _showEditHomeOwnerDialog(ho),
@@ -1355,7 +1357,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          TextButton.icon(
+                          testId('module_set_responsible_${ho.unitId}', TextButton.icon(
                             key: Key('module_set_responsible_${ho.unitId}'),
                             onPressed: () => _showSelectPrimaryResponsibleDialog(ho),
                             icon: const Icon(Icons.swap_horiz, size: 14, color: AppColors.accentCyan),
@@ -1365,7 +1367,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               minimumSize: const Size(0, 24),
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                          ),
+                          )),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -1430,7 +1432,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: Row(
                           children: [
                             Expanded(
-                              child: InkWell(
+                              child: testId('tab_residents_${ho.unitId}', InkWell(
                                 key: Key('tab_residents_${ho.unitId}'),
                                 onTap: () => setState(() => _unitCardTabs[ho.unitId] = 0),
                                 borderRadius: BorderRadius.circular(8),
@@ -1460,11 +1462,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ],
                                   ),
                                 ),
-                              ),
+                              )),
                             ),
                             const SizedBox(width: 4),
                             Expanded(
-                              child: InkWell(
+                              child: testId('tab_owner_${ho.unitId}', InkWell(
                                 key: Key('tab_owner_${ho.unitId}'),
                                 onTap: () => setState(() => _unitCardTabs[ho.unitId] = 1),
                                 borderRadius: BorderRadius.circular(8),
@@ -1494,7 +1496,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ],
                                   ),
                                 ),
-                              ),
+                              )),
                             ),
                           ],
                         ),
@@ -1601,7 +1603,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 spacing: 8,
                                 runSpacing: 6,
                                 children: [
-                                  OutlinedButton.icon(
+                                  testId('edit_residents_${ho.unitId}', OutlinedButton.icon(
                                     key: Key('edit_residents_${ho.unitId}'),
                                     onPressed: () => _showEditHomeOwnerDialog(ho, initialTab: 0),
                                     icon: const Icon(Icons.edit_outlined, size: 12),
@@ -1613,8 +1615,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       minimumSize: const Size(0, 28),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
-                                  ),
-                                  OutlinedButton.icon(
+                                  )),
+                                  testId('move_out_resident_${ho.unitId}', OutlinedButton.icon(
                                     key: Key('move_out_resident_${ho.unitId}'),
                                     onPressed: () => _showMoveOutDialog(ho),
                                     icon: const Icon(Icons.logout, size: 12),
@@ -1626,7 +1628,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       minimumSize: const Size(0, 28),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
-                                  ),
+                                  )),
                                 ],
                               ),
                             ],
@@ -1658,7 +1660,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ),
                                   ),
                                   const Spacer(),
-                                  TextButton.icon(
+                                  testId('add_resident_to_${ho.unitId}', TextButton.icon(
                                     key: Key('add_resident_to_${ho.unitId}'),
                                     onPressed: () => _showAddHouseholdMemberDialog(ho),
                                     icon: const Icon(Icons.person_add_alt_1, size: 14, color: AppColors.accentPurple),
@@ -1668,7 +1670,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       minimumSize: const Size(0, 24),
                                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                     ),
-                                  ),
+                                  )),
                                 ],
                               ),
                               if (ho.householdResidents.isNotEmpty) ...[
@@ -1696,23 +1698,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                      IconButton(
+                                      testId('edit_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                         key: Key('edit_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                         icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.accentCyan),
                                         tooltip: '${m.fullName} bilgilerini düzenle',
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         onPressed: () => _showEditHouseholdMemberDialog(ho, m),
-                                      ),
+                                      )),
                                       const SizedBox(width: 6),
-                                      IconButton(
+                                      testId('delete_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                         key: Key('delete_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                         icon: const Icon(Icons.close, size: 14, color: AppColors.accentRed),
                                         tooltip: '${m.fullName} kaydını sil',
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
                                         onPressed: () => _confirmDeleteHouseholdMember(ho, m),
-                                      ),
+                                      )),
                                     ],
                                   ),
                                 )),
@@ -1827,7 +1829,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 spacing: 8,
                                 runSpacing: 6,
                                 children: [
-                                  OutlinedButton.icon(
+                                  testId('edit_owner_${ho.unitId}', OutlinedButton.icon(
                                     key: Key('edit_owner_${ho.unitId}'),
                                     onPressed: () => _showEditHomeOwnerDialog(ho, initialTab: 1),
                                     icon: const Icon(Icons.edit_outlined, size: 12),
@@ -1839,8 +1841,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       minimumSize: const Size(0, 28),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
-                                  ),
-                                  OutlinedButton.icon(
+                                  )),
+                                  testId('module_transfer_ownership_${ho.unitId}', OutlinedButton.icon(
                                     key: Key('module_transfer_ownership_${ho.unitId}'),
                                     onPressed: () => _showTransferOwnershipDialog(ho),
                                     icon: const Icon(Icons.real_estate_agent, size: 12),
@@ -1852,7 +1854,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       minimumSize: const Size(0, 28),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
-                                  ),
+                                  )),
                                 ],
                               ),
                             ],
@@ -1967,7 +1969,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         spacing: 8,
                                         runSpacing: 6,
                                         children: [
-                                          OutlinedButton.icon(
+                                          testId('edit_residents_${ho.unitId}', OutlinedButton.icon(
                                             key: Key('edit_residents_${ho.unitId}'),
                                             onPressed: () => _showEditHomeOwnerDialog(ho, initialTab: 0),
                                             icon: const Icon(Icons.edit_outlined, size: 12),
@@ -1979,8 +1981,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               minimumSize: const Size(0, 28),
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                             ),
-                                          ),
-                                          OutlinedButton.icon(
+                                          )),
+                                          testId('add_resident_member_to_${ho.unitId}', OutlinedButton.icon(
                                             key: Key('add_resident_member_to_${ho.unitId}'),
                                             onPressed: () => _showAddHouseholdMemberDialog(ho),
                                             icon: const Icon(Icons.person_add_alt_1, size: 12),
@@ -1992,8 +1994,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               minimumSize: const Size(0, 28),
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                             ),
-                                          ),
-                                          OutlinedButton.icon(
+                                          )),
+                                          testId('move_in_resident_to_${ho.unitId}', OutlinedButton.icon(
                                             key: Key('move_in_resident_to_${ho.unitId}'),
                                             onPressed: () => _showMoveInDialog(ho),
                                             icon: const Icon(Icons.key, size: 12),
@@ -2008,8 +2010,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               minimumSize: const Size(0, 28),
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                             ),
-                                          ),
-                                          OutlinedButton.icon(
+                                          )),
+                                          testId('move_out_resident_${ho.unitId}', OutlinedButton.icon(
                                             key: Key('move_out_resident_${ho.unitId}'),
                                             onPressed: () => _showMoveOutDialog(ho),
                                             icon: const Icon(Icons.logout, size: 12),
@@ -2021,12 +2023,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               minimumSize: const Size(0, 28),
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                             ),
-                                          ),
+                                          )),
                                         ],
                                       ),
                                     ] else ...[
                                       const SizedBox(height: 10),
-                                      ElevatedButton.icon(
+                                      testId('move_in_btn_${ho.unitId}', ElevatedButton.icon(
                                         key: Key('move_in_btn_${ho.unitId}'),
                                         onPressed: () => _showMoveInDialog(ho),
                                         icon: const Icon(Icons.person_add_alt, size: 13),
@@ -2038,7 +2040,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           minimumSize: const Size(0, 28),
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                         ),
-                                      ),
+                                      )),
                                     ],
                                   ],
                                 ),
@@ -2135,7 +2137,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                               ),
                               const SizedBox(width: 6),
-                              TextButton.icon(
+                              testId('add_resident_to_${ho.unitId}', TextButton.icon(
                                 key: Key('add_resident_to_${ho.unitId}'),
                                 onPressed: () => _showAddHouseholdMemberDialog(ho),
                                 icon: const Icon(Icons.add, size: 14, color: AppColors.accentPurple),
@@ -2145,7 +2147,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   minimumSize: const Size(0, 24),
                                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 ),
-                              ),
+                              )),
                             ],
                           ),
                           if (ho.householdResidents.isNotEmpty) ...[
@@ -2173,23 +2175,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  IconButton(
+                                  testId('edit_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                     key: Key('edit_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                     icon: const Icon(Icons.edit_outlined, size: 14, color: AppColors.accentCyan),
                                     tooltip: '${m.fullName} bilgilerini düzenle',
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
                                     onPressed: () => _showEditHouseholdMemberDialog(ho, m),
-                                  ),
+                                  )),
                                   const SizedBox(width: 6),
-                                  IconButton(
+                                  testId('delete_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                     key: Key('delete_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                     icon: const Icon(Icons.close, size: 14, color: AppColors.accentRed),
                                     tooltip: '${m.fullName} kaydını sil',
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
                                     onPressed: () => _confirmDeleteHouseholdMember(ho, m),
-                                  ),
+                                  )),
                                 ],
                               ),
                             )),
@@ -2210,7 +2212,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               spacing: 8,
               runSpacing: 6,
               children: [
-                OutlinedButton.icon(
+                testId('quick_add_resident_${ho.unitId}', OutlinedButton.icon(
                   key: Key('quick_add_resident_${ho.unitId}'),
                   onPressed: () => _showAddHouseholdMemberDialog(ho),
                   icon: const Icon(Icons.family_restroom, size: 13, color: AppColors.accentPurple),
@@ -2222,8 +2224,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     minimumSize: const Size(0, 30),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                ),
-                OutlinedButton.icon(
+                )),
+                testId('quick_move_in_${ho.unitId}', OutlinedButton.icon(
                   key: Key('quick_move_in_${ho.unitId}'),
                   onPressed: () => _showMoveInDialog(ho),
                   icon: const Icon(Icons.key, size: 13, color: AppColors.accentGreen),
@@ -2242,8 +2244,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     minimumSize: const Size(0, 30),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                ),
-                OutlinedButton.icon(
+                )),
+                testId('module_history_ho_${ho.unitId}', OutlinedButton.icon(
                   key: Key('module_history_ho_${ho.unitId}'),
                   onPressed: () => _showUnitOccupancyHistoryDialog(ho),
                   icon: const Icon(Icons.history, size: 13, color: AppColors.accentCyan),
@@ -2255,8 +2257,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     minimumSize: const Size(0, 30),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                ),
-                OutlinedButton.icon(
+                )),
+                testId('module_iban_ho_${ho.unitId}', OutlinedButton.icon(
                   key: Key('module_iban_ho_${ho.unitId}'),
                   onPressed: () => _showVirtualIbanDetailsDialog(ho),
                   icon: const Icon(Icons.account_balance, size: 13, color: AppColors.accentPurple),
@@ -2268,8 +2270,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     minimumSize: const Size(0, 30),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                ),
-                OutlinedButton.icon(
+                )),
+                testId('transfer_ownership_${ho.unitId}', OutlinedButton.icon(
                   key: Key('transfer_ownership_${ho.unitId}'),
                   onPressed: () => _showTransferOwnershipDialog(ho),
                   icon: const Icon(Icons.real_estate_agent, size: 13, color: Colors.teal),
@@ -2281,8 +2283,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     minimumSize: const Size(0, 30),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                ),
-                OutlinedButton.icon(
+                )),
+                testId('module_delete_ho_${ho.unitId}', OutlinedButton.icon(
                   key: Key('module_delete_ho_${ho.unitId}'),
                   onPressed: () => _confirmDeleteHomeOwner(ho),
                   icon: const Icon(Icons.delete_outline, size: 13, color: AppColors.accentRed),
@@ -2294,7 +2296,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     minimumSize: const Size(0, 30),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                ),
+                )),
               ],
             ),
           ],
@@ -2372,7 +2374,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   )
                 else
-                  ...items.map((h) => Container(
+                  ...items.map((h) => testId('history_item_${h.id}', Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -2442,7 +2444,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ],
                     ),
-                  )),
+                  ))),
               ],
             ),
           );
@@ -2483,7 +2485,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   child: const Text('Vazgeç'),
                 ),
-                FilledButton.icon(
+                testId('btn_confirm_move_out', FilledButton.icon(
                   onPressed: isSaving ? null : () async {
                     setDialogState(() {
                       isSaving = true;
@@ -2531,7 +2533,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
               ],
             ),
             child: Column(
@@ -2617,7 +2619,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   child: const Text('Vazgeç'),
                 ),
-                FilledButton.icon(
+                testId('btn_confirm_move_in', FilledButton.icon(
                   onPressed: isSaving ? null : () async {
                     if (nameCtrl.text.trim().isEmpty || emailCtrl.text.trim().isEmpty) {
                       setDialogState(() {
@@ -2675,7 +2677,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
               ],
             ),
             child: Column(
@@ -2694,29 +2696,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                TextField(
+                testId('move_in_name_field', TextField(
                   controller: nameCtrl,
                   decoration: InputDecoration(
                     labelText: 'Sakin Adı Soyadı *',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
                 const SizedBox(height: 12),
-                TextField(
+                testId('move_in_email_field', TextField(
                   controller: emailCtrl,
                   decoration: InputDecoration(
                     labelText: 'E-posta Adresi *',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
                 const SizedBox(height: 12),
-                TextField(
+                testId('move_in_phone_field', TextField(
                   controller: phoneCtrl,
                   decoration: InputDecoration(
                     labelText: 'Telefon Numarası',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
                 const SizedBox(height: 12),
                 TextField(
                   controller: notesCtrl,
@@ -3008,7 +3010,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   child: const Text('Vazgeç'),
                 ),
-                ElevatedButton(
+                testId('household_save_button', ElevatedButton(
                   key: const Key('household_save_button'),
                   onPressed: isSaving
                       ? null
@@ -3076,7 +3078,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: isSaving
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                       : const Text('Kaydet', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
+                )),
               ],
             ),
             child: SingleChildScrollView(
@@ -3115,7 +3117,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   Text('Ad Soyad *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                   const SizedBox(height: 6),
-                  TextField(
+                  testId('household_name_field', TextField(
                     key: const Key('household_name_field'),
                     controller: nameCtrl,
                     decoration: InputDecoration(
@@ -3124,7 +3126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 14),
                   Text('Yakınlık Derecesi / Rol', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                   const SizedBox(height: 6),
@@ -3144,7 +3146,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 14),
                   Text('Telefon Numarası', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                   const SizedBox(height: 6),
-                  TextField(
+                  testId('household_phone_field', TextField(
                     key: const Key('household_phone_field'),
                     controller: phoneCtrl,
                     keyboardType: TextInputType.phone,
@@ -3153,11 +3155,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 14),
                   Text('E-posta Adresi', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                   const SizedBox(height: 6),
-                  TextField(
+                  testId('household_email_field', TextField(
                     key: const Key('household_email_field'),
                     controller: emailCtrl,
                     keyboardType: TextInputType.emailAddress,
@@ -3166,7 +3168,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
-                  ),
+                  )),
                 ],
               ),
             ),
@@ -3262,7 +3264,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
-                      child: ElevatedButton.icon(
+                      child: testId('remove_tenant_only_button', ElevatedButton.icon(
                         key: const Key('remove_tenant_only_button'),
                         onPressed: () async {
                           Navigator.pop(ctx);
@@ -3299,7 +3301,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                      ),
+                      )),
                     ),
                   ],
                 ),
@@ -3355,7 +3357,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
-                      child: OutlinedButton.icon(
+                      child: testId('delete_entire_home_owner_button', OutlinedButton.icon(
                         key: const Key('delete_entire_home_owner_button'),
                         onPressed: () async {
                           Navigator.pop(ctx);
@@ -3388,7 +3390,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                      ),
+                      )),
                     ),
                   ],
                 ),
@@ -3543,7 +3545,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             bottomBar: AppFullscreenPage.buildBottomBar(
               context: ctx,
               children: [
-                OutlinedButton.icon(
+                testId('edit_ho_delete_button', OutlinedButton.icon(
                   key: const Key('edit_ho_delete_button'),
                   onPressed: isSaving ? null : () => _confirmDeleteHomeOwner(resident, parentCtx: ctx),
                   icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.accentRed),
@@ -3553,7 +3555,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ),
+                )),
                 OutlinedButton(
                   onPressed: isSaving ? null : () => Navigator.pop(ctx),
                   style: OutlinedButton.styleFrom(
@@ -3772,7 +3774,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: InkWell(
+                            child: testId('dialog_tab_residents', InkWell(
                               key: const Key('dialog_tab_residents'),
                               onTap: () => setDialogState(() => activeDialogTab = 0),
                               borderRadius: BorderRadius.circular(8),
@@ -3799,11 +3801,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ],
                                 ),
                               ),
-                            ),
+                            )),
                           ),
                           const SizedBox(width: 4),
                           Expanded(
-                            child: InkWell(
+                            child: testId('dialog_tab_owner', InkWell(
                               key: const Key('dialog_tab_owner'),
                               onTap: () => setDialogState(() => activeDialogTab = 1),
                               borderRadius: BorderRadius.circular(8),
@@ -3830,11 +3832,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ],
                                 ),
                               ),
-                            ),
+                            )),
                           ),
                           const SizedBox(width: 4),
                           Expanded(
-                            child: InkWell(
+                            child: testId('dialog_tab_all', InkWell(
                               key: const Key('dialog_tab_all'),
                               onTap: () => setDialogState(() => activeDialogTab = 2),
                               borderRadius: BorderRadius.circular(8),
@@ -3861,7 +3863,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ],
                                 ),
                               ),
-                            ),
+                            )),
                           ),
                         ],
                       ),
@@ -3921,7 +3923,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const SizedBox(height: 12),
                             Text('Kiracı Ad Soyad *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                             const SizedBox(height: 6),
-                            TextField(
+                            testId('tenant_name_field', TextField(
                               key: const Key('tenant_name_field'),
                               controller: tenantNameCtrl,
                               decoration: InputDecoration(
@@ -3930,11 +3932,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               ),
-                            ),
+                            )),
                             const SizedBox(height: 12),
                             Text('Kiracı Telefon Numarası *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                             const SizedBox(height: 6),
-                            TextField(
+                            testId('tenant_phone_field', TextField(
                               key: const Key('tenant_phone_field'),
                               controller: tenantPhoneCtrl,
                               keyboardType: TextInputType.phone,
@@ -3944,11 +3946,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               ),
-                            ),
+                            )),
                             const SizedBox(height: 12),
                             Text('Kiracı E-posta Adresi *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                             const SizedBox(height: 6),
-                            TextField(
+                            testId('tenant_email_field', TextField(
                               key: const Key('tenant_email_field'),
                               controller: tenantEmailCtrl,
                               keyboardType: TextInputType.emailAddress,
@@ -3958,7 +3960,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               ),
-                            ),
+                            )),
                             const SizedBox(height: 12),
                             Align(
                               alignment: Alignment.centerRight,
@@ -4014,7 +4016,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         ),
                                       ),
                                     ),
-                                    ElevatedButton.icon(
+                                    testId('dialog_add_household_member', ElevatedButton.icon(
                                       key: const Key('dialog_add_household_member'),
                                       onPressed: () {
                                         _showAddHouseholdMemberDialog(currentHo);
@@ -4029,7 +4031,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         minimumSize: const Size(0, 32),
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                       ),
-                                    ),
+                                    )),
                                   ],
                                 ),
                                 const SizedBox(height: 12),
@@ -4061,7 +4063,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             ],
                                           ),
                                         ),
-                                        IconButton(
+                                        testId('dialog_edit_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                           key: Key('dialog_edit_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                           icon: const Icon(Icons.edit_outlined, size: 16, color: AppColors.accentCyan),
                                           tooltip: 'Düzenle',
@@ -4069,8 +4071,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             _showEditHouseholdMemberDialog(currentHo, m);
                                             setDialogState(() {});
                                           },
-                                        ),
-                                        IconButton(
+                                        )),
+                                        testId('dialog_delete_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                           key: Key('dialog_delete_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                           icon: const Icon(Icons.close, size: 16, color: AppColors.accentRed),
                                           tooltip: 'Sil',
@@ -4078,7 +4080,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             _confirmDeleteHouseholdMember(currentHo, m);
                                             setDialogState(() {});
                                           },
-                                        ),
+                                        )),
                                       ],
                                     ),
                                   )),
@@ -4157,7 +4159,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const SizedBox(height: 12),
                             Text('Ev Sahibi Ad Soyad *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                             const SizedBox(height: 6),
-                            TextField(
+                            testId('owner_name_field', TextField(
                               key: const Key('owner_name_field'),
                               controller: ownerNameCtrl,
                               decoration: InputDecoration(
@@ -4166,11 +4168,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               ),
-                            ),
+                            )),
                             const SizedBox(height: 12),
                             Text('Ev Sahibi Telefon Numarası *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                             const SizedBox(height: 6),
-                            TextField(
+                            testId('owner_phone_field', TextField(
                               key: const Key('owner_phone_field'),
                               controller: ownerPhoneCtrl,
                               keyboardType: TextInputType.phone,
@@ -4180,11 +4182,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               ),
-                            ),
+                            )),
                             const SizedBox(height: 12),
                             Text('Ev Sahibi E-posta Adresi *', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                             const SizedBox(height: 6),
-                            TextField(
+                            testId('owner_email_field', TextField(
                               key: const Key('owner_email_field'),
                               controller: ownerEmailCtrl,
                               keyboardType: TextInputType.emailAddress,
@@ -4194,7 +4196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               ),
-                            ),
+                            )),
                           ],
                         ),
                       ),
@@ -4284,7 +4286,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       ),
                                     ),
                                   ),
-                                  ElevatedButton.icon(
+                                  testId('dialog_add_household_member', ElevatedButton.icon(
                                     key: const Key('dialog_add_household_member'),
                                     onPressed: () {
                                       _showAddHouseholdMemberDialog(currentHo);
@@ -4299,7 +4301,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       minimumSize: const Size(0, 32),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
-                                  ),
+                                  )),
                                 ],
                               ),
                               const SizedBox(height: 12),
@@ -4331,7 +4333,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           ],
                                         ),
                                       ),
-                                      IconButton(
+                                      testId('dialog_edit_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                         key: Key('dialog_edit_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                         icon: const Icon(Icons.edit_outlined, size: 16, color: AppColors.accentCyan),
                                         tooltip: 'Düzenle',
@@ -4339,8 +4341,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           _showEditHouseholdMemberDialog(currentHo, m);
                                           setDialogState(() {});
                                         },
-                                      ),
-                                      IconButton(
+                                      )),
+                                      testId('dialog_delete_member_${m.id.isNotEmpty ? m.id : m.fullName}', IconButton(
                                         key: Key('dialog_delete_member_${m.id.isNotEmpty ? m.id : m.fullName}'),
                                         icon: const Icon(Icons.close, size: 16, color: AppColors.accentRed),
                                         tooltip: 'Sil',
@@ -4348,7 +4350,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           _confirmDeleteHouseholdMember(currentHo, m);
                                           setDialogState(() {});
                                         },
-                                      ),
+                                      )),
                                     ],
                                   ),
                                 )),
@@ -4403,7 +4405,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          ElevatedButton.icon(
+                          testId('dialog_move_in_btn', ElevatedButton.icon(
                             key: const Key('dialog_move_in_btn'),
                             onPressed: () {
                               Navigator.pop(ctx);
@@ -4421,7 +4423,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               minimumSize: const Size(0, 32),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                          ),
+                          )),
                         ],
                       ),
                     ),
@@ -4625,7 +4627,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               return Column(
                 children: [
-                  InkWell(
+                  testId('ledger_row_$index', InkWell(
                     onTap: item.isCredit ? () => _showSingleReceiptDetailDialog(item) : null,
                     borderRadius: BorderRadius.circular(12),
                     child: Padding(
@@ -4693,7 +4695,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ),
                     ),
-                  ),
+                  )),
                   if (index < transactions.length - 1)
                     Divider(
                       height: 1,
@@ -4754,7 +4756,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    ElevatedButton.icon(
+                    testId('btn_manual_add_resident', ElevatedButton.icon(
                       key: const Key('btn_manual_add_resident'),
                       onPressed: () => _showAddHouseholdMemberDialog(),
                       icon: const Icon(Icons.person_add_alt_1, size: 13, color: Colors.white),
@@ -4769,9 +4771,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                    ),
+                    )),
                     const SizedBox(width: 6),
-                    OutlinedButton.icon(
+                    testId('btn_invite_resident_link', OutlinedButton.icon(
                       key: const Key('btn_invite_resident_link'),
                       onPressed: () => widget.controller.generateUnitInviteLink(),
                       icon: const Icon(Icons.share, size: 13, color: AppColors.accentOrange),
@@ -4786,7 +4788,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                    ),
+                    )),
                   ],
                 ),
             ],
@@ -4870,14 +4872,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         if (!r.isOwner && isHomeUser) ...[
                           const SizedBox(width: 4),
-                          IconButton(
+                          testId('btn_delete_resident_${r.id}', IconButton(
                             key: Key('btn_delete_resident_${r.id}'),
                             icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.accentRed),
                             tooltip: 'Sakini Sil',
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
                             onPressed: () => _confirmDeleteHouseholdResident(r),
-                          ),
+                          )),
                         ],
                       ],
                     ),
@@ -4902,7 +4904,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Vazgeç'),
           ),
-          ElevatedButton(
+          testId('btn_confirm_delete_resident', ElevatedButton(
             key: const Key('btn_confirm_delete_resident'),
             onPressed: () async {
               Navigator.pop(ctx);
@@ -4918,7 +4920,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentRed),
             child: const Text('Sil', style: TextStyle(color: Colors.white)),
-          ),
+          )),
         ],
       ),
     );
@@ -5286,7 +5288,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Text('• Son Ödeme Tarihi: ${dues.sonOdemeTarihi.day.toString().padLeft(2, '0')}.${dues.sonOdemeTarihi.month.toString().padLeft(2, '0')}.${dues.sonOdemeTarihi.year}', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
                     if (dues.gecikmeTazminati > Decimal.zero) ...[
                       const SizedBox(height: 8),
-                      Text('• Gecikme Durumu: ${dues.gecikenGunSayisi} Gün Gecikme', style: const TextStyle(color: AppColors.accentRed, fontSize: 13, fontWeight: FontWeight.w500)),
+                      testId('penalty_days', Text('• Gecikme Durumu: ${dues.gecikenGunSayisi} Gün Gecikme', style: const TextStyle(color: AppColors.accentRed, fontSize: 13, fontWeight: FontWeight.w500))),
                       const SizedBox(height: 8),
                       Text('• Aylık Yasal Gecikme Oranı: %5 (KMK Madde 20/c)', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13)),
                       const SizedBox(height: 14),
@@ -5298,10 +5300,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: AppColors.accentRed.withValues(alpha: 0.2)),
                         ),
-                        child: Text(
+                        child: testId('penalty_formula', Text(
                           '• Gecikme Tazminatı: (${dues.anaPara.toStringAsFixed(0)} * 0.05 / 30) * ${dues.gecikenGunSayisi} = ₺${dues.gecikmeTazminati.toStringAsFixed(2)}',
                           style: const TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold, fontSize: 12.5),
-                        ),
+                        )),
                       ),
                     ],
                     const SizedBox(height: 14),
@@ -5532,14 +5534,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Center(
                 child: Column(
                   children: [
-                    Text(
+                    testId('home_receipt_amount', Text(
                       tx.amountStr,
                       style: const TextStyle(
                         color: AppColors.accentGreen,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
-                    ),
+                    )),
                     const SizedBox(height: 4),
                     Text(
                       tx.title,
@@ -5555,7 +5557,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 18),
               Divider(color: AppColors.border(context)),
               const SizedBox(height: 12),
-              _buildReceiptRow('İşlem / Makbuz No:', tx.id),
+              testId('home_receipt_number', _buildReceiptRow('İşlem / Makbuz No:', tx.id)),
               const SizedBox(height: 8),
               _buildReceiptRow('İşlem Tarihi:', tx.date),
               const SizedBox(height: 8),
@@ -5870,7 +5872,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            OutlinedButton(
+            testId('btn_copy_invite_link', OutlinedButton(
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: invite.inviteUrl));
                 Navigator.pop(ctx);
@@ -5884,7 +5886,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Linki Kopyala', style: TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.w600)),
-            ),
+            )),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
@@ -5908,10 +5910,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.border(context)),
               ),
-              child: SelectableText(
+              child: testId('invite_link_text', SelectableText(
                 invite.inviteUrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontFamily: 'monospace'),
-              ),
+              ), label: invite.inviteUrl),
             ),
             const SizedBox(height: 14),
             Container(
@@ -5927,10 +5929,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const Icon(Icons.shield_outlined, size: 18, color: AppColors.accentOrange),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
+                    child: testId('invite_security_notice', Text(
                       invite.securityNotice,
                       style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, height: 1.4),
-                    ),
+                    )),
                   ),
                 ],
               ),
@@ -5958,7 +5960,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            ElevatedButton(
+            testId('btn_close_approval_dialog', ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accentGreen,
@@ -5967,7 +5969,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
+            )),
           ],
         ),
         child: Column(
@@ -5985,10 +5987,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.accentGreen),
               ),
-              child: SelectableText(
+              child: testId('approval_credentials_password', SelectableText(
                 info.temporaryPassword,
                 style: const TextStyle(color: AppColors.accentGreen, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
-              ),
+              ), label: info.temporaryPassword),
             ),
             const SizedBox(height: 14),
             Text('Şifre ve giriş linki ${info.email} adresine SMS ve e-posta olarak iletildi.', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, height: 1.4)),
@@ -6021,7 +6023,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            ElevatedButton(
+            testId('btn_close_site_credentials', ElevatedButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 widget.controller.fetchSaasSites();
@@ -6033,7 +6035,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
+            )),
           ],
         ),
         child: Column(
@@ -6051,10 +6053,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppColors.accentCyan),
               ),
-              child: SelectableText(
+              child: testId('site_credentials_password', SelectableText(
                 creds.temporaryPassword,
                 style: const TextStyle(color: AppColors.accentCyan, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
-              ),
+              ), label: creds.temporaryPassword),
             ),
           ],
         ),
@@ -6079,7 +6081,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            ElevatedButton(
+            testId('btn_close_resident_provisioned', ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accentGreen,
@@ -6088,7 +6090,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
+            )),
           ],
         ),
         child: Column(
@@ -6207,7 +6209,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
                 ),
-                ElevatedButton(
+                testId('btn_save_new_resident', ElevatedButton(
                   onPressed: () async {
                     setDialogState(() {
                       emailError = null;
@@ -6392,7 +6394,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text('Kaydet & Şifre Üret', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
+                )),
               ],
             ),
             child: SingleChildScrollView(
@@ -6471,7 +6473,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           children: [
                             Expanded(
                               flex: 5,
-                              child: DropdownButtonFormField<String>(
+                              child: testId('add_resident_block_dropdown', DropdownButtonFormField<String>(
                                 key: const Key('add_resident_block_dropdown'),
                                 value: currentBlocks.contains(selectedBlock) ? selectedBlock : (currentBlocks.isNotEmpty ? currentBlocks.first : null),
                                 dropdownColor: AppColors.card(context),
@@ -6499,7 +6501,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     });
                                   }
                                 },
-                              ),
+                              )),
                             ),
                             const SizedBox(width: 4),
                             IconButton(
@@ -6552,7 +6554,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             // Daire No (MUST BE TextField at index 0 in the dialog for test compatibility)
                             Expanded(
                               flex: 4,
-                              child: TextField(
+                              child: testId('add_resident_unit_field', TextField(
                                 controller: unitCtrl,
                                 keyboardType: TextInputType.number,
                                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
@@ -6566,7 +6568,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   fillColor: AppColors.surface(context),
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                 ),
-                              ),
+                              )),
                             ),
                           ],
                         ),
@@ -6680,7 +6682,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         // Role Selector
                         SizedBox(
                           width: double.infinity,
-                          child: SegmentedButton<String>(
+                          child: testId('add_resident_role_selector', SegmentedButton<String>(
                             key: const Key('add_resident_role_selector'),
                             segments: const [
                               ButtonSegment<String>(
@@ -6708,7 +6710,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 }
                               });
                             },
-                          ),
+                          )),
                         ),
                         const SizedBox(height: 12),
 
@@ -6716,7 +6718,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         if (selectedRole == 'OWNER') ...[
                           Material(
                             color: Colors.transparent,
-                            child: SwitchListTile(
+                            child: testId('add_resident_is_resident_switch', SwitchListTile(
                               key: const Key('add_resident_is_resident_switch'),
                               contentPadding: EdgeInsets.zero,
                               dense: true,
@@ -6737,7 +6739,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   isResidentOwner = val;
                                 });
                               },
-                            ),
+                            )),
                           ),
                           if (isResidentOwner) ...[
                             const SizedBox(height: 6),
@@ -6857,7 +6859,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(height: 12),
 
                         // Person Fields (MUST maintain order: nameCtrl = 1, emailCtrl = 2, phoneCtrl = 3)
-                        TextField(
+                        testId('add_resident_name_field', TextField(
                           controller: nameCtrl,
                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                           decoration: InputDecoration(
@@ -6876,9 +6878,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             fillColor: AppColors.surface(context),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                        ),
+                        )),
                         const SizedBox(height: 12),
-                        TextField(
+                        testId('add_resident_email_field', TextField(
                           controller: emailCtrl,
                           keyboardType: TextInputType.emailAddress,
                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -6892,9 +6894,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             fillColor: AppColors.surface(context),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                        ),
+                        )),
                         const SizedBox(height: 12),
-                        TextField(
+                        testId('add_resident_phone_field', TextField(
                           controller: phoneCtrl,
                           keyboardType: TextInputType.phone,
                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -6908,7 +6910,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             fillColor: AppColors.surface(context),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                        ),
+                        )),
 
                         // Extra option for Ev Sakini: Relationship selector
                         if (selectedRole == 'RESIDENT') ...[
@@ -7119,7 +7121,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            OutlinedButton.icon(
+                            testId('add_co_resident_btn', OutlinedButton.icon(
                               key: const Key('add_co_resident_btn'),
                               icon: const Icon(Icons.person_add_alt_1, size: 14, color: AppColors.accentCyan),
                               label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.accentCyan)),
@@ -7134,7 +7136,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 side: const BorderSide(color: AppColors.accentCyan),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
-                            ),
+                            )),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -7465,7 +7467,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
                   child: const Text('Vazgeç'),
                 ),
-                ElevatedButton(
+                testId('module_confirm_transfer_ownership_btn', ElevatedButton(
                   key: const Key('module_confirm_transfer_ownership_btn'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal,
@@ -7515,7 +7517,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: isSubmitting
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                       : const Text('Tapu Devrini Onayla'),
-                ),
+                )),
               ],
             ),
             child: SingleChildScrollView(
@@ -7561,7 +7563,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: TextStyle(color: AppColors.textPrimary(ctx), fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
+                  testId('module_transfer_new_owner_name_input', TextField(
                     key: const Key('module_transfer_new_owner_name_input'),
                     controller: nameCtrl,
                     decoration: const InputDecoration(
@@ -7569,9 +7571,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       prefixIcon: Icon(Icons.person, size: 18),
                       border: OutlineInputBorder(),
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 12),
-                  TextField(
+                  testId('module_transfer_new_owner_phone_input', TextField(
                     key: const Key('module_transfer_new_owner_phone_input'),
                     controller: phoneCtrl,
                     keyboardType: TextInputType.phone,
@@ -7580,9 +7582,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       prefixIcon: Icon(Icons.phone, size: 18),
                       border: OutlineInputBorder(),
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 12),
-                  TextField(
+                  testId('module_transfer_new_owner_email_input', TextField(
                     key: const Key('module_transfer_new_owner_email_input'),
                     controller: emailCtrl,
                     keyboardType: TextInputType.emailAddress,
@@ -7591,9 +7593,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       prefixIcon: Icon(Icons.email, size: 18),
                       border: OutlineInputBorder(),
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 12),
-                  TextField(
+                  testId('module_transfer_notes_input', TextField(
                     key: const Key('module_transfer_notes_input'),
                     controller: notesCtrl,
                     maxLines: 3,
@@ -7602,7 +7604,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       prefixIcon: Icon(Icons.note_alt_outlined, size: 18),
                       border: OutlineInputBorder(),
                     ),
-                  ),
+                  )),
                 ],
               ),
             ),
@@ -7694,7 +7696,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
-              ElevatedButton(
+              testId('btn_save_new_site', ElevatedButton(
                 key: const Key('btn_save_new_site'),
                 onPressed: isSaving
                     ? null
@@ -7790,7 +7792,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
                     : const Text('Siteyi Kaydet & Yetkilendir', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
+              )),
             ],
           ),
           child: Column(
@@ -7820,7 +7822,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ],
-              TextField(
+              testId('add_site_name_field', TextField(
                 controller: nameCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
@@ -7830,9 +7832,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('add_site_city_field', TextField(
                 controller: cityCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
@@ -7842,9 +7844,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('add_site_address_field', TextField(
                 controller: addressCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
@@ -7854,9 +7856,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('add_site_blocks_field', TextField(
                 key: const Key('add_site_blocks_field'),
                 controller: blocksCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -7870,9 +7872,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   prefixIcon: const Icon(Icons.domain, size: 20, color: AppColors.accentCyan),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('add_site_admin_name_field', TextField(
                 controller: adminNameCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
@@ -7882,9 +7884,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('add_site_admin_email_field', TextField(
                 controller: adminEmailCtrl,
                 keyboardType: TextInputType.emailAddress,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -7897,9 +7899,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('add_site_admin_phone_field', TextField(
                 controller: adminPhoneCtrl,
                 keyboardType: TextInputType.phone,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -7910,7 +7912,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
             ],
           ),
         ),
@@ -7955,7 +7957,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
-              ElevatedButton(
+              testId('btn_save_site_edit', ElevatedButton(
                 key: const Key('btn_save_site_edit'),
                 onPressed: () async {
                   final siteName = nameCtrl.text.trim();
@@ -7992,12 +7994,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: const Text('Değişiklikleri Kaydet', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
+              )),
             ],
           ),
           child: Column(
             children: [
-              TextField(
+              testId('edit_site_name_field', TextField(
                 key: const Key('edit_site_name_field'),
                 controller: nameCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -8008,7 +8010,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -8061,7 +8063,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              TextField(
+              testId('edit_site_city_field', TextField(
                 key: const Key('edit_site_city_field'),
                 controller: cityCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -8072,9 +8074,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('edit_site_address_field', TextField(
                 key: const Key('edit_site_address_field'),
                 controller: addressCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -8085,9 +8087,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('edit_site_blocks_field', TextField(
                 key: const Key('edit_site_blocks_field'),
                 controller: blocksCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -8101,9 +8103,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   prefixIcon: const Icon(Icons.domain, size: 20, color: AppColors.accentGreen),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('edit_site_admin_name_field', TextField(
                 key: const Key('edit_site_admin_name_field'),
                 controller: adminNameCtrl,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -8114,9 +8116,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('edit_site_admin_email_field', TextField(
                 key: const Key('edit_site_admin_email_field'),
                 controller: adminEmailCtrl,
                 keyboardType: TextInputType.emailAddress,
@@ -8128,9 +8130,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('edit_site_admin_phone_field', TextField(
                 key: const Key('edit_site_admin_phone_field'),
                 controller: adminPhoneCtrl,
                 keyboardType: TextInputType.phone,
@@ -8142,7 +8144,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
             ],
           ),
         ),
@@ -8168,7 +8170,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           bottomBar: AppFullscreenPage.buildBottomBar(
             context: ctx,
             children: [
-              ElevatedButton(
+              testId('btn_ack_delete_blocked', ElevatedButton(
                 onPressed: () => Navigator.pop(ctx),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accentCyan,
@@ -8177,7 +8179,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: const Text('Anladım', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
+              )),
             ],
           ),
           child: Text(
@@ -8230,7 +8232,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildMustChangePasswordBanner() {
-    return Container(
+    return testId('banner_must_change_password', Container(
       key: const Key('banner_must_change_password'),
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(12),
@@ -8259,7 +8261,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          ElevatedButton(
+          testId('btn_open_change_password', ElevatedButton(
             key: const Key('btn_open_change_password'),
             onPressed: _showChangePasswordDialog,
             style: ElevatedButton.styleFrom(
@@ -8269,10 +8271,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('Şifre Değiştir', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-          ),
+          )),
         ],
       ),
-    );
+    ));
   }
 
   void _showChangePasswordDialog() {
@@ -8308,7 +8310,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Text('İptal', style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
               ),
-              ElevatedButton(
+              testId('btn_submit_change_password', ElevatedButton(
                 onPressed: isSubmitting
                     ? null
                     : () async {
@@ -8373,7 +8375,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: Text(isSubmitting ? 'Kaydediliyor...' : 'Şifreyi Güncelle', style: const TextStyle(fontWeight: FontWeight.bold)),
-              ),
+              )),
             ],
           ),
           child: Column(
@@ -8415,7 +8417,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              TextField(
+              testId('change_password_current', TextField(
                 controller: currentPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -8426,9 +8428,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('change_password_new', TextField(
                 controller: newPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -8439,9 +8441,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('change_password_confirm', TextField(
                 controller: confirmPassCtrl,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -8452,7 +8454,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fillColor: AppColors.card(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
+              )),
             ],
           ),
         ),

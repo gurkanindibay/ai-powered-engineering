@@ -1,0 +1,116 @@
+# SitePulse GUI Automation: Plan to Build the Test Plan and Browser Test Suite
+
+Status: v2. Phases 0–4 are done (all 83 scenarios automated; X-03 zero-data guidance is covered by GUI-03-03). Open: CI runner for the gui-e2e gate. Facts were checked against the code on 2026-11-07.
+
+**Goal:** a written GUI test plan, plus an automated suite that opens a real browser, logs in as each role and runs every user-facing scenario in the epics against the real backend and database.
+
+## 1. Verified starting point
+
+| Fact | Where it comes from | What it means for the plan |
+|---|---|---|
+| Flutter **3.47.5** (stable) | `flutter --version` | `Semantics(identifier: ...)` is supported and is rendered as a `flt-semantics-identifier` DOM attribute. Stable selectors are possible. |
+| The web client draws to a canvas | Flutter web default | Without semantics turned on, the browser sees no buttons. The app must enable semantics in a test build. |
+| About 160 `Key('...')` ids exist, mostly in `dashboard_screen.dart`, `owners_residents_module_page.dart` and `capital_projects_view.dart` | grep of `flutter/lib/ui` | These are reused as the naming scheme. Nothing new is invented. |
+| The UI text is Turkish, e.g. "Eylül 2026" | handlers and seed data | Tests target ids, never visible text. Text is only checked where a scenario asserts it. |
+| Seed users exist when `SITEPULSE_SEED_TEST_DATA=true` | `backend/src/state.rs` | Manager `mehmet.demir@begonya.com`, homeowner `ahmet.yilmaz@begonya.com`, SaaS admin `admin@sitepulse.io` (bootstrap password, `must_change_password: true`). Pending registration: `kerem.yilmaz@gmail.com`. |
+| A reseed endpoint exists | `backend/src/app.rs:219`, `POST /api/v1/system/seed-test-fixtures` (refused in production) | Each test module can reset to known data without restarting the stack. |
+| The login screen has separate homeowner and manager panels and prefills test passwords in test mode | `login_screen.dart:67-108` | Login tests must clear the prefilled fields first, so the result never depends on prefill. |
+| `playwright` and `pytest` are **not installed**. Google Chrome is at `/usr/bin/google-chrome`. | local check | Add `e2e/requirements.txt` and a virtualenv. Run with `channel="chrome"` locally and bundled Chromium in CI. |
+| About 128 acceptance criteria across 10 epics (EPIC-05 is backend only) | `.specify/requirements/` | Expect roughly 90–110 GUI scenarios once backend-only criteria are removed. |
+
+## 2. Tool choice
+
+**Playwright (Python) driving the Flutter web build through the semantics tree.** It runs a real browser against the real backend, records a trace, video and screenshot when a test fails, and follows the AGENTS.md rule to prefer Python. Flutter `integration_test` with chromedriver stays a fallback for widgets that can't be reached through semantics, such as custom painters.
+
+For tests, build the app with `flutter build web --dart-define=E2E=true --dart-define=SITEPULSE_API_BASE_URL=http://localhost:8080` and serve it as static files. Release builds refuse to start without the API URL, by design. Don't use the `flutter run` dev server: it starts slower and changes with hot-reload state.
+
+## 3. Phases
+
+### Phase 0: Scenario catalogue (`docs/GUI_TEST_PLAN.md`)
+1. For each epic except EPIC-05, turn every Given/When/Then criterion with a visible UI effect into a scenario.
+2. Cross-check against the screens: login, dashboard and manager cockpit, dues management, payment tracking, bank reconciliation, manual unit assignment, residents and owners module, capital projects, SaaS admin, profile and role sheet, house types, checkout dialog, virtual IBAN card.
+3. Each scenario records: id `GUI-<EPIC>-<NN>`, role, story id, preconditions and seed data, steps, expected UI result, an optional database check (`scripts/db_verify.py query-json`), and a priority (P0 smoke, P1 core, P2 edge).
+4. Add a coverage table: each acceptance criterion is mapped to a GUI scenario, or marked "covered by unit/API test" with a reason.
+
+**Exit check:** every story in `COMPLETION_STATUS.md` has at least one GUI scenario or a written exclusion.
+
+### Phase 1: Make the app testable (small Flutter changes) — ✅ DONE 2026-11-07 (results in GUI_TEST_PLAN.md §6)
+- Add `lib/testing/test_id.dart`: `Widget testId(String id, Widget child)` wraps the child in `Semantics(identifier: id)`.
+- In `main.dart`, when `const bool.fromEnvironment('E2E')` is true, call `SemanticsBinding.instance.ensureSemantics()`. This never affects production builds.
+- Wrap every element a scenario touches (existing `Key`s first) using the same id string. Commit screen by screen; `dashboard_screen.dart` is 8.5k lines, so keep those diffs small.
+- **Exit check:** a short Playwright probe finds `login_*` ids and dashboard ids after login.
+
+### Phase 2: Framework scaffold (`apps/development-time/SitePulse/e2e/`) — ✅ DONE 2026-11-07
+
+**Result:** 12 P0 smoke tests (11 pass, 1 strict xfail for a confirmed backend bug), about 60 s for the whole run including stack start, stable across consecutive runs. As built:
+- `support/stack.py` reuses `scripts/api_system_check.py` (`Psql`, `Backend`). Throwaway database `sitepulse_e2e_<pid>`; release backend on :8180 with test-only secrets and a known bootstrap admin password; web bundle served in-process on :9190. Reset = truncate + system/test seed + backend restart (about 1 s), **before every test**.
+- `conftest.py`: session stack, per-test reset, `login_as(role)`, a page guard (fails on page errors and 5xx; 4xx recorded as `client_errors` in the JUnit properties).
+- `pages/`: login, shell (bottom navigation located by label, since `BottomNavigationBarItem` can't carry an id), resident home, manager (cockpit, residents tab, add-resident form, dues segments), SaaS admin.
+- Runner `scripts/gui_e2e.py` (`run` / `serve` / `build`, `--json`, `--headed`, `-m`, `-k`, `--browser`, `--env-file`).
+- Arrange steps that the API can't express (an already-overdue liability) write SQL and restart the backend; they're marked "SQL arrange" in `support/api.py`.
+
+**Findings while building it** (the tests report them, they don't hide them):
+1. `/api/v1/saas/stats` returns placeholders (`total_units = sites × 20`, volume = `80000 × sites`), `services/saas_tenant_service.rs:377`. Test `test_portfolio_stats_agree_with_site_list` is a strict xfail.
+2. The resident dashboard's `site_title` shows the block's id where its name should be ("Begonya Sitesi • 1 Blok D:14" instead of "A Blok"). Seen in the API on master `8d0d1d3`; no test yet.
+3. The client calls `/api/v1/saas/sites` from the login screen before authentication (401), and the homeowner dashboard calls manager-only endpoints `site-admin/overview` and `site-admin/home-owners` (403).
+4. The root `.gitignore` rule `**/bin/` keeps `backend/src/bin/hash_password.rs` out of git while `Cargo.toml` declares it, so `api_system_check.py` (and its gate in `run_tests.py`) can't build on a fresh clone or worktree.
+
+The original Phase 2 design follows, kept for reference:
+```
+e2e/
+  requirements.txt     # playwright, pytest, pytest-playwright, pytest-html (versions pinned)
+  conftest.py          # stack check, reseed per module, browser context, login fixtures per role
+  support/flutter.py   # by_id(page, id) -> locator('[flt-semantics-identifier="..."]'), wait for first frame
+  support/money.py     # parse "₺1.400,00" into Decimal (never float)
+  support/api.py       # reseed and read-back helpers for the backend
+  pages/               # LoginPage, CockpitPage, DuesPage, PaymentTrackingPage, ReconciliationPage,
+                       #   UnitAssignmentPage, ResidentsPage, CapitalProjectsPage, SaasAdminPage, ProfileSheet
+  tests/test_epic01_*.py ... test_epic10_*.py, test_cross_cutting.py
+  fixtures/bank/       # sample statement files for upload tests
+```
+- Markers: `smoke`, `core`, `edge`, `role_homeowner`, `role_manager`, `role_saas`.
+- Reports: JUnit XML, an HTML report, and Playwright traces/videos for failed tests, written to `e2e/.artifacts/` (gitignored).
+- Runner `scripts/gui_e2e.py` (Python, `--help`, `--json`) with `--build` (build the E2E web bundle), `--serve`, `--browser chrome|chromium|firefox|webkit`, `--headed`, `--marker`, `--base-url`, `--api-url`, `--skip-stack`. It checks `:8080/health` and the web port before running.
+
+### Phase 3: Scenarios (P0 first, then P1, then P2) — P0 ✅ DONE 2026-11-07 (19 pass, 4 strict xfail; GUI_TEST_PLAN.md §8); P1 ✅ 46/46 (26 pass, 28 strict xfail; §9); P2 ✅ 16/16 (8 pass, 8 strict xfail; §10)
+| Epic | Example scenarios |
+|---|---|
+| EPIC-06 Auth | Login per role; wrong password shows `login_error_banner`; clear login cache; SaaS admin forced password change on first login; change password from the profile sheet; logout; role switch |
+| EPIC-01 Resident dues | Hero balance card amount matches the API; dues breakdown; virtual IBAN card; checkout dialog; delay penalty (5% monthly) shown correctly |
+| EPIC-02 Manager | Cockpit tiles; `btn_open_unified_dues_center`; segment tabs; house types and tariff modal with validation errors |
+| EPIC-03 SaaS | Portfolio list; `btn_edit_site_*`; onboarding a new site, then logging in with the issued temporary credentials |
+| EPIC-04 Invitations | Pending registration (Kerem Yılmaz) is approved or rejected by the manager, and the queue updates |
+| EPIC-07 Bank | Upload a statement (`btn_stream_upload_bank_statement`); auto-matches; `banner_unmatched_bank_transactions` and resolve; manual unit assignment; matching criteria card |
+| EPIC-08 Occupancy | Owner/tenant move-in and move-out; directory edit; ledger split across both ledgers |
+| EPIC-09 Payments | Aging buckets; filters; `action_open_bank_reconciliation` link |
+| EPIC-10 Capex | Create a project; fixture dues allocation; project view (reuse `TEST_PLAN_EPIC_10_CAPITAL_EXPENDITURE.md`) |
+| Cross-cutting | Dark/light theme; zero-data guidance; 375px mobile smoke test; no uncaught console errors |
+
+Rule for money: every amount shown on screen is parsed to `Decimal` and, for P0/P1, compared with the API or database value.
+
+### Phase 4: Wiring it into the repo — ✅ DONE 2026-11-07
+- **`gui-e2e` gate** in `scripts/run_tests.py` (and `harness/loop/verification_gates.py`): runs `scripts/gui_e2e.py run --json`; any failure, setup error or unexpected XPASS fails it. `--skip-gui` (or `--skip-db`, since it needs PostgreSQL) reports it as SKIPPED, never as passed.
+- **`testid-lint` gate**: `scripts/testid_lint.py` fails when a `Key('<id>')` under `flutter/lib/ui` has no `testId('<id>', ...)`. Unwrappable constructors are skipped; state-only keys carry `// testid-lint: ignore`. Self-tests: `harness/tests/test_testid_lint.py`.
+- **Traceability**: each test records its `gui_ids` in the JUnit report (`e2e/conftest.py`). `scripts/gui_traceability.py --write-status` writes the generated "GUI end-to-end coverage" section of `COMPLETION_STATUS.md` (story → scenarios → pass/xfail/fail → status). `harness/tests/test_gui_traceability.py` fails if a story has neither a scenario nor a written exclusion.
+- Documented in `skills.md` (5b-3, 5b-4, 5c), registered in `.agents/skills/continuous-improvement-tooling`, root symlinks in `scripts/`.
+- Not done (open decision §6): running `gui-e2e` in GitHub Actions, which needs PostgreSQL, Rust, Flutter and Chrome on the runner.
+
+## 4. Risks and mitigations
+- **Missing ids on new widgets:** the lint in Phase 4.
+- **Flaky waits:** wait on ids and expected state, never fixed sleeps. Reseed per module. Retry once in CI only, and report flaky tests separately.
+- **Resets wipe the dev database:** the reset endpoints (`reset-to-initial-state`, `seed-test-fixtures`) act on whichever backend the tests point at. Phase 2 must run its own backend on port 8180 against its own database (`sitepulse_e2e`), never the developer stack on 8080. The Phase 1 probe only logs in and reads, so it's safe on 8080.
+- **Clock-dependent penalties:** see GUI_TEST_PLAN.md §4. Expected amounts come from the API, not from constants copied out of the stories.
+- **Shared database across tests:** tests that write data (approvals, uploads, capex) each start with their own reseed. The stack is single-tenant (`site-1`), so these tests run one at a time.
+- **SaaS bootstrap password:** read from the backend's environment or config (`bootstrap_admin_password()`), never hard-coded in tests.
+
+## 5. Order of delivery and size
+1. Phase 0 catalogue: about 0.5–1 day
+2. Phase 1 ids and P0 probe: about 1 day
+3. Phase 2 scaffold, runner, and P0 smoke (about 10 tests): about 1 day
+4. Phase 3 P1, then P2, epic by epic: about 3–5 days
+5. Phase 4 wiring: about 0.5 day
+
+## 6. Open decisions
+- CI target: local only, or a GitHub Actions job (needs Postgres and Rust in CI)?
+- Browsers: Chrome only, or Chrome, Firefox and WebKit?
+- Should the mobile layout get full scenarios, or only the smoke test?

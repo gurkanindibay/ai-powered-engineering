@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../domain/models/auth_models.dart';
@@ -229,7 +230,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final message = _localError ?? (!widget.controller.isAuthenticated ? widget.controller.authMessage : null);
     if (message == null || message.trim().isEmpty) return const SizedBox.shrink();
 
-    return Container(
+    return testId('login_error_banner', Container(
       key: const Key('login_error_banner'),
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -281,7 +282,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   @override
@@ -341,7 +342,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
         actions: [
-          IconButton(
+          testId('btn_toggle_theme', IconButton(
             tooltip: 'Tema Değiştir',
             icon: Icon(
               isDark ? Icons.light_mode : Icons.dark_mode,
@@ -349,7 +350,7 @@ class _LoginScreenState extends State<LoginScreen> {
               size: 20,
             ),
             onPressed: () => widget.controller.toggleTheme(),
-          ),
+          ), label: isDark ? 'theme:dark' : 'theme:light'),
           const SizedBox(width: 8),
         ],
       ),
@@ -492,7 +493,7 @@ class _LoginScreenState extends State<LoginScreen> {
     required Color color,
   }) {
     final isSelected = _selectedTab == tab;
-    return InkWell(
+    return testId('login_tab_${tab.name}', InkWell(
       onTap: () {
         setState(() {
           _selectedTab = tab;
@@ -528,7 +529,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   // =========================================================================
@@ -594,7 +595,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
                   ),
-                  TextButton.icon(
+                  testId('btn_clear_login_cache_homeowner', TextButton.icon(
                     key: const Key('btn_clear_login_cache_homeowner'),
                     onPressed: _clearCacheAndForm,
                     icon: const Icon(Icons.cleaning_services_outlined, size: 13, color: AppColors.accentGreen),
@@ -602,12 +603,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       'Temizle',
                       style: TextStyle(fontSize: 11, color: AppColors.accentGreen),
                     ),
-                  ),
+                  )),
                 ],
               ),
               const SizedBox(height: 14),
               _buildErrorBanner(context),
-              TextField(
+              testId('login_homeowner_email', TextField(
                 controller: _homeownerEmailController,
                 onChanged: (_) {
                   if (_localError != null || widget.controller.authMessage != null) {
@@ -624,9 +625,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   prefixIcon: const Icon(Icons.email_outlined, size: 18),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('login_homeowner_password', TextField(
                 controller: _homeownerPasswordController,
                 obscureText: _obscureHomeownerPassword,
                 onChanged: (_) {
@@ -650,11 +651,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
-              ),
+              )),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child: testId('login_homeowner_submit', ElevatedButton.icon(
                   onPressed: _isSubmitting
                       ? null
                       : () => _performPasswordLogin(
@@ -679,12 +680,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
+                )),
               ),
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton.icon(
+                child: testId('btn_google_sign_in', OutlinedButton.icon(
                   onPressed: () => widget.controller.loginWithGoogle(),
                   icon: const Icon(Icons.g_mobiledata, size: 22),
                   label: const Text('Google ile Giriş Yap'),
@@ -692,7 +693,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 11),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
+                )),
               ),
             ],
           ),
@@ -794,7 +795,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
                   ),
-                  TextButton.icon(
+                  testId('btn_clear_login_cache_manager', TextButton.icon(
                     key: const Key('btn_clear_login_cache_manager'),
                     onPressed: _clearCacheAndForm,
                     icon: const Icon(Icons.cleaning_services_outlined, size: 13, color: AppColors.accentCyan),
@@ -802,12 +803,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       'Temizle',
                       style: TextStyle(fontSize: 11, color: AppColors.accentCyan),
                     ),
-                  ),
+                  )),
                 ],
               ),
               const SizedBox(height: 14),
               _buildErrorBanner(context),
-              TextField(
+              testId('login_manager_email', TextField(
                 controller: _managerEmailController,
                 onChanged: (_) {
                   if (_localError != null || widget.controller.authMessage != null) {
@@ -824,9 +825,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   prefixIcon: const Icon(Icons.email_outlined, size: 18),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('login_manager_password', TextField(
                 controller: _managerPasswordController,
                 obscureText: _obscureManagerPassword,
                 onChanged: (_) {
@@ -850,7 +851,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
-              ),
+              )),
               const SizedBox(height: 14),
 
               // Dual Path Selector: Manager Cockpit vs My Flat
@@ -859,7 +860,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child: testId('login_manager_submit', ElevatedButton.icon(
                   onPressed: _isSubmitting
                       ? null
                       : () => _performPasswordLogin(
@@ -885,7 +886,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
+                )),
               ),
             ],
           ),
@@ -937,7 +938,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 14),
               _buildErrorBanner(context),
-              TextField(
+              testId('login_saas_email', TextField(
                 controller: _saasEmailController,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
                 decoration: InputDecoration(
@@ -947,9 +948,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   prefixIcon: const Icon(Icons.email_outlined, size: 18),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
-              ),
+              )),
               const SizedBox(height: 12),
-              TextField(
+              testId('login_saas_password', TextField(
                 controller: _saasPasswordController,
                 obscureText: true,
                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -960,11 +961,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   prefixIcon: const Icon(Icons.lock_outline, size: 18),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
-              ),
+              )),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child: testId('login_saas_submit', ElevatedButton.icon(
                   onPressed: _isSubmitting
                       ? null
                       : () {
@@ -988,7 +989,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
+                )),
               ),
             ],
           ),

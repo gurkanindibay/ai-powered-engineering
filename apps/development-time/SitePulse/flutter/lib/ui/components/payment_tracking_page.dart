@@ -1,3 +1,4 @@
+import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import 'package:decimal/decimal.dart';
 import '../../domain/models/dues_models.dart';
@@ -361,7 +362,7 @@ class PaymentTrackingPage extends StatefulWidget {
                   const SizedBox(height: 16),
                   const Text('Daire', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
+                  testId('virman_unit_dropdown', DropdownButtonFormField<String>(
                     value: unitId,
                     decoration: const InputDecoration(border: OutlineInputBorder()),
                     items: const [
@@ -369,7 +370,7 @@ class PaymentTrackingPage extends StatefulWidget {
                       DropdownMenuItem(value: 'd-1', child: Text('A Blok D:1')),
                     ],
                     onChanged: (v) => setDialogState(() => unitId = v ?? 'd-14'),
-                  ),
+                  )),
                   const SizedBox(height: 16),
                   const Text('Virman Yapılacak Tutar (₺)', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
@@ -413,7 +414,7 @@ class PaymentTrackingPage extends StatefulWidget {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            OutlinedButton.icon(
+            testId('btn_share_receipt', OutlinedButton.icon(
               icon: const Icon(Icons.share),
               label: const Text('Paylaş / PDF'),
               style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
@@ -422,7 +423,7 @@ class PaymentTrackingPage extends StatefulWidget {
                   const SnackBar(content: Text('Makbuz PDF formatında dışa aktarıldı.')),
                 );
               },
-            ),
+            )),
             ElevatedButton.icon(
               icon: const Icon(Icons.check),
               label: const Text('Kapat'),
@@ -477,10 +478,10 @@ class PaymentTrackingPage extends StatefulWidget {
                             color: AppColors.primary.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Text(
+                          child: testId('receipt_number', Text(
                             receipt.receiptNumber,
                             style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
-                          ),
+                          )),
                         ),
                       ],
                     ),
@@ -495,10 +496,10 @@ class PaymentTrackingPage extends StatefulWidget {
                         children: [
                           const Text('TOPLAM TAHSİLAT TUTARI', style: TextStyle(fontSize: 11, letterSpacing: 1.1)),
                           const SizedBox(height: 4),
-                          Text(
+                          testId('receipt_total', Text(
                             '₺${receipt.totalAmount}',
                             style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.accentGreen),
-                          ),
+                          )),
                         ],
                       ),
                     ),
@@ -506,7 +507,7 @@ class PaymentTrackingPage extends StatefulWidget {
                     _buildReceiptRowStatic(ctx, 'Daire:', receipt.unitId),
                     _buildReceiptRowStatic(ctx, 'Ödeyen:', '${receipt.payerName} (${receipt.payerRole == "TENANT" ? "Kiracı" : "Kat Maliki"})'),
                     if (receipt.onBehalfOfName != null)
-                      _buildReceiptRowStatic(ctx, 'Adına Ödenen:', '${receipt.onBehalfOfName} (Kat Maliki)'),
+                      testId('receipt_on_behalf', _buildReceiptRowStatic(ctx, 'Adına Ödenen:', '${receipt.onBehalfOfName} (Kat Maliki)')),
                     _buildReceiptRowStatic(ctx, 'Ödeme Kanalı:', channelLabel(receipt.paymentChannel)),
                     _buildReceiptRowStatic(ctx, 'Tarih & Saat:', receipt.issuedAt.toLocal().toString().split('.').first),
                     const SizedBox(height: 16),
@@ -517,10 +518,10 @@ class PaymentTrackingPage extends StatefulWidget {
                       child: Text('Mahsup ve Tahsisat Detayı', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
                     const SizedBox(height: 8),
-                    _buildReceiptRowStatic(ctx, 'Ana Para Borcu:', '₺${receipt.allocatedPrincipal}'),
-                    _buildReceiptRowStatic(ctx, 'Gecikme Zammı (KMK %5):', '₺${receipt.allocatedPenalty}'),
+                    testId('receipt_allocated_principal', _buildReceiptRowStatic(ctx, 'Ana Para Borcu:', '₺${receipt.allocatedPrincipal}')),
+                    testId('receipt_allocated_penalty', _buildReceiptRowStatic(ctx, 'Gecikme Zammı (KMK %5):', '₺${receipt.allocatedPenalty}')),
                     if (receipt.allocatedAdvance > Decimal.zero)
-                      _buildReceiptRowStatic(ctx, 'Avans Bakiyesine Aktarılan:', '₺${receipt.allocatedAdvance}'),
+                      testId('receipt_allocated_advance', _buildReceiptRowStatic(ctx, 'Avans Bakiyesine Aktarılan:', '₺${receipt.allocatedAdvance}')),
                     if (receipt.isRentOffsetEligible) ...[
                       const SizedBox(height: 16),
                       Container(
@@ -544,11 +545,11 @@ class PaymentTrackingPage extends StatefulWidget {
                               ],
                             ),
                             const SizedBox(height: 6),
-                            Text(
+                            testId('receipt_rent_offset_note', Text(
                               receipt.legalStatutoryNote ??
                                   '634 sayılı KMK Madde 20 & 22 uyarınca ortak demirbaş giderleri Kat Maliki sorumluluğundadır. Kiracı tarafından ödenen bu tutar TBK Madde 314 gereği kira bedelinden mahsup edilebilir.',
                               style: const TextStyle(fontSize: 11, height: 1.3),
-                            ),
+                            )),
                           ],
                         ),
                       ),
@@ -651,7 +652,7 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
               tooltip: 'Yenile',
               onPressed: _loadData,
             ),
-            IconButton(
+            testId('action_open_bank_reconciliation', IconButton(
               key: const Key('action_open_bank_reconciliation'),
               icon: const Icon(Icons.receipt_long),
               tooltip: 'Banka Ekstresi & Eşleştirme (Excel/MT940)',
@@ -659,7 +660,7 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                 await BankStatementReconciliationPage.open(context, controller: widget.controller);
                 _loadData();
               },
-            ),
+            )),
             IconButton(
               icon: const Icon(Icons.add_card),
               tooltip: 'Manuel Tahsilat Girişi',
@@ -937,7 +938,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (unmatchedBank.isNotEmpty) ...[
-          Container(
+          testId('banner_unmatched_bank_transactions', Container(
             key: const Key('banner_unmatched_bank_transactions'),
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(12),
@@ -973,7 +974,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                     ],
                   ),
                 ),
-                ElevatedButton(
+                testId('btn_resolve_unmatched_bank', ElevatedButton(
                   key: const Key('btn_resolve_unmatched_bank'),
                   onPressed: () async {
                     await BankStatementReconciliationPage.open(context, controller: widget.controller);
@@ -987,17 +988,17 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   child: const Text('Eşleştirmeyi Çöz'),
-                ),
+                )),
               ],
             ),
-          ),
+          )),
         ],
         // Filter bar
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              OutlinedButton.icon(
+              testId('btn_stream_upload_bank_statement', OutlinedButton.icon(
                 key: const Key('btn_stream_upload_bank_statement'),
                 onPressed: () async {
                   await BankStatementReconciliationPage.open(context, controller: widget.controller);
@@ -1010,19 +1011,19 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-              ),
+              )),
               const SizedBox(width: 8),
-              _buildFilterChip(
+              testId('filter_channel_chip', _buildFilterChip(
                 label: 'Kanal: ${PaymentTrackingPage.channelLabel(_selectedChannel)}',
                 icon: Icons.filter_alt,
                 onTap: _showChannelFilterDialog,
-              ),
+              )),
               const SizedBox(width: 8),
-              _buildFilterChip(
+              testId('filter_role_chip', _buildFilterChip(
                 label: 'Rol: ${PaymentTrackingPage.roleLabel(_selectedRole)}',
                 icon: Icons.person_outline,
                 onTap: _showRoleFilterDialog,
-              ),
+              )),
               const SizedBox(width: 8),
               _buildFilterChip(
                 label: 'Durum: ${PaymentTrackingPage.settlementLabel(_selectedSettlement)}',
@@ -1097,7 +1098,7 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final entry = stream.entries[index];
-        return _buildPaymentEntryCard(entry);
+        return testId('payment_entry_${entry.id}_${entry.payerRole}', _buildPaymentEntryCard(entry));
       },
     );
   }
@@ -1319,14 +1320,14 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
       builder: (ctx) => SimpleDialog(
         title: const Text('Ödeme Kanalı Filtresi'),
         children: channels.map((c) {
-          return SimpleDialogOption(
+          return testId('filter_channel_option_$c', SimpleDialogOption(
             onPressed: () {
               Navigator.pop(ctx);
               setState(() => _selectedChannel = c);
               _loadData();
             },
             child: Text(PaymentTrackingPage.channelLabel(c)),
-          );
+          ));
         }).toList(),
       ),
     );
@@ -1339,14 +1340,14 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
       builder: (ctx) => SimpleDialog(
         title: const Text('Ödeyen Rolü Filtresi'),
         children: roles.map((r) {
-          return SimpleDialogOption(
+          return testId('filter_role_option_$r', SimpleDialogOption(
             onPressed: () {
               Navigator.pop(ctx);
               setState(() => _selectedRole = r);
               _loadData();
             },
             child: Text(PaymentTrackingPage.roleLabel(r)),
-          );
+          ));
         }).toList(),
       ),
     );
@@ -1405,10 +1406,10 @@ class DebtAgingWidget extends StatelessWidget {
           mainAxisSpacing: 10,
           childAspectRatio: 2.2,
           children: [
-            _buildAgingSummaryTile(context, 'Vadesi Gelmemiş', '₺${report.totalCurrent}', Colors.blue, 'Normal döngü'),
-            _buildAgingSummaryTile(context, '1 - 30 Gün Gecikmiş', '₺${report.total1to30Days}', Colors.amber.shade700, 'Hatırlatma SMS'),
-            _buildAgingSummaryTile(context, '31 - 60 Gün Gecikmiş', '₺${report.total31to60Days}', Colors.orange.shade800, 'İhtar mektubu'),
-            _buildAgingSummaryTile(context, '60+ Gün (Yasal Takip)', '₺${report.total60PlusDays}', Colors.red.shade700, 'Hukuki takip adayı'),
+            testId('aging_bucket_current', _buildAgingSummaryTile(context, 'Vadesi Gelmemiş', '₺${report.totalCurrent}', Colors.blue, 'Normal döngü')),
+            testId('aging_bucket_1_30', _buildAgingSummaryTile(context, '1 - 30 Gün Gecikmiş', '₺${report.total1to30Days}', Colors.amber.shade700, 'Hatırlatma SMS')),
+            testId('aging_bucket_31_60', _buildAgingSummaryTile(context, '31 - 60 Gün Gecikmiş', '₺${report.total31to60Days}', Colors.orange.shade800, 'İhtar mektubu')),
+            testId('aging_bucket_60_plus', _buildAgingSummaryTile(context, '60+ Gün (Yasal Takip)', '₺${report.total60PlusDays}', Colors.red.shade700, 'Hukuki takip adayı')),
           ],
         ),
         const SizedBox(height: 12),
@@ -1427,7 +1428,7 @@ class DebtAgingWidget extends StatelessWidget {
                   children: [
                     Text('KMK %5 Gecikme Zammı', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
                     const SizedBox(height: 2),
-                    Text('+₺${report.totalPenalty}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red)),
+                    testId('aging_total_penalty', Text('+₺${report.totalPenalty}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red))),
                   ],
                 ),
               ),
@@ -1439,7 +1440,7 @@ class DebtAgingWidget extends StatelessWidget {
                   children: [
                     Text('Toplam Açık Alacak', style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
                     const SizedBox(height: 2),
-                    Text('₺${report.grandTotal}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    testId('aging_grand_total', Text('₺${report.grandTotal}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primary))),
                   ],
                 ),
               ),
