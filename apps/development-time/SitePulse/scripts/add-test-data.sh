@@ -13,7 +13,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SITEPULSE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-SEEDS_FILE="$SITEPULSE_ROOT/backend/db/init/02-test-seed.sql"
+SEEDS_FILE="$SITEPULSE_ROOT/backend/db/seed/02-test-seed.sql"
 
 if [ "${APP_ENV:-development}" = "production" ] || [ "${ENVIRONMENT:-development}" = "production" ]; then
     echo "❌ FATAL: Cannot run add-test-data.sh in PRODUCTION environment!"

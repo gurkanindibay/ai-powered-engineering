@@ -104,7 +104,7 @@ impl SiteBankAccountService {
         inner.site_bank_accounts.push(new_account.clone());
 
         if let Some(ref pool) = self.state.pool {
-            let _ = crate::db::save_site_bank_account(pool, &new_account).await;
+            crate::db::save_site_bank_account(pool, &new_account).await.map_err(|e| e.to_string())?;
         }
 
         Ok(response)

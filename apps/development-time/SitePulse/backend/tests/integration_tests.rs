@@ -17,6 +17,10 @@ fn when_overdue_by_10_days_then_calculates_exact_5_percent_pro_rated_penalty() {
         total_amount: Decimal::from_str_exact("1400.00").unwrap(),
         due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
         status: DebtStatus::Pending,
+        paid_principal: Decimal::ZERO,
+        paid_penalty: Decimal::ZERO,
+        debtor_type: "TENANT".to_string(),
+        expense_type: "OPERATIONAL_DUES".to_string(),
     };
 
     let evaluation_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
@@ -39,6 +43,10 @@ fn when_not_overdue_then_penalty_remains_zero() {
         total_amount: Decimal::from_str_exact("1400.00").unwrap(),
         due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
         status: DebtStatus::Pending,
+        paid_principal: Decimal::ZERO,
+        paid_penalty: Decimal::ZERO,
+        debtor_type: "TENANT".to_string(),
+        expense_type: "OPERATIONAL_DUES".to_string(),
     };
 
     let evaluation_date = NaiveDate::from_ymd_opt(2026, 9, 10).unwrap();
@@ -284,6 +292,9 @@ async fn when_duplicate_email_for_home_resident_then_throws_exception() {
 #[tokio::test]
 async fn when_valid_password_registration_then_can_authenticate() {
     let state = AppState::new();
+    let invite = HomeResidentInvitationService::new(state.clone())
+        .generate_unit_invite_link("d-14", None)
+        .await;
     let service = AuthService::new(state);
 
     let reg_req = RegisterUserRequest {
@@ -291,11 +302,27 @@ async fn when_valid_password_registration_then_can_authenticate() {
         email: "emre.aydin@gmail.com".to_string(),
         password: "SuperSecretPassword123".to_string(),
         phone: Some("+90 532 999 8877".to_string()),
-        unit_invite_token: None,
+        unit_invite_token: Some(invite.token.clone()),
     };
 
     let reg_res = service.register_with_password(reg_req).await.expect("Register failed");
     assert_eq!(reg_res.user.full_name, "Emre Aydın");
+    assert_eq!(reg_res.user.site_id, "site-1", "site comes from the invited unit");
+    assert_eq!(reg_res.user.unit_id, "d-14");
+    let claims = sitepulse_backend::auth::verify_token(&reg_res.access_token).expect("signed token");
+    assert_eq!(claims.unit_id.as_deref(), Some("d-14"));
+
+    // The invite token is single-use.
+    let replay = service
+        .register_with_password(RegisterUserRequest {
+            full_name: "Replay".to_string(),
+            email: "replay@gmail.com".to_string(),
+            password: "AnotherPassword123".to_string(),
+            phone: None,
+            unit_invite_token: Some(invite.token),
+        })
+        .await;
+    assert!(replay.is_err());
 
     let login_req = PasswordLoginRequest {
         email: "emre.aydin@gmail.com".to_string(),
@@ -325,12 +352,16 @@ async fn when_wrong_password_then_throws_exception() {
 
 #[tokio::test]
 async fn when_valid_google_id_token_then_authenticates_and_links_account() {
+    std::env::set_var("SITEPULSE_ALLOW_MOCK_GOOGLE_TOKENS", "true");
     let state = AppState::new();
+    let invite = HomeResidentInvitationService::new(state.clone())
+        .generate_unit_invite_link("d-14", None)
+        .await;
     let service = AuthService::new(state);
 
     let req = GoogleLoginRequest {
         id_token: "mock-google-token:sub-998877:google.ahmet@gmail.com:Ahmet Yılmaz Google".to_string(),
-        unit_invite_token: None,
+        unit_invite_token: Some(invite.token),
     };
 
     let res = service.authenticate_with_google(req).await.expect("Google auth failed");
@@ -563,7 +594,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
     assert_eq!(res.confirmed_count, 1);
     assert_eq!(res.total_amount_cleared, Decimal::from_str_exact("1423.33").unwrap());
     assert_eq!(res.updated_unit_ids, vec!["d-14".to_string()]);
-    assert_eq!(res.message_sent, false);
+    assert!(!res.message_sent);
     assert!(res.notification_summary.is_none());
 
     let inner = state.inner.read().await;
@@ -611,7 +642,7 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
 
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(res.confirmed_count, 1);
-    assert_eq!(res.message_sent, true);
+    assert!(res.message_sent);
     assert!(res.notification_summary.as_ref().unwrap().contains("iletildi"));
 }
 
@@ -892,6 +923,10 @@ async fn when_statement_contains_virtual_iban_then_matches_flat_with_100_percent
         total_amount: Decimal::from_str_exact("1400.00").unwrap(),
         due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
         status: DebtStatus::Pending,
+        paid_principal: Decimal::ZERO,
+        paid_penalty: Decimal::ZERO,
+        debtor_type: "TENANT".to_string(),
+        expense_type: "OPERATIONAL_DUES".to_string(),
     }];
 
     // Narrative contains NO block name and NO resident name, only the Virtual IBAN!
@@ -929,10 +964,7 @@ async fn when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_ge
         signature: Some("HMAC_SHA256_VALID_SIG".to_string()),
     };
 
-    let (status, axum::Json(res)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
-        axum::extract::State(state.clone()),
-        axum::Json(webhook_req.clone()),
-    )
+    let (status, axum::Json(res)) = call_signed_webhook(state.clone(), webhook_req.clone())
     .await
     .unwrap();
 
@@ -951,10 +983,7 @@ async fn when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_ge
 
     // Verify Idempotency Gate (Duplicate Delivery)
     drop(inner);
-    let (status2, axum::Json(res2)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
-        axum::extract::State(state.clone()),
-        axum::Json(webhook_req),
-    )
+    let (status2, axum::Json(res2)) = call_signed_webhook(state.clone(), webhook_req)
     .await
     .unwrap();
 
@@ -978,10 +1007,7 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
         signature: Some("HMAC_VALID".to_string()),
     };
 
-    let (status1, axum::Json(res1)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
-        axum::extract::State(state.clone()),
-        axum::Json(webhook_req_1),
-    )
+    let (status1, axum::Json(res1)) = call_signed_webhook(state.clone(), webhook_req_1)
     .await
     .unwrap();
 
@@ -1002,10 +1028,7 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
         signature: Some("HMAC_VALID".to_string()),
     };
 
-    let (status2, axum::Json(res2)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
-        axum::extract::State(state.clone()),
-        axum::Json(webhook_req_2),
-    )
+    let (status2, axum::Json(res2)) = call_signed_webhook(state.clone(), webhook_req_2)
     .await
     .unwrap();
 
@@ -1028,10 +1051,7 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
         signature: Some("HMAC_VALID".to_string()),
     };
 
-    let (_, axum::Json(res3)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
-        axum::extract::State(state.clone()),
-        axum::Json(webhook_req_3),
-    )
+    let (_, axum::Json(res3)) = call_signed_webhook(state.clone(), webhook_req_3)
     .await
     .unwrap();
 
@@ -1078,10 +1098,7 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
         signature: Some("HMAC_VALID".to_string()),
     };
 
-    let (status, axum::Json(res)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
-        axum::extract::State(state.clone()),
-        axum::Json(webhook_req),
-    )
+    let (status, axum::Json(res)) = call_signed_webhook(state.clone(), webhook_req)
     .await
     .unwrap();
 
@@ -1189,7 +1206,7 @@ async fn when_dues_period_already_accrued_then_duplicate_accrual_is_prevented() 
 #[tokio::test]
 async fn when_scheduler_batch_runs_then_accrues_and_prevents_duplicate_accrual() {
     let state = AppState::new();
-    let test_date = NaiveDate::from_ymd_opt(2026, 12, 1).unwrap();
+    let test_date = NaiveDate::from_ymd_opt(2026, 12, 1).unwrap().and_hms_opt(9, 0, 0).unwrap().and_utc();
 
     // First batch run: accrues for all sites
     let (sites_accrued_1, units_accrued_1) =
@@ -1197,6 +1214,14 @@ async fn when_scheduler_batch_runs_then_accrues_and_prevents_duplicate_accrual()
 
     assert!(sites_accrued_1 > 0);
     assert!(units_accrued_1 > 0);
+    {
+        // Priced from the unit's house-type tariff (d-14 is a 3+1 at ₺1800), not a flat ₺1400;
+        // d-14 has no tenant, so the owner is liable.
+        let inner = state.inner.read().await;
+        let accrued = inner.dues.iter().find(|d| d.unit_id == "d-14" && d.period == "Aralık 2026").unwrap();
+        assert_eq!(accrued.principal_amount, Decimal::from_str_exact("1800.00").unwrap());
+        assert_eq!(accrued.debtor_type, "OWNER");
+    }
 
     // Second batch run for the same date/period: must be completely idempotent (0 newly accrued)
     let (sites_accrued_2, units_accrued_2) =
@@ -1493,10 +1518,7 @@ async fn when_sender_iban_is_remembered_subsequent_blank_desc_payment_auto_match
         signature: None,
     };
 
-    let (status, axum::Json(webhook_res)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
-        axum::extract::State(state.clone()),
-        axum::Json(webhook_payload),
-    )
+    let (status, axum::Json(webhook_res)) = call_signed_webhook(state.clone(), webhook_payload)
     .await
     .expect("Webhook processing should succeed");
 
@@ -1522,10 +1544,7 @@ async fn when_transfer_cannot_be_matched_then_enters_unmatched_pool_successfully
         signature: None,
     };
 
-    let (status, axum::Json(webhook_res)) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
-        axum::extract::State(state.clone()),
-        axum::Json(webhook_payload),
-    )
+    let (status, axum::Json(webhook_res)) = call_signed_webhook(state.clone(), webhook_payload)
     .await
     .expect("Webhook processing should succeed");
 
@@ -1627,10 +1646,7 @@ async fn when_reset_demo_data_invoked_then_payments_and_dues_are_restored_to_cle
         signature: None,
     };
 
-    let (status, _) = sitepulse_backend::handlers::handle_bank_incoming_webhook(
-        axum::extract::State(state.clone()),
-        axum::Json(webhook_req),
-    )
+    let (status, _) = call_signed_webhook(state.clone(), webhook_req)
     .await
     .expect("Payment should process");
 
@@ -1831,6 +1847,7 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
             status: "ACTIVE".to_string(),
             plan_type: "STANDARD".to_string(),
             license_end_date: chrono::NaiveDate::from_ymd_opt(2027, 12, 31).unwrap(),
+            timezone: "Europe/Istanbul".to_string(),
         });
     }
 
@@ -2177,7 +2194,7 @@ async fn when_managing_occupancy_lifecycle_then_can_move_out_and_move_in_without
         };
 
         let move_out_res = service.move_out_resident("site-1", &created.unit_id, move_out_req).await.unwrap();
-        assert_eq!(move_out_res.is_active, false);
+        assert!(!move_out_res.is_active);
 
         // 4. Fetch history and verify zero data loss
         let history = service.get_unit_occupancy_history("site-1", &created.unit_id).await.unwrap();
@@ -2407,7 +2424,7 @@ async fn when_tenant_moves_out_then_household_members_are_archived_and_cleared_f
         notes: Some("Kiracı tahliyesi".to_string()),
     };
     let move_out_res = service.move_out_resident("site-1", &created.unit_id, move_out_req).await.unwrap();
-    assert_eq!(move_out_res.is_active, false);
+    assert!(!move_out_res.is_active);
 
     // 4. Verify household members are cleared from active unit
     let members_after = invitation_service.get_unit_members(&created.unit_id).await;
@@ -2429,6 +2446,7 @@ async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_k
         payment_channel: "MANUAL_CASH".to_string(),
         description: Some("Eylül ayı aidat nakit elden".to_string()),
         payment_date: Some(Utc::now()),
+        idempotency_key: None,
     };
     service.record_and_allocate_payment(p1).await.unwrap();
 
@@ -2441,6 +2459,7 @@ async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_k
         payment_channel: "VIRTUAL_IBAN".to_string(),
         description: Some("Banka transferi".to_string()),
         payment_date: Some(Utc::now()),
+        idempotency_key: None,
     };
     service.record_and_allocate_payment(p2).await.unwrap();
 
@@ -2490,6 +2509,10 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             total_amount: Decimal::from_str_exact("1000.00").unwrap(),
             due_date: today,
             status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: "TENANT".to_string(),
+            expense_type: "OPERATIONAL_DUES".to_string(),
         });
 
         // 1-30 days overdue (due 20 days ago)
@@ -2502,6 +2525,10 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             total_amount: Decimal::from_str_exact("1240.00").unwrap(),
             due_date: today - chrono::Days::new(20),
             status: DebtStatus::Overdue,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: "TENANT".to_string(),
+            expense_type: "OPERATIONAL_DUES".to_string(),
         });
 
         // 31-60 days overdue (due 45 days ago)
@@ -2514,6 +2541,10 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             total_amount: Decimal::from_str_exact("1505.00").unwrap(),
             due_date: today - chrono::Days::new(45),
             status: DebtStatus::Overdue,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: "TENANT".to_string(),
+            expense_type: "OPERATIONAL_DUES".to_string(),
         });
 
         // 60+ days overdue (due 80 days ago)
@@ -2526,6 +2557,10 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             total_amount: Decimal::from_str_exact("1800.00").unwrap(),
             due_date: today - chrono::Days::new(80),
             status: DebtStatus::Overdue,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: "TENANT".to_string(),
+            expense_type: "OPERATIONAL_DUES".to_string(),
         });
     }
 
@@ -2544,6 +2579,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
 async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_marks_rent_offset_eligible() {
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());
+    state.inner.write().await.dues.push(owner_capital_due("cap-1", "2000.00"));
 
     let req = RecordManualPaymentRequest {
         site_id: Some("site-1".to_string()),
@@ -2554,6 +2590,7 @@ async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_m
         payment_channel: "BANK_TRANSFER".to_string(),
         description: Some("Daire 14 Asansör ve Demirbaş Harcaması Payı".to_string()),
         payment_date: Some(Utc::now()),
+        idempotency_key: None,
     };
 
     let receipt = service.record_and_allocate_payment(req).await.unwrap();
@@ -2565,6 +2602,88 @@ async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_m
     assert!(receipt.legal_statutory_note.is_some());
     assert!(receipt.legal_statutory_note.unwrap().contains("TBK Madde 314"));
     assert_eq!(receipt.verification_hash.len(), 64);
+    let capital_line = receipt.allocation_breakdown.iter().find(|b| b.due_id.as_deref() == Some("cap-1")).unwrap();
+    assert_eq!(capital_line.expense_type, "CAPITAL_DUES", "label comes from the liability");
+}
+
+fn owner_capital_due(id: &str, amount: &str) -> DuesLiability {
+    DuesLiability {
+        id: id.to_string(),
+        unit_id: "d-14".to_string(),
+        period: "Asansör Taksit 1".to_string(),
+        principal_amount: Decimal::from_str_exact(amount).unwrap(),
+        delay_penalty: Decimal::ZERO,
+        total_amount: Decimal::from_str_exact(amount).unwrap(),
+        due_date: NaiveDate::from_ymd_opt(2026, 8, 1).unwrap(),
+        status: DebtStatus::Pending,
+        paid_principal: Decimal::ZERO,
+        paid_penalty: Decimal::ZERO,
+        debtor_type: "OWNER".to_string(),
+        expense_type: "CAPITAL_DUES".to_string(),
+    }
+}
+
+#[tokio::test]
+async fn when_tenant_pays_without_capital_intent_then_owner_capital_dues_are_untouched() {
+    let state = AppState::new();
+    state.inner.write().await.dues.push(owner_capital_due("cap-2", "2000.00"));
+    let receipt = PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(RecordManualPaymentRequest {
+            site_id: Some("site-1".to_string()),
+            unit_id: "d-14".to_string(),
+            amount: Decimal::from_str_exact("5000.00").unwrap(),
+            payer_name: "Ali Kiracı".to_string(),
+            payer_role: "TENANT".to_string(),
+            payment_channel: "BANK_TRANSFER".to_string(),
+            description: Some("Aidat".to_string()),
+            payment_date: None,
+            idempotency_key: None,
+        })
+        .await
+        .unwrap();
+    assert!(receipt.allocation_breakdown.iter().all(|b| b.due_id.as_deref() != Some("cap-2")));
+    assert!(!receipt.is_rent_offset_eligible);
+    let inner = state.inner.read().await;
+    let cap = inner.dues.iter().find(|d| d.id == "cap-2").unwrap();
+    assert_eq!(cap.paid_principal, Decimal::ZERO);
+}
+
+#[tokio::test]
+async fn when_payment_is_allocated_then_amount_owed_is_preserved_and_penalty_is_recorded() {
+    let state = AppState::new();
+    let service = PaymentTrackingService::new(state.clone());
+    {
+        let mut inner = state.inner.write().await;
+        inner.dues.clear();
+        let mut d = owner_capital_due("op-1", "1000.00");
+        d.debtor_type = "TENANT".to_string();
+        d.expense_type = "OPERATIONAL_DUES".to_string();
+        d.delay_penalty = Decimal::from_str_exact("50.00").unwrap();
+        d.total_amount = Decimal::from_str_exact("1050.00").unwrap();
+        inner.dues.push(d);
+    }
+    let receipt = service
+        .record_and_allocate_payment(RecordManualPaymentRequest {
+            site_id: Some("site-1".to_string()),
+            unit_id: "d-14".to_string(),
+            amount: Decimal::from_str_exact("300.00").unwrap(),
+            payer_name: "Ali".to_string(),
+            payer_role: "TENANT".to_string(),
+            payment_channel: "CASH".to_string(),
+            description: None,
+            payment_date: None,
+            idempotency_key: None,
+        })
+        .await
+        .unwrap();
+    let allocated: Decimal = receipt.allocation_breakdown.iter().map(|b| b.principal_paid + b.penalty_paid).sum();
+    assert_eq!(allocated + receipt.allocated_advance, receipt.total_amount, "allocations sum to the payment");
+    assert!(receipt.allocation_breakdown[0].penalty_paid > Decimal::ZERO, "penalty allocation is recorded");
+    let inner = state.inner.read().await;
+    let d = inner.dues.iter().find(|d| d.id == "op-1").unwrap();
+    assert_eq!(d.principal_amount, Decimal::from_str_exact("1000.00").unwrap(), "owed principal unchanged");
+    assert_eq!(d.paid_principal + d.paid_penalty, Decimal::from_str_exact("300.00").unwrap());
+    assert_eq!(d.total_amount, d.principal_amount + d.delay_penalty - d.paid_principal - d.paid_penalty);
 }
 
 #[tokio::test]
@@ -2586,6 +2705,10 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
             total_amount: Decimal::from_str_exact("1400.00").unwrap(),
             due_date: Utc::now().date_naive(),
             status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: "TENANT".to_string(),
+            expense_type: "OPERATIONAL_DUES".to_string(),
         });
     }
 
@@ -2631,6 +2754,10 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
             total_amount: Decimal::from_str_exact("2800.00").unwrap(),
             due_date: Utc::now().date_naive(),
             status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: "TENANT".to_string(),
+            expense_type: "OPERATIONAL_DUES".to_string(),
         });
     }
 
@@ -2830,6 +2957,10 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
             total_amount: Decimal::from_str_exact("1050.00").unwrap(),
             due_date: NaiveDate::from_ymd_opt(2026, 10, 15).unwrap(),
             status: DebtStatus::Overdue,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: "TENANT".to_string(),
+            expense_type: "OPERATIONAL_DUES".to_string(),
         });
     }
 
@@ -2841,6 +2972,7 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
         payer_role: "OWNER".to_string(),
         payment_channel: "BANK_TRANSFER".to_string(),
         payment_date: None,
+        idempotency_key: None,
         description: Some("Ekim Aidat ve Avans".to_string()),
     };
 
@@ -2879,6 +3011,10 @@ async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_
             total_amount: Decimal::from_str_exact("800.00").unwrap(),
             due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
             status: DebtStatus::Overdue,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            debtor_type: "TENANT".to_string(),
+            expense_type: "OPERATIONAL_DUES".to_string(),
         });
     }
 
@@ -2906,4 +3042,158 @@ async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_
     assert_eq!(last.role, "OWNER");
     assert!(!last.is_active);
     assert_eq!(last.exit_balance, Decimal::from_str_exact("800.00").unwrap());
+}
+
+const TEST_WEBHOOK_SECRET: &str = "integration-test-webhook-secret";
+
+/// Calls the webhook handler exactly as the bank would: JSON body plus HMAC header.
+async fn call_signed_webhook(
+    state: AppState,
+    req: BankIncomingWebhookRequest,
+) -> Result<(axum::http::StatusCode, axum::Json<BankIncomingWebhookResponse>), (axum::http::StatusCode, String)> {
+    std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", TEST_WEBHOOK_SECRET);
+    let body = serde_json::to_vec(&req).unwrap();
+    let sig = sitepulse_backend::auth::sign_webhook_body(TEST_WEBHOOK_SECRET, &body);
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(sitepulse_backend::handlers::BANK_WEBHOOK_SIGNATURE_HEADER, sig.parse().unwrap());
+    sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state),
+        headers,
+        axum::body::Bytes::from(body),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn when_webhook_is_unsigned_or_forged_then_it_is_rejected() {
+    std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", TEST_WEBHOOK_SECRET);
+    let state = AppState::new();
+    let req = BankIncomingWebhookRequest {
+        transaction_id: "TXN-FORGED-1".to_string(),
+        virtual_iban: "TR000000000000000000000000".to_string(),
+        amount: Decimal::from_str_exact("1400.00").unwrap(),
+        currency: Some("TRY".to_string()),
+        sender_name: None,
+        sender_iban: None,
+        description: None,
+        signature: Some("HMAC_SHA256_VALID_SIG".to_string()),
+    };
+    let body = serde_json::to_vec(&req).unwrap();
+    let unsigned = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        axum::http::HeaderMap::new(),
+        axum::body::Bytes::from(body.clone()),
+    )
+    .await;
+    assert_eq!(unsigned.unwrap_err().0, axum::http::StatusCode::UNAUTHORIZED);
+
+    let mut headers = axum::http::HeaderMap::new();
+    let wrong = sitepulse_backend::auth::sign_webhook_body("attacker-secret", &body);
+    headers.insert(sitepulse_backend::handlers::BANK_WEBHOOK_SIGNATURE_HEADER, wrong.parse().unwrap());
+    let forged = sitepulse_backend::handlers::handle_bank_incoming_webhook(
+        axum::extract::State(state.clone()),
+        headers,
+        axum::body::Bytes::from(body),
+    )
+    .await;
+    assert_eq!(forged.unwrap_err().0, axum::http::StatusCode::UNAUTHORIZED);
+    assert!(state.inner.read().await.reconciliation_queue.is_empty());
+}
+
+#[tokio::test]
+async fn when_webhook_currency_is_not_try_then_it_is_rejected() {
+    let state = AppState::new();
+    let req = BankIncomingWebhookRequest {
+        transaction_id: "TXN-USD-1".to_string(),
+        virtual_iban: "TR000000000000000000000000".to_string(),
+        amount: Decimal::from_str_exact("100.00").unwrap(),
+        currency: Some("USD".to_string()),
+        sender_name: None,
+        sender_iban: None,
+        description: None,
+        signature: None,
+    };
+    let res = call_signed_webhook(state, req).await;
+    assert_eq!(res.unwrap_err().0, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn when_registering_without_invite_or_with_unknown_invite_then_rejected() {
+    let service = AuthService::new(AppState::new());
+    for token in [None, Some("SP-HANE-NOTREAL".to_string())] {
+        let res = service
+            .register_with_password(RegisterUserRequest {
+                full_name: "Intruder".to_string(),
+                email: "intruder@example.com".to_string(),
+                password: "LongEnoughPassword1".to_string(),
+                phone: None,
+                unit_invite_token: token,
+            })
+            .await;
+        assert!(res.is_err());
+    }
+}
+
+#[tokio::test]
+async fn when_google_token_is_unsigned_then_account_takeover_is_impossible() {
+    // A hand-made "JWT" carrying the admin's email must not authenticate.
+    std::env::remove_var("GOOGLE_CLIENT_ID");
+    let service = AuthService::new(AppState::new());
+    let payload = base64::Engine::encode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        r#"{"sub":"x","email":"admin@sitepulse.io","email_verified":true}"#,
+    );
+    let res = service
+        .authenticate_with_google(GoogleLoginRequest {
+            id_token: format!("eyJhbGciOiJub25lIn0.{}.", payload),
+            unit_invite_token: None,
+        })
+        .await;
+    assert!(res.is_err());
+}
+
+#[tokio::test]
+async fn when_using_former_backdoor_or_placeholder_passwords_then_login_fails() {
+    let service = AuthService::new(AppState::new());
+    for (email, password) in [
+        ("yonetici@begonya.com", "SP-99190-PASS"),
+        ("admin@sitepulse.io", "admin123"),
+        ("mehmet.demir@begonya.com", "ARGON2_HASH_mehmet123"),
+    ] {
+        let res = service
+            .authenticate_with_password(PasswordLoginRequest { email: email.to_string(), password: password.to_string() })
+            .await;
+        assert!(res.is_err(), "{} must not log in with {}", email, password);
+    }
+}
+
+#[tokio::test]
+async fn when_changing_password_then_policy_is_uniform_and_errors_do_not_enumerate_users() {
+    let service = AuthService::new(AppState::new());
+    let short = service
+        .change_password(ChangePasswordRequest {
+            email: "ahmet.yilmaz@begonya.com".to_string(),
+            current_password: "ahmet123".to_string(),
+            new_password: "short1".to_string(),
+        })
+        .await
+        .unwrap_err();
+    assert!(short.contains("at least"));
+    let unknown = service
+        .change_password(ChangePasswordRequest {
+            email: "nobody@example.com".to_string(),
+            current_password: "whatever-password".to_string(),
+            new_password: "AValidNewPassword1".to_string(),
+        })
+        .await
+        .unwrap_err();
+    assert!(!unknown.to_lowercase().contains("not found"));
+}
+
+#[test]
+fn when_utc_is_late_evening_then_accrual_uses_the_site_local_date() {
+    let late = NaiveDate::from_ymd_opt(2026, 11, 30).unwrap().and_hms_opt(22, 30, 0).unwrap().and_utc();
+    let local = sitepulse_backend::scheduler::site_local_date("Europe/Istanbul", late);
+    assert_eq!(local, NaiveDate::from_ymd_opt(2026, 12, 1).unwrap());
+    assert_eq!(sitepulse_backend::scheduler::format_turkish_month_year(local), "Aralık 2026");
 }

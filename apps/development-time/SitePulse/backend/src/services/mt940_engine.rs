@@ -8,6 +8,12 @@ use crate::models::BankTransactionItem;
 
 pub struct Mt940Engine;
 
+impl Default for Mt940Engine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Mt940Engine {
     pub fn new() -> Self {
         Self

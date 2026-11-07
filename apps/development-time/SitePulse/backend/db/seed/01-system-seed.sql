@@ -46,19 +46,7 @@ SET config_value = EXCLUDED.config_value,
     updated_at = CURRENT_TIMESTAMP;
 
 -- 3. Initial SaaS Platform Super Administrator
--- Note: In production deployments, change admin password immediately upon first login.
-INSERT INTO persons (id, national_id, full_name, phone, email, person_type)
-VALUES (999, '99999999999', 'SaaS Platform Admin', '+90 850 555 0000', 'admin@sitepulse.io', 'SAAS_ADMIN')
-ON CONFLICT (email) DO NOTHING;
-
-INSERT INTO users (id, site_id, person_id, email, password_hash, role, must_change_password)
-VALUES (
-    1,
-    NULL,
-    (SELECT id FROM persons WHERE email = 'admin@sitepulse.io'),
-    'admin@sitepulse.io',
-    'ARGON2_HASH_admin123',
-    'SAAS_ADMIN',
-    FALSE
-)
-ON CONFLICT (email) DO NOTHING;
+-- Not seeded here: no credential may live in source control. On startup the backend
+-- creates the first SAAS_ADMIN (SITEPULSE_BOOTSTRAP_ADMIN_EMAIL, default
+-- admin@sitepulse.io) with SITEPULSE_BOOTSTRAP_ADMIN_PASSWORD or a random one-time
+-- password printed once to the log, and must_change_password = TRUE.

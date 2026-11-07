@@ -25,11 +25,71 @@ public class WorkspaceSandbox : IWorkspaceSandbox
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// File names that let a generated project hook arbitrary MSBuild logic into
+    /// <c>dotnet build</c>/<c>dotnet test</c>, which run with the host user's privileges.
+    /// </summary>
+    private static readonly string[] ForbiddenFileNames =
+    {
+        "Directory.Build.props", "Directory.Build.targets", "Directory.Build.rsp",
+        "Directory.Packages.props", "NuGet.config", "nuget.config", "global.json",
+    };
+
+    private static readonly string[] ForbiddenExtensions = { ".targets", ".props", ".tasks" };
+
+    /// <summary>MSBuild elements that execute code or extend the build (whole element names only).</summary>
+    private static readonly System.Text.RegularExpressions.Regex ForbiddenProjectElements =
+        new(@"<\s*(Exec|UsingTask|Target|Import)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Resolves an agent-supplied relative path inside the sandbox, rejecting
+    /// absolute paths and any path that escapes the sandbox root (e.g. <c>../</c>).
+    /// </summary>
+    public string ResolveInside(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+        {
+            throw new UnauthorizedAccessException($"Path '{relativePath}' must be relative to the sandbox.");
+        }
+
+        var root = Path.GetFullPath(WorkingDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var fullPath = Path.GetFullPath(Path.Combine(root, relativePath));
+        if (!fullPath.StartsWith(root, StringComparison.Ordinal))
+        {
+            throw new UnauthorizedAccessException($"Path '{relativePath}' escapes the sandbox.");
+        }
+
+        return fullPath;
+    }
+
+    /// <summary>Rejects files that could run code during the build outside the generated sources.</summary>
+    public static void EnsureBuildSafe(ProjectSourceFile file)
+    {
+        var name = Path.GetFileName(file.RelativePath);
+        if (ForbiddenFileNames.Contains(name, StringComparer.OrdinalIgnoreCase) ||
+            ForbiddenExtensions.Contains(Path.GetExtension(name), StringComparer.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException($"Generated file '{file.RelativePath}' is not allowed: it can extend the MSBuild pipeline.");
+        }
+
+        if (name.EndsWith("proj", StringComparison.OrdinalIgnoreCase) &&
+            ForbiddenProjectElements.IsMatch(file.Content))
+        {
+            throw new UnauthorizedAccessException($"Project '{file.RelativePath}' declares custom MSBuild targets, tasks or imports.");
+        }
+    }
+
     public async Task WriteFilesAsync(IEnumerable<ProjectSourceFile> files, CancellationToken ct = default)
     {
-        foreach (var file in files)
+        // Validate the whole batch first so a rejected file leaves nothing half-written.
+        var resolved = files.Select(f =>
         {
-            var fullPath = Path.Combine(WorkingDirectory, file.RelativePath);
+            EnsureBuildSafe(f);
+            return (File: f, FullPath: ResolveInside(f.RelativePath));
+        }).ToList();
+
+        foreach (var (file, fullPath) in resolved)
+        {
             var dir = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {
@@ -42,7 +102,7 @@ public class WorkspaceSandbox : IWorkspaceSandbox
 
     public async Task<string> ReadFileAsync(string relativePath, CancellationToken ct = default)
     {
-        var fullPath = Path.Combine(WorkingDirectory, relativePath);
+        var fullPath = ResolveInside(relativePath);
         if (!File.Exists(fullPath))
         {
             throw new FileNotFoundException($"File '{relativePath}' not found in sandbox.");
@@ -72,7 +132,7 @@ public class WorkspaceSandbox : IWorkspaceSandbox
                 continue;
             }
 
-            var subDir = dirPath.Replace(sourceDir, targetDir);
+            var subDir = Path.Combine(targetDir, Path.GetRelativePath(sourceDir, dirPath));
             Directory.CreateDirectory(subDir);
         }
 
@@ -84,7 +144,7 @@ public class WorkspaceSandbox : IWorkspaceSandbox
                 continue;
             }
 
-            var destFile = filePath.Replace(sourceDir, targetDir);
+            var destFile = Path.Combine(targetDir, Path.GetRelativePath(sourceDir, filePath));
             var destDir = Path.GetDirectoryName(destFile);
             if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
             {

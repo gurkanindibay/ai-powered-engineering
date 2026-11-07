@@ -47,4 +47,14 @@ if [ -f ".env" ]; then
     set +a
 fi
 export SITEPULSE_SEED_TEST_DATA=${SITEPULSE_SEED_TEST_DATA:-false}
+# Local development defaults (production must set these explicitly).
+export APP_ENV=${APP_ENV:-development}
+export SITEPULSE_ENABLE_DEV_ROUTES=${SITEPULSE_ENABLE_DEV_ROUTES:-true}
+if [ -z "${DB_PASS:-}" ]; then
+    echo "Error: DB_PASS is not set. Copy backend/.env.example to backend/.env and fill it in."
+    exit 1
+fi
+if [ -z "${SITEPULSE_JWT_SECRET:-}" ]; then
+    echo "Warning: SITEPULSE_JWT_SECRET is not set; a random secret is used and logins end on restart."
+fi
 "$CARGO_BIN" run --release

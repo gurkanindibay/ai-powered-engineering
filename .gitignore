@@ -22,6 +22,9 @@ build/
 **/build/
 local.properties
 *.lock
+# Lock files that pin application dependencies are committed (reproducible builds).
+!Cargo.lock
+!pubspec.lock
 
 # Maven / Java artifacts
 **/target/

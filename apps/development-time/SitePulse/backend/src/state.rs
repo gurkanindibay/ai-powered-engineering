@@ -11,6 +11,23 @@ use crate::models::{
 };
 use crate::services::VirtualIbanService;
 
+/// Password for the bootstrap SaaS administrator: `SITEPULSE_BOOTSTRAP_ADMIN_PASSWORD`
+/// when set, otherwise a random one-time password logged once at startup. The
+/// account is always created with `must_change_password = true`.
+pub fn bootstrap_admin_password() -> String {
+    static PASSWORD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    PASSWORD
+        .get_or_init(|| match std::env::var("SITEPULSE_BOOTSTRAP_ADMIN_PASSWORD") {
+            Ok(p) if p.chars().count() >= crate::auth::MIN_PASSWORD_LENGTH => p,
+            _ => {
+                let p = crate::auth::generate_temporary_password("SP-ADMIN-");
+                tracing::warn!("Bootstrap SaaS admin one-time password (change on first login): {}", p);
+                p
+            }
+        })
+        .clone()
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub inner: Arc<RwLock<AppStateInner>>,
@@ -47,6 +64,12 @@ pub struct AppStateInner {
     pub capital_projects: Vec<crate::models::CapitalProject>,
     pub capital_installments: Vec<crate::models::CapitalProjectInstallment>,
     pub capital_disbursements: Vec<crate::models::CapitalContractorDisbursement>,
+}
+
+impl Default for AppStateInner {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AppStateInner {
@@ -131,9 +154,9 @@ impl AppStateInner {
                 full_name: "SaaS Platform Admin".to_string(),
                 email: "admin@sitepulse.io".to_string(),
                 phone: "+90 532 999 0000".to_string(),
-                password_hash: Some("ARGON2_HASH_admin123".to_string()),
+                password_hash: Some(crate::auth::hash_password(&bootstrap_admin_password())),
                 role: Role::SaasAdmin,
-                must_change_password: false,
+                must_change_password: true,
                 auth_provider: "LOCAL".to_string(),
                 google_sub: None,
                 avatar_url: None,
@@ -169,7 +192,7 @@ impl AppStateInner {
         }
 
         if self.blocks.is_empty() {
-            let default_blocks = vec!["A Blok", "B Blok"];
+            let default_blocks = ["A Blok", "B Blok"];
             for (idx, bname) in default_blocks.iter().enumerate() {
                 self.blocks.push(crate::models::BlockDto {
                     id: (idx + 1).to_string(),
@@ -200,6 +223,7 @@ impl AppStateInner {
                 status: "ACTIVE".to_string(),
                 plan_type: "PREMIUM".to_string(),
                 license_end_date: NaiveDate::from_ymd_opt(2027, 9, 1).unwrap(),
+                timezone: crate::models::default_site_timezone(),
             });
         }
 
@@ -212,6 +236,7 @@ impl AppStateInner {
                 status: "ACTIVE".to_string(),
                 plan_type: "STANDARD".to_string(),
                 license_end_date: NaiveDate::from_ymd_opt(2027, 10, 15).unwrap(),
+                timezone: crate::models::default_site_timezone(),
             });
         }
 
@@ -224,7 +249,7 @@ impl AppStateInner {
                 full_name: "Mehmet Demir".to_string(),
                 email: "mehmet.demir@begonya.com".to_string(),
                 phone: "+90 532 100 2030".to_string(),
-                password_hash: Some("ARGON2_HASH_mehmet123".to_string()),
+                password_hash: Some(crate::auth::hash_password("mehmet123")),
                 role: Role::SiteManager,
                 must_change_password: false,
                 auth_provider: "LOCAL".to_string(),
@@ -243,7 +268,7 @@ impl AppStateInner {
                 full_name: "Ahmet Yılmaz".to_string(),
                 email: "ahmet.yilmaz@begonya.com".to_string(),
                 phone: "+90 532 111 22 33".to_string(),
-                password_hash: Some("ARGON2_HASH_ahmet123".to_string()),
+                password_hash: Some(crate::auth::hash_password("ahmet123")),
                 role: Role::HomeOwner,
                 must_change_password: false,
                 auth_provider: "LOCAL".to_string(),
@@ -341,6 +366,10 @@ impl AppStateInner {
                 total_amount: Decimal::from_str_exact("1400.00").unwrap(),
                 due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
                 status: DebtStatus::Pending,
+                paid_principal: Decimal::ZERO,
+                paid_penalty: Decimal::ZERO,
+                debtor_type: "TENANT".to_string(),
+                expense_type: "OPERATIONAL_DUES".to_string(),
             });
         }
 
@@ -474,6 +503,10 @@ impl AppStateInner {
                 total_amount: Decimal::from_str_exact("1400.00").unwrap(),
                 due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
                 status: DebtStatus::Pending,
+                paid_principal: Decimal::ZERO,
+                paid_penalty: Decimal::ZERO,
+                debtor_type: "TENANT".to_string(),
+                expense_type: "OPERATIONAL_DUES".to_string(),
             });
         }
 
@@ -553,6 +586,12 @@ impl AppStateInner {
                 created_at: Some(Utc::now()),
             });
         }
+    }
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

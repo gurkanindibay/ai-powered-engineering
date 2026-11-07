@@ -1,5 +1,5 @@
 use chrono::{DateTime, Datelike, Utc};
-use rand::{distributions::Alphanumeric, Rng};
+
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
@@ -109,7 +109,7 @@ impl SiteAdminService {
         let formatted_block_name = format!("{} Blok", effective_clean_block);
 
         let temp_pass = generate_resident_temporary_password();
-        let password_hash = format!("argon2id_hash_placeholder:{}", &temp_pass);
+        let password_hash = crate::auth::hash_password(&temp_pass);
 
         let effective_floor = if request.floor > 0 {
             request.floor
@@ -133,7 +133,7 @@ impl SiteAdminService {
         let monthly_dues = resolved_dues.unwrap_or_else(|| Decimal::from_str_exact("1400.00").unwrap());
 
         // Parse numeric IDs
-        let site_numeric_id = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let site_numeric_id = crate::db::require_id("entity", site_id)?;
         let viban = VirtualIbanService::generate_virtual_iban(
             VirtualIbanService::KUVEYT_TURK_BANK_CODE,
             &site_numeric_id.to_string(),
@@ -267,7 +267,7 @@ impl SiteAdminService {
                 if !t_email_norm.is_empty() {
                     let existing_t_user = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&t_email_norm]).await.ok().flatten();
                     if existing_t_user.is_none() {
-                        let _ = client
+                        client
                             .execute(
                                 r#"
                                 INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
@@ -275,7 +275,7 @@ impl SiteAdminService {
                                 "#,
                                 &[&site_numeric_id, &t_pid, &t_email_norm, &password_hash],
                             )
-                            .await;
+                            .await.map_err(|e| e.to_string())?;
                     }
                 }
             }
@@ -295,7 +295,7 @@ impl SiteAdminService {
                 let prev_tenant: Option<i64> = existing_unit.get("tenant_person_id");
 
                 if is_resident_only {
-                    let _ = client
+                    client
                         .execute(
                             r#"
                             INSERT INTO occupancy_members (occupancy_id, person_id, resident_user_id, full_name, relationship, phone, email, is_emergency_contact, created_at)
@@ -312,7 +312,7 @@ impl SiteAdminService {
                                 &email_norm,
                             ],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 } else {
                     // Check active occupancy in unit_occupancies
                     let active_occ_row = client
@@ -326,16 +326,16 @@ impl SiteAdminService {
 
                     if let Some(occ_row) = active_occ_row {
                         let occ_id: i64 = occ_row.get(0);
-                        let _ = client
+                        client
                             .execute(
                                 "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE, notes = COALESCE(notes, '') || ' • Ayrıldı (Yeni sakin devri)' WHERE id = $1",
                                 &[&occ_id],
                             )
-                            .await;
+                            .await.map_err(|e| e.to_string())?;
                     } else if let Some(prev_pid) = prev_tenant.or(prev_owner) {
                         // Legacy occupant was not in unit_occupancies; archive it now so history is preserved
                         let prev_role = if prev_tenant.is_some() { "TENANT" } else { "OWNER" };
-                        let _ = client
+                        client
                             .execute(
                                 r#"
                                 INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, end_date, is_active, exit_balance, notes)
@@ -343,7 +343,7 @@ impl SiteAdminService {
                                 "#,
                                 &[&unit_numeric_id, &prev_pid, &prev_role],
                             )
-                            .await;
+                            .await.map_err(|e| e.to_string())?;
                     }
 
                     // Insert new occupant into unit_occupancies
@@ -353,7 +353,7 @@ impl SiteAdminService {
 
                     if has_explicit_tenant || is_tenant || request.is_resident {
                         if let Some(occ_pid) = active_occ_pid {
-                            let _ = client
+                            client
                                 .execute(
                                     r#"
                                     INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
@@ -361,13 +361,13 @@ impl SiteAdminService {
                                     "#,
                                     &[&unit_numeric_id, &occ_pid, &new_occ_type, &Some(format!("Yeni {} girişi", if has_explicit_tenant || is_tenant { "kiracı" } else { "malik" }))],
                                 )
-                                .await;
+                                .await.map_err(|e| e.to_string())?;
                         }
                     }
 
                     // Update unit with new occupant
                     if has_explicit_tenant {
-                        let _ = client
+                        client
                             .execute(
                                 r#"
                                 UPDATE units SET
@@ -380,9 +380,9 @@ impl SiteAdminService {
                                 "#,
                                 &[&person_numeric_id, &explicit_tenant_person_id, &effective_house_type, &viban, &unit_numeric_id],
                             )
-                            .await;
+                            .await.map_err(|e| e.to_string())?;
                     } else if is_tenant {
-                        let _ = client
+                        client
                             .execute(
                                 r#"
                                 UPDATE units SET
@@ -394,9 +394,9 @@ impl SiteAdminService {
                                 "#,
                                 &[&person_numeric_id, &new_occ_status, &effective_house_type, &viban, &unit_numeric_id],
                             )
-                            .await;
+                            .await.map_err(|e| e.to_string())?;
                     } else {
-                        let _ = client
+                        client
                             .execute(
                                 r#"
                                 UPDATE units SET
@@ -409,7 +409,7 @@ impl SiteAdminService {
                                 "#,
                                 &[&person_numeric_id, &request.is_resident, &new_occ_status, &effective_house_type, &viban, &unit_numeric_id],
                             )
-                            .await;
+                            .await.map_err(|e| e.to_string())?;
                     }
                 }
             } else {
@@ -447,7 +447,7 @@ impl SiteAdminService {
                     .map_err(|e| format!("Failed to insert unit: {}", e))?;
                 unit_numeric_id = unit_row.get(0);
                 if is_resident_only {
-                    let _ = client
+                    client
                         .execute(
                             r#"
                             INSERT INTO occupancy_members (occupancy_id, person_id, resident_user_id, full_name, relationship, phone, email, is_emergency_contact, created_at)
@@ -464,10 +464,10 @@ impl SiteAdminService {
                                 &email_norm,
                             ],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 } else if has_explicit_tenant {
                     if let Some(t_pid) = explicit_tenant_person_id {
-                        let _ = client
+                        client
                             .execute(
                                 r#"
                                 INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
@@ -475,11 +475,11 @@ impl SiteAdminService {
                                 "#,
                                 &[&unit_numeric_id, &t_pid],
                             )
-                            .await;
+                            .await.map_err(|e| e.to_string())?;
                     }
                 } else if is_tenant || request.is_resident {
                     let occ_type = if is_tenant { "TENANT" } else { "OWNER" };
-                    let _ = client
+                    client
                         .execute(
                             r#"
                             INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
@@ -487,7 +487,7 @@ impl SiteAdminService {
                             "#,
                             &[&unit_numeric_id, &person_numeric_id, &occ_type],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 }
             }
 
@@ -511,7 +511,7 @@ impl SiteAdminService {
                 };
                 let period = format!("{} {}", month_name, now.year());
                 let due_date = now.date_naive() + chrono::Days::new(15);
-                let _ = client
+                client
                     .execute(
                         r#"
                         INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, delay_penalty, paid_amount)
@@ -520,7 +520,7 @@ impl SiteAdminService {
                         "#,
                         &[&unit_numeric_id, &period, &monthly_dues, &due_date],
                     )
-                    .await;
+                    .await.map_err(|e| e.to_string())?;
             }
         }
 
@@ -751,6 +751,10 @@ impl SiteAdminService {
                 total_amount: monthly_dues,
                 due_date: Utc::now().date_naive() + chrono::Days::new(15),
                 status: DebtStatus::Pending,
+                paid_principal: Decimal::ZERO,
+                paid_penalty: Decimal::ZERO,
+                debtor_type: "TENANT".to_string(),
+                expense_type: "OPERATIONAL_DUES".to_string(),
             });
         }
 
@@ -797,7 +801,7 @@ impl SiteAdminService {
     }
 
     pub async fn get_home_owners_for_site(&self, site_id: &str) -> Vec<HomeOwnerResponse> {
-        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(0);
 
         // 1. Try DB first if pool available
         if let Some(ref pool) = self.state.pool {
@@ -836,7 +840,7 @@ impl SiteAdminService {
                     ORDER BY b.block_name, u.unit_number
                 "#;
                 let mut household_map: std::collections::HashMap<String, Vec<crate::models::UnitMemberDto>> = std::collections::HashMap::new();
-                if let Ok(m_rows) = client
+                if let Some(m_rows) = crate::db::logged(client
                     .query(
                         r#"
                         SELECT uo.unit_id, om.id, om.full_name, om.relationship, COALESCE(om.phone, ''), COALESCE(om.email, ''), (uo.occupancy_type = 'OWNER'), om.occupancy_id
@@ -847,8 +851,7 @@ impl SiteAdminService {
                         "#,
                         &[],
                     )
-                    .await
-                {
+                    .await, "site_admin_service") {
                     for mr in m_rows {
                         let u_id: i64 = mr.get(0);
                         let u_id = u_id.to_string();
@@ -867,7 +870,7 @@ impl SiteAdminService {
                     }
                 }
 
-                if let Ok(rows) = client.query(query, &[&site_numeric]).await {
+                if let Some(rows) = crate::db::logged(client.query(query, &[&site_numeric]).await, "site_admin_service") {
                     if !rows.is_empty() {
                         let mut db_result = Vec::new();
                         let mut seen = std::collections::HashSet::new();
@@ -1031,7 +1034,7 @@ impl SiteAdminService {
         unit_or_user_id: &str,
         req: crate::models::UpdateHomeOwnerRequest,
     ) -> Result<HomeOwnerResponse, String> {
-        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let site_numeric = crate::db::require_id("entity", site_id)?;
         let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
 
         // 1. If DB pool is available, update database
@@ -1064,36 +1067,36 @@ impl SiteAdminService {
 
                     if req.remove_tenant == Some(true) {
                         if let Some(tenant_person_id) = t_id {
-                            let _ = client.execute(
+                            client.execute(
                                 "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE WHERE unit_id = $1 AND person_id = $2 AND is_active = true",
                                 &[&u_id, &tenant_person_id],
-                            ).await;
+                            ).await.map_err(|e| e.to_string())?;
                         }
                         let new_occupancy = if req.is_resident == Some(true) { "OWNER_OCCUPIED" } else { "VACANT" };
-                        let _ = client.execute("UPDATE units SET tenant_person_id = NULL, occupancy_status = $1 WHERE id = $2", &[&new_occupancy, &u_id]).await;
+                        client.execute("UPDATE units SET tenant_person_id = NULL, occupancy_status = $1 WHERE id = $2", &[&new_occupancy, &u_id]).await.map_err(|e| e.to_string())?;
                         if req.is_resident == Some(true) {
                             if let Some(owner_person_id) = p_id {
-                                let _ = client.execute(
+                                client.execute(
                                     "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, created_at)
                                      VALUES ($1, $2, 'OWNER', CURRENT_DATE, true, NOW())
                                      ON CONFLICT DO NOTHING",
                                     &[&u_id, &owner_person_id],
-                                ).await;
+                                ).await.map_err(|e| e.to_string())?;
                             }
                         }
                     } else if let Some(tenant_person_id) = t_id {
                         if let Some(ref t_name) = req.tenant_full_name {
-                            let _ = client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[t_name, &tenant_person_id]).await;
+                            client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[t_name, &tenant_person_id]).await.map_err(|e| e.to_string())?;
                         }
                         if let Some(ref t_phone) = req.tenant_phone {
-                            let _ = client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[t_phone, &tenant_person_id]).await;
+                            client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[t_phone, &tenant_person_id]).await.map_err(|e| e.to_string())?;
                         }
                         if let Some(ref t_email) = req.tenant_email {
                             let email_norm = t_email.trim().to_lowercase();
                             let prev_email: Option<String> = client.query_opt("SELECT email FROM persons WHERE id = $1", &[&tenant_person_id]).await.ok().flatten().map(|r| r.get(0));
-                            let _ = client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &tenant_person_id]).await;
+                            client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &tenant_person_id]).await.map_err(|e| e.to_string())?;
                             if let Some(ref pe) = prev_email {
-                                let _ = client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND LOWER(email) = LOWER($3)", &[&email_norm, &site_numeric, pe]).await;
+                                client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND LOWER(email) = LOWER($3)", &[&email_norm, &site_numeric, pe]).await.map_err(|e| e.to_string())?;
                             }
                         }
                     } else if let Some(ref t_name) = req.tenant_full_name {
@@ -1109,41 +1112,41 @@ impl SiteAdminService {
                             ).await;
                             if let Ok(r) = row_res {
                                 let new_t_id: i64 = r.get(0);
-                                let _ = client.execute("UPDATE units SET tenant_person_id = $1, occupancy_status = 'TENANT_OCCUPIED' WHERE id = $2", &[&new_t_id, &u_id]).await;
-                                let _ = client.execute(
+                                client.execute("UPDATE units SET tenant_person_id = $1, occupancy_status = 'TENANT_OCCUPIED' WHERE id = $2", &[&new_t_id, &u_id]).await.map_err(|e| e.to_string())?;
+                                client.execute(
                                     "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, created_at)
                                      VALUES ($1, $2, 'TENANT', CURRENT_DATE, true, NOW())",
                                     &[&u_id, &new_t_id],
-                                ).await;
+                                ).await.map_err(|e| e.to_string())?;
                             }
                         }
                     }
 
                     if let Some(owner_person_id) = p_id {
                         if let Some(ref name) = req.owner_full_name {
-                            let _ = client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[name, &owner_person_id]).await;
+                            client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[name, &owner_person_id]).await.map_err(|e| e.to_string())?;
                         }
                         if let Some(ref phone) = req.phone {
-                            let _ = client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[phone, &owner_person_id]).await;
+                            client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[phone, &owner_person_id]).await.map_err(|e| e.to_string())?;
                         }
                         if let Some(ref email) = req.email {
                             let email_norm = email.trim().to_lowercase();
                             let prev_email: Option<String> = client.query_opt("SELECT email FROM persons WHERE id = $1", &[&owner_person_id]).await.ok().flatten().map(|r| r.get(0));
-                            let _ = client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &owner_person_id]).await;
+                            client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &owner_person_id]).await.map_err(|e| e.to_string())?;
                             if let Some(ref pe) = prev_email {
-                                let _ = client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND LOWER(email) = LOWER($3)", &[&email_norm, &site_numeric, pe]).await;
+                                client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND LOWER(email) = LOWER($3)", &[&email_norm, &site_numeric, pe]).await.map_err(|e| e.to_string())?;
                             }
                         }
                     }
 
                     if let Some(ref ht) = req.house_type {
-                        let _ = client.execute("UPDATE units SET house_type = $1 WHERE id = $2", &[ht, &u_id]).await;
+                        client.execute("UPDATE units SET house_type = $1 WHERE id = $2", &[ht, &u_id]).await.map_err(|e| e.to_string())?;
                     }
                     if let Some(dues) = req.monthly_dues {
-                        let _ = client.execute(
+                        client.execute(
                             "UPDATE dues_liabilities SET principal_amount = $1 WHERE unit_id = $2 AND status = 'PENDING'",
                             &[&dues, &u_id],
-                        ).await;
+                        ).await.map_err(|e| e.to_string())?;
                     }
                 }
             }
@@ -1285,7 +1288,7 @@ impl SiteAdminService {
     }
 
     pub async fn delete_home_owner(&self, site_id: &str, unit_or_user_id: &str) -> Result<(), String> {
-        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let site_numeric = crate::db::require_id("entity", site_id)?;
         let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
 
         // 1. If DB pool is available, delete from PostgreSQL
@@ -1317,31 +1320,29 @@ impl SiteAdminService {
                     let t_id: Option<i64> = u_row.get(2);
 
                     // Delete dependent records safely adhering to foreign key hierarchy
-                    let _ = client.execute("DELETE FROM payment_entries WHERE unit_id = $1 OR dues_liability_id IN (SELECT id FROM dues_liabilities WHERE unit_id = $1)", &[&u_id]).await;
-                    let _ = client.execute("DELETE FROM dues_liabilities WHERE unit_id = $1", &[&u_id]).await;
-                    let _ = client.execute("DELETE FROM unit_occupancies WHERE unit_id = $1", &[&u_id]).await;
-                    let _ = client.execute("DELETE FROM advance_balances WHERE unit_id = $1", &[&u_id]).await;
-                    let _ = client.execute("DELETE FROM unit_sender_ibans WHERE unit_id = $1", &[&u_id]).await;
-                    let _ = client.execute("DELETE FROM unit_payer_names WHERE unit_id = $1", &[&u_id]).await;
-                    let _ = client.execute("DELETE FROM units WHERE id = $1", &[&u_id]).await;
+                    client.execute("DELETE FROM payment_entries WHERE unit_id = $1 OR dues_liability_id IN (SELECT id FROM dues_liabilities WHERE unit_id = $1)", &[&u_id]).await.map_err(|e| e.to_string())?;
+                    client.execute("DELETE FROM dues_liabilities WHERE unit_id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
+                    client.execute("DELETE FROM unit_occupancies WHERE unit_id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
+                    client.execute("DELETE FROM advance_balances WHERE unit_id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
+                    client.execute("DELETE FROM unit_sender_ibans WHERE unit_id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
+                    client.execute("DELETE FROM unit_payer_names WHERE unit_id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
+                    client.execute("DELETE FROM units WHERE id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
 
                     // Clean up person and user if no other units or occupancies exist
-                    for person_opt in &[p_id, t_id] {
-                        if let Some(person_id) = person_opt {
-                            let other_units = client
-                                .query_one("SELECT COUNT(*) FROM units WHERE owner_person_id = $1 OR tenant_person_id = $1", &[person_id])
-                                .await
-                                .map(|r| r.get::<_, i64>(0))
-                                .unwrap_or(0);
-                            let other_occ = client
-                                .query_one("SELECT COUNT(*) FROM unit_occupancies WHERE person_id = $1", &[person_id])
-                                .await
-                                .map(|r| r.get::<_, i64>(0))
-                                .unwrap_or(0);
-                            if other_units == 0 && other_occ == 0 {
-                                let _ = client.execute("DELETE FROM users WHERE site_id = $1 AND email = (SELECT email FROM persons WHERE id = $2)", &[&site_numeric, person_id]).await;
-                                let _ = client.execute("DELETE FROM persons WHERE id = $1", &[person_id]).await;
-                            }
+                    for person_id in [p_id, t_id].iter().flatten() {
+                        let other_units = client
+                            .query_one("SELECT COUNT(*) FROM units WHERE owner_person_id = $1 OR tenant_person_id = $1", &[person_id])
+                            .await
+                            .map(|r| r.get::<_, i64>(0))
+                            .unwrap_or(0);
+                        let other_occ = client
+                            .query_one("SELECT COUNT(*) FROM unit_occupancies WHERE person_id = $1", &[person_id])
+                            .await
+                            .map(|r| r.get::<_, i64>(0))
+                            .unwrap_or(0);
+                        if other_units == 0 && other_occ == 0 {
+                            client.execute("DELETE FROM users WHERE site_id = $1 AND email = (SELECT email FROM persons WHERE id = $2)", &[&site_numeric, person_id]).await.map_err(|e| e.to_string())?;
+                            client.execute("DELETE FROM persons WHERE id = $1", &[person_id]).await.map_err(|e| e.to_string())?;
                         }
                     }
                 }
@@ -1479,8 +1480,8 @@ impl SiteAdminService {
         let email_norm = email.trim().to_lowercase();
         if !email_norm.is_empty() && !inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
             let temp_pass = generate_resident_temporary_password();
-            let password_hash = format!("argon2id_hash_placeholder:{}", &temp_pass);
-            let s_id = if site_id.is_empty() { "site-1".to_string() } else { site_id.to_string() };
+            let password_hash = crate::auth::hash_password(&temp_pass);
+            let s_id = site_id.to_string();
             inner.users.push(crate::models::User {
                 id: format!("usr-res-{}", &uuid::Uuid::new_v4().to_string()[..8]),
                 site_id: s_id,
@@ -1504,12 +1505,12 @@ impl SiteAdminService {
     pub async fn delete_unit_member(&self, _site_id: &str, unit_id: &str, resident_id: &str) -> Result<(), String> {
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
-                let unit_id_num = crate::db::parse_id_to_i64(unit_id).unwrap_or(0);
+                let unit_id_num = crate::db::require_id("entity", unit_id)?;
                 let member_id = crate::db::parse_id_to_i64(resident_id);
-                let _ = client.execute(
+                client.execute(
                     "DELETE FROM occupancy_members WHERE id = $1 AND occupancy_id IN (SELECT id FROM unit_occupancies WHERE unit_id = $2)",
                     &[&member_id, &unit_id_num],
-                ).await;
+                ).await.map_err(|e| e.to_string())?;
             }
         }
 
@@ -1522,6 +1523,7 @@ impl SiteAdminService {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_unit_member(
         &self,
         _site_id: &str,
@@ -1534,12 +1536,12 @@ impl SiteAdminService {
     ) -> Result<(), String> {
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
-                let unit_id_num = crate::db::parse_id_to_i64(unit_id).unwrap_or(0);
+                let unit_id_num = crate::db::require_id("entity", unit_id)?;
                 let member_id = crate::db::parse_id_to_i64(resident_id);
-                let _ = client.execute(
+                client.execute(
                     "UPDATE occupancy_members SET full_name = $1, phone = $2, email = $3, relationship = $4 WHERE id = $5 AND occupancy_id IN (SELECT id FROM unit_occupancies WHERE unit_id = $6)",
                     &[&full_name, &phone, &email, &relationship, &member_id, &unit_id_num],
-                ).await;
+                ).await.map_err(|e| e.to_string())?;
             }
         }
 
@@ -1560,18 +1562,17 @@ impl SiteAdminService {
     }
 
     pub async fn get_house_types_for_site(&self, site_id: &str) -> Vec<crate::models::HouseTypeTariff> {
-        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(0);
 
         // 1. Try DB first if pool available
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
-                if let Ok(rows) = client
+                if let Some(rows) = crate::db::logged(client
                     .query(
                         "SELECT id, site_id, type_name, dues_amount, description FROM house_types WHERE site_id = $1 ORDER BY dues_amount ASC",
                         &[&site_numeric],
                     )
-                    .await
-                {
+                    .await, "site_admin_service") {
                     if !rows.is_empty() {
                         return rows
                             .into_iter()
@@ -1658,7 +1659,7 @@ impl SiteAdminService {
         if request.dues_amount <= Decimal::ZERO {
             return Err("Aidat tutarı sıfırdan büyük olmalıdır.".to_string());
         }
-        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let site_numeric = crate::db::require_id("entity", site_id)?;
         let type_name_trimmed = request.type_name.trim().to_string();
 
         let mut id_str = format!("ht-{}", &Uuid::new_v4().to_string()[..8]);
@@ -1707,16 +1708,16 @@ impl SiteAdminService {
     }
 
     pub async fn delete_house_type(&self, site_id: &str, id: &str) -> Result<(), String> {
-        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let site_numeric = crate::db::require_id("entity", site_id)?;
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
                 if let Ok(numeric_id) = id.parse::<i64>() {
-                    let _ = client
+                    client
                         .execute(
                             "DELETE FROM house_types WHERE id = $1 AND site_id = $2",
                             &[&numeric_id, &site_numeric],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 }
             }
         }
@@ -1790,7 +1791,7 @@ impl SiteAdminService {
             return Err("Blok adı boş olamaz (örn: A Blok).".to_string());
         }
         let total_floors = request.total_floors.unwrap_or(10);
-        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let site_numeric = crate::db::require_id("entity", site_id)?;
 
         let mut id_str = format!("blk-{}", &Uuid::new_v4().to_string()[..8]);
 
@@ -1807,12 +1808,12 @@ impl SiteAdminService {
             if let Some(row) = existing {
                 let db_id: i64 = row.get(0);
                 id_str = db_id.to_string();
-                let _ = client
+                client
                     .execute(
                         "UPDATE blocks SET total_floors = $1 WHERE id = $2",
                         &[&total_floors, &db_id],
                     )
-                    .await;
+                    .await.map_err(|e| e.to_string())?;
             } else {
                 let row = client
                     .query_one(
@@ -1852,7 +1853,7 @@ impl SiteAdminService {
         unit_id: &str,
         req: crate::models::MoveOutResidentRequest,
     ) -> Result<crate::models::OccupancyHistoryItem, String> {
-        let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let site_numeric = crate::db::require_id("entity", site_id)?;
         let unit_numeric = crate::db::parse_id_to_i64(unit_id)
             .or_else(|| {
                 if unit_id.starts_with("unit-") {
@@ -1925,12 +1926,12 @@ impl SiteAdminService {
 
                 let occ_id: i64 = if let Some(row) = active_occ {
                     let id: i64 = row.get(0);
-                    let _ = client
+                    client
                         .execute(
                             "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE, exit_balance = $1, notes = COALESCE($2, notes) WHERE id = $3",
                             &[&exit_balance, &notes_val, &id],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                     id
                 } else {
                     let row = client
@@ -1948,12 +1949,12 @@ impl SiteAdminService {
                 };
 
                 // Bind active household members to the closed occupancy session
-                let _ = client
+                client
                     .execute(
                         "UPDATE occupancy_members SET occupancy_id = $1 WHERE occupancy_id IS NULL AND person_id IN (SELECT person_id FROM unit_occupancies WHERE id = $1)",
                         &[&occ_id],
                     )
-                    .await;
+                    .await.map_err(|e| e.to_string())?;
 
                 // Clear active household members from in-memory cache
                 {
@@ -1970,19 +1971,19 @@ impl SiteAdminService {
 
                 // Update unit status to VACANT and clear tenant_person_id if tenant moved out
                 if tenant_id.is_some() {
-                    let _ = client
+                    client
                         .execute(
                             "UPDATE units SET tenant_person_id = NULL, occupancy_status = 'VACANT' WHERE id = $1",
                             &[&unit_numeric],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 } else {
-                    let _ = client
+                    client
                         .execute(
                             "UPDATE units SET occupancy_status = 'VACANT' WHERE id = $1",
                             &[&unit_numeric],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 }
 
                 // Fetch person details
@@ -2046,7 +2047,7 @@ impl SiteAdminService {
         unit_id: &str,
         req: crate::models::MoveInResidentRequest,
     ) -> Result<crate::models::OccupancyHistoryItem, String> {
-        let _site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(1);
+        let _site_numeric = crate::db::require_id("entity", site_id)?;
         let unit_numeric = crate::db::parse_id_to_i64(unit_id)
             .or_else(|| {
                 if unit_id.starts_with("unit-") {
@@ -2092,12 +2093,12 @@ impl SiteAdminService {
                 };
 
                 // Close any existing active occupancy for this unit
-                let _ = client
+                client
                     .execute(
                         "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE WHERE unit_id = $1 AND is_active = true",
                         &[&unit_numeric],
                     )
-                    .await;
+                    .await.map_err(|e| e.to_string())?;
 
                 let occ_role = if req.role.to_uppercase() == "TENANT" { "TENANT" } else { "OWNER" };
                 let occ_status = if occ_role == "TENANT" { "TENANT_OCCUPIED" } else { "OWNER_OCCUPIED" };
@@ -2122,19 +2123,19 @@ impl SiteAdminService {
 
                 // Update unit
                 if occ_role == "TENANT" {
-                    let _ = client
+                    client
                         .execute(
                             "UPDATE units SET tenant_person_id = $1, occupancy_status = $2 WHERE id = $3",
                             &[&person_id, &occ_status, &unit_numeric],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 } else {
-                    let _ = client
+                    client
                         .execute(
                             "UPDATE units SET owner_person_id = $1, occupancy_status = $2 WHERE id = $3",
                             &[&person_id, &occ_status, &unit_numeric],
                         )
-                        .await;
+                        .await.map_err(|e| e.to_string())?;
                 }
 
                 // Fetch person details
@@ -2203,7 +2204,7 @@ impl SiteAdminService {
                     WHERE uo.unit_id = $1
                     ORDER BY uo.start_date DESC, uo.id DESC
                 "#;
-                if let Ok(rows) = client.query(query, &[&unit_numeric]).await {
+                if let Some(rows) = crate::db::logged(client.query(query, &[&unit_numeric]).await, "site_admin_service") {
                     let items = rows
                         .into_iter()
                         .map(|r| crate::models::OccupancyHistoryItem {
@@ -2244,11 +2245,6 @@ impl SiteAdminService {
 }
 
 fn generate_resident_temporary_password() -> String {
-    let part: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(4)
-        .map(char::from)
-        .collect();
-    format!("SP-SAKIN-{}", part.to_uppercase())
+    crate::auth::generate_temporary_password("SP-SAKIN-")
 }
 

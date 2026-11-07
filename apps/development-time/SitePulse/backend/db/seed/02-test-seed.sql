@@ -43,6 +43,7 @@ SET block_name = EXCLUDED.block_name,
     total_floors = EXCLUDED.total_floors;
 
 -- 3. Test Persons & Users
+-- Development-only credentials (argon2id hashes of mehmet123 / ahmet123 / mehmetoz123).
 -- Site Manager (Mehmet Demir)
 INSERT INTO persons (id, national_id, full_name, phone, email, person_type)
 VALUES 
@@ -51,7 +52,7 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (id, site_id, person_id, email, password_hash, role, must_change_password)
 VALUES 
-    (2, 1, 3, 'mehmet.demir@begonya.com', 'ARGON2_HASH_mehmet123', 'SITE_MANAGER', FALSE)
+    (2, 1, 3, 'mehmet.demir@begonya.com', '$argon2id$v=19$m=19456,t=2,p=1$oti/xPMmkVNKfWBjdyF3tA$8fO5zoZsnd/RpTdpnsOeURv7wyWzkHicAFacs0xx6q0', 'SITE_MANAGER', FALSE)
 ON CONFLICT (email) DO NOTHING;
 
 -- Home Owner (Ahmet Yılmaz)
@@ -62,7 +63,7 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (id, site_id, person_id, email, password_hash, role, must_change_password)
 VALUES 
-    (3, 1, 1, 'ahmet.yilmaz@begonya.com', 'ARGON2_HASH_ahmet123', 'HOME_OWNER', FALSE)
+    (3, 1, 1, 'ahmet.yilmaz@begonya.com', '$argon2id$v=19$m=19456,t=2,p=1$YsMeFsEB5mFZyolRkMHQdg$B+e2RQqZ4RhmRJm27iab3Oam+ZiatTZFjdxUzZfNVag', 'HOME_OWNER', FALSE)
 ON CONFLICT (email) DO NOTHING;
 
 -- Tenant (Zeynep Kaya)
@@ -79,7 +80,7 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (id, site_id, person_id, email, password_hash, role, must_change_password)
 VALUES 
-    (4, 1, 4, 'mehmet.oz@begonya.com', 'ARGON2_HASH_mehmetoz123', 'HOME_OWNER', FALSE)
+    (4, 1, 4, 'mehmet.oz@begonya.com', '$argon2id$v=19$m=19456,t=2,p=1$yhcA3VWK507NdmDfi0k1aQ$qRbHm998tv7yn0wexSHEyOZ73qfZqiuCIY4zz8oHAow', 'HOME_OWNER', FALSE)
 ON CONFLICT (email) DO NOTHING;
 
 -- 4. Test Units (Flats)
@@ -120,5 +121,14 @@ SELECT setval(pg_get_serial_sequence('persons', 'id'), COALESCE((SELECT MAX(id) 
 SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 1));
 SELECT setval(pg_get_serial_sequence('units', 'id'), COALESCE((SELECT MAX(id) FROM units), 1));
 SELECT setval(pg_get_serial_sequence('site_bank_accounts', 'id'), COALESCE((SELECT MAX(id) FROM site_bank_accounts), 1));
-SELECT setval(pg_get_serial_sequence('dues_liabilities', 'id'), 1, false);
-SELECT setval(pg_get_serial_sequence('payment_entries', 'id'), 1, false);
+-- Keep every identity sequence ahead of the explicit ids inserted above.
+DO $$
+DECLARE r record;
+BEGIN
+    FOR r IN SELECT table_name, column_name FROM information_schema.columns
+             WHERE table_schema = 'public' AND is_identity = 'YES' LOOP
+        EXECUTE format(
+            'SELECT setval(pg_get_serial_sequence(%L, %L), COALESCE((SELECT MAX(%I) FROM %I), 0) + 1, false)',
+            r.table_name, r.column_name, r.column_name, r.table_name);
+    END LOOP;
+END $$;

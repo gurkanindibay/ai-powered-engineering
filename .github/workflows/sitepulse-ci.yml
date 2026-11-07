@@ -1,0 +1,121 @@
+# SitePulse CI: runs every verification gate against a real PostgreSQL service.
+# Task status is changed only here (`harness_cli.py verify --record` requires CI=true).
+# Branch protection for master (require this workflow) is a repository setting.
+name: SitePulse CI
+
+on:
+  pull_request:
+    paths: ["apps/development-time/SitePulse/**", ".github/workflows/sitepulse-ci.yml"]
+  push:
+    branches: [master]
+    paths: ["apps/development-time/SitePulse/**", ".github/workflows/sitepulse-ci.yml"]
+
+defaults:
+  run:
+    working-directory: apps/development-time/SitePulse
+
+env:
+  DB_HOST: 127.0.0.1
+  DB_PORT: "5432"
+  DB_USER: sitepulse_user
+  DB_PASS: ci-only-password
+  CARGO_TERM_COLOR: never
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sitepulse_user
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: sitepulse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sitepulse_user -d sitepulse"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/development-time/SitePulse/backend
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Flutter dependencies
+        working-directory: apps/development-time/SitePulse/flutter
+        run: flutter pub get
+      - name: All gates (build, clippy, tests, money fixtures, analyze, lint, schema, API system)
+        run: python3 scripts/run_tests.py
+      - name: Traceability (VERIFIED requirements need current evidence)
+        run: python3 harness/rtm_validator.py
+
+  record-evidence:
+    if: github.event_name == 'push'
+    needs: verify
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sitepulse_user
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: sitepulse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sitepulse_user -d sitepulse"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/development-time/SitePulse/backend
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Flutter dependencies
+        working-directory: apps/development-time/SitePulse/flutter
+        run: flutter pub get
+      - name: Record evidence for every task (dependency order)
+        env:
+          CI: "true"
+        run: |
+          python3 - <<'PY'
+          import json, subprocess, sys
+          dag = json.load(open(".specify/tasks/task-dag.json"))
+          done, order, tasks = set(), [], {t["id"]: t for t in dag["tasks"]}
+          def visit(t):
+              if t in done: return
+              for d in tasks[t]["depends_on"]: visit(d)
+              done.add(t); order.append(t)
+          for t in tasks: visit(t)
+          failed = []
+          for t in order:
+              if subprocess.run([sys.executable, "harness/harness_cli.py", "verify", "--task", t, "--record"]).returncode != 0:
+                  failed.append(t)
+          print("Failed tasks:", failed or "none")
+          sys.exit(1 if failed else 0)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sitepulse-evidence
+          path: |
+            apps/development-time/SitePulse/.specify/evidence/
+            apps/development-time/SitePulse/.specify/tasks/task-dag.json

@@ -10,13 +10,22 @@ Validates forward and backward traceability across:
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
+ACCEPTANCE_REF = re.compile(r"`((?:rust|flutter|system):[^`]+)`")
+
+
 class RtmValidator:
-    def __init__(self, workspace_root: Optional[Path] = None):
+    """A requirement is VERIFIED only with evidence: its task is COMPLETED, and
+    `.specify/evidence/<task>.json` records a passing run on the current commit
+    in which every acceptance test named in the RTM row passed."""
+
+    def __init__(self, workspace_root: Optional[Path] = None, allow_stale_evidence: bool = False):
+        self.allow_stale_evidence = allow_stale_evidence
         if workspace_root is None:
             # SCRIPT_DIR is .../apps/development-time/SitePulse/harness
             script_dir = Path(__file__).resolve().parent
@@ -34,6 +43,7 @@ class RtmValidator:
             / "tasks"
             / "task-dag.json"
         )
+        self.evidence_dir = self.dag_file.parent.parent / "evidence"
 
     def parse_rtm_table(self) -> List[Dict[str, str]]:
         """Parses rows from the markdown table in traceability-matrix.md."""
@@ -79,6 +89,36 @@ class RtmValidator:
 
         return rows
 
+    def _current_commit(self) -> Optional[str]:
+        try:
+            return subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.workspace_root, capture_output=True,
+                                  text=True, check=True).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+    def _evidence_issues(self, req_id: str, task_id: str, named_tests: List[str]) -> List[str]:
+        if not named_tests:
+            return [f"[{req_id}] VERIFIED but names no acceptance tests (rust:/flutter:/system: ids)"]
+        path = self.evidence_dir / f"{task_id}.json"
+        try:
+            evidence = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return [f"[{req_id}] VERIFIED but evidence file is missing or unreadable: {path.name}"]
+        issues: List[str] = []
+        if not evidence.get("passed"):
+            issues.append(f"[{req_id}] VERIFIED but the latest evidence run failed")
+        if not self.allow_stale_evidence:
+            head = self._current_commit()
+            if head is None or evidence.get("commit") != head:
+                issues.append(f"[{req_id}] evidence is from commit {evidence.get('commit')}, not the current HEAD {head}")
+            if evidence.get("dirty"):
+                issues.append(f"[{req_id}] evidence was recorded on a dirty working tree")
+        passed = {t["id"] for t in evidence.get("acceptance_tests", []) if t.get("passed")}
+        for test in named_tests:
+            if test not in passed:
+                issues.append(f"[{req_id}] named test {test} did not pass in the evidence")
+        return issues
+
     def load_task_dag(self) -> Dict[str, Any]:
         if not self.dag_file.exists():
             raise FileNotFoundError(f"Task DAG not found: {self.dag_file}")
@@ -115,12 +155,15 @@ class RtmValidator:
                     issues.append(
                         f"[{req_id}] Status mismatch: RTM is 'VERIFIED' but task-dag.json is '{dag_status}'"
                     )
-                elif status == "PENDING" and dag_status not in ("PENDING", "IN_PROGRESS"):
+                elif status in ("PENDING", "UNVERIFIED") and dag_status == "COMPLETED":
                     issues.append(
-                        f"[{req_id}] Status mismatch: RTM is 'PENDING' but task-dag.json is '{dag_status}'"
+                        f"[{req_id}] Status mismatch: RTM is '{status}' but task-dag.json is 'COMPLETED'"
                     )
 
-            # 2. Artifact Existence check for VERIFIED requirements
+            # 2. VERIFIED needs evidence, not just files on disk
+            named_tests = ACCEPTANCE_REF.findall(row["verification_tests"])
+            if status == "VERIFIED":
+                issues.extend(self._evidence_issues(req_id, task_id, named_tests))
             if status == "VERIFIED":
                 verified_count += 1
                 for rel_path in row["artifact_paths"]:
@@ -162,9 +205,10 @@ def main():
     parser = argparse.ArgumentParser(description="A-CMMI Requirements Traceability Matrix Validator")
     parser.add_argument("--check", action="store_true", help="Run validation check")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
+    parser.add_argument("--allow-stale-evidence", action="store_true", help="Accept evidence from other commits or dirty trees")
 
     args = parser.parse_args()
-    validator = RtmValidator()
+    validator = RtmValidator(allow_stale_evidence=args.allow_stale_evidence)
 
     try:
         report = validator.validate()
@@ -187,8 +231,8 @@ def main():
 
     if report["passed"]:
         print("[✔] TRACEABILITY CHECK PASSED!")
-        print("    All requirements have valid forward and backward linkages,")
-        print("    synchronized DAG tasks, and existing source artifacts.")
+        print("    Forward/backward links are complete and every VERIFIED requirement")
+        print("    is backed by passing evidence from the current commit.")
         sys.exit(0)
     else:
         print(f"[❌] TRACEABILITY CHECK FAILED with {len(report['issues'])} issue(s):")

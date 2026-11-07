@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Tuple
@@ -49,30 +50,23 @@ class DbVerifier:
             raise RuntimeError(f"psql execution failed:\n{result.stderr.strip()}")
         return result.stdout.strip()
 
-    def query_json(self, sql: str) -> List[Dict[str, Any]]:
-        """Executes a query and returns results parsed as a list of Python dicts."""
-        # Wrap query into JSON aggregation
-        clean_sql = sql.strip().rstrip(";").strip()
-        json_sql = f"""
-        SELECT COALESCE(json_agg(t), '[]'::json)
-        FROM ({clean_sql}) AS t;
+    def query_json(self, sql: str, params: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+        """Runs a query and returns rows as dicts.
+
+        Values are bound with psql variables (``-v name=value``) and referenced in
+        the SQL as ``:'name'`` (quoted literal) or ``:"name"`` (quoted
+        identifier), so psql escapes them; nothing is formatted into the SQL text.
+        The SQL is sent on stdin because psql does not interpolate ``-c``.
         """
-        cmd = [
-            "docker",
-            "exec",
-            "-i",
-            self.container,
-            "psql",
-            "-U",
-            self.user,
-            "-d",
-            self.database,
-            "-t",
-            "-A",
-            "-c",
-            json_sql,
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        clean_sql = sql.strip().rstrip(";").strip()
+        json_sql = f"SELECT COALESCE(json_agg(t), '[]'::json) FROM ({clean_sql}) AS t;\n"
+        cmd = ["docker", "exec", "-i", self.container, "psql", "-U", self.user, "-d", self.database,
+               "-X", "-t", "-A", "-v", "ON_ERROR_STOP=1"]
+        for name, value in (params or {}).items():
+            if not re.fullmatch(r"[a-z_]+", name):
+                raise ValueError(f"invalid parameter name {name!r}")
+            cmd += ["-v", f"{name}={value}"]
+        result = subprocess.run(cmd, input=json_sql, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(f"JSON query failed:\n{result.stderr.strip()}")
         output = result.stdout.strip()
@@ -101,7 +95,7 @@ class DbVerifier:
         for t in tables:
             tname = t["table_name"]
             try:
-                count_res = self.query_json(f"SELECT COUNT(*) AS cnt FROM {tname};")
+                count_res = self.query_json('SELECT COUNT(*) AS cnt FROM :"table_name"', {"table_name": tname})
                 t["row_count"] = count_res[0]["cnt"] if count_res else 0
             except Exception:
                 t["row_count"] = "error"
@@ -109,19 +103,20 @@ class DbVerifier:
 
     def inspect_table(self, table_name: str) -> Dict[str, Any]:
         """Inspects table schema and returns column definitions plus sample rows."""
-        schema_sql = f"""
+        schema_sql = """
         SELECT 
             column_name, 
             data_type, 
             is_nullable, 
             column_default
         FROM information_schema.columns
-        WHERE table_name = '{table_name}' AND table_schema = 'public'
+        WHERE table_name = :'table_name' AND table_schema = 'public'
         ORDER BY ordinal_position;
         """
-        columns = self.query_json(schema_sql)
-        sample_sql = f"SELECT * FROM {table_name} LIMIT 5;"
-        samples = self.query_json(sample_sql)
+        columns = self.query_json(schema_sql, {"table_name": table_name})
+        if not columns:
+            raise ValueError(f"Unknown table: {table_name}")
+        samples = self.query_json('SELECT * FROM :"table_name" LIMIT 5', {"table_name": table_name})
         return {
             "table_name": table_name,
             "columns": columns,
@@ -131,7 +126,7 @@ class DbVerifier:
 
     def get_residents(self, site_id: str = "1") -> List[Dict[str, Any]]:
         """Fetches units, owners, tenants, occupancy status, and dual-ledger balances for a site."""
-        sql = f"""
+        sql = """
         SELECT 
             u.id AS unit_id,
             b.block_name,
@@ -168,15 +163,15 @@ class DbVerifier:
         JOIN blocks b ON u.block_id = b.id
         LEFT JOIN persons po ON u.owner_person_id = po.id
         LEFT JOIN persons pt ON u.tenant_person_id = pt.id
-        WHERE u.site_id::text = '{site_id}'
+        WHERE u.site_id::text = :'site_id'
         ORDER BY b.block_name, u.unit_number;
         """
-        return self.query_json(sql)
+        return self.query_json(sql, {"site_id": site_id})
 
     def get_occupancy_history(self, unit_id: str) -> List[Dict[str, Any]]:
         """Fetches chronological occupancy and residency history for a unit."""
         clean_id = unit_id.replace("unit-", "").replace("d-", "")
-        sql = f"""
+        sql = """
         SELECT 
             uo.id,
             uo.unit_id,
@@ -193,60 +188,60 @@ class DbVerifier:
             uo.created_at::text AS created_at
         FROM unit_occupancies uo
         JOIN persons p ON uo.person_id = p.id
-        WHERE uo.unit_id::text = '{clean_id}'
+        WHERE uo.unit_id::text = :'unit_id'
         ORDER BY uo.start_date DESC, uo.id DESC;
         """
-        return self.query_json(sql)
+        return self.query_json(sql, {"unit_id": clean_id})
 
     def verify_integrity(self, site_id: str = "1") -> Dict[str, Any]:
         """Performs comprehensive integrity check and financial balance audits."""
         summary = {}
 
         # 1. Entity Counts
-        counts_sql = f"""
+        counts_sql = """
         SELECT
-            (SELECT COUNT(*) FROM sites WHERE id::text = '{site_id}') AS sites,
-            (SELECT COUNT(*) FROM blocks WHERE site_id::text = '{site_id}') AS blocks,
-            (SELECT COUNT(*) FROM units WHERE site_id::text = '{site_id}') AS units,
-            (SELECT COUNT(DISTINCT p.id) FROM persons p JOIN units u ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id) WHERE u.site_id::text = '{site_id}') AS site_persons,
+            (SELECT COUNT(*) FROM sites WHERE id::text = :'site_id') AS sites,
+            (SELECT COUNT(*) FROM blocks WHERE site_id::text = :'site_id') AS blocks,
+            (SELECT COUNT(*) FROM units WHERE site_id::text = :'site_id') AS units,
+            (SELECT COUNT(DISTINCT p.id) FROM persons p JOIN units u ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id) WHERE u.site_id::text = :'site_id') AS site_persons,
             (SELECT COUNT(*) FROM persons) AS total_persons,
             (SELECT COUNT(*) FROM users) AS total_users,
-            (SELECT COUNT(*) FROM dues_periods WHERE site_id::text = '{site_id}') AS dues_periods,
-            (SELECT COUNT(*) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id::text = '{site_id}') AS dues_liabilities,
-            (SELECT COUNT(*) FROM payment_entries pe JOIN units u ON pe.unit_id = u.id WHERE u.site_id::text = '{site_id}') AS collections
+            (SELECT COUNT(*) FROM dues_periods WHERE site_id::text = :'site_id') AS dues_periods,
+            (SELECT COUNT(*) FROM dues_liabilities dl JOIN units u ON dl.unit_id = u.id WHERE u.site_id::text = :'site_id') AS dues_liabilities,
+            (SELECT COUNT(*) FROM payment_entries pe JOIN units u ON pe.unit_id = u.id WHERE u.site_id::text = :'site_id') AS collections
         """
-        summary["entity_counts"] = self.query_json(counts_sql)[0]
+        summary["entity_counts"] = self.query_json(counts_sql, {"site_id": site_id})[0]
 
         # 2. Financial Totals
-        fin_sql = f"""
+        fin_sql = """
         SELECT 
             COALESCE(SUM(principal_amount), 0) AS total_principal_accrued,
             COALESCE(SUM(paid_amount), 0) AS total_paid,
             COALESCE(SUM(principal_amount + delay_penalty - paid_amount), 0) AS total_remaining,
             COALESCE(SUM(delay_penalty), 0) AS total_penalties,
             COUNT(CASE WHEN status = 'PAID' THEN 1 END) AS count_paid,
-            COUNT(CASE WHEN status = 'PARTIAL' THEN 1 END) AS count_partial,
+            COUNT(CASE WHEN status = 'PARTIALLY_PAID' THEN 1 END) AS count_partial,
             COUNT(CASE WHEN status = 'PENDING' THEN 1 END) AS count_pending,
             COUNT(CASE WHEN status = 'OVERDUE' THEN 1 END) AS count_overdue
         FROM dues_liabilities dl
         JOIN units u ON dl.unit_id = u.id
-        WHERE u.site_id::text = '{site_id}';
+        WHERE u.site_id::text = :'site_id';
         """
-        summary["financial_summary"] = self.query_json(fin_sql)[0]
+        summary["financial_summary"] = self.query_json(fin_sql, {"site_id": site_id})[0]
 
         # 3. Integrity Audits
         orphan_checks = {
             "units_without_owner": self.query_json(
-                f"SELECT id, block_id, unit_number FROM units WHERE site_id::text = '{site_id}' AND owner_person_id IS NULL;"
+                "SELECT id, block_id, unit_number FROM units WHERE site_id::text = :'site_id' AND owner_person_id IS NULL;", {"site_id": site_id}
             ),
             "units_with_invalid_owner": self.query_json(
-                f"SELECT u.id, u.unit_number FROM units u LEFT JOIN persons p ON u.owner_person_id = p.id WHERE u.site_id::text = '{site_id}' AND u.owner_person_id IS NOT NULL AND p.id IS NULL;"
+                "SELECT u.id, u.unit_number FROM units u LEFT JOIN persons p ON u.owner_person_id = p.id WHERE u.site_id::text = :'site_id' AND u.owner_person_id IS NOT NULL AND p.id IS NULL;", {"site_id": site_id}
             ),
             "units_with_invalid_tenant": self.query_json(
-                f"SELECT u.id, u.unit_number FROM units u LEFT JOIN persons p ON u.tenant_person_id = p.id WHERE u.site_id::text = '{site_id}' AND u.tenant_person_id IS NOT NULL AND p.id IS NULL;"
+                "SELECT u.id, u.unit_number FROM units u LEFT JOIN persons p ON u.tenant_person_id = p.id WHERE u.site_id::text = :'site_id' AND u.tenant_person_id IS NOT NULL AND p.id IS NULL;", {"site_id": site_id}
             ),
             "orphaned_dues_liabilities": self.query_json(
-                f"SELECT dl.id, dl.unit_id FROM dues_liabilities dl LEFT JOIN units u ON dl.unit_id = u.id WHERE u.id IS NULL;"
+                "SELECT dl.id, dl.unit_id FROM dues_liabilities dl LEFT JOIN units u ON dl.unit_id = u.id WHERE u.id IS NULL;"
             ),
             "orphaned_household_members": self.query_json(
                 "SELECT om.id, om.occupancy_id, om.full_name FROM occupancy_members om LEFT JOIN unit_occupancies uo ON om.occupancy_id = uo.id WHERE uo.id IS NULL;"
@@ -409,6 +404,9 @@ def main() -> None:
                     for item in items:
                         print(f"      * {item}")
                 print("=================================================================")
+            # Integrity problems are a failure, so CI and scripts can act on them.
+            if report["status"] != "HEALTHY":
+                sys.exit(1)
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

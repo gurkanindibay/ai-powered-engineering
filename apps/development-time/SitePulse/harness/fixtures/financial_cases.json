@@ -1,0 +1,50 @@
+{
+  "description": "Single source of financial truth for SitePulse. Each case is checked by backend/tests/financial_fixtures.rs (DuesCalculationService, dues_ledger) and, for penalty cases, by flutter/test/financial_fixture_test.dart (CalculateDuesUseCase). Penalty = principal * 0.05 * days / 30, rounded half away from zero to 2 decimals.",
+  "penalty_cases": [
+    {"name": "10 days overdue on 1400.00", "principal": "1400.00", "due_date": "2026-09-15", "evaluation_date": "2026-09-25", "expected_penalty": "23.33", "expected_total": "1423.33", "expected_status": "OVERDUE"},
+    {"name": "not yet due", "principal": "1400.00", "due_date": "2026-09-15", "evaluation_date": "2026-09-10", "expected_penalty": "0.00", "expected_total": "1400.00", "expected_status": "PENDING"},
+    {"name": "due today", "principal": "1400.00", "due_date": "2026-09-15", "evaluation_date": "2026-09-15", "expected_penalty": "0.00", "expected_total": "1400.00", "expected_status": "PENDING"},
+    {"name": "one full month", "principal": "1800.00", "due_date": "2026-01-15", "evaluation_date": "2026-02-14", "expected_penalty": "90.00", "expected_total": "1890.00", "expected_status": "OVERDUE"},
+    {"name": "half-cent tie rounds up (1.005)", "principal": "201.00", "due_date": "2026-03-01", "evaluation_date": "2026-03-04", "expected_penalty": "1.01", "expected_total": "202.01", "expected_status": "OVERDUE"},
+    {"name": "half-cent tie rounds up (2.675)", "principal": "535.00", "due_date": "2026-03-01", "evaluation_date": "2026-03-04", "expected_penalty": "2.68", "expected_total": "537.68", "expected_status": "OVERDUE"},
+    {"name": "one day on one kurus", "principal": "0.01", "due_date": "2026-03-01", "evaluation_date": "2026-03-02", "expected_penalty": "0.00", "expected_total": "0.01", "expected_status": "OVERDUE"}
+  ],
+  "allocation_cases": [
+    {
+      "name": "partial payment settles penalty first",
+      "payer_role": "TENANT",
+      "payment": "500.00",
+      "dues": [{"id": "a", "principal": "1400.00", "penalty": "23.33", "due_date": "2026-09-15", "debtor_type": "TENANT", "expense_type": "OPERATIONAL_DUES"}],
+      "expected_lines": [{"due_id": "a", "principal": "476.67", "penalty": "23.33"}],
+      "expected_advance": "0.00",
+      "expected_outstanding": {"a": "923.33"}
+    },
+    {
+      "name": "all penalties before any principal, then FIFO, surplus to advance",
+      "payer_role": "OWNER",
+      "payment": "300.00",
+      "dues": [
+        {"id": "late", "principal": "100.00", "penalty": "5.00", "due_date": "2026-09-20", "debtor_type": "TENANT", "expense_type": "OPERATIONAL_DUES"},
+        {"id": "early", "principal": "100.00", "penalty": "10.00", "due_date": "2026-09-10", "debtor_type": "TENANT", "expense_type": "OPERATIONAL_DUES"}
+      ],
+      "expected_lines": [
+        {"due_id": "early", "principal": "100.00", "penalty": "10.00"},
+        {"due_id": "late", "principal": "100.00", "penalty": "5.00"}
+      ],
+      "expected_advance": "85.00",
+      "expected_outstanding": {"early": "0.00", "late": "0.00"}
+    },
+    {
+      "name": "tenant payment never settles owner capital dues",
+      "payer_role": "TENANT",
+      "payment": "1000.00",
+      "dues": [
+        {"id": "capital", "principal": "800.00", "penalty": "0.00", "due_date": "2026-08-01", "debtor_type": "OWNER", "expense_type": "CAPITAL_DUES"},
+        {"id": "operational", "principal": "300.00", "penalty": "0.00", "due_date": "2026-09-01", "debtor_type": "TENANT", "expense_type": "OPERATIONAL_DUES"}
+      ],
+      "expected_lines": [{"due_id": "operational", "principal": "300.00", "penalty": "0.00"}],
+      "expected_advance": "700.00",
+      "expected_outstanding": {"capital": "800.00", "operational": "0.00"}
+    }
+  ]
+}
