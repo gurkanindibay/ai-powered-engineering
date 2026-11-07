@@ -679,7 +679,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 10. Load Advance Balances
     {
-        let rows = client.query("SELECT unit_id, balance FROM advance_balances",
+        let rows = client.query("SELECT unit_id, COALESCE(SUM(balance), 0) FROM advance_balances GROUP BY unit_id",
             &[],).await?;
         for row in rows {
             let unit_id: i64 = row.get(0);
@@ -721,7 +721,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 13. Load Reconciliation Queue
     {
-        let rows = client.query("SELECT match_id, transaction_id, txn_date, amount, currency, description, sender_name, sender_iban, reference_no, matched_unit_id, matched_block, matched_unit_number, matched_resident_name, confidence_score, matched_due_id, outstanding_balance, amount_matches_balance, status, status_code, notes FROM reconciliation_queue ORDER BY txn_date ASC",
+        let rows = client.query("SELECT match_id, transaction_id, txn_date, amount, currency, description, sender_name, sender_iban, reference_no, matched_unit_id, matched_block, matched_unit_number, matched_resident_name, confidence_score, matched_due_id, outstanding_balance, amount_matches_balance, status, status_code, notes, site_id FROM reconciliation_queue ORDER BY txn_date ASC",
             &[],).await?;
         for row in rows {
             let match_id: String = row.get(0);
@@ -744,6 +744,8 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let status_str: String = row.get(17);
             let status_code: String = row.get(18);
             let notes: Option<String> = row.get(19);
+            let site_id_num: Option<i64> = row.get(20);
+            let site_id = site_id_num.map(|s| s.to_string()).unwrap_or_else(|| "1".to_string());
 
             let status = match status_str.as_str() {
                 "APPROVED" | "ONAYLANDI" => ReconciliationStatus::Approved,
@@ -754,6 +756,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
             let m = ReconciliationMatch {
                 match_id: match_id.clone(),
+                site_id,
                 transaction: BankTransactionItem {
                     transaction_id,
                     date: txn_date,

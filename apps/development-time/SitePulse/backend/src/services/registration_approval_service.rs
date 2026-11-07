@@ -407,6 +407,13 @@ impl RegistrationApprovalService {
             .position(|r| r.request_id == request_id)
             .ok_or_else(|| format!("Registration request not found: {}", request_id))?;
 
+        if inner.pending_registrations[index].status != "PENDING" {
+            return Err(format!(
+                "This application has already been processed: {}",
+                inner.pending_registrations[index].status
+            ));
+        }
+
         inner.pending_registrations[index].status = "REJECTED".to_string();
         let result = inner.pending_registrations[index].clone();
         drop(inner);
