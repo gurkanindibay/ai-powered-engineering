@@ -1,5 +1,7 @@
 # .NET build artifacts
 **/bin/
+# Rust binary targets are source, not build output (cargo builds into target/).
+!**/src/bin/
 **/obj/
 *.user
 *.suo
