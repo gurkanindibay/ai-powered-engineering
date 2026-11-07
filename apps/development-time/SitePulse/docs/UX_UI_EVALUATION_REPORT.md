@@ -14,6 +14,31 @@ The five priorities, in order:
 4. **Navigation model** — no routes or deep links on a web target; a "Profile" tab that opens a sheet; two parallel manager paths behind a segmented switch.
 5. **Production hygiene** — the "simulate offline" toggle and one-tap logout sit in the main app bar; there is no localization layer for the hard-coded Turkish strings.
 
+## Re-evaluation after remediation (Nov 7, 2026)
+
+Every finding below was re-checked against `master` (after the GUI test suite merge) and then worked on. **8 of 16 are fixed and 8 are partly fixed.** The partial ones are listed with what is left.
+
+| # | Finding | Status | What changed | Left to do |
+| --- | --- | --- | --- | --- |
+| 1 | Screen-reader support | Partly fixed | `Semantics` on custom toggles, tabs, segments, filter chips, action tiles and hero buttons (`selected`, `button`, labels); toasts and the offline banner are live regions; decorative icons excluded. Widget tests check `textContrastGuideline` and `labeledTapTargetGuideline` on the resident home and login | `androidTapTargetGuideline` still fails on dense 32 dp buttons; no TalkBack/VoiceOver pass yet |
+| 2 | Status colour contrast | Fixed | Two tiers of tokens: bright `accent*` for icons and fills, `*Fill` for white text (green `#047857`, amber `#B45309`, red `#B91C1C`, primary `#0369A1`) and theme-aware `*Text(context)`. Secondary text darkened. Every pair is tested at ≥ 4.5:1 in both themes | Colours passed through variables (`statusColor`) are converted only where a test found them |
+| 3 | Money display | Fixed | One `MoneyFormatter` (`Decimal` only, `₺1.423,33`), used by all screens, ledger rows and `Money`. The hero card no longer uses `double`. `ui_style_lint` fails on any hand-formatted amount | — |
+| 4 | Typography | Fixed | `TextTheme` with the type scale; no text below 12 px (156 raised, lint-enforced) | Nav labels use the 12 px Label token, not the 14 px the quick-win list suggested |
+| 5 | Navigation | Fixed | `MaterialApp.router` with a URL per role and tab (`/resident/home`, `/manager/dues`, `/manager/my-flat/home`, `/admin/sites`). Back, bookmarks and deep links work; a deep link opened while signed out is applied after login | The session is still not persisted, so reload goes to login first (then back to the tab) |
+| 6 | Design system bypassed | Partly fixed | `ColorScheme` with `on*` and `surfaceContainer`, a `StatusColors` `ThemeExtension`, spacing, radius and breakpoint tokens, button and input themes. Raw `Color(0x…)` outside the theme went from 105 to 26. The new `ui_style_lint` ratchet blocks new literals | About 900 literal `fontSize`s still need moving to `TextTheme` (the ratchet only stops growth) |
+| 7 | Profile tab, tab reset | Fixed | Profile opens from the avatar only. Changing the manager path goes to Home explicitly | — |
+| 8 | One-tap logout | Fixed | Logout lives in the profile sheet and asks first ("Çıkış yapılsın mı?") | — |
+| 9 | Offline toggle, forced dark mode | Fixed | The offline simulator sits under "Geliştirici araçları" in debug and E2E builds only. Real browser offline events show the banner. The theme follows the system until chosen, and the choice is saved | On mobile and desktop the theme choice is saved only for the session (web uses `localStorage`) |
+| 10 | Forms | Partly fixed | Login fields have `autofillHints`, the right keyboard, `textInputAction` and Enter-to-submit inside an `AutofillGroup` | `TextFormField` validators for IBAN, amount and phone across the other forms |
+| 11 | Responsive | Fixed | `NavigationRail` from 840 dp, content capped at 1,200 dp, and a two-column resident home. Overflows at 375 dp were fixed and are tested for all three roles | — |
+| 12 | Feedback | Partly fixed | Success, info, warning and error toasts each have their own icon and fill and are announced by kind. Errors stay until dismissed. Skeleton lists replace list spinners; offline is an inline banner | Dialogs still open from the controller listener |
+| 13 | Manager switch | Partly fixed | Labels ellipsize with the full name in a tooltip; the switch has 48 dp targets and selected-state semantics | Replacing the segmented switch with an account switcher is a product decision |
+| 14 | Localization, emoji | Partly fixed | `flutter_localizations` with `tr_TR`, and shared words in `AppStrings` (`Vazgeç` appeared 35 times). No emoji are left in UI strings (lint-enforced) | Moving screen copy to ARB waits on the open locale question |
+| 15 | Login | Partly fixed | The quick-login tab shows in dev and test builds only; demo personas were already test-only; a vector Google "G" replaces `Icons.g_mobiledata` | One form with role detection (needs a backend change); swap in the official Google asset when `flutter_svg` is added |
+| 16 | Maintainability | Partly fixed | Turkish identifiers and the whole Turkish alias layer (`AidatBorcu`, `siteAdi`, `daireNo`, …) are gone; the resident home is one shared builder | `dashboard_screen.dart` is still ~8,500 lines |
+
+**Tests.** Flutter tests went from 144 to 181, and all pass. New tests are `design_system_test.dart` (formatter, contrast, type scale, toasts) and `ux_shell_and_navigation_test.dart` (routes, router, app bar, logout confirmation, offline banner, rail, 375 dp layouts, semantics, autofill, contrast guidelines). Existing tests were updated for the new behaviour. Where content grew past the 800×600 test viewport, taps now scroll into view first. The Playwright suite's page objects, tab counts and money parsers were updated, and the strict xfails these fixes resolve were removed (GUI-01-05, GUI-X-06, GUI-02-01 kuruş). A new GUI-X-07 test covers URLs and back. See `GUI_TEST_PLAN.md` §11. `ui_style_lint.py` runs as gate `ui-style-lint`.
+
 ## Scope and method
 
 The review covers the SitePulse Flutter client (`apps/development-time/SitePulse/flutter/lib/ui`, about 33,400 lines across 21 files), the only end-user UI in the workspace. AuditGuard, TaskPilot and DevFactory have no UI.
@@ -61,28 +86,28 @@ Work in three phases: fix what blocks real users first, then make the design sys
 
 ### Phase 1 — Quick wins (about 1 sprint)
 
-- [ ] Add a single `MoneyFormatter` built on `intl` `NumberFormat.currency(locale: 'tr_TR', symbol: '₺')` that takes `Decimal`, and replace all 66 `toStringAsFixed` calls and the `double` path in the hero card [3].
-- [ ] Darken status tokens for text and filled buttons (for example green `#047857`, amber `#B45309`, red `#B91C1C`, primary `#0369A1`) so every pair reaches 4.5:1; keep the bright tones for icons and fills only [2].
-- [ ] Raise the minimum font size to 12 px, with 14 px for body and nav labels [4].
-- [ ] Hide the offline simulator behind a debug or test-mode flag; follow the system theme by default and save the user's choice [9].
-- [ ] Move logout into the profile sheet with a confirm step; drop "Profil & Yetki" from the bottom bar [7, 8].
-- [ ] Add `autofillHints`, `textInputAction` and `onSubmitted` to the login fields so password managers work and Enter submits [10].
-- [ ] Give SnackBars success, warning and error variants with icon plus color [12].
-- [ ] Add `maxLines: 1` and ellipsis to the manager path switcher labels [13].
+- [x] Add a single `MoneyFormatter` built on `intl` `NumberFormat.currency(locale: 'tr_TR', symbol: '₺')` that takes `Decimal`, and replace all 66 `toStringAsFixed` calls and the `double` path in the hero card [3].
+- [x] Darken status tokens for text and filled buttons (for example green `#047857`, amber `#B45309`, red `#B91C1C`, primary `#0369A1`) so every pair reaches 4.5:1; keep the bright tones for icons and fills only [2].
+- [x] Raise the minimum font size to 12 px, with 14 px for body and nav labels [4].
+- [x] Hide the offline simulator behind a debug or test-mode flag; follow the system theme by default and save the user's choice [9].
+- [x] Move logout into the profile sheet with a confirm step; drop "Profil & Yetki" from the bottom bar [7, 8].
+- [x] Add `autofillHints`, `textInputAction` and `onSubmitted` to the login fields so password managers work and Enter submits [10].
+- [x] Give SnackBars success, warning and error variants with icon plus color [12].
+- [x] Add `maxLines: 1` and ellipsis to the manager path switcher labels [13].
 
 ### Phase 2 — Design system and accessibility (2–3 sprints)
 
 - [ ] Define a full `TextTheme` and `ColorScheme` (including `onPrimary`, `surfaceContainer` and status roles) plus spacing and radius tokens in a `ThemeExtension`; read them through `Theme.of(context)` [6].
-- [ ] Add a lint (custom rule or CI grep) that blocks new literal `fontSize` and `Color(0x…)` outside `ui/theme/` [6].
-- [ ] Wrap custom toggles, chips and cards in `Semantics` (label, `selected`, `button`); add labels to icon-only controls; replace emoji with `Icon`s [1, 14].
-- [ ] Run Flutter's `meetsGuideline(textContrastGuideline)` and `androidTapTargetGuideline` in widget tests for the main screens [1, 2].
+- [x] Add a lint (custom rule or CI grep) that blocks new literal `fontSize` and `Color(0x…)` outside `ui/theme/` [6].
+- [x] Wrap custom toggles, chips and cards in `Semantics` (label, `selected`, `button`); add labels to icon-only controls; replace emoji with `Icon`s [1, 14].
+- [ ] Run Flutter's `meetsGuideline(textContrastGuideline)` and `androidTapTargetGuideline` in widget tests (text contrast and labelled tap targets now run; the Android tap-target check is still open) for the main screens [1, 2].
 - [ ] Move to `TextFormField` with inline validators for IBAN, amount and phone, shown on blur [10].
-- [ ] Add skeleton placeholders for the dashboard and lists in place of spinners [12].
+- [x] Add skeleton placeholders for the dashboard and lists in place of spinners [12].
 
 ### Phase 3 — Structure and scale (2–4 sprints)
 
-- [ ] Adopt `go_router` with URLs per role and tab (for example `/resident/home`, `/manager/dues`) so back, reload and deep links work on web [5, 7].
-- [ ] Add breakpoints: `NavigationRail` and a 2-column layout at 840 px and up, with content capped near 1,200 px [11].
+- [x] Adopt URL routing (done with Flutter's `Router` API, no new package) with URLs per role and tab (for example `/resident/home`, `/manager/dues`) so back, reload and deep links work on web [5, 7].
+- [x] Add breakpoints: `NavigationRail` and a 2-column layout at 840 px and up, with content capped near 1,200 px [11].
 - [ ] Replace the manager segmented switch with an account switcher in the profile menu, or a separate "My flat" tab [13].
 - [ ] Move strings to ARB files with `flutter_localizations`, keeping Turkish as the default locale [14].
 - [ ] Split `dashboard_screen.dart` into one widget per tab and role, extract the shared resident layout, and rename Turkish identifiers [16].

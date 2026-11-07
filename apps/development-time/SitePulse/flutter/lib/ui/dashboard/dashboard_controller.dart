@@ -1,13 +1,17 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:decimal/decimal.dart';
+import 'dart:async';
+import 'dart:ui' show Brightness, PlatformDispatcher;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
 import '../../domain/services/api_client.dart';
 import '../../domain/services/bank_file_parser.dart';
+import '../../domain/services/platform_env.dart';
 import '../../domain/usecases/calculate_dues_usecase.dart';
-
+import '../design_system/money_formatter.dart';
 class DashboardController extends ChangeNotifier {
   final CalculateDuesUseCase _calculateDuesUseCase;
 
@@ -19,7 +23,18 @@ class DashboardController extends ChangeNotifier {
     this.isTestMode = false,
   })  : _calculateDuesUseCase = calculateDuesUseCase ?? CalculateDuesUseCase(),
         _isAuthenticated = startAuthenticated {
+    _themeMode = _readSavedThemeMode();
+    _isOffline = isPlatformOffline();
+    _offlineSubscription = platformOfflineChanges().listen(setNetworkOffline);
     _initData();
+  }
+
+  StreamSubscription<bool>? _offlineSubscription;
+
+  @override
+  void dispose() {
+    _offlineSubscription?.cancel();
+    super.dispose();
   }
 
   // Session & Auth
@@ -36,9 +51,34 @@ class DashboardController extends ChangeNotifier {
   String? _authMessage;
   String? get authMessage => _authMessage;
 
-  // Theme (Papara Dark default)
-  bool _isDarkMode = true;
-  bool get isDarkMode => _isDarkMode;
+  // Theme: follows the system until the user picks one; the choice is saved.
+  static const themePreferenceKey = 'theme_mode';
+  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode get themeMode => _themeMode;
+  Brightness _platformBrightness = PlatformDispatcher.instance.platformBrightness;
+  bool get isDarkMode =>
+      _themeMode == ThemeMode.dark || (_themeMode == ThemeMode.system && _platformBrightness == Brightness.dark);
+
+  static ThemeMode _readSavedThemeMode() {
+    return switch (readPreference(themePreferenceKey)) {
+      'dark' => ThemeMode.dark,
+      'light' => ThemeMode.light,
+      _ => ThemeMode.system,
+    };
+  }
+
+  /// Called by the app shell when the OS switches between light and dark.
+  void updatePlatformBrightness(Brightness brightness) {
+    if (_platformBrightness == brightness) return;
+    _platformBrightness = brightness;
+    if (_themeMode == ThemeMode.system) notifyListeners();
+  }
+
+  void setThemeMode(ThemeMode mode) {
+    _themeMode = mode;
+    writePreference(themePreferenceKey, mode == ThemeMode.system ? null : mode.name);
+    notifyListeners();
+  }
 
   // Offline Sync State
   bool _isOffline = false;
@@ -57,9 +97,8 @@ class DashboardController extends ChangeNotifier {
       (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner)
           ? _managerUnit
           : _activeUnit;
-  ApartmentUnit get activeDaire => activeUnit;
-  String get siteName => activeUnit.siteAdi.isNotEmpty
-      ? activeUnit.siteAdi
+  String get siteName => activeUnit.siteName.isNotEmpty
+      ? activeUnit.siteName
       : (_currentManagedSite?.name ?? (_saasSites.isNotEmpty ? _saasSites.first.name : ''));
 
   List<DuesLiability> _duesList = [];
@@ -1362,11 +1401,16 @@ class DashboardController extends ChangeNotifier {
     return {'status': 'SUCCESS', 'period_name': periodName};
   }
 
-  void toggleTheme() {
-    _isDarkMode = !_isDarkMode;
-    notifyListeners();
+  /// Switches to the opposite of what is shown now and saves the choice.
+  void toggleTheme() => setThemeMode(isDarkMode ? ThemeMode.light : ThemeMode.dark);
+
+  /// Real connectivity change reported by the platform (browser online/offline events).
+  void setNetworkOffline(bool offline) {
+    if (_isOffline == offline) return;
+    toggleOfflineMode(offline);
   }
 
+  /// Developer simulation of an offline session (dev tools only).
   void toggleOfflineMode(bool offline) {
     _isOffline = offline;
     _lastSyncTime = offline ? 'Çevrimdışı önbellekten yüklendi' : 'Az önce';
@@ -3721,7 +3765,7 @@ class DashboardController extends ChangeNotifier {
       confidence = amountMatchesBalance ? 100 : 90;
       status = confidence >= 70 ? 'ONAY_BEKLIYOR' : 'ESLESTIRILEMEDI';
       notes = outstandingBalance == Decimal.zero
-          ? 'Aktif aidat borcu bulunmuyor • ₺$amount tutarındaki ödeme avans bakiyesi (Avans Bakiye) olarak eşleştirildi.'
+          ? 'Aktif aidat borcu bulunmuyor • ${formatTry(amount)} tutarındaki ödeme avans bakiyesi (Avans Bakiye) olarak eşleştirildi.'
           : (amountMatchesBalance
               ? 'Aidat borcuyla (%5 KMK gecikme tazminatı dahil) birebir eşleşti'
               : 'Daire ve sakin tespit edildi');
@@ -3918,7 +3962,7 @@ class DashboardController extends ChangeNotifier {
         ? ' (Gönderici IBAN gelecekteki ödemeler için kalıcı olarak eşleştirildi)'
         : '';
     _reconciliationSuccessMessage =
-        '₺${totalCleared.toStringAsFixed(2)} tutarındaki banka aidat transferi başarıyla onaylandı$messageNote$ibanNote.';
+        '${formatTry(totalCleared)} tutarındaki banka aidat transferi başarıyla onaylandı$messageNote$ibanNote.';
     notifyListeners();
 
     // Dispatch to Rust Backend to persist reconciliation settlement
@@ -4083,7 +4127,7 @@ class DashboardController extends ChangeNotifier {
         : (clearedDebt > Decimal.zero ? 'FAST ile Aidat Ödemesi' : 'FAST ile Avans Yükleme');
 
     final txSubtitle = advanceCredit > Decimal.zero && clearedDebt > Decimal.zero
-        ? '₺${clearedDebt.toStringAsFixed(2)} borç kapatıldı • ₺${advanceCredit.toStringAsFixed(2)} avans bakiyenize aktarıldı'
+        ? '${formatTry(clearedDebt)} borç kapatıldı • ${formatTry(advanceCredit)} avans bakiyenize aktarıldı'
         : (clearedDebt > Decimal.zero ? 'Aidat borcu başarıyla kapatıldı' : 'Aktif borç bulunmuyor • Avans bakiyenize aktarıldı');
 
     final tempTxId = 'draft-${_accountTransactions.length + 1}';
@@ -4477,7 +4521,7 @@ class DashboardController extends ChangeNotifier {
 
     return {
       'success': true,
-      'message': '₺${amount.toStringAsFixed(2)} avans bakiyesinden demirbaş borcuna başarıyla aktarıldı.',
+      'message': '${formatTry(amount)} avans bakiyesinden demirbaş borcuna başarıyla aktarıldı.',
       'receipt_number': 'TAH-2026-000101',
       'remaining_advance_balance': '500.00',
     };

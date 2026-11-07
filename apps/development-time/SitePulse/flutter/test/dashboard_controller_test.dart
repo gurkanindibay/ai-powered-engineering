@@ -2,7 +2,6 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:sitepulse/domain/models/auth_models.dart';
-import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'test_fixtures.dart';
 
@@ -231,8 +230,8 @@ void main() {
       expect(controller.isAuthenticated, isTrue);
       expect(controller.userRole, UserRole.siteManager);
       expect(controller.siteAdminPath, SiteAdminActivePath.myFlatOwner);
-      expect(controller.activeUnit.blok, 'B');
-      expect(controller.activeUnit.daireNo, 1);
+      expect(controller.activeUnit.block, 'B');
+      expect(controller.activeUnit.unitNo, 1);
       expect(controller.unitResidents.first.fullName, 'Mehmet Demir');
 
       // Toggle to managerCockpit path
@@ -292,7 +291,7 @@ void main() {
       expect(flatAfter.isPaid, isTrue);
       expect(controller.activeUnit.advancePayment, Decimal.parse('576.67'));
       expect(controller.accountTransactions.first.title, 'Kart ile Aidat Ödemesi');
-      expect(controller.accountTransactions.first.subtitle, contains('₺1423.33 borç kapatıldı • ₺576.67 avans bakiyenize aktarıldı'));
+      expect(controller.accountTransactions.first.subtitle, contains('₺1.423,33 borç kapatıldı • ₺576,67 avans bakiyenize aktarıldı'));
     });
 
     test('when recordHomeownerPayment on unit with zero debt, credits entire amount to advance payment', () {
@@ -411,7 +410,7 @@ void main() {
       expect(controller.reconciliationQueue, isEmpty);
       expect(controller.duesList, isEmpty);
       expect(controller.accountTransactions, isEmpty);
-      expect(controller.primaryDues.toplamTutar, Decimal.zero);
+      expect(controller.primaryDues.totalAmount, Decimal.zero);
 
       // Verify site manager cockpit & dues management numbers are completely reset to 0
       expect(controller.collectionSummary.totalExpected, Decimal.zero);

@@ -42,9 +42,9 @@ def test_statement_upload_matches_known_sender_and_flags_unknown(login_as, page,
 
     summary = DuesManagement(page).open().upload_statement(_statement(tmp_path))
 
-    # Amounts in this dialog are printed with toStringAsFixed ("1400.00"), not the Turkish format.
-    assert summary.matched() == (1, "1400.00")
-    assert summary.unmatched() == (1, "250.00")
+    # Amounts are printed by MoneyFormatter ("₺1.400,00") and parsed back exactly.
+    assert summary.matched() == (1, Decimal("1400.00"))
+    assert summary.unmatched() == (1, Decimal("250.00"))
 
 
 @pytest.mark.smoke

@@ -1,10 +1,12 @@
 import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 import 'app_fullscreen_page.dart';
 
+import '../design_system/money_formatter.dart';
 class ManualUnitAssignmentPage extends StatefulWidget {
   final List<FlatPaymentStatus> flats;
   final ReconciliationQueueItem item;
@@ -70,21 +72,21 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
+                    Flexible(child: Text(
                       'İşlem Tutarı',
                       style: TextStyle(
                         color: AppColors.textSecondary(context),
                         fontSize: 12,
                       ),
-                    ),
-                    Text(
-                      '₺${txn.amount.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: AppColors.accentGreen,
+                    )),
+                    Flexible(child: Text(
+                      formatTry(txn.amount),
+                      style: TextStyle(
+                        color: AppColors.successText(context),
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
-                    ),
+                    )),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -104,8 +106,8 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                       const SizedBox(width: 4),
                       Text(
                         'Gönderen: ${txn.senderName}',
-                        style: const TextStyle(
-                          color: AppColors.accentCyan,
+                        style: TextStyle(
+                          color: AppColors.primaryText(context),
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
                         ),
@@ -122,7 +124,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
           // 2. Search Field
           Container(
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+              color: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.border(context)),
             ),
@@ -223,31 +225,33 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                     ),
                     subtitle: Padding(
                       padding: const EdgeInsets.only(top: 4),
-                      child: Row(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
-                            'Mevcut Borç: ₺${flat.amountDue.toStringAsFixed(2)}',
+                            'Mevcut Borç: ${formatTry(flat.amountDue)}',
                             style: TextStyle(
                               fontSize: 12,
                               color: flat.amountDue > Decimal.zero
-                                  ? AppColors.accentOrange
-                                  : AppColors.accentGreen,
+                                  ? AppColors.warningText(context)
+                                  : AppColors.successText(context),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           if (isExactAmount) ...[
-                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: AppColors.accentGreen.withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(6),
                               ),
-                              child: const Text(
+                              child: Text(
                                 '%100 Tutar Eşleşmesi',
                                 style: TextStyle(
-                                  color: AppColors.accentGreen,
-                                  fontSize: 10,
+                                  color: AppColors.successText(context),
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -275,7 +279,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
     bool rememberIban = txn.senderIban != null && txn.senderIban!.isNotEmpty;
     final messageController = TextEditingController(
       text:
-          'Sayın ${flat.residentName}, ${flat.flatDesc} nolu dairenize ait ₺${txn.amount.toStringAsFixed(2)} tutarındaki aidat ödemeniz banka hareketleri ile eşleştirilmiş ve onaylanmıştır. Teşekkür ederiz.',
+          'Sayın ${flat.residentName}, ${flat.flatDesc} nolu dairenize ait ${formatTry(txn.amount)} tutarındaki aidat ödemeniz banka hareketleri ile eşleştirilmiş ve onaylanmıştır. Teşekkür ederiz.',
     );
 
     final confirmed = await showDialog<bool>(
@@ -368,9 +372,9 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Mevcut Borç: ₺${flat.amountDue.toStringAsFixed(2)}',
+                              'Mevcut Borç: ${formatTry(flat.amountDue)}',
                               style: TextStyle(
-                                color: flat.amountDue > Decimal.zero ? AppColors.accentOrange : AppColors.accentGreen,
+                                color: flat.amountDue > Decimal.zero ? AppColors.warningText(context) : AppColors.successText(context),
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -395,20 +399,20 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'Eşleştirilecek Ödeme Tutarı',
-                                    style: TextStyle(fontSize: 11, color: AppColors.accentGreen, fontWeight: FontWeight.w600),
+                                    style: TextStyle(fontSize: 12, color: AppColors.successText(context), fontWeight: FontWeight.w600),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '₺${txn.amount.toStringAsFixed(2)}',
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.accentGreen),
+                                    formatTry(txn.amount),
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.successText(context)),
                                   ),
                                   if (txn.senderName != null) ...[
                                     const SizedBox(height: 4),
                                     Text(
                                       'Gönderen: ${txn.senderName}',
-                                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary(dialogCtx)),
+                                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary(dialogCtx)),
                                     ),
                                   ],
                                 ],
@@ -472,7 +476,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                                           'Gelecek ödemelerde bu hesaptan (${txn.senderIban}) yapılan transferler açıklama boş olsa dahi otomatik olarak ${flat.flatDesc} (${flat.residentName}) ile eşleştirilecektir.',
                                           style: TextStyle(
                                             color: AppColors.textSecondary(dialogCtx),
-                                            fontSize: 11,
+                                            fontSize: 12,
                                             height: 1.35,
                                           ),
                                         ),
@@ -527,7 +531,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                           decoration: InputDecoration(
                             hintText: 'Ev sahibine iletilecek mesaj metnini düzenleyebilirsiniz...',
                             filled: true,
-                            fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                            fillColor: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(color: AppColors.border(dialogCtx)),
@@ -549,7 +553,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
-                              child: const Text('Vazgeç'),
+                              child: const Text(AppStrings.cancel),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -559,7 +563,7 @@ class _ManualUnitAssignmentPageState extends State<ManualUnitAssignmentPage> {
                               icon: const Icon(Icons.check, size: 16),
                               label: const Text('Eşleştirmeyi Onayla'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.accentGreen,
+                                backgroundColor: AppColors.successFill,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

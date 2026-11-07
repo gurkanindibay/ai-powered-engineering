@@ -123,6 +123,8 @@ void main() {
       expect(find.byKey(const Key('btn_stream_upload_bank_statement')), findsOneWidget);
 
       // Switch to Borç Yaşlandırma Tab
+      await tester.ensureVisible(find.text('Borç Yaşlandırma (Aging)'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Borç Yaşlandırma (Aging)'));
       await tester.pumpAndSettle();
 
@@ -219,6 +221,8 @@ void main() {
 
       final duesNavBtn = find.byKey(const Key('btn_open_unified_dues_center'));
       expect(duesNavBtn, findsOneWidget);
+      await tester.ensureVisible(duesNavBtn);
+      await tester.pumpAndSettle();
       await tester.tap(duesNavBtn);
       await tester.pumpAndSettle();
       expect(navigatedToDues, isTrue);

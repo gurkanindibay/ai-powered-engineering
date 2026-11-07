@@ -87,13 +87,15 @@ void main() {
       await tester.pumpAndSettle();
 
       // Find 'Sakin & Malik Listesi' action button in cockpit
-      final sakinlerBtn = find.byKey(const Key('btn_cockpit_manage_residents'));
-      await tester.ensureVisible(sakinlerBtn);
+      final residentsButton = find.byKey(const Key('btn_cockpit_manage_residents'));
+      await tester.ensureVisible(residentsButton);
       await tester.pumpAndSettle();
-      expect(sakinlerBtn, findsOneWidget);
+      expect(residentsButton, findsOneWidget);
 
       // Tap button to navigate to Sakinler & Malikler tab
-      await tester.tap(sakinlerBtn);
+      await tester.ensureVisible(residentsButton);
+      await tester.pumpAndSettle();
+      await tester.tap(residentsButton);
       await tester.pumpAndSettle();
 
       // Verify navigated to Sakinler & Malikler tab and module button is present
@@ -107,6 +109,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap Sakinler & Malikler tab
+      await tester.ensureVisible(find.text('Sakinler & Malikler'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Sakinler & Malikler'));
       await tester.pumpAndSettle();
 
@@ -115,6 +119,8 @@ void main() {
       expect(moduleBtn, findsOneWidget);
 
       // Tap module button
+      await tester.ensureVisible(moduleBtn);
+      await tester.pumpAndSettle();
       await tester.tap(moduleBtn);
       await tester.pumpAndSettle();
 
@@ -135,6 +141,8 @@ void main() {
       expect(responsibleBtn, findsOneWidget);
 
       // Tap button to open primary responsible selection modal
+      await tester.ensureVisible(responsibleBtn);
+      await tester.pumpAndSettle();
       await tester.tap(responsibleBtn);
       await tester.pumpAndSettle();
 
@@ -143,6 +151,8 @@ void main() {
       expect(find.text('Kemal Ev Sahibi'), findsWidgets);
 
       // Choose Kat Maliki as active responsible
+      await tester.ensureVisible(find.text('Kemal Ev Sahibi').first);
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Kemal Ev Sahibi').first);
       await tester.pumpAndSettle();
 
@@ -159,15 +169,17 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify tabs on rented unit
-      final sakinerTab = find.byKey(const Key('module_tab_residents_unit-rented-kpi'));
+      final residentsTabFinder = find.byKey(const Key('module_tab_residents_unit-rented-kpi'));
       final ownerTab = find.byKey(const Key('module_tab_owner_unit-rented-kpi'));
-      await tester.ensureVisible(sakinerTab);
+      await tester.ensureVisible(residentsTabFinder);
       await tester.pumpAndSettle();
 
-      expect(sakinerTab, findsOneWidget);
+      expect(residentsTabFinder, findsOneWidget);
       expect(ownerTab, findsOneWidget);
 
       // Switch to Kat Maliki tab
+      await tester.ensureVisible(ownerTab);
+      await tester.pumpAndSettle();
       await tester.tap(ownerTab);
       await tester.pumpAndSettle();
 
@@ -175,7 +187,9 @@ void main() {
       expect(find.byKey(const Key('module_edit_owner_unit-rented-kpi')), findsOneWidget);
 
       // Switch back to Sakinler tab
-      await tester.tap(sakinerTab);
+      await tester.ensureVisible(residentsTabFinder);
+      await tester.pumpAndSettle();
+      await tester.tap(residentsTabFinder);
       await tester.pumpAndSettle();
 
       expect(find.text('Birincil Kiracı'), findsWidgets);
@@ -195,11 +209,15 @@ void main() {
       expect(addMemberBtn, findsOneWidget);
 
       // Tap + Hane Sakini
+      await tester.ensureVisible(addMemberBtn);
+      await tester.pumpAndSettle();
       await tester.tap(addMemberBtn);
       await tester.pumpAndSettle();
 
       expect(find.text('Hane Sakini Ekle'), findsOneWidget);
       // Close modal
+      await tester.ensureVisible(find.text('Vazgeç'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Vazgeç'));
       await tester.pumpAndSettle();
 
@@ -210,6 +228,8 @@ void main() {
       expect(historyBtn, findsOneWidget);
 
       // Tap history
+      await tester.ensureVisible(historyBtn);
+      await tester.pumpAndSettle();
       await tester.tap(historyBtn);
       await tester.pumpAndSettle();
 
@@ -225,6 +245,8 @@ void main() {
       // Tap Top Bar "Yeni Sakin Ekle" button
       final addResidentBtn = find.byKey(const Key('module_add_new_resident_btn'));
       expect(addResidentBtn, findsOneWidget);
+      await tester.ensureVisible(addResidentBtn);
+      await tester.pumpAndSettle();
       await tester.tap(addResidentBtn);
       await tester.pumpAndSettle();
 
@@ -297,6 +319,8 @@ void main() {
       expect(find.descendant(of: roleSelector, matching: find.text('Boş Daire')), findsOneWidget);
 
       // Switch to Malik Oturuyor (Owner Occupied)
+      await tester.ensureVisible(find.descendant(of: roleSelector, matching: find.text('Malik Oturuyor')));
+      await tester.pumpAndSettle();
       await tester.tap(find.descendant(of: roleSelector, matching: find.text('Malik Oturuyor')));
       await tester.pumpAndSettle();
 
@@ -304,6 +328,8 @@ void main() {
       expect(find.text('Kiracı Bilgileri (Fiilen İkamet Eden)'), findsNothing);
 
       // Save
+      await tester.ensureVisible(find.byKey(const Key('module_save_edit_resident_btn')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('module_save_edit_resident_btn')));
       await tester.pumpAndSettle();
 
@@ -355,6 +381,8 @@ void main() {
       expect(find.descendant(of: roleSelector, matching: find.text('Kat Maliki Girişi')), findsOneWidget);
 
       // Select Kat Maliki Girişi
+      await tester.ensureVisible(find.descendant(of: roleSelector, matching: find.text('Kat Maliki Girişi')));
+      await tester.pumpAndSettle();
       await tester.tap(find.descendant(of: roleSelector, matching: find.text('Kat Maliki Girişi')));
       await tester.pumpAndSettle();
 
@@ -369,6 +397,8 @@ void main() {
 
       // Tap Top Bar "Yeni Sakin Ekle" button
       final addResidentBtn = find.byKey(const Key('module_add_new_resident_btn'));
+      await tester.ensureVisible(addResidentBtn);
+      await tester.pumpAndSettle();
       await tester.tap(addResidentBtn);
       await tester.pumpAndSettle();
 

@@ -2,11 +2,11 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
-import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/main.dart';
 import 'package:sitepulse/ui/components/capital_projects_view.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'test_fixtures.dart';
+import 'ui_test_helpers.dart';
 
 DashboardController _createE2EController({bool startAuthenticated = false}) {
   final controller = DashboardController(startAuthenticated: startAuthenticated, isTestMode: true);
@@ -54,12 +54,16 @@ void main() {
       // 2. Navigate on screen to Aidat Yönetimi bottom tab
       final duesNavTab = find.text('Aidat Yönetimi');
       expect(duesNavTab, findsOneWidget);
+      await tester.ensureVisible(duesNavTab);
+      await tester.pumpAndSettle();
       await tester.tap(duesNavTab);
       await tester.pumpAndSettle();
 
       // 3. Switch to Segment 4: Demirbaş & Yatırım
       final demirbasTab = find.byKey(const Key('segment_tab_4'));
       expect(demirbasTab, findsOneWidget);
+      await tester.ensureVisible(demirbasTab);
+      await tester.pumpAndSettle();
       await tester.tap(demirbasTab);
       await tester.pumpAndSettle();
 
@@ -134,6 +138,8 @@ void main() {
       // Confirm accrual
       final confirmAccrualBtn = find.byKey(const Key('btn_confirm_accrual_dialog'));
       expect(confirmAccrualBtn, findsOneWidget);
+      await tester.ensureVisible(confirmAccrualBtn);
+      await tester.pumpAndSettle();
       await tester.tap(confirmAccrualBtn);
       await tester.pumpAndSettle();
 
@@ -152,6 +158,8 @@ void main() {
       // Open disbursement modal
       final recordDisbursementBtn = find.byKey(const Key('btn_record_disbursement'));
       expect(recordDisbursementBtn, findsOneWidget);
+      await tester.ensureVisible(recordDisbursementBtn);
+      await tester.pumpAndSettle();
       await tester.tap(recordDisbursementBtn);
       await tester.pumpAndSettle();
 
@@ -214,10 +222,14 @@ void main() {
 
       // Navigate to Aidat Yönetimi -> Demirbaş & Yatırım
       final duesNavTab = find.text('Aidat Yönetimi');
+      await tester.ensureVisible(duesNavTab);
+      await tester.pumpAndSettle();
       await tester.tap(duesNavTab);
       await tester.pumpAndSettle();
 
       final demirbasTab = find.byKey(const Key('segment_tab_4'));
+      await tester.ensureVisible(demirbasTab);
+      await tester.pumpAndSettle();
       await tester.tap(demirbasTab);
       await tester.pumpAndSettle();
 
@@ -249,6 +261,8 @@ void main() {
         'invalid_budget_amount',
       );
 
+      await tester.ensureVisible(submitProjectBtn);
+      await tester.pumpAndSettle();
       await tester.tap(submitProjectBtn);
       await tester.pumpAndSettle();
 
@@ -282,6 +296,8 @@ void main() {
       await tester.pumpAndSettle();
 
       final recordDisbursementBtn = find.byKey(const Key('btn_record_disbursement'));
+      await tester.ensureVisible(recordDisbursementBtn);
+      await tester.pumpAndSettle();
       await tester.tap(recordDisbursementBtn);
       await tester.pumpAndSettle();
 
@@ -345,10 +361,8 @@ void main() {
       expect(find.text('₺1.423,33'), findsWidgets);
 
       // 2. Logout Kat Maliki
-      final logoutBtn = find.byTooltip('Çıkış Yap / Rol Değiştir');
-      expect(logoutBtn, findsOneWidget);
-      await tester.tap(logoutBtn);
-      await tester.pumpAndSettle();
+      // Logout lives in the profile sheet and asks for confirmation.
+      await logOutThroughProfile(tester);
 
       expect(controller.isAuthenticated, isFalse);
 
@@ -396,10 +410,14 @@ void main() {
 
       // Navigate to Demirbaş tab
       final duesNavTab = find.text('Aidat Yönetimi');
+      await tester.ensureVisible(duesNavTab);
+      await tester.pumpAndSettle();
       await tester.tap(duesNavTab);
       await tester.pumpAndSettle();
 
       final demirbasTab = find.byKey(const Key('segment_tab_4'));
+      await tester.ensureVisible(demirbasTab);
+      await tester.pumpAndSettle();
       await tester.tap(demirbasTab);
       await tester.pumpAndSettle();
 

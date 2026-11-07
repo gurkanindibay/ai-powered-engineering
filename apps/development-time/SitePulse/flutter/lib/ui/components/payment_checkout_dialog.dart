@@ -1,19 +1,22 @@
 import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import 'package:flutter/services.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 
 import 'app_fullscreen_page.dart';
 
+import '../design_system/money_formatter.dart';
+import '../design_system/sp_feedback.dart';
 enum CheckoutPaymentMethod {
   card,
   virtualIban,
 }
 
 class PaymentCheckoutDialog extends StatefulWidget {
-  final AidatBorcu dues;
+  final DuesLiability dues;
   final String siteName;
   final String unitDesc;
   final String virtualIban;
@@ -49,8 +52,8 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
   void initState() {
     super.initState();
     _selectedMethod = widget.initialMethod;
-    final initialVal = widget.dues.toplamTutar > Decimal.zero
-        ? widget.dues.toplamTutar
+    final initialVal = widget.dues.totalAmount > Decimal.zero
+        ? widget.dues.totalAmount
         : Decimal.parse('500.00');
     _enteredAmount = initialVal;
     _amountCtrl = TextEditingController(text: initialVal.toStringAsFixed(2));
@@ -86,7 +89,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isOverdue = widget.dues.gecikmeTazminati > Decimal.zero;
+    final isOverdue = widget.dues.delayPenalty > Decimal.zero;
 
     return AppFullscreenPage(
       title: 'Aidat Ödeme Adımı',
@@ -97,7 +100,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
           color: AppColors.textPrimary(context),
           size: 20,
         ),
-        tooltip: 'Geri Dön',
+        tooltip: AppStrings.back,
         onPressed: () => Navigator.pop(context),
       ),
       child: Column(
@@ -119,16 +122,16 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                       children: [
                         Expanded(
                           child: Text(
-                            '${widget.dues.donem} Aidat Ana Parası',
+                            '${widget.dues.period} Aidat Ana Parası',
                             style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          '₺${widget.dues.anaPara.toStringAsFixed(2)}',
+                        Flexible(child: Text(
+                          formatTry(widget.dues.principalAmount),
                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
+                        )),
                       ],
                     ),
                     if (isOverdue) ...[
@@ -137,9 +140,11 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: Row(
+                            child: Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              runSpacing: 2,
                               children: [
-                                const Text('KMK %5 Kanuni Gecikme', style: TextStyle(color: AppColors.accentRed, fontSize: 11)),
+                                Text('KMK %5 Kanuni Gecikme', style: TextStyle(color: AppColors.dangerText(context), fontSize: 12)),
                                 const SizedBox(width: 4),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -148,18 +153,18 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
-                                    '${widget.dues.gecikenGunSayisi} gün',
-                                    style: const TextStyle(color: AppColors.accentRed, fontSize: 10, fontWeight: FontWeight.bold),
+                                    '${widget.dues.daysOverdue} gün',
+                                    style: TextStyle(color: AppColors.dangerText(context), fontSize: 12, fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               ],
-                            ),
+),
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            '+₺${widget.dues.gecikmeTazminati.toStringAsFixed(2)}',
-                            style: const TextStyle(color: AppColors.accentRed, fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
+                          Flexible(child: Text(
+                            '+${formatTry(widget.dues.delayPenalty)}',
+                            style: TextStyle(color: AppColors.dangerText(context), fontSize: 12, fontWeight: FontWeight.bold),
+                          )),
                         ],
                       ),
                     ],
@@ -173,10 +178,10 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                             style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                         ),
-                        Text(
-                          '₺${widget.dues.toplamTutar.toStringAsFixed(2)}',
-                          style: const TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 17),
-                        ),
+                        Flexible(child: Text(
+                          formatTry(widget.dues.totalAmount),
+                          style: TextStyle(color: AppColors.primaryText(context), fontWeight: FontWeight.bold, fontSize: 17),
+                        )),
                       ],
                     ),
                   ],
@@ -237,7 +242,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
   }
 
   Widget _buildAmountSection() {
-    final debt = widget.dues.toplamTutar;
+    final debt = widget.dues.totalAmount;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -252,20 +257,20 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              Flexible(child: Text(
                 'Ödemek İstediğiniz Tutar',
                 style: TextStyle(
                   color: AppColors.textPrimary(context),
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
-              ),
+              )),
               if (debt > Decimal.zero)
                 Text(
-                  'Mevcut Borç: ₺${debt.toStringAsFixed(2)}',
+                  'Mevcut Borç: ${formatTry(debt)}',
                   style: TextStyle(
                     color: AppColors.textSecondary(context),
-                    fontSize: 11,
+                    fontSize: 12,
                   ),
                 ),
             ],
@@ -286,8 +291,8 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
               labelText: 'Tutar Giriniz (₺)',
               labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
               prefixText: '₺ ',
-              prefixStyle: const TextStyle(
-                color: AppColors.accentCyan,
+              prefixStyle: TextStyle(
+                color: AppColors.primaryText(context),
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -318,7 +323,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
               children: [
                 if (debt > Decimal.zero) ...[
                   _buildQuickPresetChip(
-                    label: 'Borcun Tamamı (₺${debt.toStringAsFixed(2)})',
+                    label: 'Borcun Tamamı (${formatTry(debt)})',
                     amount: debt,
                   ),
                   const SizedBox(width: 6),
@@ -373,8 +378,8 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? AppColors.accentCyan : AppColors.textSecondary(context),
-            fontSize: 11,
+            color: isSelected ? AppColors.primaryText(context) : AppColors.textSecondary(context),
+            fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
           ),
         ),
@@ -383,7 +388,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
   }
 
   Widget _buildAmountImpactBanner() {
-    final debt = widget.dues.toplamTutar;
+    final debt = widget.dues.totalAmount;
     if (_enteredAmount <= Decimal.zero) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -391,14 +396,14 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
           color: AppColors.accentRed.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Row(
+        child: Row(
           children: [
             Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.accentRed),
             SizedBox(width: 6),
             Expanded(
               child: Text(
                 'Lütfen geçerli bir ödeme tutarı giriniz.',
-                style: TextStyle(color: AppColors.accentRed, fontSize: 11),
+                style: TextStyle(color: AppColors.dangerText(context), fontSize: 12),
               ),
             ),
           ],
@@ -422,8 +427,8 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'Kısmi Ödeme: ₺${_enteredAmount.toStringAsFixed(2)} borçtan düşülecek • Kalan borç: ₺${remaining.toStringAsFixed(2)}',
-                  style: const TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w600),
+                  'Kısmi Ödeme: ${formatTry(_enteredAmount)} borçtan düşülecek • Kalan borç: ${formatTry(remaining)}',
+                  style: const TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -437,14 +442,14 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
           ),
-          child: const Row(
+          child: Row(
             children: [
               Icon(Icons.check_circle_outline, size: 16, color: AppColors.accentGreen),
               SizedBox(width: 6),
               Expanded(
                 child: Text(
                   'Mevcut aidat borcunuzun tamamı kapatılacak.',
-                  style: TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -465,8 +470,8 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  '₺${debt.toStringAsFixed(2)} borç kapatılacak • ₺${surplus.toStringAsFixed(2)} avans bakiyenize (Avans Bakiye) aktarılacak.',
-                  style: const TextStyle(color: AppColors.accentCyan, fontSize: 11, fontWeight: FontWeight.w600),
+                  '${formatTry(debt)} borç kapatılacak • ${formatTry(surplus)} avans bakiyenize (Avans Bakiye) aktarılacak.',
+                  style: TextStyle(color: AppColors.primaryText(context), fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -487,8 +492,8 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Borcunuz bulunmuyor. ₺${_enteredAmount.toStringAsFixed(2)} tutarının tamamı avans bakiyenize (Avans Bakiye) aktarılacak.',
-                style: const TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.w600),
+                'Borcunuz bulunmuyor. ${formatTry(_enteredAmount)} tutarının tamamı avans bakiyenize (Avans Bakiye) aktarılacak.',
+                style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -536,7 +541,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                   Text(
                     title,
                     style: TextStyle(
-                      color: isSelected ? AppColors.accentCyan : AppColors.textPrimary(context),
+                      color: isSelected ? AppColors.primaryText(context) : AppColors.textPrimary(context),
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
@@ -544,7 +549,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                   ),
                   Text(
                     subtitle,
-                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
@@ -629,7 +634,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
             Expanded(
               child: Text(
                 '256-Bit SSL & 3D Secure banka güvencesiyle korunur',
-                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -647,13 +652,13 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                 : null,
             icon: const Icon(Icons.lock, size: 16),
             label: Text(
-              widget.dues.toplamTutar > Decimal.zero
-                  ? '3D Secure ile ₺${_enteredAmount.toStringAsFixed(2)} Öde'
-                  : '3D Secure ile ₺${_enteredAmount.toStringAsFixed(2)} Avans Yükle',
+              widget.dues.totalAmount > Decimal.zero
+                  ? '3D Secure ile ${formatTry(_enteredAmount)} Öde'
+                  : '3D Secure ile ${formatTry(_enteredAmount)} Avans Yükle',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentCyan,
+              backgroundColor: AppColors.primaryFill,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 13),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -684,7 +689,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                   Expanded(
                     child: Text(
                       'Dairenize Tanımlı Sanal IBAN',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontWeight: FontWeight.w600),
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -695,9 +700,9 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                       color: AppColors.accentGreen.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Otomatik Eşleşir',
-                      style: TextStyle(color: AppColors.accentGreen, fontSize: 10, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -731,10 +736,10 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                       onTap: () {
                         Clipboard.setData(ClipboardData(text: widget.virtualIban.replaceAll(' ', '')));
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
+                          appSnackBar(
                             content: Text('Sanal IBAN panoya kopyalandı!'),
                             duration: Duration(seconds: 2),
-                            backgroundColor: AppColors.accentGreen,
+                            backgroundColor: AppColors.successFill,
                           ),
                         );
                       },
@@ -745,14 +750,14 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                           color: AppColors.accentCyan.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.copy, size: 12, color: AppColors.accentCyan),
                             SizedBox(width: 4),
                             Text(
-                              'Kopyala',
-                              style: TextStyle(color: AppColors.accentCyan, fontSize: 11, fontWeight: FontWeight.bold),
+                              AppStrings.copy,
+                              style: TextStyle(color: AppColors.primaryText(context), fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
@@ -765,13 +770,13 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Alıcı Adı:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
+                  Flexible(child: Text('Alıcı Adı:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12))),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '${widget.siteName} Yönetimi',
                       textAlign: TextAlign.end,
-                      style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.bold),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -781,13 +786,13 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Banka:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
+                  Flexible(child: Text('Banka:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12))),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'VakıfBank Kurumsal Havuz',
                       textAlign: TextAlign.end,
-                      style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.bold),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -797,8 +802,8 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Ödenecek Tutar:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
-                  Text('₺${_enteredAmount.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.accentCyan, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Flexible(child: Text('Ödenecek Tutar:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12))),
+                  Flexible(child: Text(formatTry(_enteredAmount), style: TextStyle(color: AppColors.primaryText(context), fontSize: 12, fontWeight: FontWeight.bold))),
                 ],
               ),
             ],
@@ -820,7 +825,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
               Expanded(
                 child: testId('checkout_fast_note', Text(
                   'Açıklama alanına hiçbir şey yazmanıza gerek yoktur. Bu IBAN sadece dairenize özeldir ve gönderdiğiniz tutar FAST ile saniyeler içinde aidat borcunuzu kapatır.',
-                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11, height: 1.35),
+                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, height: 1.35),
                 )),
               ),
             ],
@@ -833,15 +838,15 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
+                appSnackBar(
                   content: Text('FAST transferiniz ulaştığında sistem borcunuzu otomatik kapatacak ve bildirim gönderecektir.'),
-                  backgroundColor: AppColors.accentGreen,
+                  backgroundColor: AppColors.successFill,
                   duration: Duration(seconds: 4),
                 ),
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentCyan,
+              backgroundColor: AppColors.primaryFill,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

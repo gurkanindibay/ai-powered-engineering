@@ -4,13 +4,14 @@ from decimal import ROUND_HALF_UP, Decimal
 import pytest
 
 from pages import CapitalProjects, ManagerCockpit, ResidentHome
+from support.money import last_amount
 
 BUDGET = Decimal("500000.00")
 
 
 def _share_from(text: str) -> Decimal:
-    # "Arsa Payı: 24/1000 • Toplam Pay: ₺285714.29" (printed with Decimal.toString, not the Turkish format)
-    return Decimal(text.rsplit("₺", 1)[1].strip())
+    # "Arsa Payı: 24/1000 • Toplam Pay: ₺285.714,29" (MoneyFormatter, Turkish format)
+    return last_amount(text)
 
 
 @pytest.mark.smoke
@@ -71,7 +72,7 @@ def test_equal_allocation_gives_every_unit_the_same_share(login_as, page, stack)
     capital.create("Kamera Sistemi", str(budget), by_land_share=False, installments=1)
 
     shown = [_share_from(t) for t in capital.show_unit_shares().unit_share_texts().values()]
-    assert shown == [budget / units] * units
+    assert shown == [(budget / units).quantize(Decimal("0.01"))] * units
     assert stack.sql("SELECT allocation_basis FROM capital_projects;") == "EQUAL_PER_UNIT"
 
 
@@ -113,9 +114,9 @@ A14_IBAN = "TR620020500009863791600001"
 
 
 def _metric(page, metric_id: str) -> Decimal:
-    """Capital tile value, e.g. 'Tahsil Edilen₺4000' -> Decimal('4000')."""
+    """Capital tile value, e.g. 'Tahsil Edilen₺4.000,00' -> Decimal('4000.00')."""
     from support.flutter import text_of
-    return Decimal(text_of(by_id(page, f"capital_metric_{metric_id}")).rsplit("₺", 1)[1].strip())
+    return last_amount(text_of(by_id(page, f"capital_metric_{metric_id}")))
 
 
 @pytest.fixture

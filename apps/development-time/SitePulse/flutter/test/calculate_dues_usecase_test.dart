@@ -33,10 +33,10 @@ void main() {
       expect(result.totalAmount, Decimal.parse('1423.33'));
 
       // Also verify compatibility getters
-      expect(result.durum, DebtStatus.overdue);
-      expect(result.gecikenGunSayisi, 10);
-      expect(result.gecikmeTazminati, Decimal.parse('23.33'));
-      expect(result.toplamTutar, Decimal.parse('1423.33'));
+      expect(result.status, DebtStatus.overdue);
+      expect(result.daysOverdue, 10);
+      expect(result.delayPenalty, Decimal.parse('23.33'));
+      expect(result.totalAmount, Decimal.parse('1423.33'));
     });
 
     test('when dues are not overdue, penalty remains zero', () {

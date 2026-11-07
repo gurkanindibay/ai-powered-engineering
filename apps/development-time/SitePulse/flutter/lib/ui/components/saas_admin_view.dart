@@ -1,5 +1,6 @@
 import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
@@ -35,7 +36,7 @@ class SaasAdminView extends StatelessWidget {
             color: isDark ? null : AppColors.lightSurface,
             gradient: isDark
                 ? const LinearGradient(
-                    colors: [Color(0xFF1E1B4B), Color(0xFF0F172A)],
+                    colors: [Color(0xFF1E1B4B), AppColors.lightTextPrimary],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   )
@@ -60,25 +61,25 @@ class SaasAdminView extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Flexible(child: Text(
                     'SitePulse Multi-Tenant Platform',
                     style: TextStyle(
-                      color: AppColors.accentCyan,
+                      color: AppColors.primaryText(context),
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
-                  ),
+                  )),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppColors.accentCyan.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Text(
+                    child: Text(
                       'SaaS SuperAdmin',
                       style: TextStyle(
-                        color: AppColors.accentCyan,
-                        fontSize: 11,
+                        color: AppColors.primaryText(context),
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -91,9 +92,10 @@ class SaasAdminView extends StatelessWidget {
                 style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
               ),
               const SizedBox(height: 4),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   Text(
                     '${sites.length}',
@@ -108,17 +110,18 @@ class SaasAdminView extends StatelessWidget {
                     'Aktif Site / Kompleks',
                     style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14),
                   ),
-                ],
-              ),
+                ]),
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
                   _buildMetric(context, 'Toplam Bağımsız Bölüm', '$totalUnits Daire'),
                   _buildMetric(context, 'Platform Hacmi', '₺240.000 /ay', color: AppColors.accentGreen),
                   _buildMetric(context, 'Uptime', '%99.98', color: AppColors.accentCyan),
-                ],
-              ),
+                ]),
             ],
           ),
         ),
@@ -129,16 +132,15 @@ class SaasAdminView extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
+            Flexible(child: Text(
               'Kayıtlı Siteler & Yöneticiler',
               style: TextStyle(
                 color: AppColors.textPrimary(context),
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
-            ),
-            Row(
-              children: [
+            )),
+            Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                 IconButton(
                   tooltip: 'Siteleri Yenile',
                   icon: Icon(Icons.refresh, size: 20, color: AppColors.accentCyan),
@@ -150,14 +152,13 @@ class SaasAdminView extends StatelessWidget {
                   icon: const Icon(Icons.add_business, size: 16),
                   label: const Text('Yeni Site Kaydet', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentCyan,
+                    backgroundColor: AppColors.primaryFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 )),
-              ],
-            ),
+              ])),
           ],
         ),
 
@@ -206,7 +207,7 @@ class SaasAdminView extends StatelessWidget {
       children: [
         Text(
           label,
-          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
         ),
         const SizedBox(height: 2),
         Text(
@@ -263,7 +264,7 @@ class SaasAdminView extends StatelessWidget {
                           )),
                           Text(
                             '${site.city} • ${site.totalUnits} Daire',
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
@@ -281,9 +282,9 @@ class SaasAdminView extends StatelessWidget {
                 ),
                 child: Text(
                   site.planType,
-                  style: const TextStyle(
-                    color: AppColors.accentGreen,
-                    fontSize: 10,
+                  style: TextStyle(
+                    color: AppColors.successText(context),
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -310,7 +311,7 @@ class SaasAdminView extends StatelessWidget {
                         children: [
                           Text(
                             'Site Yöneticisi',
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -329,7 +330,7 @@ class SaasAdminView extends StatelessWidget {
                     Flexible(
                       child: Text(
                         '${site.adminPhone} • ${site.adminEmail}',
-                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                         textAlign: TextAlign.end,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -337,8 +338,11 @@ class SaasAdminView extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
                   children: [
                     if (onEditSiteTap != null) ...[
                       testId('btn_edit_site_${site.id}', InkWell(
@@ -352,7 +356,7 @@ class SaasAdminView extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: AppColors.accentGreen.withOpacity(0.4)),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.edit_outlined, size: 13, color: AppColors.accentGreen),
@@ -360,8 +364,8 @@ class SaasAdminView extends StatelessWidget {
                               Text(
                                 'Düzenle',
                                 style: TextStyle(
-                                  color: AppColors.accentGreen,
-                                  fontSize: 11,
+                                  color: AppColors.successText(context),
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -382,7 +386,7 @@ class SaasAdminView extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: AppColors.accentCyan.withOpacity(0.4)),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.key, size: 13, color: AppColors.accentCyan),
@@ -390,8 +394,8 @@ class SaasAdminView extends StatelessWidget {
                               Text(
                                 'Şifre Yenile',
                                 style: TextStyle(
-                                  color: AppColors.accentCyan,
-                                  fontSize: 11,
+                                  color: AppColors.primaryText(context),
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -412,12 +416,12 @@ class SaasAdminView extends StatelessWidget {
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: Colors.red.withOpacity(0.3)),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.delete_outline, size: 13, color: Colors.redAccent),
+                                Icon(Icons.delete_outline, size: 13, color: AppColors.accentRed),
                                 SizedBox(width: 4),
-                                Text('Sil', style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                                Text(AppStrings.delete, style: TextStyle(color: AppColors.dangerText(context), fontSize: 12, fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
@@ -437,14 +441,13 @@ class SaasAdminView extends StatelessWidget {
                               children: [
                                 Icon(Icons.lock_outline, size: 12, color: AppColors.textSecondary(context)),
                                 const SizedBox(width: 4),
-                                Text('İşlemli', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10)),
+                                Text('İşlemli', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                               ],
                             ),
                           ),
                         )),
                     ],
-                  ],
-                ),
+                  ]),
               ],
             ),
           ),

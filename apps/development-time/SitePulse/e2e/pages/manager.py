@@ -4,7 +4,10 @@ from playwright.sync_api import Page
 
 from pathlib import Path
 
+from decimal import Decimal
+
 from support.flutter import by_id, by_id_prefix, fill, text_of
+from support.money import last_amount
 
 from .shell import Shell
 
@@ -135,15 +138,15 @@ class ImportSummary:
         return self
 
     @staticmethod
-    def _count_and_sum(text: str) -> tuple[int, str]:
-        # e.g. "Eşleşen Daireler (1)₺1400.00"
+    def _count_and_sum(text: str) -> tuple[int, Decimal]:
+        # e.g. "Eşleşen Daireler (1)₺1.400,00"
         count = int(text.split("(", 1)[1].split(")", 1)[0])
-        return count, text.rsplit("₺", 1)[1].strip()
+        return count, last_amount(text)
 
-    def matched(self) -> tuple[int, str]:
+    def matched(self) -> tuple[int, Decimal]:
         return self._count_and_sum(text_of(by_id(self.page, "import_summary_matched")))
 
-    def unmatched(self) -> tuple[int, str]:
+    def unmatched(self) -> tuple[int, Decimal]:
         return self._count_and_sum(text_of(by_id(self.page, "import_summary_unmatched")))
 
     def confirm_matched(self) -> None:
@@ -208,7 +211,7 @@ class CapitalProjects:
         return self
 
     def unit_share_texts(self) -> dict[str, str]:
-        """{'<block>_<unit>': 'Arsa Payı: 24/1000 • Toplam Pay: ₺285714.29'}"""
+        """{'<block>_<unit>': 'Arsa Payı: 24/1000 • Toplam Pay: ₺285.714,29'}"""
         ids = self.page.eval_on_selector_all(
             '[flt-semantics-identifier^="unit_share_"]',
             "els => els.map(e => e.getAttribute('flt-semantics-identifier'))")

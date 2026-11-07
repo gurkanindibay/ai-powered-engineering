@@ -22,6 +22,13 @@ def parse_try(text: str) -> Decimal:
     return sign * Decimal(raw).quantize(Decimal("0.01"))
 
 
+def last_amount(text: str) -> Decimal:
+    """The amount after the last '₺' in a label, e.g. 'Toplam Pay: ₺285.714,29' -> Decimal('285714.29')."""
+    if "₺" not in text:
+        raise ValueError(f"no TRY amount in {text!r}")
+    return parse_try("₺" + text.rsplit("₺", 1)[1])
+
+
 def api_amount(value: object) -> Decimal:
     """Backend amounts arrive as strings ("1400.00"); quantize to kuruş."""
     return Decimal(str(value)).quantize(Decimal("0.01"))

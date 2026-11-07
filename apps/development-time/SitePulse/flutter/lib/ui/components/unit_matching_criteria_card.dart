@@ -1,10 +1,12 @@
 import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import 'package:flutter/services.dart';
 import '../../domain/models/dues_models.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
 
+import '../design_system/sp_feedback.dart';
 /// Card component allowing homeowners to see their automated payment
 /// matching criteria (Virtual IBAN, registered sender IBANs, payer names, and description format)
 /// and modify them at will.
@@ -95,7 +97,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                     decoration: InputDecoration(
                       hintText: 'TR00 0000 0000 0000 0000 0000 00',
                       filled: true,
-                      fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      fillColor: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: AppColors.border(dialogCtx)),
@@ -117,7 +119,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                     decoration: InputDecoration(
                       hintText: 'Örn: İş Bankası Maaş Hesabım',
                       filled: true,
-                      fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      fillColor: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: AppColors.border(dialogCtx)),
@@ -139,7 +141,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                     decoration: InputDecoration(
                       hintText: 'Örn: Türkiye İş Bankası',
                       filled: true,
-                      fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      fillColor: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: AppColors.border(dialogCtx)),
@@ -155,7 +157,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => Navigator.pop(dialogCtx),
-                          child: const Text('Vazgeç'),
+                          child: const Text(AppStrings.cancel),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -165,7 +167,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                             final rawIban = ibanController.text.trim();
                             if (rawIban.length < 15) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Lütfen geçerli bir IBAN giriniz.')),
+                                appSnackBar(content: Text('Lütfen geçerli bir IBAN giriniz.')),
                               );
                               return;
                             }
@@ -176,16 +178,16 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                             );
                             Navigator.pop(dialogCtx);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
+                              appSnackBar(
                                 content: Text('Gönderici IBAN başarıyla kaydedildi!'),
-                                backgroundColor: AppColors.accentGreen,
+                                backgroundColor: AppColors.successFill,
                               ),
                             );
                           },
                           icon: const Icon(Icons.check, size: 16),
-                          label: const Text('Kaydet'),
+                          label: const Text(AppStrings.save),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accentCyan,
+                            backgroundColor: AppColors.primaryFill,
                             foregroundColor: Colors.black87,
                             textStyle: const TextStyle(fontWeight: FontWeight.bold),
                           ),
@@ -226,8 +228,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
+                          Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                               const Icon(Icons.badge_outlined, color: AppColors.accentGreen, size: 22),
                               const SizedBox(width: 8),
                               Text(
@@ -238,8 +239,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                            ],
-                          ),
+                            ])),
                           IconButton(
                             onPressed: () => Navigator.pop(ctx),
                             icon: const Icon(Icons.close, size: 20),
@@ -264,8 +264,8 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                             side: BorderSide(color: AppColors.accentGreen.withOpacity(0.3)),
                             label: Text(
                               name,
-                              style: const TextStyle(
-                                color: AppColors.accentGreen,
+                              style: TextStyle(
+                                color: AppColors.successText(context),
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -291,7 +291,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                               decoration: InputDecoration(
                                 hintText: 'Ad Soyad (Örn: Fatma Yılmaz)',
                                 filled: true,
-                                fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                                fillColor: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(color: AppColors.border(ctx)),
@@ -312,7 +312,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                               }
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentGreen,
+                              backgroundColor: AppColors.successFill,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -329,7 +329,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                           Expanded(
                             child: OutlinedButton(
                               onPressed: () => Navigator.pop(ctx),
-                              child: const Text('Vazgeç'),
+                              child: const Text(AppStrings.cancel),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -339,16 +339,16 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                                 widget.controller.updateUnitPayerNames(names: names);
                                 Navigator.pop(ctx);
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
+                                  appSnackBar(
                                     content: Text('Gönderen isimleri başarıyla güncellendi!'),
-                                    backgroundColor: AppColors.accentGreen,
+                                    backgroundColor: AppColors.successFill,
                                   ),
                                 );
                               },
                               icon: const Icon(Icons.check, size: 16),
-                              label: const Text('Kaydet'),
+                              label: const Text(AppStrings.save),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.accentGreen,
+                                backgroundColor: AppColors.successFill,
                                 foregroundColor: Colors.white,
                                 textStyle: const TextStyle(fontWeight: FontWeight.bold),
                               ),
@@ -380,17 +380,17 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Vazgeç'),
+            child: const Text(AppStrings.cancel),
           ),
           ElevatedButton(
             onPressed: () {
               widget.controller.deleteSenderIbanFromUnit(iban: ibanItem.senderIban);
               Navigator.pop(dialogCtx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Gönderici IBAN başarıyla kaldırıldı.')),
+                appSnackBar(content: Text('Gönderici IBAN başarıyla kaldırıldı.')),
               );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentRed, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.dangerFill, foregroundColor: Colors.white),
             child: const Text('Kaldır'),
           ),
         ],
@@ -401,10 +401,10 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
   void _copyToClipboard(BuildContext context, String text, String label) {
     Clipboard.setData(ClipboardData(text: text.replaceAll(' ', '')));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      appSnackBar(
         content: Text('$label panoya kopyalandı!'),
         duration: const Duration(seconds: 2),
-        backgroundColor: AppColors.accentGreen,
+        backgroundColor: AppColors.successFill,
       ),
     );
   }
@@ -432,8 +432,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
+              Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -459,13 +458,12 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                         '${criteria.block} Blok D:${criteria.unitNumber} • Otomatik Eşleşme Kriterleri',
                         style: TextStyle(
                           color: AppColors.textSecondary(context),
-                          fontSize: 11,
+                          fontSize: 12,
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
+                ])),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -473,14 +471,14 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppColors.accentGreen.withOpacity(0.3)),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.shield_outlined, color: AppColors.accentGreen, size: 12),
                     SizedBox(width: 4),
                     Text(
                       'Aktif',
-                      style: TextStyle(color: AppColors.accentGreen, fontSize: 10.5, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -493,7 +491,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+              color: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: AppColors.accentCyan.withOpacity(0.35)),
             ),
@@ -503,8 +501,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
+                    Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                         const Icon(Icons.flash_on, color: AppColors.accentCyan, size: 16),
                         const SizedBox(width: 6),
                         Text(
@@ -515,17 +512,16 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ],
-                    ),
+                      ])),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: AppColors.accentCyan.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text(
+                      child: Text(
                         '%100 Güvenli',
-                        style: TextStyle(color: AppColors.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: AppColors.primaryText(context), fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
@@ -536,11 +532,11 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                     Expanded(
                       child: SelectableText(
                         criteria.virtualIban ?? 'TR41 0020 5042 1399 1067 0000 14',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 12.5,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.accentCyan,
+                          color: AppColors.primaryText(context),
                         ),
                       ),
                     ),
@@ -556,8 +552,8 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                   ],
                 ),
                 Text(
-                  '💡 Bu IBAN\'a yapılan tüm ödemeler açıklama boş olsa bile doğrudan dairenizle eşleşir.',
-                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                  'Bu IBAN\'a yapılan tüm ödemeler açıklama boş olsa bile doğrudan dairenizle eşleşir.',
+                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                 ),
               ],
             ),
@@ -568,8 +564,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
+              Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                   const Icon(Icons.credit_card, size: 16, color: AppColors.accentOrange),
                   const SizedBox(width: 6),
                   Text(
@@ -580,14 +575,13 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
+                ])),
               TextButton.icon(
                 onPressed: () => _showAddIbanDialog(context),
                 icon: const Icon(Icons.add, size: 14, color: AppColors.accentOrange),
-                label: const Text(
+                label: Text(
                   'Yeni IBAN Ekle',
-                  style: TextStyle(fontSize: 11.5, color: AppColors.accentOrange, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 12, color: AppColors.warningText(context), fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -607,7 +601,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                   Expanded(
                     child: Text(
                       'Henüz kayıtlı gönderici IBAN\'ınız yok. Sık kullandığınız banka hesabınızı ekleyerek genel site IBAN\'ına yapılan ödemelerde otomatik eşleşme sağlayabilirsiniz.',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     ),
                   ),
                 ],
@@ -619,7 +613,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                  color: isDark ? AppColors.lightTextPrimary : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.border(context)),
                 ),
@@ -644,7 +638,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                             const SizedBox(height: 2),
                             Text(
                               [ibanItem.label, ibanItem.bankName].where((s) => s != null && s.isNotEmpty).join(' • '),
-                              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                             ),
                           ],
                         ],
@@ -665,8 +659,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
+              Flexible(child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: [
                   const Icon(Icons.person_pin_outlined, size: 16, color: AppColors.accentGreen),
                   const SizedBox(width: 6),
                   Text(
@@ -677,14 +670,13 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
+                ])),
               testId('btn_edit_payer_names', TextButton.icon(
                 onPressed: () => _showEditPayerNamesDialog(context, criteria.registeredPayerNames),
                 icon: const Icon(Icons.edit, size: 13, color: AppColors.accentGreen),
-                label: const Text(
+                label: Text(
                   'Düzenle',
-                  style: TextStyle(fontSize: 11.5, color: AppColors.accentGreen, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 12, color: AppColors.successText(context), fontWeight: FontWeight.bold),
                 ),
               )),
             ],
@@ -702,7 +694,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                 visualDensity: VisualDensity.compact,
                 label: Text(
                   name,
-                  style: const TextStyle(color: AppColors.accentGreen, fontSize: 11.5, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               );
             }).toList(),
@@ -727,12 +719,12 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                     children: [
                       const Text(
                         'Genel Site IBAN\'ına Gönderim Açıklama Kuralı',
-                        style: TextStyle(color: Colors.blueAccent, fontSize: 11.5, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Farklı bir banka hesabından site genel IBAN\'ına transfer yaparken açıklamaya "${criteria.recommendedDescription}" yazmanız eşleşme için yeterlidir.',
-                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                       ),
                     ],
                   ),
@@ -751,8 +743,8 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                         Icon(Icons.copy, size: 12, color: Colors.blueAccent),
                         SizedBox(width: 4),
                         Text(
-                          'Kopyala',
-                          style: TextStyle(color: Colors.blueAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                          AppStrings.copy,
+                          style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),

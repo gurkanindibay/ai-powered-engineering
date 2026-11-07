@@ -1,10 +1,13 @@
 import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import '../../domain/models/auth_models.dart';
 import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
 import 'app_fullscreen_page.dart';
 
+import '../design_system/brand_marks.dart';
+import '../design_system/sp_feedback.dart';
 class ProfileRoleSheet extends StatefulWidget {
   final DashboardController controller;
 
@@ -49,7 +52,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
           color: AppColors.textPrimary(context),
           size: 20,
         ),
-        tooltip: 'Geri Dön',
+        tooltip: AppStrings.back,
         onPressed: () => Navigator.pop(context),
       ),
       child: Column(
@@ -61,7 +64,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
               children: [
                 CircleAvatar(
                   radius: 26,
-                  backgroundColor: AppColors.primary,
+                  backgroundColor: AppColors.primaryFill,
                   child: Text(
                     (session.fullName.trim().isEmpty ? '?' : session.fullName.trim().substring(0, 1).toUpperCase()),
                     style: const TextStyle(
@@ -98,9 +101,9 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                             ),
                             child: Text(
                               session.role.displayName,
-                              style: const TextStyle(
-                                color: AppColors.accentCyan,
-                                fontSize: 10,
+                              style: TextStyle(
+                                color: AppColors.primaryText(context),
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -166,14 +169,14 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
+                Flexible(child: Text(
                   'Kimlik Doğrulama (Multi-Auth)',
                   style: TextStyle(
                     color: AppColors.textSecondary(context),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
-                ),
+                )),
                 TextButton(
                   onPressed: () {
                     setState(() {
@@ -182,7 +185,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   },
                   child: Text(
                     _showLoginForm ? 'Gizle' : 'Şifre ile Giriş Yap',
-                    style: const TextStyle(color: AppColors.accentCyan, fontSize: 12),
+                    style: TextStyle(color: AppColors.primaryText(context), fontSize: 12),
                   ),
                 ),
               ],
@@ -197,7 +200,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   widget.controller.loginWithGoogle();
                   Navigator.pop(context);
                 },
-                icon: Icon(Icons.g_mobiledata, size: 24, color: AppColors.textPrimary(context)),
+                icon: const GoogleMark(size: 20),
                 label: Text(
                   'Google Hesabı ile Giriş Yap',
                   style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
@@ -250,7 +253,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                     Navigator.pop(context);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentCyan,
+                    backgroundColor: AppColors.primaryFill,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -313,7 +316,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                             perm.isolationNote,
                             style: TextStyle(
                               color: AppColors.textSecondary(context),
-                              fontSize: 10,
+                              fontSize: 12,
                             ),
                           ),
                         ],
@@ -330,9 +333,9 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                 key: const Key('btn_change_password_sheet'),
                 onPressed: () => _showChangePasswordDialog(context),
                 icon: const Icon(Icons.password, color: AppColors.accentCyan, size: 18),
-                label: const Text(
+                label: Text(
                   'Şifre Değiştir',
-                  style: TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppColors.primaryText(context), fontWeight: FontWeight.bold),
                 ),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: AppColors.accentCyan.withOpacity(0.4)),
@@ -341,18 +344,68 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                 ),
               )),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpacing.xl),
+            _sectionTitle(context, 'Görünüm'),
+            const SizedBox(height: AppSpacing.sm),
+            testId('btn_profile_toggle_theme', SwitchListTile(
+              key: const Key('btn_profile_toggle_theme'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                side: BorderSide(color: AppColors.border(context)),
+              ),
+              secondary: Icon(
+                widget.controller.isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                color: AppColors.textSecondary(context),
+              ),
+              title: Text('Koyu tema', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14)),
+              subtitle: Text(
+                widget.controller.themeMode == ThemeMode.system
+                    ? 'Sistem ayarını izliyor'
+                    : 'Seçiminiz bu cihazda saklanır',
+                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+              ),
+              value: widget.controller.isDarkMode,
+              onChanged: (_) => setState(widget.controller.toggleTheme),
+            ), label: widget.controller.isDarkMode ? 'theme:dark' : 'theme:light'),
+            if (widget.controller.themeMode != ThemeMode.system)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: testId('btn_profile_theme_follow_system', TextButton(
+                  key: const Key('btn_profile_theme_follow_system'),
+                  onPressed: () => setState(() => widget.controller.setThemeMode(ThemeMode.system)),
+                  child: const Text('Sistem temasını kullan'),
+                )),
+              ),
+            if (kShowDevTools) ...[
+              const SizedBox(height: AppSpacing.lg),
+              _sectionTitle(context, 'Geliştirici araçları'),
+              const SizedBox(height: AppSpacing.sm),
+              testId('btn_dev_simulate_offline', SwitchListTile(
+                key: const Key('btn_dev_simulate_offline'),
+                contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  side: BorderSide(color: AppColors.border(context)),
+                ),
+                secondary: Icon(Icons.cloud_off_rounded, color: AppColors.textSecondary(context)),
+                title: Text('Çevrimdışı modu simüle et', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14)),
+                subtitle: Text('Yalnızca geliştirme ve test derlemelerinde görünür',
+                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                value: widget.controller.isOffline,
+                onChanged: (v) => setState(() => widget.controller.toggleOfflineMode(v)),
+              )),
+            ],
+            const SizedBox(height: AppSpacing.xl),
             SizedBox(
               width: double.infinity,
               child: testId('btn_logout', OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  widget.controller.logout();
-                },
-                icon: const Icon(Icons.logout_rounded, color: AppColors.accentRed, size: 18),
-                label: const Text(
-                  'Çıkış Yap & Giriş Ekranına Dön',
-                  style: TextStyle(color: AppColors.accentRed, fontWeight: FontWeight.bold),
+                key: const Key('btn_logout'),
+                onPressed: () => _confirmLogout(context),
+                icon: Icon(Icons.logout_rounded, color: AppColors.dangerText(context), size: 20),
+                label: Text(
+                  'Çıkış Yap',
+                  style: TextStyle(color: AppColors.dangerText(context), fontWeight: FontWeight.bold),
                 ),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: AppColors.accentRed.withOpacity(0.4)),
@@ -365,6 +418,29 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
         ),
       );
     }
+
+  Widget _sectionTitle(BuildContext context, String text) => Semantics(
+        header: true,
+        child: Text(
+          text,
+          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      );
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    final navigator = Navigator.of(context);
+    final confirmed = await showSpConfirmDialog(
+      context,
+      title: 'Çıkış yapılsın mı?',
+      message: '${widget.controller.userSession.fullName} oturumu kapatılacak ve giriş ekranına döneceksiniz.',
+      confirmLabel: 'Çıkış Yap',
+      destructive: true,
+      confirmKey: 'btn_confirm_logout',
+    );
+    if (!confirmed || !mounted) return;
+    navigator.pop();
+    widget.controller.logout();
+  }
 
   void _showChangePasswordDialog(BuildContext context) {
     final currentPassCtrl = TextEditingController();
@@ -430,9 +506,9 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                         if (ok && mounted) {
                           Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            appSnackBar(
                               content: Text('Şifreniz başarıyla güncellendi.'),
-                              backgroundColor: Colors.green,
+                              backgroundColor: AppColors.successFill,
                             ),
                           );
                           setState(() {});
@@ -444,7 +520,7 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                         }
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentCyan,
+                  backgroundColor: AppColors.primaryFill,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -463,14 +539,14 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
                   decoration: BoxDecoration(
                     color: Colors.redAccent.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.redAccent),
+                    border: Border.all(color: AppColors.accentRed),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
+                      const Icon(Icons.error_outline, color: AppColors.accentRed, size: 16),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(localError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                        child: Text(localError!, style: TextStyle(color: AppColors.dangerText(context), fontSize: 12)),
                       ),
                     ],
                   ),

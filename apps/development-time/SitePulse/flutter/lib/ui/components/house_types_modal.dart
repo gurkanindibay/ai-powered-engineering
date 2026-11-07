@@ -1,11 +1,13 @@
 import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
 import 'app_fullscreen_page.dart';
 
+import '../design_system/money_formatter.dart';
 Future<void> showManageHouseTypesFullscreen(BuildContext context, DashboardController controller) async {
   await AppFullscreenPage.push(
     context: context,
@@ -113,9 +115,9 @@ Future<void> showManageHouseTypesFullscreen(BuildContext context, DashboardContr
                                       style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
                                     ),
                                     Text(
-                                      '₺${item.duesAmount}',
-                                      style: const TextStyle(
-                                        color: AppColors.accentGreen,
+                                      formatTry(item.duesAmount),
+                                      style: TextStyle(
+                                        color: AppColors.successText(context),
                                         fontWeight: FontWeight.bold,
                                         fontSize: 15,
                                       ),
@@ -126,7 +128,7 @@ Future<void> showManageHouseTypesFullscreen(BuildContext context, DashboardContr
                                   const SizedBox(height: 2),
                                   Text(
                                     item.description!,
-                                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                   ),
                                 ],
                               ],
@@ -145,10 +147,10 @@ Future<void> showManageHouseTypesFullscreen(BuildContext context, DashboardContr
                                   title: const Text('Tarifeyi Sil'),
                                   content: Text('${item.typeName} tarifesini silmek istediğinize emin misiniz?'),
                                   actions: [
-                                    TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
+                                    TextButton(onPressed: () => Navigator.pop(c, false), child: const Text(AppStrings.cancel)),
                                     TextButton(
                                       onPressed: () => Navigator.pop(c, true),
-                                      child: const Text('Sil', style: TextStyle(color: Colors.redAccent)),
+                                      child: Text(AppStrings.delete, style: TextStyle(color: AppColors.dangerText(context))),
                                     ),
                                   ],
                                 ),
@@ -246,7 +248,7 @@ void _showEditHouseTypeDialog(BuildContext context, DashboardController controll
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Kaydet', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text(AppStrings.save, style: TextStyle(fontWeight: FontWeight.bold)),
               )),
             ],
           ),
@@ -268,7 +270,7 @@ void _showEditHouseTypeDialog(BuildContext context, DashboardController controll
                         const Icon(Icons.error_outline, color: AppColors.accentRed, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: testId('house_type_error', Text(errorText!, style: const TextStyle(color: AppColors.accentRed, fontSize: 13))),
+                          child: testId('house_type_error', Text(errorText!, style: TextStyle(color: AppColors.dangerText(context), fontSize: 13))),
                         ),
                       ],
                     ),

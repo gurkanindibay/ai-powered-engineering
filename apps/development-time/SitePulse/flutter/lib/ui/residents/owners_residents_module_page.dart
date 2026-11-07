@@ -1,12 +1,16 @@
 import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../components/app_fullscreen_page.dart';
 import '../components/house_types_modal.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
+import '../design_system/sp_skeleton.dart';
 
+import '../design_system/money_formatter.dart';
+import '../design_system/sp_feedback.dart';
 /// Standalone Fullscreen Module for Comprehensive Owners & Residents Management.
 ///
 /// Mandated by SitePulse UX Guidelines:
@@ -115,7 +119,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
             OutlinedButton.icon(
               onPressed: () => showManageHouseTypesFullscreen(context, widget.controller),
               icon: const Icon(Icons.home_work_outlined, size: 14),
-              label: const Text('Konut Tipleri & Tarifeler', style: TextStyle(fontSize: 11)),
+              label: const Text('Konut Tipleri & Tarifeler', style: TextStyle(fontSize: 12)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.accentPurple,
                 side: const BorderSide(color: AppColors.accentPurple),
@@ -145,7 +149,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                 icon: const Icon(Icons.person_add_alt_1, size: 18),
                 label: const Text('Yeni Sakin Ekle'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentCyan,
+                  backgroundColor: AppColors.primaryFill,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -209,11 +213,11 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   children: [
                     _buildOccupancyFilterChip('Tümü ($totalUnits)', 'ALL'),
                     const SizedBox(width: 8),
-                    _buildOccupancyFilterChip('👥 Kiracılı ($tenantCount)', 'TENANT'),
+                    _buildOccupancyFilterChip('Kiracılı ($tenantCount)', 'TENANT'),
                     const SizedBox(width: 8),
-                    _buildOccupancyFilterChip('🔑 Malik Mukim ($ownerCount)', 'OWNER'),
+                    _buildOccupancyFilterChip('Malik Mukim ($ownerCount)', 'OWNER'),
                     const SizedBox(width: 8),
-                    _buildOccupancyFilterChip('🚪 Boş Daire ($vacantCount)', 'VACANT'),
+                    _buildOccupancyFilterChip('Boş Daire ($vacantCount)', 'VACANT'),
                   ],
                 ),
               ),
@@ -312,9 +316,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                 ),
                 child: Text(
                   'Doluluk: %$occupancyRate',
-                  style: const TextStyle(
-                    color: AppColors.accentGreen,
-                    fontSize: 11,
+                  style: TextStyle(
+                    color: AppColors.successText(context),
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -354,7 +358,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppColors.textSecondary(context),
-            fontSize: 10,
+            fontSize: 12,
           ),
         ),
       ],
@@ -370,7 +374,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
       selectedColor: AppColors.accentCyan.withOpacity(0.2),
       checkmarkColor: AppColors.accentCyan,
       labelStyle: TextStyle(
-        color: isSelected ? AppColors.accentCyan : AppColors.textSecondary(context),
+        color: isSelected ? AppColors.primaryText(context) : AppColors.textSecondary(context),
         fontSize: 12,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
@@ -389,7 +393,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
         checkmarkColor: AppColors.accentPurple,
         labelStyle: TextStyle(
           color: isSelected ? AppColors.accentPurple : AppColors.textSecondary(context),
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
       ),
@@ -464,7 +468,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             badgeLabel,
                             style: TextStyle(
                               color: statusColor,
-                              fontSize: 10,
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -502,7 +506,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               statusLabel,
                               style: TextStyle(
                                 color: statusColor,
-                                fontSize: 10,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -512,7 +516,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       const SizedBox(height: 2),
                       Text(
                         'Kat ${ho.floor}${ho.houseType != null && ho.houseType!.isNotEmpty ? ' • ${ho.houseType}' : ''} • Arsa Payı: ${ho.landShare}',
-                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                       ),
                     ],
                   ),
@@ -522,7 +526,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '₺${ho.monthlyDues.toStringAsFixed(2)}',
+                      formatTry(ho.monthlyDues),
                       style: TextStyle(
                         color: AppColors.textPrimary(context),
                         fontSize: 14,
@@ -531,21 +535,21 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     ),
                     Text(
                       'Aylık Aidat',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10),
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                     ),
                     if (ho.capitalDuesBalance > Decimal.zero) ...[
                       const SizedBox(height: 1),
                       Text(
-                        '₺${ho.capitalDuesBalance.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: AppColors.accentOrange,
-                          fontSize: 11,
+                        formatTry(ho.capitalDuesBalance),
+                        style: TextStyle(
+                          color: AppColors.warningText(context),
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const Text(
+                      Text(
                         'Demirbaş',
-                        style: TextStyle(color: AppColors.accentOrange, fontSize: 9),
+                        style: TextStyle(color: AppColors.warningText(context), fontSize: 12),
                       ),
                     ],
                   ],
@@ -577,9 +581,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                           Expanded(
                             child: Text(
                               ho.activeResponsibleRoleLabel,
-                              style: const TextStyle(
-                                color: AppColors.accentCyan,
-                                fontSize: 11,
+                              style: TextStyle(
+                                color: AppColors.primaryText(context),
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
                               overflow: TextOverflow.ellipsis,
@@ -590,7 +594,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             key: Key('module_set_responsible_${ho.unitId}'),
                             onPressed: () => _showSelectPrimaryResponsibleDialog(ho),
                             icon: const Icon(Icons.swap_horiz, size: 14, color: AppColors.accentCyan),
-                            label: const Text('Sorumluyu Seç', style: TextStyle(fontSize: 11, color: AppColors.accentCyan, fontWeight: FontWeight.bold)),
+                            label: Text('Sorumluyu Seç', style: TextStyle(fontSize: 12, color: AppColors.primaryText(context), fontWeight: FontWeight.bold)),
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               minimumSize: const Size(0, 24),
@@ -620,7 +624,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               const SizedBox(width: 4),
                               Text(
                                 ho.activeResponsiblePhone.isNotEmpty ? ho.activeResponsiblePhone : 'Telefon Yok',
-                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                               ),
                             ],
                           ),
@@ -631,7 +635,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               const SizedBox(width: 4),
                               Text(
                                 ho.activeResponsibleEmail.isNotEmpty ? ho.activeResponsibleEmail : 'E-posta Yok',
-                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                               ),
                             ],
                           ),
@@ -674,8 +678,8 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                   child: Text(
                                     isTenant ? 'Sakinler (${ho.tenantFullName ?? 'Kiracı'})' : (isVacant ? 'Sakinler (Boş)' : 'Sakinler (${ho.ownerFullName})'),
                                     style: TextStyle(
-                                      color: cardTab == 0 ? AppColors.accentGreen : AppColors.textSecondary(context),
-                                      fontSize: 11,
+                                      color: cardTab == 0 ? AppColors.successText(context) : AppColors.textSecondary(context),
+                                      fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                     ),
                                     overflow: TextOverflow.ellipsis,
@@ -708,8 +712,8 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                   child: Text(
                                     'Kat Maliki (${ho.ownerFullName.isNotEmpty ? ho.ownerFullName : 'Ev Sahibi'})',
                                     style: TextStyle(
-                                      color: cardTab == 1 ? AppColors.accentCyan : AppColors.textSecondary(context),
-                                      fontSize: 11,
+                                      color: cardTab == 1 ? AppColors.primaryText(context) : AppColors.textSecondary(context),
+                                      fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                     ),
                                     overflow: TextOverflow.ellipsis,
@@ -745,10 +749,10 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             children: [
                               const Icon(Icons.key, size: 14, color: AppColors.accentGreen),
                               const SizedBox(width: 6),
-                              const Expanded(
+                              Expanded(
                                 child: Text(
                                   'Birincil Kiracı',
-                                  style: TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                                  style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.bold),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -757,7 +761,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 key: Key('module_edit_residents_${ho.unitId}'),
                                 onPressed: () => _openEditHomeOwner(ho, initialTab: 0),
                                 icon: const Icon(Icons.edit_outlined, size: 11),
-                                label: const Text('Düzenle', style: TextStyle(fontSize: 10)),
+                                label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppColors.accentGreen,
                                   side: const BorderSide(color: AppColors.accentGreen),
@@ -770,7 +774,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 key: Key('module_move_out_${ho.unitId}'),
                                 onPressed: () => _openMoveOut(ho),
                                 icon: const Icon(Icons.logout, size: 11),
-                                label: const Text('Tahliye', style: TextStyle(fontSize: 10)),
+                                label: const Text('Tahliye', style: TextStyle(fontSize: 12)),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppColors.accentOrange,
                                   side: const BorderSide(color: AppColors.accentOrange),
@@ -787,7 +791,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                           ),
                           Text(
                             '${ho.tenantPhone ?? ho.phone} • ${ho.tenantEmail ?? ho.email}',
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                           ),
                         ],
                       ),
@@ -808,16 +812,16 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                           Expanded(
                             child: Text(
                               'Bu daire şu anda boştur. Yeni sakin veya kiracı girişi yapabilirsiniz.',
-                              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11),
+                              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                             ),
                           ),
                           testId('module_move_in_${ho.unitId}', ElevatedButton.icon(
                             key: Key('module_move_in_${ho.unitId}'),
                             onPressed: () => _openMoveIn(ho),
                             icon: const Icon(Icons.person_add_alt, size: 12),
-                            label: const Text('Yeni Kiracı / Sakin Girişi', style: TextStyle(fontSize: 11)),
+                            label: const Text('Yeni Kiracı / Sakin Girişi', style: TextStyle(fontSize: 12)),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentGreen,
+                              backgroundColor: AppColors.successFill,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               minimumSize: const Size(0, 28),
@@ -843,10 +847,10 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             children: [
                               const Icon(Icons.home, size: 14, color: AppColors.accentCyan),
                               const SizedBox(width: 6),
-                              const Expanded(
+                              Expanded(
                                 child: Text(
                                   'Fiilen İkamet Eden Kat Maliki (Birincil Muhatap)',
-                                  style: TextStyle(color: AppColors.accentCyan, fontSize: 11, fontWeight: FontWeight.bold),
+                                  style: TextStyle(color: AppColors.primaryText(context), fontSize: 12, fontWeight: FontWeight.bold),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -855,7 +859,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 key: Key('module_edit_owner_res_${ho.unitId}'),
                                 onPressed: () => _openEditHomeOwner(ho, initialTab: 0),
                                 icon: const Icon(Icons.edit_outlined, size: 11),
-                                label: const Text('Düzenle', style: TextStyle(fontSize: 10)),
+                                label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppColors.accentCyan,
                                   side: const BorderSide(color: AppColors.accentCyan),
@@ -868,7 +872,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 key: Key('module_add_tenant_${ho.unitId}'),
                                 onPressed: () => _openMoveIn(ho),
                                 icon: const Icon(Icons.person_add_alt, size: 11),
-                                label: const Text('Kiracı Girişi', style: TextStyle(fontSize: 10)),
+                                label: const Text('Kiracı Girişi', style: TextStyle(fontSize: 12)),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppColors.accentGreen,
                                   side: const BorderSide(color: AppColors.accentGreen),
@@ -881,7 +885,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 key: Key('module_move_out_owner_${ho.unitId}'),
                                 onPressed: () => _openMoveOut(ho),
                                 icon: const Icon(Icons.logout, size: 11),
-                                label: const Text('Tahliye', style: TextStyle(fontSize: 10)),
+                                label: const Text('Tahliye', style: TextStyle(fontSize: 12)),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppColors.accentOrange,
                                   side: const BorderSide(color: AppColors.accentOrange),
@@ -898,7 +902,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                           ),
                           Text(
                             '${ho.phone.isNotEmpty ? ho.phone : 'Telefon Yok'} • ${ho.email.isNotEmpty ? ho.email : 'E-posta Yok'}',
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                           ),
                         ],
                       ),
@@ -924,7 +928,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             Expanded(
                               child: Text(
                                 'Hane Sakinleri / Birlikte Yaşayanlar (${ho.householdResidents.length})',
-                                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11, fontWeight: FontWeight.bold),
+                                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.bold),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -933,7 +937,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               key: Key('module_add_resident_to_${ho.unitId}'),
                               onPressed: () => _openAddHouseholdMember(ho),
                               icon: const Icon(Icons.add, size: 14, color: AppColors.accentPurple),
-                              label: const Text('+ Hane Sakini', style: TextStyle(color: AppColors.accentPurple, fontSize: 11, fontWeight: FontWeight.bold)),
+                              label: const Text('+ Hane Sakini', style: TextStyle(color: AppColors.accentPurple, fontSize: 12, fontWeight: FontWeight.bold)),
                               style: TextButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 minimumSize: const Size(0, 24),
@@ -960,7 +964,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                     Expanded(
                                       child: Text(
                                         '${m.fullName} • ${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
-                                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
@@ -988,7 +992,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                           const SizedBox(height: 4),
                           Text(
                             'Henüz kayıtlı ek hane sakini bulunmuyor.',
-                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontStyle: FontStyle.italic),
+                            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, fontStyle: FontStyle.italic),
                           ),
                         ],
                       ],
@@ -1010,10 +1014,10 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                           children: [
                             const Icon(Icons.vpn_key_outlined, size: 14, color: AppColors.accentCyan),
                             const SizedBox(width: 6),
-                            const Expanded(
+                            Expanded(
                               child: Text(
                                 'Kat Maliki (Mülk Sahibi)',
-                                style: TextStyle(color: AppColors.accentCyan, fontSize: 11, fontWeight: FontWeight.bold),
+                                style: TextStyle(color: AppColors.primaryText(context), fontSize: 12, fontWeight: FontWeight.bold),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -1022,7 +1026,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               key: Key('module_edit_owner_${ho.unitId}'),
                               onPressed: () => _openEditHomeOwner(ho, initialTab: 1),
                               icon: const Icon(Icons.edit_outlined, size: 11),
-                              label: const Text('Düzenle', style: TextStyle(fontSize: 10)),
+                              label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.accentCyan,
                                 side: const BorderSide(color: AppColors.accentCyan),
@@ -1035,10 +1039,10 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               key: Key('module_transfer_ownership_${ho.unitId}'),
                               onPressed: () => _openTransferOwnership(ho),
                               icon: const Icon(Icons.real_estate_agent, size: 11),
-                              label: const Text('Mülk Devri (Satış)', style: TextStyle(fontSize: 10)),
+                              label: const Text('Mülk Devri (Satış)', style: TextStyle(fontSize: 12)),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.teal,
-                                side: const BorderSide(color: Colors.teal),
+                                foregroundColor: AppColors.accentGreen,
+                                side: const BorderSide(color: AppColors.accentGreen),
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 minimumSize: const Size(0, 24),
                               ),
@@ -1053,12 +1057,12 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         const SizedBox(height: 2),
                         Text(
                           '${ho.phone.isNotEmpty ? ho.phone : 'Telefon Yok'} • ${ho.email.isNotEmpty ? ho.email : 'E-posta Yok'}',
-                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Arsa Payı Oranı: ${ho.landShare}',
-                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                         ),
                       ],
                     ),
@@ -1076,7 +1080,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       key: Key('module_quick_add_resident_${ho.unitId}'),
                       onPressed: () => _openAddHouseholdMember(ho),
                       icon: const Icon(Icons.family_restroom, size: 13, color: AppColors.accentPurple),
-                      label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11)),
+                      label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.accentPurple,
                         side: const BorderSide(color: AppColors.accentPurple),
@@ -1095,7 +1099,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             : ho.isTenantOccupied
                                 ? 'Yeni Kiracı Girişi (Move-In)'
                                 : 'Kiracı Tanımla (Move-In)',
-                        style: const TextStyle(fontSize: 11),
+                        style: const TextStyle(fontSize: 12),
                       ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.accentGreen,
@@ -1109,7 +1113,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       key: Key('module_history_ho_${ho.unitId}'),
                       onPressed: () => _openUnitHistory(ho),
                       icon: const Icon(Icons.history, size: 13, color: AppColors.accentCyan),
-                      label: const Text('Daire Tarihçesi', style: TextStyle(fontSize: 11)),
+                      label: const Text('Daire Tarihçesi', style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.accentCyan,
                         side: const BorderSide(color: AppColors.accentCyan),
@@ -1122,7 +1126,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       key: Key('module_iban_ho_${ho.unitId}'),
                       onPressed: () => _openIbanDetails(ho),
                       icon: const Icon(Icons.account_balance, size: 13, color: AppColors.accentPurple),
-                      label: const Text('Sanal IBAN', style: TextStyle(fontSize: 11)),
+                      label: const Text('Sanal IBAN', style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.accentPurple,
                         side: const BorderSide(color: AppColors.accentPurple),
@@ -1135,7 +1139,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       key: Key('module_delete_ho_${ho.unitId}'),
                       onPressed: () => _openDeleteUnit(ho),
                       icon: const Icon(Icons.delete_outline, size: 13, color: AppColors.accentRed),
-                      label: const Text('Sil', style: TextStyle(fontSize: 11)),
+                      label: const Text(AppStrings.delete, style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.accentRed,
                         side: const BorderSide(color: AppColors.accentRed),
@@ -1213,7 +1217,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       email: ho.email,
                     );
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('${ho.ownerFullName} aktif sorumlu olarak belirlendi.')),
+                      appSnackBar(content: Text('${ho.ownerFullName} aktif sorumlu olarak belirlendi.')),
                     );
                   },
                 ),
@@ -1240,7 +1244,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         email: ho.tenantEmail ?? ho.email,
                       );
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('${ho.tenantFullName} aktif sorumlu olarak belirlendi.')),
+                        appSnackBar(content: Text('${ho.tenantFullName} aktif sorumlu olarak belirlendi.')),
                       );
                     },
                   ),
@@ -1270,7 +1274,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               email: m.email,
                             );
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('${m.fullName} aktif sorumlu olarak belirlendi.')),
+                              appSnackBar(content: Text('${m.fullName} aktif sorumlu olarak belirlendi.')),
                             );
                           },
                         ),
@@ -1348,7 +1352,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     }
                     Navigator.pop(ctx);
                   },
-                  child: const Text('Vazgeç'),
+                  child: const Text(AppStrings.cancel),
                 ),
                 testId('module_save_new_resident_btn', ElevatedButton(
                   key: const Key('module_save_new_resident_btn'),
@@ -1393,7 +1397,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             'Yeni kayıt yapıldığında mevcut sakin geçmiş ikamet arşivine aktarılacak ve yeni sakin aktif yapılacaktır.\n\n'
                             'Bu işlemi onaylıyor musunuz?',
                         confirmLabel: 'Evet, Yeni Sakin Kaydet',
-                        cancelLabel: 'Vazgeç',
+                        cancelLabel: AppStrings.cancel,
                         confirmColor: AppColors.accentCyan,
                         icon: Icons.swap_horiz_rounded,
                         iconColor: AppColors.accentCyan,
@@ -1461,11 +1465,11 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       final addedCoResidentsCount = pendingResidents.where((r) => r.nameCtrl.text.trim().isNotEmpty).length;
                       final coResidentMsg = addedCoResidentsCount > 0 ? ' ve $addedCoResidentsCount hane sakini' : '';
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Yeni daire ($selectedBlock Daire $unitNo - $ownerName)$coResidentMsg başarıyla eklendi.')),
+                        appSnackBar(content: Text('Yeni daire ($selectedBlock Daire $unitNo - $ownerName)$coResidentMsg başarıyla eklendi.')),
                       );
                     }
                   },
-                  child: const Text('Kaydet'),
+                  child: const Text(AppStrings.save),
                 )),
               ],
             ),
@@ -1484,12 +1488,12 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                          const Icon(Icons.error_outline, color: AppColors.accentRed, size: 20),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               formError!,
-                              style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
+                              style: TextStyle(color: AppColors.dangerText(context), fontSize: 13, fontWeight: FontWeight.w600),
                             ),
                           ),
                         ],
@@ -1527,11 +1531,11 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             if (currentTariff != null) ...[
                               const SizedBox(width: 6),
                               Text(
-                                '₺${currentTariff.duesAmount}/ay',
-                                style: const TextStyle(
-                                  color: AppColors.accentGreen,
+                                '${formatTry(currentTariff.duesAmount)}/ay',
+                                style: TextStyle(
+                                  color: AppColors.successText(context),
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 11,
+                                  fontSize: 12,
                                 ),
                               ),
                             ],
@@ -1593,7 +1597,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             items: currentHouseTypes.map((ht) {
                               return DropdownMenuItem<String>(
                                 value: ht.typeName,
-                                child: Text('${ht.typeName} (₺${ht.duesAmount}/ay)'),
+                                child: Text('${ht.typeName} (${formatTry(ht.duesAmount)}/ay)'),
                               );
                             }).toList(),
                             onChanged: (val) {
@@ -1649,7 +1653,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                               Expanded(
                                 child: Text(
                                   'Kat Maliki: Dairenin yasal tapu sahibidir. Demirbaş ve ana bina giderlerinin kanuni muhatabıdır.',
-                                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11),
+                                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                 ),
                               ),
                             ],
@@ -1726,7 +1730,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         const SizedBox(height: 6),
                         Text(
                           'Dairede kat maliki mi oturuyor, kiracı mı var yoksa daire boş mu?',
-                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                         ),
                         const SizedBox(height: 10),
                         SizedBox(
@@ -1772,8 +1776,8 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    '✓ Malik Oturuyor: Kat maliki bu dairede bizzat ikamet etmektedir. İşletme ve demirbaş aidatlarının doğrudan muhatabıdır. Ayrıca kiracı tanımlanamaz.',
-                                    style: TextStyle(color: AppColors.accentGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                                    'Malik Oturuyor: Kat maliki bu dairede bizzat ikamet etmektedir. İşletme ve demirbaş aidatlarının doğrudan muhatabıdır. Ayrıca kiracı tanımlanamaz.',
+                                    style: TextStyle(color: AppColors.successText(context), fontSize: 12, fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               ],
@@ -1803,7 +1807,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 const SizedBox(height: 4),
                                 Text(
                                   'Aylık işletme aidatları kiracıya, demirbaş aidatları kat malikine yansıtılır.',
-                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                 ),
                                 const SizedBox(height: 10),
                                 testId('module_new_tenant_name', TextField(
@@ -1858,7 +1862,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 Expanded(
                                   child: Text(
                                     'Boş Daire: Dairede şu anda ikamet eden yoktur. Daire boş statüsünde kaydedilir ve tüm aidat borçları kat malikine yansıtılır.',
-                                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 11, fontWeight: FontWeight.w600),
+                                    style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.w600),
                                   ),
                                 ),
                               ],
@@ -1899,7 +1903,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             testId('module_add_co_resident_btn', OutlinedButton.icon(
                               key: const Key('module_add_co_resident_btn'),
                               icon: const Icon(Icons.person_add_alt_1, size: 14, color: AppColors.accentCyan),
-                              label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.accentCyan)),
+                              label: Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryText(context))),
                               onPressed: () {
                                 setDlgState(() {
                                   pendingResidents.add(_PendingResidentEntry());
@@ -1917,7 +1921,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         const SizedBox(height: 4),
                         Text(
                           'Dairede birlikte ikamet eden diğer aile bireylerini (eş, çocuk, anne/baba vb.) ekleyebilirsiniz.',
-                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                         ),
                         const SizedBox(height: 10),
                         if (pendingResidents.isEmpty)
@@ -1936,7 +1940,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                 Expanded(
                                   child: Text(
                                     'Henüz eklenen hane sakini yok. Birlikte ikamet eden birey eklemek için "+ Hane Sakini Ekle" butonuna tıklayınız.',
-                                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                   ),
                                 ),
                               ],
@@ -1967,12 +1971,12 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                         ),
                                         child: Text(
                                           'Hane Sakini #${idx + 1}',
-                                          style: const TextStyle(color: AppColors.accentCyan, fontSize: 10, fontWeight: FontWeight.bold),
+                                          style: TextStyle(color: AppColors.primaryText(context), fontSize: 12, fontWeight: FontWeight.bold),
                                         ),
                                       ),
                                       const Spacer(),
                                       IconButton(
-                                        icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                                        icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.accentRed),
                                         tooltip: 'Hane Sakinini Kaldır',
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(),
@@ -1994,7 +1998,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                           decoration: InputDecoration(
                                             labelText: 'Ad Soyad *',
-                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                             hintText: 'Örn: Zeynep Yılmaz',
                                             filled: true,
                                             isDense: true,
@@ -2013,7 +2017,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                           decoration: InputDecoration(
                                             labelText: 'Yakınlık',
-                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                             filled: true,
                                             isDense: true,
                                             contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -2045,7 +2049,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                           decoration: InputDecoration(
                                             labelText: 'Telefon (Opsiyonel)',
-                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                             hintText: 'Örn: 0532 ...',
                                             filled: true,
                                             isDense: true,
@@ -2062,7 +2066,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
                                           decoration: InputDecoration(
                                             labelText: 'E-posta (Opsiyonel)',
-                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
+                                            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                             hintText: 'Örn: sakin@...',
                                             filled: true,
                                             isDense: true,
@@ -2112,7 +2116,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
               children: [
                 OutlinedButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Vazgeç'),
+                  child: const Text(AppStrings.cancel),
                 ),
                 testId('module_save_edit_resident_btn', ElevatedButton(
                   key: const Key('module_save_edit_resident_btn'),
@@ -2155,14 +2159,14 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       if (success && ctx.mounted) {
                         Navigator.pop(ctx);
                         messenger.showSnackBar(
-                          const SnackBar(content: Text('Sakin bilgileri başarıyla güncellendi.')),
+                          appSnackBar(content: Text('Sakin bilgileri başarıyla güncellendi.')),
                         );
                       }
                     } catch (e) {
                       debugPrint('_openEditHomeOwner error: $e');
                     }
                   },
-                  child: const Text('Kaydet'),
+                  child: const Text(AppStrings.save),
                 )),
               ],
             ),
@@ -2346,7 +2350,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                     setDlgState(() {});
                                   },
                                   icon: const Icon(Icons.person_add_alt, size: 12),
-                                  label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                  label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.accentPurple,
                                     foregroundColor: Colors.white,
@@ -2380,7 +2384,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                           ),
                                           Text(
                                             '${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
-                                            style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 11),
+                                            style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12),
                                           ),
                                         ],
                                       ),
@@ -2398,7 +2402,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                     const SizedBox(width: 6),
                                     IconButton(
                                       icon: const Icon(Icons.close, size: 14, color: AppColors.accentRed),
-                                      tooltip: 'Sil',
+                                      tooltip: AppStrings.delete,
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
                                       onPressed: () {
@@ -2412,7 +2416,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             ] else ...[
                               Text(
                                 'Bu daireye kayıtlı ek hane sakini bulunmuyor. Yeni hane sakini eklemek için yukarıdaki butonu kullanabilirsiniz.',
-                                style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 11, fontStyle: FontStyle.italic),
+                                style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12, fontStyle: FontStyle.italic),
                               ),
                             ],
                           ],
@@ -2445,7 +2449,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
             bottomBar: AppFullscreenPage.buildBottomBar(
               context: ctx,
               children: [
-                OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
+                OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text(AppStrings.cancel)),
                 testId('module_save_household_btn', ElevatedButton(
                   key: const Key('module_save_household_btn'),
                   onPressed: () async {
@@ -2471,7 +2475,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     if (success && ctx.mounted) {
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(this.context).showSnackBar(
-                        const SnackBar(content: Text('Hane sakini başarıyla eklendi.')),
+                        appSnackBar(content: Text('Hane sakini başarıyla eklendi.')),
                       );
                     }
                   },
@@ -2512,7 +2516,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       contentPadding: EdgeInsets.zero,
                       dense: true,
                       title: const Text('Bu kişiyi dairenin aktif sorumlusu yap', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                      subtitle: const Text('Bildirimler ve birincil muhataplık bu kişiye yönlendirilir', style: TextStyle(fontSize: 11)),
+                      subtitle: const Text('Bildirimler ve birincil muhataplık bu kişiye yönlendirilir', style: TextStyle(fontSize: 12)),
                       value: setAsPrimary,
                       activeThumbColor: AppColors.accentPurple,
                       onChanged: (val) {
@@ -2542,7 +2546,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
+            OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text(AppStrings.cancel)),
             ElevatedButton(
               onPressed: () async {
                 final name = nameCtrl.text.trim();
@@ -2558,11 +2562,11 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                 if (success && ctx.mounted) {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(content: Text('Hane sakini bilgileri güncellendi.')),
+                    appSnackBar(content: Text('Hane sakini bilgileri güncellendi.')),
                   );
                 }
               },
-              child: const Text('Kaydet'),
+              child: const Text(AppStrings.save),
             ),
           ],
         ),
@@ -2590,7 +2594,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
       await widget.controller.deleteHouseholdMember(unitId: ho.unitId, residentId: member.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${member.fullName} kaydı silindi.')),
+          appSnackBar(content: Text('${member.fullName} kaydı silindi.')),
         );
       }
     }
@@ -2606,16 +2610,16 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
         bottomBar: AppFullscreenPage.buildBottomBar(
           context: ctx,
           children: [
-            OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
+            OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text(AppStrings.cancel)),
             testId('module_confirm_move_out_btn', ElevatedButton(
               key: const Key('module_confirm_move_out_btn'),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentOrange, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.warningFill, foregroundColor: Colors.white),
               onPressed: () async {
                 final success = await widget.controller.moveOutResident(ho.unitId, notes: notesCtrl.text.trim());
                 if (success && ctx.mounted) {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(content: Text('Sakin tahliye işlemi kaydedildi.')),
+                    appSnackBar(content: Text('Sakin tahliye işlemi kaydedildi.')),
                   );
                 }
               },
@@ -2655,7 +2659,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
             bottomBar: AppFullscreenPage.buildBottomBar(
               context: ctx,
               children: [
-                OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
+                OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text(AppStrings.cancel)),
                 testId('module_confirm_move_in_btn', ElevatedButton(
                   key: const Key('module_confirm_move_in_btn'),
                   onPressed: () async {
@@ -2672,7 +2676,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       Navigator.pop(ctx);
                       final roleLabel = selectedRole == 'OWNER' ? 'Kat Maliki' : 'Kiracı';
                       ScaffoldMessenger.of(this.context).showSnackBar(
-                        SnackBar(content: Text('Yeni $roleLabel girişi başarıyla yapıldı.')),
+                        appSnackBar(content: Text('Yeni $roleLabel girişi başarıyla yapıldı.')),
                       );
                     }
                   },
@@ -2760,12 +2764,12 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
               children: [
                 ElevatedButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Kapat'),
+                  child: const Text(AppStrings.close),
                 ),
               ],
             ),
             child: isLoading
-                ? const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+                ? const SpSkeletonList()
                 : (historyList.isEmpty
                     ? const Center(
                         child: Padding(
@@ -2808,7 +2812,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
           children: [
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Kapat'),
+              child: const Text(AppStrings.close),
             ),
           ],
         ),
@@ -2825,14 +2829,14 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Daireye Özel Tahsisli Sanal IBAN', style: TextStyle(color: AppColors.accentCyan, fontWeight: FontWeight.bold, fontSize: 12)),
+                  Text('Daireye Özel Tahsisli Sanal IBAN', style: TextStyle(color: AppColors.primaryText(context), fontWeight: FontWeight.bold, fontSize: 12)),
                   const SizedBox(height: 8),
                   Text(
                     widget.controller.activeUnit.virtualIban ?? 'TR91 0020 5000 0986 3791 6000 01',
                     style: TextStyle(color: AppColors.textPrimary(ctx), fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
-                  Text('Bu IBAN numarasına gönderilen tüm FAST/Havale ödemeleri %100 doğrulukla doğrudan bu dairenin aidat borcuna mahsup edilir.', style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 11)),
+                  Text('Bu IBAN numarasına gönderilen tüm FAST/Havale ödemeleri %100 doğrulukla doğrudan bu dairenin aidat borcuna mahsup edilir.', style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12)),
                 ],
               ),
             ),
@@ -2861,12 +2865,12 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
               children: [
                 OutlinedButton(
                   onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
-                  child: const Text('Vazgeç'),
+                  child: const Text(AppStrings.cancel),
                 ),
                 testId('module_confirm_transfer_ownership_btn', ElevatedButton(
                   key: const Key('module_confirm_transfer_ownership_btn'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
+                    backgroundColor: AppColors.successFill,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: isSubmitting
@@ -2875,7 +2879,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                           final newName = nameCtrl.text.trim();
                           if (newName.isEmpty) {
                             ScaffoldMessenger.of(ctx).showSnackBar(
-                              const SnackBar(content: Text('Lütfen yeni malikin adını ve soyadını giriniz.')),
+                              appSnackBar(content: Text('Lütfen yeni malikin adını ve soyadını giriniz.')),
                             );
                             return;
                           }
@@ -2892,16 +2896,16 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             if (res != null && ctx.mounted) {
                               Navigator.pop(ctx);
                               messenger.showSnackBar(
-                                SnackBar(
+                                appSnackBar(
                                   content: Text(res['message']?.toString() ?? 'Mülk tapu devri başarıyla tamamlandı.'),
-                                  backgroundColor: Colors.teal,
+                                  backgroundColor: AppColors.successFill,
                                 ),
                               );
                             }
                           } catch (e) {
                             if (ctx.mounted) {
                               ScaffoldMessenger.of(ctx).showSnackBar(
-                                SnackBar(content: Text('Hata: $e'), backgroundColor: Colors.redAccent),
+                                appSnackBar(content: Text('Hata: $e'), backgroundColor: AppColors.dangerFill),
                               );
                             }
                           } finally {
@@ -2932,7 +2936,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.info_outline, color: Colors.teal, size: 20),
+                            const Icon(Icons.info_outline, color: AppColors.accentGreen, size: 20),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -2948,7 +2952,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                           '• Devir anına kadar olan tüm ödenmemiş borçlar ve avanslar eski malik hesabında dondurulur ve arşivlenir.\n'
                           '• Yeni kat maliki tapu tescil tarihi itibarıyla tahakkuk edecek aidat ve demirbaşlardan sorumlu olur.\n'
                           '${ho.isTenantOccupied ? "• Dairedeki aktif kiracının (${ho.tenantFullName ?? 'Kiracı'}) sözleşmesi ve sorumluluğu aynen devam eder." : "• Daire mülk sahibi kullanımında görünmektedir."}',
-                          style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 11, height: 1.4),
+                          style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12, height: 1.4),
                         ),
                       ],
                     ),
@@ -3021,7 +3025,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
       await widget.controller.deleteHomeOwner(unitId: ho.unitId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Kat maliki başarıyla silindi.')),
+          appSnackBar(content: Text('Kat maliki başarıyla silindi.')),
         );
       }
     }

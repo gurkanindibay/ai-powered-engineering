@@ -5,13 +5,14 @@ import pytest
 
 from pages import ManagerCockpit, PaymentStream, ResidentHome
 from support.flutter import by_id, by_id_prefix, text_of
+from support.money import last_amount
 
 PERIOD = "Ekim 2026"
 
 
 def _amount(text: str) -> Decimal:
-    """'Gecikme Zammı (KMK %5):₺53.67' -> Decimal('53.67') (these views print Decimal.toString)."""
-    return Decimal(text.rsplit("₺", 1)[1].strip())
+    """'Gecikme Zammı (KMK %5):₺53,67' -> Decimal('53.67')."""
+    return last_amount(text)
 
 
 @pytest.fixture

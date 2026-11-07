@@ -129,9 +129,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Navigate to Yönetim tab
-      final yonetimTab = find.text('Sakinler & Malikler');
-      if (yonetimTab.evaluate().isNotEmpty) {
-        await tester.tap(yonetimTab);
+      final residentsTab = find.text('Sakinler & Malikler');
+      if (residentsTab.evaluate().isNotEmpty) {
+        await tester.ensureVisible(residentsTab);
+        await tester.pumpAndSettle();
+        await tester.tap(residentsTab);
         await tester.pumpAndSettle();
       }
 
@@ -154,15 +156,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final yonetimTab = find.text('Sakinler & Malikler');
-      expect(yonetimTab, findsOneWidget);
-      await tester.tap(yonetimTab);
+      final residentsTab = find.text('Sakinler & Malikler');
+      expect(residentsTab, findsOneWidget);
+      await tester.ensureVisible(residentsTab);
+      await tester.pumpAndSettle();
+      await tester.tap(residentsTab);
       await tester.pumpAndSettle();
 
       final firstHo = controller.homeOwners.first;
       final historyBtn = find.byKey(Key('history_ho_${firstHo.unitId}'));
       expect(historyBtn, findsOneWidget);
 
+      await tester.ensureVisible(historyBtn);
+      await tester.pumpAndSettle();
       await tester.tap(historyBtn);
       await tester.pumpAndSettle();
 
@@ -172,6 +178,8 @@ void main() {
       // Verify closing the dialog
       final closeBtn = find.text('Kapat');
       expect(closeBtn, findsOneWidget);
+      await tester.ensureVisible(closeBtn);
+      await tester.pumpAndSettle();
       await tester.tap(closeBtn);
       await tester.pumpAndSettle();
 
@@ -193,15 +201,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final yonetimTab = find.text('Sakinler & Malikler');
-      expect(yonetimTab, findsOneWidget);
-      await tester.tap(yonetimTab);
+      final residentsTab = find.text('Sakinler & Malikler');
+      expect(residentsTab, findsOneWidget);
+      await tester.ensureVisible(residentsTab);
+      await tester.pumpAndSettle();
+      await tester.tap(residentsTab);
       await tester.pumpAndSettle();
 
       final firstHo = controller.homeOwners.first;
       final moveOutBtn = find.byKey(Key('move_out_ho_${firstHo.unitId}'));
       expect(moveOutBtn, findsOneWidget);
 
+      await tester.ensureVisible(moveOutBtn);
+      await tester.pumpAndSettle();
       await tester.tap(moveOutBtn);
       await tester.pumpAndSettle();
 
@@ -211,6 +223,8 @@ void main() {
       // Verify closing via Vazgeç
       final cancelBtn = find.text('Vazgeç');
       expect(cancelBtn, findsOneWidget);
+      await tester.ensureVisible(cancelBtn);
+      await tester.pumpAndSettle();
       await tester.tap(cancelBtn);
       await tester.pumpAndSettle();
 
@@ -235,13 +249,17 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final yonetimTab = find.text('Sakinler & Malikler');
-      await tester.tap(yonetimTab);
+      final residentsTab = find.text('Sakinler & Malikler');
+      await tester.ensureVisible(residentsTab);
+      await tester.pumpAndSettle();
+      await tester.tap(residentsTab);
       await tester.pumpAndSettle();
 
       // Tap "Yeni Sakin Ekle"
       final addBtn = find.byKey(const Key('add_resident_btn'));
       expect(addBtn, findsOneWidget);
+      await tester.ensureVisible(addBtn);
+      await tester.pumpAndSettle();
       await tester.tap(addBtn);
       await tester.pumpAndSettle();
 
@@ -253,6 +271,8 @@ void main() {
       expect(find.descendant(of: roleSelector, matching: find.text('Ev Sakini')), findsOneWidget);
 
       // Select "Kiracı"
+      await tester.ensureVisible(find.descendant(of: roleSelector, matching: find.text('Kiracı')));
+      await tester.pumpAndSettle();
       await tester.tap(find.descendant(of: roleSelector, matching: find.text('Kiracı')));
       await tester.pumpAndSettle();
 
@@ -266,6 +286,8 @@ void main() {
 
       // Submit form
       final submitBtn = find.text('Kaydet & Şifre Üret');
+      await tester.ensureVisible(submitBtn);
+      await tester.pumpAndSettle();
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
@@ -276,6 +298,8 @@ void main() {
       // Confirm assignment
       final confirmBtn = find.text('Evet, Yeni Kiracı Ata');
       expect(confirmBtn, findsOneWidget);
+      await tester.ensureVisible(confirmBtn);
+      await tester.pumpAndSettle();
       await tester.tap(confirmBtn);
       await tester.pumpAndSettle();
 
@@ -307,16 +331,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final yonetimTab = find.text('Sakinler & Malikler');
-      await tester.tap(yonetimTab);
+      final residentsTab = find.text('Sakinler & Malikler');
+      await tester.ensureVisible(residentsTab);
+      await tester.pumpAndSettle();
+      await tester.tap(residentsTab);
       await tester.pumpAndSettle();
 
       // Tap "Yeni Sakin Ekle"
       final addBtn = find.byKey(const Key('add_resident_btn'));
+      await tester.ensureVisible(addBtn);
+      await tester.pumpAndSettle();
       await tester.tap(addBtn);
       await tester.pumpAndSettle();
 
       // Select "Ev Sakini"
+      await tester.ensureVisible(find.text('Ev Sakini'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Ev Sakini'));
       await tester.pumpAndSettle();
 
@@ -333,6 +363,8 @@ void main() {
 
       // Submit form
       final submitBtn = find.text('Kaydet & Şifre Üret');
+      await tester.ensureVisible(submitBtn);
+      await tester.pumpAndSettle();
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
@@ -359,16 +391,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final yonetimTab = find.text('Sakinler & Malikler');
-      await tester.tap(yonetimTab);
+      final residentsTab = find.text('Sakinler & Malikler');
+      await tester.ensureVisible(residentsTab);
+      await tester.pumpAndSettle();
+      await tester.tap(residentsTab);
       await tester.pumpAndSettle();
 
       // Tap "Yeni Sakin Ekle"
       final addBtn = find.byKey(const Key('add_resident_btn'));
+      await tester.ensureVisible(addBtn);
+      await tester.pumpAndSettle();
       await tester.tap(addBtn);
       await tester.pumpAndSettle();
 
       // Select "Ev Sakini"
+      await tester.ensureVisible(find.text('Ev Sakini'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Ev Sakini'));
       await tester.pumpAndSettle();
 
@@ -382,12 +420,16 @@ void main() {
 
       // Submit form
       final submitBtn = find.text('Kaydet & Şifre Üret');
+      await tester.ensureVisible(submitBtn);
+      await tester.pumpAndSettle();
       await tester.tap(submitBtn);
       await tester.pumpAndSettle();
 
       // Dismiss provisioned credentials dialog if displayed
       final tamamBtn = find.text('Tamam');
       if (tamamBtn.evaluate().isNotEmpty) {
+        await tester.ensureVisible(tamamBtn);
+        await tester.pumpAndSettle();
         await tester.tap(tamamBtn);
         await tester.pumpAndSettle();
       }

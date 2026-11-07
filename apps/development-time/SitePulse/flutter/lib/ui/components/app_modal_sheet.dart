@@ -1,5 +1,6 @@
 import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 
 /// Standard Mobile Modal Bottom Sheet component for SitePulse.
@@ -55,7 +56,7 @@ class AppModalSheet extends StatelessWidget {
     required String title,
     required String message,
     String confirmLabel = 'Onayla',
-    String cancelLabel = 'Vazgeç',
+    String cancelLabel = AppStrings.cancel,
     Color confirmColor = AppColors.accentRed,
     IconData icon = Icons.warning_amber_rounded,
     Color iconColor = AppColors.accentRed,
@@ -217,7 +218,7 @@ class AppModalSheet extends StatelessWidget {
                               subtitle!,
                               style: TextStyle(
                                 color: AppColors.textSecondary(context),
-                                fontSize: 11,
+                                fontSize: 12,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
