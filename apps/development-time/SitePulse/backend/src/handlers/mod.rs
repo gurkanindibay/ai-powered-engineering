@@ -663,7 +663,14 @@ pub async fn delete_home_owner(
         .delete_home_owner(&site_id, &id)
         .await
         .map(|_| StatusCode::NO_CONTENT)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(|e| {
+            let code = if e == crate::services::site_admin_service::UNIT_HAS_FINANCIAL_HISTORY {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            (code, e)
+        })
 }
 
 pub async fn move_out_resident(

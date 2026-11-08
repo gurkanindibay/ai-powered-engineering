@@ -140,7 +140,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 3. Load Units
     {
-        let rows = client.query("SELECT id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, site_id, virtual_iban, house_type FROM units",
+        let rows = client.query("SELECT id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, site_id, virtual_iban, house_type FROM units WHERE deleted_at IS NULL",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
@@ -263,7 +263,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 4. Load Dues Liabilities
     {
-        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type, penalty_accrued_through FROM dues_liabilities",
+        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type, penalty_accrued_through FROM dues_liabilities d WHERE d.status <> 'CANCELLED' AND EXISTS (SELECT 1 FROM units u WHERE u.id = d.unit_id AND u.deleted_at IS NULL)",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);

@@ -454,15 +454,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 20),
 
-              // Render corresponding screen view
-              if (_selectedTab == LoginTab.quickAll)
-                _buildQuickAllView(context)
-              else if (_selectedTab == LoginTab.homeOwner)
-                _buildDedicatedHomeOwnerView(context)
-              else if (_selectedTab == LoginTab.siteManager)
-                _buildDedicatedSiteManagerView(context)
-              else
-                _buildDedicatedSaasAdminView(context),
+              // Render corresponding screen view. Keyed per tab: the panels share a
+              // widget shape, and without a key Flutter reuses the previous panel's
+              // elements (text field state and semantics identifiers included), so the
+              // homeowner form was exposed with the manager form's automation ids.
+              KeyedSubtree(
+                key: ValueKey<LoginTab>(_selectedTab),
+                child: _selectedTab == LoginTab.quickAll
+                    ? _buildQuickAllView(context)
+                    : _selectedTab == LoginTab.homeOwner
+                        ? _buildDedicatedHomeOwnerView(context)
+                        : _selectedTab == LoginTab.siteManager
+                            ? _buildDedicatedSiteManagerView(context)
+                            : _buildDedicatedSaasAdminView(context),
+              ),
 
               const SizedBox(height: 20),
             ],
