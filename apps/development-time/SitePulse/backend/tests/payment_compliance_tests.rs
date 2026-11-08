@@ -29,8 +29,8 @@ fn liability(id: &str, period: &str, principal: &str, due_date: NaiveDate, debto
         status: DebtStatus::Pending,
         paid_principal: Decimal::ZERO,
         paid_penalty: Decimal::ZERO,
-        debtor_type: debtor.to_string(),
-        expense_type: expense.to_string(),
+        debtor_type: DebtorType::from_str_loose(debtor),
+        expense_type: ExpenseType::from_str_loose(expense),
         penalty_accrued_through: None,
     }
 }
@@ -90,8 +90,8 @@ fn manual(amount: &str) -> RecordManualPaymentRequest {
         unit_id: UNIT.to_string(),
         amount: d(amount),
         payer_name: "Ahmet Yılmaz".to_string(),
-        payer_role: "OWNER".to_string(),
-        payment_channel: "MANUAL_CASH".to_string(),
+        payer_role: DebtorType::Owner,
+        payment_channel: PaymentChannel::ManualCash,
         ..Default::default()
     }
 }
@@ -113,7 +113,7 @@ async fn when_overdue_due_is_paid_by_webhook_then_penalty_is_collected_first_wit
     let receipt = inner.payment_receipts.iter().find(|r| r.receipt_number == res.receipt_id).unwrap();
     assert_eq!(receipt.allocated_penalty, expected_penalty);
     assert_eq!(receipt.allocated_principal, d("1330.00"));
-    assert_eq!(receipt.payment_channel, "VIRTUAL_IBAN");
+    assert_eq!(receipt.payment_channel, PaymentChannel::VirtualIban);
     let due = inner.dues.iter().find(|x| x.id == "op-1").unwrap();
     assert_eq!(due.penalty_accrued_through, Some(today()));
     assert_ne!(due.status, DebtStatus::Paid);
@@ -215,7 +215,7 @@ async fn when_a_statement_line_is_confirmed_twice_then_it_is_settled_once() {
     }
     let inner = state.inner.read().await;
     assert_eq!(inner.payment_receipts.len(), 1, "idempotent on STMT:<transaction id>");
-    assert_eq!(inner.payment_receipts[0].payment_channel, "BANK_STATEMENT");
+    assert_eq!(inner.payment_receipts[0].payment_channel, PaymentChannel::BankStatement);
     assert_eq!(Some(inner.advance_total(UNIT)), Some(d("600.00")));
     assert_eq!(inner.dues[0].status, DebtStatus::Paid);
 }
@@ -231,7 +231,7 @@ async fn when_match_all_settles_a_pending_payment_then_no_duplicate_ledger_row_i
         unit_number: 14,
         homeowner_name: Some("Ahmet Yılmaz".to_string()),
         amount: d("1400.00"),
-        payment_method: "BANK_TRANSFER".to_string(),
+        payment_method: PaymentChannel::BankTransfer,
         reference_code: Some("REF-77".to_string()),
         note: None,
         status: PaymentMatchStatus::Pending,
@@ -269,11 +269,9 @@ async fn when_match_all_settles_a_pending_payment_then_no_duplicate_ledger_row_i
 /// R1: a channel outside the V14 vocabulary is rejected, not stored.
 #[tokio::test]
 async fn when_payment_channel_is_unknown_then_the_payment_is_rejected() {
-    let state = state_with(vec![]).await;
-    let mut req = manual("10.00");
-    req.payment_channel = "TELEPATHY".to_string();
-    let err = PaymentTrackingService::new(state.clone()).record_and_allocate_payment(req).await.unwrap_err();
+    let err = sitepulse_backend::services::payment_tracking_service::normalize_payment_channel("TELEPATHY").unwrap_err();
     assert!(err.contains("Unknown payment channel"), "{}", err);
+    let state = state_with(vec![]).await;
     assert!(state.inner.read().await.payment_receipts.is_empty());
 }
 
@@ -294,8 +292,8 @@ async fn when_debt_aging_is_computed_then_it_uses_outstanding_amounts_and_the_li
         }
     }
     let report = PaymentTrackingService::new(state.clone()).get_debt_aging_report("site-1").await;
-    let tenant = report.brackets.iter().find(|b| b.debtor_type == "TENANT").expect("tenant row");
-    let owner = report.brackets.iter().find(|b| b.debtor_type == "OWNER").expect("owner row");
+    let tenant = report.brackets.iter().find(|b| b.debtor_type == DebtorType::Tenant).expect("tenant row");
+    let owner = report.brackets.iter().find(|b| b.debtor_type == DebtorType::Owner).expect("owner row");
     assert_eq!(tenant.current_due, d("600.00"), "only the unpaid remainder");
     assert_eq!(owner.current_due, d("3000.00"), "capital dues belong to the owner");
     assert_eq!(report.total_current, d("3600.00"));

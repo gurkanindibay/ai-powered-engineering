@@ -3,8 +3,8 @@ use chrono::{DateTime, Datelike, Utc};
 use rust_decimal::Decimal;
 
 use crate::models::{
-    DebtStatus, DuesLiability, HomeOwnerResponse, IndependentUnit, RegisterHomeOwnerRequest, Role,
-    UnitMemberDto, User,
+    AuthProvider, DebtStatus, DebtorType, DuesLiability, ExpenseType, HomeOwnerResponse, IndependentUnit,
+    OccupancyStatus, RegisterHomeOwnerRequest, Role, UnitMemberDto, User,
 };
 use crate::services::virtual_iban_service::VirtualIbanService;
 use crate::state::AppState;
@@ -555,7 +555,7 @@ impl SiteAdminService {
             password_hash: Some(password_hash.clone()),
             role: if is_tenant || is_resident_only { Role::HomeResident } else { Role::HomeOwner },
             must_change_password: true,
-            auth_provider: "LOCAL".to_string(),
+            auth_provider: AuthProvider::Local,
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
@@ -622,7 +622,7 @@ impl SiteAdminService {
                     password_hash: Some(password_hash.clone()),
                     role: Role::HomeResident,
                     must_change_password: true,
-                    auth_provider: "LOCAL".to_string(),
+                    auth_provider: AuthProvider::Local,
                     google_sub: None,
                     avatar_url: None,
                     created_at: Utc::now(),
@@ -713,7 +713,7 @@ impl SiteAdminService {
                     person_name: request.tenant_full_name.clone().unwrap_or_default(),
                     person_phone: request.tenant_phone.clone(),
                     person_email: request.tenant_email.clone(),
-                    role: "TENANT".to_string(),
+                    role: DebtorType::Tenant,
                     start_date: Utc::now().date_naive().to_string(),
                     end_date: None,
                     is_active: true,
@@ -729,7 +729,7 @@ impl SiteAdminService {
                     person_name: request.owner_full_name.clone(),
                     person_phone: Some(request.phone.clone()),
                     person_email: Some(email_norm.clone()),
-                    role: occ_type.to_string(),
+                    role: DebtorType::from_str_loose(occ_type),
                     start_date: Utc::now().date_naive().to_string(),
                     end_date: None,
                     is_active: true,
@@ -778,8 +778,8 @@ impl SiteAdminService {
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: if is_tenant { "TENANT" } else { "OWNER" }.to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
+                debtor_type: if is_tenant { DebtorType::Tenant } else { DebtorType::Owner },
+                expense_type: ExpenseType::OperationalDues,
                 penalty_accrued_through: None,
             });
         }
@@ -816,7 +816,7 @@ impl SiteAdminService {
             temporary_password: Some(temp_pass),
             must_change_password: true,
             created_at: Utc::now(),
-            occupancy_status: Some(if request.is_resident { "OWNER_OCCUPIED".to_string() } else { "VACANT".to_string() }),
+            occupancy_status: Some(if request.is_resident { OccupancyStatus::OwnerOccupied } else { OccupancyStatus::Vacant }),
             tenant_full_name: None,
             tenant_email: None,
             tenant_phone: None,
@@ -960,7 +960,7 @@ household_residents: household,
                                 temporary_password: None,
                                 must_change_password: r.get("must_change_password"),
                                 created_at: r.get("created_at"),
-                                occupancy_status: Some(occ_status),
+                                occupancy_status: Some(OccupancyStatus::from_str_loose(&occ_status)),
                                 tenant_full_name: t_name,
                                 tenant_email: t_email,
                                 tenant_phone: t_phone,
@@ -1050,7 +1050,7 @@ household_residents: household,
                 temporary_password: None,
                 must_change_password: user.must_change_password,
                 created_at: user.created_at,
-                occupancy_status: Some("OWNER_OCCUPIED".to_string()),
+                occupancy_status: Some(OccupancyStatus::OwnerOccupied),
                 tenant_full_name: None,
                 tenant_email: None,
                 tenant_phone: None,
@@ -1263,7 +1263,7 @@ household_residents: household,
                         role: crate::models::Role::HomeResident,
                         site_id: site_id.to_string(),
                         must_change_password: true,
-                        auth_provider: "LOCAL".to_string(),
+                        auth_provider: AuthProvider::Local,
                         google_sub: None,
                         avatar_url: None,
                         created_at: chrono::Utc::now(),
@@ -1336,11 +1336,11 @@ household_residents: household,
                 must_change_password: false,
                 created_at: chrono::Utc::now(),
                 occupancy_status: Some(if req.remove_tenant == Some(true) {
-                    if req.is_resident == Some(true) { "OWNER_OCCUPIED".to_string() } else { "VACANT".to_string() }
+                    if req.is_resident == Some(true) { OccupancyStatus::OwnerOccupied } else { OccupancyStatus::Vacant }
                 } else if req.tenant_full_name.is_some() {
-                    "TENANT_OCCUPIED".to_string()
+                    OccupancyStatus::TenantOccupied
                 } else {
-                    "OWNER_OCCUPIED".to_string()
+                    OccupancyStatus::OwnerOccupied
                 }),
                 tenant_full_name: req.tenant_full_name.clone(),
                 tenant_email: req.tenant_email.clone(),
@@ -1599,7 +1599,7 @@ household_residents: vec![],
                 password_hash: Some(password_hash),
                 role: crate::models::Role::HomeResident,
                 must_change_password: true,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: chrono::Utc::now(),
@@ -1993,10 +1993,10 @@ household_residents: vec![],
                 let tenant_id: Option<i64> = unit_row.get(2);
 
                 let target_person_id = tenant_id.or(owner_id).ok_or_else(|| "Unit has no occupant to move out".to_string())?;
-                let occ_role = if tenant_id.is_some() { "TENANT" } else { "OWNER" };
+                let occ_role = if tenant_id.is_some() { DebtorType::Tenant } else { DebtorType::Owner };
 
                 // Calculate exit balance: operational liabilities for tenant, all liabilities for owner (KMK Art. 20/22)
-                let exit_balance: Decimal = if occ_role == "TENANT" {
+                let exit_balance: Decimal = if occ_role == DebtorType::Tenant {
                     client
                         .query_one(
                             r#"
@@ -2110,7 +2110,7 @@ household_residents: vec![],
                     person_name: person_row.get(0),
                     person_phone: person_row.get(1),
                     person_email: person_row.get(2),
-                    role: occ_role.to_string(),
+                    role: occ_role,
                     start_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
                     end_date: Some(chrono::Utc::now().format("%Y-%m-%d").to_string()),
                     is_active: false,
@@ -2142,7 +2142,7 @@ household_residents: vec![],
             person_name: "Tenant".to_string(),
             person_phone: None,
             person_email: None,
-            role: "TENANT".to_string(),
+            role: DebtorType::Tenant,
             start_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
             end_date: Some(chrono::Utc::now().format("%Y-%m-%d").to_string()),
             is_active: false,
@@ -2188,8 +2188,7 @@ household_residents: vec![],
                     } else {
                         let full_name = req.full_name.clone().unwrap_or_else(|| "New Resident".to_string());
                         let phone = req.phone.clone();
-                        let p_role = req.role.to_uppercase();
-                        let p_type = if p_role == "TENANT" { "HOME_RESIDENT" } else { "HOME_OWNER" };
+                        let p_type = if req.role == DebtorType::Tenant { "HOME_RESIDENT" } else { "HOME_OWNER" };
                         let row = client
                             .query_one(
                                 "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, $4) RETURNING id",
@@ -2211,8 +2210,8 @@ household_residents: vec![],
                     )
                     .await.map_err(|e| e.to_string())?;
 
-                let occ_role = if req.role.to_uppercase() == "TENANT" { "TENANT" } else { "OWNER" };
-                let occ_status = if occ_role == "TENANT" { "TENANT_OCCUPIED" } else { "OWNER_OCCUPIED" };
+                let occ_role = req.role.as_str();
+                let occ_status = if req.role == DebtorType::Tenant { "TENANT_OCCUPIED" } else { "OWNER_OCCUPIED" };
 
                 // Insert into unit_occupancies
                 let notes_val = req.notes.clone();
@@ -2233,7 +2232,7 @@ household_residents: vec![],
                 let created_at: DateTime<Utc> = occ_row.get(2);
 
                 // Update unit
-                if occ_role == "TENANT" {
+                if req.role == DebtorType::Tenant {
                     client
                         .execute(
                             "UPDATE units SET tenant_person_id = $1, occupancy_status = $2 WHERE id = $3",
@@ -2262,7 +2261,7 @@ household_residents: vec![],
                     person_name: person_row.get(0),
                     person_phone: person_row.get(1),
                     person_email: person_row.get(2),
-                    role: occ_role.to_string(),
+                    role: req.role,
                     start_date: start_date_str,
                     end_date: None,
                     is_active: true,
@@ -2325,7 +2324,7 @@ household_residents: vec![],
                             person_name: r.get(3),
                             person_phone: r.get(4),
                             person_email: r.get(5),
-                            role: r.get(6),
+                            role: DebtorType::from_str_loose(&r.get::<_, String>(6)),
                             start_date: r.get(7),
                             end_date: r.get(8),
                             is_active: r.get(9),

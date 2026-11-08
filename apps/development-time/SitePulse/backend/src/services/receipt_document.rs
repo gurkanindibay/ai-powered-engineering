@@ -151,11 +151,11 @@ pub fn render_receipt_pdf(receipt: &PaymentReceipt, unit_label: &str) -> Result<
     pen.row("Makbuz No", &receipt.receipt_number);
     pen.row("Düzenlenme", &istanbul(receipt.issued_at));
     pen.row("Bağımsız bölüm", unit_label);
-    pen.row("Ödeyen", &format!("{} ({})", receipt.payer_name, role_tr(&receipt.payer_role)));
+    pen.row("Ödeyen", &format!("{} ({})", receipt.payer_name, role_tr(receipt.payer_role.as_str())));
     if let Some(ref on_behalf) = receipt.on_behalf_of_name {
-        pen.row("Adına ödenen", &format!("{} ({})", on_behalf, role_tr(receipt.on_behalf_of_role.as_deref().unwrap_or("OWNER"))));
+        pen.row("Adına ödenen", &format!("{} ({})", on_behalf, role_tr(receipt.on_behalf_of_role.map(|r| r.as_str()).unwrap_or("OWNER"))));
     }
-    pen.row("Ödeme kanalı", channel_tr(&receipt.payment_channel));
+    pen.row("Ödeme kanalı", channel_tr(receipt.payment_channel.as_str()));
     if let Some(ref reference) = receipt.channel_reference {
         pen.row(if reversal { "İptal edilen makbuz" } else { "Kanal referansı" }, reference);
     }
@@ -182,7 +182,7 @@ pub fn render_receipt_pdf(receipt: &PaymentReceipt, unit_label: &str) -> Result<
             break;
         }
         pen.text(&item.period, 9.0, 18.0, false);
-        pen.text(expense_tr(&item.expense_type), 9.0, 75.0, false);
+        pen.text(expense_tr(item.expense_type.as_str()), 9.0, 75.0, false);
         pen.text(&format_try(item.principal_paid), 9.0, 128.0, false);
         pen.text(&format_try(item.penalty_paid), 9.0, 155.0, false);
         pen.y -= 5.0;

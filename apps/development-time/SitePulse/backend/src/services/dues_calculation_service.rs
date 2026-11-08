@@ -79,6 +79,7 @@ impl DuesCalculationService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{DebtorType, ExpenseType};
 
     fn due(paid_principal: &str, paid_penalty: &str) -> DuesLiability {
         DuesLiability {
@@ -92,8 +93,8 @@ mod tests {
             status: DebtStatus::Pending,
             paid_principal: Decimal::from_str_exact(paid_principal).unwrap(),
             paid_penalty: Decimal::from_str_exact(paid_penalty).unwrap(),
-            debtor_type: "TENANT".to_string(),
-            expense_type: "OPERATIONAL_DUES".to_string(),
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
         }
     }

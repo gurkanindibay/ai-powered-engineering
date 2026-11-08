@@ -47,7 +47,7 @@ pub fn build_statement(inner: &AppStateInner, unit: &IndependentUnit, viewer: Op
             .dues
             .iter()
             .filter(|d| {
-                crate::auth::same_id(&d.unit_id, &unit.id) && d.status != DebtStatus::Paid && d.debtor_type.eq_ignore_ascii_case(debtor)
+                crate::auth::same_id(&d.unit_id, &unit.id) && d.status != DebtStatus::Paid && d.debtor_type.as_str() == debtor
             })
             .map(|stored| {
                 let d = calc.calculate_delay_penalty(stored.clone(), today);
@@ -57,7 +57,7 @@ pub fn build_statement(inner: &AppStateInner, unit: &IndependentUnit, viewer: Op
                 StatementOpenItem {
                     due_id: d.id.clone(),
                     period: d.period.clone(),
-                    expense_type: d.expense_type.clone(),
+                    expense_type: d.expense_type.as_str().to_string(),
                     due_date: d.due_date,
                     days_overdue,
                     principal_outstanding: principal,
@@ -112,14 +112,14 @@ pub fn build_statement(inner: &AppStateInner, unit: &IndependentUnit, viewer: Op
         .filter(|r| crate::auth::same_id(&r.unit_id, &unit.id))
         .filter(|r| match viewer {
             None => true,
-            Some(v) => r.payer_role == v || r.on_behalf_of_role.as_deref() == Some(v),
+            Some(v) => r.payer_role.as_str() == v || r.on_behalf_of_role.map(|x| x.as_str()) == Some(v),
         })
         .map(|r| StatementReceipt {
             receipt_number: r.receipt_number.clone(),
             receipt_type: r.receipt_type.clone(),
             issued_at: r.issued_at,
-            payer_role: r.payer_role.clone(),
-            payment_channel: r.payment_channel.clone(),
+            payer_role: r.payer_role.as_str().to_string(),
+            payment_channel: r.payment_channel.as_str().to_string(),
             total_amount: r.total_amount,
             reversed: r.receipt_type == LEDGER_KIND_COLLECTION
                 && inner.payment_receipts.iter().any(|x| x.reverses_receipt_id == Some(r.id)),

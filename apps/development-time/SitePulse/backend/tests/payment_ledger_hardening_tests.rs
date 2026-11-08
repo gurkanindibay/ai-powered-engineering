@@ -36,8 +36,8 @@ fn liability(id: &str, period: &str, principal: &str, due_date: NaiveDate, debto
         status: DebtStatus::Pending,
         paid_principal: Decimal::ZERO,
         paid_penalty: Decimal::ZERO,
-        debtor_type: debtor.to_string(),
-        expense_type: expense.to_string(),
+        debtor_type: DebtorType::from_str_loose(debtor),
+        expense_type: ExpenseType::from_str_loose(expense),
         penalty_accrued_through: None,
     }
 }
@@ -71,8 +71,8 @@ fn payment(amount: &str, role: &str, name: &str) -> RecordManualPaymentRequest {
         unit_id: UNIT.to_string(),
         amount: d(amount),
         payer_name: name.to_string(),
-        payer_role: role.to_string(),
-        payment_channel: "MANUAL_CASH".to_string(),
+        payer_role: DebtorType::from_str_loose(role),
+        payment_channel: PaymentChannel::ManualCash,
         ..Default::default()
     }
 }
@@ -148,10 +148,10 @@ async fn when_tenant_surplus_is_transferred_to_owner_capital_then_the_tenant_adv
     assert_eq!(inner.advance_of(UNIT, "TENANT"), d("200.00"));
     assert_eq!(inner.dues.iter().find(|x| x.id == "cap-1").unwrap().status, DebtStatus::Paid);
     let receipt = inner.payment_receipts.iter().find(|r| r.receipt_number == resp.receipt_number).unwrap();
-    assert_eq!(receipt.payer_role, "TENANT");
+    assert_eq!(receipt.payer_role, DebtorType::Tenant);
     assert_eq!(receipt.payer_name, "Canan Kaya");
     assert!(receipt.is_rent_offset_eligible);
-    assert_eq!(receipt.on_behalf_of_role.as_deref(), Some("OWNER"));
+    assert_eq!(receipt.on_behalf_of_role, Some(DebtorType::Owner));
 }
 
 /// A debtor value outside OWNER/TENANT is rejected.
@@ -220,9 +220,9 @@ async fn when_a_settled_payment_is_reversed_then_dues_reopen_the_advance_is_refu
     assert_eq!(entries.len(), 2, "the original plus one contra entry");
     let orig_entry = entries.iter().find(|e| e.receipt_id == Some(original.id)).unwrap();
     let contra = entries.iter().find(|e| e.entry_type == "REVERSAL").unwrap();
-    assert_eq!(orig_entry.settlement_status, "REVERSED");
+    assert_eq!(orig_entry.settlement_status, SettlementStatus::Reversed);
     assert_eq!(contra.reverses_entry_id, Some(orig_entry.id));
-    assert_eq!(contra.settlement_status, "REVERSED");
+    assert_eq!(contra.settlement_status, SettlementStatus::Reversed);
     assert_eq!(contra.recorded_by.as_deref(), Some(OPERATOR));
     assert_eq!(contra.reversal_reason.as_deref(), Some("Karşılıksız havale (bounced)"));
 
@@ -279,7 +279,7 @@ async fn when_the_credited_advance_was_already_used_then_the_reversal_is_rejecte
     let err = service.reverse_payment(reverse(&original.receipt_number, "Kiracıya iade"), OPERATOR).await.unwrap_err();
     assert!(err.contains("already been used"), "{}", err);
     let inner = state.inner.read().await;
-    assert!(inner.payment_entries.iter().all(|e| e.settlement_status != "REVERSED"), "nothing changed");
+    assert!(inner.payment_entries.iter().all(|e| e.settlement_status != SettlementStatus::Reversed), "nothing changed");
 }
 
 /// SPEC-007 R1: reversing a virman reopens the dues it settled and credits the

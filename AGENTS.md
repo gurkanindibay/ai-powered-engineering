@@ -17,6 +17,7 @@ The workspace is strictly partitioned into two paradigms:
 1. **Context Boundary Awareness**:
    - When modifying files under `apps/runtime/`, apply the rules defined in [.agents/rules/runtime-inference.md](file:///.agents/rules/runtime-inference.md).
    - When modifying files under `apps/development-time/` or `factory/`, apply the rules defined in [.agents/rules/development-time-inference.md](file:///.agents/rules/development-time-inference.md).
+   - When modifying Rust components (`*.rs`, `Cargo.toml`), apply the rules defined in [.agents/rules/rust-standards.md](file:///.agents/rules/rust-standards.md) and [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md) (operationalizing [rust-skills](file:///.agents/skills/rust-skills/SKILL.md)). Architect and Developer agents are strictly bound to Clean Architecture, zero Clippy warnings (`-D warnings`), zero panics, persistence safety, and `rust_decimal` precision.
 
 2. **Invariants & Decimal Precision**:
    - Monetary or calculation fields MUST use high-precision decimals (`decimal` in C#, `rust_decimal::Decimal` in Rust, `Decimal` in Dart/Python, `BigDecimal` in Java, `NUMERIC(15,2)` in SQL). Never introduce floating-point arithmetic in financial domains.

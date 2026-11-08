@@ -121,8 +121,8 @@ pub fn apply_advance_payments_offset(
             .map(|user| user.full_name.clone());
 
         for idx in unpaid_indices {
-            let debtor = inner.dues[idx].debtor_type.clone();
-            let advance = buckets.bucket_mut(&debtor);
+            let debtor = inner.dues[idx].debtor_type;
+            let advance = buckets.bucket_mut(debtor.as_str());
             if *advance <= Decimal::ZERO {
                 continue;
             }
@@ -1136,7 +1136,7 @@ pub async fn confirm_reconciliation(
     struct Line {
         match_id: String,
         unit: crate::models::IndependentUnit,
-        payer_role: String,
+        payer_role: DebtorType,
         payer_name: String,
         request_designation: Option<crate::models::PaymentDesignation>,
         item: ReconciliationMatch,
@@ -1183,8 +1183,8 @@ pub async fn confirm_reconciliation(
                 unit_id: line.unit.id.clone(),
                 amount: txn.amount,
                 payer_name: line.payer_name.clone(),
-                payer_role: line.payer_role.clone(),
-                payment_channel: "BANK_STATEMENT".to_string(),
+                payer_role: line.payer_role,
+                payment_channel: PaymentChannel::BankStatement,
                 description: Some(txn.description.clone()),
                 payment_date: None,
                 idempotency_key: Some(format!("STMT:{}", key)),
@@ -1935,7 +1935,7 @@ async fn process_bank_incoming_webhook_scoped(
             amount: payload.amount,
             payer_name,
             payer_role,
-            payment_channel: if is_virtual_iban { "VIRTUAL_IBAN" } else { "BANK_TRANSFER" }.to_string(),
+            payment_channel: if is_virtual_iban { PaymentChannel::VirtualIban } else { PaymentChannel::BankTransfer },
             description: Some(txn_desc.clone()),
             payment_date: None,
             idempotency_key: Some(match account_scope {
@@ -2046,7 +2046,7 @@ fn resolve_payer(
     inner: &crate::state::AppStateInner,
     unit: &crate::models::IndependentUnit,
     sender_name: Option<&str>,
-) -> (String, String) {
+) -> (DebtorType, String) {
     let name_of = |uid: &Option<String>| {
         uid.as_ref().and_then(|id| inner.users.iter().find(|u| &u.id == id)).map(|u| u.full_name.clone())
     };
@@ -2054,14 +2054,14 @@ fn resolve_payer(
     if let (Some(sender), Some(tenant)) = (sender, name_of(&unit.tenant_user_id)) {
         let (a, b) = (crate::services::dues_ledger::fold_turkish(sender), crate::services::dues_ledger::fold_turkish(&tenant));
         if a.contains(&b) || b.contains(&a) {
-            return ("TENANT".to_string(), sender.to_string());
+            return (DebtorType::Tenant, sender.to_string());
         }
     }
     let name = sender
         .map(str::to_string)
         .or_else(|| name_of(&unit.owner_user_id))
         .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string());
-    ("OWNER".to_string(), name)
+    (DebtorType::Owner, name)
 }
 
 /// HTTP status for a canonical-ingestion failure: storage problems are 503 (the
@@ -2116,7 +2116,7 @@ pub async fn create_dues_period(
         site_id: payload.site_id.clone(),
         period_name: payload.period_name.clone(),
         due_date: payload.due_date,
-        status: "ACTIVE".to_string(),
+        status: DuesPeriodStatus::Active,
         created_at: Some(chrono::Utc::now()),
     };
 
@@ -2178,7 +2178,7 @@ pub async fn accrue_monthly_dues(
         let mut skipped: Vec<String> = Vec::new();
         for unit in &units_in_site {
             let already = inner.dues.iter().any(|d| {
-                d.unit_id == unit.id && d.period == payload.period && d.expense_type == crate::services::dues_ledger::EXPENSE_OPERATIONAL
+                d.unit_id == unit.id && d.period == payload.period && d.expense_type == ExpenseType::OperationalDues
             });
             if already {
                 continue;
@@ -2229,7 +2229,7 @@ pub async fn accrue_monthly_dues(
                 site_id: payload.site_id.clone(),
                 period_name: payload.period.clone(),
                 due_date: payload.due_date,
-                status: "ACTIVE".to_string(),
+                status: DuesPeriodStatus::Active,
                 created_at: Some(chrono::Utc::now()),
             };
             inner.dues_periods.push(record.clone());
@@ -2260,12 +2260,11 @@ pub async fn accrue_monthly_dues(
             // Operational dues are the occupant's: the tenant's when the unit is
             // let, otherwise the owner's (same rule as the scheduler).
             debtor_type: if tenanted.as_ref().map(|t| t.contains(&unit.id)).unwrap_or(unit.tenant_user_id.is_some()) {
-                "TENANT"
+                DebtorType::Tenant
             } else {
-                "OWNER"
-            }
-            .to_string(),
-            expense_type: crate::services::dues_ledger::EXPENSE_OPERATIONAL.to_string(),
+                DebtorType::Owner
+            },
+            expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
         };
         if let Some(ref pool) = state.pool {
@@ -2393,8 +2392,8 @@ pub async fn record_homeowner_payment(
             unit_id: unit.id.clone(),
             amount: payload.amount,
             payer_name: payer_name.clone(),
-            payer_role: "OWNER".to_string(),
-            payment_channel: payload.payment_method.clone(),
+            payer_role: DebtorType::Owner,
+            payment_channel: payload.payment_method,
             description: payload.note.clone(),
             payment_date: None,
             idempotency_key: reference.as_ref().map(|r| format!("HOP:{}", r)),
@@ -2439,7 +2438,7 @@ pub async fn record_homeowner_payment(
     };
 
     // Approved digital receipt line for the site payment views.
-    let is_card = receipt.payment_channel == "CREDIT_CARD";
+    let is_card = receipt.payment_channel == PaymentChannel::CreditCard;
     let match_seq = inner.reconciliation_queue.len() + 1;
     let r_match = ReconciliationMatch {
         match_id: format!("MATCH-{}", match_seq),
@@ -2533,8 +2532,8 @@ pub async fn match_all_homeowner_payments(
                 unit_id: record.unit_id.clone(),
                 amount: record.amount,
                 payer_name: record.homeowner_name.clone().unwrap_or_else(|| "Kat Maliki".to_string()),
-                payer_role: "OWNER".to_string(),
-                payment_channel: record.payment_method.clone(),
+                payer_role: DebtorType::Owner,
+                payment_channel: record.payment_method,
                 description: record.note.clone(),
                 payment_date: None,
                 idempotency_key: Some(format!("HOP:{}", record.id)),
@@ -2844,7 +2843,7 @@ pub async fn wipe_all_data(
             password_hash: Some(crate::auth::hash_password(&crate::state::bootstrap_admin_password())),
             role: crate::models::Role::SaasAdmin,
             must_change_password: true,
-            auth_provider: "LOCAL".to_string(),
+            auth_provider: AuthProvider::Local,
             google_sub: None,
             avatar_url: None,
             created_at: chrono::Utc::now(),
@@ -3092,8 +3091,8 @@ pub async fn provision_site_units(
                 let name: String = r.get(1);
                 let s_slug: Option<String> = r.get(2);
                 let addr: Option<String> = r.get(3);
-                let st: String = r.get(4);
-                let plan: String = r.get(5);
+                let st: SiteStatus = r.get(4);
+                let plan: PlanType = r.get(5);
                 let lic_end: Option<chrono::NaiveDate> = r.get(6);
                 let mut inner = state.inner.write().await;
                 if !inner.sites.iter().any(|s| s.id == id_str) {
@@ -3167,8 +3166,8 @@ pub async fn provision_site_units(
                 let name: String = r.get(1);
                 let s_slug: Option<String> = r.get(2);
                 let addr: Option<String> = r.get(3);
-                let st: String = r.get(4);
-                let plan: String = r.get(5);
+                let st: SiteStatus = r.get(4);
+                let plan: PlanType = r.get(5);
                 let lic_end: Option<chrono::NaiveDate> = r.get(6);
                 let mut inner = state.inner.write().await;
                 if !inner.sites.iter().any(|s| s.id == id_str) {
@@ -3219,8 +3218,8 @@ pub async fn provision_site_units(
                     name: s_name,
                     address: "Kadıköy, İstanbul".to_string(),
                     slug,
-                    status: "ACTIVE".to_string(),
-                    plan_type: "PREMIUM".to_string(),
+                    status: SiteStatus::Active,
+                    plan_type: PlanType::Premium,
                     license_end_date: license_end,
                     timezone: crate::models::default_site_timezone(),
                     tax_id: None,
@@ -3240,8 +3239,8 @@ pub async fn provision_site_units(
                     name: s_name,
                     address: "Kadıköy, İstanbul".to_string(),
                     slug,
-                    status: "ACTIVE".to_string(),
-                    plan_type: "PREMIUM".to_string(),
+                    status: SiteStatus::Active,
+                    plan_type: PlanType::Premium,
                     license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
                     timezone: crate::models::default_site_timezone(),
                     tax_id: None,
@@ -3306,7 +3305,7 @@ pub async fn provision_site_units(
                 password_hash: Some(crate::auth::hash_password(&crate::auth::generate_temporary_password("SP-SAKIN-"))),
                 role: Role::HomeOwner,
                 must_change_password: true,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
@@ -3367,8 +3366,8 @@ pub async fn provision_site_units(
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
                 // A freshly provisioned unit has no tenant: its dues are the owner's.
-                debtor_type: "OWNER".to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
+                debtor_type: DebtorType::Owner,
+                expense_type: ExpenseType::OperationalDues,
                 penalty_accrued_through: None,
             });
         }
@@ -3530,15 +3529,11 @@ pub async fn get_site_payments(
             let txn_upper = item.transaction.transaction_id.to_uppercase();
 
             let (payment_channel, payment_channel_label) = if let Some(hp) = linked_hp {
-                let m = hp.payment_method.to_uppercase();
-                if m.contains("CARD") || m.contains("KART") {
-                    ("CREDIT_CARD", "Kredi Kartı (Online)")
-                } else if m.contains("VIBAN") || m.contains("VIRTUAL") {
-                    ("VIRTUAL_IBAN", "Sanal IBAN (Virtual Account)")
-                } else if m.contains("FAST") {
-                    ("FAST", "FAST 7/24 Anlık Takas")
-                } else {
-                    ("BANK_TRANSFER", "Banka Havale / EFT")
+                match hp.payment_method {
+                    PaymentChannel::CreditCard => ("CREDIT_CARD", "Kredi Kartı (Online)"),
+                    PaymentChannel::VirtualIban => ("VIRTUAL_IBAN", "Sanal IBAN (Virtual Account)"),
+                    PaymentChannel::Fast => ("FAST", "FAST 7/24 Anlık Takas"),
+                    _ => ("BANK_TRANSFER", "Banka Havale / EFT"),
                 }
             } else if desc_upper.contains("KART")
                 || desc_upper.contains("CARD")
@@ -3621,15 +3616,12 @@ pub async fn get_site_payments(
                 let virtual_iban = unit.and_then(|u| u.virtual_iban.clone());
                 let is_advance = hp.advance_credit_amount > Decimal::ZERO;
 
-                let payment_channel = hp.payment_method.clone();
-                let payment_channel_label = if payment_channel.to_uppercase().contains("CARD") || payment_channel.to_uppercase().contains("KART") {
-                    "Kredi Kartı (Online)".to_string()
-                } else if payment_channel.to_uppercase().contains("VIBAN") || payment_channel.to_uppercase().contains("VIRTUAL") {
-                    "Sanal IBAN (Virtual Account)".to_string()
-                } else if payment_channel.to_uppercase().contains("FAST") {
-                    "FAST 7/24 Anlık Takas".to_string()
-                } else {
-                    "Banka Havale / EFT".to_string()
+                let payment_channel = hp.payment_method.as_str();
+                let payment_channel_label = match hp.payment_method {
+                    PaymentChannel::CreditCard => "Kredi Kartı (Online)".to_string(),
+                    PaymentChannel::VirtualIban => "Sanal IBAN (Virtual Account)".to_string(),
+                    PaymentChannel::Fast => "FAST 7/24 Anlık Takas".to_string(),
+                    _ => "Banka Havale / EFT".to_string(),
                 };
 
                 payments.push(serde_json::json!({
@@ -4003,7 +3995,7 @@ pub async fn reverse_payment(
     let service = crate::services::PaymentTrackingService::new(state.clone());
     let reversal = service.reverse_payment(payload, &actor).await.map_err(payment_error_status)?;
     // A reversed card payment is refunded at the provider (SPEC-007 R4).
-    if reversal.reversal_receipt.payment_channel == "CREDIT_CARD" {
+    if reversal.reversal_receipt.payment_channel == PaymentChannel::CreditCard {
         if let Err(e) = crate::services::CardPaymentService::new(state)
             .refund_for_receipt(&site_id, &reversal.reversed_receipt_number)
             .await

@@ -64,10 +64,13 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 
 ---
 
-## 2. Rust Engineering Skills (`rust-skills`)
+## 2. Rust Engineering Skills & Standards (`rust-skills`)
 
 - **Skill Definition:** [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md)
-- **Purpose:** 265 coding rules across 26 categories covering ownership, error handling, async patterns, concurrency, memory optimization, and numeric precision (`rust_decimal`).
+- **Authoritative Standards Document:** [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md)
+- **Rule Directives:** [.agents/rules/rust-standards.md](file:///.agents/rules/rust-standards.md)
+- **Purpose:** 265 coding rules across 26 categories ([leonardomso/rust-skills](https://github.com/leonardomso/rust-skills)) covering ownership, error handling, async patterns, concurrency, memory optimization, and numeric precision (`rust_decimal`).
+- **Agent Bindings:** Formally bound to **Architect Agent** (contracts, DTOs, migrations, concurrency models) and **Developer Agent** (synthesis, zero-clippy, zero-unwrap, persistence safety).
 
 ---
 
