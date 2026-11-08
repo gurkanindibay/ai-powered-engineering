@@ -450,6 +450,57 @@ void main() {
       // Clean up after test
       await controller.resetAllDemoData();
     });
+
+    test('when logout is invoked, thoroughly purges all in-memory domain, tenant, and financial state', () {
+      controller.loadTestFixtures();
+      expect(controller.flatsList.isNotEmpty, isTrue);
+      expect(controller.duesList.isNotEmpty, isTrue);
+      expect(controller.accountTransactions.isNotEmpty, isTrue);
+      expect(controller.activeUnit.id.isNotEmpty, isTrue);
+
+      controller.logout();
+
+      expect(controller.isAuthenticated, isFalse);
+      expect(controller.flatsList, isEmpty);
+      expect(controller.duesList, isEmpty);
+      expect(controller.accountTransactions, isEmpty);
+      expect(controller.activeUnit.id, isEmpty);
+      expect(controller.homeOwners, isEmpty);
+      expect(controller.reconciliationQueue, isEmpty);
+      expect(controller.capitalProjects, isEmpty);
+    });
+
+    test('when attachActiveUnitForUser has no matching resident email, does not default to first unit of prior session', () {
+      controller.loadTestFixtures();
+      expect(controller.flatsList.isNotEmpty, isTrue);
+
+      // Try to attach an unknown email
+      controller.attachActiveUnitForUser(email: 'completely.unknown@example.com');
+
+      expect(controller.activeUnit.id, isEmpty);
+    });
+
+    test('when !isTestMode and API calls fail, does not fabricate fake in-memory receipts or projects', () async {
+      final liveController = DashboardController(isTestMode: false);
+
+      // fetchReceipt for non-existent receipt with no server should return null, not fake Ahmet Yilmaz
+      final receipt = await liveController.fetchReceipt('TAH-NONEXISTENT-999');
+      expect(receipt, isNull);
+
+      // transferUnitOwnership when remote fails should return failure response
+      final transferRes = await liveController.transferUnitOwnership(
+        unitId: 'unit-999',
+        newOwnerName: 'Test Malik',
+      );
+      expect(transferRes!['success'], isFalse);
+
+      // createCapitalProject when remote fails should return null, not fake in-memory project
+      final proj = await liveController.createCapitalProject(
+        title: 'Asansör',
+        totalBudget: Decimal.parse('50000.00'),
+      );
+      expect(proj, isNull);
+    });
   });
 }
 
