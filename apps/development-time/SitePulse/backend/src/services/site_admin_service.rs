@@ -3,11 +3,15 @@ use chrono::{DateTime, Datelike, Utc};
 use rust_decimal::Decimal;
 
 use crate::models::{
-    DebtStatus, DuesLiability, HomeOwnerResponse, IndependentUnit, RegisterHomeOwnerRequest, Role,
-    UnitMemberDto, User,
+    AuthProvider, DebtStatus, DebtorType, DuesLiability, ExpenseType, HomeOwnerResponse, IndependentUnit,
+    OccupancyStatus, RegisterHomeOwnerRequest, Role, UnitMemberDto, User,
 };
 use crate::services::virtual_iban_service::VirtualIbanService;
 use crate::state::AppState;
+
+/// Refusal for deleting a unit that has payments, receipts, advance history, paid dues or a matured receivable.
+pub const UNIT_HAS_FINANCIAL_HISTORY: &str =
+    "Bu dairenin finansal geçmişi (ödeme, makbuz, avans, ödenmiş veya vadesi geçmiş aidat) var; silinemez. Tahliye veya malik devri kullanın.";
 
 pub struct SiteAdminService {
     state: AppState,
@@ -428,6 +432,15 @@ impl SiteAdminService {
                         r#"
                         INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, virtual_iban, house_type, occupancy_status)
                         VALUES ($1, $2, $3, $4, 1, $5, $6, $7, $8, $9)
+                        ON CONFLICT (block_id, unit_number) DO UPDATE SET
+                            deleted_at = NULL,
+                            floor = EXCLUDED.floor,
+                            owner_person_id = EXCLUDED.owner_person_id,
+                            tenant_person_id = EXCLUDED.tenant_person_id,
+                            house_type = EXCLUDED.house_type,
+                            occupancy_status = EXCLUDED.occupancy_status
+                        -- only an archived (soft-deleted) flat is revived; an active one still conflicts
+                        WHERE units.deleted_at IS NOT NULL
                         RETURNING id
                         "#,
                         &[
@@ -542,7 +555,7 @@ impl SiteAdminService {
             password_hash: Some(password_hash.clone()),
             role: if is_tenant || is_resident_only { Role::HomeResident } else { Role::HomeOwner },
             must_change_password: true,
-            auth_provider: "LOCAL".to_string(),
+            auth_provider: AuthProvider::Local,
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
@@ -609,7 +622,7 @@ impl SiteAdminService {
                     password_hash: Some(password_hash.clone()),
                     role: Role::HomeResident,
                     must_change_password: true,
-                    auth_provider: "LOCAL".to_string(),
+                    auth_provider: AuthProvider::Local,
                     google_sub: None,
                     avatar_url: None,
                     created_at: Utc::now(),
@@ -700,7 +713,7 @@ impl SiteAdminService {
                     person_name: request.tenant_full_name.clone().unwrap_or_default(),
                     person_phone: request.tenant_phone.clone(),
                     person_email: request.tenant_email.clone(),
-                    role: "TENANT".to_string(),
+                    role: DebtorType::Tenant,
                     start_date: Utc::now().date_naive().to_string(),
                     end_date: None,
                     is_active: true,
@@ -716,7 +729,7 @@ impl SiteAdminService {
                     person_name: request.owner_full_name.clone(),
                     person_phone: Some(request.phone.clone()),
                     person_email: Some(email_norm.clone()),
-                    role: occ_type.to_string(),
+                    role: DebtorType::from_str_loose(occ_type),
                     start_date: Utc::now().date_naive().to_string(),
                     end_date: None,
                     is_active: true,
@@ -765,8 +778,9 @@ impl SiteAdminService {
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: "TENANT".to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
+                debtor_type: if is_tenant { DebtorType::Tenant } else { DebtorType::Owner },
+                expense_type: ExpenseType::OperationalDues,
+                penalty_accrued_through: None,
             });
         }
 
@@ -802,7 +816,7 @@ impl SiteAdminService {
             temporary_password: Some(temp_pass),
             must_change_password: true,
             created_at: Utc::now(),
-            occupancy_status: Some(if request.is_resident { "OWNER_OCCUPIED".to_string() } else { "VACANT".to_string() }),
+            occupancy_status: Some(if request.is_resident { OccupancyStatus::OwnerOccupied } else { OccupancyStatus::Vacant }),
             tenant_full_name: None,
             tenant_email: None,
             tenant_phone: None,
@@ -935,7 +949,7 @@ impl SiteAdminService {
                                 temporary_password: None,
                                 must_change_password: r.get("must_change_password"),
                                 created_at: r.get("created_at"),
-                                occupancy_status: Some(occ_status),
+                                occupancy_status: Some(OccupancyStatus::from_str_loose(&occ_status)),
                                 tenant_full_name: t_name,
                                 tenant_email: t_email,
                                 tenant_phone: t_phone,
@@ -1024,7 +1038,7 @@ impl SiteAdminService {
                 temporary_password: None,
                 must_change_password: user.must_change_password,
                 created_at: user.created_at,
-                occupancy_status: Some("OWNER_OCCUPIED".to_string()),
+                occupancy_status: Some(OccupancyStatus::OwnerOccupied),
                 tenant_full_name: None,
                 tenant_email: None,
                 tenant_phone: None,
@@ -1214,7 +1228,7 @@ impl SiteAdminService {
                         role: crate::models::Role::HomeResident,
                         site_id: site_id.to_string(),
                         must_change_password: true,
-                        auth_provider: "LOCAL".to_string(),
+                        auth_provider: AuthProvider::Local,
                         google_sub: None,
                         avatar_url: None,
                         created_at: chrono::Utc::now(),
@@ -1281,11 +1295,11 @@ impl SiteAdminService {
                 must_change_password: false,
                 created_at: chrono::Utc::now(),
                 occupancy_status: Some(if req.remove_tenant == Some(true) {
-                    if req.is_resident == Some(true) { "OWNER_OCCUPIED".to_string() } else { "VACANT".to_string() }
+                    if req.is_resident == Some(true) { OccupancyStatus::OwnerOccupied } else { OccupancyStatus::Vacant }
                 } else if req.tenant_full_name.is_some() {
-                    "TENANT_OCCUPIED".to_string()
+                    OccupancyStatus::TenantOccupied
                 } else {
-                    "OWNER_OCCUPIED".to_string()
+                    OccupancyStatus::OwnerOccupied
                 }),
                 tenant_full_name: req.tenant_full_name.clone(),
                 tenant_email: req.tenant_email.clone(),
@@ -1308,7 +1322,9 @@ impl SiteAdminService {
 
             let unit_row_opt = if let Some(uid) = id_numeric {
                 tx.query_opt(
-                    "SELECT id, owner_person_id, tenant_person_id FROM units WHERE (id = $1 OR owner_person_id = $1) AND site_id = $2",
+                    // A unit id wins over an owner person id: both are numbers, and an
+                    // OR-match returning two rows used to fail the whole delete.
+                    "SELECT id, owner_person_id, tenant_person_id FROM units WHERE (id = $1 OR owner_person_id = $1) AND site_id = $2 AND deleted_at IS NULL ORDER BY (id = $1) DESC, id LIMIT 1",
                     &[&uid, &site_numeric],
                 )
                 .await
@@ -1326,8 +1342,46 @@ impl SiteAdminService {
                 let u_id: i64 = u_row.get(0);
                 let p_id: Option<i64> = u_row.get(1);
 
-                // Dissociate owner from unit without deleting the physical unit
-                tx.execute("UPDATE units SET owner_person_id = NULL WHERE id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
+                // Zero data loss: a unit with financial history (any payment, receipt,
+                // advance movement, paid due or matured receivable) is never removed; the
+                // manager uses move-out or ownership transfer instead. Only untouched,
+                // not-yet-due charges (e.g. the one issued at registration) are voided.
+                let has_history: bool = tx
+                    .query_one(
+                        r#"
+                        SELECT EXISTS (SELECT 1 FROM payment_entries WHERE unit_id = $1)
+                            OR EXISTS (SELECT 1 FROM payment_receipts WHERE unit_id = $1)
+                            OR EXISTS (SELECT 1 FROM advance_ledger_entries WHERE unit_id = $1)
+                            OR EXISTS (SELECT 1 FROM dues_liabilities WHERE unit_id = $1 AND status <> 'CANCELLED'
+                                       AND (paid_amount > 0 OR status = 'PAID' OR due_date < CURRENT_DATE))
+                        "#,
+                        &[&u_id],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .get(0);
+                if has_history {
+                    return Err(UNIT_HAS_FINANCIAL_HISTORY.to_string());
+                }
+
+                // Archive (soft-delete) the unit: untouched dues are cancelled, the
+                // occupancy and ownership history is closed, nothing is physically deleted.
+                tx.execute(
+                    "UPDATE dues_liabilities SET status = 'CANCELLED' WHERE unit_id = $1 AND status IN ('PENDING', 'OVERDUE') AND paid_amount = 0",
+                    &[&u_id],
+                ).await.map_err(|e| e.to_string())?;
+                tx.execute(
+                    "UPDATE unit_occupancies SET is_active = FALSE, end_date = CURRENT_DATE WHERE unit_id = $1 AND is_active = TRUE",
+                    &[&u_id],
+                ).await.map_err(|e| e.to_string())?;
+                tx.execute(
+                    "UPDATE unit_ownerships SET is_active = FALSE, end_date = CURRENT_DATE WHERE unit_id = $1 AND is_active = TRUE",
+                    &[&u_id],
+                ).await.map_err(|e| e.to_string())?;
+                tx.execute(
+                    "UPDATE units SET owner_person_id = NULL, tenant_person_id = NULL, deleted_at = CURRENT_TIMESTAMP WHERE id = $1",
+                    &[&u_id],
+                ).await.map_err(|e| e.to_string())?;
 
                 if let Some(person_id) = p_id {
                     tx.execute(
@@ -1347,8 +1401,9 @@ impl SiteAdminService {
                         .unwrap_or(0);
 
                     if other_units == 0 && other_occ == 0 {
+                        // The login account goes; the person stays, because the closed
+                        // ownership/occupancy history references it (zero data loss).
                         tx.execute("DELETE FROM users WHERE site_id = $1 AND email = (SELECT email FROM persons WHERE id = $2)", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
-                        tx.execute("DELETE FROM persons WHERE id = $1", &[&person_id]).await.map_err(|e| e.to_string())?;
                     }
                 }
             }
@@ -1373,6 +1428,21 @@ impl SiteAdminService {
 
         if !target_units.is_empty() {
             let target_unit_ids: Vec<String> = target_units.iter().map(|u| u.id.clone()).collect();
+            if self.state.pool.is_none() {
+                let has_history = target_unit_ids.iter().any(|uid| {
+                    inner.payment_receipts.iter().any(|r| &r.unit_id == uid)
+                        || inner.payment_entries.iter().any(|e| &e.unit_id == uid)
+                        || inner.advance_total(uid) > rust_decimal::Decimal::ZERO
+                        || inner.dues.iter().any(|d| {
+                            &d.unit_id == uid
+                                && (d.paid_principal + d.paid_penalty > rust_decimal::Decimal::ZERO
+                                    || d.due_date < chrono::Utc::now().date_naive())
+                        })
+                });
+                if has_history {
+                    return Err(UNIT_HAS_FINANCIAL_HISTORY.to_string());
+                }
+            }
             let target_owner_uids: Vec<String> = target_units
                 .iter()
                 .filter_map(|u| u.owner_user_id.clone())
@@ -1392,7 +1462,7 @@ impl SiteAdminService {
 
             // Clean advance and mappings strictly for target units
             for u_id in &target_unit_ids {
-                inner.advance_payments.remove(u_id);
+                inner.advance_balances.remove(u_id);
                 inner.unit_members.remove(u_id);
                 inner.unit_payer_names.remove(u_id);
                 inner.unit_invite_tokens.remove(u_id);
@@ -1487,7 +1557,7 @@ impl SiteAdminService {
                 password_hash: Some(password_hash),
                 role: crate::models::Role::HomeResident,
                 must_change_password: true,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: chrono::Utc::now(),
@@ -1881,10 +1951,10 @@ impl SiteAdminService {
                 let tenant_id: Option<i64> = unit_row.get(2);
 
                 let target_person_id = tenant_id.or(owner_id).ok_or_else(|| "Unit has no occupant to move out".to_string())?;
-                let occ_role = if tenant_id.is_some() { "TENANT" } else { "OWNER" };
+                let occ_role = if tenant_id.is_some() { DebtorType::Tenant } else { DebtorType::Owner };
 
                 // Calculate exit balance: operational liabilities for tenant, all liabilities for owner (KMK Art. 20/22)
-                let exit_balance: Decimal = if occ_role == "TENANT" {
+                let exit_balance: Decimal = if occ_role == DebtorType::Tenant {
                     client
                         .query_one(
                             r#"
@@ -1998,7 +2068,7 @@ impl SiteAdminService {
                     person_name: person_row.get(0),
                     person_phone: person_row.get(1),
                     person_email: person_row.get(2),
-                    role: occ_role.to_string(),
+                    role: occ_role,
                     start_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
                     end_date: Some(chrono::Utc::now().format("%Y-%m-%d").to_string()),
                     is_active: false,
@@ -2030,7 +2100,7 @@ impl SiteAdminService {
             person_name: "Tenant".to_string(),
             person_phone: None,
             person_email: None,
-            role: "TENANT".to_string(),
+            role: DebtorType::Tenant,
             start_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
             end_date: Some(chrono::Utc::now().format("%Y-%m-%d").to_string()),
             is_active: false,
@@ -2076,8 +2146,7 @@ impl SiteAdminService {
                     } else {
                         let full_name = req.full_name.clone().unwrap_or_else(|| "New Resident".to_string());
                         let phone = req.phone.clone();
-                        let p_role = req.role.to_uppercase();
-                        let p_type = if p_role == "TENANT" { "HOME_RESIDENT" } else { "HOME_OWNER" };
+                        let p_type = if req.role == DebtorType::Tenant { "HOME_RESIDENT" } else { "HOME_OWNER" };
                         let row = client
                             .query_one(
                                 "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, $4) RETURNING id",
@@ -2099,8 +2168,8 @@ impl SiteAdminService {
                     )
                     .await.map_err(|e| e.to_string())?;
 
-                let occ_role = if req.role.to_uppercase() == "TENANT" { "TENANT" } else { "OWNER" };
-                let occ_status = if occ_role == "TENANT" { "TENANT_OCCUPIED" } else { "OWNER_OCCUPIED" };
+                let occ_role = req.role.as_str();
+                let occ_status = if req.role == DebtorType::Tenant { "TENANT_OCCUPIED" } else { "OWNER_OCCUPIED" };
 
                 // Insert into unit_occupancies
                 let notes_val = req.notes.clone();
@@ -2121,7 +2190,7 @@ impl SiteAdminService {
                 let created_at: DateTime<Utc> = occ_row.get(2);
 
                 // Update unit
-                if occ_role == "TENANT" {
+                if req.role == DebtorType::Tenant {
                     client
                         .execute(
                             "UPDATE units SET tenant_person_id = $1, occupancy_status = $2 WHERE id = $3",
@@ -2150,7 +2219,7 @@ impl SiteAdminService {
                     person_name: person_row.get(0),
                     person_phone: person_row.get(1),
                     person_email: person_row.get(2),
-                    role: occ_role.to_string(),
+                    role: req.role,
                     start_date: start_date_str,
                     end_date: None,
                     is_active: true,
@@ -2213,7 +2282,7 @@ impl SiteAdminService {
                             person_name: r.get(3),
                             person_phone: r.get(4),
                             person_email: r.get(5),
-                            role: r.get(6),
+                            role: DebtorType::from_str_loose(&r.get::<_, String>(6)),
                             start_date: r.get(7),
                             end_date: r.get(8),
                             is_active: r.get(9),

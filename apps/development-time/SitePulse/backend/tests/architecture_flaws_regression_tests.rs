@@ -8,7 +8,7 @@ use sitepulse_backend::{
     auth,
     models::{
         BankTransactionItem, ConfirmReconciliationRequest, PaymentStreamFilter,
-        PendingRegistrationResponse, ReconciliationMatch, ReconciliationStatus, Role,
+        PendingRegistrationResponse, ReconciliationMatch, ReconciliationStatus, RegistrationStatus, Role,
     },
     services::PaymentTrackingService,
     state::AppState,
@@ -85,7 +85,7 @@ async fn test_cross_tenant_registration_approval_blocked() {
             email: "yabanci@sitepulse.io".to_string(),
             phone: "05551112233".to_string(),
             is_resident: true,
-            status: "PENDING".to_string(),
+            status: RegistrationStatus::Pending,
             submitted_at: chrono::Utc::now(),
         });
     }
@@ -120,7 +120,7 @@ async fn test_reject_registration_already_processed_blocked() {
             email: "onayli@sitepulse.io".to_string(),
             phone: "05551112233".to_string(),
             is_resident: true,
-            status: "APPROVED".to_string(),
+            status: RegistrationStatus::Approved,
             submitted_at: chrono::Utc::now(),
         });
     }

@@ -27,19 +27,19 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 1. Load Sites
     {
-        let rows = client.query("SELECT id, name, address, slug, status, plan_type, license_end_date, timezone FROM sites WHERE deleted_at IS NULL",
+        let rows = client.query("SELECT id, name, address, slug, status, plan_type, license_end_date, timezone, tax_id, tax_office FROM sites WHERE deleted_at IS NULL",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let name: String = row.get(1);
             let address: String = row.get::<_, Option<String>>(2).unwrap_or_default();
             let slug: String = row.get::<_, Option<String>>(3).unwrap_or_else(|| id.to_string());
-            let status: String = row
-                .get::<_, Option<String>>(4)
-                .unwrap_or_else(|| "ACTIVE".to_string());
-            let plan_type: String = row
-                .get::<_, Option<String>>(5)
-                .unwrap_or_else(|| "STANDARD".to_string());
+            let status = row
+                .get::<_, Option<SiteStatus>>(4)
+                .unwrap_or(SiteStatus::Active);
+            let plan_type = row
+                .get::<_, Option<PlanType>>(5)
+                .unwrap_or(PlanType::Standard);
             let license_end_date: Option<NaiveDate> = row.get(6);
 
             let s = Site {
@@ -52,6 +52,8 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 license_end_date: license_end_date
                     .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
                 timezone: row.get::<_, Option<String>>(7).unwrap_or_else(crate::models::default_site_timezone),
+                tax_id: row.get(8),
+                tax_office: row.get(9),
             };
 
             upsert_by_id(&mut state.sites, s, |x| &x.id);
@@ -89,7 +91,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 password_hash,
                 role: Role::from_str_loose(&role_str),
                 must_change_password,
-                auth_provider: auth_provider.unwrap_or_else(|| "LOCAL".to_string()),
+                auth_provider: auth_provider.as_deref().map(AuthProvider::from_str_loose).unwrap_or(AuthProvider::Local),
                 google_sub,
                 avatar_url,
                 created_at: created_at.unwrap_or_else(Utc::now),
@@ -126,7 +128,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 password_hash: None,
                 role,
                 must_change_password: false,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
@@ -140,7 +142,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 3. Load Units
     {
-        let rows = client.query("SELECT id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, site_id, virtual_iban, house_type FROM units",
+        let rows = client.query("SELECT id, block_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, site_id, virtual_iban, house_type FROM units WHERE deleted_at IS NULL",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
@@ -263,7 +265,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 4. Load Dues Liabilities
     {
-        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type FROM dues_liabilities",
+        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type, penalty_accrued_through FROM dues_liabilities d WHERE d.status <> 'CANCELLED' AND EXISTS (SELECT 1 FROM units u WHERE u.id = d.unit_id AND u.deleted_at IS NULL)",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
@@ -275,8 +277,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let delay_penalty: Decimal = row.get(6);
             let paid_principal: Decimal = row.get(7);
             let paid_penalty: Decimal = row.get(8);
-            let debtor_type: String = row.get(9);
-            let expense_type: String = row.get(10);
+            let debtor_type: DebtorType = row.get(9);
+            let expense_type: ExpenseType = row.get(10);
+            let penalty_accrued_through: Option<NaiveDate> = row.get(11);
 
             let status = match status_str.to_uppercase().as_str() {
                 "PAID" => DebtStatus::Paid,
@@ -297,6 +300,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 paid_penalty,
                 debtor_type,
                 expense_type,
+                penalty_accrued_through,
             };
             crate::services::dues_ledger::refresh(&mut due);
             upsert_by_id(&mut state.dues, due, |x| &x.id);
@@ -313,7 +317,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let site_id: i64 = row.get(1);
             let period_name: String = row.get(2);
             let due_date: NaiveDate = row.get(3);
-            let status: String = row.get(4);
+            let status: DuesPeriodStatus = row.get(4);
             let created_at: Option<DateTime<Utc>> = row.get(5);
 
             let site_id_str = site_id.to_string();
@@ -355,7 +359,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let bank_name: String = row.get(3);
             let iban: String = row.get(4);
             let account_holder: String = row.get(5);
-            let statement_format: String = row.get(6);
+            let statement_format: BankStatementFormat = row.get(6);
             let is_active: bool = row.get(7);
             let configured_by: Option<i64> = row.get(8);
             let created_at: Option<DateTime<Utc>> = row.get(9);
@@ -396,23 +400,22 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
     // 6. Load the unified payment ledger (payment_entries) and derive the legacy
     // homeowner-payment view from it so existing endpoints keep working.
     {
-        let rows = client.query("SELECT id, site_id, unit_id, dues_liability_id, payer_name, payer_role, receipt_id, amount, payment_channel, settlement_status, description, external_reference, payment_date, created_at FROM payment_entries ORDER BY payment_date ASC",
+        let rows = client.query("SELECT id, site_id, unit_id, payer_name, payer_role, receipt_id, amount, payment_channel, settlement_status, description, external_reference, payment_date, created_at, entry_type, reverses_entry_id, reversal_reason, recorded_by FROM payment_entries ORDER BY payment_date ASC, id ASC",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let site_id: i64 = row.get(1);
             let unit_id: i64 = row.get(2);
-            let _dues_liability_id: Option<i64> = row.get(3);
-            let payer_name: String = row.get(4);
-            let payer_role: String = row.get(5);
-            let receipt_id: Option<i64> = row.get(6);
-            let amount: Decimal = row.get(7);
-            let payment_channel: String = row.get(8);
-            let settlement_status: String = row.get(9);
-            let description: Option<String> = row.get(10);
-            let external_reference: Option<String> = row.get(11);
-            let payment_date: Option<DateTime<Utc>> = row.get(12);
-            let created_at: Option<DateTime<Utc>> = row.get(13);
+            let payer_name: String = row.get(3);
+            let payer_role: DebtorType = row.get(4);
+            let receipt_id: Option<i64> = row.get(5);
+            let amount: Decimal = row.get(6);
+            let payment_channel: PaymentChannel = row.get(7);
+            let settlement_status: SettlementStatus = row.get(8);
+            let description: Option<String> = row.get(9);
+            let external_reference: Option<String> = row.get(10);
+            let payment_date: Option<DateTime<Utc>> = row.get(11);
+            let created_at: Option<DateTime<Utc>> = row.get(12);
 
             let entry = PaymentEntry {
                 id,
@@ -424,13 +427,18 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 receipt_id,
                 receipt_number: None,
                 amount,
-                payment_channel: payment_channel.clone(),
-                settlement_status: settlement_status.clone(),
+                payment_channel,
+                settlement_status,
                 description: description.clone(),
                 external_reference: external_reference.clone(),
                 payment_date: payment_date.unwrap_or_else(Utc::now),
                 created_at: created_at.unwrap_or_else(Utc::now),
+                entry_type: row.get(13),
+                reverses_entry_id: row.get(14),
+                reversal_reason: row.get(15),
+                recorded_by: row.get(16),
             };
+            let is_contra = entry.entry_type == crate::models::LEDGER_KIND_REVERSAL;
 
             if let Some(pos) = state.payment_entries.iter().position(|e| e.id == id) {
                 state.payment_entries[pos] = entry;
@@ -438,7 +446,11 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 state.payment_entries.push(entry);
             }
 
-            // Derive the legacy homeowner-payment record for the match/reconcile endpoints.
+            // Derive the legacy homeowner-payment record for the match/reconcile endpoints
+            // (reversal contra entries have no counterpart there).
+            if is_contra {
+                continue;
+            }
             let matched_unit = state.units.iter().find(|u| parse_id_to_i64(&u.id) == Some(unit_id));
             let record = HomeownerPaymentRecord {
                 id: id.to_string(),
@@ -450,14 +462,14 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 payment_method: payment_channel,
                 reference_code: external_reference,
                 note: description,
-                status: if settlement_status == "SETTLED" {
+                status: if settlement_status == SettlementStatus::Settled {
                     PaymentMatchStatus::MatchedDebt
-                } else if settlement_status == "UNMATCHED" {
+                } else if settlement_status == SettlementStatus::Unmatched {
                     PaymentMatchStatus::Pending
                 } else {
                     PaymentMatchStatus::MatchedDebt
                 },
-                cleared_debt_amount: if settlement_status == "SETTLED" { amount } else { Decimal::ZERO },
+                cleared_debt_amount: if settlement_status == SettlementStatus::Settled { amount } else { Decimal::ZERO },
                 advance_credit_amount: Decimal::ZERO,
                 created_at: created_at.unwrap_or_else(Utc::now),
             };
@@ -475,56 +487,12 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 6b. Load Payment Receipts
     {
-        let rows = client.query("SELECT id, site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, on_behalf_of_name, on_behalf_of_role, total_amount, payment_channel, channel_reference, allocated_principal, allocated_penalty, allocated_advance, allocation_breakdown::text, is_rent_offset_eligible, legal_statutory_note, verification_hash, issued_at FROM payment_receipts ORDER BY sequence_number ASC",
-            &[],).await?;
+        let rows = client
+            .query(&format!("SELECT {} FROM payment_receipts ORDER BY receipt_type ASC, sequence_number ASC", super::RECEIPT_COLUMNS), &[])
+            .await?;
         for row in rows {
-            let id: i64 = row.get(0);
-            let site_id: i64 = row.get(1);
-            let unit_id: i64 = row.get(2);
-            let receipt_number: String = row.get(3);
-            let sequence_number: i64 = row.get(4);
-            let payer_name: String = row.get(5);
-            let payer_role: String = row.get(6);
-            let on_behalf_of_name: Option<String> = row.get(7);
-            let on_behalf_of_role: Option<String> = row.get(8);
-            let total_amount: Decimal = row.get(9);
-            let payment_channel: String = row.get(10);
-            let channel_reference: Option<String> = row.get(11);
-            let allocated_principal: Decimal = row.get(12);
-            let allocated_penalty: Decimal = row.get(13);
-            let allocated_advance: Decimal = row.get(14);
-            let breakdown_str: String = row.get(15);
-            let is_rent_offset_eligible: bool = row.get(16);
-            let legal_statutory_note: Option<String> = row.get(17);
-            let verification_hash: String = row.get(18);
-            let issued_at: Option<DateTime<Utc>> = row.get(19);
-
-            let allocation_breakdown: Vec<AllocationBreakdownItem> =
-                serde_json::from_str(&breakdown_str).unwrap_or_default();
-
-            let receipt = PaymentReceipt {
-                id,
-                site_id: site_id.to_string(),
-                unit_id: unit_id.to_string(),
-                receipt_number,
-                sequence_number,
-                payer_name,
-                payer_role,
-                on_behalf_of_name,
-                on_behalf_of_role,
-                total_amount,
-                payment_channel,
-                channel_reference,
-                allocated_principal,
-                allocated_penalty,
-                allocated_advance,
-                allocation_breakdown,
-                is_rent_offset_eligible,
-                legal_statutory_note,
-                verification_hash,
-                issued_at: issued_at.unwrap_or_else(Utc::now),
-            };
-
+            let receipt = super::receipt_from_row(&row);
+            let id = receipt.id;
             if let Some(pos) = state.payment_receipts.iter().position(|r| r.id == id) {
                 state.payment_receipts[pos] = receipt;
             } else {
@@ -616,7 +584,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let person_name: String = row.get(3);
             let person_phone: Option<String> = row.get(4);
             let person_email: Option<String> = row.get(5);
-            let role: String = row.get(6);
+            let role: DebtorType = row.get(6);
             let start_date: NaiveDate = row.get(7);
             let end_date: Option<NaiveDate> = row.get(8);
             let is_active: bool = row.get(9);
@@ -679,14 +647,24 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 10. Load Advance Balances
     {
-        let rows = client.query("SELECT unit_id, COALESCE(SUM(balance), 0) FROM advance_balances GROUP BY unit_id",
-            &[],).await?;
+        let rows = client.query("SELECT unit_id, debtor_type, balance FROM advance_balances", &[]).await?;
+        state.advance_balances.clear();
         for row in rows {
             let unit_id: i64 = row.get(0);
-            let balance: Decimal = row.get(1);
-            state.advance_payments.insert(unit_id.to_string(), balance);
+            let debtor_type: String = row.get(1);
+            let balance: Decimal = row.get(2);
+            state.adjust_advance(&unit_id.to_string(), &debtor_type, balance);
         }
-        info!("Loaded {} advance balances from PostgreSQL", state.advance_payments.len());
+        info!("Loaded advance balances of {} units from PostgreSQL", state.advance_balances.len());
+    }
+
+    // 10b. Load idempotency keys (O-4: the only home of idempotency).
+    {
+        let rows = client.query("SELECT site_id, idempotency_key, receipt_id FROM payment_idempotency_keys", &[]).await?;
+        for row in rows {
+            let site: i64 = row.get(0);
+            state.payment_idempotency.insert((site.to_string(), row.get(1)), row.get(2));
+        }
     }
 
     // 11. Load Unit Sender IBANs
@@ -721,7 +699,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 13. Load Reconciliation Queue
     {
-        let rows = client.query("SELECT match_id, transaction_id, txn_date, amount, currency, description, sender_name, sender_iban, reference_no, matched_unit_id, matched_block, matched_unit_number, matched_resident_name, confidence_score, matched_due_id, outstanding_balance, amount_matches_balance, status, status_code, notes, site_id FROM reconciliation_queue ORDER BY txn_date ASC",
+        let rows = client.query("SELECT match_id, transaction_id, txn_date, amount, currency, description, sender_name, sender_iban, reference_no, matched_unit_id, matched_block, matched_unit_number, matched_resident_name, confidence_score, matched_due_id, outstanding_balance, amount_matches_balance, status, notes, site_id FROM reconciliation_queue ORDER BY txn_date ASC",
             &[],).await?;
         for row in rows {
             let match_id: String = row.get(0);
@@ -742,17 +720,12 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let outstanding_balance: Option<Decimal> = row.get(15);
             let amount_matches_balance: bool = row.get(16);
             let status_str: String = row.get(17);
-            let status_code: String = row.get(18);
-            let notes: Option<String> = row.get(19);
-            let site_id_num: Option<i64> = row.get(20);
+            let notes: Option<String> = row.get(18);
+            let site_id_num: Option<i64> = row.get(19);
             let site_id = site_id_num.map(|s| s.to_string()).unwrap_or_else(|| "1".to_string());
 
-            let status = match status_str.as_str() {
-                "APPROVED" | "ONAYLANDI" => ReconciliationStatus::Approved,
-                "ALREADY_PROCESSED" => ReconciliationStatus::AlreadyProcessed,
-                "UNMATCHED" | "ESLESTIRILEMEDI" => ReconciliationStatus::Unmatched,
-                _ => ReconciliationStatus::PendingApproval,
-            };
+            let status = ReconciliationStatus::from_db_code(&status_str);
+            let status_code = status.as_str().to_string();
 
             let m = ReconciliationMatch {
                 match_id: match_id.clone(),
@@ -861,8 +834,9 @@ pub async fn sync_all_in_memory_to_db(
     }
 
     // 7. Sync Advance Balances
-    for (unit_id, bal) in &state.advance_payments {
-        save_advance_balance(pool, unit_id, *bal).await.map_err(|e| e.to_string())?;
+    for (unit_id, adv) in &state.advance_balances {
+        save_advance_balance(pool, unit_id, "OWNER", adv.owner).await.map_err(|e| e.to_string())?;
+        save_advance_balance(pool, unit_id, "TENANT", adv.tenant).await.map_err(|e| e.to_string())?;
     }
 
     // 8. Sync Payment Receipts

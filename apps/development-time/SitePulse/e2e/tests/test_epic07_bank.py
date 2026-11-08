@@ -5,8 +5,7 @@ import pytest
 
 from pages import DuesManagement, ManagerCockpit
 from support.bank_files import StatementRow, kuveyt_xlsx
-from support.known_issues import (BANK_ACCOUNT_NOT_LOADED, RECONCILIATION_NOT_PERSISTED,
-                                  WEBHOOK_PENALTY_NOT_COLLECTED)
+from support.known_issues import BANK_ACCOUNT_NOT_LOADED, RECONCILIATION_NOT_PERSISTED
 
 PERIOD = "Ekim 2026"
 DUES = Decimal("1400.00")
@@ -151,7 +150,7 @@ def test_wrong_statement_format_is_rejected_and_excel_accepted(login_as, page, t
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-07-08")
-@pytest.mark.xfail(strict=True, reason=WEBHOOK_PENALTY_NOT_COLLECTED)
+# Fixed by SPEC-005 R1/R3: the webhook settles through the canonical path, penalty first.
 def test_fast_webhook_pays_the_balance_once(login_as, page, builders, api, actors, stack):
     builders.overdue_dues(principal=DUES, days_overdue=10)
     homeowner = api.login(**actors["homeowner"])
@@ -171,7 +170,7 @@ def test_fast_webhook_pays_the_balance_once(login_as, page, builders, api, actor
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-07-09")
-@pytest.mark.xfail(strict=True, reason=WEBHOOK_PENALTY_NOT_COLLECTED)
+# Fixed by SPEC-005 R1/R3: the webhook settles through the canonical path, penalty first.
 def test_overpayment_becomes_an_advance(login_as, page, builders, api, actors):
     builders.overdue_dues(principal=DUES, days_overdue=10)
     homeowner = api.login(**actors["homeowner"])

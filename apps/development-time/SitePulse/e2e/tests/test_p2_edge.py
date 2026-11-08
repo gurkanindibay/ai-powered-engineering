@@ -296,8 +296,7 @@ def test_debt_aging_buckets_add_up_to_the_grand_total(login_as, page, tenant_pai
 @pytest.mark.edge
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-09-06")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-09-01): the debt aging report ignores partial payments: after a "
-                   "₺1.000,00 payment on a ₺42.000,00 installment it still shows ₺42.000 open (database: ₺41.000,00)")
+# Fixed by SPEC-005 R5: the aging report uses outstanding amounts (partial payments count).
 def test_debt_aging_total_matches_the_open_ledger(login_as, page, tenant_paid_capital, stack):
     open_total = Decimal(stack.sql("SELECT sum(principal_amount + delay_penalty - paid_amount) FROM dues_liabilities;"))
     login_as("manager")

@@ -3,9 +3,10 @@ use rust_decimal::Decimal;
 use tracing::{info, warn};
 
 use crate::models::{
-    AccrueInstallmentResponse, CapitalContractorDisbursement, CapitalProject,
-    CapitalProjectInstallment, CreateCapitalProjectRequest, DebtStatus, DuesLiability,
-    RecordDisbursementRequest, UnitCapitalShareSummary,
+    AccrueInstallmentResponse, AllocationBasis, CapitalContractorDisbursement, CapitalProject,
+    CapitalProjectCategory, CapitalProjectInstallment, CapitalProjectStatus, CreateCapitalProjectRequest,
+    DebtStatus, DebtorType, DisbursementMethod, DuesLiability, ExpenseType, RecordDisbursementRequest,
+    UnitCapitalShareSummary,
 };
 use crate::state::AppState;
 
@@ -32,8 +33,8 @@ impl CapitalProjectService {
         }
 
         let site_id = req.site_id.unwrap_or_default();
-        let category = req.category.unwrap_or_else(|| "ELEVATOR".to_string());
-        let allocation_basis = req.allocation_basis.unwrap_or_else(|| "BY_LAND_SHARE".to_string());
+        let category = req.category.unwrap_or(CapitalProjectCategory::Elevator);
+        let allocation_basis = req.allocation_basis.unwrap_or(AllocationBasis::ByLandShare);
         let target_start_date = req.target_start_date.unwrap_or_else(|| Utc::now().date_naive());
 
         let project_id_str: String;
@@ -189,7 +190,7 @@ impl CapitalProjectService {
             contractor_tax_no: req.contractor_tax_no,
             contractor_iban: req.contractor_iban,
             contract_amount: req.contract_amount,
-            status: "ACTIVE".to_string(),
+            status: CapitalProjectStatus::Active,
             collected_amount: Decimal::ZERO,
             disbursed_amount: Decimal::ZERO,
             remaining_fund_balance: Decimal::ZERO,
@@ -421,7 +422,7 @@ impl CapitalProjectService {
 
         for unit in &units {
             let share: Decimal;
-            if project.allocation_basis == "EQUAL_PER_UNIT" {
+            if project.allocation_basis == AllocationBasis::EqualPerUnit {
                 share = (installment_budget / Decimal::from(unit_count)).round_dp(2);
             } else {
                 // By Land Share (KMK Madde 20/a kanuni oran)
@@ -508,8 +509,9 @@ impl CapitalProjectService {
                     status: DebtStatus::Pending,
                     paid_principal: Decimal::ZERO,
                     paid_penalty: Decimal::ZERO,
-                    debtor_type: "OWNER".to_string(),
-                    expense_type: "CAPITAL_DUES".to_string(),
+                    debtor_type: DebtorType::Owner,
+                    expense_type: ExpenseType::CapitalDues,
+                    penalty_accrued_through: None,
                 });
             }
 
@@ -559,7 +561,7 @@ impl CapitalProjectService {
         }
 
         let disbursement_date = req.disbursement_date.unwrap_or_else(|| Utc::now().date_naive());
-        let disbursement_method = req.disbursement_method.unwrap_or_else(|| "BANK_TRANSFER".to_string());
+        let disbursement_method = req.disbursement_method.unwrap_or(DisbursementMethod::BankTransfer);
         let now = Utc::now();
         let mut dis_id = String::new();
 
@@ -723,7 +725,7 @@ impl CapitalProjectService {
 
         for unit in &units {
             let total_share: Decimal;
-            if project.allocation_basis == "EQUAL_PER_UNIT" {
+            if project.allocation_basis == AllocationBasis::EqualPerUnit {
                 total_share = (project.total_budget / Decimal::from(unit_count)).round_dp(2);
             } else {
                 if total_land_share > 0 {
