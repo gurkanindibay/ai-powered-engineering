@@ -86,7 +86,7 @@ This epic solves the operational bottleneck of manually matching bank transfers 
     And payload indicates ₺1460.67 transfer with reference "TXN-KT-LIVE-..."
     When the webhook controller processes the event
     Then the unit "A Blok D:14" dues status transitions to "ODENDI"
-    And an official receipt is issued (#DKN-2026-...)
+    And an official sequential receipt is issued (#TAH-YYYY-NNNNNN, SPEC-005 single ingestion path)
     And subsequent duplicate requests return "DUPLICATE_IGNORED" without double-crediting
   ```
 - **Implementation Artifacts:**

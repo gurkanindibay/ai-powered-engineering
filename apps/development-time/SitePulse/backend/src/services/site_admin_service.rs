@@ -9,6 +9,10 @@ use crate::models::{
 use crate::services::virtual_iban_service::VirtualIbanService;
 use crate::state::AppState;
 
+/// Refusal for deleting a unit that has payments, receipts, advance history, paid dues or a matured receivable.
+pub const UNIT_HAS_FINANCIAL_HISTORY: &str =
+    "Bu dairenin finansal geçmişi (ödeme, makbuz, avans, ödenmiş veya vadesi geçmiş aidat) var; silinemez. Tahliye veya malik devri kullanın.";
+
 pub struct SiteAdminService {
     state: AppState,
 }
@@ -428,6 +432,15 @@ impl SiteAdminService {
                         r#"
                         INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, virtual_iban, house_type, occupancy_status)
                         VALUES ($1, $2, $3, $4, 1, $5, $6, $7, $8, $9)
+                        ON CONFLICT (block_id, unit_number) DO UPDATE SET
+                            deleted_at = NULL,
+                            floor = EXCLUDED.floor,
+                            owner_person_id = EXCLUDED.owner_person_id,
+                            tenant_person_id = EXCLUDED.tenant_person_id,
+                            house_type = EXCLUDED.house_type,
+                            occupancy_status = EXCLUDED.occupancy_status
+                        -- only an archived (soft-deleted) flat is revived; an active one still conflicts
+                        WHERE units.deleted_at IS NOT NULL
                         RETURNING id
                         "#,
                         &[
@@ -765,8 +778,9 @@ impl SiteAdminService {
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: DebtorType::Tenant,
+                debtor_type: if is_tenant { DebtorType::Tenant } else { DebtorType::Owner },
                 expense_type: ExpenseType::OperationalDues,
+                penalty_accrued_through: None,
             });
         }
 
@@ -1308,7 +1322,9 @@ impl SiteAdminService {
 
             let unit_row_opt = if let Some(uid) = id_numeric {
                 tx.query_opt(
-                    "SELECT id, owner_person_id, tenant_person_id FROM units WHERE (id = $1 OR owner_person_id = $1) AND site_id = $2",
+                    // A unit id wins over an owner person id: both are numbers, and an
+                    // OR-match returning two rows used to fail the whole delete.
+                    "SELECT id, owner_person_id, tenant_person_id FROM units WHERE (id = $1 OR owner_person_id = $1) AND site_id = $2 AND deleted_at IS NULL ORDER BY (id = $1) DESC, id LIMIT 1",
                     &[&uid, &site_numeric],
                 )
                 .await
@@ -1326,8 +1342,46 @@ impl SiteAdminService {
                 let u_id: i64 = u_row.get(0);
                 let p_id: Option<i64> = u_row.get(1);
 
-                // Dissociate owner from unit without deleting the physical unit
-                tx.execute("UPDATE units SET owner_person_id = NULL WHERE id = $1", &[&u_id]).await.map_err(|e| e.to_string())?;
+                // Zero data loss: a unit with financial history (any payment, receipt,
+                // advance movement, paid due or matured receivable) is never removed; the
+                // manager uses move-out or ownership transfer instead. Only untouched,
+                // not-yet-due charges (e.g. the one issued at registration) are voided.
+                let has_history: bool = tx
+                    .query_one(
+                        r#"
+                        SELECT EXISTS (SELECT 1 FROM payment_entries WHERE unit_id = $1)
+                            OR EXISTS (SELECT 1 FROM payment_receipts WHERE unit_id = $1)
+                            OR EXISTS (SELECT 1 FROM advance_ledger_entries WHERE unit_id = $1)
+                            OR EXISTS (SELECT 1 FROM dues_liabilities WHERE unit_id = $1 AND status <> 'CANCELLED'
+                                       AND (paid_amount > 0 OR status = 'PAID' OR due_date < CURRENT_DATE))
+                        "#,
+                        &[&u_id],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .get(0);
+                if has_history {
+                    return Err(UNIT_HAS_FINANCIAL_HISTORY.to_string());
+                }
+
+                // Archive (soft-delete) the unit: untouched dues are cancelled, the
+                // occupancy and ownership history is closed, nothing is physically deleted.
+                tx.execute(
+                    "UPDATE dues_liabilities SET status = 'CANCELLED' WHERE unit_id = $1 AND status IN ('PENDING', 'OVERDUE') AND paid_amount = 0",
+                    &[&u_id],
+                ).await.map_err(|e| e.to_string())?;
+                tx.execute(
+                    "UPDATE unit_occupancies SET is_active = FALSE, end_date = CURRENT_DATE WHERE unit_id = $1 AND is_active = TRUE",
+                    &[&u_id],
+                ).await.map_err(|e| e.to_string())?;
+                tx.execute(
+                    "UPDATE unit_ownerships SET is_active = FALSE, end_date = CURRENT_DATE WHERE unit_id = $1 AND is_active = TRUE",
+                    &[&u_id],
+                ).await.map_err(|e| e.to_string())?;
+                tx.execute(
+                    "UPDATE units SET owner_person_id = NULL, tenant_person_id = NULL, deleted_at = CURRENT_TIMESTAMP WHERE id = $1",
+                    &[&u_id],
+                ).await.map_err(|e| e.to_string())?;
 
                 if let Some(person_id) = p_id {
                     tx.execute(
@@ -1347,8 +1401,9 @@ impl SiteAdminService {
                         .unwrap_or(0);
 
                     if other_units == 0 && other_occ == 0 {
+                        // The login account goes; the person stays, because the closed
+                        // ownership/occupancy history references it (zero data loss).
                         tx.execute("DELETE FROM users WHERE site_id = $1 AND email = (SELECT email FROM persons WHERE id = $2)", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
-                        tx.execute("DELETE FROM persons WHERE id = $1", &[&person_id]).await.map_err(|e| e.to_string())?;
                     }
                 }
             }
@@ -1373,6 +1428,21 @@ impl SiteAdminService {
 
         if !target_units.is_empty() {
             let target_unit_ids: Vec<String> = target_units.iter().map(|u| u.id.clone()).collect();
+            if self.state.pool.is_none() {
+                let has_history = target_unit_ids.iter().any(|uid| {
+                    inner.payment_receipts.iter().any(|r| &r.unit_id == uid)
+                        || inner.payment_entries.iter().any(|e| &e.unit_id == uid)
+                        || inner.advance_total(uid) > rust_decimal::Decimal::ZERO
+                        || inner.dues.iter().any(|d| {
+                            &d.unit_id == uid
+                                && (d.paid_principal + d.paid_penalty > rust_decimal::Decimal::ZERO
+                                    || d.due_date < chrono::Utc::now().date_naive())
+                        })
+                });
+                if has_history {
+                    return Err(UNIT_HAS_FINANCIAL_HISTORY.to_string());
+                }
+            }
             let target_owner_uids: Vec<String> = target_units
                 .iter()
                 .filter_map(|u| u.owner_user_id.clone())
@@ -1392,7 +1462,7 @@ impl SiteAdminService {
 
             // Clean advance and mappings strictly for target units
             for u_id in &target_unit_ids {
-                inner.advance_payments.remove(u_id);
+                inner.advance_balances.remove(u_id);
                 inner.unit_members.remove(u_id);
                 inner.unit_payer_names.remove(u_id);
                 inner.unit_invite_tokens.remove(u_id);

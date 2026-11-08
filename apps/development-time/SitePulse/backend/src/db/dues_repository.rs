@@ -110,15 +110,16 @@ pub async fn save_due_liability(
     client
         .execute(
             r#"
-            INSERT INTO dues_liabilities (id, unit_id, period, principal_amount, due_date, status, delay_penalty)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO dues_liabilities (id, unit_id, period, principal_amount, due_date, status, delay_penalty, penalty_accrued_through)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (id) DO UPDATE SET
                 unit_id = EXCLUDED.unit_id,
                 period = EXCLUDED.period,
                 principal_amount = EXCLUDED.principal_amount,
                 due_date = EXCLUDED.due_date,
                 status = EXCLUDED.status,
-                delay_penalty = EXCLUDED.delay_penalty
+                delay_penalty = EXCLUDED.delay_penalty,
+                penalty_accrued_through = EXCLUDED.penalty_accrued_through
             "#,
             &[
                 &due_id_num,
@@ -128,6 +129,7 @@ pub async fn save_due_liability(
                 &due.due_date,
                 &status_str,
                 &due.delay_penalty,
+                &due.penalty_accrued_through,
             ],
         )
         .await?;
@@ -196,72 +198,41 @@ pub async fn record_due_allocation(
 }
 
 
-/// Stores a unit's total advance balance without touching other debtors' credit.
-///
-/// `advance_balances` is per (unit, debtor_type) while the in-memory view keeps one
-/// total per unit. The TENANT bucket is set so that all buckets add up to `total`
-/// (owner credit is never overwritten), and every change is written to
-/// `advance_ledger_entries` so the balance stays tied to its ledger.
-pub async fn save_advance_balance(pool: &Pool, unit_id: &str, total: Decimal) -> DbResult<()> {
+/// Stores one debtor's advance balance of a unit (O-1: the in-memory model is per
+/// debtor, so no re-split heuristic is needed). The change is written to
+/// `advance_ledger_entries` so the balance stays tied to its ledger: payments and
+/// transfers record their own typed entries in their transaction; a fall seen here
+/// is the automatic advance offset (`OFFSET_APPLIED`), a rise is not backed by a
+/// payment and is recorded as `ADJUSTMENT_CREDIT` (V16).
+pub async fn save_advance_balance(pool: &Pool, unit_id: &str, debtor_type: &str, balance: Decimal) -> DbResult<()> {
     let unit = require_id("unit", unit_id)?;
+    let debtor = if debtor_type.eq_ignore_ascii_case("OWNER") { "OWNER" } else { "TENANT" };
+    if balance < Decimal::ZERO {
+        return Err(format!("advance balance of unit {} ({}) cannot be negative", unit_id, debtor).into());
+    }
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
-    let rows = tx
-        .query("SELECT debtor_type, balance FROM advance_balances WHERE unit_id = $1 FOR UPDATE", &[&unit])
-        .await?;
-    let mut tenant = Decimal::ZERO;
-    let mut owner = Decimal::ZERO;
-    for r in rows {
-        let kind: String = r.get(0);
-        let bal: Decimal = r.get(1);
-        if kind == "TENANT" { tenant = bal } else { owner += bal }
-    }
-    if total >= owner {
-        let new_tenant = total - owner;
-        let delta = new_tenant - tenant;
-        if delta != Decimal::ZERO {
-            tx.execute(
-                "INSERT INTO advance_balances (unit_id, debtor_type, balance, updated_at) VALUES ($1, 'TENANT', $2, CURRENT_TIMESTAMP)
-                 ON CONFLICT (unit_id, debtor_type) DO UPDATE SET balance = EXCLUDED.balance, updated_at = CURRENT_TIMESTAMP",
-                &[&unit, &new_tenant],
-            )
-            .await?;
-            let entry_type = if delta > Decimal::ZERO { "PAYMENT_SURPLUS" } else { "OFFSET_APPLIED" };
-            tx.execute(
-                "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description, created_at)
-                 VALUES ($1, 'TENANT', $2, $3, 'Advance balance change', CURRENT_TIMESTAMP)",
-                &[&unit, &entry_type, &delta.abs()],
-            )
-            .await?;
-        }
-    } else {
-        if tenant != Decimal::ZERO {
-            let zero = Decimal::ZERO;
-            tx.execute(
-                "INSERT INTO advance_balances (unit_id, debtor_type, balance, updated_at) VALUES ($1, 'TENANT', $2, CURRENT_TIMESTAMP)
-                 ON CONFLICT (unit_id, debtor_type) DO UPDATE SET balance = EXCLUDED.balance, updated_at = CURRENT_TIMESTAMP",
-                &[&unit, &zero],
-            )
-            .await?;
-            tx.execute(
-                "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description, created_at)
-                 VALUES ($1, 'TENANT', 'OFFSET_APPLIED', $2, 'Advance balance change', CURRENT_TIMESTAMP)",
-                &[&unit, &tenant],
-            )
-            .await?;
-        }
-        let delta_owner = total - owner;
+    let current: Decimal = tx
+        .query_opt(
+            "SELECT balance FROM advance_balances WHERE unit_id = $1 AND debtor_type = $2 FOR UPDATE",
+            &[&unit, &debtor],
+        )
+        .await?
+        .map(|r| r.get(0))
+        .unwrap_or(Decimal::ZERO);
+    let delta = balance - current;
+    if delta != Decimal::ZERO {
         tx.execute(
-            "INSERT INTO advance_balances (unit_id, debtor_type, balance, updated_at) VALUES ($1, 'OWNER', $2, CURRENT_TIMESTAMP)
+            "INSERT INTO advance_balances (unit_id, debtor_type, balance, updated_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
              ON CONFLICT (unit_id, debtor_type) DO UPDATE SET balance = EXCLUDED.balance, updated_at = CURRENT_TIMESTAMP",
-            &[&unit, &total],
+            &[&unit, &debtor, &balance],
         )
         .await?;
-        let entry_type = if delta_owner > Decimal::ZERO { "PAYMENT_SURPLUS" } else { "OFFSET_APPLIED" };
+        let entry_type = if delta > Decimal::ZERO { "ADJUSTMENT_CREDIT" } else { "OFFSET_APPLIED" };
         tx.execute(
             "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description, created_at)
-             VALUES ($1, 'OWNER', $2, $3, 'Advance balance change', CURRENT_TIMESTAMP)",
-            &[&unit, &entry_type, &delta_owner.abs()],
+             VALUES ($1, $2, $3, $4, 'Advance balance change', CURRENT_TIMESTAMP)",
+            &[&unit, &debtor, &entry_type, &delta.abs()],
         )
         .await?;
     }
@@ -284,6 +255,8 @@ pub async fn sync_due_payment_state(pool: &Pool, due: &DuesLiability) -> DbResul
             r#"
             UPDATE dues_liabilities
             SET delay_penalty  = GREATEST(delay_penalty, $2, $4),
+                penalty_accrued_through = CASE WHEN $6::date IS NULL THEN penalty_accrued_through
+                                               ELSE GREATEST(COALESCE(penalty_accrued_through, $6::date), $6::date) END,
                 paid_principal = $3,
                 paid_penalty   = $4,
                 paid_amount    = $3 + $4,
@@ -292,61 +265,11 @@ pub async fn sync_due_payment_state(pool: &Pool, due: &DuesLiability) -> DbResul
                 version        = version + 1
             WHERE id = $1
             "#,
-            &[&id, &due.delay_penalty, &due.paid_principal, &due.paid_penalty, &status],
+            &[&id, &due.delay_penalty, &due.paid_principal, &due.paid_penalty, &status, &due.penalty_accrued_through],
         )
         .await?;
     Ok(())
 }
-
-pub async fn save_advance_balance_with_type(
-    pool: &Pool,
-    unit_id: &str,
-    debtor_type: &str,
-    balance: Decimal,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
-    let unit_id_num = require_id("entity", unit_id)?;
-    client
-        .execute(
-            r#"
-            INSERT INTO advance_balances (unit_id, balance, debtor_type, updated_at)
-            VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-            ON CONFLICT (unit_id, debtor_type) DO UPDATE SET
-                balance = EXCLUDED.balance,
-                updated_at = CURRENT_TIMESTAMP
-            "#,
-            &[&unit_id_num, &balance, &debtor_type],
-        )
-        .await?;
-    info!("Saved advance balance (₺{}) for unit {} ({}) to PostgreSQL", balance, unit_id, debtor_type);
-    Ok(())
-}
-
-pub async fn save_advance_ledger_entry(
-    pool: &Pool,
-    unit_id: &str,
-    debtor_type: &str,
-    entry_type: &str,
-    amount: Decimal,
-    reference_id: Option<&str>,
-    description: Option<&str>,
-) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
-    let unit_id_num = require_id("entity", unit_id)?;
-    let row = client
-        .query_one(
-            r#"
-            INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, reference_id, description, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
-            RETURNING id
-            "#,
-            &[&unit_id_num, &debtor_type, &entry_type, &amount, &reference_id, &description],
-        )
-        .await?;
-    let entry_id: i64 = row.get(0);
-    Ok(entry_id)
-}
-
 
 /// Inserts an accrued liability and returns its id, or `None` when the unit
 /// already has one for this period and expense type (`uq_unit_period_expense`).

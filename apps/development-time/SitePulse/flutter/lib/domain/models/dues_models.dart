@@ -161,11 +161,13 @@ enum ReconciliationStatus {
 enum PaymentChannel {
   creditCard('CREDIT_CARD', 'Kredi Kartı'),
   bankTransfer('BANK_TRANSFER', 'Banka Havalesi / EFT'),
+  bankStatement('BANK_STATEMENT', 'Banka Ekstresi'),
   fast('FAST', 'FAST Anlık Transfer'),
   cash('CASH', 'Nakit'),
   manualCash('MANUAL_CASH', 'Elden Nakit'),
   virtualIban('VIRTUAL_IBAN', 'Sanal IBAN'),
   interLedger('INTER_LEDGER', 'Hesaplar Arası Virman'),
+  onlinePayment('ONLINE_PAYMENT', 'Online Ödeme'),
   other('OTHER', 'Diğer');
 
   final String code;
@@ -175,12 +177,14 @@ enum PaymentChannel {
   static PaymentChannel fromCode(String? code) {
     final upper = code?.toUpperCase() ?? '';
     if (upper.contains('CARD') || upper.contains('KART')) return PaymentChannel.creditCard;
+    if (upper.contains('STATEMENT') || upper.contains('EKSTRE')) return PaymentChannel.bankStatement;
+    if (upper.contains('ONLINE')) return PaymentChannel.onlinePayment;
     if (upper.contains('VIRTUAL') || upper.contains('VIBAN')) return PaymentChannel.virtualIban;
     if (upper.contains('FAST')) return PaymentChannel.fast;
     if (upper.contains('INTER_LEDGER')) return PaymentChannel.interLedger;
     if (upper.contains('MANUAL')) return PaymentChannel.manualCash;
     if (upper.contains('CASH') || upper.contains('NAKIT')) return PaymentChannel.cash;
-    if (upper.contains('BANK') || upper.contains('HAVALE') || upper.contains('EFT')) {
+    if (upper.contains('BANK') || upper.contains('HAVALE') || upper.contains('EFT') || upper.contains('TRANSFER')) {
       return PaymentChannel.bankTransfer;
     }
     return PaymentChannel.other;
@@ -190,7 +194,8 @@ enum PaymentChannel {
 enum SettlementStatus {
   settled('SETTLED', 'Eşleşti ve Kapandı'),
   pending('PENDING', 'Beklemede'),
-  unmatched('UNMATCHED', 'Eşleşmedi');
+  unmatched('UNMATCHED', 'Eşleşmedi'),
+  reversed('REVERSED', 'İptal / İade Edildi');
 
   final String code;
   final String label;
@@ -200,6 +205,7 @@ enum SettlementStatus {
     final upper = code?.toUpperCase();
     if (upper == 'PENDING') return SettlementStatus.pending;
     if (upper == 'UNMATCHED') return SettlementStatus.unmatched;
+    if (upper == 'REVERSED') return SettlementStatus.reversed;
     return SettlementStatus.settled;
   }
 }
