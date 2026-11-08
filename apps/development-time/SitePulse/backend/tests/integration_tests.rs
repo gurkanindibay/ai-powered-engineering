@@ -1509,7 +1509,9 @@ async fn when_sender_iban_is_remembered_subsequent_blank_desc_payment_auto_match
     // 2. An incoming webhook arrives from this sender IBAN, to general site IBAN, with NO description
     let webhook_payload = sitepulse_backend::models::BankIncomingWebhookRequest {
         transaction_id: "TXN-TEST-REMEMBERED-IBAN-1".to_string(),
-        virtual_iban: "TR33 0006 2000 0000 0000 0000 01".to_string(), // General site IBAN
+        // site-1's configured main account: fallback matching is confined to the
+        // site that owns the receiving IBAN (AF-16).
+        virtual_iban: "TR62 0020 5000 0986 3791 6000 01".to_string(),
         amount: Decimal::from_str_exact("500.00").unwrap(),
         currency: Some("TRY".to_string()),
         sender_iban: Some("TR99 0006 2000 0000 0000 9999 88".to_string()),

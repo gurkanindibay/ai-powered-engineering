@@ -275,3 +275,120 @@ flowchart TD
 4. **Phase 1, F3 ("Prefix map keys with Site ID"):** prefixing alone is not enough. The DB-ID and flat-number namespaces must also be separated, or the map should be keyed only by DB unit ID. `resolve_unit_id` must stop iterating the map.
 5. **Phase 3, T1 (typed IDs):** move this earlier, or at least add prefix-aware parsing. Several authorisation paths depend on ID equality.
 6. **Testing:** each confirmed finding should get a regression test in the existing harness. Cross-tenant tests should cover AF-03, NV-01 and AF-04. A restart round-trip test should cover NV-03, and a delete-with-receipts test should cover NV-02. That way each fix gets checked by the Maker-Checker gates.
+
+---
+
+## Second Audit: Remediation Check and New Findings (AF-11 .. AF-22)
+
+**Audit date:** 2026-11-08
+**Baseline:** `master` at `6e5602c` (it includes the AF-01..AF-10 fix commit `635ba17`).
+**Method:** Static reading of `backend/src` and `backend/migrations`, compared with `.specify/requirements` (EPIC-07, EPIC-08, EPIC-09) and `.specify/specs/004-*`. Every new finding was then reproduced as a failing regression test in `backend/tests/architecture_flaws_af11_regression_tests.rs` before it was fixed. Line references point to the **baseline** (pre-fix) code. Paths are relative to `backend/src/`.
+
+### Part A: Did the AF-01..AF-10 Fixes Land?
+
+| # | Status | Evidence / residual |
+|---|---|---|
+| AF-01 | **Open (by design)** | The in-memory dual state is still the architecture. No change was intended in `635ba17`. Tracked by the roadmap, Phase 2. |
+| AF-02 | **Partially fixed** | The pool wait timeout (`db/base.rs`) and the scheduler read-then-write split landed. Request handlers still hold the global write lock across DB I/O (see AF-21). |
+| AF-03 | **Fixed** | `ReconciliationMatch.site_id` was added. The queue is filtered by the `site_id` the middleware pins (`auth.rs:339-361`). `confirm_reconciliation` returns 403 for a foreign match. Approve and reject check the site. |
+| AF-04 | **Fixed** | The bare flat-number keys are gone from `unit_members`, and the read-side fallback chain was removed. |
+| AF-05 | **Partially fixed** | `check_body_scope` now recurses. The body is still buffered and re-serialised (accepted, MEDIUM). Note that the scope check is keyed by field *name* only: ids under other names (`project_id`, path ids) are not covered. That gap is what makes AF-11 possible. |
+| AF-06 | **Partially fixed** | The reload sums both debtor buckets, and the OWNER bucket is written back. However, `apply_advance_payments_offset` still spends the coalesced per-unit advance on **any** unpaid due, including `CAPITAL_DUES` (see AF-18). |
+| AF-07 | **Partially fixed** | The database now dissociates the owner inside one transaction. The in-memory branch still **removes the unit and all of its dues** (`services/site_admin_service.rs:1382-1391`), so memory and the DB disagree (see AF-19). |
+| AF-08 | **Open** | IDs are still `String` and `same_id` still ignores prefixes. Application-assigned `max()+1` IDs also collide with DB sequences (see AF-14, AF-22). |
+| AF-09 | **Open** | `handlers/mod.rs` is about 4,090 lines, and there are still no repository traits. |
+| AF-10 | **Fixed for payment streams** | `PaymentStreamFilter` pages. Other list endpoints remain unpaged (accepted). |
+
+### Part B: New Findings
+
+| # | Finding | Severity | Primary location | Status |
+|---|---|---|---|---|
+| **AF-11** | Capital-project object routes have no tenant check (BOLA): another site's manager can read, accrue and disburse a project. | **CRITICAL** | `handlers/mod.rs:4025-4091` | Fixed |
+| **AF-12** | Capital installment accrual, unit shares and "collected" totals are computed over **every tenant's** units and dues. | **CRITICAL** | `services/capital_project_service.rs:408, 716, 294, 743` | Fixed |
+| **AF-13** | Capital installment accrual is not atomic or idempotent. Memory dues get invented IDs that differ from the DB rows, and pool errors are swallowed. | **HIGH** | `services/capital_project_service.rs:384-520` | Fixed |
+| **AF-14** | Manual dues accrual upserts **every site's** dues for the period, by application-invented id (`ON CONFLICT (id) DO UPDATE SET unit_id = …`). | **CRITICAL** | `handlers/mod.rs:2181-2190`, `db/dues_repository.rs:97-136` | Fixed |
+| **AF-15** | Two accrual implementations with different rules. The manual one always bills `TENANT` and invents a ₺1,400 tariff. | **HIGH** | `handlers/mod.rs:2140-2175` vs `scheduler.rs:55-128` | Fixed |
+| **AF-16** | Bank webhook fallback matching (remembered IBAN, narrative, payer name) searches all tenants. Unattributable money defaults to site `"1"`. | **CRITICAL** | `handlers/mod.rs:1712-1779` | Fixed |
+| **AF-17** | Capital project, installment and disbursement writes fall back to memory-only on DB errors, which loses financial records silently. | **HIGH** | `services/capital_project_service.rs:80-94, 147, 596` | Fixed |
+| **AF-18** | Advance auto-offset settles the owner's `CAPITAL_DUES` with coalesced (possibly tenant) money. This is the AF-06 residual. | **HIGH** | `handlers/mod.rs:92-97` | Fixed |
+| **AF-19** | `delete_home_owner` keeps the unit in the DB but deletes the unit, dues, advance balance and payer names from memory. This is the AF-07 residual. | **MEDIUM** | `services/site_admin_service.rs:1382-1405` | Fixed |
+| **AF-20** | Hard-coded tenants and fabricated data: `"site-begonya"` default, `"1"` site fallbacks, a fake owner phone, `total_units_count: 12`. | **MEDIUM** | `handlers/mod.rs:103, 2046`, `services/reconciliation_service.rs:251`, `services/capital_project_service.rs:272, 766` | Fixed |
+| **AF-21** | Request handlers still hold the global write lock across DB I/O. This is the AF-02 residual. | **MEDIUM** | `handlers/mod.rs` (`confirm_reconciliation`, `process_bank_incoming_webhook`, `create_dues_period`, …) | Partially fixed / deferred |
+| **AF-22** | Production code chooses its data by sniffing the executable name. App-assigned `max()+1` IDs are used in about 30 places. | **MEDIUM** | `state.rs:137, 354-356`; see `grep 'max().unwrap_or(0)'` | Deferred |
+
+### Detailed Findings
+
+#### AF-11: Capital-project object-level authorization missing (CRITICAL)
+- **Evidence:** `handlers/mod.rs:4025-4091`. `get_capital_project`, `list_capital_installments`, `accrue_capital_installment`, `record_capital_disbursement`, `list_capital_disbursements` and `get_unit_capital_shares` take only `Path(id)`. In `auth.rs`, `path_unit_id` and `path_site_id` do not cover `/capital-projects/:id`, and `route_access` gives every authenticated user `GET` access.
+- **Impact:** The manager of Site B can create capital liabilities for Site A's owners (`accrue-installment`) and record contractor payments against Site A's fund (`disbursements`). Any resident of any site can read another site's budgets, contractor IBANs and owner lists.
+- **Fix:** `authorize_capital_project` loads the project and requires `same_id(project.site_id, claims.site_id)` unless the caller is a SaaS admin. A foreign project returns **404**, so IDs cannot be enumerated. Residents receive only their own unit's line from `unit-shares`.
+- **Test:** `af11_foreign_manager_cannot_read_or_accrue_another_sites_capital_project`.
+
+#### AF-12: Capital allocation spans all tenants (CRITICAL)
+- **Evidence:** `accrue_installment` sets `units = inner.units.clone()` (`capital_project_service.rs:408`), and `get_unit_capital_shares` does the same (`:716`). The "collected" totals match `period.contains("Demirbaş" | "Asansör")` over all dues (`:294, :743`).
+- **Impact:** A ₺120,000 installment of Site A is split by land share across **every unit on the platform**. Site A under-collects, and owners in unrelated sites receive capital liabilities they do not owe, which is a KMK Art. 20 violation. Fund balances also include other projects' and other sites' payments.
+- **Fix:** `site_units(project.site_id)` is used for accrual, shares and unit counts. Project dues are matched by `CAPITAL_DUES`, the project's own period label, and the site's units.
+- **Test:** `af12_installment_accrual_and_unit_shares_cover_only_the_projects_site`.
+
+#### AF-13: Capital installment accrual not atomic or idempotent (HIGH)
+- **Evidence:** `capital_project_service.rs:384-520`. The `is_accrued` check is check-then-act. Around 50 `INSERT`s and the final `UPDATE … is_accrued = TRUE` (`:482`) run on one connection **without a transaction**. `if let Ok(client)` skips the DB silently. Memory dues get `max()+1` IDs instead of the IDs the DB generated.
+- **Impact:** Two concurrent requests both charge every owner (double billing). A failure part-way leaves some owners charged and the installment still open, so a retry charges them again. Payments recorded against the in-memory due update a *different* DB row.
+- **Fix:** One transaction. The guard is `UPDATE … SET is_accrued = TRUE WHERE … AND is_accrued = FALSE`, and 0 rows means a duplicate, which is rejected before any insert. Each due is inserted with `RETURNING id`, and memory uses those IDs. Pool errors are returned. Without a DB, the write lock re-checks the flag.
+- **Test:** `af13_concurrent_installment_accruals_charge_exactly_once`.
+
+#### AF-14: Manual accrual rewrites every site's dues by invented ID (CRITICAL)
+- **Evidence:** `handlers/mod.rs:2159-2160` invents `max(memory ids)+1`. `:2181-2190` then calls `save_due_liability` for **all** in-memory dues whose `period` equals the request's period, across all sites. `db/dues_repository.rs:113-121` writes `INSERT … (id, …) ON CONFLICT (id) DO UPDATE SET unit_id = EXCLUDED.unit_id, …, status = EXCLUDED.status`.
+- **Impact:** (1) When memory and the DB disagree (for example after a scheduler insert or a restart), an invented ID can equal an existing row's ID, and the upsert **re-assigns another tenant's liability to this unit** and overwrites its status. (2) Explicit IDs do not advance the `BIGSERIAL` sequence, so later sequence-based inserts (scheduler, capital accrual) fail with primary-key violations. (3) A unique-index conflict (`uq_unit_period_expense`) part-way through returns 503 after some rows are written. (4) Every accrual rewrites other tenants' rows.
+- **Fix:** The manual endpoint now persists DB-first through `scheduler::persist_accruals` → `insert_accrued_due` (`RETURNING id`, `ON CONFLICT … DO NOTHING`), and only for this site's new liabilities. Memory is updated afterwards with the DB IDs. The advance offset runs only for the site's own units.
+- **Test:** `af14_repeated_manual_accrual_creates_no_duplicates`, `af14_af15_manual_accrual_is_site_scoped_owner_liable_and_never_invents_a_tariff`.
+
+#### AF-15: Duplicated accrual logic with divergent invariants (HIGH)
+- **Evidence:** The scheduler (`scheduler.rs:55-128`) bills the tenant only when the unit has one, otherwise the owner, and skips units without a tariff. The manual endpoint (`handlers/mod.rs:2140-2175`) always writes `debtor_type: "TENANT"` and falls back to `Decimal::new(1400, 0)`. Its duplicate check also uses `period` only, while the DB unique key is `(unit_id, period, expense_type)`.
+- **Impact:** Owner-occupied units get `TENANT` liabilities, which contradicts EPIC-08 ("tenants are only liable for operational dues during their tenancy window"). Units with no tariff are billed an invented ₺1,400.
+- **Fix:** There is now a single rule set, `scheduler::build_operational_accruals`, with `operational_debtor_for` and `tariff_for`. Both paths use it, and units without a tariff are counted and skipped.
+- **Test:** `af14_af15_manual_accrual_is_site_scoped_owner_liable_and_never_invents_a_tariff`.
+
+#### AF-16: Webhook fallback matching crosses tenants (CRITICAL)
+- **Evidence:** `handlers/mod.rs:1712-1767`. When the virtual IBAN does not match, the code searches `remembered_sender_ibans`, the narrative "A Blok 14", `unit_payer_names` and `users` across **all** units. `:1773-1779` assigns an unmatched transfer to site `"1"` when the receiving IBAN is unknown.
+- **Impact:** A transfer into Site B's main account whose description says "A Blok Daire 14" (a flat that exists in nearly every site) **settles Site A's dues and credits Site A's advance balance**. Site B's money is then posted to another tenant's ledger. Unknown transfers appear in site 1's queue.
+- **Fix:** The receiving site comes from the unit's virtual IBAN, or else from `site_bank_accounts`. All fallback matching is restricted to that site's units. If the receiving site is unknown, nothing is matched, and the queue item gets an empty `site_id`, so only SaaS admins see it. One integration test that posted to an IBAN not configured for any site now uses site-1's configured account.
+- **Test:** `af16_narrative_match_never_credits_a_unit_of_another_site`, `af16_unknown_receiving_account_is_unmatched_and_not_assigned_to_a_default_site`.
+
+#### AF-17: Silent memory-only fallback for capital writes (HIGH)
+- **Evidence:** `create_project` logs "Falling back to memory" on an INSERT error (`capital_project_service.rs:80-94`). Installment inserts (`:147`) and `record_disbursement` (`:596`) use `if let Ok(row)`. The project and its installments are written in separate statements.
+- **Impact:** The API returns 201 for a contractor payment or project that was never stored. It disappears on restart, so the fund balance is wrong and there is no audit trail.
+- **Fix:** When a pool is attached, errors are returned. The project and its installments are written in one transaction with `RETURNING id`.
+- **Test:** covered by existing `when_*capital*` integration tests (memory path). The DB path is exercised by the `api-system` gate.
+
+#### AF-18: Auto-offset spends coalesced advance on capital dues (HIGH)
+- **Evidence:** `handlers/mod.rs:92-97` filters unpaid dues by unit and status only. The advance is one `Decimal` per unit, which mixes owner and tenant money (AF-06).
+- **Impact:** A tenant's overpayment silently pays the landlord's elevator assessment. This contradicts EPIC-09 §"Dual-Ledger Audit Gate": *tenant payments must never offset capital project liabilities unless explicit capital intent or inter-ledger virman is authorized*.
+- **Fix:** The auto-offset is limited to non-`CAPITAL_DUES` liabilities. Capital dues are settled through the explicit `inter-ledger-transfer` flow (STORY-09-06). A per-debtor advance model is still the long-term fix (roadmap T3).
+- **Test:** `af18_auto_offset_settles_operational_dues_only`.
+
+#### AF-19: `delete_home_owner` memory/DB divergence (MEDIUM)
+- **Evidence:** `services/site_admin_service.rs:1382-1405` still runs `units.retain`, `dues.retain`, `advance_payments.remove` and `unit_payer_names.remove`, while the DB only sets `owner_person_id = NULL`.
+- **Impact:** Until the next restart, the unit and its whole financial history vanish from every in-memory read model (dashboards, debt aging, reconciliation). Payments to the unit fail with "unit not found". After a restart everything reappears.
+- **Fix:** Memory mirrors the DB. `owner_user_id` is cleared and the owner's household entry is dropped. The unit, dues, advance balance and payer names are kept.
+- **Test:** `af19_delete_home_owner_keeps_unit_and_financial_history_in_memory`.
+
+#### AF-20: Hard-coded tenants and fabricated values (MEDIUM)
+- **Evidence:** `list_dues_periods` defaults to `"site-begonya"` (`handlers/mod.rs:2046`). There are `unwrap_or_else(|| "1")` site fallbacks in the advance offset (`:103`), the webhook (`:1779`) and `reconciliation_service.rs:251`. `owner_phone: "+90 532 111 22 33"` (`capital_project_service.rs:766`) and `total_units_count: 12` (`:272`, `:179`) are invented.
+- **Impact:** Data is silently attributed to a real tenant, and fake PII and counts are shown as facts.
+- **Fix:** No default tenant: `list_dues_periods` needs a `site_id` and returns 400 without one (the middleware pins it for site users). Fallbacks now produce an empty site, visible to SaaS admins only. The owner phone comes from the owner's user record or is `None`. Unit counts come from `COUNT(*)` or memory.
+- **Test:** `af20_dues_periods_require_an_explicit_site`, plus assertions in `af12_*`.
+
+#### AF-21: Global write lock held across DB I/O in handlers (MEDIUM, AF-02 residual)
+- **Evidence:** `confirm_reconciliation`, `process_bank_incoming_webhook`, `record_homeowner_payment` and `create_dues_period` take `state.inner.write()` and then `await` PostgreSQL while still holding it.
+- **Status:** Partially fixed. `accrue_monthly_dues` now inserts without the lock (build under a read lock, persist DB-first, record under a short write lock that re-checks duplicates). The rest is **deferred on purpose**. As the AF-02 reviewer noted, releasing the guard before the DB write without DB-first writes would allow lost updates and double settlement. The 10 s pool wait timeout limits the stall.
+
+#### AF-22: Test-aware production state and app-assigned IDs (MEDIUM)
+- **Evidence:** `state.rs:137` and `:354-356` decide whether to seed demo dues by checking whether the executable path contains `/deps/integration_tests` or ends in `test`. About 30 call sites assign IDs as `max(memory)+1` (`grep -rn 'max().unwrap_or(0)' src`).
+- **Impact:** Behaviour depends on a binary's file name: a new test binary silently gets different data (found while writing this audit's tests). Invented IDs collide with DB sequences (see AF-14).
+- **Status:** Deferred. The money paths for dues accrual and capital accrual now use DB-generated IDs. The remaining sites should move to `RETURNING id` together with typed IDs (roadmap T1). Fixture seeding should become an explicit constructor (`AppState::new_with_test_fixtures`, which already exists) instead of name sniffing.
+
+### Verification
+
+- New suite: `backend/tests/architecture_flaws_af11_regression_tests.rs` (10 tests). All 10 pass after the fix. On the baseline `6e5602c`, **8 of 10 fail**, which reproduces AF-11, AF-12, AF-14/15, AF-16 (two tests), AF-18, AF-19 and AF-20. The other two (`af13_concurrent_installment_accruals_charge_exactly_once`, `af14_repeated_manual_accrual_creates_no_duplicates`) also pass on the baseline. They run without PostgreSQL, where the baseline's sequential in-memory path happens not to race. They guard the rewritten idempotency paths. The DB-side race they target (AF-13 and AF-14) is covered by the transactional guard and the unique index, not by a dedicated DB test.
+- One existing integration test changed: `when_sender_iban_is_remembered_subsequent_blank_desc_payment_auto_matches` now posts to site-1's configured account instead of an IBAN that belongs to no site (AF-16).
+- Gates: `cargo build`, `cargo clippy -D warnings`, `cargo test` and `scripts/run_tests.py` (results in the commit message).
