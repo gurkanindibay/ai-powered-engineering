@@ -891,9 +891,34 @@ async fn when_probing_kuveyt_turk_sandbox_status_then_reports_keys_loaded() {
     assert!(status_json.is_sandbox);
     assert_eq!(status_json.identity_url, "https://prep-identity.kuveytturk.com.tr");
     assert_eq!(status_json.gateway_url, "https://prep-gateway.kuveytturk.com.tr");
-    // Keys were uploaded by the user to backend/keys/
-    assert!(status_json.private_key_present);
-    assert!(status_json.public_key_present);
+    // The key files are secrets kept out of git (backend/keys/), so a fresh checkout has
+    // none: the status must report what is actually on disk, not assume it.
+    let svc = sitepulse_backend::services::kuveyt_turk_service::KuveytTurkSandboxService::new();
+    let (private_on_disk, public_on_disk) = svc.get_key_status();
+    assert_eq!(status_json.private_key_present, private_on_disk);
+    assert_eq!(status_json.public_key_present, public_on_disk);
+}
+
+#[test]
+fn when_kuveyt_turk_key_files_exist_then_key_status_reports_them_loaded() {
+    use sitepulse_backend::services::kuveyt_turk_service::KuveytTurkSandboxService;
+    let dir = std::env::temp_dir().join(format!("sitepulse-kt-keys-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let private_path = dir.join("kt-private-key.asc");
+    let public_path = dir.join("kt-public-key.asc");
+    let svc = KuveytTurkSandboxService {
+        identity_base_url: KuveytTurkSandboxService::DEFAULT_PREP_IDENTITY.to_string(),
+        gateway_base_url: KuveytTurkSandboxService::DEFAULT_PREP_GATEWAY.to_string(),
+        private_key_path: private_path.to_string_lossy().into_owned(),
+        public_key_path: public_path.to_string_lossy().into_owned(),
+    };
+    assert_eq!(svc.get_key_status(), (false, false));
+    std::fs::write(&private_path, "test private key").unwrap();
+    std::fs::write(&public_path, "test public key").unwrap();
+    assert_eq!(svc.get_key_status(), (true, true));
+    let status = svc.get_config_status(None);
+    assert!(status.private_key_present && status.public_key_present);
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[tokio::test]

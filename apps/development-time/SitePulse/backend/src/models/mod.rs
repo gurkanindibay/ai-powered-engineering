@@ -2,6 +2,9 @@ use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+mod payments_phase2;
+pub use payments_phase2::*;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Role {
@@ -158,6 +161,15 @@ pub struct AccrueDuesPeriodResponse {
     pub total_amount_offset_from_advance: Decimal,
     pub already_accrued: bool,
     pub message: String,
+    /// The operating budget the amounts came from (their legal basis), if any.
+    #[serde(default)]
+    pub operating_budget_id: Option<String>,
+    /// Set when dues were accrued without an operating budget in force (KMK 37).
+    #[serde(default)]
+    pub legal_basis_warning: Option<String>,
+    /// Units that were not accrued, with the reason.
+    #[serde(default)]
+    pub skipped_units: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -258,6 +270,9 @@ pub struct AccountTransactionDto {
     pub amount: Decimal,
     pub date: String,
     pub is_credit: bool,
+    /// The receipt issued for this payment (TAH-...), when one exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_number: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -632,6 +647,9 @@ pub struct HomeOwnerResponse {
     pub operational_dues_balance: Option<Decimal>,
     #[serde(default)]
     pub capital_dues_balance: Option<Decimal>,
+    /// The unit's advance (avans) balance, owner + tenant (used by the virman dialog).
+    #[serde(default)]
+    pub advance_balance: Option<Decimal>,
     #[serde(default)]
     pub household_residents: Vec<UnitMemberDto>,
 }
@@ -1504,6 +1522,10 @@ pub struct ReversePaymentResponse {
     pub refunded_advance: Decimal,
     /// Liabilities whose paid amounts were restored.
     pub reopened_due_ids: Vec<String>,
+    /// Advance credited back to the source debtor when a virman is reversed
+    /// (written to the advance ledger as VIRMAN_REVERSAL); zero otherwise.
+    #[serde(default)]
+    pub restored_advance: Decimal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

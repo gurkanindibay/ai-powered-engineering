@@ -185,8 +185,6 @@ def test_owner_dashboard_shows_capital_dues_separately(login_as, page, owner_pai
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-10-09")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-10-04): the virman dialog offers hard-coded units ('d-14' "
-                   "'Mevcut Avans: ₺3.000,00', 'd-1') instead of the site's units and their real advance balances")
 def test_virman_dialog_offers_real_units_and_advances(login_as, page, api):
     api.webhook_transfer(A14_IBAN, Decimal("3500.00"), "E2E-FAST-ADV-1", "AHMET YILMAZ AVANS")  # no dues: all advance
     login_as("manager")

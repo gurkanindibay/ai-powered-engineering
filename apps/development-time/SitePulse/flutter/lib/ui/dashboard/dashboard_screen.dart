@@ -25,6 +25,8 @@ import 'dashboard_controller.dart';
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
 import '../components/sp_dialog_pages.dart';
+import '../payments/resident_statement_page.dart';
+import '../design_system/sp_typography.dart';
 class DashboardScreen extends StatefulWidget {
   final DashboardController controller;
 
@@ -551,6 +553,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     ];
     final secondary = <Widget>[
+      _buildStatementEntryCard(unit.id, '${unit.siteName} • ${unit.block} Blok D:${unit.unitNo}'),
+      const SizedBox(height: 16),
       _buildAccountActivitySection(),
       const SizedBox(height: 16),
       _buildMyUnitHouseholdCard(),
@@ -1276,6 +1280,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: const EdgeInsets.all(4),
                   constraints: const BoxConstraints(),
                   onPressed: () => _showUnitOccupancyHistoryDialog(ho),
+                )),
+                const SizedBox(width: 4),
+                // The unit's account statement: aging per debtor, receipts as PDF (STORY-09-03).
+                testId('btn_statement_${ho.unitId}', IconButton(
+                  key: Key('btn_statement_${ho.unitId}'),
+                  icon: const Icon(Icons.account_balance_wallet_outlined, size: 18, color: AppColors.accentCyan),
+                  tooltip: 'Hesap Ekstresi',
+                  padding: const EdgeInsets.all(4),
+                  constraints: const BoxConstraints(),
+                  onPressed: () => AppFullscreenPage.push(
+                    context: context,
+                    builder: (ctx) => ResidentStatementPage(unitId: ho.unitId, subtitle: '${ho.block} Blok D:${ho.unitNo}'),
+                  ),
                 )),
                 const SizedBox(width: 4),
                 if (!isVacant)
@@ -4560,6 +4577,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// Entry to the account statement (aging, penalty, receipts as PDF), SPEC-007 R2.
+  Widget _buildStatementEntryCard(String unitId, String subtitle) {
+    return testId('resident_statement_entry', MergeSemantics(child: Semantics(button: true, child: InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => AppFullscreenPage.push(
+        context: context,
+        builder: (ctx) => ResidentStatementPage(unitId: unitId, subtitle: subtitle),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface(context),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border(context)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.account_balance_wallet_outlined, color: AppColors.accentCyan),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Hesap Ekstresi', style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text('Borç yaşlandırma, gecikme tazminatı ve makbuz PDF\'leri',
+                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: SpFontSize.caption)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: AppColors.textSecondary(context)),
+          ],
+        ),
+      ),
+    ))));
+  }
+
   Widget _buildAccountActivitySection() {
     final transactions = widget.controller.accountTransactions;
 
@@ -4949,14 +5003,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? 'TR12 0006 2000 0000 0000 0001'
             : 'TR12 0006 2000 0000 0000 0014',
         initialMethod: initialMethod,
-        onPaymentSuccess: (paidAmount) {
-          widget.controller.recordHomeownerPayment(
-            block: widget.controller.activeUnit.block,
-            unitNo: widget.controller.activeUnit.unitNo,
-            amount: paidAmount,
-            paymentMethod: 'CREDIT_CARD',
-            note: '${dues.period} Aidat Kart Ödemesi',
-          );
+        unitId: widget.controller.activeUnit.id,
+        onCardPaymentCaptured: (intent) {
+          // The provider's capture already issued the receipt; reload the balances.
+          widget.controller.fetchResidentDashboard();
+          final paidAmount = intent.amount;
           final snackMsg = paidAmount > dues.totalAmount && dues.totalAmount > Decimal.zero
               ? '${formatTry(paidAmount)} tutarındaki kart ödemeniz alındı! Borcunuz kapatıldı, ${formatTry((paidAmount - dues.totalAmount))} avans bakiyenize aktarıldı.'
               : (paidAmount < dues.totalAmount
@@ -4964,7 +5015,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   : (dues.totalAmount <= Decimal.zero
                       ? '${formatTry(paidAmount)} tutarı avans bakiyenize başarıyla aktarıldı.'
                       : '${formatTry(paidAmount)} tutarındaki kart ödemeniz başarıyla alındı! Borcunuz kapatıldı.'));
-
           ScaffoldMessenger.of(context).showSnackBar(
             appSnackBar(
               content: Text(snackMsg),
@@ -5559,7 +5609,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 18),
               Divider(color: AppColors.border(context)),
               const SizedBox(height: 12),
-              testId('home_receipt_number', _buildReceiptRow('İşlem / Makbuz No:', tx.id)),
+              testId('home_receipt_number', _buildReceiptRow('İşlem / Makbuz No:', tx.receiptNumber ?? tx.id)),
               const SizedBox(height: 8),
               _buildReceiptRow('İşlem Tarihi:', tx.date),
               const SizedBox(height: 8),

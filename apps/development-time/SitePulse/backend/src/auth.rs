@@ -227,7 +227,18 @@ fn route_access(method: &Method, path: &str) -> Access {
         // Authenticated by HMAC signature inside the handler, not by a user token.
         "/api/v1/bank/webhook/incoming-transfer" => return Access::Public,
         "/api/v1/site-admin/banks" => return Access::Public,
+        // The licensed provider's notification: authenticated by its HMAC signature.
+        "/api/v1/payments/provider/webhook" => return Access::Public,
+        // Receipt verification behind the QR code; discloses no payer data.
+        "/api/v1/public/receipts/verify" => return Access::Public,
         _ => {}
+    }
+    // The sandbox provider's hosted page (the handler refuses it in production).
+    if p.starts_with("/api/v1/payment-provider/sandbox/") {
+        return Access::Public;
+    }
+    if p == "/api/v1/revaluation-rates" && *method == Method::PUT {
+        return Access::SaasAdmin;
     }
     if p.starts_with("/api/v1/registration/submit/") {
         return Access::Public;

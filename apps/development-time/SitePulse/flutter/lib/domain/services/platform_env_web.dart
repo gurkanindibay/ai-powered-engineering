@@ -36,3 +36,31 @@ Stream<bool> platformOfflineChanges() {
   html.window.onOnline.listen((_) => controller.add(false));
   return controller.stream;
 }
+
+/// Saves bytes as a file through the browser's download. Returns false if blocked.
+bool downloadBytes(String filename, List<int> bytes, String mimeType) {
+  try {
+    final blob = html.Blob([bytes], mimeType);
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    final anchor = html.AnchorElement(href: url)
+      ..download = filename
+      ..style.display = 'none';
+    html.document.body?.append(anchor);
+    anchor.click();
+    anchor.remove();
+    html.Url.revokeObjectUrl(url);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Opens a URL (e.g. a payment provider's hosted page) in a new browser tab.
+bool openUrlInNewTab(String url) {
+  try {
+    html.window.open(url, '_blank');
+    return true;
+  } catch (_) {
+    return false;
+  }
+}

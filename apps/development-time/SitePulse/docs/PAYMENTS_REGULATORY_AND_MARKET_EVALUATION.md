@@ -6,6 +6,13 @@
 >
 > ⚠️ **This is not legal advice.** The regulatory findings come from secondary sources: law-firm articles, news reports and legal databases (listed in §7). Before any rule is built into the product, confirm it against the official Resmî Gazete text, and have a lawyer or mali müşavir review it. Points that are uncertain are marked **(verify)**.
 
+> **Implementation status (2026-11-08).** The tables below describe the module as evaluated. Since then:
+> - **SPEC-005 / V16:** F2 (segmented penalty), F3 (TBK 101 designation) and the single-ingestion half of F4 are built.
+> - **SPEC-006 / V17:** reversals (F4) and per-debtor advances are built.
+> - **SPEC-007 / V18:** F1 (işletme projesi: lifecycle, revaluation cap, service, objections, accrual from unit shares as the liabilities' legal basis), F7 (card payments only through a provider's hosted page with a signed webhook; only a **sandbox** provider exists, so real card acceptance still needs a licensed provider contract), virman reversal, the resident statement with aging (E10, STORY-09-03) and the receipt PDF with public QR verification (E11).
+>
+> Still open: F5, F6, F8–F18, real provider integrations, and the `METER` / `CUSTOM` allocation keys. See `.specify/specs/007-payments-phase2/spec.md` §4.
+
 ---
 
 ## 1. Executive summary

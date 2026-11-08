@@ -141,6 +141,8 @@ class AccountTransactionItem {
   final Decimal amount;
   final String date;
   final bool isCredit;
+  /// The receipt the backend issued for this payment; `id` is the bank's transaction id.
+  final String? receiptNumber;
 
   const AccountTransactionItem({
     required this.id,
@@ -149,6 +151,7 @@ class AccountTransactionItem {
     required this.amount,
     required this.date,
     required this.isCredit,
+    this.receiptNumber,
   });
 
   String get amountStr => isCredit ? MoneyFormatter.formatCredit(amount) : MoneyFormatter.format(amount.abs());
@@ -161,6 +164,7 @@ class AccountTransactionItem {
       amount: Decimal.tryParse(json['amount']?.toString() ?? '0') ?? Decimal.zero,
       date: json['date'] as String? ?? 'Bugün',
       isCredit: json['is_credit'] as bool? ?? false,
+      receiptNumber: json['receipt_number'] as String?,
     );
   }
 }
@@ -553,6 +557,10 @@ class HomeOwnerItem {
   Decimal get operationalDuesBalance => _operationalDuesBalance ?? Decimal.zero;
   final Decimal? _capitalDuesBalance;
   Decimal get capitalDuesBalance => _capitalDuesBalance ?? Decimal.zero;
+
+  /// Owner + tenant advance (avans) balance of the unit, from the backend.
+  final Decimal? _advanceBalance;
+  Decimal get advanceBalance => _advanceBalance ?? Decimal.zero;
   final String? primaryResponsibleName;
   final String? primaryResponsibleRole;
   final String? primaryResponsiblePhone;
@@ -653,12 +661,14 @@ class HomeOwnerItem {
     this.householdResidents = const [],
     Decimal? operationalDuesBalance,
     Decimal? capitalDuesBalance,
+    Decimal? advanceBalance,
     this.primaryResponsibleName,
     this.primaryResponsibleRole,
     this.primaryResponsiblePhone,
     this.primaryResponsibleEmail,
   }) : _operationalDuesBalance = operationalDuesBalance,
-       _capitalDuesBalance = capitalDuesBalance;
+       _capitalDuesBalance = capitalDuesBalance,
+       _advanceBalance = advanceBalance;
 
   factory HomeOwnerItem.fromJson(Map<String, dynamic> json) {
     return HomeOwnerItem(
@@ -690,6 +700,7 @@ class HomeOwnerItem {
           const [],
       operationalDuesBalance: Decimal.tryParse(json['operational_dues_balance']?.toString() ?? '0') ?? Decimal.zero,
       capitalDuesBalance: Decimal.tryParse(json['capital_dues_balance']?.toString() ?? '0') ?? Decimal.zero,
+      advanceBalance: Decimal.tryParse(json['advance_balance']?.toString() ?? '0') ?? Decimal.zero,
       primaryResponsibleName: json['primary_responsible_name']?.toString(),
       primaryResponsibleRole: json['primary_responsible_role']?.toString(),
       primaryResponsiblePhone: json['primary_responsible_phone']?.toString(),
@@ -722,6 +733,7 @@ class HomeOwnerItem {
     List<UnitResidentMember>? householdResidents,
     Decimal? operationalDuesBalance,
     Decimal? capitalDuesBalance,
+    Decimal? advanceBalance,
     String? primaryResponsibleName,
     String? primaryResponsibleRole,
     String? primaryResponsiblePhone,
@@ -752,6 +764,7 @@ class HomeOwnerItem {
       householdResidents: householdResidents ?? this.householdResidents,
       operationalDuesBalance: operationalDuesBalance ?? this.operationalDuesBalance,
       capitalDuesBalance: capitalDuesBalance ?? this.capitalDuesBalance,
+      advanceBalance: advanceBalance ?? this.advanceBalance,
       primaryResponsibleName: clearPrimaryResponsible ? null : (primaryResponsibleName ?? this.primaryResponsibleName),
       primaryResponsibleRole: clearPrimaryResponsible ? null : (primaryResponsibleRole ?? this.primaryResponsibleRole),
       primaryResponsiblePhone: clearPrimaryResponsible ? null : (primaryResponsiblePhone ?? this.primaryResponsiblePhone),

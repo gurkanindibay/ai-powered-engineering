@@ -750,6 +750,10 @@ impl PaymentTrackingService {
     /// Nothing is updated in place except the liability state and the original's
     /// status (the ledger is append-only). One receipt is reversed at most once;
     /// asking again returns the existing reversal.
+    ///
+    /// A virman (`INTER_LEDGER`) receipt is reversed the same way, except that the
+    /// advance it spent is credited back to the source debtor (`VIRMAN_REVERSAL`)
+    /// instead of an advance being refunded (SPEC-007 R1).
     pub async fn reverse_payment(&self, req: ReversePaymentRequest, actor: &str) -> Result<ReversePaymentResponse, String> {
         let site_id = req.site_id.clone().filter(|s| !s.trim().is_empty()).ok_or_else(|| "site_id is required".to_string())?;
         let reason = req.reason.trim().to_string();
@@ -819,6 +823,19 @@ impl PaymentTrackingService {
                     original.allocated_advance,
                     Some(&reversal.receipt_number),
                     Some(&format!("Reversal of {}: {}", original.receipt_number, reason)),
+                )
+                .await
+                .map_err(db_err)?;
+            }
+            if is_virman(&original) {
+                crate::db::tx_credit_advance(
+                    &tx,
+                    target.unit_id,
+                    &original.payer_role,
+                    "VIRMAN_REVERSAL",
+                    original.total_amount,
+                    Some(&reversal.receipt_number),
+                    Some(&format!("Reversal of virman {}: {}", original.receipt_number, reason)),
                 )
                 .await
                 .map_err(db_err)?;
@@ -896,6 +913,9 @@ impl PaymentTrackingService {
         }
         if original.allocated_advance > Decimal::ZERO {
             inner.adjust_advance(&original.unit_id, &advance_debtor_of(&original), -original.allocated_advance);
+        }
+        if is_virman(&original) {
+            inner.adjust_advance(&original.unit_id, &original.payer_role, original.total_amount);
         }
         if let Some(e) = inner.payment_entries.iter_mut().find(|e| e.receipt_id == Some(original.id)) {
             e.settlement_status = "REVERSED".to_string();
@@ -1186,13 +1206,12 @@ fn check_reversible(original: &PaymentReceipt, settlement_status: &str) -> Resul
     if settlement_status != "SETTLED" {
         return Err(format!("{} is {} and cannot be reversed", original.receipt_number, settlement_status));
     }
-    if original.payment_channel == "INTER_LEDGER" {
-        return Err(format!(
-            "{} is an inter-ledger transfer; reversing a virman is not supported (record a correcting transfer)",
-            original.receipt_number
-        ));
-    }
     Ok(())
+}
+
+/// A virman receipt: its amount was taken from the payer's advance, not paid in.
+fn is_virman(receipt: &PaymentReceipt) -> bool {
+    receipt.payment_channel == "INTER_LEDGER"
 }
 
 /// The `IAD-YYYY-NNNNNN` reversal receipt: the original's amounts and lines, in
@@ -1218,7 +1237,11 @@ fn build_reversal_receipt(original: &PaymentReceipt, sequence_number: i64, reaso
         allocated_advance: original.allocated_advance,
         allocation_breakdown: original.allocation_breakdown.clone(),
         is_rent_offset_eligible: false,
-        legal_statutory_note: Some(format!("{} numaralı tahsilat makbuzunun iptali / iadesi. Gerekçe: {}", original.receipt_number, reason)),
+        legal_statutory_note: Some(if is_virman(original) {
+            format!("{} numaralı virman makbuzunun iptali; tutar avans bakiyesine geri alındı. Gerekçe: {}", original.receipt_number, reason)
+        } else {
+            format!("{} numaralı tahsilat makbuzunun iptali / iadesi. Gerekçe: {}", original.receipt_number, reason)
+        }),
         issued_at,
         receipt_type: LEDGER_KIND_REVERSAL.to_string(),
         reverses_receipt_id: Some(original.id),
@@ -1262,6 +1285,7 @@ fn reversal_response(reversal: PaymentReceipt, original: &PaymentReceipt) -> Rev
         refunded_advance: reversal.allocated_advance,
         reopened_due_ids: reversal.allocation_breakdown.iter().filter_map(|b| b.due_id.clone()).collect(),
         reversed_receipt_number: original.receipt_number.clone(),
+        restored_advance: if is_virman(original) { original.total_amount } else { Decimal::ZERO },
         reversal_receipt: reversal,
     }
 }

@@ -822,11 +822,22 @@ impl SiteAdminService {
             tenant_phone: None,
             operational_dues_balance: Some(Decimal::ZERO),
             capital_dues_balance: Some(Decimal::ZERO),
-            household_residents: household,
+                        advance_balance: None,
+household_residents: household,
         })
     }
 
     pub async fn get_home_owners_for_site(&self, site_id: &str) -> Vec<HomeOwnerResponse> {
+        let mut owners = self.load_home_owners_for_site(site_id).await;
+        let inner = self.state.inner.read().await;
+        for o in owners.iter_mut() {
+            let unit = inner.units.iter().find(|u| crate::auth::same_id(&u.id, &o.unit_id)).map(|u| u.id.clone());
+            o.advance_balance = Some(unit.map(|id| inner.advance_total(&id)).unwrap_or(Decimal::ZERO).max(Decimal::ZERO));
+        }
+        owners
+    }
+
+    async fn load_home_owners_for_site(&self, site_id: &str) -> Vec<HomeOwnerResponse> {
         let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(0);
 
         // 1. Try DB first if pool available
@@ -955,7 +966,8 @@ impl SiteAdminService {
                                 tenant_phone: t_phone,
                                 operational_dues_balance: Some(op_balance),
                                 capital_dues_balance: Some(cap_balance),
-                                household_residents: household,
+                                                                advance_balance: None,
+household_residents: household,
                             });
                         }
                         if !db_result.is_empty() {
@@ -1044,7 +1056,8 @@ impl SiteAdminService {
                 tenant_phone: None,
                 operational_dues_balance: Some(Decimal::ZERO),
                 capital_dues_balance: Some(Decimal::ZERO),
-                household_residents: household,
+                                advance_balance: None,
+household_residents: household,
             });
         }
 
@@ -1060,31 +1073,43 @@ impl SiteAdminService {
         let site_numeric = crate::db::require_id("entity", site_id)?;
         let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
 
+        // The database unit this request resolved to; the in-memory update below
+        // follows it so the two never touch different units.
+        let mut resolved_unit_id: Option<String> = None;
+
         // 1. If DB pool is available, update database
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
+            {
+                let client = pool.get().await.map_err(|e| format!("Database connection error: {}", e))?;
                 let unit_row_opt = if let Some(uid) = id_numeric {
+                    // A unit id wins over a person id: both are numbers, and the old
+                    // OR-match could return two rows, fail silently and fall back to
+                    // in-memory state (the tenant then stayed in the database).
                     client
                         .query_opt(
-                            "SELECT id, block_id, unit_number, floor, owner_person_id, tenant_person_id, house_type FROM units WHERE (id = $1 OR owner_person_id = $1 OR tenant_person_id = $1) AND site_id = $2",
+                            "SELECT id, block_id, unit_number, floor, owner_person_id, tenant_person_id, house_type FROM units \
+                             WHERE (id = $1 OR owner_person_id = $1 OR tenant_person_id = $1) AND site_id = $2 AND deleted_at IS NULL \
+                             ORDER BY (id = $1) DESC, id LIMIT 1",
                             &[&uid, &site_numeric],
                         )
                         .await
-                        .ok()
-                        .flatten()
+                        .map_err(|e| e.to_string())?
                 } else {
                     client
                         .query_opt(
-                            "SELECT u.id, u.block_id, u.unit_number, u.floor, u.owner_person_id, u.tenant_person_id, u.house_type FROM units u JOIN persons p ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id) WHERE p.email = $1 AND u.site_id = $2",
+                            "SELECT u.id, u.block_id, u.unit_number, u.floor, u.owner_person_id, u.tenant_person_id, u.house_type FROM units u \
+                             JOIN persons p ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id) \
+                             WHERE LOWER(p.email) = LOWER($1) AND u.site_id = $2 AND u.deleted_at IS NULL \
+                             ORDER BY (u.owner_person_id = p.id) DESC, u.id LIMIT 1",
                             &[&unit_or_user_id, &site_numeric],
                         )
                         .await
-                        .ok()
-                        .flatten()
+                        .map_err(|e| e.to_string())?
                 };
 
                 if let Some(u_row) = unit_row_opt {
                     let u_id: i64 = u_row.get(0);
+                    resolved_unit_id = Some(u_id.to_string());
                     let p_id: Option<i64> = u_row.get(4);
                     let t_id: Option<i64> = u_row.get(5);
 
@@ -1178,17 +1203,27 @@ impl SiteAdminService {
         // 2. Update in-memory state
         let mut inner = self.state.inner.write().await;
 
-        let unit_idx = inner.units.iter().position(|u| {
-            u.id == unit_or_user_id
-                || u.owner_user_id.as_deref() == Some(unit_or_user_id)
-                || crate::db::parse_id_to_i64(&u.id) == id_numeric
-        });
+        // Resolve one unit, in order of precedence: the unit the database resolved,
+        // an exact unit id, then a unit owned by the given user id. Unit and user ids
+        // are both plain numbers, so a single OR-match picked whichever came first.
+        let unit_idx = resolved_unit_id
+            .as_deref()
+            .and_then(|rid| inner.units.iter().position(|u| u.id == rid))
+            .or_else(|| {
+                inner.units.iter().position(|u| {
+                    u.id == unit_or_user_id || (id_numeric.is_some() && crate::db::parse_id_to_i64(&u.id) == id_numeric)
+                })
+            })
+            .or_else(|| inner.units.iter().position(|u| u.owner_user_id.as_deref() == Some(unit_or_user_id)));
 
-        let user_idx = inner.users.iter().position(|u| {
-            u.id == unit_or_user_id
-                || crate::db::parse_id_to_i64(&u.id) == id_numeric
-                || (unit_idx.is_some() && inner.units[unit_idx.unwrap()].owner_user_id.as_deref() == Some(&u.id))
-        });
+        // The owner is the resolved unit's owner; only without a unit is the id read as a user id.
+        let user_idx = match unit_idx {
+            Some(uidx) => inner.units[uidx]
+                .owner_user_id
+                .clone()
+                .and_then(|oid| inner.users.iter().position(|u| u.id == oid)),
+            None => inner.users.iter().position(|u| u.id == unit_or_user_id),
+        };
 
         let tenant_user_idx = if let Some(uidx) = unit_idx {
             if let Some(ref tuid) = inner.units[uidx].tenant_user_id {
@@ -1266,9 +1301,15 @@ impl SiteAdminService {
             inner.unit_payer_names.insert(unit_id, vec![name.clone()]);
         }
 
+        let resolved_unit_id = unit_idx.map(|uidx| inner.units[uidx].id.clone()).or(resolved_unit_id);
         drop(inner);
 
         let all_owners = self.get_home_owners_for_site(site_id).await;
+        if let Some(ref rid) = resolved_unit_id {
+            if let Some(updated) = all_owners.iter().find(|o| &o.unit_id == rid) {
+                return Ok(updated.clone());
+            }
+        }
         if let Some(updated) = all_owners.into_iter().find(|o| {
             o.unit_id == unit_or_user_id
                 || crate::db::parse_id_to_i64(&o.unit_id) == id_numeric
@@ -1306,7 +1347,8 @@ impl SiteAdminService {
                 tenant_phone: req.tenant_phone.clone(),
                 operational_dues_balance: None,
                 capital_dues_balance: None,
-                household_residents: vec![],
+                                advance_balance: None,
+household_residents: vec![],
             })
         }
     }

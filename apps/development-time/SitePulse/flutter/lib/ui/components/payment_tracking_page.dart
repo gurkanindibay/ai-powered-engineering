@@ -12,6 +12,8 @@ import 'bank_statement_reconciliation_page.dart';
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
 import 'sp_dialog_pages.dart';
+import '../../domain/models/auth_models.dart';
+import '../payments/receipt_actions.dart';
 class PaymentTrackingPage extends StatefulWidget {
   final DashboardController controller;
   final String? initialUnitId;
@@ -293,12 +295,19 @@ class PaymentTrackingPage extends StatefulWidget {
     required DashboardController controller,
     String? initialUnitId,
     VoidCallback? onCompleted,
-  }) {
+  }) async {
+    // The site's real units and advance balances (STORY-10-04), never fixed sample units.
+    // Refreshed on every open so the advance balances are current.
+    await controller.fetchHomeOwners(siteId: controller.currentManagedSite?.id);
+    if (!context.mounted) return;
+    final units = controller.homeOwners;
     final amountCtrl = TextEditingController(text: '1400.00');
     final noteCtrl = TextEditingController(text: 'Ev sahibi onaylı avanstan demirbaşa virman');
-    String unitId = initialUnitId ?? 'd-14';
+    String? unitId = units.any((u) => u.unitId == initialUnitId)
+        ? initialUnitId
+        : (units.where((u) => u.advanceBalance > Decimal.zero).firstOrNull ?? units.firstOrNull)?.unitId;
 
-    return AppFullscreenPage.push(
+    await AppFullscreenPage.push(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
@@ -318,8 +327,10 @@ class PaymentTrackingPage extends StatefulWidget {
                     final amt = Decimal.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? Decimal.zero;
                     if (amt <= Decimal.zero || amt.scale > 2) return;
 
+                    final selected = unitId;
+                    if (selected == null) return;
                     final res = await controller.executeInterLedgerTransfer(
-                      unitId: unitId,
+                      unitId: selected,
                       amount: amt,
                       note: noteCtrl.text.trim(),
                     );
@@ -368,13 +379,23 @@ class PaymentTrackingPage extends StatefulWidget {
                   const Text('Daire', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
                   testId('virman_unit_dropdown', DropdownButtonFormField<String>(
-                    value: unitId,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'd-14', child: Text('A Blok D:14 (Mevcut Avans: ₺3.000,00)')),
-                      DropdownMenuItem(value: 'd-1', child: Text('A Blok D:1')),
+                    initialValue: unitId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      hintText: units.isEmpty ? 'Sitede daire bulunamadı' : null,
+                    ),
+                    items: [
+                      for (final u in units)
+                        DropdownMenuItem(
+                          value: u.unitId,
+                          child: Text(
+                            '${u.block} Blok D:${u.unitNo} (Mevcut Avans: ${formatTry(u.advanceBalance)})',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                     ],
-                    onChanged: (v) => setDialogState(() => unitId = v ?? 'd-14'),
+                    onChanged: (v) => setDialogState(() => unitId = v ?? unitId),
                   )),
                   const SizedBox(height: 16),
                   const Text('Virman Yapılacak Tutar (₺)', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -420,15 +441,28 @@ class PaymentTrackingPage extends StatefulWidget {
           context: ctx,
           children: [
             testId('btn_share_receipt', OutlinedButton.icon(
-              icon: const Icon(Icons.share),
-              label: const Text('Paylaş / PDF'),
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              label: const FittedBox(fit: BoxFit.scaleDown, child: Text('Paylaş / PDF')),
               style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-              onPressed: () {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  appSnackBar(content: Text('Makbuz PDF formatında dışa aktarıldı.')),
-                );
-              },
+              onPressed: () => downloadReceiptPdf(ctx, receipt.receiptNumber, siteId: receipt.siteId),
             )),
+            // Site staff may reverse a collection or virman receipt (SPEC-006 O-2, SPEC-007 R1).
+            if (controller.userRole == UserRole.siteManager && receipt.receiptNumber.startsWith('TAH-'))
+              testId('btn_reverse_receipt', OutlinedButton.icon(
+                icon: const Icon(Icons.undo),
+                label: const FittedBox(fit: BoxFit.scaleDown, child: Text('İptal / iade')),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  foregroundColor: AppColors.dangerText(ctx),
+                ),
+                onPressed: () async {
+                  final reversal = await reverseReceiptWithReason(ctx, receipt.receiptNumber, siteId: receipt.siteId);
+                  if (reversal != null && ctx.mounted) {
+                    await controller.fetchPaymentStream(siteId: receipt.siteId);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  }
+                },
+              )),
             ElevatedButton.icon(
               icon: const Icon(Icons.check),
               label: const Text(AppStrings.close),

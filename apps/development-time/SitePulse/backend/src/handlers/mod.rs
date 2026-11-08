@@ -17,6 +17,9 @@ use crate::services::{
 };
 use crate::state::AppState;
 
+mod payments_phase2;
+pub use payments_phase2::*;
+
 
 /// Snapshot of the in-memory ledger (liability payment state and advance
 /// balances), used to persist exactly what an in-memory operation changed.
@@ -438,6 +441,17 @@ pub async fn get_resident_dashboard(
     for m in inner.reconciliation_queue.iter().rev() {
         if m.matched_unit_id.as_deref() == Some(&unit_id) && m.status == ReconciliationStatus::Approved {
             let (title, subtitle) = format_resident_transaction_display(m);
+            // The receipt the ledger issued for this bank transaction, not the bank's id.
+            let receipt_number = inner
+                .payment_entries
+                .iter()
+                .filter(|e| crate::auth::same_id(&e.unit_id, &unit_id) && e.entry_type == LEDGER_KIND_COLLECTION)
+                .find(|e| {
+                    e.external_reference.as_deref().is_some_and(|r| {
+                        r == m.transaction.transaction_id || Some(r) == m.transaction.reference_no.as_deref()
+                    })
+                })
+                .and_then(|e| e.receipt_number.clone());
             transactions.push(AccountTransactionDto {
                 id: m.transaction.transaction_id.clone(),
                 title,
@@ -445,6 +459,7 @@ pub async fn get_resident_dashboard(
                 amount: m.transaction.amount,
                 date: m.transaction.date.format("%d.%m.%Y").to_string(),
                 is_credit: true,
+                receipt_number,
             });
         }
     }
@@ -458,6 +473,7 @@ pub async fn get_resident_dashboard(
             amount: due.total_amount,
             date: due.due_date.format("%d.%m.%Y").to_string(),
             is_credit: false,
+            receipt_number: None,
         });
     }
 
@@ -2114,109 +2130,177 @@ pub async fn create_dues_period(
 }
 
 // Periodic Dues Accrual & Automatic Advance Balance Offsetting
+//
+// SPEC-007 R5: the amount is the unit's monthly share of the operating budget
+// (işletme projesi) in force on the due date, and the liability records that
+// budget as its legal basis. A free-typed amount is refused while a budget is in
+// force or when the site requires one; only a site without a budget falls back to
+// its house-type tariffs, and the response then carries a KMK 37 warning.
 pub async fn accrue_monthly_dues(
     State(state): State<AppState>,
     Json(payload): Json<AccrueDuesPeriodRequest>,
 ) -> Result<(StatusCode, Json<AccrueDuesPeriodResponse>), (StatusCode, String)> {
-    let mut inner = state.inner.write().await;
-    let ledger_before = ledger_snapshot(&inner);
-    let units_in_site: Vec<IndependentUnit> = inner
-        .units
-        .iter()
-        .filter(|u| u.site_id == payload.site_id)
-        .cloned()
-        .collect();
+    use crate::services::operating_budget_service as budgets;
 
-    if units_in_site.is_empty() {
-        return Err((
-            StatusCode::NOT_FOUND,
-            format!("No units found for site '{}'", payload.site_id),
-        ));
-    }
-
-    let total_units_in_site = units_in_site.len();
-
-    // Ensure period is stored in the separate dues_periods table
-    let period_exists = inner.dues_periods.iter().any(|p| {
-        (p.site_id == payload.site_id || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&payload.site_id))
-            && p.period_name.eq_ignore_ascii_case(&payload.period)
-    });
-    if !period_exists {
-        let max_p = inner.dues_periods.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
-        let period_record = DuesPeriod {
-            id: (max_p + 1).to_string(),
-            site_id: payload.site_id.clone(),
-            period_name: payload.period.clone(),
-            due_date: payload.due_date,
-            status: "ACTIVE".to_string(),
-            created_at: Some(chrono::Utc::now()),
-        };
-        inner.dues_periods.push(period_record.clone());
-        if let Some(ref pool) = state.pool {
-            crate::db::save_dues_period(pool, &period_record).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+    // 1. Decide every unit's amount and basis under a read lock.
+    let (units_in_site, planned, skipped, budget_id) = {
+        let inner = state.inner.read().await;
+        let units_in_site: Vec<IndependentUnit> =
+            inner.units.iter().filter(|u| crate::auth::same_id(&u.site_id, &payload.site_id)).cloned().collect();
+        if units_in_site.is_empty() {
+            return Err((StatusCode::NOT_FOUND, format!("No units found for site '{}'", payload.site_id)));
         }
-    }
-
-    // Invariant Guard: Prevent duplicate accrual for already-accrued units
-    let mut newly_accrued_units_count = 0;
-    let mut total_amount_accrued = Decimal::ZERO;
-
-    for unit in &units_in_site {
-        let already_exists = inner
-            .dues
-            .iter()
-            .any(|d| d.unit_id == unit.id && d.period == payload.period);
-        if !already_exists {
-            let effective_amount = if payload.amount > Decimal::ZERO {
-                payload.amount
-            } else {
-                let unit_house_type = unit.house_type.as_deref().unwrap_or("2+1");
-                inner
-                    .house_types
-                    .iter()
-                    .find(|ht| {
-                        (ht.site_id == payload.site_id || crate::db::parse_id_to_i64(&ht.site_id) == crate::db::parse_id_to_i64(&payload.site_id))
-                            && ht.type_name.eq_ignore_ascii_case(unit_house_type)
-                    })
-                    .map(|ht| ht.dues_amount)
-                    .unwrap_or(Decimal::new(1400, 0))
-            };
-
-            let max_d = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
-            let due_id = (max_d + 1).to_string();
-            inner.dues.push(DuesLiability {
-                id: due_id,
-                unit_id: unit.id.clone(),
-                period: payload.period.clone(),
-                principal_amount: effective_amount,
-                delay_penalty: Decimal::ZERO,
-                total_amount: effective_amount,
-                due_date: payload.due_date,
-                status: DebtStatus::Pending,
-                paid_principal: Decimal::ZERO,
-                paid_penalty: Decimal::ZERO,
-                // Operational dues are the occupant's: the tenant's when the unit is
-                // let, otherwise the owner's (same rule as the scheduler).
-                debtor_type: if unit.tenant_user_id.is_some() { "TENANT" } else { "OWNER" }.to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
-                penalty_accrued_through: None,
+        let in_force = budgets::budget_in_force(&inner, &payload.site_id, payload.due_date).map(|b| (b.id.clone(), b.fiscal_year));
+        let required = budgets::site_requires_budget(&inner, &payload.site_id);
+        if payload.amount > Decimal::ZERO {
+            if let Some((id, year)) = &in_force {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!("Operating budget {} ({}) is in force on {}; dues are accrued from its unit shares, not a typed amount", id, year, payload.due_date),
+                ));
+            }
+            if required {
+                return Err((
+                    StatusCode::CONFLICT,
+                    "This site requires an operating budget (işletme projesi); a typed dues amount has no legal basis".to_string(),
+                ));
+            }
+        } else if in_force.is_none() && required {
+            return Err((
+                StatusCode::CONFLICT,
+                format!(
+                    "No operating budget (işletme projesi) is in force on {}; issue an interim budget or record the assembly's approval first",
+                    payload.due_date
+                ),
+            ));
+        }
+        let mut planned: Vec<(IndependentUnit, Decimal, Option<String>)> = Vec::new();
+        let mut skipped: Vec<String> = Vec::new();
+        for unit in &units_in_site {
+            let already = inner.dues.iter().any(|d| {
+                d.unit_id == unit.id && d.period == payload.period && d.expense_type == crate::services::dues_ledger::EXPENSE_OPERATIONAL
             });
-            total_amount_accrued += effective_amount;
-            newly_accrued_units_count += 1;
+            if already {
+                continue;
+            }
+            let basis = if payload.amount > Decimal::ZERO {
+                Ok(budgets::DuesBasis { amount: payload.amount, operating_budget_id: None })
+            } else {
+                match budgets::operational_dues_basis(&inner, unit, payload.due_date) {
+                    // Legacy sites without a tariff keep the historical default amount.
+                    Err(_) if in_force.is_none() && !required => {
+                        Ok(budgets::DuesBasis { amount: Decimal::new(1400, 0), operating_budget_id: None })
+                    }
+                    other => other,
+                }
+            };
+            match basis {
+                Ok(b) if b.amount > Decimal::ZERO => planned.push((unit.clone(), b.amount, b.operating_budget_id)),
+                Ok(_) => skipped.push(format!("{}: zero share", inner.unit_label(&unit.block_id, unit.unit_number))),
+                Err(reason) => skipped.push(format!("{}: {}", inner.unit_label(&unit.block_id, unit.unit_number), reason)),
+            }
         }
+        (units_in_site, planned, skipped, in_force.map(|(id, _)| id))
+    };
+    let total_units_in_site = units_in_site.len();
+    // With PostgreSQL the occupancy (tenant or not) is read from the units table: a
+    // tenant moved in without a user account has no in-memory tenant user.
+    let tenanted: Option<std::collections::HashSet<String>> = match state.pool {
+        Some(ref pool) => Some(
+            crate::db::tenanted_unit_ids(pool, &payload.site_id)
+                .await
+                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database unavailable: {}", e)))?,
+        ),
+        None => None,
+    };
+
+    // 2. The billing period row.
+    let period_record = {
+        let mut inner = state.inner.write().await;
+        let exists = inner.dues_periods.iter().any(|p| {
+            crate::auth::same_id(&p.site_id, &payload.site_id) && p.period_name.eq_ignore_ascii_case(&payload.period)
+        });
+        if exists {
+            None
+        } else {
+            let max_p = inner.dues_periods.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
+            let record = DuesPeriod {
+                id: (max_p + 1).to_string(),
+                site_id: payload.site_id.clone(),
+                period_name: payload.period.clone(),
+                due_date: payload.due_date,
+                status: "ACTIVE".to_string(),
+                created_at: Some(chrono::Utc::now()),
+            };
+            inner.dues_periods.push(record.clone());
+            Some(record)
+        }
+    };
+    if let (Some(ref pool), Some(ref record)) = (&state.pool, &period_record) {
+        crate::db::save_dues_period(pool, record)
+            .await
+            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
     }
 
-    if let Some(ref pool) = state.pool {
-        let dues_to_save: Vec<DuesLiability> = inner
-            .dues
-            .iter()
-            .filter(|d| d.period == payload.period)
-            .cloned()
-            .collect();
-        for due in &dues_to_save {
-            crate::db::save_due_liability(pool, due).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+    // 3. Insert the liabilities. With PostgreSQL the identity column assigns the id
+    //    and the unique (unit, period, expense) index is the duplicate guard.
+    let mut accrued: Vec<(DuesLiability, Option<String>)> = Vec::new();
+    for (unit, amount, basis) in planned {
+        let mut due = DuesLiability {
+            id: String::new(),
+            unit_id: unit.id.clone(),
+            period: payload.period.clone(),
+            principal_amount: amount,
+            delay_penalty: Decimal::ZERO,
+            total_amount: amount,
+            due_date: payload.due_date,
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            // Operational dues are the occupant's: the tenant's when the unit is
+            // let, otherwise the owner's (same rule as the scheduler).
+            debtor_type: if tenanted.as_ref().map(|t| t.contains(&unit.id)).unwrap_or(unit.tenant_user_id.is_some()) {
+                "TENANT"
+            } else {
+                "OWNER"
+            }
+            .to_string(),
+            expense_type: crate::services::dues_ledger::EXPENSE_OPERATIONAL.to_string(),
+            penalty_accrued_through: None,
+        };
+        if let Some(ref pool) = state.pool {
+            match crate::db::insert_accrued_due(pool, &due)
+                .await
+                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?
+            {
+                Some(id) => due.id = id.to_string(),
+                None => continue, // accrued concurrently
+            }
+            if let Some(ref b) = basis {
+                crate::db::set_due_budget_basis(pool, &due.id, b)
+                    .await
+                    .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+            }
         }
+        accrued.push((due, basis));
     }
+
+    let mut inner = state.inner.write().await;
+    let mut total_amount_accrued = Decimal::ZERO;
+    let newly_accrued_units_count = accrued.len();
+    for (mut due, basis) in accrued {
+        if due.id.is_empty() {
+            due.id = (inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0) + 1).to_string();
+        }
+        total_amount_accrued += due.principal_amount;
+        if let Some(b) = basis {
+            inner.dues_budget_basis.insert(due.id.clone(), b);
+        }
+        inner.dues.push(due);
+    }
+    let legal_basis_warning = budget_id.is_none().then(|| {
+        "KMK 37 (Law 7579): these dues were accrued without an operating budget (işletme projesi) in force; they have no assembly-approved basis".to_string()
+    });
 
     if newly_accrued_units_count == 0 {
         return Ok((
@@ -2229,16 +2313,21 @@ pub async fn accrue_monthly_dues(
                 auto_settled_units_count: 0,
                 total_amount_accrued: Decimal::ZERO,
                 total_amount_offset_from_advance: Decimal::ZERO,
-                already_accrued: true,
-                message: format!(
-                    "'{}' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi.",
-                    payload.period
-                ),
+                already_accrued: skipped.is_empty(),
+                message: if skipped.is_empty() {
+                    format!("'{}' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi.", payload.period)
+                } else {
+                    format!("'{}' dönemi için tahakkuk yapılamadı: {}", payload.period, skipped.join("; "))
+                },
+                operating_budget_id: budget_id,
+                legal_basis_warning: None,
+                skipped_units: skipped,
             }),
         ));
     }
 
     // Automatically apply available advance payments against newly accrued dues!
+    let ledger_before = ledger_snapshot(&inner);
     let (auto_settled_count, total_offset) = apply_advance_payments_offset(&mut inner, None);
     if let Some(ref pool) = state.pool {
         persist_ledger_changes(pool, &ledger_before, &inner)
@@ -2261,6 +2350,9 @@ pub async fn accrue_monthly_dues(
                 "'{}' dönemi için {} daireye başarıyla aidat tahakkuk ettirildi. {} daire avanstan otomatik kapatıldı.",
                 payload.period, newly_accrued_units_count, auto_settled_count
             ),
+            operating_budget_id: budget_id,
+            legal_basis_warning,
+            skipped_units: skipped,
         }),
     ))
 }
@@ -2820,6 +2912,7 @@ async fn purge_site_rows(pool: &deadpool_postgres::Pool, site_id: i64) -> Result
         "payment_entries WHERE site_id = $1 AND reverses_entry_id IS NOT NULL",
         "payment_entries WHERE site_id = $1",
         "payment_idempotency_keys WHERE site_id = $1",
+        "payment_intents WHERE site_id = $1",
         "payment_receipts WHERE site_id = $1 AND reverses_receipt_id IS NOT NULL",
         "payment_receipts WHERE site_id = $1",
         "receipt_counters WHERE site_id = $1",
@@ -2830,6 +2923,8 @@ async fn purge_site_rows(pool: &deadpool_postgres::Pool, site_id: i64) -> Result
         "unit_sender_ibans WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
         "unit_payer_names WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
         "dues_liabilities WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
+        // Budget lines, shares, service records and objections cascade with the budget.
+        "operating_budgets WHERE site_id = $1",
         "occupancy_members WHERE occupancy_id IN (SELECT o.id FROM unit_occupancies o JOIN units u ON u.id = o.unit_id WHERE u.site_id = $1)",
         "unit_occupancies WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
         "unit_ownerships WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
@@ -3904,12 +3999,19 @@ pub async fn reverse_payment(
         payload.site_id = Some(claims.site_id.clone());
     }
     let actor = format!("user:{} <{}>", claims.sub, claims.email);
-    let service = crate::services::PaymentTrackingService::new(state);
-    service
-        .reverse_payment(payload, &actor)
-        .await
-        .map(|r| (StatusCode::CREATED, Json(r)))
-        .map_err(payment_error_status)
+    let site_id = payload.site_id.clone().unwrap_or_default();
+    let service = crate::services::PaymentTrackingService::new(state.clone());
+    let reversal = service.reverse_payment(payload, &actor).await.map_err(payment_error_status)?;
+    // A reversed card payment is refunded at the provider (SPEC-007 R4).
+    if reversal.reversal_receipt.payment_channel == "CREDIT_CARD" {
+        if let Err(e) = crate::services::CardPaymentService::new(state)
+            .refund_for_receipt(&site_id, &reversal.reversed_receipt_number)
+            .await
+        {
+            tracing::error!("Card refund for {} was not completed: {}", reversal.reversed_receipt_number, e);
+        }
+    }
+    Ok((StatusCode::CREATED, Json(reversal)))
 }
 
 /// Writes today's debt aging snapshot (O-8). The daily worker does the same.
