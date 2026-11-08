@@ -174,8 +174,6 @@ def test_house_type_tariff_is_saved_and_negative_amount_rejected(login_as, page,
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-08")
-@pytest.mark.xfail(strict=True, reason="BUG: the house type form accepts '1400.555' (more than two decimals) "
-                   "without a validation error (flutter/lib/ui/components/house_types_modal.dart only checks > 0)")
 def test_house_type_tariff_rejects_more_than_two_decimals(login_as, page, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
