@@ -2,7 +2,6 @@ import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
-import 'package:flutter/services.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 
@@ -10,6 +9,9 @@ import 'app_fullscreen_page.dart';
 
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
+import '../design_system/sp_clipboard.dart';
+import 'package:flutter/services.dart';
+import '../design_system/sp_money_field.dart';
 enum CheckoutPaymentMethod {
   card,
   virtualIban,
@@ -67,8 +69,9 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
   }
 
   void _onAmountChanged() {
-    final clean = _amountCtrl.text.replaceAll(',', '.').replaceAll('₺', '').trim();
-    final parsed = Decimal.tryParse(clean) ?? Decimal.zero;
+    // Invalid or partial text counts as zero, which keeps the pay button
+    // disabled; it is never submitted as an amount.
+    final parsed = MoneyInput.parse(_amountCtrl.text).amount ?? Decimal.zero;
     if (parsed != _enteredAmount) {
       setState(() {
         _enteredAmount = parsed;
@@ -709,64 +712,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                 ],
               ),
               const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.background(context),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.border(context)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.virtualIban,
-                        style: TextStyle(
-                          fontFamily: 'monospace',
-                          color: AppColors.textPrimary(context),
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.6,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    InkWell(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: widget.virtualIban.replaceAll(' ', '')));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          appSnackBar(
-                            content: Text('Sanal IBAN panoya kopyalandı!'),
-                            duration: Duration(seconds: 2),
-                            backgroundColor: AppColors.successFill,
-                          ),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentCyan.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.copy, size: 12, color: AppColors.accentCyan),
-                            SizedBox(width: 4),
-                            Text(
-                              AppStrings.copy,
-                              style: TextStyle(color: AppColors.primaryText(context), fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              SpIbanCopyRow(iban: widget.virtualIban, compact: true, copyButtonId: 'btn_checkout_copy_iban'),
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

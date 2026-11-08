@@ -11,6 +11,7 @@ import 'app_fullscreen_page.dart';
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
 import 'sp_dialog_pages.dart';
+import '../design_system/sp_money_field.dart';
 class CapitalProjectsView extends StatefulWidget {
   final DashboardController controller;
 
@@ -1156,7 +1157,7 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final budgetVal = Decimal.tryParse(_budgetController.text.trim());
+    final budgetVal = MoneyInput.parse(_budgetController.text).amount;
     if (budgetVal == null || budgetVal <= Decimal.zero) {
       ScaffoldMessenger.of(context).showSnackBar(
         appSnackBar(content: Text('Lütfen geçerli bir bütçe tutarı giriniz.')),
@@ -1281,21 +1282,17 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
             // Toplam Bütçe
             Text('Toplam Proje Bütçesi (₺) *', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
             const SizedBox(height: 6),
-            testId('input_capital_project_budget', TextFormField(
+            testId('input_capital_project_budget', SpMoneyFormField(
               key: const Key('input_capital_project_budget'),
               controller: _budgetController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              requiredMessage: 'Bütçe zorunludur',
+              invalidMessage: 'Geçerli bir tutar girin',
               decoration: InputDecoration(
-                hintText: 'Örn: 120000.00',
+                hintText: 'Örn: 120.000,00',
                 filled: true,
-                fillColor: AppColors.isDark(context) ? Colors.white.withOpacity(0.04) : Colors.grey.shade100,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                fillColor: AppColors.isDark(context) ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade100,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppSpacing.sm + 2), borderSide: BorderSide.none),
               ),
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Bütçe zorunludur';
-                if (Decimal.tryParse(v.trim()) == null) return 'Geçerli bir tutar girin';
-                return null;
-              },
             )),
             const SizedBox(height: 16),
 
@@ -1469,7 +1466,7 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    final amt = Decimal.tryParse(_amountController.text.trim());
+    final amt = MoneyInput.parse(_amountController.text).amount;
     if (amt == null || amt <= Decimal.zero) {
       ScaffoldMessenger.of(context).showSnackBar(appSnackBar(content: Text('Geçerli bir tutar girin.')));
       return;
@@ -1541,17 +1538,17 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Aşama tanımı zorunludur' : null,
               )),
               const SizedBox(height: 10),
-              testId('input_disbursement_amount', TextFormField(
+              testId('input_disbursement_amount', SpMoneyFormField(
                 key: const Key('input_disbursement_amount'),
                 controller: _amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                requiredMessage: 'Geçerli tutar girin',
+                invalidMessage: 'Geçerli tutar girin',
                 decoration: InputDecoration(
                   labelText: 'Ödeme Tutarı (₺) *',
                   filled: true,
-                  fillColor: AppColors.isDark(context) ? Colors.white.withOpacity(0.04) : Colors.grey.shade100,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  fillColor: AppColors.isDark(context) ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade100,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppSpacing.sm + 2), borderSide: BorderSide.none),
                 ),
-                validator: (v) => (v == null || Decimal.tryParse(v.trim()) == null) ? 'Geçerli tutar girin' : null,
               )),
               const SizedBox(height: 10),
               testId('input_disbursement_recipient', TextFormField(
