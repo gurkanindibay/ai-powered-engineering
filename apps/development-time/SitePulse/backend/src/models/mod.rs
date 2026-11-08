@@ -1220,6 +1220,22 @@ impl SupportedBank {
         }
     }
 
+    /// Five-digit EFT bank code carried in characters 5–9 of the bank's IBANs.
+    pub fn eft_code(&self) -> &'static str {
+        match self {
+            SupportedBank::KuveytTurk => "00205",
+            SupportedBank::IsBankasi => "00064",
+            SupportedBank::ZiraatBankasi => "00010",
+            SupportedBank::GarantiBbva => "00062",
+            SupportedBank::AkBank => "00046",
+            SupportedBank::YapiKredi => "00067",
+            SupportedBank::Halkbank => "00012",
+            SupportedBank::Vakifbank => "00015",
+            SupportedBank::DenizBank => "00134",
+            SupportedBank::QnbFinansbank => "00111",
+        }
+    }
+
     /// Human-readable display name for the bank.
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -1456,6 +1472,19 @@ pub struct ParseBankStatementResponse {
     #[serde(default)]
     pub already_processed_count: usize,
     pub matches: Vec<ReconciliationMatch>,
+    /// Statement entries that were not imported, with the reason. Previously
+    /// such rows were dropped silently.
+    #[serde(default)]
+    pub skipped_entries: Vec<SkippedStatementEntry>,
+}
+
+/// A statement line or MT940 entry that was not turned into a transaction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkippedStatementEntry {
+    /// 1-based line number in the uploaded content.
+    pub line_number: usize,
+    pub reason: String,
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

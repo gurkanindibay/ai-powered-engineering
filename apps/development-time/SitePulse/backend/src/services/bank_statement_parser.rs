@@ -3,8 +3,22 @@ use regex::Regex;
 use rust_decimal::Decimal;
 use std::str::FromStr;
 
-use crate::models::{BankStatementFormat, BankTransactionItem};
+use crate::models::{BankStatementFormat, BankTransactionItem, SkippedStatementEntry};
 use crate::services::mt940_engine::Mt940Engine;
+use std::sync::LazyLock;
+
+/// Compiled once; `all_patterns_compile` guarantees it is `Ok`.
+static DATE_IN_TEXT_RE: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| Regex::new(r"\b(\d{2}[./]\d{2}[./]\d{4}|\d{4}-\d{2}-\d{2})\b"));
+/// Compiled once; `all_patterns_compile` guarantees it is `Ok`.
+static AMOUNT_IN_TEXT_RE: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| Regex::new(r"₺?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+[.,][0-9]{2})\s*(?:TL|TRY)?"));
+
+/// Result of parsing a statement: imported transactions plus every entry that
+/// was skipped and why.
+#[derive(Debug, Clone, Default)]
+pub struct ParseReport {
+    pub transactions: Vec<BankTransactionItem>,
+    pub skipped: Vec<SkippedStatementEntry>,
+}
 
 pub struct BankStatementParser {
     mt940_engine: Mt940Engine,
@@ -24,37 +38,62 @@ impl BankStatementParser {
     }
 
     /// Automatically detects statement format or respects specified format, parsing rows into transactions.
+    /// Rows without a date are dated today; use [`Self::parse_statement_report`]
+    /// to choose the fallback date and to see which rows were skipped.
     pub fn parse_statement(
         &self,
         content: &str,
         format_opt: Option<BankStatementFormat>,
     ) -> Result<Vec<BankTransactionItem>, String> {
+        self.parse_statement_report(content, format_opt, Utc::now().date_naive())
+            .map(|report| report.transactions)
+    }
+
+    /// Parses a statement and reports every entry that was not imported.
+    ///
+    /// `fallback_date` is used for rows that carry no recognizable date, so the
+    /// result is deterministic for a given input and import context.
+    ///
+    /// Limits: `Excel` content is read as delimited text (binary `.xlsx` is not
+    /// decoded), delimited rows are split without CSV quote handling, and
+    /// currency is assumed to be TRY.
+    pub fn parse_statement_report(
+        &self,
+        content: &str,
+        format_opt: Option<BankStatementFormat>,
+        fallback_date: NaiveDate,
+    ) -> Result<ParseReport, String> {
         let trimmed = content.trim();
         if trimmed.is_empty() {
-            return Ok(Vec::new());
+            return Ok(ParseReport::default());
         }
 
         let format = format_opt.unwrap_or(BankStatementFormat::Auto);
-
-        match format {
-            BankStatementFormat::Mt940 => self.mt940_engine.parse(trimmed),
-            BankStatementFormat::Excel | BankStatementFormat::Csv => self.parse_tabular_or_lines(trimmed),
+        let is_mt940 = match format {
+            BankStatementFormat::Mt940 => true,
+            BankStatementFormat::Excel | BankStatementFormat::Csv => false,
             BankStatementFormat::Auto => {
-                if trimmed.starts_with(":20:") || (trimmed.contains(":61:") && trimmed.contains(":86:")) {
-                    self.mt940_engine.parse(trimmed)
-                } else {
-                    self.parse_tabular_or_lines(trimmed)
-                }
+                trimmed.starts_with(":20:") || (trimmed.contains(":61:") && trimmed.contains(":86:"))
             }
+        };
+
+        if is_mt940 {
+            let (transactions, skipped) = self.mt940_engine.parse_report(trimmed)?;
+            Ok(ParseReport { transactions, skipped })
+        } else {
+            Ok(self.parse_tabular_or_lines(trimmed, fallback_date))
         }
     }
 
     /// Parses tabular text, CSV, TSV, or single/multi-line Turkish bank transaction statements.
-    fn parse_tabular_or_lines(&self, content: &str) -> Result<Vec<BankTransactionItem>, String> {
-        let mut transactions = Vec::new();
-        let lines: Vec<&str> = content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+    fn parse_tabular_or_lines(&self, content: &str, fallback_date: NaiveDate) -> ParseReport {
+        let mut report = ParseReport::default();
 
-        for (idx, line) in lines.iter().enumerate() {
+        for (idx, raw_line) in content.lines().enumerate() {
+            let line = raw_line.trim();
+            if line.is_empty() {
+                continue;
+            }
             // Skip common table headers
             let lower = line.to_lowercase();
             if (lower.contains("tarih") || lower.contains("date"))
@@ -63,18 +102,23 @@ impl BankStatementParser {
                 continue;
             }
 
-            if let Some(item) = self.parse_single_line(line, idx + 1) {
-                transactions.push(item);
+            match self.parse_single_line(line, idx + 1, fallback_date) {
+                Some(item) => report.transactions.push(item),
+                None => report.skipped.push(SkippedStatementEntry {
+                    line_number: idx + 1,
+                    reason: "No transaction amount could be recognized on this line.".to_string(),
+                    content: line.to_string(),
+                }),
             }
         }
 
-        Ok(transactions)
+        report
     }
 
     /// Parses a single line representing a transaction.
     /// Handles delimiter separation (; , \t |) or unstructured Turkish bank transfer text like:
     /// "HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33"
-    fn parse_single_line(&self, line: &str, row_num: usize) -> Option<BankTransactionItem> {
+    fn parse_single_line(&self, line: &str, row_num: usize, fallback_date: NaiveDate) -> Option<BankTransactionItem> {
         // Detect delimiter if present
         let delimiter = if line.contains('\t') {
             Some('\t')
@@ -92,15 +136,15 @@ impl BankStatementParser {
         if let Some(delim) = delimiter {
             let parts: Vec<&str> = line.split(delim).map(|p| p.trim()).collect();
             if parts.len() >= 2 {
-                return self.parse_delimited_parts(&parts, row_num);
+                return self.parse_delimited_parts(&parts, row_num, fallback_date);
             }
         }
 
         // Unstructured free-form line parsing (e.g. "HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33")
-        self.parse_freeform_line(line, row_num)
+        self.parse_freeform_line(line, row_num, fallback_date)
     }
 
-    fn parse_delimited_parts(&self, parts: &[&str], row_num: usize) -> Option<BankTransactionItem> {
+    fn parse_delimited_parts(&self, parts: &[&str], row_num: usize, fallback_date: NaiveDate) -> Option<BankTransactionItem> {
         let mut detected_date: Option<NaiveDate> = None;
         let mut detected_amount: Option<Decimal> = None;
         let mut detected_desc: Option<String> = None;
@@ -136,7 +180,7 @@ impl BankStatementParser {
         }
 
         let amount = detected_amount?;
-        let date = detected_date.unwrap_or_else(|| Utc::now().date_naive());
+        let date = detected_date.unwrap_or(fallback_date);
         let description = detected_desc.unwrap_or_else(|| format!("Banka İşlemi Satır {}", row_num));
         let txn_id = detected_ref.unwrap_or_else(|| format!("TXN-EXCEL-{:03}", row_num));
 
@@ -152,9 +196,9 @@ impl BankStatementParser {
         })
     }
 
-    fn parse_freeform_line(&self, line: &str, row_num: usize) -> Option<BankTransactionItem> {
+    fn parse_freeform_line(&self, line: &str, row_num: usize, fallback_date: NaiveDate) -> Option<BankTransactionItem> {
         let amount = Self::extract_amount_from_text(line)?;
-        let date = Self::extract_date_from_text(line).unwrap_or_else(|| Utc::now().date_naive());
+        let date = Self::extract_date_from_text(line).unwrap_or(fallback_date);
 
         // Clean amount and currency tokens from description
         let description = line.to_string();
@@ -192,7 +236,7 @@ impl BankStatementParser {
 
     /// Searches text for date pattern.
     pub fn extract_date_from_text(text: &str) -> Option<NaiveDate> {
-        let re = Regex::new(r"\b(\d{2}[./]\d{2}[./]\d{4}|\d{4}-\d{2}-\d{2})\b").ok()?;
+        let re = DATE_IN_TEXT_RE.as_ref().ok()?;
         if let Some(m) = re.find(text) {
             return Self::extract_date(m.as_str());
         }
@@ -227,12 +271,25 @@ impl BankStatementParser {
     /// Searches text for currency amounts like "₺1.423,33", "1.423,33 TL", "1423.33".
     pub fn extract_amount_from_text(text: &str) -> Option<Decimal> {
         // Pattern: Optional ₺, digits, optional dots/commas, 2 decimal digits, optional TL/TRY
-        let re = Regex::new(r"₺?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+[.,][0-9]{2})\s*(?:TL|TRY)?").ok()?;
+        let re = AMOUNT_IN_TEXT_RE.as_ref().ok()?;
         if let Some(caps) = re.captures(text) {
             if let Some(m) = caps.get(1) {
                 return Self::extract_amount(m.as_str());
             }
         }
         None
+    }
+}
+
+
+#[cfg(test)]
+mod pattern_tests {
+    use super::*;
+
+    #[test]
+    fn all_patterns_compile() {
+        for (name, pattern) in [("DATE_IN_TEXT_RE", &*DATE_IN_TEXT_RE), ("AMOUNT_IN_TEXT_RE", &*AMOUNT_IN_TEXT_RE)] {
+            assert!(pattern.is_ok(), "{name} failed to compile: {:?}", pattern.as_ref().err());
+        }
     }
 }

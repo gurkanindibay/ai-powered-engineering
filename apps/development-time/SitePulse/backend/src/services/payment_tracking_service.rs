@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
-use sha2::{Digest, Sha256};
 
 use crate::models::{
     AllocationBreakdownItem, AuthProvider, DebtAgingBracket, DebtAgingReport, DebtStatus, DebtorType,
@@ -28,16 +27,13 @@ impl PaymentTrackingService {
         total_amount: Decimal,
         issued_at: &DateTime<Utc>,
     ) -> String {
-        let mut hasher = Sha256::new();
-        let payload = format!(
-            "sitepulse:{}:{}:{:.2}:{}",
+        // Persisted contract: see `crate::domain::fingerprint::receipt_canonical_v1`.
+        crate::domain::fingerprint::receipt_hash_v1(&crate::domain::fingerprint::ReceiptFields {
             receipt_number,
             unit_id,
             total_amount,
-            issued_at.to_rfc3339()
-        );
-        hasher.update(payload.as_bytes());
-        format!("{:x}", hasher.finalize())
+            issued_at,
+        })
     }
 
     /// Detects capital expenditure keyword intent in transaction description

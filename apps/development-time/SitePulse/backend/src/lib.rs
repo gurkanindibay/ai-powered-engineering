@@ -4,6 +4,7 @@
 pub mod app;
 pub mod auth;
 pub mod db;
+pub mod domain;
 pub mod migrations;
 pub mod handlers;
 pub mod models;

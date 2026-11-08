@@ -38,7 +38,7 @@ impl AuthService {
             }
         }
         let inner = self.state.inner.read().await;
-        Ok(inner.users.iter().find(|u| u.email.to_lowercase() == email_norm).cloned())
+        Ok(inner.users.iter().find(|u| crate::domain::email::same_email(&u.email, email_norm)).cloned())
     }
 
     /// Resolves the unit a resident belongs to. Returns `None` rather than guessing.
@@ -66,7 +66,7 @@ impl AuthService {
         }
         let pool = self.state.pool.as_ref()?;
         let client = pool.get().await.ok()?;
-        let email = user.email.to_lowercase();
+        let email = crate::domain::email::NormalizedEmail::normalize(&user.email);
         let site_id_num = crate::db::parse_id_to_i64(&user.site_id);
 
         let row = if let Some(sid) = site_id_num {
@@ -158,7 +158,7 @@ impl AuthService {
         if request.email.trim().is_empty() || request.password.is_empty() {
             return Err("Email and password are required.".to_string());
         }
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
         let user = self.find_user_by_email(&email_norm).await?.ok_or_else(|| INVALID_CREDENTIALS.to_string())?;
 
         let stored = user
@@ -180,7 +180,7 @@ impl AuthService {
         if !payload.email_verified {
             return Err("Google account email is not verified.".to_string());
         }
-        let email_norm = payload.email.to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&payload.email);
 
         let existing = {
             let inner = self.state.inner.read().await;
@@ -188,7 +188,7 @@ impl AuthService {
                 .users
                 .iter()
                 .position(|u| u.google_sub.as_deref() == Some(&payload.sub))
-                .or_else(|| inner.users.iter().position(|u| u.email.to_lowercase() == email_norm))
+                .or_else(|| inner.users.iter().position(|u| crate::domain::email::same_email(&u.email, &email_norm)))
         };
 
         let user = if let Some(idx) = existing {
@@ -248,7 +248,7 @@ impl AuthService {
         if let Some(ref pool) = self.state.pool {
             crate::db::save_user(pool, &user).await.map_err(|e| format!("Failed to persist user: {}", e))?;
             if let Ok(client) = pool.get().await {
-                if let Ok(Some(row)) = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&user.email.to_lowercase()]).await {
+                if let Ok(Some(row)) = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&crate::domain::email::NormalizedEmail::normalize(&user.email)]).await {
                     let db_id: i64 = row.get("id");
                     user.id = db_id.to_string();
                 }
@@ -264,7 +264,7 @@ impl AuthService {
             return Err("Full name, email, and password are required.".to_string());
         }
         auth::validate_new_password(&request.password)?;
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
         if self.find_user_by_email(&email_norm).await?.is_some() {
             return Err("An account with this email address already exists (zaten mevcut).".to_string());
         }
@@ -304,7 +304,7 @@ impl AuthService {
         if let Some(ref pool) = self.state.pool {
             crate::db::save_user(pool, &new_user).await.map_err(|e| format!("Failed to persist user: {}", e))?;
             if let Ok(client) = pool.get().await {
-                if let Ok(Some(row)) = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&new_user.email.to_lowercase()]).await {
+                if let Ok(Some(row)) = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&crate::domain::email::NormalizedEmail::normalize(&new_user.email)]).await {
                     let db_id: i64 = row.get("id");
                     new_user.id = db_id.to_string();
                 }
@@ -356,7 +356,7 @@ impl AuthService {
         }
         auth::validate_new_password(&request.new_password)?;
 
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
         // The same message for "no such user" and "wrong password" avoids user enumeration.
         let user = self.find_user_by_email(&email_norm).await?.ok_or_else(|| INVALID_CREDENTIALS.to_string())?;
         let stored = user.password_hash.as_deref().ok_or_else(|| INVALID_CREDENTIALS.to_string())?;
@@ -380,7 +380,7 @@ impl AuthService {
         }
         {
             let mut inner = self.state.inner.write().await;
-            if let Some(u) = inner.users.iter_mut().find(|u| u.email.to_lowercase() == email_norm) {
+            if let Some(u) = inner.users.iter_mut().find(|u| crate::domain::email::same_email(&u.email, &email_norm)) {
                 u.password_hash = Some(new_hash.clone());
                 u.must_change_password = false;
             }
