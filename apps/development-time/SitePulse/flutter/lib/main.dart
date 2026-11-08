@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
 import 'ui/dashboard/dashboard_controller.dart';
@@ -34,10 +35,12 @@ class _SitePulseAppState extends State<SitePulseApp> with WidgetsBindingObserver
     super.initState();
     Intl.defaultLocale = 'tr_TR';
     WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_handleEscape);
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleEscape);
     WidgetsBinding.instance.removeObserver(this);
     _routerDelegate.dispose();
     super.dispose();
@@ -46,6 +49,26 @@ class _SitePulseAppState extends State<SitePulseApp> with WidgetsBindingObserver
   @override
   void didChangePlatformBrightness() {
     widget.controller.updatePlatformBrightness(WidgetsBinding.instance.platformDispatcher.platformBrightness);
+  }
+
+  /// Escape closes the top full-screen page, as it closed the dialogs those
+  /// pages replaced (Papara-style UX). Dialogs, sheets and menus (popup routes)
+  /// keep their own Escape handling, and the router's own pages (login,
+  /// dashboard) are never popped. A page route's built-in dismiss action is
+  /// disabled (not barrier-dismissible), so this is handled at keyboard level.
+  bool _handleEscape(KeyEvent event) {
+    if (event is! KeyDownEvent || event.logicalKey != LogicalKeyboardKey.escape) return false;
+    final navigator = _routerDelegate.navigatorKey.currentState;
+    if (navigator == null || !navigator.canPop()) return false;
+    Route<dynamic>? top;
+    navigator.popUntil((route) {
+      top = route;
+      return true; // inspect only: stops at the top route without popping it
+    });
+    final route = top;
+    if (route == null || route is PopupRoute || route.settings is Page) return false;
+    navigator.maybePop();
+    return true;
   }
 
   @override

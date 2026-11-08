@@ -435,6 +435,28 @@ impl AppStateInner {
 
     /// Backward compatibility alias for seed_test_fixtures
     #[allow(dead_code)]
+    /// Display name of a block: units loaded from PostgreSQL carry the numeric
+    /// block id, fixtures carry a letter; both resolve through `blocks`.
+    /// Always ends in "Blok" (e.g. "A Blok").
+    pub fn block_label(&self, block_id: &str) -> String {
+        let name = self
+            .blocks
+            .iter()
+            .find(|b| crate::auth::same_id(&b.id, block_id))
+            .map(|b| b.block_name.clone())
+            .unwrap_or_else(|| block_id.to_string());
+        if name.to_lowercase().contains("blok") {
+            name
+        } else {
+            format!("{} Blok", name)
+        }
+    }
+
+    /// "A Blok D:14" for a unit.
+    pub fn unit_label(&self, block_id: &str, unit_number: i32) -> String {
+        format!("{} D:{}", self.block_label(block_id), unit_number)
+    }
+
     /// Total advance of a unit (owner + tenant buckets).
     pub fn advance_total(&self, unit_id: &str) -> Decimal {
         self.advance_balances.get(unit_id).map(|a| a.total()).unwrap_or(Decimal::ZERO)
