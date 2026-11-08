@@ -84,6 +84,7 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 - [flutter-implement-json-serialization](file:///.agents/skills/flutter-implement-json-serialization/SKILL.md): JSON serialization models.
 - [flutter-apply-architecture-best-practices](file:///.agents/skills/flutter-apply-architecture-best-practices/SKILL.md): Layered architecture (UI, Logic, Data).
 - [dart-run-static-analysis](file:///.agents/skills/dart-run-static-analysis/SKILL.md): Static analysis and mechanical lint fixes.
+- **[flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md)**: SitePulse's shared Flutter component catalogue (`SpTone`, metrics, guidance cards, status badges, filter chips, `showSpSelection`, `SpMoneyFormField`/`MoneyInput`, `sp_clipboard.dart`, `ResidentSummary`, `readDecimal`, `BankFileParser`), when to promote a widget to a shared component, and the review checklist. Mandatory for SitePulse Flutter work through [.agents/rules/flutter-components.md](file:///.agents/rules/flutter-components.md); enforced by gate `flutter-reuse`.
 
 ---
 
@@ -151,6 +152,19 @@ Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/
 ./scripts/ui_style_lint.py --json
 ./scripts/ui_style_lint.py --update-baseline  # after removing literals: record the lower counts
 ```
+
+## 5b-3c. Flutter Reuse Inventory (`flutter_reuse_inventory.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/flutter_reuse_inventory.py](file:///apps/development-time/SitePulse/scripts/flutter_reuse_inventory.py) (symlinked to `scripts/flutter_reuse_inventory.py`)
+- **Purpose:** Tracks component reuse from [docs/flutter-reusability-report.md](file:///docs/flutter-reusability-report.md). The inventory counts design-token adoption and repeated patterns in `flutter/lib/ui` (`EdgeInsets.` vs `AppSpacing.`, raw colours vs `SpTone.`, `appSnackBar(` vs `spSnackBar(`, shared-widget usage). Reuse rules fail with `--check`: `clipboard` (raw `Clipboard.setData` outside `sp_clipboard.dart`), `money-parse` (`Decimal.tryParse` in `lib/ui`; use `MoneyInput`/`SpMoneyFormField`), `json-decimal` (the `?? '0') ?? Decimal.zero` fallback; use `readDecimal`), and `bank-amount` (hand-rolled `.replaceAll('.', '').replaceAll(',', '.')`; use `BankFileParser.parseAmount`), `filter-chip` (raw `FilterChip(`; use `SpFilterChip`), `selection-page` (hand-built `SpSelectionPage(`; use `showSpSelection<T>`), and `raw-snackbar` (direct `SnackBar(`; use `SpToast`/`spSnackBar(kind:)`). Comments are ignored. Gate `flutter-reuse` in `run_tests.py`.
+
+```bash
+./scripts/flutter_reuse_inventory.py           # inventory table + rule findings (exit 0)
+./scripts/flutter_reuse_inventory.py --check   # exit 1 when a reuse rule fires
+./scripts/flutter_reuse_inventory.py --json
+```
+
+The full catalogue and the promotion procedure are in the [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md) skill. Shared Flutter components that the rules point to live in `flutter/lib/ui/design_system/` (`SpTone`, `SpMetricValue`/`SpIconMetric`, `SpGuidanceCard`, `SpStatusBadge`, `SpFilterChip`, `SpMoneyFormField`/`MoneyInput`, `SpIbanCopyRow`/`spCopyToClipboard`), `ui/components/sp_dialog_pages.dart` (`showSpSelection<T>`), `ui/residents/resident_directory.dart` (`ResidentSummary`, `matchesResidentFilters`, `ResidentOccupancyStats`) and `domain/formatting/json_decimal.dart` (`readDecimal`).
 
 ## 5b-4. GUI Traceability (`gui_traceability.py`)
 

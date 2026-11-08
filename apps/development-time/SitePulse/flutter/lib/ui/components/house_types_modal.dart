@@ -9,6 +9,7 @@ import 'app_fullscreen_page.dart';
 
 import '../design_system/money_formatter.dart';
 import 'sp_dialog_pages.dart';
+import '../design_system/sp_money_field.dart';
 Future<void> showManageHouseTypesFullscreen(BuildContext context, DashboardController controller) async {
   await AppFullscreenPage.push(
     context: context,
@@ -212,7 +213,7 @@ void _showEditHouseTypeDialog(BuildContext context, DashboardController controll
                 onPressed: () async {
                   final typeName = typeNameCtrl.text.trim();
                   final duesText = duesCtrl.text.trim();
-                  final parsedDues = Decimal.tryParse(duesText);
+                  final parsedDues = MoneyInput.parse(duesText).amount;
 
                   if (typeName.isEmpty) {
                     setDialogState(() {
@@ -221,7 +222,7 @@ void _showEditHouseTypeDialog(BuildContext context, DashboardController controll
                     return;
                   }
 
-                  if (parsedDues == null || parsedDues <= Decimal.zero) {
+                  if (parsedDues == null || parsedDues <= Decimal.zero || parsedDues.scale > 2) {
                     setDialogState(() {
                       errorText = 'Lütfen geçerli bir aylık aidat tutarı giriniz.';
                     });
