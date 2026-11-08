@@ -296,7 +296,8 @@ impl AppStateInner {
                 "site-1",
                 "A",
                 14,
-            );
+            )
+            .ok();
             self.units.push(IndependentUnit {
                 id: "d-14".to_string(),
                 site_id: "site-1".to_string(),
@@ -306,7 +307,7 @@ impl AppStateInner {
                 land_share: 24,
                 owner_user_id: Some("usr-home-owner-1".to_string()),
                 tenant_user_id: None,
-                virtual_iban: Some(seeded_virtual_iban),
+                virtual_iban: seeded_virtual_iban,
                 house_type: Some("3+1".to_string()),
             });
         }
@@ -530,7 +531,8 @@ impl AppStateInner {
                 "site-1",
                 "A",
                 14,
-            );
+            )
+            .ok();
             self.units.push(IndependentUnit {
                 id: "d-14".to_string(),
                 site_id: "site-1".to_string(),
@@ -540,7 +542,7 @@ impl AppStateInner {
                 land_share: 24,
                 owner_user_id: Some("usr-home-owner-1".to_string()),
                 tenant_user_id: None,
-                virtual_iban: Some(seeded_virtual_iban),
+                virtual_iban: seeded_virtual_iban,
                 house_type: Some("3+1".to_string()),
             });
         }

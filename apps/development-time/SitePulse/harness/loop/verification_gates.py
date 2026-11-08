@@ -119,6 +119,9 @@ GATES: Dict[str, List[CommandSpec]] = {
     "testid-lint": [CommandSpec(["python3", "scripts/testid_lint.py", "--json"], ".", 120)],
     # Design-system rules (12 px floor, MoneyFormatter, no emoji icons, ratchet on literal styles).
     "ui-style-lint": [CommandSpec(["python3", "scripts/ui_style_lint.py", "--json"], ".", 120)],
+    # Rust standards (docs/RUST_STANDARDS.md 10-16): domain purity, layering, shared rules,
+    # no per-call regex / implicit rounding / floats; ratchet on unwrap, String errors, fmt.
+    "rust-standards-lint": [CommandSpec(["python3", "scripts/rust_standards_lint.py", "--json"], ".", 300)],
     # Shared-component reuse guard: no raw clipboard writes, hand-rolled amount parsing or
     # JSON Decimal fallbacks outside the shared helpers (docs/flutter-reusability-report.md).
     "flutter-reuse": [CommandSpec(["python3", "scripts/flutter_reuse_inventory.py", "--check", "--json"], ".", 120)],

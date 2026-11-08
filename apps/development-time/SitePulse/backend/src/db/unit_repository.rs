@@ -163,8 +163,8 @@ pub async fn save_unit_member(
     // Link the household member to the person record when one exists for this email.
     let person_id: Option<i64> = client
         .query_opt(
-            "SELECT id FROM persons WHERE LOWER(email) = LOWER($1)",
-            &[&email.trim()],
+            "SELECT id FROM persons WHERE LOWER(email) = $1",
+            &[&crate::domain::email::NormalizedEmail::normalize(email)],
         )
         .await?
         .map(|r| r.get(0));
@@ -276,7 +276,10 @@ pub async fn transfer_unit_ownership_db(
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
     let new_person_id: Option<i64> = tx
-        .query_opt("SELECT person_id FROM users WHERE LOWER(email) = LOWER($1)", &[&new_user.email])
+        .query_opt(
+            "SELECT person_id FROM users WHERE LOWER(email) = $1",
+            &[&crate::domain::email::NormalizedEmail::normalize(&new_user.email)],
+        )
         .await?
         .and_then(|r| r.get(0));
 

@@ -31,6 +31,7 @@ chrono-tz = "0.10"
 tokio-postgres-rustls = { version = "0.13", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 webpki-roots = "0.26"
+thiserror = "2"
 
 # Password hashing is deliberately expensive; keep it fast in debug/test builds.
 [profile.dev.package.argon2]
