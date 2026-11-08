@@ -922,6 +922,15 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             state.payment_intents.len()
         );
     }
+
+    // SPEC-009: every payments-phase-3 aggregate.
+    state.finance = super::finance_store::load_finance_book(pool).await?;
+    info!(
+        "Loaded {} expenses, {} collection cases and {} notifications from PostgreSQL",
+        state.finance.expenses.len(),
+        state.finance.cases.len(),
+        state.finance.notifications.len()
+    );
     Ok(())
 }
 

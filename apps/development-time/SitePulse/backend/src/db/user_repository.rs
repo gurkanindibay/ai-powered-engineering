@@ -49,6 +49,7 @@ pub async fn save_user(
                 Role::HomeResident => "HOME_RESIDENT",
                 Role::SaasAdmin => "SAAS_ADMIN",
                 Role::SiteManager => "SITE_MANAGER",
+                Role::Auditor => "AUDITOR",
             };
             let row = client
                 .query_one(

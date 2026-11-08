@@ -15,3 +15,15 @@ pub use apportionment::{apportion, ApportionmentError};
 pub use email::{EmailError, NormalizedEmail};
 pub use iban::{IbanError, TrIban};
 pub use text::fold_turkish;
+// SPEC-009 (payments phase 3) rules.
+pub mod assembly_vote;
+pub mod collection_metrics;
+pub mod double_entry;
+pub mod dunning;
+pub mod heat_share;
+pub mod installments;
+pub mod joint_liability;
+pub mod kvkk;
+pub mod limitation;
+pub mod payer_match;
+pub mod tax_id;
