@@ -20,7 +20,7 @@ impl HomeResidentInvitationService {
         &self,
         unit_id: &str,
         relationship: Option<String>,
-    ) -> UnitInviteLinkResponse {
+    ) -> Result<UnitInviteLinkResponse, String> {
         let inner = self.state.inner.read().await;
         let unit = inner.units.iter().find(|u| u.id == unit_id);
         let site_slug = unit
@@ -41,7 +41,7 @@ impl HomeResidentInvitationService {
             .take(24)
             .map(char::from)
             .collect();
-        let token = format!("SP-HANE-{}", token_part.to_uppercase());
+        let token = format!("SP-HANE-{}", token_part);
         let invite_url = format!(
             "https://sitepulse.app/join/{}/units/{}?token={}",
             site_slug, unit_id, token
@@ -72,17 +72,18 @@ impl HomeResidentInvitationService {
         let mut stored = response.clone();
         stored.token = crate::auth::token_digest(&token);
         stored.invite_url = String::new();
-        let mut inner_write = self.state.inner.write().await;
-        inner_write.unit_invite_tokens.insert(stored.token.clone(), stored.clone());
-        drop(inner_write);
-
         if let Some(ref pool) = self.state.pool {
-            if let Err(e) = crate::db::save_invitation_token(pool, &stored).await {
-                tracing::error!("Failed to persist invitation token: {}", e);
-            }
+            crate::db::save_invitation_token(pool, &stored)
+                .await
+                .map_err(|_| "Invitation storage unavailable")?;
         }
-
-        response
+        self.state
+            .inner
+            .write()
+            .await
+            .unit_invite_tokens
+            .insert(stored.token.clone(), stored);
+        Ok(response)
     }
 
     pub async fn register_home_resident(
@@ -99,10 +100,46 @@ impl HomeResidentInvitationService {
             return Err("Email is required".to_string());
         }
 
+        if self.state.pool.is_some() {
+            let password = generate_temporary_password();
+            let draft = User {
+                id: String::new(),
+                site_id: String::new(),
+                full_name: request.full_name.clone(),
+                email: request.email.trim().to_lowercase(),
+                phone: request.phone.clone().unwrap_or_default(),
+                password_hash: Some(crate::auth::hash_password_async(password.clone()).await?),
+                role: Role::HomeResident,
+                must_change_password: true,
+                auth_provider: AuthProvider::Local,
+                google_sub: None,
+                avatar_url: None,
+                created_at: Utc::now(),
+                person_id: None,
+            };
+            let (user, unit) = crate::services::AuthService::new(self.state.clone())
+                .register_invited_db(draft, &request.token)
+                .await?;
+            return Ok(HomeResidentResponse {
+                resident_id: user.id,
+                full_name: user.full_name,
+                email: user.email,
+                phone: request.phone,
+                unit_id: unit.clone(),
+                role: "HOME_RESIDENT".to_string(),
+                temporary_password: password,
+                permission_scope: format!("UNIT_ONLY ({})", unit),
+                created_at: Utc::now(),
+            });
+        }
         let mut inner = self.state.inner.write().await;
         let email_norm = request.email.trim().to_lowercase();
 
-        if inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
+        if inner
+            .users
+            .iter()
+            .any(|u| u.email.to_lowercase() == email_norm)
+        {
             return Err(format!(
                 "An account with this email address already exists (zaten mevcut): {}",
                 request.email
@@ -146,7 +183,7 @@ impl HomeResidentInvitationService {
             full_name: request.full_name.clone(),
             email: email_norm.clone(),
             phone: request.phone.clone().unwrap_or_else(|| "-".to_string()),
-            password_hash: Some(crate::auth::hash_password(&temp_pass)),
+            password_hash: Some(crate::auth::hash_password_async(temp_pass.clone()).await?),
             role: Role::HomeResident,
             must_change_password: true,
             auth_provider: AuthProvider::Local,
@@ -179,10 +216,20 @@ impl HomeResidentInvitationService {
 
         let mut final_resident_id = resident_id.clone();
         if let Some(ref pool) = self.state.pool {
-            crate::db::delete_invitation_token(pool, &digest).await.map_err(|e| e.to_string())?;
-            crate::db::save_user(pool, &resident_user).await.map_err(|e| format!("Failed to persist resident: {}", e))?;
+            crate::db::delete_invitation_token(pool, &digest)
+                .await
+                .map_err(|e| e.to_string())?;
+            crate::db::save_user(pool, &resident_user)
+                .await
+                .map_err(|e| format!("Failed to persist resident: {}", e))?;
             if let Ok(client) = pool.get().await {
-                if let Ok(Some(row)) = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&email_norm]).await {
+                if let Ok(Some(row)) = client
+                    .query_opt(
+                        "SELECT id FROM users WHERE LOWER(email) = $1",
+                        &[&email_norm],
+                    )
+                    .await
+                {
                     let db_id: i64 = row.get("id");
                     final_resident_id = db_id.to_string();
                 }

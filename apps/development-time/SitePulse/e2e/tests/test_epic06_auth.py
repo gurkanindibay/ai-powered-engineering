@@ -45,9 +45,10 @@ def test_logout_returns_to_login_screen(login_as, login_page, page):
 @pytest.mark.smoke
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-06-06")
-def test_saas_admin_must_change_bootstrap_password(login_as, login_page, page, api, actors):
+def test_saas_admin_must_change_bootstrap_password(login_as, login_page, page, api, actors, stack):
+    stack.sql("UPDATE users SET must_change_password=true WHERE email='admin@sitepulse.io';")
     login_as("saas")
-    saas = SaasAdmin(page).wait()
+    saas = SaasAdmin(page)
     saas.must_change_password_banner.wait_for(timeout=10_000)
 
     new_password = "E2E-Changed-Admin-2"

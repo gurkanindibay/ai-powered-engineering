@@ -161,6 +161,8 @@ def test_site_with_units_cannot_be_deleted(saas_ui):
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-03-08")
 def test_admin_password_reset_issues_a_new_password_and_retires_the_old(saas_ui, api, actors):
+    from pages.shell import Shell
+    Shell(saas_ui.page).verify_sensitive(SAAS_PASSWORD)
     manager = actors["manager"]
     new_password = saas_ui.reset_admin_password("1").password()
 

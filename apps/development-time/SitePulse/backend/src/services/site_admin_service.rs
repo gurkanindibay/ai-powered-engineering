@@ -3,8 +3,8 @@ use chrono::{DateTime, Datelike, Utc};
 use rust_decimal::Decimal;
 
 use crate::models::{
-    AuthProvider, DebtStatus, DebtorType, DuesLiability, ExpenseType, HomeOwnerResponse, IndependentUnit,
-    OccupancyStatus, RegisterHomeOwnerRequest, Role, UnitMemberDto, User,
+    AuthProvider, DebtStatus, DebtorType, DuesLiability, ExpenseType, HomeOwnerResponse,
+    IndependentUnit, OccupancyStatus, RegisterHomeOwnerRequest, Role, UnitMemberDto, User,
 };
 use crate::services::virtual_iban_service::VirtualIbanService;
 use crate::state::AppState;
@@ -31,7 +31,9 @@ pub fn validate_email(email: &str) -> Result<(), String> {
         return Err("Geçerli bir e-posta adresi giriniz (örn: sakin@sitepulse.io).".to_string());
     }
     let domain_parts: Vec<&str> = domain.split('.').collect();
-    if domain_parts.iter().any(|p| p.is_empty()) || domain_parts.last().map(|tld| tld.len()).unwrap_or(0) < 2 {
+    if domain_parts.iter().any(|p| p.is_empty())
+        || domain_parts.last().map(|tld| tld.len()).unwrap_or(0) < 2
+    {
         return Err("Geçerli bir e-posta adresi giriniz (örn: sakin@sitepulse.io).".to_string());
     }
     if email.contains(' ') || email.contains('\t') || email.contains('\n') {
@@ -45,7 +47,10 @@ pub fn validate_phone(phone: &str) -> Result<(), String> {
     if phone_trimmed.is_empty() {
         return Err("Telefon numarası boş bırakılamaz.".to_string());
     }
-    let clean: String = phone_trimmed.chars().filter(|c| c.is_ascii_digit()).collect();
+    let clean: String = phone_trimmed
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
     if clean.is_empty() {
         return Err("Telefon numarası geçerli rakamlar içermelidir.".to_string());
     }
@@ -89,7 +94,11 @@ impl SiteAdminService {
         // 1. Check in-memory state for duplicate email first
         {
             let inner = self.state.inner.read().await;
-            if inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
+            if inner
+                .users
+                .iter()
+                .any(|u| u.email.to_lowercase() == email_norm)
+            {
                 return Err(format!(
                     "An account with this email address already exists (zaten mevcut): {}",
                     request.email
@@ -112,7 +121,7 @@ impl SiteAdminService {
         let formatted_block_name = format!("{} Blok", effective_clean_block);
 
         let temp_pass = generate_resident_temporary_password();
-        let password_hash = crate::auth::hash_password(&temp_pass);
+        let password_hash = crate::auth::hash_password_async(temp_pass.clone()).await?;
 
         let effective_floor = if request.floor > 0 {
             request.floor
@@ -120,20 +129,26 @@ impl SiteAdminService {
             ((request.unit_no - 1) / 4) + 1
         };
 
-        let effective_house_type = request.house_type.clone().or_else(|| Some("2+1".to_string()));
+        let effective_house_type = request
+            .house_type
+            .clone()
+            .or_else(|| Some("2+1".to_string()));
         let mut resolved_dues = request.monthly_dues;
 
         // Resolve monthly dues from house_type tariff
         if let Some(ref ht_name) = effective_house_type {
             let inner = self.state.inner.read().await;
             if let Some(tariff) = inner.house_types.iter().find(|t| {
-                (t.site_id == site_id || crate::db::parse_id_to_i64(&t.site_id) == crate::db::parse_id_to_i64(site_id))
+                (t.site_id == site_id
+                    || crate::db::parse_id_to_i64(&t.site_id)
+                        == crate::db::parse_id_to_i64(site_id))
                     && t.type_name.eq_ignore_ascii_case(ht_name)
             }) {
                 resolved_dues = Some(tariff.dues_amount);
             }
         }
-        let monthly_dues = resolved_dues.unwrap_or_else(|| Decimal::from_str_exact("1400.00").unwrap());
+        let monthly_dues =
+            resolved_dues.unwrap_or_else(|| Decimal::from_str_exact("1400.00").unwrap());
 
         // Parse numeric IDs
         let site_numeric_id = crate::db::require_id("entity", site_id)?;
@@ -161,11 +176,17 @@ impl SiteAdminService {
 
         // 2. Persist to PostgreSQL if pool is available
         if let Some(ref pool) = self.state.pool {
-            let client = pool.get().await.map_err(|e| format!("DB connection error: {}", e))?;
+            let client = pool
+                .get()
+                .await
+                .map_err(|e| format!("DB connection error: {}", e))?;
 
             // Check duplicate email in DB
             let existing_user = client
-                .query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&email_norm])
+                .query_opt(
+                    "SELECT id FROM users WHERE LOWER(email) = $1",
+                    &[&email_norm],
+                )
                 .await
                 .map_err(|e| format!("DB query error: {}", e))?;
             if existing_user.is_some() {
@@ -198,9 +219,16 @@ impl SiteAdminService {
             };
 
             // Find or create person
-            let person_type = if request.is_resident { "HOME_RESIDENT" } else { "HOME_OWNER" };
+            let person_type = if request.is_resident {
+                "HOME_RESIDENT"
+            } else {
+                "HOME_OWNER"
+            };
             let existing_person = client
-                .query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&email_norm])
+                .query_opt(
+                    "SELECT id FROM persons WHERE LOWER(email) = $1",
+                    &[&email_norm],
+                )
                 .await
                 .map_err(|e| format!("DB query error: {}", e))?;
 
@@ -218,7 +246,11 @@ impl SiteAdminService {
             };
 
             // Insert user
-            let user_role_str = if is_tenant || is_resident_only { "HOME_RESIDENT" } else { "HOME_OWNER" };
+            let user_role_str = if is_tenant || is_resident_only {
+                "HOME_RESIDENT"
+            } else {
+                "HOME_OWNER"
+            };
             let user_row = client
                 .query_one(
                     r#"
@@ -244,10 +276,22 @@ impl SiteAdminService {
             if has_explicit_tenant {
                 let t_name = request.tenant_full_name.as_deref().unwrap_or("").trim();
                 let t_phone = request.tenant_phone.as_deref().unwrap_or("").trim();
-                let t_email_norm = request.tenant_email.as_deref().unwrap_or("").trim().to_lowercase();
+                let t_email_norm = request
+                    .tenant_email
+                    .as_deref()
+                    .unwrap_or("")
+                    .trim()
+                    .to_lowercase();
 
                 let existing_t_person = if !t_email_norm.is_empty() {
-                    client.query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&t_email_norm]).await.ok().flatten()
+                    client
+                        .query_opt(
+                            "SELECT id FROM persons WHERE LOWER(email) = $1",
+                            &[&t_email_norm],
+                        )
+                        .await
+                        .ok()
+                        .flatten()
                 } else {
                     None
                 };
@@ -268,7 +312,14 @@ impl SiteAdminService {
                 explicit_tenant_pid = Some(t_pid);
 
                 if !t_email_norm.is_empty() {
-                    let existing_t_user = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&t_email_norm]).await.ok().flatten();
+                    let existing_t_user = client
+                        .query_opt(
+                            "SELECT id FROM users WHERE LOWER(email) = $1",
+                            &[&t_email_norm],
+                        )
+                        .await
+                        .ok()
+                        .flatten();
                     if existing_t_user.is_none() {
                         client
                             .execute(
@@ -337,7 +388,11 @@ impl SiteAdminService {
                             .await.map_err(|e| e.to_string())?;
                     } else if let Some(prev_pid) = prev_tenant.or(prev_owner) {
                         // Legacy occupant was not in unit_occupancies; archive it now so history is preserved
-                        let prev_role = if prev_tenant.is_some() { "TENANT" } else { "OWNER" };
+                        let prev_role = if prev_tenant.is_some() {
+                            "TENANT"
+                        } else {
+                            "OWNER"
+                        };
                         client
                             .execute(
                                 r#"
@@ -350,9 +405,23 @@ impl SiteAdminService {
                     }
 
                     // Insert new occupant into unit_occupancies
-                    let new_occ_type = if has_explicit_tenant || is_tenant { "TENANT" } else { "OWNER" };
-                    let new_occ_status = if has_explicit_tenant || is_tenant { "TENANT_OCCUPIED" } else if request.is_resident { "OWNER_OCCUPIED" } else { "VACANT" };
-                    let active_occ_pid = if has_explicit_tenant { explicit_tenant_person_id } else { Some(person_numeric_id) };
+                    let new_occ_type = if has_explicit_tenant || is_tenant {
+                        "TENANT"
+                    } else {
+                        "OWNER"
+                    };
+                    let new_occ_status = if has_explicit_tenant || is_tenant {
+                        "TENANT_OCCUPIED"
+                    } else if request.is_resident {
+                        "OWNER_OCCUPIED"
+                    } else {
+                        "VACANT"
+                    };
+                    let active_occ_pid = if has_explicit_tenant {
+                        explicit_tenant_person_id
+                    } else {
+                        Some(person_numeric_id)
+                    };
 
                     if has_explicit_tenant || is_tenant || request.is_resident {
                         if let Some(occ_pid) = active_occ_pid {
@@ -381,9 +450,16 @@ impl SiteAdminService {
                                     virtual_iban = COALESCE(virtual_iban, $4)
                                 WHERE id = $5
                                 "#,
-                                &[&person_numeric_id, &explicit_tenant_person_id, &effective_house_type, &viban, &unit_numeric_id],
+                                &[
+                                    &person_numeric_id,
+                                    &explicit_tenant_person_id,
+                                    &effective_house_type,
+                                    &viban,
+                                    &unit_numeric_id,
+                                ],
                             )
-                            .await.map_err(|e| e.to_string())?;
+                            .await
+                            .map_err(|e| e.to_string())?;
                     } else if is_tenant {
                         client
                             .execute(
@@ -395,9 +471,16 @@ impl SiteAdminService {
                                     virtual_iban = COALESCE(virtual_iban, $4)
                                 WHERE id = $5
                                 "#,
-                                &[&person_numeric_id, &new_occ_status, &effective_house_type, &viban, &unit_numeric_id],
+                                &[
+                                    &person_numeric_id,
+                                    &new_occ_status,
+                                    &effective_house_type,
+                                    &viban,
+                                    &unit_numeric_id,
+                                ],
                             )
-                            .await.map_err(|e| e.to_string())?;
+                            .await
+                            .map_err(|e| e.to_string())?;
                     } else {
                         client
                             .execute(
@@ -424,8 +507,18 @@ impl SiteAdminService {
                 } else {
                     "VACANT"
                 };
-                let owner_pid = if is_tenant && !has_explicit_tenant { None } else { Some(person_numeric_id) };
-                let tenant_pid = if has_explicit_tenant { explicit_tenant_person_id } else if is_tenant { Some(person_numeric_id) } else { None };
+                let owner_pid = if is_tenant && !has_explicit_tenant {
+                    None
+                } else {
+                    Some(person_numeric_id)
+                };
+                let tenant_pid = if has_explicit_tenant {
+                    explicit_tenant_person_id
+                } else if is_tenant {
+                    Some(person_numeric_id)
+                } else {
+                    None
+                };
 
                 let unit_row = client
                     .query_one(
@@ -542,7 +635,12 @@ impl SiteAdminService {
         let user_id = if user_numeric_id > 0 {
             user_numeric_id.to_string()
         } else {
-            let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            let max_u = inner
+                .users
+                .iter()
+                .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
+                .max()
+                .unwrap_or(0);
             (max_u + 1).to_string()
         };
 
@@ -553,13 +651,21 @@ impl SiteAdminService {
             email: email_norm.clone(),
             phone: request.phone.clone(),
             password_hash: Some(password_hash.clone()),
-            role: if is_tenant || is_resident_only { Role::HomeResident } else { Role::HomeOwner },
+            role: if is_tenant || is_resident_only {
+                Role::HomeResident
+            } else {
+                Role::HomeOwner
+            },
             must_change_password: true,
             auth_provider: AuthProvider::Local,
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
-            person_id: if person_numeric_id > 0 { Some(person_numeric_id) } else { None },
+            person_id: if person_numeric_id > 0 {
+                Some(person_numeric_id)
+            } else {
+                None
+            },
         };
         inner.users.push(resident_user.clone());
 
@@ -593,31 +699,59 @@ impl SiteAdminService {
                 person_id: None,
                 resident_user_id: None,
             };
-            inner.unit_members.entry(unit_id.clone()).or_default().push(member_dto.clone());
+            inner
+                .unit_members
+                .entry(unit_id.clone())
+                .or_default()
+                .push(member_dto.clone());
             if unit_numeric_id > 0 {
-                inner.unit_members.entry(unit_numeric_id.to_string()).or_default().push(member_dto.clone());
+                inner
+                    .unit_members
+                    .entry(unit_numeric_id.to_string())
+                    .or_default()
+                    .push(member_dto.clone());
             }
             let legacy_id = format!("d-{}", request.unit_no);
             if legacy_id != unit_id {
-                inner.unit_members.entry(legacy_id).or_default().push(member_dto.clone());
+                inner
+                    .unit_members
+                    .entry(legacy_id)
+                    .or_default()
+                    .push(member_dto.clone());
             }
             let unit_prefix_id = format!("unit-{}", request.unit_no);
             if unit_prefix_id != unit_id {
-                inner.unit_members.entry(unit_prefix_id).or_default().push(member_dto);
+                inner
+                    .unit_members
+                    .entry(unit_prefix_id)
+                    .or_default()
+                    .push(member_dto);
             }
         } else {
-            let existing_owner_id = existing_unit_pos.and_then(|p| inner.units[p].owner_user_id.clone());
-            let existing_tenant_id = existing_unit_pos.and_then(|p| inner.units[p].tenant_user_id.clone());
+            let existing_owner_id =
+                existing_unit_pos.and_then(|p| inner.units[p].owner_user_id.clone());
+            let existing_tenant_id =
+                existing_unit_pos.and_then(|p| inner.units[p].tenant_user_id.clone());
 
             let mut explicit_tenant_user_id_in_mem: Option<String> = None;
             if has_explicit_tenant {
-                let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+                let max_u = inner
+                    .users
+                    .iter()
+                    .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
+                    .max()
+                    .unwrap_or(0);
                 let tid = (max_u + 1).to_string();
                 let tenant_user = User {
                     id: tid.clone(),
                     site_id: site_id.to_string(),
                     full_name: request.tenant_full_name.clone().unwrap_or_default(),
-                    email: request.tenant_email.clone().unwrap_or_default().trim().to_lowercase(),
+                    email: request
+                        .tenant_email
+                        .clone()
+                        .unwrap_or_default()
+                        .trim()
+                        .to_lowercase(),
                     phone: request.tenant_phone.clone().unwrap_or_default(),
                     password_hash: Some(password_hash.clone()),
                     role: Role::HomeResident,
@@ -639,7 +773,11 @@ impl SiteAdminService {
                 unit_number: request.unit_no,
                 floor: effective_floor,
                 land_share: 1,
-                owner_user_id: if is_tenant && !has_explicit_tenant { existing_owner_id } else { Some(user_id.clone()) },
+                owner_user_id: if is_tenant && !has_explicit_tenant {
+                    existing_owner_id
+                } else {
+                    Some(user_id.clone())
+                },
                 tenant_user_id: if has_explicit_tenant {
                     explicit_tenant_user_id_in_mem
                 } else if is_tenant {
@@ -695,14 +833,21 @@ impl SiteAdminService {
         }
 
         if !is_resident_only {
-            let occ_type = if has_explicit_tenant || is_tenant { "TENANT" } else { "OWNER" };
+            let occ_type = if has_explicit_tenant || is_tenant {
+                "TENANT"
+            } else {
+                "OWNER"
+            };
             let history_key = unit_id.clone();
             let history_list = inner.unit_occupancies.entry(history_key).or_default();
             for item in history_list.iter_mut() {
                 if item.is_active {
                     item.is_active = false;
                     item.end_date = Some(Utc::now().date_naive().to_string());
-                    item.notes = Some(format!("{} • Ayrıldı (Yeni sakin devri)", item.notes.as_deref().unwrap_or("")));
+                    item.notes = Some(format!(
+                        "{} • Ayrıldı (Yeni sakin devri)",
+                        item.notes.as_deref().unwrap_or("")
+                    ));
                 }
             }
             if has_explicit_tenant {
@@ -734,39 +879,57 @@ impl SiteAdminService {
                     end_date: None,
                     is_active: true,
                     exit_balance: Decimal::ZERO,
-                    notes: Some(format!("Yeni {} kaydı", if is_tenant { "kiracı" } else { "malik" })),
+                    notes: Some(format!(
+                        "Yeni {} kaydı",
+                        if is_tenant { "kiracı" } else { "malik" }
+                    )),
                     created_at: Utc::now(),
                 });
             }
             let cloned = history_list.clone();
-            inner.unit_occupancies.insert(request.unit_no.to_string(), cloned.clone());
-            inner.unit_occupancies.insert(format!("unit-{}", request.unit_no), cloned.clone());
-            inner.unit_occupancies.insert(format!("d-{}", request.unit_no), cloned);
+            inner
+                .unit_occupancies
+                .insert(request.unit_no.to_string(), cloned.clone());
+            inner
+                .unit_occupancies
+                .insert(format!("unit-{}", request.unit_no), cloned.clone());
+            inner
+                .unit_occupancies
+                .insert(format!("d-{}", request.unit_no), cloned);
         }
 
         // Also add due liability in memory if > 0 and NOT a co-resident
         if !is_resident_only && monthly_dues > Decimal::ZERO {
-            let period = inner.dues.first().map(|d| d.period.clone()).unwrap_or_else(|| {
-                let now = Utc::now();
-                let month_name = match now.month() {
-                    1 => "Ocak",
-                    2 => "Şubat",
-                    3 => "Mart",
-                    4 => "Nisan",
-                    5 => "Mayıs",
-                    6 => "Haziran",
-                    7 => "Temmuz",
-                    8 => "Ağustos",
-                    9 => "Eylül",
-                    10 => "Ekim",
-                    11 => "Kasım",
-                    12 => "Aralık",
-                    _ => "Ocak",
-                };
-                format!("{} {}", month_name, now.year())
-            });
+            let period = inner
+                .dues
+                .first()
+                .map(|d| d.period.clone())
+                .unwrap_or_else(|| {
+                    let now = Utc::now();
+                    let month_name = match now.month() {
+                        1 => "Ocak",
+                        2 => "Şubat",
+                        3 => "Mart",
+                        4 => "Nisan",
+                        5 => "Mayıs",
+                        6 => "Haziran",
+                        7 => "Temmuz",
+                        8 => "Ağustos",
+                        9 => "Eylül",
+                        10 => "Ekim",
+                        11 => "Kasım",
+                        12 => "Aralık",
+                        _ => "Ocak",
+                    };
+                    format!("{} {}", month_name, now.year())
+                });
 
-            let max_d = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
+            let max_d = inner
+                .dues
+                .iter()
+                .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
+                .max()
+                .unwrap_or(0);
             inner.dues.push(DuesLiability {
                 id: (max_d + 1).to_string(),
                 unit_id: unit_id.clone(),
@@ -778,7 +941,11 @@ impl SiteAdminService {
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: if is_tenant { DebtorType::Tenant } else { DebtorType::Owner },
+                debtor_type: if is_tenant {
+                    DebtorType::Tenant
+                } else {
+                    DebtorType::Owner
+                },
                 expense_type: ExpenseType::OperationalDues,
                 penalty_accrued_through: None,
             });
@@ -816,7 +983,11 @@ impl SiteAdminService {
             temporary_password: Some(temp_pass),
             must_change_password: true,
             created_at: Utc::now(),
-            occupancy_status: Some(if request.is_resident { OccupancyStatus::OwnerOccupied } else { OccupancyStatus::Vacant }),
+            occupancy_status: Some(if request.is_resident {
+                OccupancyStatus::OwnerOccupied
+            } else {
+                OccupancyStatus::Vacant
+            }),
             tenant_full_name: None,
             tenant_email: None,
             tenant_phone: None,
@@ -865,7 +1036,10 @@ impl SiteAdminService {
                     WHERE u.site_id = $1
                     ORDER BY b.block_name, u.unit_number
                 "#;
-                let mut household_map: std::collections::HashMap<String, Vec<crate::models::UnitMemberDto>> = std::collections::HashMap::new();
+                let mut household_map: std::collections::HashMap<
+                    String,
+                    Vec<crate::models::UnitMemberDto>,
+                > = std::collections::HashMap::new();
                 if let Some(m_rows) = crate::db::logged(client
                     .query(
                         r#"
@@ -896,7 +1070,10 @@ impl SiteAdminService {
                     }
                 }
 
-                if let Some(rows) = crate::db::logged(client.query(query, &[&site_numeric]).await, "site_admin_service") {
+                if let Some(rows) = crate::db::logged(
+                    client.query(query, &[&site_numeric]).await,
+                    "site_admin_service",
+                ) {
                     if !rows.is_empty() {
                         let mut db_result = Vec::new();
                         let mut seen = std::collections::HashSet::new();
@@ -922,15 +1099,25 @@ impl SiteAdminService {
                             let op_balance: Decimal = r.get("operational_dues_balance");
                             let cap_balance: Decimal = r.get("capital_dues_balance");
 
-                            let mut household = household_map.get(&unit_id_val).cloned().unwrap_or_default();
+                            let mut household =
+                                household_map.get(&unit_id_val).cloned().unwrap_or_default();
                             if household.is_empty() {
-                                household = household_map.get(&unit_no.to_string()).cloned().unwrap_or_default();
+                                household = household_map
+                                    .get(&unit_no.to_string())
+                                    .cloned()
+                                    .unwrap_or_default();
                             }
                             if household.is_empty() {
-                                household = household_map.get(&format!("d-{}", unit_no)).cloned().unwrap_or_default();
+                                household = household_map
+                                    .get(&format!("d-{}", unit_no))
+                                    .cloned()
+                                    .unwrap_or_default();
                             }
                             if household.is_empty() {
-                                household = household_map.get(&format!("unit-{}", unit_no)).cloned().unwrap_or_default();
+                                household = household_map
+                                    .get(&format!("unit-{}", unit_no))
+                                    .cloned()
+                                    .unwrap_or_default();
                             }
 
                             db_result.push(HomeOwnerResponse {
@@ -949,7 +1136,9 @@ impl SiteAdminService {
                                 temporary_password: None,
                                 must_change_password: r.get("must_change_password"),
                                 created_at: r.get("created_at"),
-                                occupancy_status: Some(OccupancyStatus::from_str_loose(&occ_status)),
+                                occupancy_status: Some(OccupancyStatus::from_str_loose(
+                                    &occ_status,
+                                )),
                                 tenant_full_name: t_name,
                                 tenant_email: t_email,
                                 tenant_phone: t_phone,
@@ -1034,7 +1223,10 @@ impl SiteAdminService {
                 land_share: "1/24".to_string(),
                 monthly_dues,
                 house_type: matching_unit.and_then(|u| u.house_type.clone()),
-                is_resident: user.role == Role::HomeResident || matching_unit.map(|u| u.tenant_user_id.is_none()).unwrap_or(true),
+                is_resident: user.role == Role::HomeResident
+                    || matching_unit
+                        .map(|u| u.tenant_user_id.is_none())
+                        .unwrap_or(true),
                 temporary_password: None,
                 must_change_password: user.must_change_password,
                 created_at: user.created_at,
@@ -1095,7 +1287,11 @@ impl SiteAdminService {
                                 &[&u_id, &tenant_person_id],
                             ).await.map_err(|e| e.to_string())?;
                         }
-                        let new_occupancy = if req.is_resident == Some(true) { "OWNER_OCCUPIED" } else { "VACANT" };
+                        let new_occupancy = if req.is_resident == Some(true) {
+                            "OWNER_OCCUPIED"
+                        } else {
+                            "VACANT"
+                        };
                         client.execute("UPDATE units SET tenant_person_id = NULL, occupancy_status = $1 WHERE id = $2", &[&new_occupancy, &u_id]).await.map_err(|e| e.to_string())?;
                         if req.is_resident == Some(true) {
                             if let Some(owner_person_id) = p_id {
@@ -1109,22 +1305,53 @@ impl SiteAdminService {
                         }
                     } else if let Some(tenant_person_id) = t_id {
                         if let Some(ref t_name) = req.tenant_full_name {
-                            client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[t_name, &tenant_person_id]).await.map_err(|e| e.to_string())?;
+                            client
+                                .execute(
+                                    "UPDATE persons SET full_name = $1 WHERE id = $2",
+                                    &[t_name, &tenant_person_id],
+                                )
+                                .await
+                                .map_err(|e| e.to_string())?;
                         }
                         if let Some(ref t_phone) = req.tenant_phone {
-                            client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[t_phone, &tenant_person_id]).await.map_err(|e| e.to_string())?;
+                            client
+                                .execute(
+                                    "UPDATE persons SET phone = $1 WHERE id = $2",
+                                    &[t_phone, &tenant_person_id],
+                                )
+                                .await
+                                .map_err(|e| e.to_string())?;
                         }
                         if let Some(ref t_email) = req.tenant_email {
                             let email_norm = t_email.trim().to_lowercase();
-                            let prev_email: Option<String> = client.query_opt("SELECT email FROM persons WHERE id = $1", &[&tenant_person_id]).await.ok().flatten().map(|r| r.get(0));
-                            client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &tenant_person_id]).await.map_err(|e| e.to_string())?;
+                            let prev_email: Option<String> = client
+                                .query_opt(
+                                    "SELECT email FROM persons WHERE id = $1",
+                                    &[&tenant_person_id],
+                                )
+                                .await
+                                .ok()
+                                .flatten()
+                                .map(|r| r.get(0));
+                            client
+                                .execute(
+                                    "UPDATE persons SET email = $1 WHERE id = $2",
+                                    &[&email_norm, &tenant_person_id],
+                                )
+                                .await
+                                .map_err(|e| e.to_string())?;
                             if let Some(ref pe) = prev_email {
                                 client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND LOWER(email) = LOWER($3)", &[&email_norm, &site_numeric, pe]).await.map_err(|e| e.to_string())?;
                             }
                         }
                     } else if let Some(ref t_name) = req.tenant_full_name {
                         if !t_name.trim().is_empty() {
-                            let t_email = req.tenant_email.clone().unwrap_or_else(|| format!("tenant.{}@example.com", u_id)).trim().to_lowercase();
+                            let t_email = req
+                                .tenant_email
+                                .clone()
+                                .unwrap_or_else(|| format!("tenant.{}@example.com", u_id))
+                                .trim()
+                                .to_lowercase();
                             let t_phone = req.tenant_phone.clone().unwrap_or_default();
                             let row_res = client.query_one(
                                 "INSERT INTO persons (full_name, phone, email, person_type) 
@@ -1147,15 +1374,41 @@ impl SiteAdminService {
 
                     if let Some(owner_person_id) = p_id {
                         if let Some(ref name) = req.owner_full_name {
-                            client.execute("UPDATE persons SET full_name = $1 WHERE id = $2", &[name, &owner_person_id]).await.map_err(|e| e.to_string())?;
+                            client
+                                .execute(
+                                    "UPDATE persons SET full_name = $1 WHERE id = $2",
+                                    &[name, &owner_person_id],
+                                )
+                                .await
+                                .map_err(|e| e.to_string())?;
                         }
                         if let Some(ref phone) = req.phone {
-                            client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[phone, &owner_person_id]).await.map_err(|e| e.to_string())?;
+                            client
+                                .execute(
+                                    "UPDATE persons SET phone = $1 WHERE id = $2",
+                                    &[phone, &owner_person_id],
+                                )
+                                .await
+                                .map_err(|e| e.to_string())?;
                         }
                         if let Some(ref email) = req.email {
                             let email_norm = email.trim().to_lowercase();
-                            let prev_email: Option<String> = client.query_opt("SELECT email FROM persons WHERE id = $1", &[&owner_person_id]).await.ok().flatten().map(|r| r.get(0));
-                            client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &owner_person_id]).await.map_err(|e| e.to_string())?;
+                            let prev_email: Option<String> = client
+                                .query_opt(
+                                    "SELECT email FROM persons WHERE id = $1",
+                                    &[&owner_person_id],
+                                )
+                                .await
+                                .ok()
+                                .flatten()
+                                .map(|r| r.get(0));
+                            client
+                                .execute(
+                                    "UPDATE persons SET email = $1 WHERE id = $2",
+                                    &[&email_norm, &owner_person_id],
+                                )
+                                .await
+                                .map_err(|e| e.to_string())?;
                             if let Some(ref pe) = prev_email {
                                 client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND LOWER(email) = LOWER($3)", &[&email_norm, &site_numeric, pe]).await.map_err(|e| e.to_string())?;
                             }
@@ -1163,7 +1416,13 @@ impl SiteAdminService {
                     }
 
                     if let Some(ref ht) = req.house_type {
-                        client.execute("UPDATE units SET house_type = $1 WHERE id = $2", &[ht, &u_id]).await.map_err(|e| e.to_string())?;
+                        client
+                            .execute(
+                                "UPDATE units SET house_type = $1 WHERE id = $2",
+                                &[ht, &u_id],
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
                     }
                     if let Some(dues) = req.monthly_dues {
                         client.execute(
@@ -1187,7 +1446,8 @@ impl SiteAdminService {
         let user_idx = inner.users.iter().position(|u| {
             u.id == unit_or_user_id
                 || crate::db::parse_id_to_i64(&u.id) == id_numeric
-                || (unit_idx.is_some() && inner.units[unit_idx.unwrap()].owner_user_id.as_deref() == Some(&u.id))
+                || (unit_idx.is_some()
+                    && inner.units[unit_idx.unwrap()].owner_user_id.as_deref() == Some(&u.id))
         });
 
         let tenant_user_idx = if let Some(uidx) = unit_idx {
@@ -1215,9 +1475,17 @@ impl SiteAdminService {
                 }
             } else if let Some(ref t_name) = req.tenant_full_name {
                 if !t_name.trim().is_empty() {
-                    let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+                    let max_u = inner
+                        .users
+                        .iter()
+                        .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
+                        .max()
+                        .unwrap_or(0);
                     let new_uid = (max_u + 1).to_string();
-                    let email = req.tenant_email.clone().unwrap_or_else(|| format!("tenant.{}@example.com", new_uid));
+                    let email = req
+                        .tenant_email
+                        .clone()
+                        .unwrap_or_else(|| format!("tenant.{}@example.com", new_uid));
                     let phone = req.tenant_phone.clone().unwrap_or_default();
                     inner.users.push(crate::models::User {
                         id: new_uid.clone(),
@@ -1242,7 +1510,11 @@ impl SiteAdminService {
             }
             if let Some(dues) = req.monthly_dues {
                 let unit_id = inner.units[uidx].id.clone();
-                for d in inner.dues.iter_mut().filter(|d| d.unit_id == unit_id && d.status == DebtStatus::Pending) {
+                for d in inner
+                    .dues
+                    .iter_mut()
+                    .filter(|d| d.unit_id == unit_id && d.status == DebtStatus::Pending)
+                {
                     d.principal_amount = dues;
                     d.total_amount = dues;
                 }
@@ -1272,8 +1544,21 @@ impl SiteAdminService {
         if let Some(updated) = all_owners.into_iter().find(|o| {
             o.unit_id == unit_or_user_id
                 || crate::db::parse_id_to_i64(&o.unit_id) == id_numeric
-                || req.email.as_ref().map(|e| e.trim().eq_ignore_ascii_case(&o.email)).unwrap_or(false)
-                || (req.tenant_email.as_ref().map(|e| o.tenant_email.as_ref().map(|te| te.trim().eq_ignore_ascii_case(e)).unwrap_or(false)).unwrap_or(false))
+                || req
+                    .email
+                    .as_ref()
+                    .map(|e| e.trim().eq_ignore_ascii_case(&o.email))
+                    .unwrap_or(false)
+                || (req
+                    .tenant_email
+                    .as_ref()
+                    .map(|e| {
+                        o.tenant_email
+                            .as_ref()
+                            .map(|te| te.trim().eq_ignore_ascii_case(e))
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false))
         }) {
             Ok(updated)
         } else {
@@ -1284,7 +1569,10 @@ impl SiteAdminService {
                 block: "A".to_string(),
                 unit_no: id_numeric.map(|n| n as i32).unwrap_or(1),
                 floor: 1,
-                owner_full_name: req.owner_full_name.clone().unwrap_or_else(|| "Kat Maliki".to_string()),
+                owner_full_name: req
+                    .owner_full_name
+                    .clone()
+                    .unwrap_or_else(|| "Kat Maliki".to_string()),
                 email: req.email.clone().unwrap_or_default(),
                 phone: req.phone.clone().unwrap_or_default(),
                 land_share: req.land_share.clone().unwrap_or_else(|| "1/1".to_string()),
@@ -1295,7 +1583,11 @@ impl SiteAdminService {
                 must_change_password: false,
                 created_at: chrono::Utc::now(),
                 occupancy_status: Some(if req.remove_tenant == Some(true) {
-                    if req.is_resident == Some(true) { OccupancyStatus::OwnerOccupied } else { OccupancyStatus::Vacant }
+                    if req.is_resident == Some(true) {
+                        OccupancyStatus::OwnerOccupied
+                    } else {
+                        OccupancyStatus::Vacant
+                    }
                 } else if req.tenant_full_name.is_some() {
                     OccupancyStatus::TenantOccupied
                 } else {
@@ -1311,14 +1603,24 @@ impl SiteAdminService {
         }
     }
 
-    pub async fn delete_home_owner(&self, site_id: &str, unit_or_user_id: &str) -> Result<(), String> {
+    pub async fn delete_home_owner(
+        &self,
+        site_id: &str,
+        unit_or_user_id: &str,
+    ) -> Result<(), String> {
         let site_numeric = crate::db::require_id("entity", site_id)?;
         let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
 
         // 1. If DB pool is available, dissociate in PostgreSQL inside a single transaction
         if let Some(ref pool) = self.state.pool {
-            let mut client = pool.get().await.map_err(|e| format!("Database connection error: {}", e))?;
-            let tx = client.transaction().await.map_err(|e| format!("Transaction error: {}", e))?;
+            let mut client = pool
+                .get()
+                .await
+                .map_err(|e| format!("Database connection error: {}", e))?;
+            let tx = client
+                .transaction()
+                .await
+                .map_err(|e| format!("Transaction error: {}", e))?;
 
             let unit_row_opt = if let Some(uid) = id_numeric {
                 tx.query_opt(
@@ -1407,7 +1709,9 @@ impl SiteAdminService {
                     }
                 }
             }
-            tx.commit().await.map_err(|e| format!("Transaction commit error: {}", e))?;
+            tx.commit()
+                .await
+                .map_err(|e| format!("Transaction commit error: {}", e))?;
         }
 
         // 2. In-memory state cleanup
@@ -1417,11 +1721,15 @@ impl SiteAdminService {
             .units
             .iter()
             .filter(|u| {
-                (u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric))
+                (u.site_id == site_id
+                    || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric))
                     && (u.id == unit_or_user_id
                         || crate::db::parse_id_to_i64(&u.id) == id_numeric
                         || u.owner_user_id.as_deref() == Some(unit_or_user_id)
-                        || u.owner_user_id.as_ref().and_then(|uid| crate::db::parse_id_to_i64(uid)) == id_numeric)
+                        || u.owner_user_id
+                            .as_ref()
+                            .and_then(|uid| crate::db::parse_id_to_i64(uid))
+                            == id_numeric)
             })
             .cloned()
             .collect();
@@ -1450,7 +1758,8 @@ impl SiteAdminService {
 
             // Clear matching units for this site
             inner.units.retain(|u| {
-                let matches_site = u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric);
+                let matches_site = u.site_id == site_id
+                    || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric);
                 if !matches_site {
                     return true;
                 }
@@ -1470,7 +1779,10 @@ impl SiteAdminService {
 
             // Remove users if not owning other units
             for owner_uid in &target_owner_uids {
-                let owns_other = inner.units.iter().any(|u| u.owner_user_id.as_deref() == Some(owner_uid));
+                let owns_other = inner
+                    .units
+                    .iter()
+                    .any(|u| u.owner_user_id.as_deref() == Some(owner_uid));
                 if !owns_other {
                     inner.users.retain(|u| &u.id != owner_uid);
                 }
@@ -1479,13 +1791,19 @@ impl SiteAdminService {
         } else {
             // Also check if id is a user
             if let Some(usridx) = inner.users.iter().position(|u| {
-                (u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric))
-                    && (u.id == unit_or_user_id || crate::db::parse_id_to_i64(&u.id) == id_numeric || u.email.eq_ignore_ascii_case(unit_or_user_id))
+                (u.site_id == site_id
+                    || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric))
+                    && (u.id == unit_or_user_id
+                        || crate::db::parse_id_to_i64(&u.id) == id_numeric
+                        || u.email.eq_ignore_ascii_case(unit_or_user_id))
             }) {
                 inner.users.remove(usridx);
                 Ok(())
             } else {
-                Err(format!("Kat maliki / daire '{}' bulunamadı.", unit_or_user_id))
+                Err(format!(
+                    "Kat maliki / daire '{}' bulunamadı.",
+                    unit_or_user_id
+                ))
             }
         }
     }
@@ -1506,7 +1824,11 @@ impl SiteAdminService {
             return Err("E-posta adresi boş olamaz.".to_string());
         }
 
-        let relationship_val = if relationship.trim().is_empty() { "Ev Sakini" } else { relationship };
+        let relationship_val = if relationship.trim().is_empty() {
+            "Ev Sakini"
+        } else {
+            relationship
+        };
 
         // Persist into the canonical household table; it resolves the unit's active
         // occupancy and links the person by email. The returned id is the real identifier.
@@ -1537,17 +1859,35 @@ impl SiteAdminService {
         };
 
         let mut inner = self.state.inner.write().await;
-        for key in &[unit_id.to_string(), format!("d-{}", unit_id), format!("unit-{}", unit_id)] {
-            inner.unit_members.entry(key.clone()).or_default().push(member.clone());
+        for key in &[
+            unit_id.to_string(),
+            format!("d-{}", unit_id),
+            format!("unit-{}", unit_id),
+        ] {
+            inner
+                .unit_members
+                .entry(key.clone())
+                .or_default()
+                .push(member.clone());
         }
 
         // Also add to inner.users so the co-resident can log in with temporary password if needed
         let email_norm = email.trim().to_lowercase();
-        if !email_norm.is_empty() && !inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
+        if !email_norm.is_empty()
+            && !inner
+                .users
+                .iter()
+                .any(|u| u.email.to_lowercase() == email_norm)
+        {
             let temp_pass = generate_resident_temporary_password();
-            let password_hash = crate::auth::hash_password(&temp_pass);
+            let password_hash = crate::auth::hash_password_async(temp_pass.clone()).await?;
             let s_id = site_id.to_string();
-            let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            let max_u = inner
+                .users
+                .iter()
+                .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
+                .max()
+                .unwrap_or(0);
             inner.users.push(crate::models::User {
                 id: (max_u + 1).to_string(),
                 site_id: s_id,
@@ -1568,7 +1908,12 @@ impl SiteAdminService {
         Ok(member)
     }
 
-    pub async fn delete_unit_member(&self, _site_id: &str, unit_id: &str, resident_id: &str) -> Result<(), String> {
+    pub async fn delete_unit_member(
+        &self,
+        _site_id: &str,
+        unit_id: &str,
+        resident_id: &str,
+    ) -> Result<(), String> {
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
                 let unit_id_num = crate::db::require_id("entity", unit_id)?;
@@ -1581,7 +1926,11 @@ impl SiteAdminService {
         }
 
         let mut inner = self.state.inner.write().await;
-        for key in &[unit_id.to_string(), format!("d-{}", unit_id), format!("unit-{}", unit_id)] {
+        for key in &[
+            unit_id.to_string(),
+            format!("d-{}", unit_id),
+            format!("unit-{}", unit_id),
+        ] {
             if let Some(members) = inner.unit_members.get_mut(key) {
                 members.retain(|m| m.resident_id != resident_id && m.full_name != resident_id);
             }
@@ -1612,7 +1961,11 @@ impl SiteAdminService {
         }
 
         let mut inner = self.state.inner.write().await;
-        for key in &[unit_id.to_string(), format!("d-{}", unit_id), format!("unit-{}", unit_id)] {
+        for key in &[
+            unit_id.to_string(),
+            format!("d-{}", unit_id),
+            format!("unit-{}", unit_id),
+        ] {
             if let Some(members) = inner.unit_members.get_mut(key) {
                 for m in members.iter_mut() {
                     if m.resident_id == resident_id || m.full_name == resident_id {
@@ -1627,7 +1980,10 @@ impl SiteAdminService {
         Ok(())
     }
 
-    pub async fn get_house_types_for_site(&self, site_id: &str) -> Vec<crate::models::HouseTypeTariff> {
+    pub async fn get_house_types_for_site(
+        &self,
+        site_id: &str,
+    ) -> Vec<crate::models::HouseTypeTariff> {
         let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(0);
 
         // 1. Try DB first if pool available
@@ -1667,7 +2023,9 @@ impl SiteAdminService {
         let list: Vec<_> = inner
             .house_types
             .iter()
-            .filter(|h| h.site_id == site_id || crate::db::parse_id_to_i64(&h.site_id) == Some(site_numeric))
+            .filter(|h| {
+                h.site_id == site_id || crate::db::parse_id_to_i64(&h.site_id) == Some(site_numeric)
+            })
             .cloned()
             .collect();
         if !list.is_empty() {
@@ -1729,7 +2087,10 @@ impl SiteAdminService {
         let type_name_trimmed = request.type_name.trim().to_string();
 
         let id_str = if let Some(ref pool) = self.state.pool {
-            let client = pool.get().await.map_err(|e| format!("DB connection error: {}", e))?;
+            let client = pool
+                .get()
+                .await
+                .map_err(|e| format!("DB connection error: {}", e))?;
             let row = client
                 .query_one(
                     r#"
@@ -1740,7 +2101,12 @@ impl SiteAdminService {
                         description = EXCLUDED.description
                     RETURNING id
                     "#,
-                    &[&site_numeric, &type_name_trimmed, &request.dues_amount, &request.description],
+                    &[
+                        &site_numeric,
+                        &type_name_trimmed,
+                        &request.dues_amount,
+                        &request.description,
+                    ],
                 )
                 .await
                 .map_err(|e| format!("DB insert error: {}", e))?;
@@ -1748,7 +2114,12 @@ impl SiteAdminService {
             db_id.to_string()
         } else {
             let inner = self.state.inner.read().await;
-            let max_id = inner.house_types.iter().filter_map(|h| crate::db::parse_id_to_i64(&h.id)).max().unwrap_or(0);
+            let max_id = inner
+                .house_types
+                .iter()
+                .filter_map(|h| crate::db::parse_id_to_i64(&h.id))
+                .max()
+                .unwrap_or(0);
             (max_id + 1).to_string()
         };
 
@@ -1784,7 +2155,8 @@ impl SiteAdminService {
                             "DELETE FROM house_types WHERE id = $1 AND site_id = $2",
                             &[&numeric_id, &site_numeric],
                         )
-                        .await.map_err(|e| e.to_string())?;
+                        .await
+                        .map_err(|e| e.to_string())?;
                 }
             }
         }
@@ -1861,7 +2233,10 @@ impl SiteAdminService {
         let site_numeric = crate::db::require_id("entity", site_id)?;
 
         let id_str = if let Some(ref pool) = self.state.pool {
-            let client = pool.get().await.map_err(|e| format!("DB connection error: {}", e))?;
+            let client = pool
+                .get()
+                .await
+                .map_err(|e| format!("DB connection error: {}", e))?;
             let existing = client
                 .query_opt(
                     "SELECT id FROM blocks WHERE site_id = $1 AND LOWER(block_name) = LOWER($2)",
@@ -1877,7 +2252,8 @@ impl SiteAdminService {
                         "UPDATE blocks SET total_floors = $1 WHERE id = $2",
                         &[&total_floors, &db_id],
                     )
-                    .await.map_err(|e| e.to_string())?;
+                    .await
+                    .map_err(|e| e.to_string())?;
                 db_id.to_string()
             } else {
                 let row = client
@@ -1892,7 +2268,12 @@ impl SiteAdminService {
             }
         } else {
             let inner = self.state.inner.read().await;
-            let max_id = inner.blocks.iter().filter_map(|b| crate::db::parse_id_to_i64(&b.id)).max().unwrap_or(0);
+            let max_id = inner
+                .blocks
+                .iter()
+                .filter_map(|b| crate::db::parse_id_to_i64(&b.id))
+                .max()
+                .unwrap_or(0);
             (max_id + 1).to_string()
         };
 
@@ -1926,9 +2307,13 @@ impl SiteAdminService {
         let unit_numeric = crate::db::parse_id_to_i64(unit_id)
             .or_else(|| {
                 if unit_id.starts_with("unit-") {
-                    unit_id.strip_prefix("unit-").and_then(|s| s.parse::<i64>().ok())
+                    unit_id
+                        .strip_prefix("unit-")
+                        .and_then(|s| s.parse::<i64>().ok())
                 } else if unit_id.starts_with("d-") {
-                    unit_id.strip_prefix("d-").and_then(|s| s.parse::<i64>().ok())
+                    unit_id
+                        .strip_prefix("d-")
+                        .and_then(|s| s.parse::<i64>().ok())
                 } else {
                     None
                 }
@@ -1950,8 +2335,14 @@ impl SiteAdminService {
                 let owner_id: Option<i64> = unit_row.get(1);
                 let tenant_id: Option<i64> = unit_row.get(2);
 
-                let target_person_id = tenant_id.or(owner_id).ok_or_else(|| "Unit has no occupant to move out".to_string())?;
-                let occ_role = if tenant_id.is_some() { DebtorType::Tenant } else { DebtorType::Owner };
+                let target_person_id = tenant_id
+                    .or(owner_id)
+                    .ok_or_else(|| "Unit has no occupant to move out".to_string())?;
+                let occ_role = if tenant_id.is_some() {
+                    DebtorType::Tenant
+                } else {
+                    DebtorType::Owner
+                };
 
                 // Calculate exit balance: operational liabilities for tenant, all liabilities for owner (KMK Art. 20/22)
                 let exit_balance: Decimal = if occ_role == DebtorType::Tenant {
@@ -2052,12 +2443,16 @@ impl SiteAdminService {
                             "UPDATE units SET occupancy_status = 'VACANT' WHERE id = $1",
                             &[&unit_numeric],
                         )
-                        .await.map_err(|e| e.to_string())?;
+                        .await
+                        .map_err(|e| e.to_string())?;
                 }
 
                 // Fetch person details
                 let person_row = client
-                    .query_one("SELECT full_name, phone, email FROM persons WHERE id = $1", &[&target_person_id])
+                    .query_one(
+                        "SELECT full_name, phone, email FROM persons WHERE id = $1",
+                        &[&target_person_id],
+                    )
                     .await
                     .map_err(|e| e.to_string())?;
 
@@ -2081,7 +2476,11 @@ impl SiteAdminService {
 
         // In-memory fallback if PostgreSQL pool is not active
         let mut inner = self.state.inner.write().await;
-        if let Some(unit) = inner.units.iter_mut().find(|u| u.id == unit_id || u.unit_number.to_string() == unit_id) {
+        if let Some(unit) = inner
+            .units
+            .iter_mut()
+            .find(|u| u.id == unit_id || u.unit_number.to_string() == unit_id)
+        {
             unit.tenant_user_id = None;
         }
         for key in &[
@@ -2120,9 +2519,13 @@ impl SiteAdminService {
         let unit_numeric = crate::db::parse_id_to_i64(unit_id)
             .or_else(|| {
                 if unit_id.starts_with("unit-") {
-                    unit_id.strip_prefix("unit-").and_then(|s| s.parse::<i64>().ok())
+                    unit_id
+                        .strip_prefix("unit-")
+                        .and_then(|s| s.parse::<i64>().ok())
                 } else if unit_id.starts_with("d-") {
-                    unit_id.strip_prefix("d-").and_then(|s| s.parse::<i64>().ok())
+                    unit_id
+                        .strip_prefix("d-")
+                        .and_then(|s| s.parse::<i64>().ok())
                 } else {
                     None
                 }
@@ -2137,16 +2540,26 @@ impl SiteAdminService {
                 } else if let Some(ref email) = req.email {
                     let clean_email = email.trim().to_lowercase();
                     let existing = client
-                        .query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&clean_email])
+                        .query_opt(
+                            "SELECT id FROM persons WHERE LOWER(email) = $1",
+                            &[&clean_email],
+                        )
                         .await
                         .ok()
                         .flatten();
                     if let Some(p) = existing {
                         p.get(0)
                     } else {
-                        let full_name = req.full_name.clone().unwrap_or_else(|| "New Resident".to_string());
+                        let full_name = req
+                            .full_name
+                            .clone()
+                            .unwrap_or_else(|| "New Resident".to_string());
                         let phone = req.phone.clone();
-                        let p_type = if req.role == DebtorType::Tenant { "HOME_RESIDENT" } else { "HOME_OWNER" };
+                        let p_type = if req.role == DebtorType::Tenant {
+                            "HOME_RESIDENT"
+                        } else {
+                            "HOME_OWNER"
+                        };
                         let row = client
                             .query_one(
                                 "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, $4) RETURNING id",
@@ -2169,7 +2582,11 @@ impl SiteAdminService {
                     .await.map_err(|e| e.to_string())?;
 
                 let occ_role = req.role.as_str();
-                let occ_status = if req.role == DebtorType::Tenant { "TENANT_OCCUPIED" } else { "OWNER_OCCUPIED" };
+                let occ_status = if req.role == DebtorType::Tenant {
+                    "TENANT_OCCUPIED"
+                } else {
+                    "OWNER_OCCUPIED"
+                };
 
                 // Insert into unit_occupancies
                 let notes_val = req.notes.clone();
@@ -2208,7 +2625,10 @@ impl SiteAdminService {
 
                 // Fetch person details
                 let person_row = client
-                    .query_one("SELECT full_name, phone, email FROM persons WHERE id = $1", &[&person_id])
+                    .query_one(
+                        "SELECT full_name, phone, email FROM persons WHERE id = $1",
+                        &[&person_id],
+                    )
                     .await
                     .map_err(|e| e.to_string())?;
 
@@ -2241,9 +2661,13 @@ impl SiteAdminService {
         let unit_numeric = crate::db::parse_id_to_i64(unit_id)
             .or_else(|| {
                 if unit_id.starts_with("unit-") {
-                    unit_id.strip_prefix("unit-").and_then(|s| s.parse::<i64>().ok())
+                    unit_id
+                        .strip_prefix("unit-")
+                        .and_then(|s| s.parse::<i64>().ok())
                 } else if unit_id.starts_with("d-") {
-                    unit_id.strip_prefix("d-").and_then(|s| s.parse::<i64>().ok())
+                    unit_id
+                        .strip_prefix("d-")
+                        .and_then(|s| s.parse::<i64>().ok())
                 } else {
                     None
                 }
@@ -2272,7 +2696,10 @@ impl SiteAdminService {
                     WHERE uo.unit_id = $1
                     ORDER BY uo.start_date DESC, uo.id DESC
                 "#;
-                if let Some(rows) = crate::db::logged(client.query(query, &[&unit_numeric]).await, "site_admin_service") {
+                if let Some(rows) = crate::db::logged(
+                    client.query(query, &[&unit_numeric]).await,
+                    "site_admin_service",
+                ) {
                     let items = rows
                         .into_iter()
                         .map(|r| crate::models::OccupancyHistoryItem {
@@ -2303,7 +2730,11 @@ impl SiteAdminService {
             .unit_occupancies
             .get(unit_id)
             .or_else(|| inner.unit_occupancies.get(&unit_numeric.to_string()))
-            .or_else(|| inner.unit_occupancies.get(&format!("unit-{}", unit_numeric)))
+            .or_else(|| {
+                inner
+                    .unit_occupancies
+                    .get(&format!("unit-{}", unit_numeric))
+            })
             .or_else(|| inner.unit_occupancies.get(&format!("d-{}", unit_numeric)))
         {
             return Ok(items.clone());
@@ -2315,4 +2746,3 @@ impl SiteAdminService {
 fn generate_resident_temporary_password() -> String {
     crate::auth::generate_temporary_password("SP-SAKIN-")
 }
-

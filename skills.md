@@ -108,13 +108,15 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 ## 5b. API System Check (`api_system_check.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/api_system_check.py](file:///apps/development-time/SitePulse/scripts/api_system_check.py) (symlinked to `scripts/api_system_check.py`)
-- **Purpose:** Creates a throwaway database, boots the real backend binary on a free port, seeds it, and checks over HTTP: every non-public route returns 401 without a token, forged tokens are rejected, cross-site access is 403, bank webhooks need a valid HMAC, 20 concurrent payments get unique receipt numbers, idempotent retries return the first receipt, receipts/inserts survive a backend restart, match-all settles an `UNMATCHED` entry in place (no duplicate ledger row), payments record the payer person on entry and receipt, the non-production site purge removes a site with ledger history atomically (SPEC-005 / V16); a tenant surplus is TENANT credit and a `TENANT -> OWNER` virman pays the owner's capital due (`tenant_surplus_virman`), a reversal issues an `IAD-` receipt with a contra entry, un-allocates, refunds advance, survives a restart and is idempotent (`reversal_restores_ledger`), webhook claims record account, receipt and payload hash and a reused id with other content is 409 (`webhook_claim_scoped`), the site tax id is validated and snapshotted on receipts (`issuer_snapshot_on_receipt`), the aging snapshot writes one row per unit/debtor per day (`debt_aging_snapshot_persisted`), and `v_integrity_violations` is empty afterwards (SPEC-006 / V17).
+- **Purpose:** Creates a throwaway database, boots the real backend binary on a free port, seeds it, and checks over HTTP: every non-public route returns 401 without a token, forged tokens are rejected, cross-site resources return scoped 404, bank webhooks need a valid HMAC, 20 concurrent payments get unique receipt numbers, idempotent retries return the first receipt, receipts/inserts survive a backend restart, match-all settles an `UNMATCHED` entry in place (no duplicate ledger row), payments record the payer person on entry and receipt, the non-production site purge removes a site with ledger history atomically (SPEC-005 / V16); a tenant surplus is TENANT credit and a `TENANT -> OWNER` virman pays the owner's capital due (`tenant_surplus_virman`), a reversal issues an `IAD-` receipt with a contra entry, un-allocates, refunds advance, survives a restart and is idempotent (`reversal_restores_ledger`), webhook claims record account, receipt and payload hash and a reused id with other content is 409 (`webhook_claim_scoped`), the site tax id is validated and snapshotted on receipts (`issuer_snapshot_on_receipt`), the aging snapshot writes one row per unit/debtor per day (`debt_aging_snapshot_persisted`), and `v_integrity_violations` is empty afterwards (SPEC-006 / V17).
 
 ```bash
 DB_PASS=... ./scripts/api_system_check.py                    # all checks
 DB_PASS=... ./scripts/api_system_check.py --only cross_site_forbidden,restart_persistence --json
 ```
 Uses `psql` when on PATH, otherwise `docker exec <--pg-container> psql`.
+
+SPEC-007 checks also verify session rotation/replay/logout (`security_session_lifecycle`), payment rollback on audit failure (`transactional_audit`), non-owner RLS and immutable evidence (`audit_scope_and_privileges`), database-only registration review (`registration_repository_scope`), second-approver support access (`support_grant_lifecycle`), and concurrent invitation consumption with identity/membership rollback (`invitation_atomic_registration`). The method/template inventory is parsed from the router registry. GUI bundles are rebuilt when source, dependencies, assets, or the API origin change; fixture resets preserve audit evidence.
 
 ## 5b-2. GUI End-to-End Suite (`gui_e2e.py`)
 
@@ -170,6 +172,7 @@ Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/
 
 ```bash
 DB_PASS=... ./scripts/run_tests.py            # everything
+./scripts/run_tests.py --from-dev-container  # load local container credentials without printing them
 ./scripts/run_tests.py --skip-db              # DB gates (incl. gui-e2e) reported as SKIPPED, not passed
 DB_PASS=... ./scripts/run_tests.py --skip-gui # everything except the browser suite
 ./scripts/run_tests.py --only rust-test,money-fixtures --json

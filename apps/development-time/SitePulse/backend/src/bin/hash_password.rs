@@ -1,15 +1,12 @@
-//! Prints the argon2id PHC hash of a password read from stdin.
-//!
-//! Usage: `echo -n 'secret' | cargo run --bin hash-password`
+//! Prints a password hash from stdin, propagating I/O and hashing failures.
 use std::io::Read;
-
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut input = String::new();
-    std::io::stdin().read_to_string(&mut input).expect("read stdin");
+    std::io::stdin().read_to_string(&mut input)?;
     let password = input.trim_end_matches(['\n', '\r']);
     if password.is_empty() {
-        eprintln!("usage: echo -n '<password>' | hash-password");
-        std::process::exit(2);
+        return Err("A password is required on stdin".into());
     }
-    println!("{}", sitepulse_backend::auth::hash_password(password));
+    println!("{}", sitepulse_backend::auth::hash_password(password)?);
+    Ok(())
 }

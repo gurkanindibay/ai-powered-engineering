@@ -4,9 +4,9 @@ use tracing::{info, warn};
 
 use crate::models::{
     AccrueInstallmentResponse, AllocationBasis, CapitalContractorDisbursement, CapitalProject,
-    CapitalProjectCategory, CapitalProjectInstallment, CapitalProjectStatus, CreateCapitalProjectRequest,
-    DebtStatus, DebtorType, DisbursementMethod, DuesLiability, ExpenseType, RecordDisbursementRequest,
-    UnitCapitalShareSummary,
+    CapitalProjectCategory, CapitalProjectInstallment, CapitalProjectStatus,
+    CreateCapitalProjectRequest, DebtStatus, DebtorType, DisbursementMethod, DuesLiability,
+    ExpenseType, RecordDisbursementRequest, UnitCapitalShareSummary,
 };
 use crate::state::AppState;
 
@@ -35,7 +35,9 @@ impl CapitalProjectService {
         let site_id = req.site_id.unwrap_or_default();
         let category = req.category.unwrap_or(CapitalProjectCategory::Elevator);
         let allocation_basis = req.allocation_basis.unwrap_or(AllocationBasis::ByLandShare);
-        let target_start_date = req.target_start_date.unwrap_or_else(|| Utc::now().date_naive());
+        let target_start_date = req
+            .target_start_date
+            .unwrap_or_else(|| Utc::now().date_naive());
 
         let project_id_str: String;
         let now = Utc::now();
@@ -80,18 +82,33 @@ impl CapitalProjectService {
                     Err(e) => {
                         warn!("PostgreSQL error inserting capital_project: {}. Falling back to memory.", e);
                         let inner = self.state.inner.read().await;
-                        let max_id = inner.capital_projects.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
+                        let max_id = inner
+                            .capital_projects
+                            .iter()
+                            .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
+                            .max()
+                            .unwrap_or(0);
                         project_id_str = (max_id + 1).to_string();
                     }
                 }
             } else {
                 let inner = self.state.inner.read().await;
-                let max_id = inner.capital_projects.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
+                let max_id = inner
+                    .capital_projects
+                    .iter()
+                    .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
+                    .max()
+                    .unwrap_or(0);
                 project_id_str = (max_id + 1).to_string();
             }
         } else {
             let inner = self.state.inner.read().await;
-            let max_id = inner.capital_projects.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
+            let max_id = inner
+                .capital_projects
+                .iter()
+                .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
+                .max()
+                .unwrap_or(0);
             project_id_str = (max_id + 1).to_string();
         }
 
@@ -155,7 +172,12 @@ impl CapitalProjectService {
 
                 if inst_id.is_empty() {
                     let inner = self.state.inner.read().await;
-                    let max_inst = inner.capital_installments.iter().filter_map(|i| crate::db::parse_id_to_i64(&i.id)).max().unwrap_or(0);
+                    let max_inst = inner
+                        .capital_installments
+                        .iter()
+                        .filter_map(|i| crate::db::parse_id_to_i64(&i.id))
+                        .max()
+                        .unwrap_or(0);
                     inst_id = (max_inst + 1 + created_installments.len() as i64).to_string();
                 }
 
@@ -194,7 +216,11 @@ impl CapitalProjectService {
             collected_amount: Decimal::ZERO,
             disbursed_amount: Decimal::ZERO,
             remaining_fund_balance: Decimal::ZERO,
-            total_units_count: if total_units_count > 0 { total_units_count } else { 12 },
+            total_units_count: if total_units_count > 0 {
+                total_units_count
+            } else {
+                12
+            },
             installments_count,
             created_at: Some(now),
         };
@@ -208,7 +234,10 @@ impl CapitalProjectService {
             }
         }
 
-        info!("Created CapitalProject: {} (Budget: ₺{})", project.title, project.total_budget);
+        info!(
+            "Created CapitalProject: {} (Budget: ₺{})",
+            project.title, project.total_budget
+        );
         Ok(project)
     }
 
@@ -292,7 +321,9 @@ impl CapitalProjectService {
                         .iter()
                         .filter(|d| {
                             (d.status == DebtStatus::Paid)
-                                && (d.period.contains(&p.title) || d.period.contains("Demirbaş") || d.period.contains("Asansör"))
+                                && (d.period.contains(&p.title)
+                                    || d.period.contains("Demirbaş")
+                                    || d.period.contains("Asansör"))
                         })
                         .map(|d| d.principal_amount)
                         .sum();
@@ -310,7 +341,8 @@ impl CapitalProjectService {
                     if disbursed > Decimal::ZERO {
                         proj_copy.disbursed_amount = disbursed;
                     }
-                    proj_copy.remaining_fund_balance = proj_copy.collected_amount - proj_copy.disbursed_amount;
+                    proj_copy.remaining_fund_balance =
+                        proj_copy.collected_amount - proj_copy.disbursed_amount;
                     projects.push(proj_copy);
                 }
             }
@@ -399,7 +431,10 @@ impl CapitalProjectService {
             .ok_or_else(|| format!("{}. taksit planı bulunamadı.", installment_number))?;
 
         if installment.is_accrued {
-            return Err(format!("{}. taksit daha önce tahakkuk ettirilmiş. Mükerrer tahakkuk engellendi.", installment_number));
+            return Err(format!(
+                "{}. taksit daha önce tahakkuk ettirilmiş. Mükerrer tahakkuk engellendi.",
+                installment_number
+            ));
         }
 
         // Get all units for this site
@@ -494,7 +529,12 @@ impl CapitalProjectService {
         // Also update memory state
         {
             let mut inner = self.state.inner.write().await;
-            let mut next_due = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
+            let mut next_due = inner
+                .dues
+                .iter()
+                .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
+                .max()
+                .unwrap_or(0);
             for (unit, share) in &unit_shares {
                 next_due += 1;
                 let due_id = next_due.to_string();
@@ -527,7 +567,11 @@ impl CapitalProjectService {
 
         info!(
             "Accrued Installment {}/{} for Project '{}': ₺{} across {} units",
-            installment_number, installment.total_installments, project.title, installment_budget, unit_shares.len()
+            installment_number,
+            installment.total_installments,
+            project.title,
+            installment_budget,
+            unit_shares.len()
         );
 
         Ok(AccrueInstallmentResponse {
@@ -560,8 +604,12 @@ impl CapitalProjectService {
             return Err("Alıcı IBAN bilgisi boş olamaz.".to_string());
         }
 
-        let disbursement_date = req.disbursement_date.unwrap_or_else(|| Utc::now().date_naive());
-        let disbursement_method = req.disbursement_method.unwrap_or(DisbursementMethod::BankTransfer);
+        let disbursement_date = req
+            .disbursement_date
+            .unwrap_or_else(|| Utc::now().date_naive());
+        let disbursement_method = req
+            .disbursement_method
+            .unwrap_or(DisbursementMethod::BankTransfer);
         let now = Utc::now();
         let mut dis_id = String::new();
 
@@ -605,7 +653,12 @@ impl CapitalProjectService {
 
         if dis_id.is_empty() {
             let inner = self.state.inner.read().await;
-            let max_id = inner.capital_disbursements.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
+            let max_id = inner
+                .capital_disbursements
+                .iter()
+                .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
+                .max()
+                .unwrap_or(0);
             dis_id = (max_id + 1).to_string();
         }
 
@@ -629,7 +682,11 @@ impl CapitalProjectService {
             let mut inner = self.state.inner.write().await;
             inner.capital_disbursements.push(disbursement.clone());
 
-            if let Some(p) = inner.capital_projects.iter_mut().find(|p| p.id == project_id) {
+            if let Some(p) = inner
+                .capital_projects
+                .iter_mut()
+                .find(|p| p.id == project_id)
+            {
                 p.disbursed_amount += req.amount;
                 p.remaining_fund_balance = p.collected_amount - p.disbursed_amount;
             }
@@ -715,7 +772,12 @@ impl CapitalProjectService {
         let dues;
         {
             let inner = self.state.inner.read().await;
-            units = inner.units.clone();
+            units = inner
+                .units
+                .iter()
+                .filter(|u| crate::authorization::same_site(&u.site_id, &project.site_id))
+                .cloned()
+                .collect::<Vec<_>>();
             dues = inner.dues.clone();
         }
 
@@ -764,7 +826,10 @@ impl CapitalProjectService {
                 unit_id: unit.id.clone(),
                 block: unit.block_id.clone(),
                 unit_number: unit.unit_number,
-                owner_name: unit.owner_user_id.clone().unwrap_or_else(|| "Kat Maliki".to_string()),
+                owner_name: unit
+                    .owner_user_id
+                    .clone()
+                    .unwrap_or_else(|| "Kat Maliki".to_string()),
                 owner_phone: Some("+90 532 111 22 33".to_string()),
                 land_share: unit.land_share,
                 total_project_share: total_share,

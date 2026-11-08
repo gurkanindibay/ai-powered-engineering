@@ -72,7 +72,12 @@ pub fn settle(d: &mut DuesLiability, amount: Decimal) -> Settlement {
 /// Reverses one allocation line on a liability (payment reversal, SPEC-006 R2):
 /// the paid amounts go back down and the status is recomputed from them and
 /// the date (OVERDUE once past due). The accrued penalty is left as accrued.
-pub fn unsettle(d: &mut DuesLiability, principal: Decimal, penalty: Decimal, today: chrono::NaiveDate) {
+pub fn unsettle(
+    d: &mut DuesLiability,
+    principal: Decimal,
+    penalty: Decimal,
+    today: chrono::NaiveDate,
+) {
     d.paid_principal = (d.paid_principal - principal).max(Decimal::ZERO);
     d.paid_penalty = (d.paid_penalty - penalty).max(Decimal::ZERO);
     d.total_amount = outstanding(d);
@@ -114,7 +119,10 @@ pub fn allocate_waterfall(
             l.settlement.principal += s.principal;
             l.settlement.penalty += s.penalty;
         } else {
-            lines.push(AllocationLine { due_index: idx, settlement: s });
+            lines.push(AllocationLine {
+                due_index: idx,
+                settlement: s,
+            });
         }
     };
 
@@ -128,7 +136,14 @@ pub fn allocate_waterfall(
             dues[idx].paid_penalty += pay;
             refresh(&mut dues[idx]);
             remaining -= pay;
-            add(&mut lines, idx, Settlement { principal: Decimal::ZERO, penalty: pay });
+            add(
+                &mut lines,
+                idx,
+                Settlement {
+                    principal: Decimal::ZERO,
+                    penalty: pay,
+                },
+            );
         }
     }
     // Tier 2: principal, FIFO.
@@ -141,7 +156,14 @@ pub fn allocate_waterfall(
             dues[idx].paid_principal += pay;
             refresh(&mut dues[idx]);
             remaining -= pay;
-            add(&mut lines, idx, Settlement { principal: pay, penalty: Decimal::ZERO });
+            add(
+                &mut lines,
+                idx,
+                Settlement {
+                    principal: pay,
+                    penalty: Decimal::ZERO,
+                },
+            );
         }
     }
     (lines, remaining)
@@ -165,13 +187,24 @@ pub fn designated_dues(
             .copied()
             .filter(|&i| {
                 let d = &dues[i];
-                (des.due_ids.is_empty() || des.due_ids.iter().any(|id| crate::auth::same_id(id, &d.id)))
-                    && (des.periods.is_empty() || des.periods.iter().any(|p| fold_turkish(p.trim()) == fold_turkish(d.period.trim())))
-                    && des.expense_type.as_deref().is_none_or(|e| e.eq_ignore_ascii_case(d.expense_type.as_str()))
+                (des.due_ids.is_empty()
+                    || des.due_ids.iter().any(|id| crate::auth::same_id(id, &d.id)))
+                    && (des.periods.is_empty()
+                        || des
+                            .periods
+                            .iter()
+                            .any(|p| fold_turkish(p.trim()) == fold_turkish(d.period.trim())))
+                    && des
+                        .expense_type
+                        .as_deref()
+                        .is_none_or(|e| e.eq_ignore_ascii_case(d.expense_type.as_str()))
             })
             .collect();
     }
-    let Some(hint) = description_hint.map(fold_turkish).filter(|h| !h.trim().is_empty()) else {
+    let Some(hint) = description_hint
+        .map(fold_turkish)
+        .filter(|h| !h.trim().is_empty())
+    else {
         return Vec::new();
     };
     candidates
@@ -212,8 +245,16 @@ pub fn allocate_with_designation(
     designated: &[usize],
     amount: Decimal,
 ) -> (Vec<AllocationLine>, Decimal) {
-    let first: Vec<usize> = candidates.iter().copied().filter(|i| designated.contains(i)).collect();
-    let rest: Vec<usize> = candidates.iter().copied().filter(|i| !designated.contains(i)).collect();
+    let first: Vec<usize> = candidates
+        .iter()
+        .copied()
+        .filter(|i| designated.contains(i))
+        .collect();
+    let rest: Vec<usize> = candidates
+        .iter()
+        .copied()
+        .filter(|i| !designated.contains(i))
+        .collect();
     let (mut lines, remainder) = allocate_waterfall(dues, &first, amount);
     let (more, remainder) = allocate_waterfall(dues, &rest, remainder);
     lines.extend(more);
@@ -221,10 +262,18 @@ pub fn allocate_with_designation(
 }
 
 /// Indices of a unit's open liabilities that `payer_role` may settle.
-pub fn open_dues_for(dues: &[DuesLiability], unit_matches: impl Fn(&str) -> bool, payer_role: &str) -> Vec<usize> {
+pub fn open_dues_for(
+    dues: &[DuesLiability],
+    unit_matches: impl Fn(&str) -> bool,
+    payer_role: &str,
+) -> Vec<usize> {
     dues.iter()
         .enumerate()
-        .filter(|(_, d)| d.status != DebtStatus::Paid && unit_matches(&d.unit_id) && payer_may_settle(d, payer_role))
+        .filter(|(_, d)| {
+            d.status != DebtStatus::Paid
+                && unit_matches(&d.unit_id)
+                && payer_may_settle(d, payer_role)
+        })
         .map(|(i, _)| i)
         .collect()
 }
@@ -234,7 +283,14 @@ mod tests {
     use super::*;
     use chrono::NaiveDate;
 
-    fn due(id: &str, principal: &str, penalty: &str, day: u32, debtor: &str, expense: &str) -> DuesLiability {
+    fn due(
+        id: &str,
+        principal: &str,
+        penalty: &str,
+        day: u32,
+        debtor: &str,
+        expense: &str,
+    ) -> DuesLiability {
         let p = Decimal::from_str_exact(principal).unwrap();
         let pen = Decimal::from_str_exact(penalty).unwrap();
         DuesLiability {
@@ -260,21 +316,56 @@ mod tests {
 
     #[test]
     fn payment_records_paid_amounts_and_never_reduces_the_debt() {
-        let mut dues = vec![due("a", "1400.00", "23.33", 15, DEBTOR_TENANT, EXPENSE_OPERATIONAL)];
+        let mut dues = vec![due(
+            "a",
+            "1400.00",
+            "23.33",
+            15,
+            DEBTOR_TENANT,
+            EXPENSE_OPERATIONAL,
+        )];
         let (lines, rest) = allocate_waterfall(&mut dues, &[0], d("500.00"));
         assert_eq!(rest, Decimal::ZERO);
-        assert_eq!(dues[0].principal_amount, d("1400.00"), "amount owed is preserved");
-        assert_eq!(dues[0].paid_penalty, d("23.33"), "penalty is paid first and recorded");
+        assert_eq!(
+            dues[0].principal_amount,
+            d("1400.00"),
+            "amount owed is preserved"
+        );
+        assert_eq!(
+            dues[0].paid_penalty,
+            d("23.33"),
+            "penalty is paid first and recorded"
+        );
         assert_eq!(dues[0].paid_principal, d("476.67"));
         assert_eq!(dues[0].total_amount, d("923.33"));
-        assert_eq!(lines[0].settlement, Settlement { principal: d("476.67"), penalty: d("23.33") });
+        assert_eq!(
+            lines[0].settlement,
+            Settlement {
+                principal: d("476.67"),
+                penalty: d("23.33")
+            }
+        );
     }
 
     #[test]
     fn allocations_sum_to_the_payment_and_surplus_is_returned() {
         let mut dues = vec![
-            due("b", "100.00", "5.00", 20, DEBTOR_TENANT, EXPENSE_OPERATIONAL),
-            due("a", "100.00", "10.00", 10, DEBTOR_TENANT, EXPENSE_OPERATIONAL),
+            due(
+                "b",
+                "100.00",
+                "5.00",
+                20,
+                DEBTOR_TENANT,
+                EXPENSE_OPERATIONAL,
+            ),
+            due(
+                "a",
+                "100.00",
+                "10.00",
+                10,
+                DEBTOR_TENANT,
+                EXPENSE_OPERATIONAL,
+            ),
         ];
         let (lines, rest) = allocate_waterfall(&mut dues, &[0, 1], d("300.00"));
         let allocated: Decimal = lines.iter().map(|l| l.settlement.total()).sum();
@@ -290,7 +381,14 @@ mod tests {
     fn tenant_cannot_settle_owner_capital_dues() {
         let dues = vec![
             due("cap", "500.00", "0.00", 1, DEBTOR_OWNER, EXPENSE_CAPITAL),
-            due("op", "100.00", "0.00", 2, DEBTOR_TENANT, EXPENSE_OPERATIONAL),
+            due(
+                "op",
+                "100.00",
+                "0.00",
+                2,
+                DEBTOR_TENANT,
+                EXPENSE_OPERATIONAL,
+            ),
         ];
         assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_TENANT), vec![1]);
         assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_OWNER), vec![0, 1]);
@@ -298,38 +396,81 @@ mod tests {
 
     #[test]
     fn settle_single_liability_penalty_first() {
-        let mut x = due("a", "100.00", "10.00", 1, DEBTOR_TENANT, EXPENSE_OPERATIONAL);
+        let mut x = due(
+            "a",
+            "100.00",
+            "10.00",
+            1,
+            DEBTOR_TENANT,
+            EXPENSE_OPERATIONAL,
+        );
         let s = settle(&mut x, d("15.00"));
-        assert_eq!(s, Settlement { principal: d("5.00"), penalty: d("10.00") });
+        assert_eq!(
+            s,
+            Settlement {
+                principal: d("5.00"),
+                penalty: d("10.00")
+            }
+        );
         assert_eq!(x.total_amount, d("95.00"));
     }
 
     fn two_months() -> Vec<DuesLiability> {
         vec![
-            due("Ağustos 2026", "1400.00", "0.00", 1, DEBTOR_TENANT, EXPENSE_OPERATIONAL),
-            due("Eylül 2026", "1400.00", "0.00", 2, DEBTOR_TENANT, EXPENSE_OPERATIONAL),
+            due(
+                "Ağustos 2026",
+                "1400.00",
+                "0.00",
+                1,
+                DEBTOR_TENANT,
+                EXPENSE_OPERATIONAL,
+            ),
+            due(
+                "Eylül 2026",
+                "1400.00",
+                "0.00",
+                2,
+                DEBTOR_TENANT,
+                EXPENSE_OPERATIONAL,
+            ),
         ]
     }
 
     #[test]
     fn designated_period_is_settled_before_older_dues() {
         let mut dues = two_months();
-        let des = crate::models::PaymentDesignation { periods: vec!["eylül 2026".to_string()], ..Default::default() };
+        let des = crate::models::PaymentDesignation {
+            periods: vec!["eylül 2026".to_string()],
+            ..Default::default()
+        };
         let designated = designated_dues(&dues, &[0, 1], Some(&des), None);
         assert_eq!(designated, vec![1]);
-        let (lines, rest) = allocate_with_designation(&mut dues, &[0, 1], &designated, d("1400.00"));
+        let (lines, rest) =
+            allocate_with_designation(&mut dues, &[0, 1], &designated, d("1400.00"));
         assert_eq!(rest, Decimal::ZERO);
-        assert_eq!(dues[1].status, DebtStatus::Paid, "the designated (newer) month is paid");
-        assert_ne!(dues[0].status, DebtStatus::Paid, "the older month stays open");
+        assert_eq!(
+            dues[1].status,
+            DebtStatus::Paid,
+            "the designated (newer) month is paid"
+        );
+        assert_ne!(
+            dues[0].status,
+            DebtStatus::Paid,
+            "the older month stays open"
+        );
         assert_eq!(lines.len(), 1);
     }
 
     #[test]
     fn designation_remainder_falls_back_to_oldest_first() {
         let mut dues = two_months();
-        let des = crate::models::PaymentDesignation { due_ids: vec!["Eylül 2026".to_string()], ..Default::default() };
+        let des = crate::models::PaymentDesignation {
+            due_ids: vec!["Eylül 2026".to_string()],
+            ..Default::default()
+        };
         let designated = designated_dues(&dues, &[0, 1], Some(&des), None);
-        let (lines, rest) = allocate_with_designation(&mut dues, &[0, 1], &designated, d("2000.00"));
+        let (lines, rest) =
+            allocate_with_designation(&mut dues, &[0, 1], &designated, d("2000.00"));
         assert_eq!(rest, Decimal::ZERO);
         assert_eq!(dues[1].status, DebtStatus::Paid);
         assert_eq!(dues[0].paid_principal, d("600.00"));
@@ -339,11 +480,27 @@ mod tests {
     #[test]
     fn bank_narrative_designates_the_named_period() {
         let dues = two_months();
-        assert_eq!(designated_dues(&dues, &[0, 1], None, Some("EYLÜL 2026 AİDATI FAST")), vec![1]);
-        assert_eq!(designated_dues(&dues, &[0, 1], None, Some("A BLOK D14 EYLUL 2026")), vec![1], "ASCII-only narrative");
-        assert_eq!(designated_dues(&dues, &[0, 1], None, Some("Eylül 2026 Aidatı FAST Ödemesi")), vec![1]);
-        assert_eq!(designated_dues(&dues, &[0, 1], None, Some("aidat")), Vec::<usize>::new());
-        assert_eq!(designated_dues(&dues, &[0, 1], None, None), Vec::<usize>::new());
+        assert_eq!(
+            designated_dues(&dues, &[0, 1], None, Some("EYLÜL 2026 AİDATI FAST")),
+            vec![1]
+        );
+        assert_eq!(
+            designated_dues(&dues, &[0, 1], None, Some("A BLOK D14 EYLUL 2026")),
+            vec![1],
+            "ASCII-only narrative"
+        );
+        assert_eq!(
+            designated_dues(&dues, &[0, 1], None, Some("Eylül 2026 Aidatı FAST Ödemesi")),
+            vec![1]
+        );
+        assert_eq!(
+            designated_dues(&dues, &[0, 1], None, Some("aidat")),
+            Vec::<usize>::new()
+        );
+        assert_eq!(
+            designated_dues(&dues, &[0, 1], None, None),
+            Vec::<usize>::new()
+        );
     }
 
     #[test]
@@ -358,10 +515,20 @@ mod tests {
     fn designation_never_lets_a_tenant_pay_owner_capital() {
         let dues = vec![
             due("cap", "500.00", "0.00", 1, DEBTOR_OWNER, EXPENSE_CAPITAL),
-            due("op", "100.00", "0.00", 2, DEBTOR_TENANT, EXPENSE_OPERATIONAL),
+            due(
+                "op",
+                "100.00",
+                "0.00",
+                2,
+                DEBTOR_TENANT,
+                EXPENSE_OPERATIONAL,
+            ),
         ];
         let candidates = open_dues_for(&dues, |_| true, DEBTOR_TENANT);
-        let des = crate::models::PaymentDesignation { due_ids: vec!["cap".to_string()], ..Default::default() };
+        let des = crate::models::PaymentDesignation {
+            due_ids: vec!["cap".to_string()],
+            ..Default::default()
+        };
         assert!(designated_dues(&dues, &candidates, Some(&des), None).is_empty());
     }
 }

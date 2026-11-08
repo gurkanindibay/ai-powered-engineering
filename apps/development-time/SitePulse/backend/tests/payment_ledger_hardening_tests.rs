@@ -14,7 +14,19 @@ use sitepulse_backend::state::AppState;
 const UNIT: &str = "d-14";
 const SITE: &str = "site-1";
 const TENANT_USER: &str = "usr-tenant-spec6";
-const OPERATOR: &str = "user:usr-site-manager-1 <mehmet.demir@begonya.com>";
+const OPERATOR: &str = "usr-site-manager-1";
+fn operator(id: &str) -> sitepulse_backend::authorization::AuthzContext {
+    let token =
+        sitepulse_backend::auth::issue_token(id, "", Role::SiteManager, SITE, None).unwrap();
+    let mut claims = sitepulse_backend::auth::verify_token(&token).unwrap();
+    claims.role = Role::SiteManager;
+    claims.site_id = SITE.to_string();
+    sitepulse_backend::authorization::AuthzContext {
+        claims,
+        permissions: Permission::permissions_for_role(Role::SiteManager),
+        request_id: "spec-006".to_string(),
+    }
+}
 
 fn d(s: &str) -> Decimal {
     Decimal::from_str_exact(s).unwrap()
@@ -24,7 +36,14 @@ fn today() -> NaiveDate {
     Utc::now().date_naive()
 }
 
-fn liability(id: &str, period: &str, principal: &str, due_date: NaiveDate, debtor: &str, expense: &str) -> DuesLiability {
+fn liability(
+    id: &str,
+    period: &str,
+    principal: &str,
+    due_date: NaiveDate,
+    debtor: &str,
+    expense: &str,
+) -> DuesLiability {
     DuesLiability {
         id: id.to_string(),
         unit_id: UNIT.to_string(),
@@ -54,13 +73,23 @@ async fn tenanted_state_with(dues: Vec<DuesLiability>) -> AppState {
         inner.homeowner_payments.clear();
         inner.reconciliation_queue.clear();
         inner.payment_idempotency.clear();
-        let mut tenant = inner.users.iter().find(|u| u.id == "usr-home-owner-1").cloned().unwrap();
+        let mut tenant = inner
+            .users
+            .iter()
+            .find(|u| u.id == "usr-home-owner-1")
+            .cloned()
+            .unwrap();
         tenant.id = TENANT_USER.to_string();
         tenant.full_name = "Canan Kaya".to_string();
         tenant.email = "canan.kaya@begonya.com".to_string();
         tenant.role = Role::HomeResident;
         inner.users.push(tenant);
-        inner.units.iter_mut().find(|u| u.id == UNIT).unwrap().tenant_user_id = Some(TENANT_USER.to_string());
+        inner
+            .units
+            .iter_mut()
+            .find(|u| u.id == UNIT)
+            .unwrap()
+            .tenant_user_id = Some(TENANT_USER.to_string());
     }
     state
 }
@@ -78,7 +107,11 @@ fn payment(amount: &str, role: &str, name: &str) -> RecordManualPaymentRequest {
 }
 
 fn reverse(receipt: &str, reason: &str) -> ReversePaymentRequest {
-    ReversePaymentRequest { site_id: Some(SITE.to_string()), receipt: receipt.to_string(), reason: reason.to_string() }
+    ReversePaymentRequest {
+        site_id: Some(SITE.to_string()),
+        receipt: receipt.to_string(),
+        reason: reason.to_string(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +121,15 @@ fn reverse(receipt: &str, reason: &str) -> ReversePaymentRequest {
 /// A tenant's overpayment is the tenant's credit, recorded on the receipt.
 #[tokio::test]
 async fn when_tenant_overpays_then_the_surplus_is_credited_to_the_tenant_advance_only() {
-    let state = tenanted_state_with(vec![liability("op-1", "Eylül 2026", "1000.00", today() + Days::new(5), "TENANT", "OPERATIONAL_DUES")]).await;
+    let state = tenanted_state_with(vec![liability(
+        "op-1",
+        "Eylül 2026",
+        "1000.00",
+        today() + Days::new(5),
+        "TENANT",
+        "OPERATIONAL_DUES",
+    )])
+    .await;
     let receipt = PaymentTrackingService::new(state.clone())
         .record_and_allocate_payment(payment("1500.00", "TENANT", "Canan Kaya"))
         .await
@@ -104,19 +145,41 @@ async fn when_tenant_overpays_then_the_surplus_is_credited_to_the_tenant_advance
 /// EPIC-09 §2.3: the tenant's surplus pays the owner's Demirbaş on the owner's
 /// behalf; only the tenant bucket is debited and the receipt is rent-offset eligible.
 #[tokio::test]
-async fn when_tenant_surplus_is_transferred_to_owner_capital_then_the_tenant_advance_pays_on_behalf_of_the_owner() {
+async fn when_tenant_surplus_is_transferred_to_owner_capital_then_the_tenant_advance_pays_on_behalf_of_the_owner(
+) {
     let state = tenanted_state_with(vec![
-        liability("op-1", "Eylül 2026", "1000.00", today() + Days::new(5), "TENANT", "OPERATIONAL_DUES"),
-        liability("cap-1", "Asansör Taksit 1", "400.00", today() + Days::new(5), "OWNER", "CAPITAL_DUES"),
+        liability(
+            "op-1",
+            "Eylül 2026",
+            "1000.00",
+            today() + Days::new(5),
+            "TENANT",
+            "OPERATIONAL_DUES",
+        ),
+        liability(
+            "cap-1",
+            "Asansör Taksit 1",
+            "400.00",
+            today() + Days::new(5),
+            "OWNER",
+            "CAPITAL_DUES",
+        ),
     ])
     .await;
     let service = PaymentTrackingService::new(state.clone());
-    service.record_and_allocate_payment(payment("1600.00", "TENANT", "Canan Kaya")).await.unwrap();
+    service
+        .record_and_allocate_payment(payment("1600.00", "TENANT", "Canan Kaya"))
+        .await
+        .unwrap();
     {
         let inner = state.inner.read().await;
         assert_eq!(inner.advance_of(UNIT, "TENANT"), d("600.00"));
         let cap = inner.dues.iter().find(|x| x.id == "cap-1").unwrap();
-        assert_ne!(cap.status, DebtStatus::Paid, "a tenant payment never settles capital dues by itself");
+        assert_ne!(
+            cap.status,
+            DebtStatus::Paid,
+            "a tenant payment never settles capital dues by itself"
+        );
     }
 
     // The default (OWNER -> OWNER) finds no owner advance.
@@ -146,8 +209,15 @@ async fn when_tenant_surplus_is_transferred_to_owner_capital_then_the_tenant_adv
 
     let inner = state.inner.read().await;
     assert_eq!(inner.advance_of(UNIT, "TENANT"), d("200.00"));
-    assert_eq!(inner.dues.iter().find(|x| x.id == "cap-1").unwrap().status, DebtStatus::Paid);
-    let receipt = inner.payment_receipts.iter().find(|r| r.receipt_number == resp.receipt_number).unwrap();
+    assert_eq!(
+        inner.dues.iter().find(|x| x.id == "cap-1").unwrap().status,
+        DebtStatus::Paid
+    );
+    let receipt = inner
+        .payment_receipts
+        .iter()
+        .find(|r| r.receipt_number == resp.receipt_number)
+        .unwrap();
     assert_eq!(receipt.payer_role, DebtorType::Tenant);
     assert_eq!(receipt.payer_name, "Canan Kaya");
     assert!(receipt.is_rent_offset_eligible);
@@ -175,16 +245,38 @@ async fn when_virman_debtor_is_unknown_then_the_transfer_is_rejected() {
 #[tokio::test]
 async fn when_advances_are_offset_then_each_due_is_paid_only_from_its_own_debtors_advance() {
     let state = tenanted_state_with(vec![
-        liability("op-1", "Ekim 2026", "300.00", today() + Days::new(5), "TENANT", "OPERATIONAL_DUES"),
-        liability("cap-1", "Çatı Taksit 1", "200.00", today() + Days::new(5), "OWNER", "CAPITAL_DUES"),
+        liability(
+            "op-1",
+            "Ekim 2026",
+            "300.00",
+            today() + Days::new(5),
+            "TENANT",
+            "OPERATIONAL_DUES",
+        ),
+        liability(
+            "cap-1",
+            "Çatı Taksit 1",
+            "200.00",
+            today() + Days::new(5),
+            "OWNER",
+            "CAPITAL_DUES",
+        ),
     ])
     .await;
     let mut inner = state.inner.write().await;
     inner.adjust_advance(UNIT, "OWNER", d("250.00"));
-    let (settled, offset) = sitepulse_backend::handlers::apply_advance_payments_offset(&mut inner, Some(UNIT));
+    let (settled, offset) =
+        sitepulse_backend::handlers::apply_advance_payments_offset(&mut inner, Some(UNIT));
     assert_eq!((settled, offset), (1, d("200.00")));
-    assert_eq!(inner.dues.iter().find(|x| x.id == "cap-1").unwrap().status, DebtStatus::Paid);
-    assert_ne!(inner.dues.iter().find(|x| x.id == "op-1").unwrap().status, DebtStatus::Paid, "the owner's advance does not pay the tenant's dues");
+    assert_eq!(
+        inner.dues.iter().find(|x| x.id == "cap-1").unwrap().status,
+        DebtStatus::Paid
+    );
+    assert_ne!(
+        inner.dues.iter().find(|x| x.id == "op-1").unwrap().status,
+        DebtStatus::Paid,
+        "the owner's advance does not pay the tenant's dues"
+    );
     assert_eq!(inner.advance_of(UNIT, "OWNER"), d("50.00"));
     assert_eq!(inner.advance_of(UNIT, "TENANT"), Decimal::ZERO);
 }
@@ -194,16 +286,45 @@ async fn when_advances_are_offset_then_each_due_is_paid_only_from_its_own_debtor
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn when_a_settled_payment_is_reversed_then_dues_reopen_the_advance_is_refunded_and_an_iad_receipt_is_issued() {
-    let state = tenanted_state_with(vec![liability("op-1", "Eylül 2026", "1000.00", today() - Days::new(1), "TENANT", "OPERATIONAL_DUES")]).await;
+async fn when_a_settled_payment_is_reversed_then_dues_reopen_the_advance_is_refunded_and_an_iad_receipt_is_issued(
+) {
+    let state = tenanted_state_with(vec![liability(
+        "op-1",
+        "Eylül 2026",
+        "1000.00",
+        today() - Days::new(1),
+        "TENANT",
+        "OPERATIONAL_DUES",
+    )])
+    .await;
     let service = PaymentTrackingService::new(state.clone());
-    let original = service.record_and_allocate_payment(payment("1200.00", "TENANT", "Canan Kaya")).await.unwrap();
-    assert_eq!(original.allocated_advance, d("200.00") - (original.allocated_penalty));
+    let original = service
+        .record_and_allocate_payment(payment("1200.00", "TENANT", "Canan Kaya"))
+        .await
+        .unwrap();
+    assert_eq!(
+        original.allocated_advance,
+        d("200.00") - (original.allocated_penalty)
+    );
 
-    let resp = service.reverse_payment(reverse(&original.receipt_number, "Karşılıksız havale (bounced)"), OPERATOR).await.unwrap();
+    let resp = service
+        .reverse_payment(
+            reverse(&original.receipt_number, "Karşılıksız havale (bounced)"),
+            &operator(OPERATOR),
+        )
+        .await
+        .unwrap();
     let rev = &resp.reversal_receipt;
-    assert!(rev.receipt_number.starts_with(&format!("IAD-{}-", Utc::now().format("%Y"))), "{}", rev.receipt_number);
-    assert_eq!(rev.sequence_number, 1, "the reversal series has its own counter");
+    assert!(
+        rev.receipt_number
+            .starts_with(&format!("IAD-{}-", Utc::now().format("%Y"))),
+        "{}",
+        rev.receipt_number
+    );
+    assert_eq!(
+        rev.sequence_number, 1,
+        "the reversal series has its own counter"
+    );
     assert_eq!(rev.receipt_type, "REVERSAL");
     assert_eq!(rev.reverses_receipt_id, Some(original.id));
     assert_eq!(rev.total_amount, original.total_amount);
@@ -218,52 +339,142 @@ async fn when_a_settled_payment_is_reversed_then_dues_reopen_the_advance_is_refu
     assert_eq!(inner.advance_of(UNIT, "TENANT"), Decimal::ZERO);
     let entries: Vec<&PaymentEntry> = inner.payment_entries.iter().collect();
     assert_eq!(entries.len(), 2, "the original plus one contra entry");
-    let orig_entry = entries.iter().find(|e| e.receipt_id == Some(original.id)).unwrap();
+    let orig_entry = entries
+        .iter()
+        .find(|e| e.receipt_id == Some(original.id))
+        .unwrap();
     let contra = entries.iter().find(|e| e.entry_type == "REVERSAL").unwrap();
     assert_eq!(orig_entry.settlement_status, SettlementStatus::Reversed);
     assert_eq!(contra.reverses_entry_id, Some(orig_entry.id));
     assert_eq!(contra.settlement_status, SettlementStatus::Reversed);
     assert_eq!(contra.recorded_by.as_deref(), Some(OPERATOR));
-    assert_eq!(contra.reversal_reason.as_deref(), Some("Karşılıksız havale (bounced)"));
+    assert_eq!(
+        contra.reversal_reason.as_deref(),
+        Some("Karşılıksız havale (bounced)")
+    );
 
     // The next collection keeps the TAH series going.
     drop(inner);
-    let next = service.record_and_allocate_payment(payment("10.00", "TENANT", "Canan Kaya")).await.unwrap();
+    let next = service
+        .record_and_allocate_payment(payment("10.00", "TENANT", "Canan Kaya"))
+        .await
+        .unwrap();
     assert_eq!(next.sequence_number, original.sequence_number + 1);
     assert!(next.receipt_number.starts_with("TAH-"));
 }
 
 #[tokio::test]
 async fn when_a_payment_is_reversed_twice_then_the_first_reversal_is_returned() {
-    let state = tenanted_state_with(vec![liability("op-1", "Eylül 2026", "100.00", today() + Days::new(3), "TENANT", "OPERATIONAL_DUES")]).await;
+    let state = tenanted_state_with(vec![liability(
+        "op-1",
+        "Eylül 2026",
+        "100.00",
+        today() + Days::new(3),
+        "TENANT",
+        "OPERATIONAL_DUES",
+    )])
+    .await;
     let service = PaymentTrackingService::new(state.clone());
-    let original = service.record_and_allocate_payment(payment("100.00", "TENANT", "Canan Kaya")).await.unwrap();
-    let first = service.reverse_payment(reverse(&original.receipt_number, "Yanlış daire"), OPERATOR).await.unwrap();
-    let second = service.reverse_payment(reverse(&original.receipt_number, "Yanlış daire"), OPERATOR).await.unwrap();
-    assert_eq!(first.reversal_receipt.receipt_number, second.reversal_receipt.receipt_number);
+    let original = service
+        .record_and_allocate_payment(payment("100.00", "TENANT", "Canan Kaya"))
+        .await
+        .unwrap();
+    let first = service
+        .reverse_payment(
+            reverse(&original.receipt_number, "Yanlış daire"),
+            &operator(OPERATOR),
+        )
+        .await
+        .unwrap();
+    let second = service
+        .reverse_payment(
+            reverse(&original.receipt_number, "Yanlış daire"),
+            &operator(OPERATOR),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        first.reversal_receipt.receipt_number,
+        second.reversal_receipt.receipt_number
+    );
     let inner = state.inner.read().await;
-    assert_eq!(inner.payment_receipts.iter().filter(|r| r.receipt_type == "REVERSAL").count(), 1);
-    assert_eq!(inner.dues[0].paid_principal, Decimal::ZERO, "un-allocated exactly once");
+    assert_eq!(
+        inner
+            .payment_receipts
+            .iter()
+            .filter(|r| r.receipt_type == "REVERSAL")
+            .count(),
+        1
+    );
+    assert_eq!(
+        inner.dues[0].paid_principal,
+        Decimal::ZERO,
+        "un-allocated exactly once"
+    );
 }
 
 #[tokio::test]
 async fn when_a_reversal_has_no_reason_or_targets_a_reversal_then_it_is_rejected() {
-    let state = tenanted_state_with(vec![liability("op-1", "Eylül 2026", "100.00", today() + Days::new(3), "TENANT", "OPERATIONAL_DUES")]).await;
+    let state = tenanted_state_with(vec![liability(
+        "op-1",
+        "Eylül 2026",
+        "100.00",
+        today() + Days::new(3),
+        "TENANT",
+        "OPERATIONAL_DUES",
+    )])
+    .await;
     let service = PaymentTrackingService::new(state.clone());
-    let original = service.record_and_allocate_payment(payment("100.00", "TENANT", "Canan Kaya")).await.unwrap();
-    assert!(service.reverse_payment(reverse(&original.receipt_number, " "), OPERATOR).await.unwrap_err().contains("reason"));
-    assert!(service.reverse_payment(reverse(&original.receipt_number, "valid reason"), "  ").await.is_err());
-    let rev = service.reverse_payment(reverse(&original.receipt_number, "valid reason"), OPERATOR).await.unwrap();
-    let err = service.reverse_payment(reverse(&rev.reversal_receipt.receipt_number, "again"), OPERATOR).await.unwrap_err();
+    let original = service
+        .record_and_allocate_payment(payment("100.00", "TENANT", "Canan Kaya"))
+        .await
+        .unwrap();
+    assert!(service
+        .reverse_payment(reverse(&original.receipt_number, " "), &operator(OPERATOR))
+        .await
+        .unwrap_err()
+        .contains("reason"));
+    assert!(service
+        .reverse_payment(
+            reverse(&original.receipt_number, "valid reason"),
+            &operator("  ")
+        )
+        .await
+        .is_err());
+    let rev = service
+        .reverse_payment(
+            reverse(&original.receipt_number, "valid reason"),
+            &operator(OPERATOR),
+        )
+        .await
+        .unwrap();
+    let err = service
+        .reverse_payment(
+            reverse(&rev.reversal_receipt.receipt_number, "again"),
+            &operator(OPERATOR),
+        )
+        .await
+        .unwrap_err();
     assert!(err.contains("cannot be reversed"), "{}", err);
 }
 
 /// The advance a payment credited must still be there to be refunded.
 #[tokio::test]
 async fn when_the_credited_advance_was_already_used_then_the_reversal_is_rejected() {
-    let state = tenanted_state_with(vec![liability("cap-1", "Asansör Taksit 1", "300.00", today() + Days::new(3), "OWNER", "CAPITAL_DUES")]).await;
+    let state = tenanted_state_with(vec![liability(
+        "cap-1",
+        "Asansör Taksit 1",
+        "300.00",
+        today() + Days::new(3),
+        "OWNER",
+        "CAPITAL_DUES",
+    )])
+    .await;
     let service = PaymentTrackingService::new(state.clone());
-    let original = service.record_and_allocate_payment(payment("300.00", "TENANT", "Canan Kaya")).await.unwrap();
+    let original = service
+        .record_and_allocate_payment(payment("300.00", "TENANT", "Canan Kaya"))
+        .await
+        .unwrap();
     assert_eq!(original.advance_debtor_type.as_deref(), Some("TENANT"));
     service
         .inter_ledger_transfer(InterLedgerTransferRequest {
@@ -276,18 +487,42 @@ async fn when_the_credited_advance_was_already_used_then_the_reversal_is_rejecte
         })
         .await
         .unwrap();
-    let err = service.reverse_payment(reverse(&original.receipt_number, "Kiracıya iade"), OPERATOR).await.unwrap_err();
+    let err = service
+        .reverse_payment(
+            reverse(&original.receipt_number, "Kiracıya iade"),
+            &operator(OPERATOR),
+        )
+        .await
+        .unwrap_err();
     assert!(err.contains("already been used"), "{}", err);
     let inner = state.inner.read().await;
-    assert!(inner.payment_entries.iter().all(|e| e.settlement_status != SettlementStatus::Reversed), "nothing changed");
+    assert!(
+        inner
+            .payment_entries
+            .iter()
+            .all(|e| e.settlement_status != SettlementStatus::Reversed),
+        "nothing changed"
+    );
 }
 
 /// Virman reversal is deferred: it is refused rather than half-done.
 #[tokio::test]
 async fn when_a_virman_receipt_is_reversed_then_it_is_refused() {
-    let state = tenanted_state_with(vec![liability("cap-1", "Asansör Taksit 1", "300.00", today() + Days::new(3), "OWNER", "CAPITAL_DUES")]).await;
+    let state = tenanted_state_with(vec![liability(
+        "cap-1",
+        "Asansör Taksit 1",
+        "300.00",
+        today() + Days::new(3),
+        "OWNER",
+        "CAPITAL_DUES",
+    )])
+    .await;
     let service = PaymentTrackingService::new(state.clone());
-    state.inner.write().await.adjust_advance(UNIT, "OWNER", d("300.00"));
+    state
+        .inner
+        .write()
+        .await
+        .adjust_advance(UNIT, "OWNER", d("300.00"));
     let virman = service
         .inter_ledger_transfer(InterLedgerTransferRequest {
             site_id: Some(SITE.to_string()),
@@ -297,7 +532,13 @@ async fn when_a_virman_receipt_is_reversed_then_it_is_refused() {
         })
         .await
         .unwrap();
-    let err = service.reverse_payment(reverse(&virman.receipt_number, "Hatalı virman"), OPERATOR).await.unwrap_err();
+    let err = service
+        .reverse_payment(
+            reverse(&virman.receipt_number, "Hatalı virman"),
+            &operator(OPERATOR),
+        )
+        .await
+        .unwrap_err();
     assert!(err.contains("inter-ledger"), "{}", err);
 }
 
@@ -311,13 +552,24 @@ async fn when_an_idempotent_payment_is_retried_then_the_key_is_not_stored_in_cha
     let service = PaymentTrackingService::new(state.clone());
     let mut req = payment("50.00", "OWNER", "Ahmet Yılmaz");
     req.idempotency_key = Some("client-key-1".to_string());
-    let first = service.record_and_allocate_payment(req.clone()).await.unwrap();
+    let first = service
+        .record_and_allocate_payment(req.clone())
+        .await
+        .unwrap();
     let second = service.record_and_allocate_payment(req).await.unwrap();
     assert_eq!(first.id, second.id);
-    assert_eq!(first.channel_reference, None, "no IDEMPOTENCY:<key> overloading");
+    assert_eq!(
+        first.channel_reference, None,
+        "no IDEMPOTENCY:<key> overloading"
+    );
     let inner = state.inner.read().await;
     assert_eq!(inner.payment_receipts.len(), 1);
-    assert_eq!(inner.payment_idempotency.get(&("1".to_string(), "client-key-1".to_string())), Some(&first.id));
+    assert_eq!(
+        inner
+            .payment_idempotency
+            .get(&("1".to_string(), "client-key-1".to_string())),
+        Some(&first.id)
+    );
 }
 
 #[tokio::test]
@@ -325,7 +577,10 @@ async fn when_a_bank_reference_is_given_then_it_is_the_receipts_channel_referenc
     let state = tenanted_state_with(vec![]).await;
     let mut req = payment("50.00", "OWNER", "Ahmet Yılmaz");
     req.external_reference = Some("FAST-2026-0001".to_string());
-    let receipt = PaymentTrackingService::new(state).record_and_allocate_payment(req).await.unwrap();
+    let receipt = PaymentTrackingService::new(state)
+        .record_and_allocate_payment(req)
+        .await
+        .unwrap();
     assert_eq!(receipt.channel_reference.as_deref(), Some("FAST-2026-0001"));
 }
 
@@ -338,7 +593,10 @@ async fn when_the_site_has_a_tax_id_then_new_receipts_snapshot_the_issuer() {
         site.tax_id = Some("1234567890".to_string());
         site.tax_office = Some("Ataşehir".to_string());
     }
-    let receipt = PaymentTrackingService::new(state).record_and_allocate_payment(payment("50.00", "OWNER", "Ahmet Yılmaz")).await.unwrap();
+    let receipt = PaymentTrackingService::new(state)
+        .record_and_allocate_payment(payment("50.00", "OWNER", "Ahmet Yılmaz"))
+        .await
+        .unwrap();
     assert_eq!(receipt.issuer_name.as_deref(), Some("Begonya Sitesi"));
     assert_eq!(receipt.issuer_tax_id.as_deref(), Some("1234567890"));
     assert_eq!(receipt.issuer_tax_office.as_deref(), Some("Ataşehir"));
@@ -349,12 +607,47 @@ async fn when_the_site_has_a_tax_id_then_new_receipts_snapshot_the_issuer() {
 async fn when_a_site_tax_id_is_not_10_or_11_digits_then_the_update_is_rejected() {
     let state = tenanted_state_with(vec![]).await;
     let service = SaasTenantService::new(state.clone());
-    let bad = UpdateSiteRequest { tax_id: Some("12AB".to_string()), site_name: Some("Renamed".to_string()), ..Default::default() };
-    assert!(service.update_site(SITE, bad).await.unwrap_err().contains("tax_id"));
-    assert_eq!(state.inner.read().await.sites.iter().find(|s| s.id == SITE).unwrap().name, "Begonya Sitesi", "nothing changed");
-    let good = UpdateSiteRequest { tax_id: Some("1234 567 890".to_string()), ..Default::default() };
+    let bad = UpdateSiteRequest {
+        tax_id: Some("12AB".to_string()),
+        site_name: Some("Renamed".to_string()),
+        ..Default::default()
+    };
+    assert!(service
+        .update_site(SITE, bad)
+        .await
+        .unwrap_err()
+        .contains("tax_id"));
+    assert_eq!(
+        state
+            .inner
+            .read()
+            .await
+            .sites
+            .iter()
+            .find(|s| s.id == SITE)
+            .unwrap()
+            .name,
+        "Begonya Sitesi",
+        "nothing changed"
+    );
+    let good = UpdateSiteRequest {
+        tax_id: Some("1234 567 890".to_string()),
+        ..Default::default()
+    };
     service.update_site(SITE, good).await.unwrap();
-    assert_eq!(state.inner.read().await.sites.iter().find(|s| s.id == SITE).unwrap().tax_id.as_deref(), Some("1234567890"));
+    assert_eq!(
+        state
+            .inner
+            .read()
+            .await
+            .sites
+            .iter()
+            .find(|s| s.id == SITE)
+            .unwrap()
+            .tax_id
+            .as_deref(),
+        Some("1234567890")
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -371,7 +664,11 @@ fn when_reconciliation_status_is_stored_then_one_english_vocabulary_round_trips(
         ReconciliationStatus::AlreadyProcessed,
     ] {
         let code = s.db_code();
-        assert!(code.chars().all(|c| c.is_ascii_uppercase() || c == '_'), "{}", code);
+        assert!(
+            code.chars().all(|c| c.is_ascii_uppercase() || c == '_'),
+            "{}",
+            code
+        );
         assert_eq!(ReconciliationStatus::from_db_code(code), s);
     }
 }
@@ -392,7 +689,11 @@ fn when_a_transaction_id_is_reused_with_other_content_then_the_payload_hash_diff
     let mut same = base.clone();
     same.virtual_iban = "TR410020504213991067000014".to_string();
     same.sender_name = Some("different display name".to_string());
-    assert_eq!(hash(&base), hash(&same), "formatting and display-only fields do not matter");
+    assert_eq!(
+        hash(&base),
+        hash(&same),
+        "formatting and display-only fields do not matter"
+    );
     let mut other = base.clone();
     other.amount = d("100.01");
     assert_ne!(hash(&base), hash(&other));
@@ -402,10 +703,27 @@ fn when_a_transaction_id_is_reused_with_other_content_then_the_payload_hash_diff
 #[tokio::test]
 async fn when_aging_is_snapshotted_then_one_row_per_unit_and_debtor_is_produced() {
     let state = tenanted_state_with(vec![
-        liability("op-1", "Eylül 2026", "100.00", today() - Days::new(40), "TENANT", "OPERATIONAL_DUES"),
-        liability("cap-1", "Asansör Taksit 1", "300.00", today() + Days::new(3), "OWNER", "CAPITAL_DUES"),
+        liability(
+            "op-1",
+            "Eylül 2026",
+            "100.00",
+            today() - Days::new(40),
+            "TENANT",
+            "OPERATIONAL_DUES",
+        ),
+        liability(
+            "cap-1",
+            "Asansör Taksit 1",
+            "300.00",
+            today() + Days::new(3),
+            "OWNER",
+            "CAPITAL_DUES",
+        ),
     ])
     .await;
-    let rows = PaymentTrackingService::new(state).snapshot_debt_aging(Some(SITE)).await.unwrap();
+    let rows = PaymentTrackingService::new(state)
+        .snapshot_debt_aging(Some(SITE))
+        .await
+        .unwrap();
     assert_eq!(rows, 2);
 }

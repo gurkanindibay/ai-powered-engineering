@@ -1,8 +1,8 @@
 use deadpool_postgres::Pool;
 use tracing::info;
 
-use crate::models::ReconciliationMatch;
 use super::base::{parse_id_to_i64, require_id};
+use crate::models::ReconciliationMatch;
 pub async fn save_reconciliation_match_for_site(
     pool: &Pool,
     m: &ReconciliationMatch,
@@ -79,7 +79,6 @@ pub async fn save_reconciliation_match(
     save_reconciliation_match_for_site(pool, m, &site.to_string(), None).await
 }
 
-
 pub async fn update_reconciliation_status(
     pool: &Pool,
     match_id: &str,
@@ -94,7 +93,9 @@ pub async fn update_reconciliation_status(
             &[&match_id, &code, &notes],
         )
         .await?;
-    info!("Updated reconciliation match {} status to {} in PostgreSQL", match_id, code);
+    info!(
+        "Updated reconciliation match {} status to {} in PostgreSQL",
+        match_id, code
+    );
     Ok(())
 }
-

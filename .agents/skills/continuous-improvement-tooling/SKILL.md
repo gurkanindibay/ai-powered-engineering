@@ -107,10 +107,10 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 
 | Tool | Path | Use it for |
 | :--- | :--- | :--- |
-| `run_tests.py` | `apps/development-time/SitePulse/scripts/run_tests.py` | The full gate run before concluding any change |
-| `api_system_check.py` | `apps/development-time/SitePulse/scripts/api_system_check.py` | HTTP auth, tenancy, webhook, concurrency, restart, match-all-in-place, payer identity, site purge, per-debtor virman, reversal, scoped webhook claims, receipt issuer snapshot, aging snapshot and ledger drift checks against a real DB |
+| `run_tests.py` | `apps/development-time/SitePulse/scripts/run_tests.py` | The full gate run before concluding any change; `--from-dev-container` loads local development DB settings without exposing credentials |
+| `api_system_check.py` | `apps/development-time/SitePulse/scripts/api_system_check.py` | HTTP auth, tenancy, webhook, concurrency, restart, match-all-in-place, payer identity, site purge, per-debtor virman, reversal, scoped webhook claims, receipt issuer snapshot, aging snapshot, ledger drift, session rotation/revocation, transactional audit failure, audit RLS, scoped review, support approval and atomic invitation checks against a real DB |
 | `schema_integrity_check.py` | `apps/development-time/SitePulse/scripts/schema_integrity_check.py` | Migration replay, constraint tests (incl. the V16 append-only payment ledger and the V17 reversal / webhook-claim / issuer / status rules) and the upgrade test |
-| `gui_e2e.py` | `apps/development-time/SitePulse/scripts/gui_e2e.py` | Playwright GUI suite in a real browser against an isolated stack (`serve` mode for writing tests) |
+| `gui_e2e.py` | `apps/development-time/SitePulse/scripts/gui_e2e.py` | Playwright GUI suite in a real browser against an isolated stack (`serve` mode for writing tests); source/API-origin fingerprint prevents stale bundle reuse and resets preserve append-only audit evidence |
 | `testid_lint.py` | `apps/development-time/SitePulse/scripts/testid_lint.py` | Every widget `Key` has a matching GUI `testId` (gate `testid-lint`) |
 | `ui_style_lint.py` | `apps/development-time/SitePulse/scripts/ui_style_lint.py` | Design-system rules: 12 px floor, `MoneyFormatter` for amounts, no emoji icons, no popups/partial sheets (`no-popup`); ratchet on literal font sizes and colours (gate `ui-style-lint`) |
 | `gui_traceability.py` | `apps/development-time/SitePulse/scripts/gui_traceability.py` | Story → GUI scenario → test status; refreshes the section in `COMPLETION_STATUS.md` |

@@ -1,8 +1,8 @@
 use deadpool_postgres::Pool;
 use tracing::info;
 
-use crate::models::PendingRegistrationResponse;
 use super::base::require_id;
+use crate::models::PendingRegistrationResponse;
 pub async fn save_pending_registration(
     pool: &Pool,
     req: &PendingRegistrationResponse,
@@ -35,7 +35,10 @@ pub async fn save_pending_registration(
             ],
         )
         .await?;
-    info!("Saved pending registration {} ({}) to PostgreSQL", req.request_id, req.email);
+    info!(
+        "Saved pending registration {} ({}) to PostgreSQL",
+        req.request_id, req.email
+    );
     Ok(())
 }
 
@@ -51,7 +54,9 @@ pub async fn update_pending_registration_status(
             &[&request_id, &status],
         )
         .await?;
-    info!("Updated pending registration {} status to {} in PostgreSQL", request_id, status);
+    info!(
+        "Updated pending registration {} status to {} in PostgreSQL",
+        request_id, status
+    );
     Ok(())
 }
-

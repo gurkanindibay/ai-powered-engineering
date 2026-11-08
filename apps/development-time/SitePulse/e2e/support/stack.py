@@ -11,6 +11,7 @@ DB_PORT; `psql` on PATH or `docker exec <container> psql`).
 from __future__ import annotations
 
 import functools
+import hashlib
 import http.server
 import os
 import subprocess
@@ -35,7 +36,7 @@ WEBHOOK_SECRET = "gui-e2e-webhook-secret"
 JWT_SECRET = "gui-e2e-jwt-secret-0123456789abcdef0123"
 
 # Tables are emptied between modules; schema bookkeeping is kept.
-KEEP_TABLES = {"schema_migrations", "refinery_schema_history", "_sqlx_migrations"}
+KEEP_TABLES = {"schema_migrations", "refinery_schema_history", "_sqlx_migrations", "audit_events"}
 
 SetupError = asc.SetupError
 
@@ -50,7 +51,18 @@ def web_base() -> str:
 
 def build_web(force: bool = False) -> None:
     """Build the E2E web bundle (semantics on, API pointed at the E2E backend)."""
-    if WEB_BUILD.joinpath("main.dart.js").exists() and not force:
+    digest=hashlib.sha256(api_base().encode())
+    flutter=SITEPULSE / "flutter"
+    inputs=[flutter/"pubspec.yaml",flutter/"pubspec.lock"]
+    for directory in ("lib","web","assets"):
+        inputs.extend(sorted(path for path in (flutter/directory).rglob("*") if path.is_file()))
+    for path in inputs:
+        if path.exists():
+            digest.update(str(path.relative_to(flutter)).encode())
+            digest.update(path.read_bytes())
+    fingerprint=digest.hexdigest()
+    stamp=WEB_BUILD / ".source-fingerprint"
+    if WEB_BUILD.joinpath("main.dart.js").exists() and stamp.exists() and stamp.read_text()==fingerprint and not force:
         return
     proc = subprocess.run(
         [str(FLUTTER), "build", "web", "--dart-define=E2E=true",
@@ -58,6 +70,7 @@ def build_web(force: bool = False) -> None:
         cwd=SITEPULSE / "flutter", capture_output=True, text=True)
     if proc.returncode != 0:
         raise SetupError("flutter build web failed:\n" + proc.stdout[-2000:] + proc.stderr[-2000:])
+    stamp.write_text(fingerprint)
 
 
 class _QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -130,6 +143,9 @@ class E2EStack:
         self.sql((seed_dir / "01-system-seed.sql").read_text(encoding="utf-8"))
         self.sql((seed_dir / "02-test-seed.sql").read_text(encoding="utf-8"))
         self.backend.start()
+        # Seed actors have permanent test passwords. Temporary-account password
+        # change scenarios create their own accounts after this fixture reset.
+        self.sql("UPDATE users SET must_change_password=false;")
 
     def restart_backend(self) -> None:
         """Reload backend memory after an Arrange step wrote SQL directly."""

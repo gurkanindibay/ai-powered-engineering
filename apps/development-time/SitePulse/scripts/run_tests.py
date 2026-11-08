@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -44,6 +46,8 @@ GUI_GATES = {"gui-e2e"}
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--from-dev-container", action="store_true",
+                        help="Load database connection settings from the running local development PostgreSQL container")
     parser.add_argument("--skip-db", action="store_true", help="Skip gates that need PostgreSQL (reported as SKIPPED)")
     parser.add_argument("--skip-gui", action="store_true",
                         help="Skip the browser end-to-end suite (reported as SKIPPED)")
@@ -51,6 +55,19 @@ def main(argv=None) -> int:
     parser.add_argument("--json", action="store_true", help="Print a JSON report")
     args = parser.parse_args(argv)
 
+    if args.from_dev_container:
+        try:
+            container = os.environ.get("SITEPULSE_PG_CONTAINER", "sitepulse-postgres")
+            result = subprocess.run(["docker", "inspect", container], capture_output=True, text=True, timeout=15, check=True)
+            configuration = json.loads(result.stdout)[0]
+            variables = dict(value.split("=", 1) for value in configuration["Config"]["Env"] if "=" in value)
+            os.environ["DB_PASS"] = variables["POSTGRES_PASSWORD"]
+            os.environ["DB_USER"] = variables.get("POSTGRES_USER", "sitepulse_user")
+            os.environ["DB_HOST"] = "127.0.0.1"
+            os.environ["DB_PORT"] = configuration["NetworkSettings"]["Ports"]["5432/tcp"][0]["HostPort"]
+        except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError):
+            print("Unable to load local development database settings; use DB_PASS explicitly.", file=sys.stderr)
+            return 2
     selected = [g.strip() for g in args.only.split(",")] if args.only else ORDER
     unknown = [g for g in selected if g not in GATES]
     if unknown:

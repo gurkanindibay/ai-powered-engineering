@@ -3,8 +3,8 @@ use regex::Regex;
 use rust_decimal::Decimal;
 
 use crate::models::{
-    BankTransactionItem, DebtStatus, DuesLiability, IndependentUnit,
-    ReconciliationMatch, ReconciliationStatus, User,
+    BankTransactionItem, DebtStatus, DuesLiability, IndependentUnit, ReconciliationMatch,
+    ReconciliationStatus, User,
 };
 use crate::services::dues_calculation_service::DuesCalculationService;
 
@@ -34,7 +34,14 @@ impl ReconciliationService {
         dues: &[DuesLiability],
         evaluation_date: NaiveDate,
     ) -> Vec<ReconciliationMatch> {
-        self.reconcile_transactions_with_site(None, transactions, units, users, dues, evaluation_date)
+        self.reconcile_transactions_with_site(
+            None,
+            transactions,
+            units,
+            users,
+            dues,
+            evaluation_date,
+        )
     }
 
     pub fn reconcile_transactions_with_site(
@@ -49,7 +56,14 @@ impl ReconciliationService {
         let mut results = Vec::new();
 
         for txn in transactions {
-            let matched = self.match_single_transaction_with_site(site_id, txn, units, users, dues, evaluation_date);
+            let matched = self.match_single_transaction_with_site(
+                site_id,
+                txn,
+                units,
+                users,
+                dues,
+                evaluation_date,
+            );
             results.push(matched);
         }
 
@@ -105,20 +119,28 @@ impl ReconciliationService {
         if matched_unit.is_none() {
             let extracted_unit = Self::extract_block_and_flat(desc);
             if let Some((ref blk, unit_no)) = extracted_unit {
-                let clean_blk = blk.to_uppercase().replace("BLOK", "").replace("BLOCK", "").replace(['-', '_', ' '], "");
+                let clean_blk = blk
+                    .to_uppercase()
+                    .replace("BLOK", "")
+                    .replace("BLOCK", "")
+                    .replace(['-', '_', ' '], "");
                 matched_unit = units.iter().find(|u| {
-                    let u_blk = u.block_id.to_uppercase().replace("BLOK", "").replace("BLOCK", "").replace(['-', '_', ' '], "");
-                    (u_blk == clean_blk || u.block_id.eq_ignore_ascii_case(blk)) && u.unit_number == unit_no
+                    let u_blk = u
+                        .block_id
+                        .to_uppercase()
+                        .replace("BLOK", "")
+                        .replace("BLOCK", "")
+                        .replace(['-', '_', ' '], "");
+                    (u_blk == clean_blk || u.block_id.eq_ignore_ascii_case(blk))
+                        && u.unit_number == unit_no
                 });
             }
 
             // If block wasn't extracted but flat was, try matching by flat number alone if unique
             if matched_unit.is_none() {
                 if let Some(flat_no) = Self::extract_flat_only(desc) {
-                    let candidate_units: Vec<&IndependentUnit> = units
-                        .iter()
-                        .filter(|u| u.unit_number == flat_no)
-                        .collect();
+                    let candidate_units: Vec<&IndependentUnit> =
+                        units.iter().filter(|u| u.unit_number == flat_no).collect();
                     if candidate_units.len() == 1 {
                         matched_unit = Some(candidate_units[0]);
                     }
@@ -158,7 +180,9 @@ impl ReconciliationService {
 
             if let Some(first_due) = unit_dues.first() {
                 // Calculate dynamic KMK penalty up to evaluation date
-                let evaluated = self.dues_service.calculate_delay_penalty((*first_due).clone(), evaluation_date);
+                let evaluated = self
+                    .dues_service
+                    .calculate_delay_penalty((*first_due).clone(), evaluation_date);
                 let balance = evaluated.total_amount;
                 outstanding_balance = Some(balance);
                 matched_due = Some(evaluated);
@@ -175,7 +199,8 @@ impl ReconciliationService {
         // 4. Calculate Confidence Score & Status
         let mut confidence: u8 = 0;
         let has_unit = matched_unit.is_some();
-        let has_name = matched_user.is_some() && Self::text_contains_name(desc, &matched_user.unwrap().full_name);
+        let has_name = matched_user.is_some()
+            && Self::text_contains_name(desc, &matched_user.unwrap().full_name);
         let is_advance_match = matched_unit.is_some() && matched_due.is_none();
 
         if is_already_processed {
@@ -224,7 +249,10 @@ impl ReconciliationService {
                         Some("100% Match via Flat-Specific Virtual IBAN (Sanal IBAN). Zero manual narrative entry required.".to_string())
                     }
                 } else if amount_matches {
-                    Some("Exact amount matches outstanding dues balance (including KMK penalty)".to_string())
+                    Some(
+                        "Exact amount matches outstanding dues balance (including KMK penalty)"
+                            .to_string(),
+                    )
                 } else if txn.amount > outstanding_balance.unwrap_or(Decimal::ZERO) {
                     let surplus = txn.amount - outstanding_balance.unwrap_or(Decimal::ZERO);
                     Some(format!(
@@ -288,9 +316,9 @@ impl ReconciliationService {
         }
 
         // Pattern 2: BLOK [A-Z0-9]+ D:(\d+)
-        let re2 = Regex::new(
-            r"(?i)\bblok\s*([A-Z0-9]+)\b.*?\b(?:d[:\.\s-]*|daire[:\.\s-]*)(\d+)\b",
-        ).ok()?;
+        let re2 =
+            Regex::new(r"(?i)\bblok\s*([A-Z0-9]+)\b.*?\b(?:d[:\.\s-]*|daire[:\.\s-]*)(\d+)\b")
+                .ok()?;
 
         if let Some(caps) = re2.captures(text) {
             let blk = caps.get(1)?.as_str().to_uppercase();

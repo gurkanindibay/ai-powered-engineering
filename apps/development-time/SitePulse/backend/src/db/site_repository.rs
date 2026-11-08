@@ -3,9 +3,12 @@ use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use tracing::info;
 
-use crate::models::{BlockDto, PlanType, SaasSiteSummaryDto, Site, SiteStatus};
 use super::base::{logged, parse_id_to_i64, require_id, DbResult};
-pub async fn save_site(pool: &Pool, site: &Site) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+use crate::models::{BlockDto, PlanType, SaasSiteSummaryDto, Site, SiteStatus};
+pub async fn save_site(
+    pool: &Pool,
+    site: &Site,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let maybe_id = parse_id_to_i64(&site.id);
     let id_num = match maybe_id {
@@ -71,7 +74,10 @@ pub async fn save_site(pool: &Pool, site: &Site) -> Result<(), Box<dyn std::erro
             row.get(0)
         }
     };
-    info!("Saved site {} (numeric ID: {}) ({}) to PostgreSQL sites", site.id, id_num, site.name);
+    info!(
+        "Saved site {} (numeric ID: {}) ({}) to PostgreSQL sites",
+        site.id, id_num, site.name
+    );
     Ok(())
 }
 
@@ -90,20 +96,33 @@ pub async fn soft_delete_site(pool: &Pool, site_id: &str) -> DbResult<()> {
 
 /// Whether a site may be used (exists, not deleted, not suspended).
 pub async fn site_is_active(pool: &Pool, site_id: &str) -> DbResult<bool> {
-    let Some(id) = parse_id_to_i64(site_id) else { return Ok(false) };
+    let Some(id) = parse_id_to_i64(site_id) else {
+        return Ok(false);
+    };
     let client = pool.get().await?;
     Ok(client
-        .query_opt("SELECT 1 FROM sites WHERE id = $1 AND deleted_at IS NULL AND status <> 'SUSPENDED'", &[&id])
+        .query_opt(
+            "SELECT 1 FROM sites WHERE id = $1 AND deleted_at IS NULL AND status <> 'SUSPENDED'",
+            &[&id],
+        )
         .await?
         .is_some())
 }
 
 /// Hard delete, used only by the development purge tooling.
-pub async fn delete_site(pool: &Pool, site_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn delete_site(
+    pool: &Pool,
+    site_id: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let id_num = require_id("entity", site_id)?;
-    client.execute("DELETE FROM sites WHERE id = $1", &[&id_num]).await?;
-    info!("Deleted site {} (numeric ID: {}) from PostgreSQL sites", site_id, id_num);
+    client
+        .execute("DELETE FROM sites WHERE id = $1", &[&id_num])
+        .await?;
+    info!(
+        "Deleted site {} (numeric ID: {}) from PostgreSQL sites",
+        site_id, id_num
+    );
     Ok(())
 }
 
@@ -207,7 +226,9 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
     for row in rows {
         let id: i64 = row.get(0);
         let name: String = row.get(1);
-        let slug: String = row.get::<_, Option<String>>(2).unwrap_or_else(|| id.to_string());
+        let slug: String = row
+            .get::<_, Option<String>>(2)
+            .unwrap_or_else(|| id.to_string());
         let address: String = row.get::<_, Option<String>>(3).unwrap_or_default();
         let status: SiteStatus = row
             .get::<_, Option<String>>(4)
@@ -233,16 +254,24 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
             .ok()
             .flatten();
 
-        let (primary_manager_name, primary_manager_email, primary_manager_phone) = match manager_row {
+        let (primary_manager_name, primary_manager_email, primary_manager_phone) = match manager_row
+        {
             Some(m_row) => (
                 m_row.get::<_, String>(0),
                 m_row.get::<_, String>(1),
-                m_row.get::<_, Option<String>>(2).unwrap_or_else(|| "-".to_string()),
+                m_row
+                    .get::<_, Option<String>>(2)
+                    .unwrap_or_else(|| "-".to_string()),
             ),
             None => ("Unassigned".to_string(), "-".to_string(), "-".to_string()),
         };
 
-        let unit_count_row = logged(client.query_one("SELECT COUNT(*) FROM units WHERE site_id = $1", &[&id]).await, "fetch site units");
+        let unit_count_row = logged(
+            client
+                .query_one("SELECT COUNT(*) FROM units WHERE site_id = $1", &[&id])
+                .await,
+            "fetch site units",
+        );
         let total_units: i64 = unit_count_row.map(|r| r.get(0)).unwrap_or(0);
 
         let dues_volume_row = logged(
@@ -254,10 +283,14 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
                 .await,
             "site dues volume",
         );
-        let monthly_dues_volume: Decimal = dues_volume_row.map(|r| r.get(0)).unwrap_or(Decimal::ZERO);
+        let monthly_dues_volume: Decimal =
+            dues_volume_row.map(|r| r.get(0)).unwrap_or(Decimal::ZERO);
 
         let block_rows = client
-            .query("SELECT block_name FROM blocks WHERE site_id = $1 ORDER BY id ASC", &[&id])
+            .query(
+                "SELECT block_name FROM blocks WHERE site_id = $1 ORDER BY id ASC",
+                &[&id],
+            )
             .await
             .unwrap_or_default();
         let mut blocks: Vec<String> = block_rows.iter().map(|r| r.get(0)).collect();
@@ -272,7 +305,8 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
             address,
             status,
             plan_type,
-            license_end_date: license_end_date.unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
+            license_end_date: license_end_date
+                .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
             total_units: total_units as i32,
             monthly_dues_volume,
             primary_manager_name,
@@ -288,7 +322,9 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
 pub async fn replace_site_blocks(pool: &Pool, site_id: &str, blocks: &[String]) -> DbResult<()> {
     let client = pool.get().await?;
     let numeric_site = require_id("site", site_id)?;
-    client.execute("DELETE FROM blocks WHERE site_id = $1", &[&numeric_site]).await?;
+    client
+        .execute("DELETE FROM blocks WHERE site_id = $1", &[&numeric_site])
+        .await?;
     for bname in blocks {
         client
             .execute(
@@ -361,7 +397,6 @@ pub async fn reset_site_admin_password_by_site(
     Ok(None)
 }
 
-
 pub async fn get_blocks_for_site_from_db(
     pool: &Pool,
     site_id: &str,
@@ -391,4 +426,3 @@ pub async fn get_blocks_for_site_from_db(
     }
     Ok(list)
 }
-

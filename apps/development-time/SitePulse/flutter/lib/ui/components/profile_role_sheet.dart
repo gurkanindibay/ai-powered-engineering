@@ -5,6 +5,7 @@ import '../../domain/models/auth_models.dart';
 import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
 import 'app_fullscreen_page.dart';
+import 'security_center_page.dart';
 
 import '../design_system/brand_marks.dart';
 import '../design_system/sp_feedback.dart';
@@ -345,6 +346,13 @@ class _ProfileRoleSheetState extends State<ProfileRoleSheet> {
               )),
             ),
             const SizedBox(height: AppSpacing.xl),
+            testId('btn_security_center', OutlinedButton.icon(
+              key: const Key('btn_security_center'),
+              onPressed: () => AppFullscreenPage.push<void>(context: context,
+                builder: (_) => SecurityCenterPage(session: widget.controller.userSession)),
+              icon: const Icon(Icons.security_outlined), label: const Text('Security and audit'),
+            )),
+            const SizedBox(height: AppSpacing.md),
             _sectionTitle(context, 'Görünüm'),
             const SizedBox(height: AppSpacing.sm),
             testId('btn_profile_toggle_theme', SwitchListTile(

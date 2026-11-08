@@ -1,5 +1,5 @@
-use std::path::Path;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 /// Kuveyt Türk API Market Sandbox Integration Service
 #[derive(Debug, Clone)]
@@ -84,7 +84,9 @@ impl KuveytTurkSandboxService {
     pub fn get_config_status(&self, configured_client_id: Option<&str>) -> KuveytTurkSandboxConfig {
         let (priv_key, pub_key) = self.get_key_status();
         let client_id_env = std::env::var("KT_CLIENT_ID").ok();
-        let effective_client_id = configured_client_id.map(|s| s.to_string()).or(client_id_env);
+        let effective_client_id = configured_client_id
+            .map(|s| s.to_string())
+            .or(client_id_env);
 
         KuveytTurkSandboxConfig {
             is_sandbox: true,
@@ -103,7 +105,10 @@ impl KuveytTurkSandboxService {
         client_id: &str,
         client_secret: &str,
     ) -> Result<KuveytTurkProbeResult, String> {
-        let token_url = format!("{}/connect/token", self.identity_base_url.trim_end_matches('/'));
+        let token_url = format!(
+            "{}/connect/token",
+            self.identity_base_url.trim_end_matches('/')
+        );
 
         let params = [
             ("grant_type", "client_credentials"),
@@ -153,7 +158,10 @@ impl KuveytTurkSandboxService {
         Ok(KuveytTurkProbeResult {
             success: false,
             http_status: status,
-            message: format!("Kuveyt Türk Sandbox responded with HTTP {}: {}", status, body),
+            message: format!(
+                "Kuveyt Türk Sandbox responded with HTTP {}: {}",
+                status, body
+            ),
             environment: "SANDBOX (PREP)".to_string(),
             token_received: false,
             token_preview: None,
