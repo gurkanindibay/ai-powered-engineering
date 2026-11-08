@@ -1772,7 +1772,7 @@ fn reversal_response(
     }
 }
 
-const RENT_OFFSET_NOTE: &str = "634 sayılı KMK md. 22 uyarınca kiracı, kat malikinin ortak gider ve avans borcundan kira bedeli ile sınırlı olarak malikle birlikte sorumludur; ana gayrimenkulün demirbaş/yatırım giderleri kat malikine aittir (KMK md. 20). Kiracının kat maliki adına ödediği bu tutar kira bedelinden mahsup edilebilir (TBK Madde 314; verify).";
+const RENT_OFFSET_NOTE: &str = "634 sayılı KMK md. 22 uyarınca kiracı, kat malikinin ortak gider ve avans borcundan kira bedeli ile sınırlı olarak malikle birlikte sorumludur; ana gayrimenkulün demirbaş/yatırım giderleri kat malikine aittir (KMK md. 20). Kiracının kat maliki adına ödediği bu tutar kira bedelinden mahsup edilebilir (TBK md. 314; verify).";
 
 fn build_receipt(
     ctx: &ReceiptContext,
