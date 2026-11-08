@@ -255,7 +255,10 @@ fn as_refs(params: &[SqlParam]) -> Vec<&(dyn ToSql + Sync)> {
 }
 
 /// Inserts `record` and returns its new id.
-pub async fn insert<T: Record>(client: &impl tokio_postgres::GenericClient, record: &T) -> DbResult<i64> {
+pub async fn insert<T: Record>(
+    client: &impl tokio_postgres::GenericClient,
+    record: &T,
+) -> DbResult<i64> {
     let params = record.params()?;
     let sql = format!(
         "INSERT INTO {} ({}) VALUES ({}) RETURNING id",
@@ -268,7 +271,10 @@ pub async fn insert<T: Record>(client: &impl tokio_postgres::GenericClient, reco
 }
 
 /// Writes every column of an existing record.
-pub async fn update<T: Record>(client: &impl tokio_postgres::GenericClient, record: &T) -> DbResult<()> {
+pub async fn update<T: Record>(
+    client: &impl tokio_postgres::GenericClient,
+    record: &T,
+) -> DbResult<()> {
     let mut params = record.params()?;
     let assignments: Vec<String> = T::COLUMNS
         .iter()
@@ -289,7 +295,10 @@ pub async fn update<T: Record>(client: &impl tokio_postgres::GenericClient, reco
     Ok(())
 }
 
-pub async fn delete<T: Record>(client: &impl tokio_postgres::GenericClient, id: i64) -> DbResult<()> {
+pub async fn delete<T: Record>(
+    client: &impl tokio_postgres::GenericClient,
+    id: i64,
+) -> DbResult<()> {
     let sql = format!("DELETE FROM {} WHERE id = $1", T::TABLE);
     client.execute(&sql, &[&id]).await?;
     Ok(())
@@ -385,7 +394,8 @@ pub async fn set_budget_decision(
     budget_id: &str,
     decision_id: i64,
 ) -> DbResult<()> {
-    let id = parse_id_to_i64(budget_id).ok_or_else(|| format!("Invalid budget id '{}'", budget_id))?;
+    let id =
+        parse_id_to_i64(budget_id).ok_or_else(|| format!("Invalid budget id '{}'", budget_id))?;
     client
         .execute(
             "UPDATE operating_budgets SET assembly_decision_id = $2 WHERE id = $1",
@@ -402,7 +412,8 @@ pub async fn set_intent_options(
     installments: i32,
     save_card: bool,
 ) -> DbResult<()> {
-    let id = parse_id_to_i64(intent_id).ok_or_else(|| format!("Invalid intent id '{}'", intent_id))?;
+    let id =
+        parse_id_to_i64(intent_id).ok_or_else(|| format!("Invalid intent id '{}'", intent_id))?;
     client
         .execute(
             "UPDATE payment_intents SET installment_count = $2, save_card = $3 WHERE id = $1",

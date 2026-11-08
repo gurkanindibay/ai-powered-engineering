@@ -41,7 +41,9 @@ impl PaymentTrackingService {
     /// SPEC-009 R15: the v2 hash of an issued receipt, which also covers the payer
     /// and the allocation lines. New receipts carry it; v1 receipts keep theirs.
     pub fn compute_verification_hash_v2(receipt: &PaymentReceipt) -> String {
-        use crate::domain::fingerprint::{receipt_hash_v2, AllocationLine, ReceiptFields, ReceiptFieldsV2};
+        use crate::domain::fingerprint::{
+            receipt_hash_v2, AllocationLine, ReceiptFields, ReceiptFieldsV2,
+        };
         let lines: Vec<AllocationLine<'_>> = receipt
             .allocation_breakdown
             .iter()

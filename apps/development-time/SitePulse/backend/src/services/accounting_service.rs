@@ -180,7 +180,10 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
     };
     for e in inner.finance.expenses.iter().filter(|e| {
         crate::auth::same_id(&e.site_id, site_id)
-            && matches!(e.status.as_str(), EXPENSE_APPROVED | EXPENSE_PARTIALLY_PAID | EXPENSE_PAID)
+            && matches!(
+                e.status.as_str(),
+                EXPENSE_APPROVED | EXPENSE_PARTIALLY_PAID | EXPENSE_PAID
+            )
     }) {
         out.push(Entry {
             date: e.invoice_date,
@@ -199,12 +202,19 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
         .iter()
         .filter(|p| crate::auth::same_id(&p.site_id, site_id))
     {
-        let account = if p.method == "CASH" { de::CASH } else { de::BANK };
+        let account = if p.method == "CASH" {
+            de::CASH
+        } else {
+            de::BANK
+        };
         out.push(Entry {
             date: p.paid_on,
             source: "EXPENSE_PAYMENT",
             reference: format!("ODEME-{}", p.id),
-            description: p.reference.clone().unwrap_or_else(|| format!("Fatura #{}", p.invoice_id)),
+            description: p
+                .reference
+                .clone()
+                .unwrap_or_else(|| format!("Fatura #{}", p.invoice_id)),
             lines: vec![
                 Posting::debit(de::VENDORS_PAYABLE, p.amount),
                 Posting::credit(account, p.amount),
@@ -283,7 +293,13 @@ fn balance(entries: &[Entry], account: &str, to: Option<NaiveDate>) -> Decimal {
         .unwrap_or(Decimal::ZERO)
 }
 
-fn movement(entries: &[Entry], account: &str, from: NaiveDate, to: NaiveDate, credit: bool) -> Decimal {
+fn movement(
+    entries: &[Entry],
+    account: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+    credit: bool,
+) -> Decimal {
     entries
         .iter()
         .filter(|e| in_range(e.date, Some(from), Some(to)))
@@ -293,7 +309,11 @@ fn movement(entries: &[Entry], account: &str, from: NaiveDate, to: NaiveDate, cr
         .sum()
 }
 
-fn budget_for_year<'a>(inner: &'a AppStateInner, site_id: &str, year: i32) -> Option<&'a OperatingBudget> {
+fn budget_for_year<'a>(
+    inner: &'a AppStateInner,
+    site_id: &str,
+    year: i32,
+) -> Option<&'a OperatingBudget> {
     inner
         .operating_budgets
         .iter()
@@ -304,7 +324,8 @@ fn budget_for_year<'a>(inner: &'a AppStateInner, site_id: &str, year: i32) -> Op
 
 fn pct(part: Decimal, whole: Decimal) -> Option<Decimal> {
     (whole > Decimal::ZERO).then(|| {
-        (part * Decimal::ONE_HUNDRED / whole).round_dp_with_strategy(2, RoundingStrategy::MidpointNearestEven)
+        (part * Decimal::ONE_HUNDRED / whole)
+            .round_dp_with_strategy(2, RoundingStrategy::MidpointNearestEven)
     })
 }
 
@@ -314,7 +335,13 @@ pub fn budget_vs_actual(inner: &AppStateInner, site_id: &str, year: i32) -> Budg
         .iter()
         .map(|c| {
             let budgeted: Decimal = budget
-                .map(|b| b.lines.iter().filter(|l| l.category == *c).map(|l| l.annual_amount).sum())
+                .map(|b| {
+                    b.lines
+                        .iter()
+                        .filter(|l| l.category == *c)
+                        .map(|l| l.annual_amount)
+                        .sum()
+                })
                 .unwrap_or(Decimal::ZERO);
             let actual: Decimal = inner
                 .finance
@@ -324,7 +351,10 @@ pub fn budget_vs_actual(inner: &AppStateInner, site_id: &str, year: i32) -> Budg
                     crate::auth::same_id(&e.site_id, site_id)
                         && e.category == *c
                         && e.invoice_date.year() == year
-                        && matches!(e.status.as_str(), EXPENSE_APPROVED | EXPENSE_PARTIALLY_PAID | EXPENSE_PAID)
+                        && matches!(
+                            e.status.as_str(),
+                            EXPENSE_APPROVED | EXPENSE_PARTIALLY_PAID | EXPENSE_PAID
+                        )
                 })
                 .map(|e| e.total_amount)
                 .sum();
@@ -398,11 +428,19 @@ impl AccountingService {
 
     // ----- vendors ---------------------------------------------------------
 
-    pub async fn create_vendor(&self, caller: &Caller, req: CreateVendorRequest) -> FinanceResult<Vendor> {
+    pub async fn create_vendor(
+        &self,
+        caller: &Caller,
+        req: CreateVendorRequest,
+    ) -> FinanceResult<Vendor> {
         let name = non_empty(&req.name, 2, "name")?;
         let tax_id = TaxId::parse(&req.tax_id).map_err(|e| invalid(e.to_string()))?;
         let iban = match opt_text(&req.iban) {
-            Some(raw) => Some(TrIban::parse(&raw).map_err(|e| invalid(e.to_string()))?.into_string()),
+            Some(raw) => Some(
+                TrIban::parse(&raw)
+                    .map_err(|e| invalid(e.to_string()))?
+                    .into_string(),
+            ),
             None => None,
         };
         let duplicate = self
@@ -414,7 +452,10 @@ impl AccountingService {
             })
             .await;
         if duplicate {
-            return Err(conflict(format!("A vendor with tax id {} exists", tax_id.as_str())));
+            return Err(conflict(format!(
+                "A vendor with tax id {} exists",
+                tax_id.as_str()
+            )));
         }
         let vendor = Vendor {
             id: 0,
@@ -450,9 +491,15 @@ impl AccountingService {
         self.store.read(|inner| manager_limit(inner, site_id)).await
     }
 
-    pub async fn set_policy(&self, caller: &Caller, req: SetApprovalPolicyRequest) -> FinanceResult<ExpenseApprovalPolicy> {
+    pub async fn set_policy(
+        &self,
+        caller: &Caller,
+        req: SetApprovalPolicyRequest,
+    ) -> FinanceResult<ExpenseApprovalPolicy> {
         if req.manager_limit < Decimal::ZERO || req.manager_limit.scale() > 2 {
-            return Err(invalid("manager_limit must be zero or positive with at most 2 decimals"));
+            return Err(invalid(
+                "manager_limit must be zero or positive with at most 2 decimals",
+            ));
         }
         let existing = self
             .store
@@ -475,10 +522,16 @@ impl AccountingService {
         Ok(self.store.upsert(policy, col::approval_policies).await?)
     }
 
-    pub async fn create_expense(&self, caller: &Caller, req: CreateExpenseRequest) -> FinanceResult<ExpenseView> {
+    pub async fn create_expense(
+        &self,
+        caller: &Caller,
+        req: CreateExpenseRequest,
+    ) -> FinanceResult<ExpenseView> {
         money(req.net_amount, "net_amount")?;
         if req.vat_amount < Decimal::ZERO || req.vat_amount.scale() > 2 {
-            return Err(invalid("vat_amount must be zero or positive with at most 2 decimals"));
+            return Err(invalid(
+                "vat_amount must be zero or positive with at most 2 decimals",
+            ));
         }
         let number = non_empty(&req.invoice_number, 1, "invoice_number")?;
         let category = BUDGET_CATEGORIES
@@ -492,7 +545,9 @@ impl AccountingService {
             .store
             .read(|inner| {
                 let vendor_ok = inner.finance.vendors.iter().any(|v| {
-                    v.id == req.vendor_id && v.active && crate::auth::same_id(&v.site_id, &caller.site_id)
+                    v.id == req.vendor_id
+                        && v.active
+                        && crate::auth::same_id(&v.site_id, &caller.site_id)
                 });
                 if !vendor_ok {
                     return Err(not_found(format!("Vendor {} not found", req.vendor_id)));
@@ -502,7 +557,10 @@ impl AccountingService {
                         && e.vendor_id == req.vendor_id
                         && e.invoice_number == number
                 }) {
-                    return Err(conflict(format!("Invoice {} of this vendor is already recorded", number)));
+                    return Err(conflict(format!(
+                        "Invoice {} of this vendor is already recorded",
+                        number
+                    )));
                 }
                 Ok(crate::services::operating_budget_service::budget_in_force(
                     inner,
@@ -546,7 +604,8 @@ impl AccountingService {
                     .filter(|e| crate::auth::same_id(&e.site_id, site_id))
                     .map(|e| expense_view(inner, e))
                     .collect();
-                rows.sort_by(|a, b| b.invoice.invoice_date.cmp(&a.invoice.invoice_date));
+                rows.sort_by_key(|a| std::cmp::Reverse(a.invoice.invoice_date));
+
                 rows
             })
             .await
@@ -571,14 +630,20 @@ impl AccountingService {
     pub async fn approve_expense(&self, caller: &Caller, id: i64) -> FinanceResult<ExpenseView> {
         let mut e = self.find_expense(&caller.site_id, id).await?;
         if e.status != EXPENSE_PENDING {
-            return Err(conflict(format!("Invoice {} is {}", e.invoice_number, e.status)));
+            return Err(conflict(format!(
+                "Invoice {} is {}",
+                e.invoice_number, e.status
+            )));
         }
         if same_actor(&e.created_by, &caller.actor()) {
             return Err(FinanceError::Forbidden(
                 "The person who recorded the invoice cannot approve it (four-eyes)".into(),
             ));
         }
-        if e.approvals.iter().any(|a| same_actor(&a.approver, &caller.actor())) {
+        if e.approvals
+            .iter()
+            .any(|a| same_actor(&a.approver, &caller.actor()))
+        {
             return Err(conflict("You have already approved this invoice"));
         }
         let role = if caller.is_auditor() {
@@ -592,7 +657,10 @@ impl AccountingService {
             approved_at: Utc::now(),
         });
         let limit = self.policy(&caller.site_id).await;
-        let has_manager = e.approvals.iter().any(|a| a.role == Role::SiteManager.as_str());
+        let has_manager = e
+            .approvals
+            .iter()
+            .any(|a| a.role == Role::SiteManager.as_str());
         let has_auditor = e.approvals.iter().any(|a| a.role == Role::Auditor.as_str());
         let complete = if e.total_amount > limit {
             has_manager && has_auditor
@@ -606,11 +674,19 @@ impl AccountingService {
         Ok(self.store.read(|inner| expense_view(inner, &saved)).await)
     }
 
-    pub async fn reject_expense(&self, caller: &Caller, id: i64, req: RejectExpenseRequest) -> FinanceResult<ExpenseView> {
+    pub async fn reject_expense(
+        &self,
+        caller: &Caller,
+        id: i64,
+        req: RejectExpenseRequest,
+    ) -> FinanceResult<ExpenseView> {
         let reason = non_empty(&req.reason, 3, "reason")?;
         let mut e = self.find_expense(&caller.site_id, id).await?;
         if e.status != EXPENSE_PENDING {
-            return Err(conflict(format!("Invoice {} is {}", e.invoice_number, e.status)));
+            return Err(conflict(format!(
+                "Invoice {} is {}",
+                e.invoice_number, e.status
+            )));
         }
         e.status = EXPENSE_REJECTED.to_string();
         e.rejection_reason = Some(reason);
@@ -618,9 +694,19 @@ impl AccountingService {
         Ok(self.store.read(|inner| expense_view(inner, &saved)).await)
     }
 
-    pub async fn pay_expense(&self, caller: &Caller, id: i64, req: PayExpenseRequest) -> FinanceResult<ExpenseView> {
+    pub async fn pay_expense(
+        &self,
+        caller: &Caller,
+        id: i64,
+        req: PayExpenseRequest,
+    ) -> FinanceResult<ExpenseView> {
         money(req.amount, "amount")?;
-        let method = req.method.as_deref().unwrap_or("BANK_TRANSFER").trim().to_ascii_uppercase();
+        let method = req
+            .method
+            .as_deref()
+            .unwrap_or("BANK_TRANSFER")
+            .trim()
+            .to_ascii_uppercase();
         if !EXPENSE_METHODS.contains(&method.as_str()) {
             return Err(invalid("method must be BANK_TRANSFER or CASH"));
         }
@@ -631,11 +717,20 @@ impl AccountingService {
                 e.invoice_number, e.status
             )));
         }
-        let open = self.store.read(|inner| expense_view(inner, &e).open_amount).await;
+        let open = self
+            .store
+            .read(|inner| expense_view(inner, &e).open_amount)
+            .await;
         if req.amount > open {
-            return Err(conflict(format!("Only ₺{:.2} is open on this invoice", open)));
+            return Err(conflict(format!(
+                "Only ₺{:.2} is open on this invoice",
+                open
+            )));
         }
-        let today = self.store.read(|inner| site_today(inner, &caller.site_id)).await;
+        let today = self
+            .store
+            .read(|inner| site_today(inner, &caller.site_id))
+            .await;
         let payment = ExpensePayment {
             id: 0,
             site_id: caller.site_id.clone(),
@@ -660,10 +755,22 @@ impl AccountingService {
 
     // ----- journal ---------------------------------------------------------
 
-    pub async fn create_journal_entry(&self, caller: &Caller, req: CreateJournalEntryRequest) -> FinanceResult<JournalEntryView> {
+    pub async fn create_journal_entry(
+        &self,
+        caller: &Caller,
+        req: CreateJournalEntryRequest,
+    ) -> FinanceResult<JournalEntryView> {
         let description = non_empty(&req.description, 3, "description")?;
-        let kind = req.kind.as_deref().unwrap_or("GENERAL").trim().to_ascii_uppercase();
-        if !matches!(kind.as_str(), "GENERAL" | "OPENING" | "RESERVE_ALLOCATION" | "RESERVE_USE" | "BANK_FEE") {
+        let kind = req
+            .kind
+            .as_deref()
+            .unwrap_or("GENERAL")
+            .trim()
+            .to_ascii_uppercase();
+        if !matches!(
+            kind.as_str(),
+            "GENERAL" | "OPENING" | "RESERVE_ALLOCATION" | "RESERVE_USE" | "BANK_FEE"
+        ) {
             return Err(invalid(format!("Unknown journal entry kind '{}'", kind)));
         }
         let postings: Vec<Posting> = req
@@ -676,7 +783,10 @@ impl AccountingService {
             })
             .collect();
         de::validate_entry(&postings).map_err(|e| invalid(e.to_string()))?;
-        let today = self.store.read(|inner| site_today(inner, &caller.site_id)).await;
+        let today = self
+            .store
+            .read(|inner| site_today(inner, &caller.site_id))
+            .await;
         let entry = ManualJournalEntry {
             id: 0,
             site_id: caller.site_id.clone(),
@@ -698,20 +808,32 @@ impl AccountingService {
             .collect();
         let (entry, lines) = self
             .store
-            .insert_with_children(entry, col::journal_entries, lines, col::journal_lines, |l, id| {
-                l.entry_id = id
-            })
+            .insert_with_children(
+                entry,
+                col::journal_entries,
+                lines,
+                col::journal_lines,
+                |l, id| l.entry_id = id,
+            )
             .await?;
         Ok(JournalEntryView {
             date: entry.entry_date,
             source: "MANUAL".to_string(),
             reference: format!("YEV-{}", entry.id),
             description: entry.description,
-            lines: lines.iter().map(|l| line_view(&l.account_code, l.debit, l.credit)).collect(),
+            lines: lines
+                .iter()
+                .map(|l| line_view(&l.account_code, l.debit, l.credit))
+                .collect(),
         })
     }
 
-    pub async fn journal(&self, site_id: &str, from: Option<NaiveDate>, to: Option<NaiveDate>) -> Vec<JournalEntryView> {
+    pub async fn journal(
+        &self,
+        site_id: &str,
+        from: Option<NaiveDate>,
+        to: Option<NaiveDate>,
+    ) -> Vec<JournalEntryView> {
         self.store
             .read(|inner| {
                 derive_entries(inner, site_id)
@@ -722,14 +844,23 @@ impl AccountingService {
                         source: e.source.to_string(),
                         reference: e.reference,
                         description: e.description,
-                        lines: e.lines.iter().map(|l| line_view(&l.account, l.debit, l.credit)).collect(),
+                        lines: e
+                            .lines
+                            .iter()
+                            .map(|l| line_view(&l.account, l.debit, l.credit))
+                            .collect(),
                     })
                     .collect()
             })
             .await
     }
 
-    pub async fn trial_balance(&self, site_id: &str, from: Option<NaiveDate>, to: Option<NaiveDate>) -> TrialBalance {
+    pub async fn trial_balance(
+        &self,
+        site_id: &str,
+        from: Option<NaiveDate>,
+        to: Option<NaiveDate>,
+    ) -> TrialBalance {
         self.store
             .read(|inner| {
                 let entries = derive_entries(inner, site_id);
@@ -764,14 +895,22 @@ impl AccountingService {
     }
 
     pub async fn budget_vs_actual(&self, site_id: &str, year: i32) -> BudgetVsActual {
-        self.store.read(|inner| budget_vs_actual(inner, site_id, year)).await
+        self.store
+            .read(|inner| budget_vs_actual(inner, site_id, year))
+            .await
     }
 
     pub async fn reserve_fund(&self, site_id: &str, year: i32) -> ReserveFundStatus {
         self.store
             .read(|inner| {
                 let target: Decimal = budget_for_year(inner, site_id, year)
-                    .map(|b| b.lines.iter().filter(|l| l.category == "RESERVE").map(|l| l.annual_amount).sum())
+                    .map(|b| {
+                        b.lines
+                            .iter()
+                            .filter(|l| l.category == "RESERVE")
+                            .map(|l| l.annual_amount)
+                            .sum()
+                    })
                     .unwrap_or(Decimal::ZERO);
                 let entries = derive_entries(inner, site_id);
                 let lines: Vec<&Posting> = entries
@@ -803,7 +942,9 @@ impl AccountingService {
             .read(|inner| {
                 let entries = derive_entries(inner, site_id);
                 let before = start.pred_opt();
-                let cash = |to: Option<NaiveDate>| balance(&entries, de::CASH, to) + balance(&entries, de::BANK, to);
+                let cash = |to: Option<NaiveDate>| {
+                    balance(&entries, de::CASH, to) + balance(&entries, de::BANK, to)
+                };
                 let bva = budget_vs_actual(inner, site_id, year);
                 let tb_lines: Vec<&Posting> = entries.iter().flat_map(|e| e.lines.iter()).collect();
                 let all = de::trial_balance(tb_lines);
@@ -834,8 +975,19 @@ impl AccountingService {
                     payables_outstanding: balance(&entries, de::VENDORS_PAYABLE, Some(end)),
                     advances_held: balance(&entries, de::ADVANCES_RECEIVED, Some(end)),
                     reserve_balance: balance(&entries, de::RESERVE_FUND, Some(end)),
-                    waivers_and_write_offs: movement(&entries, de::PENALTY_WAIVED, start, end, false)
-                        + movement(&entries, de::WRITE_OFF_EXPENSE, start, end, false),
+                    waivers_and_write_offs: movement(
+                        &entries,
+                        de::PENALTY_WAIVED,
+                        start,
+                        end,
+                        false,
+                    ) + movement(
+                        &entries,
+                        de::WRITE_OFF_EXPENSE,
+                        start,
+                        end,
+                        false,
+                    ),
                     trial_balance_balanced: all.iter().map(|r| r.debit).sum::<Decimal>()
                         == all.iter().map(|r| r.credit).sum::<Decimal>(),
                     generated_at: Utc::now(),
@@ -909,7 +1061,10 @@ impl AccountingService {
 fn line_view(account: &str, debit: Decimal, credit: Decimal) -> JournalLineView {
     JournalLineView {
         account_code: account.to_string(),
-        account_name: de::account(account).map(|a| a.name).unwrap_or("?").to_string(),
+        account_name: de::account(account)
+            .map(|a| a.name)
+            .unwrap_or("?")
+            .to_string(),
         debit,
         credit,
     }

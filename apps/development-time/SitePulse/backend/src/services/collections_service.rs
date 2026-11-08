@@ -50,10 +50,16 @@ pub fn legal_basis(inner: &AppStateInner, due: &DuesLiability) -> Option<String>
         .iter()
         .find(|s| s.due_id.as_deref() == Some(due.id.as_str()))
     {
-        return Some(format!("Isınma gideri paylaşımı #{} (yönetim planı)", share.period_id));
+        return Some(format!(
+            "Isınma gideri paylaşımı #{} (yönetim planı)",
+            share.period_id
+        ));
     }
     let budget_id = inner.dues_budget_basis.get(&due.id)?;
-    let budget = inner.operating_budgets.iter().find(|b| &b.id == budget_id)?;
+    let budget = inner
+        .operating_budgets
+        .iter()
+        .find(|b| &b.id == budget_id)?;
     Some(format!(
         "İşletme projesi {} #{} ({}{})",
         budget.fiscal_year,
@@ -84,7 +90,13 @@ pub fn case_view(inner: &AppStateInner, case: &CollectionCase, as_of: NaiveDate)
             .cases
             .iter()
             .filter(|c| crate::auth::same_id(&c.unit_id, &case.unit_id) && c.debtor_type == "OWNER")
-            .flat_map(|c| inner.finance.case_events.iter().filter(move |e| e.case_id == c.id))
+            .flat_map(|c| {
+                inner
+                    .finance
+                    .case_events
+                    .iter()
+                    .filter(move |e| e.case_id == c.id)
+            })
             .filter(|e| e.to_status == "ICRA_FILED" && e.occurred_on >= two_years_ago)
             .count()
     } else {
@@ -137,7 +149,11 @@ impl CollectionsService {
         }
     }
 
-    pub async fn open_case(&self, caller: &Caller, req: OpenCaseRequest) -> FinanceResult<CaseView> {
+    pub async fn open_case(
+        &self,
+        caller: &Caller,
+        req: OpenCaseRequest,
+    ) -> FinanceResult<CaseView> {
         let debtor = parse_debtor(req.debtor_type.as_deref())?;
         let (unit, due_ids, amount, today) = self
             .store
@@ -164,7 +180,12 @@ impl CollectionsService {
                                 .iter()
                                 .find(|d| d.id == *id || crate::auth::same_id(&d.id, id))
                                 .copied()
-                                .ok_or_else(|| invalid(format!("Liability {} is not an overdue {} item of this unit", id, debtor)))
+                                .ok_or_else(|| {
+                                    invalid(format!(
+                                        "Liability {} is not an overdue {} item of this unit",
+                                        id, debtor
+                                    ))
+                                })
                         })
                         .collect::<FinanceResult<_>>()?
                 };
@@ -178,13 +199,19 @@ impl CollectionsService {
                         .iter()
                         .any(|c| !is_terminal(&c.status) && c.due_ids.contains(&d.id))
                     {
-                        return Err(conflict(format!("Liability {} is already in an open case", d.id)));
+                        return Err(conflict(format!(
+                            "Liability {} is already in an open case",
+                            d.id
+                        )));
                     }
                 }
                 Ok((
                     unit,
                     chosen.iter().map(|d| d.id.clone()).collect::<Vec<_>>(),
-                    chosen.iter().map(|d| dues_ledger::outstanding(d)).sum::<Decimal>(),
+                    chosen
+                        .iter()
+                        .map(|d| dues_ledger::outstanding(d))
+                        .sum::<Decimal>(),
                     today,
                 ))
             })
@@ -218,9 +245,14 @@ impl CollectionsService {
         };
         let (case, _) = self
             .store
-            .insert_with_children(case, col::cases, vec![event], col::case_events, |e, id| e.case_id = id)
+            .insert_with_children(case, col::cases, vec![event], col::case_events, |e, id| {
+                e.case_id = id
+            })
             .await?;
-        Ok(self.store.read(|inner| case_view(inner, &case, today)).await)
+        Ok(self
+            .store
+            .read(|inner| case_view(inner, &case, today))
+            .await)
     }
 
     pub async fn cases(&self, site_id: &str) -> Vec<CaseView> {
@@ -260,20 +292,35 @@ impl CollectionsService {
             .await)
     }
 
-    pub async fn advance(&self, caller: &Caller, id: i64, req: AdvanceCaseRequest) -> FinanceResult<CaseView> {
+    pub async fn advance(
+        &self,
+        caller: &Caller,
+        id: i64,
+        req: AdvanceCaseRequest,
+    ) -> FinanceResult<CaseView> {
         let mut case = self.find(&caller.site_id, id).await?;
         let to = req.to_status.trim().to_ascii_uppercase();
         let (Some(from_stage), Some(to_stage)) = (stage(&case.status), stage(&to)) else {
             return Err(invalid(format!("Unknown case status '{}'", to)));
         };
         if is_terminal(&case.status) {
-            return Err(conflict(format!("Case {} is closed ({})", case.id, case.status)));
+            return Err(conflict(format!(
+                "Case {} is closed ({})",
+                case.id, case.status
+            )));
         }
         if !is_terminal(&to) && to_stage <= from_stage {
-            return Err(conflict(format!("A case moves forward: {} cannot go to {}", case.status, to)));
+            return Err(conflict(format!(
+                "A case moves forward: {} cannot go to {}",
+                case.status, to
+            )));
         }
         if to == "LAWYER_ASSIGNED" {
-            case.lawyer_name = Some(non_empty(req.lawyer_name.as_deref().unwrap_or(""), 3, "lawyer_name")?);
+            case.lawyer_name = Some(non_empty(
+                req.lawyer_name.as_deref().unwrap_or(""),
+                3,
+                "lawyer_name",
+            )?);
             case.lawyer_contact = opt_text(&req.lawyer_contact);
         }
         let view = self
@@ -285,7 +332,10 @@ impl CollectionsService {
                 "İİK 68/1: every liability needs a legal basis (operating budget or project decision) before enforcement",
             ));
         }
-        let today = self.store.read(|inner| site_today(inner, &caller.site_id)).await;
+        let today = self
+            .store
+            .read(|inner| site_today(inner, &caller.site_id))
+            .await;
         let event = CollectionCaseEvent {
             id: 0,
             case_id: case.id,
@@ -304,7 +354,10 @@ impl CollectionsService {
             case.lawyer_token_expires_at = None;
         }
         let case = self.store.update(case, col::cases).await?;
-        Ok(self.store.read(|inner| case_view(inner, &case, today)).await)
+        Ok(self
+            .store
+            .read(|inner| case_view(inner, &case, today))
+            .await)
     }
 
     pub async fn evidence_pack(&self, site_id: &str, id: i64) -> FinanceResult<EvidencePack> {
@@ -397,7 +450,14 @@ impl CollectionsService {
             rows: vec![
                 ("Ad Soyad".into(), pack.debtor_name.clone()),
                 ("Bağımsız bölüm".into(), pack.unit_label.clone()),
-                ("Sıfat".into(), if pack.debtor_type == "TENANT" { "Kiracı".into() } else { "Kat maliki".into() }),
+                (
+                    "Sıfat".into(),
+                    if pack.debtor_type == "TENANT" {
+                        "Kiracı".into()
+                    } else {
+                        "Kat maliki".into()
+                    },
+                ),
                 ("Toplam alacak".into(), try_amount(pack.total_outstanding)),
             ],
             ..DocSection::default()
@@ -406,9 +466,22 @@ impl CollectionsService {
             sections.push(DocSection {
                 heading: Some("İşletme projesi (KMK 37)".into()),
                 rows: vec![
-                    ("Yıl / durum".into(), format!("{} / {}", b.fiscal_year, b.status)),
-                    ("Karar".into(), b.assembly_decision_ref.clone().unwrap_or_else(|| "Geçici proje (yönetici)".into())),
-                    ("Karar tarihi".into(), b.assembly_decision_date.map(|d| d.format("%d.%m.%Y").to_string()).unwrap_or_else(|| "—".into())),
+                    (
+                        "Yıl / durum".into(),
+                        format!("{} / {}", b.fiscal_year, b.status),
+                    ),
+                    (
+                        "Karar".into(),
+                        b.assembly_decision_ref
+                            .clone()
+                            .unwrap_or_else(|| "Geçici proje (yönetici)".into()),
+                    ),
+                    (
+                        "Karar tarihi".into(),
+                        b.assembly_decision_date
+                            .map(|d| d.format("%d.%m.%Y").to_string())
+                            .unwrap_or_else(|| "—".into()),
+                    ),
                     ("Yıllık toplam".into(), try_amount(b.total_annual_amount)),
                 ],
                 ..DocSection::default()
@@ -428,26 +501,56 @@ impl CollectionsService {
         sections.push(DocSection {
             heading: Some("Alacak kalemleri".into()),
             table: Some(DocTable {
-                headers: vec!["Dönem".into(), "Vade".into(), "Anapara".into(), "Gecikme".into(), "Kalan".into()],
+                headers: vec![
+                    "Dönem".into(),
+                    "Vade".into(),
+                    "Anapara".into(),
+                    "Gecikme".into(),
+                    "Kalan".into(),
+                ],
                 rows: pack
                     .items
                     .iter()
-                    .map(|i| vec![i.period.clone(), i.due_date.format("%d.%m.%Y").to_string(), try_amount(i.principal), try_amount(i.penalty_accrued), try_amount(i.outstanding)])
+                    .map(|i| {
+                        vec![
+                            i.period.clone(),
+                            i.due_date.format("%d.%m.%Y").to_string(),
+                            try_amount(i.principal),
+                            try_amount(i.penalty_accrued),
+                            try_amount(i.outstanding),
+                        ]
+                    })
                     .collect(),
             }),
-            paragraphs: pack.items.iter().map(|i| format!("{}: {}", i.period, i.legal_basis)).collect(),
+            paragraphs: pack
+                .items
+                .iter()
+                .map(|i| format!("{}: {}", i.period, i.legal_basis))
+                .collect(),
             ..DocSection::default()
         });
         sections.push(DocSection {
             heading: Some("Gecikme tazminatı dökümü (KMK 20, aylık %5)".into()),
             table: Some(DocTable {
-                headers: vec!["Dönem".into(), "Başlangıç".into(), "Bitiş".into(), "Gün".into(), "Tutar".into()],
+                headers: vec![
+                    "Dönem".into(),
+                    "Başlangıç".into(),
+                    "Bitiş".into(),
+                    "Gün".into(),
+                    "Tutar".into(),
+                ],
                 rows: pack
                     .items
                     .iter()
                     .flat_map(|i| {
                         i.penalty_breakdown.iter().map(move |p| {
-                            vec![i.period.clone(), p.from.format("%d.%m.%Y").to_string(), p.to.format("%d.%m.%Y").to_string(), p.days.to_string(), try_amount(p.penalty)]
+                            vec![
+                                i.period.clone(),
+                                p.from.format("%d.%m.%Y").to_string(),
+                                p.to.format("%d.%m.%Y").to_string(),
+                                p.days.to_string(),
+                                try_amount(p.penalty),
+                            ]
                         })
                     })
                     .collect(),
@@ -457,11 +560,27 @@ impl CollectionsService {
         sections.push(DocSection {
             heading: Some("Tahsilat makbuzları".into()),
             table: Some(DocTable {
-                headers: vec!["Makbuz".into(), "Tarih".into(), "Tutar".into(), "Durum".into()],
+                headers: vec![
+                    "Makbuz".into(),
+                    "Tarih".into(),
+                    "Tutar".into(),
+                    "Durum".into(),
+                ],
                 rows: pack
                     .receipts
                     .iter()
-                    .map(|r| vec![r.receipt_number.clone(), r.issued_at.format("%d.%m.%Y").to_string(), try_amount(r.total_amount), if r.reversed { "İptal".into() } else { "Geçerli".into() }])
+                    .map(|r| {
+                        vec![
+                            r.receipt_number.clone(),
+                            r.issued_at.format("%d.%m.%Y").to_string(),
+                            try_amount(r.total_amount),
+                            if r.reversed {
+                                "İptal".into()
+                            } else {
+                                "Geçerli".into()
+                            },
+                        ]
+                    })
                     .collect(),
             }),
             ..DocSection::default()
@@ -476,15 +595,25 @@ impl CollectionsService {
     }
 
     /// Issues a read-only token for the lawyer; only its digest is kept.
-    pub async fn grant_lawyer_access(&self, caller: &Caller, id: i64) -> FinanceResult<LawyerAccessGrant> {
+    pub async fn grant_lawyer_access(
+        &self,
+        caller: &Caller,
+        id: i64,
+    ) -> FinanceResult<LawyerAccessGrant> {
         let mut case = self.find(&caller.site_id, id).await?;
         if case.lawyer_name.is_none() {
-            return Err(conflict("Assign a lawyer (LAWYER_ASSIGNED) before sharing the pack"));
+            return Err(conflict(
+                "Assign a lawyer (LAWYER_ASSIGNED) before sharing the pack",
+            ));
         }
         if is_terminal(&case.status) {
             return Err(conflict("The case is closed"));
         }
-        let token = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
+        let token = format!(
+            "{}{}",
+            uuid::Uuid::new_v4().simple(),
+            uuid::Uuid::new_v4().simple()
+        );
         let expires = Utc::now()
             .checked_add_days(Days::new(LAWYER_TOKEN_DAYS))
             .unwrap_or_else(Utc::now);
@@ -526,12 +655,21 @@ impl CollectionsService {
         let lawyer = Caller {
             site_id: case.site_id.clone(),
             user_id: format!("lawyer-case-{}", case.id),
-            email: case.lawyer_contact.clone().unwrap_or_else(|| "lawyer".into()),
+            email: case
+                .lawyer_contact
+                .clone()
+                .unwrap_or_else(|| "lawyer".into()),
             role: Role::Auditor,
             unit_id: None,
         };
         crate::services::kvkk_service::KvkkService::new(&self.state)
-            .log_access(&lawyer, ACCESS_EXPORT, "EVIDENCE_PACK", Some(&case.unit_id), Some(format!("case {}", case.id)))
+            .log_access(
+                &lawyer,
+                ACCESS_EXPORT,
+                "EVIDENCE_PACK",
+                Some(&case.unit_id),
+                Some(format!("case {}", case.id)),
+            )
             .await?;
         Ok(pack)
     }

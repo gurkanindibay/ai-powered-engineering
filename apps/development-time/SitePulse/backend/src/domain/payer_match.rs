@@ -17,14 +17,15 @@ static ELEVEN_DIGITS: LazyLock<Result<Regex, regex::Error>> =
 static MOBILE: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
     Regex::new(r"(?:\+?90|0)?\s*\(?(5\d{2})\)?[\s.-]*(\d{3})[\s.-]*(\d{2})[\s.-]*(\d{2})")
 });
+static BLOCK_UNIT_1: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(r"\b([a-z])\s*blok\s*(?:daire|d|no)?\s*[:.]?\s*(\d{1,4})\b"));
+static BLOCK_UNIT_2: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(r"\bblok\s*([a-z])\s*(?:daire|d|no)?\s*[:.]?\s*(\d{1,4})\b"));
+static BLOCK_UNIT_3: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(r"\b([a-z])\s*[-/]\s*(\d{1,4})\b"));
 /// Tried in order: "a blok d:14", "blok c daire 21", "c blok daire 3", "a-14", "b/7" (folded text).
-static BLOCK_UNIT: LazyLock<[Result<Regex, regex::Error>; 3]> = LazyLock::new(|| {
-    [
-        Regex::new(r"\b([a-z])\s*blok\s*(?:daire|d|no)?\s*[:.]?\s*(\d{1,4})\b"),
-        Regex::new(r"\bblok\s*([a-z])\s*(?:daire|d|no)?\s*[:.]?\s*(\d{1,4})\b"),
-        Regex::new(r"\b([a-z])\s*[-/]\s*(\d{1,4})\b"),
-    ]
-});
+static BLOCK_UNIT: [&LazyLock<Result<Regex, regex::Error>>; 3] =
+    [&BLOCK_UNIT_1, &BLOCK_UNIT_2, &BLOCK_UNIT_3];
 
 /// What a description reveals about the payer.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
