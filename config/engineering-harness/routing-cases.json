@@ -1,0 +1,242 @@
+[
+  {
+    "id": "copy",
+    "task": "Fix wording in docs",
+    "expected": "low",
+    "risk": {}
+  },
+  {
+    "id": "color",
+    "task": "Adjust button color",
+    "expected": "low",
+    "risk": {}
+  },
+  {
+    "id": "two-files",
+    "task": "Mechanical edits",
+    "expected": "low",
+    "risk": {
+      "files_count": 2
+    }
+  },
+  {
+    "id": "three-files",
+    "task": "Update files",
+    "expected": "medium",
+    "risk": {
+      "files_count": 3
+    }
+  },
+  {
+    "id": "six-files",
+    "task": "Update files",
+    "expected": "medium",
+    "risk": {
+      "files_count": 6
+    }
+  },
+  {
+    "id": "seven-files",
+    "task": "Update files",
+    "expected": "high",
+    "risk": {
+      "files_count": 7
+    }
+  },
+  {
+    "id": "twenty-files",
+    "task": "Update files",
+    "expected": "high",
+    "risk": {
+      "files_count": 20
+    }
+  },
+  {
+    "id": "api",
+    "task": "Add API endpoint",
+    "expected": "medium",
+    "risk": {}
+  },
+  {
+    "id": "ui",
+    "task": "Add UI component",
+    "expected": "medium",
+    "risk": {}
+  },
+  {
+    "id": "crud",
+    "task": "Build CRUD feature",
+    "expected": "medium",
+    "risk": {}
+  },
+  {
+    "id": "integration",
+    "task": "Add integration",
+    "expected": "medium",
+    "risk": {}
+  },
+  {
+    "id": "refactor",
+    "task": "Refactor module",
+    "expected": "high",
+    "risk": {}
+  },
+  {
+    "id": "architecture",
+    "task": "Architectural change",
+    "expected": "high",
+    "risk": {}
+  },
+  {
+    "id": "pipeline",
+    "task": "Change pipeline",
+    "expected": "high",
+    "risk": {}
+  },
+  {
+    "id": "auth",
+    "task": "Fix authentication policy",
+    "expected": "high",
+    "risk": {}
+  },
+  {
+    "id": "authorization",
+    "task": "Add authorization",
+    "expected": "high",
+    "risk": {}
+  },
+  {
+    "id": "permission",
+    "task": "Enforce permissions",
+    "expected": "high",
+    "risk": {}
+  },
+  {
+    "id": "migration",
+    "task": "Database migration",
+    "expected": "high",
+    "risk": {}
+  },
+  {
+    "id": "schema-flag",
+    "task": "Update persistence",
+    "expected": "high",
+    "risk": {
+      "schema": true
+    }
+  },
+  {
+    "id": "auth-flag",
+    "task": "Update guard",
+    "expected": "high",
+    "risk": {
+      "auth": true
+    }
+  },
+  {
+    "id": "money",
+    "task": "Calculate money",
+    "expected": "critical",
+    "risk": {}
+  },
+  {
+    "id": "payment",
+    "task": "Process payment",
+    "expected": "critical",
+    "risk": {}
+  },
+  {
+    "id": "ledger",
+    "task": "Update ledger",
+    "expected": "critical",
+    "risk": {}
+  },
+  {
+    "id": "iban",
+    "task": "Validate IBAN",
+    "expected": "critical",
+    "risk": {}
+  },
+  {
+    "id": "decimal",
+    "task": "Enforce decimal precision",
+    "expected": "critical",
+    "risk": {}
+  },
+  {
+    "id": "concurrency",
+    "task": "Fix concurrency",
+    "expected": "critical",
+    "risk": {}
+  },
+  {
+    "id": "race",
+    "task": "Fix race condition",
+    "expected": "critical",
+    "risk": {}
+  },
+  {
+    "id": "consensus",
+    "task": "Change consensus",
+    "expected": "critical",
+    "risk": {}
+  },
+  {
+    "id": "financial-flag",
+    "task": "Update calculation",
+    "expected": "critical",
+    "risk": {
+      "financial": true
+    }
+  },
+  {
+    "id": "override-financial",
+    "task": "Calculate interest",
+    "expected": "critical",
+    "risk": {
+      "financial": true,
+      "requested": "low"
+    }
+  },
+  {
+    "id": "override-auth",
+    "task": "Adjust guard",
+    "expected": "high",
+    "risk": {
+      "auth": true,
+      "requested": "low"
+    }
+  },
+  {
+    "id": "requested-high",
+    "task": "Mechanical edit",
+    "expected": "high",
+    "risk": {
+      "requested": "high"
+    }
+  },
+  {
+    "id": "destructive",
+    "task": "Destructive migration",
+    "expected": "critical",
+    "risk": {}
+  },
+  {
+    "id": "cross-service",
+    "task": "Change cross-service contract",
+    "expected": "high",
+    "risk": {}
+  },
+  {
+    "id": "sensitive",
+    "task": "Handle sensitive data",
+    "expected": "high",
+    "risk": {}
+  },
+  {
+    "id": "bounded-integration",
+    "task": "Integrate bounded API",
+    "expected": "medium",
+    "risk": {}
+  }
+]

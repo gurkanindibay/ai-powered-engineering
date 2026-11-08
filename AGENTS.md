@@ -57,3 +57,7 @@ The workspace is strictly partitioned into two paradigms:
    - Correlate requests end-to-end via `x-request-id` headers and `trace_id` fields in error envelopes. Never log sensitive credentials or raw PII.
    - Harness verification gate `logging-standards-lint` (`scripts/logging_standards_lint.py`) must pass on every check.
 
+
+## Durable engineering harness
+
+For persistent multi-role development runs, use `python3 scripts/development_harness.py --help` and the [team-orchestration skill](.agents/skills/team-orchestration/SKILL.md). Setup, execution boundaries and recovery are in [docs/engineering-harness.md](docs/engineering-harness.md). Preserve user changes; create runs from an explicit committed revision. Model targets require live capabilities and configured eligibility; a plan alone does not execute agents.

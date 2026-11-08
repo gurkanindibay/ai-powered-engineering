@@ -246,28 +246,22 @@ echo -n 'new-password' | cargo run --quiet --bin hash-password   # from backend/
 
 ---
 
-## 6. Team Orchestrator & Dynamic Model Selection (`team_orchestrator.py`)
+## 6. Durable Engineering Harness (`development_harness.py`)
 
-- **Skill Definition:** [.agents/skills/team-orchestration/SKILL.md](file:///.agents/skills/team-orchestration/SKILL.md)
-- **Executable Script:** [scripts/team_orchestrator.py](file:///scripts/team_orchestrator.py)
-- **Purpose:** Multi-agent software engineering team orchestration across Product Owner, Architect, Developer, and Tester roles with dynamic model selection based on complexity (low, medium, high, critical).
+- **Skill:** [.agents/skills/team-orchestration/SKILL.md](.agents/skills/team-orchestration/SKILL.md)
+- **Guide:** [docs/engineering-harness.md](docs/engineering-harness.md)
+- **Runtime:** `scripts/development_harness.py` (Python 3.12+, Docker for execution).
+- **Planner compatibility:** `scripts/team_orchestrator.py`; plans only, unresolved model targets without capabilities.
+- **Capabilities:** five specialized roles plus conditional Architect, risk floors, live target validation, SQLite scheduling, decimal budgets, per-attempt evidence, cancellation/recovery, container isolation and trusted final-candidate gates.
+- **CLI:** `plan`, `create`, `step`, `run`, `status`, `cancel`, `recover`, `events`, `audit`, `evaluate`, `validate-policy`, `sitepulse-policy`; `--help` and `--json` supported.
 
-### Capabilities:
-- Automated complexity calculation based on task descriptions, file counts, and risk domains (financial invariants, schema migrations, concurrency, authentication).
-- Dynamic model, provider, reasoning effort, and git worktree isolation configuration per role.
-- Generates ready-to-run T3 `delegate_task` JSON payloads for automated execution.
-
-### Quick Usage Examples:
 ```bash
-# Auto-score complexity and view model assignments
-./scripts/team_orchestrator.py --task "Implement payment gateway retry logic"
-
-# Output structured JSON for automation or scripting
-./scripts/team_orchestrator.py --task "Migrate user authentication schema" --schema --auth --json
-
-# Explicitly override complexity
-./scripts/team_orchestrator.py --task "Refactor logging pipeline" --complexity medium
+python3 scripts/development_harness.py --json plan --task "Implement payment reconciliation" --financial
+python3 scripts/development_harness.py --json evaluate --cases config/engineering-harness/routing-cases.json
+python3 -m unittest discover -s tests/engineering_harness -v
 ```
+
+Execution needs a digest-pinned bridge/toolchain image and operator policy. The bundled gateway bridge uses live `/v1/models` and Chat Completions through an external credential-brokering proxy. Registry tiers/prices require operator evaluation; fixture results do not establish model quality. Existing SitePulse checks are reused through a generated policy. Full setup and protocol schemas are in the guide.
 
 ### Core Rules:
 1. **Notice Repetitive Need:** If an ad-hoc query or multi-step command is executed more than once, extract and structure it.

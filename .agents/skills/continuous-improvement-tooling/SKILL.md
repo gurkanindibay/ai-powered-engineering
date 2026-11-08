@@ -122,3 +122,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |
 | `hash-password` | `apps/development-time/SitePulse/backend/src/bin/hash_password.rs` | argon2id hashes for seeds and resets |
 
+
+## Registered workspace orchestration tool
+
+`python3 scripts/development_harness.py --help` provides durable run planning/execution, candidate-bound evidence, cancellation/recovery and evaluation. Reuse it instead of scratch orchestration scripts. Guide: [docs/engineering-harness.md](../../../docs/engineering-harness.md); role workflow: [team-orchestration](../team-orchestration/SKILL.md). Registration and examples: `skills.md` section 6.

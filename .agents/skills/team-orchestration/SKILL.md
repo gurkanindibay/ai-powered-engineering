@@ -1,69 +1,35 @@
 ---
 name: team-orchestration
-description: Multi-agent software engineering team orchestration with dynamic model selection across Product Owner, Architect, Developer, and Tester roles based on task complexity.
+description: Plan and run a durable software engineering harness with Product Owner, Business Analyst, Backend Developer, Frontend Developer and Tester roles, capability-validated model routing and isolated verification.
 ---
 
-# Team Orchestration & Dynamic Model Selection
+# Team orchestration
 
-Use this skill to orchestrate an iteration using a 4-role software engineering team:
-1. **Product Owner (PO)**: Analyzes requirements, refines user stories, defines acceptance criteria, enforces scope boundaries.
-2. **Architect**: Designs system architecture, verifies interfaces and contracts, enforces invariants (including [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md) and [rust-skills](file:///.agents/skills/rust-skills/SKILL.md) for Rust/backend components), designs migrations, assesses security and failure modes.
-3. **Developer**: Implements code, refactors, manages dependencies, commits to isolated worktree branches, adhering strictly to [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md) and [rust-skills](file:///.agents/skills/rust-skills/SKILL.md) (zero clippy warnings, zero unwrap in production, decimal precision, persistence safety).
-4. **Tester**: Generates test fixtures, executes automated test suites, analyzes code coverage, performs adversarial boundary checking.
+Use `scripts/development_harness.py` for persistent runs. The architecture and supported deployment boundaries are documented in `docs/engineering-harness.md`. Use `scripts/team_orchestrator.py` only for compatible planning; it no longer emits unvalidated T3 payloads or assumes model availability.
 
----
+## Roles and routing
 
-## 1. Complexity Tier Matrix
+The five default responsibilities are Product Owner (scope/criteria), Business Analyst (domain/contracts), Backend Developer, Frontend Developer and independent Tester. High/critical work adds Architect. Select backend/frontend scope to omit unnecessary implementation roles; low-risk mechanical work can use Developer + Tester.
 
-Before executing an iteration, evaluate the task complexity:
+Risk floors cannot be lowered by `--complexity`: financial/concurrency/destructive persistence is CRITICAL; auth/schema/cross-service/broad changes are HIGH; routine API/UI behavior is MEDIUM. File-count estimates are secondary. The capability registry supplies eligible model identities, options, role/tier benchmark qualifications and decimal pricing. The harness refreshes live capabilities before dispatch and does not silently substitute a requested target.
 
-| Complexity | Criteria |
-| :--- | :--- |
-| **LOW** | Minor bugfix, typo, doc tweak, single-file trivial change (< 2 files). |
-| **MEDIUM** | Standard CRUD feature, new API endpoint, routine UI component, isolated refactor (2–6 files). |
-| **HIGH** | Multi-module integration, database migration, auth/permission logic, security vulnerability (> 6 files). |
-| **CRITICAL** | Core architectural shift, financial calculation invariants, money/payment flows, concurrency/race conditions. |
+## Workflow
 
----
+1. Read project rules and accepted requirements. Use the existing Graphify graph and project gate tools.
+2. Plan with `python3 scripts/development_harness.py --json plan --task "..."`. Planning without capabilities leaves model targets unresolved.
+3. Configure an operator-owned policy, digest-pinned toolchain/bridge image and model registry. Never put credentials in policy, prompts, images or source files. The gateway proxy owns credentials and quotas.
+4. Create from an explicit committed revision with `create --repository PATH --revision REV --policy POLICY --task "..."`. Dirty user edits are excluded; never clean or reset the user's checkout.
+5. Use `step RUN_ID` or `run RUN_ID`. Role artifacts and input hashes are validated. Sequential implementation integrates into an owned candidate; trusted gates run on disposable copies of the exact final candidate.
+6. Inspect `status`, `events` and `audit`. `cancel` stops owned work; `recover` reconciles expired attempts and blocks interrupted work without resetting budgets. Failure evidence and source are retained for inspection.
+7. READY_FOR_REVIEW requires independent tester criteria and passing final gates. Merge/release remains a separate authorized action.
 
-## 2. Role-to-Model Assignment Matrix
+Gate failures trigger bounded developer repairs followed by another tester review and complete gate run. Two unsuccessful repairs request a higher eligible tier while preserving explicit target constraints. Environment/model/configuration failures block; they are not disguised as code repairs. Unknown usage retains its full reservation.
 
-| Role | LOW Complexity | MEDIUM Complexity | HIGH Complexity | CRITICAL Complexity |
-| :--- | :--- | :--- | :--- | :--- |
-| **Product Owner** | `gemini-3.8-flash`<br/>(thinking: `low`) | `gemini-3.8-flash`<br/>(thinking: `high`) | `claude-sonnet-5-5`<br/>(effort: `high`) | `claude-opus-5-5`<br/>(effort: `high`) |
-| **Architect** | `gemini-3.8-flash`<br/>(thinking: `medium`) | `claude-sonnet-5-5`<br/>(effort: `medium`) | `claude-sonnet-5-5`<br/>(effort: `high`, ultracode: true) | `claude-opus-5-5`<br/>(effort: `ultrathink`, ultracode: true) |
-| **Developer** | `gemini-3.8-flash`<br/>(worktree) | `gpt-6-luna`<br/>(effort: `medium`, worktree) | `gpt-6-luna`<br/>(effort: `high`, worktree) | `claude-opus-5-5`<br/>(effort: `max`, ultracode: true, worktree) |
-| **Tester** | `gemini-3.8-flash`<br/>(thinking: `low`) | `gemini-3.8-flash`<br/>(thinking: `high`) | `claude-sonnet-5-5`<br/>(effort: `high`) | `claude-opus-5-5`<br/>(effort: `high`) |
+## Verification
 
----
+- `python3 -m unittest discover -s tests/engineering_harness -v`
+- Build `tests/engineering_harness/Dockerfile`, set `HARNESS_DOCKER_IMAGE` to its image digest, then rerun the suite for actual container isolation and protocol tests. Without the variable those tests are explicitly skipped.
+- `python3 scripts/development_harness.py --json evaluate --cases config/engineering-harness/routing-cases.json`
+- Run the existing project suites required by AGENTS.md. Fixture agents test the controller; they are not evidence of live model quality or cost savings.
 
-## 3. Iteration Execution Workflow
-
-```mermaid
-flowchart TD
-    Task(["User Task / Requirement"]) --> Assess["Assess Complexity (Low / Medium / High / Critical)"]
-    Assess --> PO["1. Product Owner (Scope & Acceptance Criteria)"]
-    PO -->|Approved Spec| Arch["2. Architect (Contract & Architectural Design)"]
-    Arch -->|Approved Blueprint| Dev["3. Developer (Worktree Code Implementation)"]
-    Dev -->|Feature Branch & Diff| Test["4. Tester (Verification, Test Gates & Linting)"]
-    
-    Test -->|Pass| Deliver(["Ready for Review / Merge"])
-    Test -->|Fail / Defects Found| Dev
-```
-
----
-
-## 4. Automation CLI
-
-To automatically score complexity and generate the exact T3 `delegate_task` payloads:
-
-```bash
-# Evaluate by prompt
-./scripts/team_orchestrator.py --task "Implement new dues calculation endpoint"
-
-# Output structured JSON for automation
-./scripts/team_orchestrator.py --task "Migrate user authentication schema" --schema --auth --json
-
-# Explicitly override complexity
-./scripts/team_orchestrator.py --task "Refactor logging pipeline" --complexity medium
-```
+T3 delegation from an interactive session follows the current T3 tool contract and `orchestrator_capabilities`. The Python runtime uses a container bridge protocol, not an undocumented T3 server endpoint. Do not confuse these transports or feed planner JSON directly into delegate_task.
