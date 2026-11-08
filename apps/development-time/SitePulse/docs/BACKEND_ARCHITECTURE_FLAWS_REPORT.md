@@ -275,3 +275,76 @@ flowchart TD
 4. **Phase 1, F3 ("Prefix map keys with Site ID"):** prefixing alone is not enough. The DB-ID and flat-number namespaces must also be separated, or the map should be keyed only by DB unit ID. `resolve_unit_id` must stop iterating the map.
 5. **Phase 3, T1 (typed IDs):** move this earlier, or at least add prefix-aware parsing. Several authorisation paths depend on ID equality.
 6. **Testing:** each confirmed finding should get a regression test in the existing harness. Cross-tenant tests should cover AF-03, NV-01 and AF-04. A restart round-trip test should cover NV-03, and a delete-with-receipts test should cover NV-02. That way each fix gets checked by the Maker-Checker gates.
+
+---
+
+## Remediation Status & Multi-Tenancy Guardrails (8 November 2026)
+
+This section covers a second review on top of commit `258eedc` ("migrate in-memory state and
+lookups to database persistence") and the changes made after it. Every item below was reproduced
+against the code first. The confirmed leaks also have regression tests that **fail on `258eedc`
+and pass now**.
+
+### New findings (not in the matrix above)
+
+| ID | Finding | Severity | Status |
+|---|---|---|---|
+| **NF-01** | `GET /residents/:unit/dashboard` and `GET /site-admin/overview` took the global **write** lock, ran the advance offset (settling dues from advances), and wrote the result back. The overview did this for every tenant on each load. | CRITICAL | Fixed: GETs take a read lock and never write |
+| **NF-02** | Ledger persistence wrote **absolute** values from memory (`sync_due_payment_state`, `save_advance_balance`, `sync_all_in_memory_to_db`). A stale cache could overwrite a committed payment. A balance "rise" was booked as `ADJUSTMENT_CREDIT`, creating advance money that was never paid. `version` was incremented but never checked. | CRITICAL | Fixed: all three removed. Offsets are now same-debtor virman receipts (receipt, entry, allocations, `VIRMAN_DEBIT`) in one locked, tenant-bound transaction. `v_integrity_violations` stays clean, and offsets can be reversed |
+| **NF-03** | `GET /payments/homeowner-records` ignored `site_id`. Any site manager received **every tenant's** payment records (payer names, amounts, references). | CRITICAL (leak) | Fixed: scoped through `TenantScope`, filtered in SQL. Tests: `homeowner_payment_records_are_confined_to_their_site`, `tenant_data_never_crosses_sites` |
+| **NF-04** | `/capital-projects/:id` (read, installments, unit shares, disbursements) and its writes (`accrue-installment`, `disbursements`) never checked the project's site. Another site's manager could read a project (contractor IBAN included), accrue dues on that site's units, or record payouts against it. | CRITICAL (leak) | Fixed: `scoped_capital_project` returns 404 for a foreign project. Test: `capital_projects_are_confined_to_their_site` |
+| **NF-05** | The global lock was held across database I/O in 10 places. The worst, `provision_site_units`, re-upserted every tenant's data while holding it. | HIGH | Fixed: reloads build the state outside the lock and swap it in, and provisioning persists only its own site's rows |
+| **NF-06** | Financial reads hid database errors. The payment stream returned `[]`, and debt aging fell back to the stale cache. | HIGH | Fixed: `LedgerReadError` becomes a 503 |
+| **NF-07** | Hard-coded tenant fallbacks put unattributable data into site 1: `unwrap_or_else(|| "1")` in 5 places, plus `"site-begonya"` as the default site for dues periods. | HIGH | Fixed: unknown sites stay empty, so no tenant can see the data |
+| **NF-08** | `auth::same_id` treated `d-5`, `site-5` and `5` as equal across entity kinds. | MEDIUM | Fixed: the comparison is kind-aware (a bare number still matches) |
+| **NF-09** | `/system/clear-all-data` (a platform-wide wipe) had no production guard, and the reset handlers reported success after database errors. | MEDIUM | Fixed |
+| **NF-10** | The scheduler had no cross-instance guard. | MEDIUM | Fixed: `pg_try_advisory_lock` around each tick |
+
+### Guardrails added (defence in depth)
+
+1. **`TenantScope` extractor** (`src/tenancy.rs`) is built from the verified token only. It fails
+   closed (401 without claims, 403 for an empty site claim). All 36 handlers that accept a
+   `site_id` pin it through the scope, and handlers for path object ids check ownership and return
+   404 for foreign objects.
+2. **PostgreSQL row-level security** (migration V19) covers 32 tenant-keyed tables.
+   `db::tx_bind_tenant` sets `app.tenant_site_id` for the transaction only and runs
+   `SET LOCAL ROLE sitepulse_tenant`, a role without BYPASSRLS. RLS therefore applies even
+   though the service connects as a superuser or as the table owner, and it rejects foreign
+   writes through `WITH CHECK`. The payment, transfer, reversal and home-owner delete
+   transactions, and the single-site payment read, are tenant-bound.
+3. **Static gates:** `tenant_isolation_lint.py` (`tenant-lint`) and `lock_scope_lint.py`
+   (`lock-lint`). Run on `258eedc`, they report 83 tenant findings and 10 lock findings; the
+   current tree has none.
+4. **PostgreSQL tests:** `tests/db_tenant_isolation_tests.rs` (gate `rust-db-test`) covers RLS
+   isolation and write rejection, read-only GETs, transactional accrual offsets with zero
+   integrity violations, cross-site listing isolation, and 503 on database loss.
+5. **Structure:** `handlers/mod.rs` is down from 4,391 lines to a 69-line index over domain
+   modules (`dashboard`, `reconciliation`, `dues`, `payments`, `system`, `capital`, …).
+
+### Status of the original matrix
+
+| ID | Status |
+|---|---|
+| AF-01 | **Partly fixed.** PostgreSQL is now authoritative for every ledger write and no path writes memory back over it. The in-memory read model still exists and is loaded whole at start-up, so the service remains single-instance. |
+| AF-02 | **Fixed** for database I/O (`lock-lint`). The lock is still global (one lock for all tenants). |
+| AF-03 / NV-01 | Fixed earlier; the scope now also guards it at the handler level. |
+| AF-05 / NV-05 | Fixed earlier (nested body scan). The handler-level `TenantScope` makes the middleware a second line of defence. |
+| AF-08 | **Partly fixed:** kind-aware id comparison. Typed id newtypes are still open. |
+| AF-09 | **Partly fixed:** handlers split by domain. `site_admin_service.rs` (2,799 lines, raw SQL) is still open. |
+| AF-10 | **Open:** the payment stream paginates in memory after an unbounded SQL read. |
+
+### Still open (recommended next steps)
+
+1. **Remove the in-memory read model (AF-01).** Introduce repository traits (PostgreSQL plus an
+   in-memory fake for unit tests), then migrate one aggregate at a time (dues and payments, then
+   units and users, registrations, budgets, capital), deleting each `AppStateInner` field as it
+   goes. After that, `load_all_from_db` and the start-up full load go away, and the service can
+   run as several instances.
+2. **Make RLS fail-closed.** Policies are permissive when no tenant is bound, because the
+   start-up load and the platform jobs read across tenants. Once (1) is done, give platform jobs
+   an explicit platform role and drop the `sp_tenant_site() IS NULL` branch.
+3. **Use typed ids** (`SiteId(i64)`, `UnitId(i64)`) in `TenantScope` and the repositories, so a
+   unit id cannot be passed where a site id is expected.
+4. **Paginate in SQL** (`LIMIT`/keyset) for the payment stream and reconciliation queue.
+5. **Make provisioning atomic.** `provision-site-units` now persists only its own site and
+   reports errors, but it still uses one statement per row rather than one transaction.

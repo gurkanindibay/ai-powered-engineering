@@ -301,6 +301,7 @@ async fn when_a_statement_line_is_confirmed_twice_then_it_is_settled_once() {
     for _ in 0..2 {
         let (status, axum::Json(res)) = sitepulse_backend::handlers::confirm_reconciliation(
             axum::extract::State(state.clone()),
+            sitepulse_backend::tenancy::TenantScope::platform(),
             axum::Json(ConfirmReconciliationRequest {
                 site_id: "site-1".to_string(),
                 match_ids: vec!["MATCH-SPEC5".to_string()],
@@ -361,6 +362,7 @@ async fn when_match_all_settles_a_pending_payment_then_no_duplicate_ledger_row_i
         });
     let (_, axum::Json(res)) = sitepulse_backend::handlers::match_all_homeowner_payments(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(MatchAllPaymentsRequest {
             site_id: Some("site-1".to_string()),
         }),
@@ -388,6 +390,7 @@ async fn when_match_all_settles_a_pending_payment_then_no_duplicate_ledger_row_i
     drop(inner);
     let (_, axum::Json(again)) = sitepulse_backend::handlers::match_all_homeowner_payments(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(MatchAllPaymentsRequest {
             site_id: Some("site-1".to_string()),
         }),
@@ -441,7 +444,8 @@ async fn when_debt_aging_is_computed_then_it_uses_outstanding_amounts_and_the_li
     }
     let report = PaymentTrackingService::new(state.clone())
         .get_debt_aging_report("site-1")
-        .await;
+        .await
+        .unwrap();
     let tenant = report
         .brackets
         .iter()

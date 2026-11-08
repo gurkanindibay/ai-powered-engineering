@@ -154,9 +154,8 @@ pub async fn fetch_reconciliation_queue_from_db(
         let status_str: String = row.get(17);
         let notes: Option<String> = row.get(18);
         let site_id_num: Option<i64> = row.get(19);
-        let s_id = site_id_num
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "1".to_string());
+        // A row without a site belongs to no tenant (never to site 1).
+        let s_id = site_id_num.map(|s| s.to_string()).unwrap_or_default();
 
         let status = ReconciliationStatus::from_db_code(&status_str);
         let status_code = status.as_str().to_string();

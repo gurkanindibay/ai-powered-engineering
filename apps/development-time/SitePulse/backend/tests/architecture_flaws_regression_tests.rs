@@ -208,7 +208,7 @@ async fn test_payment_stream_pagination() {
         page_size: Some(2),
         ..Default::default()
     };
-    let stream_p1 = service.get_payment_stream(filter_p1).await;
+    let stream_p1 = service.get_payment_stream(filter_p1).await.unwrap();
     assert!(stream_p1.entries.len() <= 2);
 
     let filter_p2 = PaymentStreamFilter {
@@ -217,6 +217,6 @@ async fn test_payment_stream_pagination() {
         page_size: Some(2),
         ..Default::default()
     };
-    let stream_p2 = service.get_payment_stream(filter_p2).await;
+    let stream_p2 = service.get_payment_stream(filter_p2).await.unwrap();
     assert!(stream_p2.entries.len() <= 2);
 }

@@ -11,3 +11,4 @@ pub mod models;
 pub mod scheduler;
 pub mod services;
 pub mod state;
+pub mod tenancy;

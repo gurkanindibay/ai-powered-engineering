@@ -117,6 +117,8 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `gui_traceability.py` | `apps/development-time/SitePulse/scripts/gui_traceability.py` | Story → GUI scenario → test status; refreshes the section in `COMPLETION_STATUS.md` |
 | `rust_standards_lint.py` | `apps/development-time/SitePulse/scripts/rust_standards_lint.py` | Rust standards §10–16: domain purity, layering, no inline email/Turkish-fold/IBAN rules, static regexes, explicit rounding, no floats, hashing only in `domain::fingerprint`, English identifiers; ratchet on unwrap/expect/String errors/pool branches/unformatted files (gate `rust-standards-lint`) |
 | `memory_persistence_lint.py` | `apps/development-time/SitePulse/scripts/memory_persistence_lint.py` | Catching discarded database results |
+| `tenant_isolation_lint.py` | `apps/development-time/SitePulse/scripts/tenant_isolation_lint.py` | Multi-tenant guardrails: handlers pin `site_id` through `TenantScope`, path object ids are ownership-checked, no guessed tenants, service transactions call `tx_bind_tenant`, every tenant-keyed table has row-level security (gate `tenant-lint`) |
+| `lock_scope_lint.py` | `apps/development-time/SitePulse/scripts/lock_scope_lint.py` | No guard on the global `AppState` lock held across database/network I/O (gate `lock-lint`) |
 | `db_verify.py` | `apps/development-time/SitePulse/scripts/db_verify.py` | Inspecting and auditing a database (parameterised; non-zero exit on issues) |
 | `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |
 | `hash-password` | `apps/development-time/SitePulse/backend/src/bin/hash_password.rs` | argon2id hashes for seeds and resets |

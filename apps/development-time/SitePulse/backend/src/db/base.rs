@@ -28,6 +28,16 @@ pub type DbResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 ///   against the Mozilla root store). The default is `disable` for local
 ///   development; production requires `require`.
 pub fn create_pool() -> Option<Pool> {
+    create_pool_named(std::env::var("DB_NAME").ok())
+}
+
+/// Like [`create_pool`] for an explicit database (throwaway test databases).
+/// Credentials, host and TLS mode still come from the environment.
+pub fn create_pool_for(dbname: &str) -> Option<Pool> {
+    create_pool_named(Some(dbname.to_string()))
+}
+
+fn create_pool_named(dbname: Option<String>) -> Option<Pool> {
     let in_memory = std::env::var("SITEPULSE_IN_MEMORY")
         .map(|v| v == "true")
         .unwrap_or(false);
@@ -46,7 +56,7 @@ pub fn create_pool() -> Option<Pool> {
         .and_then(|p| p.parse::<u16>().ok())
         .unwrap_or(5432);
     let user = std::env::var("DB_USER").unwrap_or_else(|_| "sitepulse_user".to_string());
-    let dbname = std::env::var("DB_NAME").unwrap_or_else(|_| "sitepulse".to_string());
+    let dbname = dbname.unwrap_or_else(|| "sitepulse".to_string());
     let ssl_mode = std::env::var("DB_SSLMODE")
         .unwrap_or_else(|_| "disable".to_string())
         .to_lowercase();

@@ -294,7 +294,8 @@ impl ReconciliationService {
             .map(|s| s.to_string())
             .or_else(|| matched_unit.map(|u| u.site_id.clone()))
             .or_else(|| units.first().map(|u| u.site_id.clone()))
-            .unwrap_or_else(|| "1".to_string());
+            // Unattributable: no tenant is guessed, so no tenant can see it.
+            .unwrap_or_default();
 
         ReconciliationMatch {
             match_id,

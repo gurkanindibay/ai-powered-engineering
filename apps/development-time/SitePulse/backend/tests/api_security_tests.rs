@@ -301,3 +301,112 @@ async fn system_routes_are_not_routed_unless_explicitly_enabled() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+/// Object-level isolation (BOLA): a capital project id in the path is not a
+/// site id the middleware can check, so the handler must. Another site's
+/// manager gets 404 (no existence oracle) on reads *and* on the writes that
+/// would accrue dues on, or pay out from, the other site's project.
+#[tokio::test]
+async fn capital_projects_are_confined_to_their_site() {
+    let state = AppState::new_with_test_fixtures();
+    state.inner.write().await.accrue_test_due(); // seeds cproj-1 in site-1
+    let app = build_router(state);
+    let own = token(Role::SiteManager, "site-1", None);
+    let other = token(Role::SiteManager, "site-2", None);
+
+    let (status, _) = call(
+        app.clone(),
+        "GET",
+        "/api/v1/capital-projects/cproj-1",
+        Some(&own),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "the owning site reads its project");
+
+    for (method, path, body) in [
+        ("GET", "/api/v1/capital-projects/cproj-1", None),
+        ("GET", "/api/v1/capital-projects/cproj-1/installments", None),
+        ("GET", "/api/v1/capital-projects/cproj-1/unit-shares", None),
+        (
+            "GET",
+            "/api/v1/capital-projects/cproj-1/disbursements",
+            None,
+        ),
+        (
+            "POST",
+            "/api/v1/capital-projects/cproj-1/accrue-installment",
+            Some(serde_json::json!({ "installment_number": 2 })),
+        ),
+        (
+            "POST",
+            "/api/v1/capital-projects/cproj-1/disbursements",
+            Some(serde_json::json!({
+                "milestone_name": "x", "amount": "1.00", "disbursement_date": "2026-11-01",
+                "recipient_name": "x", "recipient_iban": "TR120006200000000000000099",
+                "disbursement_method": "BANK_TRANSFER"
+            })),
+        ),
+    ] {
+        let (status, body_text) = call(app.clone(), method, path, Some(&other), body).await;
+        assert_eq!(
+            status,
+            StatusCode::NOT_FOUND,
+            "{} {} reached another tenant's project: {}",
+            method,
+            path,
+            body_text
+        );
+    }
+}
+
+/// Payment listings are filtered to the caller's site even when the request
+/// names no site at all.
+#[tokio::test]
+async fn homeowner_payment_records_are_confined_to_their_site() {
+    let state = AppState::new_with_test_fixtures();
+    {
+        let mut inner = state.inner.write().await;
+        inner
+            .homeowner_payments
+            .push(sitepulse_backend::models::HomeownerPaymentRecord {
+                id: "hp-leak".to_string(),
+                unit_id: "d-14".to_string(),
+                block_id: "A".to_string(),
+                unit_number: 14,
+                homeowner_name: Some("Site One Payer".to_string()),
+                amount: rust_decimal::Decimal::new(100, 0),
+                payment_method: sitepulse_backend::models::PaymentChannel::ManualCash,
+                reference_code: None,
+                note: None,
+                status: sitepulse_backend::models::PaymentMatchStatus::Pending,
+                cleared_debt_amount: rust_decimal::Decimal::ZERO,
+                advance_credit_amount: rust_decimal::Decimal::ZERO,
+                created_at: chrono::Utc::now(),
+            });
+    }
+    let app = build_router(state);
+    let (status, body) = call(
+        app.clone(),
+        "GET",
+        "/api/v1/payments/homeowner-records",
+        Some(&token(Role::SiteManager, "site-2", None)),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!body.contains("Site One Payer"), "leaked: {}", body);
+    let (_, body) = call(
+        app,
+        "GET",
+        "/api/v1/payments/homeowner-records",
+        Some(&token(Role::SiteManager, "site-1", None)),
+        None,
+    )
+    .await;
+    assert!(
+        body.contains("Site One Payer"),
+        "own records missing: {}",
+        body
+    );
+}

@@ -324,20 +324,40 @@ fn path_site_id(path: &str) -> Option<String> {
     None
 }
 
-/// Two ids refer to the same entity. In-memory ids carry prefixes (`site-1`) while
-/// PostgreSQL ids are bare integers (`1`), so compare their numeric forms too.
+/// Two ids refer to the same entity. In-memory ids carry prefixes (`site-1`,
+/// `d-14`) while PostgreSQL ids are bare integers (`1`), so their numeric forms
+/// are compared too, but only within one entity kind: `d-5` (a unit) never
+/// equals `site-5` (a site). A bare integer matches either kind, because the
+/// caller already knows which kind it is comparing.
 pub fn same_id(a: &str, b: &str) -> bool {
     if a == b {
         return true;
     }
-    let num = |s: &str| -> Option<i64> {
-        let stripped = s
-            .trim_start_matches("site-")
-            .trim_start_matches("d-")
-            .trim_start_matches("unit-");
-        stripped.parse::<i64>().ok()
+    match (typed_id(a), typed_id(b)) {
+        (Some((ka, x)), Some((kb, y))) => {
+            x == y && (ka == IdKind::Bare || kb == IdKind::Bare || ka == kb)
+        }
+        _ => false,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IdKind {
+    Bare,
+    Site,
+    Unit,
+}
+
+fn typed_id(s: &str) -> Option<(IdKind, i64)> {
+    let s = s.trim();
+    let (kind, rest) = if let Some(r) = s.strip_prefix("site-") {
+        (IdKind::Site, r)
+    } else if let Some(r) = s.strip_prefix("unit-").or_else(|| s.strip_prefix("d-")) {
+        (IdKind::Unit, r)
+    } else {
+        (IdKind::Bare, s)
     };
-    matches!((num(a), num(b)), (Some(x), Some(y)) if x == y)
+    rest.parse::<i64>().ok().map(|n| (kind, n))
 }
 
 fn error(status: StatusCode, message: &str) -> Response {

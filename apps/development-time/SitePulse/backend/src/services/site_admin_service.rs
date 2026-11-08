@@ -1680,6 +1680,10 @@ impl SiteAdminService {
                 .transaction()
                 .await
                 .map_err(|e| format!("Transaction error: {}", e))?;
+            // Tenant guardrail (V19): rows of other sites are invisible from here on.
+            crate::db::tx_bind_tenant(&tx, site_numeric)
+                .await
+                .map_err(|e| format!("Transaction error: {}", e))?;
 
             let unit_row_opt = if let Some(uid) = id_numeric {
                 tx.query_opt(

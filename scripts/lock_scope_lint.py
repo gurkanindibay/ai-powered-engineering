@@ -1,0 +1,1 @@
+../apps/development-time/SitePulse/scripts/lock_scope_lint.py

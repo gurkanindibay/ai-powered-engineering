@@ -121,6 +121,17 @@ call site is written, never after.
 2. Clone what you need, drop the guard, then `.await`.
 3. Write a test with two sites in state proving the other site is untouched
    (see `tests/capital_apportionment_tests.rs`).
+4. Handlers: take `scope: crate::tenancy::TenantScope` and pin the request's `site_id`
+   (`scope.pin_opt(&mut q.site_id)?` / `scope.pinned(q.site_id)?`). For a path id that is not a
+   unit (project, budget, receipt), load the object and return **404** unless
+   `scope.allows(&object.site_id)`; see `handlers::capital::scoped_capital_project`.
+5. Never guess a tenant (`unwrap_or_else(|| "1".to_string())`): unknown stays empty.
+6. A transaction for one site starts with `crate::db::tx_bind_tenant(&tx, site)` (RLS, V19); a
+   single-site read uses `crate::db::begin_tenant_read`. A new table with a tenant key gets
+   `SELECT sp_enable_tenant_rls(..)` in its migration.
+7. GET handlers never move money: take `inner.read()`, no offsets, no ledger writes. Advance
+   offsets go through `services::advance_offset_service::settle_advances` on write paths.
+8. With PostgreSQL, return a 503 when a ledger read fails, never an empty or cached result.
 
 ### 4.6 Fix a bug
 
@@ -135,7 +146,7 @@ call site is written, never after.
 | Domain unit tests | `#[cfg(test)] mod tests` in the domain file | Boundaries and every error variant |
 | Service and call-site behavior | `tests/<area>_tests.rs` | `AppState::new()` memory mode; name tests `when_<situation>_then_<outcome>` |
 | Cross-language money | `harness/fixtures/financial_cases.json` + `tests/financial_fixtures.rs` | Decimals as strings |
-| Database behavior | `scripts/schema_integrity_check.py`, `scripts/api_system_check.py` | Needs PostgreSQL; memory tests do not prove locking or constraints |
+| Database behavior | `scripts/schema_integrity_check.py`, `scripts/api_system_check.py`, `tests/db_tenant_isolation_tests.rs` (`#[ignore]`, gate `rust-db-test`) | Needs PostgreSQL; memory tests do not prove locking, RLS or constraints |
 | Secrets / network | Opt-in via env var (`SITEPULSE_REQUIRE_KT_KEYS=1`) | Print `SKIPPED ...` otherwise; never fail a clean checkout |
 
 ## 6. Verification Before Delivery
@@ -146,6 +157,8 @@ Run from `apps/development-time/SitePulse/`:
 cd backend && cargo clippy --offline --all-targets -- -D warnings && cargo test --offline --no-fail-fast && cd ..
 python3 scripts/rust_standards_lint.py          # hard rules + ratchet (uses cargo fmt --check)
 python3 scripts/memory_persistence_lint.py
+python3 scripts/tenant_isolation_lint.py       # TenantScope, object ownership, guessed tenants, tx binding, RLS coverage
+python3 scripts/lock_scope_lint.py             # no global-state guard held across I/O
 python3 scripts/run_tests.py --skip-db          # full gate run; add DB_PASS=... without --skip-db when PostgreSQL is available
 ```
 
@@ -167,6 +180,9 @@ Never use `--force` to raise a count so that a change passes.
 - [ ] Money: `Decimal` only, explicit rounding strategy, `apportion` for splits, fixtures updated.
 - [ ] External input: skipped entries reported, no hidden `Utc::now()`, debits excluded, regexes static.
 - [ ] Multi-tenant reads filtered by site; two-site test present; no guard held across `.await`.
+- [ ] Site input pinned through `TenantScope`; path object ids checked for ownership (404 if foreign);
+      no guessed tenant; tenant transactions call `tx_bind_tenant`; new tenant tables have RLS.
+- [ ] GETs are read-only (no offsets, no ledger writes); ledger reads fail with 503, not empty data.
 - [ ] No new `unwrap`/`expect` in production paths; new service methods return typed errors.
 - [ ] New and domain files `rustfmt`-clean; legacy files not reformatted inside a behavior change.
 - [ ] English identifiers; Turkish only inside string literals.
@@ -179,7 +195,11 @@ Tracked by the ratchet and the report's roadmap; new code must not add to them:
 - Services return `Result<_, String>` and mix Turkish and English messages (target: typed errors
   mapped to HTTP and localized at the handler boundary).
 - Services branch on `state.pool` to keep memory and PostgreSQL in sync (target: repository ports
-  and a payment unit of work).
+  and a payment unit of work). The in-memory `AppStateInner` is still the read model in database
+  mode and is loaded whole at start-up, so the backend runs as a single instance (the scheduler is
+  guarded by an advisory lock, but the cache is not shared).
+- Row-level security is permissive when no tenant is bound (start-up load, platform jobs); only
+  tenant-bound transactions are isolated by PostgreSQL.
 - Capital dues are linked to projects by period text (`"<title>: Taksit n/m"`), not by a project id
   on `DuesLiability`.
 - Statement import does not decode `.xlsx` or quoted CSV and assumes TRY.

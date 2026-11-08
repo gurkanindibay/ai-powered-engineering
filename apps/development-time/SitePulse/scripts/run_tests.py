@@ -11,7 +11,7 @@ system check and the browser end-to-end suite (gui-e2e).
   as passed unless the tool exited successfully.
 * Nothing in the repository is modified (task status changes only through
   `harness_cli.py verify --record` in CI).
-* `--skip-db` skips the gates that need PostgreSQL (schema-integrity, api-system,
+* `--skip-db` skips the gates that need PostgreSQL (schema-integrity, rust-db-test, api-system,
   gui-e2e); `--skip-gui` skips only gui-e2e (it also needs Chrome and takes about
   15 minutes). Skipped gates are reported as SKIPPED, never as passed.
 
@@ -35,10 +35,11 @@ from harness.loop.verification_gates import GATES, run_gate  # noqa: E402
 
 ORDER = [
     "harness-selftest", "rust-build", "rust-clippy", "rust-test", "money-fixtures",
-    "flutter-analyze", "flutter-test", "persistence-lint", "rust-standards-lint", "testid-lint", "ui-style-lint", "flutter-reuse", "schema-integrity", "api-system",
+    "flutter-analyze", "flutter-test", "persistence-lint", "rust-standards-lint", "tenant-lint", "lock-lint",
+    "testid-lint", "ui-style-lint", "flutter-reuse", "schema-integrity", "rust-db-test", "api-system",
     "gui-e2e",
 ]
-DB_GATES = {"schema-integrity", "api-system", "gui-e2e"}
+DB_GATES = {"schema-integrity", "rust-db-test", "api-system", "gui-e2e"}
 GUI_GATES = {"gui-e2e"}
 
 

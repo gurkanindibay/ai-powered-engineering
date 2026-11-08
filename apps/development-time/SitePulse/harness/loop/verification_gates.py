@@ -103,6 +103,10 @@ GATES: Dict[str, List[CommandSpec]] = {
     "rust-clippy": [CommandSpec(["cargo", "clippy", "--all-targets", "--locked", "--", "-D", "warnings"], "backend")],
     "rust-fmt": [CommandSpec(["cargo", "fmt", "--check"], "backend", 120)],
     "rust-test": [CommandSpec(["cargo", "test", "--locked"], "backend")],
+    # The PostgreSQL persistence path: RLS tenant isolation, read-only GETs,
+    # transactional advance offsets, 503 on database failure (needs DB_PASS).
+    "rust-db-test": [CommandSpec(["cargo", "test", "--locked", "--test", "db_tenant_isolation_tests",
+                                  "--", "--ignored", "--test-threads=1"], "backend", 900)],
     # Errors are fatal; warnings/infos are reported by `flutter analyze` itself.
     "flutter-analyze": [CommandSpec(["flutter", "analyze", "--no-fatal-infos", "--no-fatal-warnings"], "flutter", 600)],
     "flutter-test": [CommandSpec(["flutter", "test"], "flutter", 1200)],
@@ -125,6 +129,12 @@ GATES: Dict[str, List[CommandSpec]] = {
     # Shared-component reuse guard: no raw clipboard writes, hand-rolled amount parsing or
     # JSON Decimal fallbacks outside the shared helpers (docs/flutter-reusability-report.md).
     "flutter-reuse": [CommandSpec(["python3", "scripts/flutter_reuse_inventory.py", "--check", "--json"], ".", 120)],
+    # Multi-tenant guardrails: handlers pin site input through TenantScope, object-id
+    # routes check ownership, no guessed tenants, service transactions bind their
+    # tenant, and every tenant-keyed table has a row-level security policy (V19).
+    "tenant-lint": [CommandSpec(["python3", "scripts/tenant_isolation_lint.py", "--json"], ".", 120)],
+    # No guard on the global AppState lock is held across database/network I/O.
+    "lock-lint": [CommandSpec(["python3", "scripts/lock_scope_lint.py", "--json"], ".", 120)],
     # Browser end-to-end suite (e2e/): isolated DB, release backend, Flutter E2E web build, Chrome.
     # Strict xfails pin known product defects; an unexpected pass (XPASS) fails the gate.
     "gui-e2e": [CommandSpec(["python3", "scripts/gui_e2e.py", "run", "--json"], ".", 3600)],

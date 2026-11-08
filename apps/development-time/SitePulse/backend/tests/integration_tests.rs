@@ -691,6 +691,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
 
     let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(payload),
     )
     .await
@@ -759,6 +760,7 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
 
     let (status, res) = sitepulse_backend::handlers::confirm_reconciliation(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(payload),
     )
     .await
@@ -937,6 +939,7 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
     // Ingestion of Excel succeeds under Kuveyt Türk
     let (status1, res1) = sitepulse_backend::handlers::parse_bank_statement(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(ParseBankStatementRequest {
             site_id: "site-1".to_string(),
             content: excel_content.to_string(),
@@ -951,6 +954,7 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
     // Ingestion of MT940 content under Kuveyt Türk (Excel) fails format mismatch
     let err_mt940_under_excel = sitepulse_backend::handlers::parse_bank_statement(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(ParseBankStatementRequest {
             site_id: "site-1".to_string(),
             content: mt940_content.to_string(),
@@ -966,6 +970,7 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
     // Ingestion with conflicting explicit format parameter fails
     let err_explicit_mismatch = sitepulse_backend::handlers::parse_bank_statement(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(ParseBankStatementRequest {
             site_id: "site-1".to_string(),
             content: excel_content.to_string(),
@@ -996,6 +1001,7 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
     // 3. VERIFY: The new bank format (MT940) is now PERMISSIBLE and succeeds!
     let (status2, res2) = sitepulse_backend::handlers::parse_bank_statement(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(ParseBankStatementRequest {
             site_id: "site-1".to_string(),
             content: mt940_content.to_string(),
@@ -1010,6 +1016,7 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
     // And the previous Excel tabular format is now rejected under Vakıfbank
     let err_excel_under_mt940 = sitepulse_backend::handlers::parse_bank_statement(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(ParseBankStatementRequest {
             site_id: "site-1".to_string(),
             content: excel_content.to_string(),
@@ -1366,6 +1373,7 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
 
     let (accrue_status, axum::Json(accrue_res)) = sitepulse_backend::handlers::accrue_monthly_dues(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(accrue_req),
     )
     .await
@@ -1433,6 +1441,7 @@ async fn when_dues_period_already_accrued_then_duplicate_accrual_is_prevented() 
     // First accrual: Succeeds
     let (status1, axum::Json(res1)) = sitepulse_backend::handlers::accrue_monthly_dues(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(accrue_req.clone()),
     )
     .await
@@ -1455,6 +1464,7 @@ async fn when_dues_period_already_accrued_then_duplicate_accrual_is_prevented() 
     // Second accrual for the exact same period and site: MUST BE PREVENTED
     let (status2, axum::Json(res2)) = sitepulse_backend::handlers::accrue_monthly_dues(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(accrue_req),
     )
     .await
@@ -1728,6 +1738,7 @@ async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_
     // Call match_all_homeowner_payments
     let (status, axum::Json(res)) = sitepulse_backend::handlers::match_all_homeowner_payments(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(sitepulse_backend::models::MatchAllPaymentsRequest {
             site_id: Some("site-1".to_string()),
         }),
@@ -1812,6 +1823,7 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
 
     let (status, axum::Json(res)) = sitepulse_backend::handlers::confirm_reconciliation(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(payload),
     )
     .await
@@ -1850,6 +1862,7 @@ async fn when_sender_iban_is_remembered_subsequent_blank_desc_payment_auto_match
 
     let axum::Json(resp) = sitepulse_backend::handlers::remember_sender_iban(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(req),
     )
     .await
@@ -2140,6 +2153,7 @@ async fn when_provisioning_12_units_for_site_then_creates_residents_and_virtual_
 
     let resp = sitepulse_backend::handlers::provision_site_units(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(req),
     )
     .await
@@ -2200,6 +2214,7 @@ async fn when_provisioning_12_units_for_site_then_creates_residents_and_virtual_
     };
     let overview_resp = sitepulse_backend::handlers::get_site_overview(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::extract::Query(overview_query),
     )
     .await
@@ -2225,6 +2240,7 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
 
     let empty_overview_resp = sitepulse_backend::handlers::get_site_overview(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::extract::Query(sitepulse_backend::models::SiteOverviewQuery {
             site_id: None,
             period: None,
@@ -2238,6 +2254,7 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
     // Call get_site_payments with zero data
     let empty_payments_resp = sitepulse_backend::handlers::get_site_payments(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::extract::Query(sitepulse_backend::handlers::SitePaymentsQuery { site_id: None }),
     )
     .await
@@ -2264,6 +2281,7 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
 
     let zero_units_resp = sitepulse_backend::handlers::get_site_overview(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::extract::Query(sitepulse_backend::models::SiteOverviewQuery {
             site_id: Some("site-zero-units".to_string()),
             period: None,
@@ -2295,6 +2313,7 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
 
     let zero_dues_resp = sitepulse_backend::handlers::get_site_overview(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::extract::Query(sitepulse_backend::models::SiteOverviewQuery {
             site_id: Some("site-zero-units".to_string()),
             period: None,
@@ -2508,6 +2527,7 @@ async fn when_managing_dues_periods_then_can_list_and_create_period_in_separate_
     };
     let axum::Json(initial_periods) = sitepulse_backend::handlers::list_dues_periods(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::extract::Query(query),
     )
     .await
@@ -2524,6 +2544,7 @@ async fn when_managing_dues_periods_then_can_list_and_create_period_in_separate_
 
     let (status, axum::Json(created_period)) = sitepulse_backend::handlers::create_dues_period(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::Json(create_req),
     )
     .await
@@ -2539,6 +2560,7 @@ async fn when_managing_dues_periods_then_can_list_and_create_period_in_separate_
     };
     let axum::Json(updated_periods) = sitepulse_backend::handlers::list_dues_periods(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::extract::Query(query2),
     )
     .await
@@ -2583,6 +2605,7 @@ async fn when_managing_home_owners_then_can_delete_home_owner() {
     };
     let status = sitepulse_backend::handlers::delete_home_owner(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::extract::Path(created.unit_id.clone()),
         axum::extract::Query(q),
     )
@@ -2858,6 +2881,7 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
     // Flat in overview shows Canan Can as primary resident_name (NOT Sakin Kardeş, and not duplicated)
     let overview_resp = sitepulse_backend::handlers::get_site_overview(
         axum::extract::State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         axum::extract::Query(sitepulse_backend::models::SiteOverviewQuery {
             site_id: Some("site-1".to_string()),
             period: None,
@@ -2984,7 +3008,8 @@ async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_k
             site_id: Some("site-1".to_string()),
             ..Default::default()
         })
-        .await;
+        .await
+        .unwrap();
     assert!(all.total_count >= 2);
     assert!(all.total_volume >= Decimal::from_str_exact("4500.00").unwrap());
 
@@ -2995,7 +3020,8 @@ async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_k
             channel: Some(PaymentChannel::ManualCash),
             ..Default::default()
         })
-        .await;
+        .await
+        .unwrap();
     assert_eq!(cash_only.total_count, 1);
     assert_eq!(
         cash_only.entries[0].amount,
@@ -3009,7 +3035,8 @@ async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_k
             payer_role: Some(DebtorType::Tenant),
             ..Default::default()
         })
-        .await;
+        .await
+        .unwrap();
     assert!(tenant_only
         .entries
         .iter()
@@ -3095,7 +3122,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
         });
     }
 
-    let report = service.get_debt_aging_report("site-1").await;
+    let report = service.get_debt_aging_report("site-1").await.unwrap();
     assert_eq!(
         report.total_current,
         Decimal::from_str_exact("1000.00").unwrap()
