@@ -778,7 +778,7 @@ impl SiteAdminService {
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: "TENANT".to_string(),
+                debtor_type: if is_tenant { "TENANT" } else { "OWNER" }.to_string(),
                 expense_type: "OPERATIONAL_DUES".to_string(),
                 penalty_accrued_through: None,
             });
@@ -1461,7 +1461,7 @@ impl SiteAdminService {
 
             // Clean advance and mappings strictly for target units
             for u_id in &target_unit_ids {
-                inner.advance_payments.remove(u_id);
+                inner.advance_balances.remove(u_id);
                 inner.unit_members.remove(u_id);
                 inner.unit_payer_names.remove(u_id);
                 inner.unit_invite_tokens.remove(u_id);

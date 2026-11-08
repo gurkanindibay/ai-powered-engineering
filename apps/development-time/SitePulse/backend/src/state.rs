@@ -47,7 +47,10 @@ pub struct AppStateInner {
     pub site_invite_tokens: HashMap<String, SiteInvitationLinkResponse>,
     pub reconciliation_queue: Vec<ReconciliationMatch>,
     pub site_bank_accounts: Vec<SiteBankAccount>,
-    pub advance_payments: HashMap<String, Decimal>,
+    /// Advance (avans) balance per unit, split by debtor like `advance_balances`.
+    pub advance_balances: HashMap<String, crate::models::UnitAdvance>,
+    /// Idempotency keys: (site id, key) -> receipt id. Mirrors `payment_idempotency_keys`.
+    pub payment_idempotency: HashMap<(String, String), i64>,
     pub homeowner_payments: Vec<HomeownerPaymentRecord>,
     pub remembered_sender_ibans: HashMap<String, String>,
     pub sender_iban_metadata: HashMap<String, (Option<String>, Option<String>)>,
@@ -85,7 +88,8 @@ impl AppStateInner {
             site_invite_tokens: HashMap::new(),
             reconciliation_queue: Vec::new(),
             site_bank_accounts: Vec::new(),
-            advance_payments: HashMap::new(),
+            advance_balances: HashMap::new(),
+            payment_idempotency: HashMap::new(),
             homeowner_payments: Vec::new(),
             remembered_sender_ibans: HashMap::new(),
             sender_iban_metadata: HashMap::new(),
@@ -224,6 +228,8 @@ impl AppStateInner {
                 plan_type: "PREMIUM".to_string(),
                 license_end_date: NaiveDate::from_ymd_opt(2027, 9, 1).unwrap(),
                 timezone: crate::models::default_site_timezone(),
+                tax_id: None,
+                tax_office: None,
             });
         }
 
@@ -237,6 +243,8 @@ impl AppStateInner {
                 plan_type: "STANDARD".to_string(),
                 license_end_date: NaiveDate::from_ymd_opt(2027, 10, 15).unwrap(),
                 timezone: crate::models::default_site_timezone(),
+                tax_id: None,
+                tax_office: None,
             });
         }
 
@@ -427,6 +435,22 @@ impl AppStateInner {
 
     /// Backward compatibility alias for seed_test_fixtures
     #[allow(dead_code)]
+    /// Total advance of a unit (owner + tenant buckets).
+    pub fn advance_total(&self, unit_id: &str) -> Decimal {
+        self.advance_balances.get(unit_id).map(|a| a.total()).unwrap_or(Decimal::ZERO)
+    }
+
+    /// Advance of one debtor (`OWNER` / `TENANT`) of a unit.
+    pub fn advance_of(&self, unit_id: &str, debtor_type: &str) -> Decimal {
+        self.advance_balances.get(unit_id).map(|a| a.of(debtor_type)).unwrap_or(Decimal::ZERO)
+    }
+
+    /// Adds `delta` (may be negative) to one debtor's advance of a unit.
+    pub fn adjust_advance(&mut self, unit_id: &str, debtor_type: &str, delta: Decimal) {
+        let entry = self.advance_balances.entry(unit_id.to_string()).or_default();
+        *entry.bucket_mut(debtor_type) += delta;
+    }
+
     pub fn seed(&mut self) {
         self.seed_test_fixtures();
     }
@@ -443,7 +467,8 @@ impl AppStateInner {
         self.site_invite_tokens.clear();
         self.reconciliation_queue.clear();
         self.site_bank_accounts.clear();
-        self.advance_payments.clear();
+        self.advance_balances.clear();
+        self.payment_idempotency.clear();
         self.homeowner_payments.clear();
         self.remembered_sender_ibans.clear();
         self.sender_iban_metadata.clear();
@@ -458,7 +483,8 @@ impl AppStateInner {
 
     pub fn reset_all_payments_and_balances(&mut self) {
         self.auto_scheduler_enabled = false;
-        self.advance_payments.clear();
+        self.advance_balances.clear();
+        self.payment_idempotency.clear();
         self.homeowner_payments.clear();
         self.reconciliation_queue.clear();
         self.payment_receipts.clear();

@@ -42,7 +42,7 @@ async fn state_with(dues: Vec<DuesLiability>) -> AppState {
     {
         let mut inner = state.inner.write().await;
         inner.dues = dues;
-        inner.advance_payments.clear();
+        inner.advance_balances.clear();
         inner.payment_receipts.clear();
         inner.payment_entries.clear();
         inner.homeowner_payments.clear();
@@ -130,7 +130,7 @@ async fn when_bank_webhook_is_redelivered_then_only_one_receipt_exists() {
 
     let inner = state.inner.read().await;
     assert_eq!(inner.payment_receipts.len(), 1);
-    assert_eq!(inner.advance_payments.get(UNIT).copied(), Some(d("100.00")));
+    assert_eq!(Some(inner.advance_total(UNIT)), Some(d("100.00")));
 }
 
 /// R4 / TBK 101: the designated period is paid even though an older one is open.
@@ -216,7 +216,7 @@ async fn when_a_statement_line_is_confirmed_twice_then_it_is_settled_once() {
     let inner = state.inner.read().await;
     assert_eq!(inner.payment_receipts.len(), 1, "idempotent on STMT:<transaction id>");
     assert_eq!(inner.payment_receipts[0].payment_channel, "BANK_STATEMENT");
-    assert_eq!(inner.advance_payments.get(UNIT).copied(), Some(d("600.00")));
+    assert_eq!(Some(inner.advance_total(UNIT)), Some(d("600.00")));
     assert_eq!(inner.dues[0].status, DebtStatus::Paid);
 }
 

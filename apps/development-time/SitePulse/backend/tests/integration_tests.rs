@@ -124,6 +124,8 @@ async fn when_updating_site_then_site_details_and_admin_info_are_updated() {
         site_admin_email: Some("ali.kaya@nilufer.com".to_string()),
         site_admin_phone: Some("+90 532 999 8877".to_string()),
         blocks: Some(vec!["A Blok".to_string(), "B Blok".to_string(), "C Blok".to_string()]),
+        tax_id: None,
+        tax_office: None,
     };
 
     let updated = service.update_site(&reg_res.site_id, update_req).await.expect("Update failed");
@@ -1333,7 +1335,7 @@ async fn when_homeowner_records_payment_with_no_debt_then_matches_as_advance_pay
     assert_eq!(res.status, sitepulse_backend::models::PaymentMatchStatus::MatchedAdvance);
 
     let inner = state.inner.read().await;
-    let adv = inner.advance_payments.get("d-1").copied().unwrap_or(Decimal::ZERO);
+    let adv = inner.advance_total("d-1");
     assert_eq!(adv, Decimal::from_str_exact("2000.00").unwrap());
 }
 
@@ -1367,7 +1369,7 @@ async fn when_homeowner_records_payment_exceeding_debt_then_clears_debt_and_cred
     assert_eq!(res.status, sitepulse_backend::models::PaymentMatchStatus::PartiallyMatched);
 
     let inner = state.inner.read().await;
-    let adv = inner.advance_payments.get("d-14").copied().unwrap_or(Decimal::ZERO);
+    let adv = inner.advance_total("d-14");
     assert_eq!(adv, Decimal::from_str_exact("1100.00").unwrap());
 }
 
@@ -1449,7 +1451,7 @@ async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_
     let d14_due = inner.dues.iter().find(|d| d.unit_id == "d-14").unwrap();
     assert_eq!(d14_due.status, sitepulse_backend::models::DebtStatus::Paid);
 
-    let d1_adv = inner.advance_payments.get("d-1").copied().unwrap_or(Decimal::ZERO);
+    let d1_adv = inner.advance_total("d-1");
     assert_eq!(d1_adv, Decimal::from_str_exact("1500.00").unwrap());
 }
 
@@ -1511,7 +1513,7 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
     assert_eq!(due.status, sitepulse_backend::models::DebtStatus::Paid);
 
     // The due is not yet due, so no penalty: ₺2,000 - ₺1,400 = ₺600 surplus.
-    let adv = inner.advance_payments.get("d-14").copied().unwrap_or(Decimal::ZERO);
+    let adv = inner.advance_total("d-14");
     assert_eq!(adv, Decimal::from_str_exact("600.00").unwrap());
 }
 
@@ -1564,7 +1566,7 @@ async fn when_transfer_cannot_be_matched_then_enters_unmatched_pool_successfully
     // An incoming transfer to general site IBAN with unknown sender and blank description
     let webhook_payload = sitepulse_backend::models::BankIncomingWebhookRequest {
         transaction_id: "TXN-TEST-UNMATCHED-99".to_string(),
-        virtual_iban: "TR33 0006 2000 0000 0000 0000 01".to_string(), // General site IBAN
+        virtual_iban: "TR620020500009863791600001".to_string(), // Begonya's site account IBAN
         amount: Decimal::from_str_exact("1200.00").unwrap(),
         currency: Some("TRY".to_string()),
         sender_iban: Some("TR55 0006 2000 0000 0000 5555 55".to_string()),
@@ -1685,7 +1687,7 @@ async fn when_reset_demo_data_invoked_then_payments_and_dues_are_restored_to_cle
     // Verify state has advance payment and paid due
     {
         let inner = state.inner.read().await;
-        assert_eq!(inner.advance_payments.get("d-14").copied(), Some(rust_decimal::Decimal::from_str_exact("600.00").unwrap()));
+        assert_eq!(Some(inner.advance_total("d-14")), Some(rust_decimal::Decimal::from_str_exact("600.00").unwrap()));
         let due = inner.dues.iter().find(|d| d.id == "b-101").unwrap();
         assert_eq!(due.status, sitepulse_backend::models::DebtStatus::Paid);
     }
@@ -1696,7 +1698,7 @@ async fn when_reset_demo_data_invoked_then_payments_and_dues_are_restored_to_cle
     // 3. Verify clean slate restored (0 debt, 0 transactions, 0 advance)
     {
         let inner = state.inner.read().await;
-        assert!(inner.advance_payments.is_empty());
+        assert!(inner.advance_balances.values().all(|a| a.total().is_zero()));
         assert!(inner.homeowner_payments.is_empty());
         assert!(inner.reconciliation_queue.is_empty());
         assert!(inner.dues.is_empty());
@@ -1732,7 +1734,7 @@ async fn when_wipe_all_data_invoked_then_all_sites_units_and_residents_are_purge
         assert_eq!(inner.sites.len(), 0);
         assert_eq!(inner.units.len(), 0);
         assert_eq!(inner.dues.len(), 0);
-        assert_eq!(inner.advance_payments.len(), 0);
+        assert_eq!(inner.advance_balances.values().filter(|a| !a.total().is_zero()).count(), 0);
         assert_eq!(inner.reconciliation_queue.len(), 0);
         // Only SaaS platform admin user remains
         assert!(inner.users.iter().all(|u| u.role == sitepulse_backend::models::Role::SaasAdmin));
@@ -1843,7 +1845,7 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
         inner.dues.clear();
         inner.reconciliation_queue.clear();
         inner.homeowner_payments.clear();
-        inner.advance_payments.clear();
+        inner.advance_balances.clear();
     }
 
     let empty_overview_resp = sitepulse_backend::handlers::get_site_overview(
@@ -1878,6 +1880,8 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
             plan_type: "STANDARD".to_string(),
             license_end_date: chrono::NaiveDate::from_ymd_opt(2027, 12, 31).unwrap(),
             timezone: "Europe/Istanbul".to_string(),
+            tax_id: None,
+            tax_office: None,
         });
     }
 
@@ -2736,7 +2740,10 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
     // Setup: Unit d-14 has ₺3000 advance balance and ₺1400 unpaid capital dues
     {
         let mut inner = state.inner.write().await;
-        inner.advance_payments.insert("d-14".to_string(), Decimal::from_str_exact("3000.00").unwrap());
+        inner.advance_balances.insert(
+            "d-14".to_string(),
+            sitepulse_backend::models::UnitAdvance { owner: Decimal::from_str_exact("3000.00").unwrap(), tenant: Decimal::ZERO },
+        );
         inner.dues.clear();
         inner.dues.push(DuesLiability {
             id: "due-capital-1".to_string(),
@@ -2749,8 +2756,8 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
             status: DebtStatus::Pending,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: "TENANT".to_string(),
-            expense_type: "OPERATIONAL_DUES".to_string(),
+            debtor_type: "OWNER".to_string(),
+            expense_type: "CAPITAL_DUES".to_string(),
             penalty_accrued_through: None,
         });
     }
@@ -2761,6 +2768,8 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
         amount: Decimal::from_str_exact("1400.00").unwrap(),
         note: Some("Ev sahibi onaylı avanstan demirbaşa virman".to_string()),
         operator_user_id: Some("usr-manager".to_string()),
+        source_debtor: None,
+        target_debtor: None,
     };
 
     let resp = service.inter_ledger_transfer(transfer_req).await.unwrap();
@@ -3036,7 +3045,7 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
     assert_eq!(due.status, DebtStatus::Paid);
     assert_eq!(due.total_amount, Decimal::ZERO);
 
-    let advance = inner.advance_payments.get("d-14").copied().unwrap_or(Decimal::ZERO);
+    let advance = inner.advance_total("d-14");
     assert_eq!(advance, Decimal::from_str_exact("150.00").unwrap());
 }
 

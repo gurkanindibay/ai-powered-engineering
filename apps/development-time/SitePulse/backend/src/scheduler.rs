@@ -192,3 +192,25 @@ pub async fn start_automated_dues_accrual_scheduler(state: AppState) {
         }
     }
 }
+
+/// Daily debt aging snapshot worker (O-8, regulatory report F17): once per
+/// calendar day (UTC) it writes every site's aging report to
+/// `debt_aging_snapshots`, so collection trends survive restarts.
+pub async fn start_debt_aging_snapshot_worker(state: AppState) {
+    let mut ticker = tokio::time::interval(Duration::from_secs(3600));
+    let mut last_day: Option<NaiveDate> = None;
+    loop {
+        ticker.tick().await;
+        let today = Utc::now().date_naive();
+        if last_day == Some(today) || state.pool.is_none() {
+            continue;
+        }
+        match crate::services::PaymentTrackingService::new(state.clone()).snapshot_debt_aging(None).await {
+            Ok(rows) => {
+                last_day = Some(today);
+                tracing::info!("[Scheduler] Debt aging snapshot for {}: {} rows", today, rows);
+            }
+            Err(e) => tracing::error!("[Scheduler] Debt aging snapshot failed: {}", e),
+        }
+    }
+}
