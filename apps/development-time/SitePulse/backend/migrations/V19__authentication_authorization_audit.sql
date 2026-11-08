@@ -53,7 +53,7 @@ CREATE TABLE audit_events (
     resource_type TEXT NOT NULL,
     resource_id TEXT,
     outcome TEXT NOT NULL CHECK (outcome IN ('SUCCESS', 'DENIED', 'FAILURE')),
-    policy_version TEXT NOT NULL DEFAULT 'SPEC-007-v1',
+    policy_version TEXT NOT NULL DEFAULT 'SPEC-008-v1',
     changes JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX audit_events_site_time ON audit_events(site_id, event_id DESC);
@@ -73,13 +73,13 @@ REVOKE ALL ON audit_events FROM PUBLIC;
 -- Explicit allowlist: passwords, hashes, tokens, personal contact details, banking
 -- secrets and complete entity snapshots never enter the audit payload.
 CREATE FUNCTION sp_audit_projection(value JSONB) RETURNS JSONB LANGUAGE sql IMMUTABLE AS $$
-    SELECT COALESCE(jsonb_object_agg(key, CASE WHEN key = ANY(ARRAY['amount','principal_amount','delay_penalty','paid_principal','paid_penalty','allocated_advance','total_amount','total_budget']) THEN to_jsonb(val #>> '{}') ELSE val END), '{}'::jsonb)
+    SELECT COALESCE(jsonb_object_agg(key, CASE WHEN key = ANY(ARRAY['amount','principal_amount','delay_penalty','paid_principal','paid_penalty','allocated_advance','total_amount','total_budget','annual_amount','monthly_amount','rate_percent']) THEN to_jsonb(val #>> '{}') ELSE val END), '{}'::jsonb)
     FROM jsonb_each(value) AS fields(key, val)
-    WHERE key = ANY(ARRAY['amount','principal_amount','delay_penalty','paid_principal','paid_penalty','allocated_advance','total_amount','total_budget','status','role','is_active','must_change_password',
+    WHERE key = ANY(ARRAY['amount','principal_amount','delay_penalty','paid_principal','paid_penalty','allocated_advance','total_amount','total_budget','annual_amount','monthly_amount','rate_percent','status','role','is_active','must_change_password',
         'site_id','unit_id','owner_person_id','tenant_person_id','person_id',
         'debtor_type','payer_role','receipt_type','reverses_receipt_id',
         'settlement_status','matched_unit_id','auth_version','revoked_at',
-        'approved_by','operator_user_id','expires_at','permissions','user_id','currency','auth_provider'])
+        'approved_by','operator_user_id','expires_at','permissions','user_id','currency','auth_provider','budget_id','operating_budget_id','fiscal_year','year','allocation_basis'])
 $$;
 CREATE FUNCTION sp_audit_domain_change() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
