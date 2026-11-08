@@ -17,10 +17,6 @@ BANK_ACCOUNT_NOT_LOADED = (
     "BUG (STORY-07-06): the client never loads the site bank account (only setSiteBankAccountForTesting sets it), so "
     "the statement format guard is skipped: an MT940 .sta file is accepted for the Kuveyt Türk EXCEL account")
 
-WEBHOOK_PENALTY_NOT_COLLECTED = (
-    "BUG (STORY-07-03/07-05, 09-02): an incoming FAST transfer is not allocated to the KMK penalty: paying the full "
-    "total (₺1.423,33) leaves ₺23,33 open, and overpaying ₺2.860,67 shows an advance of ₺1.460,67 (payment minus "
-    "principal only)")
 
 LIABILITY_ID_SEQUENCE = (
     "BUG: accrue-period inserts dues_liabilities with explicit ids but leaves the identity sequence behind "
