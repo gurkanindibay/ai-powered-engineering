@@ -50,7 +50,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     ));
     tokio::spawn(sitepulse_backend::audit::CONTEXT.scope(
         sitepulse_backend::audit::AuditContext::service("debt-aging-worker"),
-        scheduler::start_debt_aging_snapshot_worker(state),
+        scheduler::start_debt_aging_snapshot_worker(state.clone()),
+    ));
+    tokio::spawn(sitepulse_backend::audit::CONTEXT.scope(
+        sitepulse_backend::audit::AuditContext::service("collections-worker"),
+        scheduler::start_collections_worker(state),
     ));
 
     let addr: SocketAddr = std::env::var("SITEPULSE_BIND_ADDR")

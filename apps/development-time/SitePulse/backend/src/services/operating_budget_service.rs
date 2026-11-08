@@ -469,7 +469,10 @@ impl OperatingBudgetService {
                     b.id, b.status
                 )));
             }
-            if req.assembly_decision_date > Utc::now().date_naive() {
+            // "Future" is judged in the site's time zone (an Istanbul evening is already tomorrow in UTC+3).
+            if req.assembly_decision_date
+                > crate::services::finance_common::site_today(&inner, site_id)
+            {
                 return Err(BudgetError::Invalid(
                     "The assembly decision date is in the future".into(),
                 ));
@@ -573,7 +576,11 @@ impl OperatingBudgetService {
         if req.recipient_name.trim().is_empty() {
             return Err(BudgetError::Invalid("recipient_name is required".into()));
         }
-        if req.served_on > Utc::now().date_naive() {
+        let site_today = {
+            let inner = self.state.inner.read().await;
+            crate::services::finance_common::site_today(&inner, site_id)
+        };
+        if req.served_on > site_today {
             return Err(BudgetError::Invalid("served_on is in the future".into()));
         }
         let (mut budget, unit_id) = {

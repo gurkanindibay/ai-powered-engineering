@@ -139,6 +139,18 @@ pub fn site_today(inner: &AppStateInner, site_id: &str) -> NaiveDate {
     crate::scheduler::site_local_date(&tz, Utc::now())
 }
 
+/// A timestamp's calendar date in the site's time zone (receipts are stored in
+/// UTC; an Istanbul evening is already the next day there).
+pub fn local_date(inner: &AppStateInner, site_id: &str, at: chrono::DateTime<Utc>) -> NaiveDate {
+    let tz = inner
+        .sites
+        .iter()
+        .find(|s| crate::auth::same_id(&s.id, site_id))
+        .map(|s| s.timezone.clone())
+        .unwrap_or_else(crate::models::default_site_timezone);
+    crate::scheduler::site_local_date(&tz, at)
+}
+
 pub fn site_units<'a>(
     inner: &'a AppStateInner,
     site_id: &'a str,

@@ -1,3 +1,4 @@
+import '../payments/finance_hub_page.dart';
 import '../../testing/test_id.dart';
 import 'dart:async';
 import 'package:decimal/decimal.dart';
@@ -508,6 +509,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           );
         }
+      case UserRole.auditor:
+        return const FinanceHubView(readOnly: true);
       case UserRole.saasAdmin:
         return SaasAdminView(
           controller: widget.controller,

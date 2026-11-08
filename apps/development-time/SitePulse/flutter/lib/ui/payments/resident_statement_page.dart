@@ -11,6 +11,7 @@ import '../components/app_fullscreen_page.dart';
 import '../design_system/money_formatter.dart';
 import '../theme/app_theme.dart';
 import 'receipt_actions.dart';
+import 'resident_self_service.dart';
 
 /// Hesap ekstresi: the signed-in debtor's open items aged by days overdue, the
 /// accrued delay penalty, the advance balance and their receipts (as PDF).
@@ -61,6 +62,12 @@ class _ResidentStatementPageState extends State<ResidentStatementPage> {
               ),
               const SizedBox(height: 12),
               for (final d in st.debtors) ...[_DebtorCard(debtor: d), const SizedBox(height: 14)],
+              StatementSelfService(
+                unitId: widget.unitId,
+                statement: st,
+                onChanged: () => setState(() => _future = PaymentsPhase2Api.statement(widget.unitId)),
+              ),
+              const SizedBox(height: 14),
               Text('Makbuzlar', style: TextStyle(color: AppColors.textPrimary(context), fontSize: SpFontSize.title, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               if (st.receipts.isEmpty)

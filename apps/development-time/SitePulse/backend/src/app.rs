@@ -134,14 +134,14 @@ routes! {
     post "/api/v1/support/grants" => authorization::request_grant, Require(SupportAccess);
     post "/api/v1/support/grants/approve" => authorization::approve_grant, Require(SupportAccess);
     post "/api/v1/support/grants/revoke" => authorization::revoke_grant, Require(SupportAccess);
-    get "/api/v1/payments/receipts/:id/pdf" => handlers::get_payment_receipt_pdf, Require(UnitRead);
+    get "/api/v1/payments/receipts/:id/pdf" => handlers::get_payment_receipt_pdf_logged, Require(UnitRead);
     get "/api/v1/public/receipts/verify" => handlers::verify_receipt, Public;
-    post "/api/v1/payments/provider/webhook" => handlers::provider_webhook, Public;
+    post "/api/v1/payments/provider/webhook" => handlers::provider_webhook_v2, Public;
     get "/api/v1/payment-provider/sandbox/checkout/:reference" => handlers::sandbox_checkout_page, Public;
     post "/api/v1/payment-provider/sandbox/checkout/:reference/complete" => handlers::sandbox_checkout_complete, Public;
-    get "/api/v1/residents/:unit_id/statement" => handlers::get_resident_statement, Require(UnitRead);
+    get "/api/v1/residents/:unit_id/statement" => handlers::get_resident_statement_logged, Require(UnitRead);
     get "/api/v1/residents/:unit_id/operating-budget" => handlers::get_resident_operating_budget, Require(UnitRead);
-    post "/api/v1/residents/:unit_id/payment-intents" => handlers::create_payment_intent, Require(UnitPay);
+    post "/api/v1/residents/:unit_id/payment-intents" => handlers::create_payment_intent_v2, Require(UnitPay);
     get "/api/v1/residents/:unit_id/payment-intents/:intent_id" => handlers::get_payment_intent, Require(UnitPay);
     get "/api/v1/operating-budgets" => handlers::list_operating_budgets, Require(SiteManage);
     post "/api/v1/operating-budgets" => handlers::create_operating_budget, Require(SiteManage);
@@ -158,6 +158,114 @@ routes! {
     post "/api/v1/operating-budgets/:id/objections/:objection_id/resolve" => handlers::resolve_budget_objection, Require(SiteManage);
     get "/api/v1/revaluation-rates" => handlers::list_revaluation_rates, SelfOnly;
     put "/api/v1/revaluation-rates" => handlers::set_revaluation_rate, Require(TenantManage);
+    // SPEC-009 R1: budget legal basis and transition mode
+    get "/api/v1/operating-budgets/legal-basis" => handlers::budget_legal_basis, Require(SiteManage);
+    put "/api/v1/operating-budgets/transition" => handlers::set_budget_transition, Require(SiteManage);
+    // SPEC-009 R2: KVKK (the caller's own notice and consents are SelfOnly, so every role reaches them)
+    get "/api/v1/kvkk/me" => handlers::kvkk_status, SelfOnly;
+    post "/api/v1/kvkk/me/acknowledge" => handlers::kvkk_acknowledge, SelfOnly;
+    put "/api/v1/kvkk/me/consents" => handlers::kvkk_update_consents, SelfOnly;
+    post "/api/v1/kvkk/privacy-notices" => handlers::publish_privacy_notice, Require(FinanceManage);
+    get "/api/v1/kvkk/debtor-export" => handlers::debtor_export, RequireAny(&[FinanceManage, FinanceRead, UnitRead]);
+    get "/api/v1/kvkk/access-log" => handlers::financial_access_log, Require(AuditLogRead);
+    get "/api/v1/kvkk/retention" => handlers::retention_review, Require(FinanceManage);
+    put "/api/v1/kvkk/retention" => handlers::set_retention_policy, Require(FinanceManage);
+    post "/api/v1/kvkk/retention/purge" => handlers::retention_purge, Require(FinanceManage);
+    // SPEC-009 R3: KMK 22 leases. The certificate stays under /payments/receipts/ so the
+    // middleware resolves the receipt and checks the caller's unit relationship.
+    get "/api/v1/leases" => handlers::list_leases, Require(FinanceManage);
+    post "/api/v1/leases" => handlers::upsert_lease, Require(FinanceManage);
+    get "/api/v1/leases/joint-exposure" => handlers::joint_exposure, Require(FinanceRead);
+    get "/api/v1/payments/receipts/:id/rent-deduction-certificate" => handlers::rent_deduction_certificate, Require(UnitRead);
+    // SPEC-009 R4: notifications and dunning
+    get "/api/v1/notifications" => handlers::list_notifications, RequireAny(&[FinanceManage, FinanceRead, UnitRead]);
+    post "/api/v1/notifications/broadcast" => handlers::broadcast_notification, Require(AnnouncementBroadcast);
+    get "/api/v1/dunning/policy" => handlers::get_dunning_policy, Require(FinanceManage);
+    put "/api/v1/dunning/policy" => handlers::set_dunning_policy, Require(FinanceManage);
+    post "/api/v1/dunning/run" => handlers::run_dunning, Require(FinanceManage);
+    get "/api/v1/dunning/actions" => handlers::dunning_actions, Require(FinanceRead);
+    get "/api/v1/dunning/notice-letter/:due_id" => handlers::dunning_notice_letter, Require(FinanceManage);
+    // SPEC-009 R5: resident requests
+    get "/api/v1/residents/:unit_id/virman-requests" => handlers::unit_virman_requests, Require(UnitRead);
+    post "/api/v1/residents/:unit_id/virman-requests" => handlers::create_virman_request, Require(UnitRead);
+    get "/api/v1/residents/:unit_id/disputes" => handlers::unit_disputes, Require(UnitRead);
+    post "/api/v1/residents/:unit_id/disputes" => handlers::create_dispute, Require(UnitRead);
+    get "/api/v1/residents/:unit_id/payment-plans" => handlers::unit_plans, Require(UnitRead);
+    get "/api/v1/resident-requests/virman" => handlers::site_virman_requests, Require(FinanceManage);
+    post "/api/v1/resident-requests/virman/:id/decide" => handlers::decide_virman_request, Require(FinanceManage);
+    get "/api/v1/resident-requests/disputes" => handlers::site_disputes, Require(FinanceManage);
+    post "/api/v1/resident-requests/disputes/:id/resolve" => handlers::resolve_dispute, Require(FinanceManage);
+    // SPEC-009 R6: autopay
+    get "/api/v1/residents/:unit_id/autopay" => handlers::autopay_overview, Require(UnitPay);
+    post "/api/v1/residents/:unit_id/autopay/mandates" => handlers::create_mandate, Require(UnitPay);
+    post "/api/v1/residents/:unit_id/autopay/mandates/:mandate_id/cancel" => handlers::cancel_mandate, Require(UnitPay);
+    post "/api/v1/autopay/run" => handlers::run_autopay, Require(FinanceManage);
+    // SPEC-009 R7: expenses, general ledger, account report, reserve fund
+    get "/api/v1/accounting/chart" => handlers::chart_of_accounts, Require(FinanceRead);
+    get "/api/v1/accounting/vendors" => handlers::list_vendors, Require(FinanceRead);
+    post "/api/v1/accounting/vendors" => handlers::create_vendor, Require(FinanceManage);
+    get "/api/v1/accounting/approval-policy" => handlers::get_approval_policy, Require(FinanceRead);
+    put "/api/v1/accounting/approval-policy" => handlers::set_approval_policy, Require(FinanceManage);
+    get "/api/v1/accounting/expenses" => handlers::list_expenses, Require(FinanceRead);
+    post "/api/v1/accounting/expenses" => handlers::create_expense, Require(FinanceManage);
+    post "/api/v1/accounting/expenses/:id/approve" => handlers::approve_expense, Require(ExpenseApprove);
+    post "/api/v1/accounting/expenses/:id/reject" => handlers::reject_expense, Require(ExpenseApprove);
+    post "/api/v1/accounting/expenses/:id/payments" => handlers::pay_expense, Require(FinanceManage);
+    get "/api/v1/accounting/journal" => handlers::journal, Require(FinanceRead);
+    post "/api/v1/accounting/journal" => handlers::create_journal_entry, Require(FinanceManage);
+    get "/api/v1/accounting/trial-balance" => handlers::trial_balance, Require(FinanceRead);
+    get "/api/v1/accounting/budget-vs-actual" => handlers::budget_vs_actual, Require(FinanceRead);
+    get "/api/v1/accounting/reserve-fund" => handlers::reserve_fund, Require(FinanceRead);
+    get "/api/v1/accounting/account-report" => handlers::account_report, Require(FinanceRead);
+    // SPEC-009 R8: collections and legal handover
+    get "/api/v1/collections/cases" => handlers::list_cases, Require(FinanceRead);
+    post "/api/v1/collections/cases" => handlers::open_case, Require(FinanceManage);
+    get "/api/v1/collections/cases/:id" => handlers::get_case, Require(FinanceRead);
+    post "/api/v1/collections/cases/:id/advance" => handlers::advance_case, Require(FinanceManage);
+    get "/api/v1/collections/cases/:id/evidence-pack" => handlers::evidence_pack, Require(FinanceRead);
+    post "/api/v1/collections/cases/:id/lawyer-access" => handlers::grant_lawyer_access, Require(FinanceManage);
+    get "/api/v1/public/collection-cases/pack" => handlers::lawyer_pack, Public;
+    // SPEC-009 R9: bank feeds, payer matching, daily reconciliation
+    post "/api/v1/bank-matching/suggest" => handlers::suggest_matches, Require(ReconciliationConfirm);
+    get "/api/v1/bank-matching/feeds" => handlers::list_bank_feeds, Require(ReconciliationConfirm);
+    post "/api/v1/bank-matching/feeds" => handlers::create_bank_feed, Require(ReconciliationConfirm);
+    post "/api/v1/bank-matching/feeds/:id/sync" => handlers::sync_bank_feed, Require(ReconciliationConfirm);
+    get "/api/v1/bank-matching/daily-reconciliation" => handlers::reconciliation_runs, Require(ReconciliationConfirm);
+    post "/api/v1/bank-matching/daily-reconciliation" => handlers::daily_reconciliation, Require(ReconciliationConfirm);
+    // SPEC-009 R10: payment plans, waivers and write-offs
+    get "/api/v1/payment-plans" => handlers::list_plans, Require(FinanceRead);
+    post "/api/v1/payment-plans" => handlers::create_plan, Require(FinanceManage);
+    post "/api/v1/payment-plans/run" => handlers::run_plans, Require(FinanceManage);
+    post "/api/v1/payment-plans/:id/cancel" => handlers::cancel_plan, Require(FinanceManage);
+    get "/api/v1/adjustments" => handlers::list_adjustments, Require(FinanceRead);
+    post "/api/v1/adjustments" => handlers::request_adjustment, Require(FinanceManage);
+    post "/api/v1/adjustments/:id/decide" => handlers::decide_adjustment, Require(AdjustmentApprove);
+    // SPEC-009 R11: heat-share billing
+    get "/api/v1/heat-share/periods" => handlers::list_heat_periods, Require(FinanceRead);
+    post "/api/v1/heat-share/periods" => handlers::create_heat_period, Require(FinanceManage);
+    get "/api/v1/heat-share/periods/:id" => handlers::get_heat_period, Require(FinanceRead);
+    put "/api/v1/heat-share/periods/:id/readings" => handlers::record_heat_readings, Require(FinanceManage);
+    post "/api/v1/heat-share/periods/:id/approve" => handlers::approve_heat_period, Require(FinanceManage);
+    // SPEC-009 R12: assembly and decisions book
+    get "/api/v1/assembly/meetings" => handlers::list_meetings, Require(GovernanceManage);
+    post "/api/v1/assembly/meetings" => handlers::create_meeting, Require(GovernanceManage);
+    get "/api/v1/assembly/meetings/:id" => handlers::get_meeting, Require(GovernanceManage);
+    post "/api/v1/assembly/meetings/:id/attendance" => handlers::record_attendance, Require(GovernanceManage);
+    post "/api/v1/assembly/agenda-items/:id/votes" => handlers::cast_votes, Require(GovernanceManage);
+    post "/api/v1/assembly/agenda-items/:id/close" => handlers::close_agenda_item, Require(GovernanceManage);
+    get "/api/v1/assembly/decisions" => handlers::list_decisions, RequireAny(&[GovernanceManage, FinanceRead, UnitRead]);
+    post "/api/v1/assembly/decisions" => handlers::record_decision, Require(GovernanceManage);
+    // SPEC-009 R13: management companies
+    get "/api/v1/saas/companies" => handlers::list_companies, Require(TenantManage);
+    post "/api/v1/saas/companies" => handlers::create_company, Require(TenantManage);
+    post "/api/v1/saas/companies/:id/sites" => handlers::attach_company_site, Require(TenantManage);
+    post "/api/v1/saas/companies/:id/members" => handlers::add_company_member, Require(TenantManage);
+    get "/api/v1/saas/companies/:id/summary" => handlers::portfolio_summary, Require(TenantManage);
+    get "/api/v1/saas/companies/:id/fee-invoices" => handlers::list_fee_invoices, Require(TenantManage);
+    post "/api/v1/saas/companies/:id/fee-invoices" => handlers::issue_fee_invoices, Require(TenantManage);
+    get "/api/v1/portfolio/companies/:id/summary" => handlers::portfolio_summary, Require(PortfolioRead);
+    // SPEC-009 R14: analytics
+    get "/api/v1/analytics/collections" => handlers::collection_analytics, Require(FinanceRead);
 }
 pub fn build_router(state: AppState) -> Router {
     let cors = CorsLayer::new()

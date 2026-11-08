@@ -96,7 +96,7 @@ fn ledger_bank_items(
     let mut items = Vec::new();
     for r in inner.payment_receipts.iter().filter(|r| {
         crate::auth::same_id(&r.site_id, site_id)
-            && r.issued_at.date_naive() == day
+            && local_date(inner, site_id, r.issued_at) == day
             && !matches!(
                 r.payment_channel,
                 PaymentChannel::Cash | PaymentChannel::ManualCash | PaymentChannel::InterLedger
