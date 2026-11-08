@@ -31,27 +31,31 @@ impl Mt940Engine {
         let tag_regex = Regex::new(r"^:([0-9]{2}[A-Z]?):(.*)$").map_err(|e| e.to_string())?;
 
         let mut tx_seq = 0usize;
-        let mut finalize_transaction = |t_61: &str, t_86: &[String]| -> Option<BankTransactionItem> {
-            tx_seq += 1;
-            let parsed_61 = Self::parse_tag_61(t_61)?;
-            let narrative = if !t_86.is_empty() {
-                t_86.join(" ").trim().to_string()
-            } else {
-                parsed_61.reference.clone().unwrap_or_else(|| "MT940 Transaction".to_string())
-            };
+        let mut finalize_transaction =
+            |t_61: &str, t_86: &[String]| -> Option<BankTransactionItem> {
+                tx_seq += 1;
+                let parsed_61 = Self::parse_tag_61(t_61)?;
+                let narrative = if !t_86.is_empty() {
+                    t_86.join(" ").trim().to_string()
+                } else {
+                    parsed_61
+                        .reference
+                        .clone()
+                        .unwrap_or_else(|| "MT940 Transaction".to_string())
+                };
 
-            let fallback_ref = format!("TXN-MT940-{:03}", tx_seq);
-            Some(BankTransactionItem {
-                transaction_id: parsed_61.reference.clone().unwrap_or(fallback_ref),
-                date: parsed_61.date,
-                amount: parsed_61.amount,
-                currency: "TRY".to_string(),
-                description: narrative,
-                sender_name: None,
-                sender_iban: None,
-                reference_no: parsed_61.reference,
-            })
-        };
+                let fallback_ref = format!("TXN-MT940-{:03}", tx_seq);
+                Some(BankTransactionItem {
+                    transaction_id: parsed_61.reference.clone().unwrap_or(fallback_ref),
+                    date: parsed_61.date,
+                    amount: parsed_61.amount,
+                    currency: "TRY".to_string(),
+                    description: narrative,
+                    sender_name: None,
+                    sender_iban: None,
+                    reference_no: parsed_61.reference,
+                })
+            };
 
         for raw_line in lines {
             let line = raw_line.trim_end();
@@ -116,7 +120,10 @@ impl Mt940Engine {
 
         let date_str = caps.get(1)?.as_str(); // YYMMDD
         let amount_str = caps.get(3)?.as_str(); // 1423,33
-        let bank_ref = caps.get(6).or_else(|| caps.get(5)).map(|m| m.as_str().trim().to_string());
+        let bank_ref = caps
+            .get(6)
+            .or_else(|| caps.get(5))
+            .map(|m| m.as_str().trim().to_string());
 
         let year: i32 = 2000 + date_str[0..2].parse::<i32>().ok()?;
         let month: u32 = date_str[2..4].parse::<u32>().ok()?;

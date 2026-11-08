@@ -26,14 +26,22 @@ class DashboardController extends ChangeNotifier {
     _themeMode = _readSavedThemeMode();
     _isOffline = isPlatformOffline();
     _offlineSubscription = platformOfflineChanges().listen(setNetworkOffline);
+    _sessionSubscription = ApiClient.sessionExpired.listen((_) {
+      _isAuthenticated = false;
+      _userSession = _userSession.copyWith(permissions: const []);
+      _authMessage = 'Session expired. Please sign in again.';
+      notifyListeners();
+    });
     _initData();
   }
 
   StreamSubscription<bool>? _offlineSubscription;
+  StreamSubscription<void>? _sessionSubscription;
 
   @override
   void dispose() {
     _offlineSubscription?.cancel();
+    _sessionSubscription?.cancel();
     super.dispose();
   }
 
@@ -1423,6 +1431,7 @@ class DashboardController extends ChangeNotifier {
   }
 
   void switchSessionRole(UserRole role, {AuthProvider? provider, SiteAdminActivePath? adminPath}) {
+    if (!isTestMode) return;
     _userSession = _createSession(role, provider ?? _userSession.authProvider);
     if (role == UserRole.siteManager && adminPath != null) {
       _siteAdminPath = adminPath;
@@ -1457,6 +1466,7 @@ class DashboardController extends ChangeNotifier {
     SiteAdminActivePath? adminPath,
     AuthProvider provider = AuthProvider.local,
   }) {
+    if (!isTestMode) return;
     switchSessionRole(role, provider: provider, adminPath: adminPath);
     _isAuthenticated = true;
     _authMessage = '${role.displayName} olarak giriş yapıldı.';
@@ -1467,7 +1477,8 @@ class DashboardController extends ChangeNotifier {
   }
 
   void logout() {
-    ApiClient.setAccessToken(null);
+    unawaited(ApiClient.logout());
+    _userSession = _userSession.copyWith(permissions: const []);
     _isAuthenticated = false;
     _authMessage = null;
     _provisionedCredentials = null;
@@ -1689,6 +1700,7 @@ class DashboardController extends ChangeNotifier {
   }
 
   void loginAsHomeOwner(HomeOwnerItem owner) {
+    if (!isTestMode) return;
     _activeUnit = ApartmentUnit(
       id: owner.unitId.isNotEmpty ? owner.unitId : 'unit-${owner.unitNo}',
       siteId: _currentManagedSite?.id ?? '',
@@ -1716,6 +1728,7 @@ class DashboardController extends ChangeNotifier {
   }
 
   void loginAsProvisionedHomeOwner() {
+    if (!isTestMode) return;
     if (_provisionedHomeOwner == null) return;
     final p = _provisionedHomeOwner!;
     _activeUnit = ApartmentUnit(
@@ -1745,6 +1758,7 @@ class DashboardController extends ChangeNotifier {
   }
 
   void loginAsSiteManager(TenantSiteItem site, {SiteAdminActivePath? adminPath}) {
+    if (!isTestMode) return;
     _currentManagedSite = site;
     if (adminPath != null) {
       _siteAdminPath = adminPath;
@@ -1763,6 +1777,7 @@ class DashboardController extends ChangeNotifier {
   }
 
   void loginAsProvisionedSiteManager({SiteAdminActivePath? adminPath}) {
+    if (!isTestMode) return;
     if (_provisionedCredentials == null) return;
     final p = _provisionedCredentials!;
     final site = TenantSiteItem(
@@ -1812,45 +1827,36 @@ class DashboardController extends ChangeNotifier {
 
         if (response.statusCode == 200) {
           final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-          ApiClient.setAccessToken(data['access_token']?.toString());
           final userData = data['user'] as Map<String, dynamic>?;
-          if (userData != null) {
-            final roleStr = userData['role']?.toString().toUpperCase() ?? '';
+          if (userData == null) {
+            throw const FormatException('Missing server profile');
+          }
+          if (userData.isNotEmpty) {
+            final roleStr = userData['role']?.toString() ?? '';
             final siteId = userData['site_id']?.toString() ?? '';
             final unitId = userData['unit_id']?.toString() ?? '';
             final rawName = userData['full_name']?.toString().trim() ?? '';
             final fullName = rawName.isNotEmpty ? rawName : trimmedEmail;
             final phone = userData['phone']?.toString() ?? '';
 
-            UserRole resolvedRole;
-            if (roleStr == 'SAAS_ADMIN' || roleStr.contains('ADMIN')) {
-              resolvedRole = UserRole.saasAdmin;
-            } else if (roleStr == 'SITE_MANAGER' || roleStr.contains('MANAGER')) {
-              resolvedRole = UserRole.siteManager;
-            } else if (roleStr == 'HOME_RESIDENT' || roleStr.contains('RESIDENT')) {
-              resolvedRole = UserRole.homeResident;
-            } else {
-              resolvedRole = UserRole.homeOwner;
-            }
-
-            if (targetRole != null) {
-              resolvedRole = targetRole;
-            }
+            final resolvedRole = UserRole.fromApi(roleStr);
+            final serverPermissions = (userData['permissions'] as List<dynamic>? ?? const [])
+                .map((p) => PermissionScope(code: p as String, title: p, isGranted: true,
+                    isolationNote: 'Server-authorized scope')).toList(growable: false);
+            ApiClient.setSession(data);
 
             if (adminPath != null) {
               _siteAdminPath = adminPath;
             }
 
-            if (resolvedRole == UserRole.saasAdmin) {
+            final mustChange = userData['must_change_password'] == true;
+            if (!mustChange && resolvedRole == UserRole.saasAdmin) {
               await fetchSaasSites();
-            } else if (resolvedRole == UserRole.siteManager) {
+            } else if (!mustChange && resolvedRole == UserRole.siteManager) {
               attachCurrentManagedSiteForUser(email: trimmedEmail, siteId: siteId);
               await fetchSiteManagerOverview(siteId: siteId.isNotEmpty ? siteId : _currentManagedSite?.id, period: _selectedDuesMonth);
-            } else {
+            } else if (!mustChange) {
               attachActiveUnitForUser(email: trimmedEmail, siteId: siteId, unitId: unitId);
-              if (siteId.isNotEmpty) {
-                await fetchSiteManagerOverview(siteId: siteId, period: _selectedDuesMonth);
-              }
             }
 
             final mustChangePassword = userData['must_change_password'] == true;
@@ -1862,12 +1868,13 @@ class DashboardController extends ChangeNotifier {
               customEmail: trimmedEmail,
               customPhone: phone,
               mustChangePassword: mustChangePassword,
-            );
+            ).copyWith(id: userData['id']?.toString(), permissions: serverPermissions);
             _isAuthenticated = true;
             _authMessage = 'Şifre ile başarıyla giriş yapıldı (${resolvedRole.displayName}).';
             notifyListeners();
             return true;
           }
+          throw const FormatException('Missing server profile');
         } else if (response.statusCode == 401 || response.statusCode == 400) {
           final errorBody = utf8.decode(response.bodyBytes);
           if (errorBody.contains('Invalid email or password') || errorBody.contains('kullanıcı adı veya şifre hatalı')) {
@@ -1883,6 +1890,8 @@ class DashboardController extends ChangeNotifier {
           return false;
         }
       } catch (e) {
+        ApiClient.clearSession();
+        _isAuthenticated = false;
         debugPrint('loginWithPassword backend call error: $e');
         _authMessage = 'Sunucuya bağlanılamadı. Lütfen arka uç servisinin (port 8080) çalıştığından emin olun.';
         notifyListeners();
@@ -1948,6 +1957,11 @@ class DashboardController extends ChangeNotifier {
   }
 
   void loginWithGoogle() {
+    if (!isTestMode) {
+      _authMessage = 'Use the configured Google identity sign-in flow.';
+      notifyListeners();
+      return;
+    }
     const role = UserRole.homeOwner;
     _userSession = _createSession(
       role,
@@ -2275,8 +2289,13 @@ class DashboardController extends ChangeNotifier {
 
         if (response.statusCode == 200) {
           final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-          ApiClient.setAccessToken(data['access_token']?.toString());
+          ApiClient.setSession(data);
           _userSession = _userSession.copyWith(mustChangePassword: false);
+          if (_userSession.role == UserRole.saasAdmin) {
+            await fetchSaasSites();
+          } else if (_userSession.role == UserRole.siteManager) {
+            await fetchSiteManagerOverview(siteId: _currentManagedSite?.id, period: _selectedDuesMonth);
+          }
           _authMessage = 'Şifreniz başarıyla güncellendi.';
           notifyListeners();
           return true;

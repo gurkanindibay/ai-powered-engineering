@@ -23,7 +23,8 @@ macro_rules! impl_sql_for_enum {
                 &self,
                 ty: &tokio_postgres::types::Type,
                 out: &mut tokio_postgres::types::private::BytesMut,
-            ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+            ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
+            {
                 self.as_str().to_sql(ty, out)
             }
 
@@ -55,19 +56,22 @@ impl Role {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn from_str_loose(s: &str) -> Self {
-        match s.to_uppercase().as_str() {
-            "HOME_OWNER" | "KAT_MALIKI" => Role::HomeOwner,
-            "HOME_RESIDENT" | "EV_SAKINI" | "RESIDENT" | "KAT_SAKINI" | "TENANT" => Role::HomeResident,
-            "SITE_MANAGER" | "YONETICI" => Role::SiteManager,
-            "SAAS_ADMIN" | "ADMIN" => Role::SaasAdmin,
-            _ => Role::HomeOwner,
+    /// Parse a role without granting authority to unknown values.
+    ///
+    /// # Errors
+    /// Returns an error for unrecognized or legacy role strings.
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "HOME_OWNER" => Ok(Self::HomeOwner),
+            "HOME_RESIDENT" => Ok(Self::HomeResident),
+            "SITE_MANAGER" => Ok(Self::SiteManager),
+            "SAAS_ADMIN" => Ok(Self::SaasAdmin),
+            _ => Err("Unknown role".to_string()),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Permission {
     UnitRead,
@@ -80,6 +84,15 @@ pub enum Permission {
     LedgerManageAll,
     AnnouncementBroadcast,
     TenantManage,
+    PaymentRecordManual,
+    PaymentReverse,
+    BankAccountManage,
+    ReconciliationConfirm,
+    RoleGrant,
+    AuditLogRead,
+    AuditLogExport,
+    SupportAccess,
+    PlatformIntegrationConfigure,
 }
 
 impl Permission {
@@ -92,9 +105,22 @@ impl Permission {
             Permission::SiteManage => "Manage site, blocks, units, and staff infrastructure",
             Permission::ResidentInviteSite => "Generate site-wide resident registration link",
             Permission::ResidentApprove => "Review and approve resident registration applications",
-            Permission::LedgerManageAll => "Manage dues liabilities and statutory delay penalties for all units",
-            Permission::AnnouncementBroadcast => "Broadcast announcements and notifications to residents",
+            Permission::LedgerManageAll => {
+                "Manage dues liabilities and statutory delay penalties for all units"
+            }
+            Permission::AnnouncementBroadcast => {
+                "Broadcast announcements and notifications to residents"
+            }
             Permission::TenantManage => "Manage SaaS platform sites and subscriptions",
+            Permission::PaymentRecordManual => "Record manual payments",
+            Permission::PaymentReverse => "Reverse payments after step-up",
+            Permission::BankAccountManage => "Manage site banking configuration",
+            Permission::ReconciliationConfirm => "Confirm bank reconciliation",
+            Permission::RoleGrant => "Manage role assignments",
+            Permission::AuditLogRead => "Read scoped audit events",
+            Permission::AuditLogExport => "Export scoped audit events",
+            Permission::SupportAccess => "Request and approve support access",
+            Permission::PlatformIntegrationConfigure => "Configure platform bank integration",
         }
     }
 
@@ -102,10 +128,21 @@ impl Permission {
         match role {
             Role::SaasAdmin => vec![
                 Permission::TenantManage,
-                Permission::SiteManage,
                 Permission::AnnouncementBroadcast,
+                Permission::RoleGrant,
+                Permission::AuditLogRead,
+                Permission::SupportAccess,
+                Permission::PlatformIntegrationConfigure,
             ],
             Role::SiteManager => vec![
+                Permission::UnitRead,
+                Permission::PaymentRecordManual,
+                Permission::PaymentReverse,
+                Permission::BankAccountManage,
+                Permission::ReconciliationConfirm,
+                Permission::RoleGrant,
+                Permission::AuditLogRead,
+                Permission::AuditLogExport,
                 Permission::SiteManage,
                 Permission::ResidentInviteSite,
                 Permission::ResidentApprove,
@@ -118,12 +155,7 @@ impl Permission {
                 Permission::UnitInviteCoResident,
                 Permission::UnitManageHousehold,
             ],
-            Role::HomeResident => vec![
-                Permission::UnitRead,
-                Permission::UnitPay,
-                Permission::UnitInviteCoResident,
-                Permission::UnitManageHousehold,
-            ],
+            Role::HomeResident => vec![Permission::UnitRead, Permission::UnitPay],
         }
     }
 }
@@ -424,7 +456,11 @@ impl PaymentChannel {
             PaymentChannel::BankStatement
         } else if u.contains("ONLINE") {
             PaymentChannel::OnlinePayment
-        } else if u.contains("BANK") || u.contains("HAVALE") || u.contains("EFT") || u.contains("TRANSFER") {
+        } else if u.contains("BANK")
+            || u.contains("HAVALE")
+            || u.contains("EFT")
+            || u.contains("TRANSFER")
+        {
             PaymentChannel::BankTransfer
         } else if u.contains("MANUAL") {
             PaymentChannel::ManualCash
@@ -803,6 +839,7 @@ pub struct ChangePasswordRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthResponse {
+    pub refresh_token: String,
     pub access_token: String,
     pub token_type: String,
     pub expires_in: i64,
@@ -1245,9 +1282,9 @@ impl SupportedBank {
             // Kuveyt Türk and Yapı Kredi export XLSX from online banking
             SupportedBank::KuveytTurk | SupportedBank::YapiKredi => BankStatementFormat::Excel,
             // Ziraat, Halkbank, Vakıfbank support MT940 exports
-            SupportedBank::ZiraatBankasi
-            | SupportedBank::Halkbank
-            | SupportedBank::Vakifbank => BankStatementFormat::Mt940,
+            SupportedBank::ZiraatBankasi | SupportedBank::Halkbank | SupportedBank::Vakifbank => {
+                BankStatementFormat::Mt940
+            }
             // All others use CSV
             _ => BankStatementFormat::Csv,
         }
@@ -1853,11 +1890,19 @@ impl UnitAdvance {
 
     /// Balance of one debtor (`OWNER` or `TENANT`, case-insensitive).
     pub fn of(&self, debtor_type: &str) -> Decimal {
-        if debtor_type.eq_ignore_ascii_case("OWNER") { self.owner } else { self.tenant }
+        if debtor_type.eq_ignore_ascii_case("OWNER") {
+            self.owner
+        } else {
+            self.tenant
+        }
     }
 
     pub fn bucket_mut(&mut self, debtor_type: &str) -> &mut Decimal {
-        if debtor_type.eq_ignore_ascii_case("OWNER") { &mut self.owner } else { &mut self.tenant }
+        if debtor_type.eq_ignore_ascii_case("OWNER") {
+            &mut self.owner
+        } else {
+            &mut self.tenant
+        }
     }
 }
 
@@ -2105,7 +2150,9 @@ impl CapitalProjectCategory {
         match s.to_uppercase().as_str() {
             "ELEVATOR" | "ASANSOR" => CapitalProjectCategory::Elevator,
             "FACADE_INSULATION" | "MANTOLAMA" => CapitalProjectCategory::FacadeInsulation,
-            "ROOF_WATERPROOFING" | "ROOF_FACADE" | "CATI" => CapitalProjectCategory::RoofWaterproofing,
+            "ROOF_WATERPROOFING" | "ROOF_FACADE" | "CATI" => {
+                CapitalProjectCategory::RoofWaterproofing
+            }
             "GENERATOR" | "JENERATOR" => CapitalProjectCategory::Generator,
             "SECURITY_SYSTEM" | "GUVENLIK" => CapitalProjectCategory::SecuritySystem,
             "FIRE_SAFETY" | "YANGIN" => CapitalProjectCategory::FireSafety,
@@ -2309,6 +2356,3 @@ pub struct RecordDisbursementRequest {
     #[serde(default)]
     pub notes: Option<String>,
 }
-
-
-

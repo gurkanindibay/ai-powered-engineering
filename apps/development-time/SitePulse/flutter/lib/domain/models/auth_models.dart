@@ -4,14 +4,28 @@ enum UserRole {
   siteManager('Site Yöneticisi', 'MD'),
   saasAdmin('SaaS Platform Admin', 'SA');
 
+  static UserRole fromApi(Object? value) => switch (value) {
+    'HOME_OWNER' => UserRole.homeOwner,
+    'HOME_RESIDENT' => UserRole.homeResident,
+    'SITE_MANAGER' => UserRole.siteManager,
+    'SAAS_ADMIN' => UserRole.saasAdmin,
+    _ => throw const FormatException('Unknown server role'),
+  };
+
   final String displayName;
   final String initials;
   const UserRole(this.displayName, this.initials);
 }
 
 enum SiteAdminActivePath {
-  managerCockpit('Site Yönetim Paneli', 'Tüm bloklar, aidat tahsilat tablosu ve sakin onayları'),
-  myFlatOwner('Kendi Dairem (Kat Maliki)', 'B Blok D:1 yönetici dairesi aidat, makbuz ve hane yönetimi');
+  managerCockpit(
+    'Site Yönetim Paneli',
+    'Tüm bloklar, aidat tahsilat tablosu ve sakin onayları',
+  ),
+  myFlatOwner(
+    'Kendi Dairem (Kat Maliki)',
+    'B Blok D:1 yönetici dairesi aidat, makbuz ve hane yönetimi',
+  );
 
   final String title;
   final String description;
@@ -68,6 +82,9 @@ class UserSession {
     required this.permissions,
     this.mustChangePassword = false,
   });
+
+  bool hasPermission(String code) =>
+      permissions.any((p) => p.code == code && p.isGranted);
 
   UserSession copyWith({
     String? id,

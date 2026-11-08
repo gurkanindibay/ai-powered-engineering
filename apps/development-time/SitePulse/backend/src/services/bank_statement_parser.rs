@@ -38,9 +38,13 @@ impl BankStatementParser {
 
         match format {
             BankStatementFormat::Mt940 => self.mt940_engine.parse(trimmed),
-            BankStatementFormat::Excel | BankStatementFormat::Csv => self.parse_tabular_or_lines(trimmed),
+            BankStatementFormat::Excel | BankStatementFormat::Csv => {
+                self.parse_tabular_or_lines(trimmed)
+            }
             BankStatementFormat::Auto => {
-                if trimmed.starts_with(":20:") || (trimmed.contains(":61:") && trimmed.contains(":86:")) {
+                if trimmed.starts_with(":20:")
+                    || (trimmed.contains(":61:") && trimmed.contains(":86:"))
+                {
                     self.mt940_engine.parse(trimmed)
                 } else {
                     self.parse_tabular_or_lines(trimmed)
@@ -52,7 +56,11 @@ impl BankStatementParser {
     /// Parses tabular text, CSV, TSV, or single/multi-line Turkish bank transaction statements.
     fn parse_tabular_or_lines(&self, content: &str) -> Result<Vec<BankTransactionItem>, String> {
         let mut transactions = Vec::new();
-        let lines: Vec<&str> = content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+        let lines: Vec<&str> = content
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .collect();
 
         for (idx, line) in lines.iter().enumerate() {
             // Skip common table headers
@@ -137,7 +145,8 @@ impl BankStatementParser {
 
         let amount = detected_amount?;
         let date = detected_date.unwrap_or_else(|| Utc::now().date_naive());
-        let description = detected_desc.unwrap_or_else(|| format!("Banka İşlemi Satır {}", row_num));
+        let description =
+            detected_desc.unwrap_or_else(|| format!("Banka İşlemi Satır {}", row_num));
         let txn_id = detected_ref.unwrap_or_else(|| format!("TXN-EXCEL-{:03}", row_num));
 
         Some(BankTransactionItem {
@@ -227,7 +236,10 @@ impl BankStatementParser {
     /// Searches text for currency amounts like "₺1.423,33", "1.423,33 TL", "1423.33".
     pub fn extract_amount_from_text(text: &str) -> Option<Decimal> {
         // Pattern: Optional ₺, digits, optional dots/commas, 2 decimal digits, optional TL/TRY
-        let re = Regex::new(r"₺?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+[.,][0-9]{2})\s*(?:TL|TRY)?").ok()?;
+        let re = Regex::new(
+            r"₺?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+[.,][0-9]{2})\s*(?:TL|TRY)?",
+        )
+        .ok()?;
         if let Some(caps) = re.captures(text) {
             if let Some(m) = caps.get(1) {
                 return Self::extract_amount(m.as_str());

@@ -2,11 +2,8 @@ use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use tracing::info;
 
-use crate::models::{
-    DebtStatus, DuesLiability, PaymentEntry,
-    PaymentReceipt,
-};
 use super::base::{require_id, DbResult};
+use crate::models::{DebtStatus, DuesLiability, PaymentEntry, PaymentReceipt};
 
 /// Column list read by [`receipt_from_row`] (keep the two in step).
 pub const RECEIPT_COLUMNS: &str = "id, site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, \
@@ -33,7 +30,9 @@ pub fn receipt_from_row(r: &tokio_postgres::Row) -> PaymentReceipt {
         allocated_principal: r.get(12),
         allocated_penalty: r.get(13),
         allocated_advance: r.get(14),
-        allocation_breakdown: breakdown.and_then(|b| serde_json::from_str(&b).ok()).unwrap_or_default(),
+        allocation_breakdown: breakdown
+            .and_then(|b| serde_json::from_str(&b).ok())
+            .unwrap_or_default(),
         is_rent_offset_eligible: r.get(16),
         legal_statutory_note: r.get(17),
         verification_hash: r.get(18),
@@ -115,7 +114,10 @@ pub async fn save_payment_receipt(
             .await?
             .get(0),
     };
-    info!("Saved payment receipt {} (id: {}) to PostgreSQL", receipt.receipt_number, receipt_id);
+    info!(
+        "Saved payment receipt {} (id: {}) to PostgreSQL",
+        receipt.receipt_number, receipt_id
+    );
     Ok(receipt_id)
 }
 
@@ -152,7 +154,10 @@ pub enum WebhookClaim {
     Claimed(i64),
     /// Already claimed. `same_payload` is false when the transaction id was reused
     /// with different content (amount, IBANs or description).
-    Duplicate { receipt_id: Option<i64>, same_payload: bool },
+    Duplicate {
+        receipt_id: Option<i64>,
+        same_payload: bool,
+    },
 }
 
 pub async fn claim_bank_webhook_transaction(
@@ -189,15 +194,25 @@ pub async fn claim_bank_webhook_transaction(
     Ok(WebhookClaim::Duplicate {
         receipt_id: existing.get(0),
         // Pre-V17 claims carry no hash; they are trusted as the same delivery.
-        same_payload: stored_hash.as_deref().map(|h| h == payload_hash).unwrap_or(true),
+        same_payload: stored_hash
+            .as_deref()
+            .map(|h| h == payload_hash)
+            .unwrap_or(true),
     })
 }
 
 /// Links a claimed webhook to the receipt its payment issued.
-pub async fn attach_bank_webhook_receipt(pool: &Pool, claim_id: i64, receipt_id: i64) -> DbResult<()> {
+pub async fn attach_bank_webhook_receipt(
+    pool: &Pool,
+    claim_id: i64,
+    receipt_id: i64,
+) -> DbResult<()> {
     let client = pool.get().await?;
     client
-        .execute("UPDATE processed_bank_webhooks SET receipt_id = $2 WHERE id = $1", &[&claim_id, &receipt_id])
+        .execute(
+            "UPDATE processed_bank_webhooks SET receipt_id = $2 WHERE id = $1",
+            &[&claim_id, &receipt_id],
+        )
         .await?;
     Ok(())
 }
@@ -208,7 +223,10 @@ pub async fn attach_bank_webhook_receipt(pool: &Pool, claim_id: i64, receipt_id:
 pub async fn release_bank_webhook_transaction(pool: &Pool, claim_id: i64) -> DbResult<()> {
     let client = pool.get().await?;
     client
-        .execute("DELETE FROM processed_bank_webhooks WHERE id = $1 AND receipt_id IS NULL", &[&claim_id])
+        .execute(
+            "DELETE FROM processed_bank_webhooks WHERE id = $1 AND receipt_id IS NULL",
+            &[&claim_id],
+        )
         .await?;
     Ok(())
 }
@@ -231,21 +249,31 @@ pub async fn resolve_webhook_scope(pool: &Pool, destination_iban: &str) -> DbRes
         )
         .await?;
     Ok(row
-        .map(|r| WebhookScope { site_id: Some(r.get(0)), site_bank_account_id: r.get(1) })
+        .map(|r| WebhookScope {
+            site_id: Some(r.get(0)),
+            site_bank_account_id: r.get(1),
+        })
         .unwrap_or_default())
 }
 
 pub async fn load_idempotency_keys(pool: &Pool) -> DbResult<Vec<(String, String, i64)>> {
     let client = pool.get().await?;
     Ok(client
-        .query("SELECT site_id, idempotency_key, receipt_id FROM payment_idempotency_keys", &[])
+        .query(
+            "SELECT site_id, idempotency_key, receipt_id FROM payment_idempotency_keys",
+            &[],
+        )
         .await?
         .into_iter()
         .map(|r| (r.get::<_, i64>(0).to_string(), r.get(1), r.get(2)))
         .collect())
 }
 
-pub async fn tx_find_idempotent_receipt(tx: &deadpool_postgres::Transaction<'_>, site_id: i64, key: &str) -> DbResult<Option<i64>> {
+pub async fn tx_find_idempotent_receipt(
+    tx: &deadpool_postgres::Transaction<'_>,
+    site_id: i64,
+    key: &str,
+) -> DbResult<Option<i64>> {
     Ok(tx
         .query_opt(
             "SELECT receipt_id FROM payment_idempotency_keys WHERE site_id = $1 AND idempotency_key = $2",
@@ -255,7 +283,12 @@ pub async fn tx_find_idempotent_receipt(tx: &deadpool_postgres::Transaction<'_>,
         .map(|r| r.get(0)))
 }
 
-pub async fn tx_store_idempotency_key(tx: &deadpool_postgres::Transaction<'_>, site_id: i64, key: &str, receipt_id: i64) -> DbResult<()> {
+pub async fn tx_store_idempotency_key(
+    tx: &deadpool_postgres::Transaction<'_>,
+    site_id: i64,
+    key: &str,
+    receipt_id: i64,
+) -> DbResult<()> {
     tx.execute(
         "INSERT INTO payment_idempotency_keys (site_id, idempotency_key, receipt_id) VALUES ($1, $2, $3)",
         &[&site_id, &key, &receipt_id],
@@ -265,9 +298,16 @@ pub async fn tx_store_idempotency_key(tx: &deadpool_postgres::Transaction<'_>, s
 }
 
 /// Locks the unit row and checks that it belongs to the site.
-pub async fn tx_lock_unit(tx: &deadpool_postgres::Transaction<'_>, unit_id: i64, site_id: i64) -> DbResult<bool> {
+pub async fn tx_lock_unit(
+    tx: &deadpool_postgres::Transaction<'_>,
+    unit_id: i64,
+    site_id: i64,
+) -> DbResult<bool> {
     Ok(tx
-        .query_opt("SELECT id FROM units WHERE id = $1 AND site_id = $2 FOR UPDATE", &[&unit_id, &site_id])
+        .query_opt(
+            "SELECT id FROM units WHERE id = $1 AND site_id = $2 FOR UPDATE",
+            &[&unit_id, &site_id],
+        )
         .await?
         .is_some())
 }
@@ -297,11 +337,15 @@ fn due_from_row(r: &tokio_postgres::Row, unit_id: i64) -> DuesLiability {
     d
 }
 
-const DUE_COLUMNS: &str = "id, period, principal_amount, delay_penalty, paid_principal, paid_penalty, \
+const DUE_COLUMNS: &str =
+    "id, period, principal_amount, delay_penalty, paid_principal, paid_penalty, \
      due_date, status, debtor_type, expense_type, penalty_accrued_through";
 
 /// Open liabilities of a unit, oldest first, locked for update.
-pub async fn tx_load_open_dues(tx: &deadpool_postgres::Transaction<'_>, unit_id: i64) -> DbResult<Vec<DuesLiability>> {
+pub async fn tx_load_open_dues(
+    tx: &deadpool_postgres::Transaction<'_>,
+    unit_id: i64,
+) -> DbResult<Vec<DuesLiability>> {
     let rows = tx
         .query(
             &format!(
@@ -318,7 +362,11 @@ pub async fn tx_load_open_dues(tx: &deadpool_postgres::Transaction<'_>, unit_id:
 /// Next receipt sequence for a site and series (`COLLECTION` = TAH, `REVERSAL` =
 /// IAD). The counter row is locked by the UPDATE until commit, so concurrent
 /// payments serialize and never share a number.
-pub async fn tx_next_receipt_sequence(tx: &deadpool_postgres::Transaction<'_>, site_id: i64, receipt_type: &str) -> DbResult<i64> {
+pub async fn tx_next_receipt_sequence(
+    tx: &deadpool_postgres::Transaction<'_>,
+    site_id: i64,
+    receipt_type: &str,
+) -> DbResult<i64> {
     let row = tx
         .query_one(
             r#"
@@ -336,7 +384,12 @@ pub async fn tx_next_receipt_sequence(tx: &deadpool_postgres::Transaction<'_>, s
 
 /// Inserts a receipt and fills its id, payer identity and issuer snapshot (O-5:
 /// the site's name, address and tax details at issue time).
-pub async fn tx_insert_receipt(tx: &deadpool_postgres::Transaction<'_>, receipt: &mut PaymentReceipt, site_id: i64, unit_id: i64) -> DbResult<i64> {
+pub async fn tx_insert_receipt(
+    tx: &deadpool_postgres::Transaction<'_>,
+    receipt: &mut PaymentReceipt,
+    site_id: i64,
+    unit_id: i64,
+) -> DbResult<i64> {
     let breakdown = serde_json::to_string(&receipt.allocation_breakdown)?;
     let row = tx
         .query_one(
@@ -394,7 +447,12 @@ pub async fn tx_insert_receipt(tx: &deadpool_postgres::Transaction<'_>, receipt:
     Ok(receipt.id)
 }
 
-pub async fn tx_insert_entry(tx: &deadpool_postgres::Transaction<'_>, entry: &PaymentEntry, site_id: i64, unit_id: i64) -> DbResult<i64> {
+pub async fn tx_insert_entry(
+    tx: &deadpool_postgres::Transaction<'_>,
+    entry: &PaymentEntry,
+    site_id: i64,
+    unit_id: i64,
+) -> DbResult<i64> {
     let row = tx
         .query_one(
             r#"
@@ -473,7 +531,11 @@ pub async fn tx_settle_due(
     penalty: Decimal,
 ) -> DbResult<()> {
     let due_id = require_id("dues liability", &due.id)?;
-    let status = if due.status == DebtStatus::Paid { "PAID" } else { "PARTIALLY_PAID" };
+    let status = if due.status == DebtStatus::Paid {
+        "PAID"
+    } else {
+        "PARTIALLY_PAID"
+    };
     let n = tx
         .execute(
             r#"
@@ -488,7 +550,14 @@ pub async fn tx_settle_due(
                 version        = version + 1
             WHERE id = $1
             "#,
-            &[&due_id, &due.delay_penalty, &principal, &penalty, &status, &due.penalty_accrued_through],
+            &[
+                &due_id,
+                &due.delay_penalty,
+                &principal,
+                &penalty,
+                &status,
+                &due.penalty_accrued_through,
+            ],
         )
         .await?;
     if n != 1 {
@@ -536,16 +605,29 @@ pub async fn tx_credit_advance(
     Ok(row.get(0))
 }
 
-pub async fn get_payment_receipt_by_id(pool: &Pool, receipt_id: i64) -> DbResult<Option<PaymentReceipt>> {
+pub async fn get_payment_receipt_by_id(
+    pool: &Pool,
+    receipt_id: i64,
+) -> DbResult<Option<PaymentReceipt>> {
     let client = pool.get().await?;
     let row = client
-        .query_opt(&format!("SELECT {} FROM payment_receipts WHERE id = $1", RECEIPT_COLUMNS), &[&receipt_id])
+        .query_opt(
+            &format!(
+                "SELECT {} FROM payment_receipts WHERE id = $1",
+                RECEIPT_COLUMNS
+            ),
+            &[&receipt_id],
+        )
         .await?;
     Ok(row.as_ref().map(receipt_from_row))
 }
 
 /// A receipt by number or numeric id; `site_id` 0 means any site.
-pub async fn find_payment_receipt(pool: &Pool, site_id: i64, identifier: &str) -> DbResult<Option<PaymentReceipt>> {
+pub async fn find_payment_receipt(
+    pool: &Pool,
+    site_id: i64,
+    identifier: &str,
+) -> DbResult<Option<PaymentReceipt>> {
     let client = pool.get().await?;
     let num: Option<i64> = identifier.parse().ok();
     let row = client
@@ -562,7 +644,11 @@ pub async fn find_payment_receipt(pool: &Pool, site_id: i64, identifier: &str) -
 }
 
 /// Locks and returns one debtor's advance balance for a unit (0 when absent).
-pub async fn tx_lock_advance(tx: &deadpool_postgres::Transaction<'_>, unit_id: i64, debtor_type: &str) -> DbResult<Decimal> {
+pub async fn tx_lock_advance(
+    tx: &deadpool_postgres::Transaction<'_>,
+    unit_id: i64,
+    debtor_type: &str,
+) -> DbResult<Decimal> {
     Ok(tx
         .query_opt(
             "SELECT balance FROM advance_balances WHERE unit_id = $1 AND debtor_type = $2 FOR UPDATE",
@@ -631,7 +717,9 @@ pub async fn tx_lock_entry_of_receipt(
             &[&site_id, &identifier, &num.unwrap_or(-1)],
         )
         .await?;
-    let Some(receipt_row) = receipt_row else { return Ok(None) };
+    let Some(receipt_row) = receipt_row else {
+        return Ok(None);
+    };
     let receipt = receipt_from_row(&receipt_row);
     let entry = tx
         .query_opt(
@@ -700,13 +788,20 @@ pub async fn tx_unsettle_due(
         )
         .await?;
     if n != 1 {
-        return Err(format!("dues liability {} cannot be un-allocated (cancelled or already reduced)", due_id).into());
+        return Err(format!(
+            "dues liability {} cannot be un-allocated (cancelled or already reduced)",
+            due_id
+        )
+        .into());
     }
     Ok(())
 }
 
 /// Moves the original entry SETTLED -> REVERSED (its contra entry must exist).
-pub async fn tx_mark_entry_reversed(tx: &deadpool_postgres::Transaction<'_>, entry_id: i64) -> DbResult<()> {
+pub async fn tx_mark_entry_reversed(
+    tx: &deadpool_postgres::Transaction<'_>,
+    entry_id: i64,
+) -> DbResult<()> {
     let n = tx
         .execute(
             "UPDATE payment_entries SET settlement_status = 'REVERSED' WHERE id = $1 AND settlement_status = 'SETTLED'",
@@ -725,12 +820,19 @@ pub async fn tx_mark_entry_reversed(tx: &deadpool_postgres::Transaction<'_>, ent
 
 /// Stores one site's aging report as of a date. Re-running on the same day
 /// replaces that day's rows of the site (a unit paid off since then drops out).
-pub async fn save_debt_aging_snapshot(pool: &Pool, site_id: &str, report: &crate::models::DebtAgingReport) -> DbResult<usize> {
+pub async fn save_debt_aging_snapshot(
+    pool: &Pool,
+    site_id: &str,
+    report: &crate::models::DebtAgingReport,
+) -> DbResult<usize> {
     let site = require_id("site", site_id)?;
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
-    tx.execute("DELETE FROM debt_aging_snapshots WHERE site_id = $1 AND as_of_date = $2", &[&site, &report.as_of_date])
-        .await?;
+    tx.execute(
+        "DELETE FROM debt_aging_snapshots WHERE site_id = $1 AND as_of_date = $2",
+        &[&site, &report.as_of_date],
+    )
+    .await?;
     let mut written = 0;
     for b in &report.brackets {
         let unit = require_id("unit", &b.unit_id)?;

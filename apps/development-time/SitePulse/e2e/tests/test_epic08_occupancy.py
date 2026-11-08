@@ -132,11 +132,13 @@ def test_history_lists_previous_tenant_with_exit_balance_and_the_new_one(login_a
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-06")
-def test_ownership_transfer_keeps_the_previous_owner_in_history(login_as, page, stack):
+def test_ownership_transfer_keeps_the_previous_owner_in_history(login_as, page, stack, actors):
     a14 = _unit_id(stack, "A Blok", 14)
     old_owner = stack.sql(f"SELECT owner_person_id FROM units WHERE id = {int(a14)};")
     login_as("manager")
     ManagerCockpit(page).wait()
+    from pages.shell import Shell
+    Shell(page).verify_sensitive(actors["manager"]["password"])
     ResidentsTab(page).open()
 
     by_id(page, f"transfer_ownership_{a14}").click()

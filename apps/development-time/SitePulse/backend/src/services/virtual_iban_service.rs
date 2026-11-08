@@ -88,9 +88,9 @@ impl VirtualIbanService {
 
         // Generate deterministic 10-digit site prefix
         // For site-1 (Begonya Sitesi), use Kuveyt Türk account branch root "0009863791"
-        let site_hash = site_id
-            .bytes()
-            .fold(9863791u64, |acc, b| (acc.wrapping_mul(31)).wrapping_add(b as u64));
+        let site_hash = site_id.bytes().fold(9863791u64, |acc, b| {
+            (acc.wrapping_mul(31)).wrapping_add(b as u64)
+        });
         let block_hash = block_id
             .bytes()
             .fold(0u64, |acc, b| acc.wrapping_add(b as u64));
