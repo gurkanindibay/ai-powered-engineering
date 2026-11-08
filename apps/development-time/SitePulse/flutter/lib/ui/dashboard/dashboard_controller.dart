@@ -2810,6 +2810,9 @@ class DashboardController extends ChangeNotifier {
     return true;
   }
 
+  /// Server's reason for the last refused [deleteHomeOwner] call, if any.
+  String? lastDeleteHomeOwnerError;
+
   Future<bool> deleteHomeOwner({
     required String unitId,
     String? siteId,
@@ -2825,16 +2828,22 @@ class DashboardController extends ChangeNotifier {
         ).timeout(const Duration(seconds: 4));
 
         if (response.statusCode == 200 || response.statusCode == 204) {
+          lastDeleteHomeOwnerError = null;
           await fetchHomeOwners(siteId: effectiveSiteId);
           await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
           notifyListeners();
           return true;
-        } else {
-          final err = utf8.decode(response.bodyBytes);
-          debugPrint('deleteHomeOwner failed: ${response.statusCode} - $err');
         }
+        // The server refused (e.g. 409: the unit has financial history). The card
+        // must stay: removing it locally would show data the server still holds.
+        final err = utf8.decode(response.bodyBytes);
+        debugPrint('deleteHomeOwner failed: ${response.statusCode} - $err');
+        lastDeleteHomeOwnerError = err.trim().isNotEmpty ? err.trim() : null;
+        return false;
       } catch (e) {
         debugPrint('deleteHomeOwner error: $e');
+        lastDeleteHomeOwnerError = null;
+        return false;
       }
     }
 

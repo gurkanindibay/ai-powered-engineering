@@ -2,8 +2,8 @@ use chrono::Utc;
 use rand::{distributions::Alphanumeric, Rng};
 
 use crate::models::{
-    ApprovalResultResponse, PendingRegistrationResponse, Role, SiteInvitationLinkResponse,
-    SubmitSelfRegistrationRequest, User,
+    ApprovalResultResponse, AuthProvider, PendingRegistrationResponse, RegistrationStatus, Role,
+    SiteInvitationLinkResponse, SubmitSelfRegistrationRequest, User,
 };
 use crate::state::AppState;
 
@@ -89,7 +89,7 @@ impl RegistrationApprovalService {
             email: email_norm,
             phone: request.phone,
             is_resident: request.is_resident,
-            status: "PENDING".to_string(),
+            status: RegistrationStatus::Pending,
             submitted_at: Utc::now(),
         };
 
@@ -138,7 +138,7 @@ impl RegistrationApprovalService {
         let mut list: Vec<_> = inner
             .pending_registrations
             .iter()
-            .filter(|r| r.site_id == site_id && r.status == "PENDING")
+            .filter(|r| r.site_id == site_id && r.status == RegistrationStatus::Pending)
             .cloned()
             .collect();
         list.sort_by_key(|r| std::cmp::Reverse(r.submitted_at));
@@ -156,7 +156,7 @@ impl RegistrationApprovalService {
             .position(|r| r.request_id == request_id)
             .ok_or_else(|| format!("Registration request not found: {}", request_id))?;
 
-        if inner.pending_registrations[index].status != "PENDING" {
+        if inner.pending_registrations[index].status != RegistrationStatus::Pending {
             return Err(format!(
                 "This application has already been processed: {}",
                 inner.pending_registrations[index].status
@@ -164,7 +164,7 @@ impl RegistrationApprovalService {
         }
 
         let req = inner.pending_registrations[index].clone();
-        inner.pending_registrations[index].status = "APPROVED".to_string();
+        inner.pending_registrations[index].status = RegistrationStatus::Approved;
         drop(inner); // drop write lock before doing DB operations
 
         if let Some(ref pool) = self.state.pool {
@@ -283,6 +283,7 @@ impl RegistrationApprovalService {
                         INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, virtual_iban)
                         VALUES ($1, $2, $3, $4, 1, $5, $6)
                         ON CONFLICT (block_id, unit_number) DO UPDATE SET
+                            deleted_at = NULL,
                             site_id = EXCLUDED.site_id,
                             floor = EXCLUDED.floor,
                             owner_person_id = EXCLUDED.owner_person_id,
@@ -322,7 +323,7 @@ impl RegistrationApprovalService {
             password_hash: Some(password_hash),
             role: Role::HomeResident,
             must_change_password: true,
-            auth_provider: "LOCAL".to_string(),
+            auth_provider: AuthProvider::Local,
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
@@ -388,7 +389,7 @@ impl RegistrationApprovalService {
         Ok(ApprovalResultResponse {
             request_id: request_id.to_string(),
             site_id: req.site_id,
-            status: "APPROVED".to_string(),
+            status: RegistrationStatus::Approved,
             unit_id,
             email: req.email,
             temporary_password: temp_pass,
@@ -407,14 +408,14 @@ impl RegistrationApprovalService {
             .position(|r| r.request_id == request_id)
             .ok_or_else(|| format!("Registration request not found: {}", request_id))?;
 
-        if inner.pending_registrations[index].status != "PENDING" {
+        if inner.pending_registrations[index].status != RegistrationStatus::Pending {
             return Err(format!(
                 "This application has already been processed: {}",
                 inner.pending_registrations[index].status
             ));
         }
 
-        inner.pending_registrations[index].status = "REJECTED".to_string();
+        inner.pending_registrations[index].status = RegistrationStatus::Rejected;
         let result = inner.pending_registrations[index].clone();
         drop(inner);
 
