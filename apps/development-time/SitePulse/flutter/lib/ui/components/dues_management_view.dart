@@ -17,6 +17,9 @@ import '../residents/owners_residents_module_page.dart';
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
 import 'sp_dialog_pages.dart';
+import '../design_system/sp_metric.dart';
+import '../design_system/sp_tone.dart';
+import '../design_system/sp_guidance_card.dart';
 class DuesManagementView extends StatefulWidget {
   final DashboardController controller;
   final int initialSegment;
@@ -906,10 +909,10 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildStatTile('Toplam Daire', '${summary.totalUnitsCount}', AppColors.textPrimary(context)),
-                  _buildStatTile('Ödeyen Kişi', '${summary.paidUnitsCount} Daire', AppColors.accentGreen),
-                  _buildStatTile('Ödemeyen / Geciken', '${summary.overdueUnitsCount} Daire', AppColors.accentRed),
-                  _buildStatTile('Kalan Borç', formatTry(summary.totalOverdueAmount), AppColors.accentOrange),
+                  SpMetricValue(label: AppStrings.totalUnits, value: '${summary.totalUnitsCount}'),
+                  SpMetricValue(label: 'Ödeyen Kişi', value: '${summary.paidUnitsCount} Daire', tone: SpTone.success),
+                  SpMetricValue(label: 'Ödemeyen / Geciken', value: '${summary.overdueUnitsCount} Daire', tone: SpTone.danger),
+                  SpMetricValue(label: AppStrings.remainingDebt, value: formatTry(summary.totalOverdueAmount), tone: SpTone.warning),
                 ],
               ),
             ],
@@ -1049,17 +1052,6 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     )));
   }
 
-  Widget _buildStatTile(String label, String value, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
-        const SizedBox(height: 2),
-        Text(value, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-
   Widget _buildFlatsDuesSection(List<FlatPaymentStatus> flats) {
     final currentFilter = widget.controller.flatFilter;
     final totalCount = widget.controller.currentMonthFlats.length;
@@ -1165,198 +1157,68 @@ class _DuesManagementViewState extends State<DuesManagementView> {
   }
 
   Widget _buildZeroDataGuidanceCard(BuildContext context, String selectedMonth) {
-    final isDark = AppColors.isDark(context);
     final hasNoPeriods = widget.controller.availableDuesMonths.isEmpty;
     final hasNoFlats = widget.controller.flatsList.isEmpty;
     final hasNoSite = widget.controller.currentManagedSite == null && widget.controller.managedSitesList.isEmpty && widget.controller.userSession.siteName.isEmpty;
 
     if (hasNoSite) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.border(context)),
-        ),
-        child: Column(
-          children: [
-            const Icon(Icons.apartment_outlined, size: 44, color: AppColors.accentOrange),
-            const SizedBox(height: 12),
-            Text(
-              'Yönetilen Site Bulunmuyor',
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 15, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Sistemde kayıtlı bir site bulunamadı. Aidat tahakkuku ve sakin yönetimi yapabilmek için lütfen bir site oluşturunuz.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-            ),
-          ],
-        ),
+      return const SpGuidanceCard(
+        icon: Icons.apartment_outlined,
+        tone: SpTone.warning,
+        title: AppStrings.noManagedSiteTitle,
+        message: 'Sistemde kayıtlı bir site bulunamadı. Aidat tahakkuku ve sakin yönetimi yapabilmek için lütfen bir site oluşturunuz.',
       );
     }
 
     if (hasNoPeriods) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.accentCyan.withOpacity(0.35)),
+      return SpGuidanceCard(
+        icon: Icons.calendar_today_outlined,
+        tone: SpTone.info,
+        prominent: true,
+        tonedBorder: true,
+        title: 'Henüz Aidat Dönemi Oluşturulmadı',
+        message: 'Bu sitede henüz aktif veya geçmiş bir aidat tahakkuku bulunmuyor. Dairelerinize düzenli aylık aidat yansıtmak ve banka/FAST tahsilatlarını otomatik eşleştirmek için yeni bir aidat dönemi başlatabilirsiniz.',
+        action: ElevatedButton.icon(
+          onPressed: _showAccrueDuesDialog,
+          icon: const Icon(Icons.add_circle_outline, size: 18),
+          label: const Text('İlk Aidat Dönemini Başlat'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.successFill,
+            foregroundColor: AppColors.onFill,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg + 4, vertical: AppSpacing.md),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.control)),
+          ),
         ),
-        child: Column(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: AppColors.accentCyan.withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.calendar_today_outlined, size: 28, color: AppColors.accentCyan),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Henüz Aidat Dönemi Oluşturulmadı',
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Bu sitede henüz aktif veya geçmiş bir aidat tahakkuku bulunmuyor. Dairelerinize düzenli aylık aidat yansıtmak ve banka/FAST tahsilatlarını otomatik eşleştirmek için yeni bir aidat dönemi başlatabilirsiniz.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13, height: 1.4),
-            ),
-            const SizedBox(height: 18),
-            ElevatedButton.icon(
-              onPressed: _showAccrueDuesDialog,
-              icon: const Icon(Icons.add_circle_outline, size: 18),
-              label: const Text('İlk Aidat Dönemini Başlat'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.successFill,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.surface(context),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.border(context)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const ExcludeSemantics(child: Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppColors.accentOrange)),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'KMK Madde 20 uyarınca vadesinde ödenmeyen aidatlara aylık %5 gecikme tazminatı uygulanır.',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        tip: 'KMK Madde 20 uyarınca vadesinde ödenmeyen aidatlara aylık %5 gecikme tazminatı uygulanır.',
       );
     }
 
     if (hasNoFlats) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.border(context)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: AppColors.accentOrange.withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.people_outline, size: 28, color: AppColors.accentOrange),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Kayıtlı Daire ve Kat Maliki Bulunmuyor',
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Aidat tahakkuku yapabilmek ve Sanal IBAN tahsis edebilmek için sitenize blok, bağımsız bölüm ve kat maliki tanımlamanız gerekmektedir.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13, height: 1.4),
-            ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.surface(context),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.border(context)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const ExcludeSemantics(child: Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppColors.accentOrange)),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'Yönetici kokpitinden sakin davet bağlantısı oluşturarak veya manuel ekleme yaparak başlayabilirsiniz.',
-                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+      return const SpGuidanceCard(
+        icon: Icons.people_outline,
+        tone: SpTone.warning,
+        prominent: true,
+        title: 'Kayıtlı Daire ve Kat Maliki Bulunmuyor',
+        message: 'Aidat tahakkuku yapabilmek ve Sanal IBAN tahsis edebilmek için sitenize blok, bağımsız bölüm ve kat maliki tanımlamanız gerekmektedir.',
+        tip: 'Yönetici kokpitinden sakin davet bağlantısı oluşturarak veya manuel ekleme yaparak başlayabilirsiniz.',
       );
     }
 
     // Otherwise: search or filter returned empty
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.surface(context),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border(context)),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.filter_alt_off_outlined, size: 36, color: AppColors.accentCyan),
-          const SizedBox(height: 10),
-          Text(
-            'Filtreye Uygun Daire Bulunamadı',
-            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Seçtiğiniz filtre (${widget.controller.flatFilter}) veya arama kriterine uygun daire kaydı bulunmuyor.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-          ),
-          const SizedBox(height: 12),
-          TextButton.icon(
-            onPressed: () {
-              setState(() {
-                _searchQuery = '';
-              });
-              widget.controller.setFlatFilter('ALL');
-            },
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('Filtreyi Temizle (Tümü)'),
-          ),
-        ],
+    return SpGuidanceCard(
+      icon: Icons.filter_alt_off_outlined,
+      tone: SpTone.info,
+      title: 'Filtreye Uygun Daire Bulunamadı',
+      message: 'Seçtiğiniz filtre (${widget.controller.flatFilter}) veya arama kriterine uygun daire kaydı bulunmuyor.',
+      action: TextButton.icon(
+        onPressed: () {
+          setState(() {
+            _searchQuery = '';
+          });
+          widget.controller.setFlatFilter('ALL');
+        },
+        icon: const Icon(Icons.refresh, size: 16),
+        label: const Text('Filtreyi Temizle (Tümü)'),
       ),
     );
   }

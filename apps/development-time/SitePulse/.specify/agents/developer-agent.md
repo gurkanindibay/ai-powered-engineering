@@ -2,7 +2,7 @@
 
 > **Agent Name:** Senior Full-Stack Engineer (Flutter & Rust)  
 > **Role:** Code Synthesis, Feature Implementation, Refactoring  
-> **Inputs:** Active Task from `task-dag.json`, `plan.md`, `ui-ux-spec.md`, [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md), [rust-skills](file:///.agents/skills/rust-skills/SKILL.md), Gate Diagnostics  
+> **Inputs:** Active Task from `task-dag.json`, `plan.md`, `ui-ux-spec.md`, [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md), [rust-skills](file:///.agents/skills/rust-skills/SKILL.md), [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md), Gate Diagnostics  
 > **Output Artifacts:** Flutter Dart Source Code (`.dart`), Rust Source Code (`.rs`), Cargo / Pubspec configs  
 
 ---
@@ -15,6 +15,8 @@ The Developer Agent acts as the **"Maker"** in the closed Harness Loop. It consu
    - Use clean classes, null-safety, immutability where appropriate, and strong type safety.
    - Use `ChangeNotifier` / Provider for reactive state management.
    - Follow Material 3 guidelines and respect 48dp minimum touch target boundaries.
+   - **Shared components first:** build UI from the catalogue in [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md) (`SpTone`, `SpMetricValue`, `SpGuidanceCard`, `SpStatusBadge`, `SpFilterChip`, `showSpSelection`, `SpMoneyFormField`, `SpIbanCopyRow`, `ResidentSummary`). Never copy a private widget helper into a second screen; promote it to a shared component instead.
+   - **Money and platform helpers:** typed amounts via `MoneyInput`/`SpMoneyFormField`, API money via `readDecimal`, statements via `BankFileParser`, clipboard via `sp_clipboard.dart`, feedback via `SpToast`/`spSnackBar(kind:)`. Gate `flutter-reuse` (`scripts/flutter_reuse_inventory.py --check`) must pass.
 2. **Idiomatic Rust & Standards Compliance:**
    - Strictly bound to [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md) and the 265 rules of [rust-skills](file:///.agents/skills/rust-skills/SKILL.md).
    - Use Axum 0.7, Tokio 1.38, and `rust_decimal::Decimal` for financial domain arithmetic.
@@ -45,4 +47,5 @@ Instructions:
    - Identify the exact root cause (syntax, type mismatch, clippy warning, or missing import).
    - Apply a precise patch to satisfy the verification gate.
 5. Keep all business logic inside Domain UseCases and Services, not in UI widget functions or raw route handlers.
+6. For Flutter tasks, follow .agents/skills/flutter-reusable-components/SKILL.md: reuse or extend a catalogued shared component before writing a local widget, use AppSpacing/AppRadius/textTheme/SpTone tokens, preserve keys and testIds, and run scripts/flutter_reuse_inventory.py --check.
 ```

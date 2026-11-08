@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
 
-import '../../testing/test_id.dart';
-import '../components/sp_dialog_pages.dart';
 import '../theme/app_theme.dart';
+import '../components/app_fullscreen_page.dart';
 
 /// Kind of a transient message. Each kind has its own icon and fill so that an
 /// error never looks like a success (status is never shown by colour alone).
@@ -149,9 +148,9 @@ class SpToast {
 
 /// Full-screen confirmation page that names the object and the consequence.
 ///
-/// Opens as a 100% viewport page (center popups are prohibited by the
-/// constitution). Cancel sits left of confirm in the sticky bottom bar; a
-/// destructive confirm uses the danger fill.
+/// Adapter over [AppFullscreenPage.pushConfirmation], the one confirmation
+/// implementation. Cancel sits left of confirm in the sticky bottom bar; a
+/// destructive confirm uses the danger fill. Back counts as cancel.
 Future<bool> showSpConfirmDialog(
   BuildContext context, {
   required String title,
@@ -161,27 +160,17 @@ Future<bool> showSpConfirmDialog(
   bool destructive = false,
   String? confirmKey,
 }) async {
-  final result = await showSpPage<bool>(
+  final result = await AppFullscreenPage.pushConfirmation(
     context: context,
-    builder: (ctx) => SpAlertPage(
-      title: Text(title),
-      content: Text(message),
-      actions: [
-        testId('btn_confirm_cancel', OutlinedButton(
-          key: const Key('btn_confirm_cancel'),
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: Text(cancelLabel),
-        )),
-        testId(confirmKey ?? 'btn_confirm_ok', FilledButton(
-          key: Key(confirmKey ?? 'btn_confirm_ok'),
-          style: destructive
-              ? FilledButton.styleFrom(backgroundColor: AppColors.dangerFill, foregroundColor: AppColors.onFill)
-              : null,
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: Text(confirmLabel),
-        )),
-      ],
-    ),
+    title: title,
+    message: message,
+    confirmLabel: confirmLabel,
+    cancelLabel: cancelLabel,
+    confirmColor: destructive ? AppColors.dangerFill : AppColors.primaryFill,
+    icon: destructive ? Icons.warning_amber_rounded : Icons.help_outline_rounded,
+    iconColor: destructive ? AppColors.accentRed : AppColors.accentCyan,
+    cancelId: 'btn_confirm_cancel',
+    confirmId: confirmKey ?? 'btn_confirm_ok',
   );
   return result ?? false;
 }

@@ -4,6 +4,10 @@ import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
+import 'package:decimal/decimal.dart';
+import '../design_system/money_formatter.dart';
+import '../design_system/sp_metric.dart';
+import '../design_system/sp_tone.dart';
 
 class SaasAdminView extends StatelessWidget {
   final DashboardController controller;
@@ -118,9 +122,9 @@ class SaasAdminView extends StatelessWidget {
                 runSpacing: 8,
                 alignment: WrapAlignment.spaceBetween,
                 children: [
-                  _buildMetric(context, 'Toplam Bağımsız Bölüm', '$totalUnits Daire'),
-                  _buildMetric(context, 'Platform Hacmi', '₺240.000 /ay', color: AppColors.accentGreen),
-                  _buildMetric(context, 'Uptime', '%99.98', color: AppColors.accentCyan),
+                  SpMetricValue(label: 'Toplam Bağımsız Bölüm', value: '$totalUnits Daire'),
+                  SpMetricValue(label: 'Platform Hacmi', value: '${formatTry(Decimal.fromInt(240000))} /ay', tone: SpTone.success),
+                  const SpMetricValue(label: 'Uptime', value: '%99.98', tone: SpTone.info),
                 ]),
             ],
           ),
@@ -197,27 +201,6 @@ class SaasAdminView extends StatelessWidget {
           )
         else
           ...sites.map((site) => _buildTenantSiteCard(context, site)),
-      ],
-    );
-  }
-
-  Widget _buildMetric(BuildContext context, String label, String value, {Color? color}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            color: color ?? AppColors.textPrimary(context),
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
       ],
     );
   }

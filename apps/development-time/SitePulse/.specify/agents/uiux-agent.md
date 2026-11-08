@@ -27,6 +27,9 @@ The UI/UX Agent translates functional requirements into responsive, accessible, 
 - **Body Medium:** 14sp / 20sp line height (Descriptions, receipts)
 - **Label Large:** 14sp / 20sp (Button text, badge indicators)
 
+### Shared Components
+Specify each screen with the catalogued components in [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md): `SpMetricValue`/`SpIconMetric` for figures, `SpGuidanceCard` for empty states, `SpStatusBadge` for statuses, `SpFilterChip` and `showSpSelection` for filters, `SpMoneyFormField` for amounts, `SpIbanCopyRow` for IBANs, and `ResidentSummary` for occupancy. Name colours by `SpTone` role (`info`, `success`, `warning`, `danger`, `accent`, `neutral`), not hex values. Mark anything new as **local** (one screen) or **shared** (two or more screens).
+
 ## 3. Required Outputs per Screen
 1. **Layout Hierarchy (Flutter Widgets tree):**
    - AppBar (Site/Daire Switcher + Notifications)
