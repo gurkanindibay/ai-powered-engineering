@@ -189,8 +189,34 @@ python3 apps/development-time/SitePulse/harness/harness_cli.py verify --task tas
 echo -n 'new-password' | cargo run --quiet --bin hash-password   # from backend/
 ```
 
+---
+
+## 6. Team Orchestrator & Dynamic Model Selection (`team_orchestrator.py`)
+
+- **Skill Definition:** [.agents/skills/team-orchestration/SKILL.md](file:///.agents/skills/team-orchestration/SKILL.md)
+- **Executable Script:** [scripts/team_orchestrator.py](file:///scripts/team_orchestrator.py)
+- **Purpose:** Multi-agent software engineering team orchestration across Product Owner, Architect, Developer, and Tester roles with dynamic model selection based on complexity (low, medium, high, critical).
+
+### Capabilities:
+- Automated complexity calculation based on task descriptions, file counts, and risk domains (financial invariants, schema migrations, concurrency, authentication).
+- Dynamic model, provider, reasoning effort, and git worktree isolation configuration per role.
+- Generates ready-to-run T3 `delegate_task` JSON payloads for automated execution.
+
+### Quick Usage Examples:
+```bash
+# Auto-score complexity and view model assignments
+./scripts/team_orchestrator.py --task "Implement payment gateway retry logic"
+
+# Output structured JSON for automation or scripting
+./scripts/team_orchestrator.py --task "Migrate user authentication schema" --schema --auth --json
+
+# Explicitly override complexity
+./scripts/team_orchestrator.py --task "Refactor logging pipeline" --complexity medium
+```
+
 ### Core Rules:
 1. **Notice Repetitive Need:** If an ad-hoc query or multi-step command is executed more than once, extract and structure it.
 2. **Author in Python:** Build with `argparse`, type annotations, structured table output, and `--json` support.
 3. **Persist & Symlink:** Store in project `scripts/` (with workspace root symlinks where appropriate) and set executable permissions.
 4. **Register in Skills:** Keep `skills.md` and `.agents/skills/` up to date so future sessions immediately discover and leverage the tool.
+
