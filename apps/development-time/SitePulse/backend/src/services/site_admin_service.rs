@@ -89,7 +89,7 @@ impl SiteAdminService {
         validate_email(&request.email)?;
         validate_phone(&request.phone)?;
 
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
 
         // 1. Check in-memory state for duplicate email first
         {
@@ -97,7 +97,7 @@ impl SiteAdminService {
             if inner
                 .users
                 .iter()
-                .any(|u| u.email.to_lowercase() == email_norm)
+                .any(|u| crate::domain::email::same_email(&u.email, &email_norm))
             {
                 return Err(format!(
                     "An account with this email address already exists (zaten mevcut): {}",
@@ -157,7 +157,8 @@ impl SiteAdminService {
             &site_numeric_id.to_string(),
             &format!("blok-{}", effective_clean_block),
             request.unit_no,
-        );
+        )
+        .map_err(|e| e.to_string())?;
 
         let mut user_numeric_id = 0i64;
         #[allow(unused_assignments)]
@@ -276,12 +277,9 @@ impl SiteAdminService {
             if has_explicit_tenant {
                 let t_name = request.tenant_full_name.as_deref().unwrap_or("").trim();
                 let t_phone = request.tenant_phone.as_deref().unwrap_or("").trim();
-                let t_email_norm = request
-                    .tenant_email
-                    .as_deref()
-                    .unwrap_or("")
-                    .trim()
-                    .to_lowercase();
+                let t_email_norm = crate::domain::email::NormalizedEmail::normalize(
+                    request.tenant_email.as_deref().unwrap_or(""),
+                );
 
                 let existing_t_person = if !t_email_norm.is_empty() {
                     client
@@ -993,11 +991,30 @@ impl SiteAdminService {
             tenant_phone: None,
             operational_dues_balance: Some(Decimal::ZERO),
             capital_dues_balance: Some(Decimal::ZERO),
+            advance_balance: None,
             household_residents: household,
         })
     }
 
     pub async fn get_home_owners_for_site(&self, site_id: &str) -> Vec<HomeOwnerResponse> {
+        let mut owners = self.load_home_owners_for_site(site_id).await;
+        let inner = self.state.inner.read().await;
+        for o in owners.iter_mut() {
+            let unit = inner
+                .units
+                .iter()
+                .find(|u| crate::auth::same_id(&u.id, &o.unit_id))
+                .map(|u| u.id.clone());
+            o.advance_balance = Some(
+                unit.map(|id| inner.advance_total(&id))
+                    .unwrap_or(Decimal::ZERO)
+                    .max(Decimal::ZERO),
+            );
+        }
+        owners
+    }
+
+    async fn load_home_owners_for_site(&self, site_id: &str) -> Vec<HomeOwnerResponse> {
         let site_numeric = crate::db::parse_id_to_i64(site_id).unwrap_or(0);
 
         // 1. Try DB first if pool available
@@ -1144,12 +1161,11 @@ impl SiteAdminService {
                                 tenant_phone: t_phone,
                                 operational_dues_balance: Some(op_balance),
                                 capital_dues_balance: Some(cap_balance),
+                                advance_balance: None,
                                 household_residents: household,
                             });
                         }
-                        if !db_result.is_empty() {
-                            return db_result;
-                        }
+                        return db_result;
                     }
                 }
             }
@@ -1236,6 +1252,7 @@ impl SiteAdminService {
                 tenant_phone: None,
                 operational_dues_balance: Some(Decimal::ZERO),
                 capital_dues_balance: Some(Decimal::ZERO),
+                advance_balance: None,
                 household_residents: household,
             });
         }
@@ -1252,31 +1269,46 @@ impl SiteAdminService {
         let site_numeric = crate::db::require_id("entity", site_id)?;
         let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
 
+        // The database unit this request resolved to; the in-memory update below
+        // follows it so the two never touch different units.
+        let mut resolved_unit_id: Option<String> = None;
+
         // 1. If DB pool is available, update database
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
+            {
+                let client = pool
+                    .get()
+                    .await
+                    .map_err(|e| format!("Database connection error: {}", e))?;
                 let unit_row_opt = if let Some(uid) = id_numeric {
+                    // A unit id wins over a person id: both are numbers, and the old
+                    // OR-match could return two rows, fail silently and fall back to
+                    // in-memory state (the tenant then stayed in the database).
                     client
                         .query_opt(
-                            "SELECT id, block_id, unit_number, floor, owner_person_id, tenant_person_id, house_type FROM units WHERE (id = $1 OR owner_person_id = $1 OR tenant_person_id = $1) AND site_id = $2",
+                            "SELECT id, block_id, unit_number, floor, owner_person_id, tenant_person_id, house_type FROM units \
+                             WHERE (id = $1 OR owner_person_id = $1 OR tenant_person_id = $1) AND site_id = $2 AND deleted_at IS NULL \
+                             ORDER BY (id = $1) DESC, id LIMIT 1",
                             &[&uid, &site_numeric],
                         )
                         .await
-                        .ok()
-                        .flatten()
+                        .map_err(|e| e.to_string())?
                 } else {
                     client
                         .query_opt(
-                            "SELECT u.id, u.block_id, u.unit_number, u.floor, u.owner_person_id, u.tenant_person_id, u.house_type FROM units u JOIN persons p ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id) WHERE p.email = $1 AND u.site_id = $2",
+                            "SELECT u.id, u.block_id, u.unit_number, u.floor, u.owner_person_id, u.tenant_person_id, u.house_type FROM units u \
+                             JOIN persons p ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id) \
+                             WHERE LOWER(p.email) = LOWER($1) AND u.site_id = $2 AND u.deleted_at IS NULL \
+                             ORDER BY (u.owner_person_id = p.id) DESC, u.id LIMIT 1",
                             &[&unit_or_user_id, &site_numeric],
                         )
                         .await
-                        .ok()
-                        .flatten()
+                        .map_err(|e| e.to_string())?
                 };
 
                 if let Some(u_row) = unit_row_opt {
                     let u_id: i64 = u_row.get(0);
+                    resolved_unit_id = Some(u_id.to_string());
                     let p_id: Option<i64> = u_row.get(4);
                     let t_id: Option<i64> = u_row.get(5);
 
@@ -1323,7 +1355,8 @@ impl SiteAdminService {
                                 .map_err(|e| e.to_string())?;
                         }
                         if let Some(ref t_email) = req.tenant_email {
-                            let email_norm = t_email.trim().to_lowercase();
+                            let email_norm =
+                                crate::domain::email::NormalizedEmail::normalize(t_email);
                             let prev_email: Option<String> = client
                                 .query_opt(
                                     "SELECT email FROM persons WHERE id = $1",
@@ -1392,7 +1425,8 @@ impl SiteAdminService {
                                 .map_err(|e| e.to_string())?;
                         }
                         if let Some(ref email) = req.email {
-                            let email_norm = email.trim().to_lowercase();
+                            let email_norm =
+                                crate::domain::email::NormalizedEmail::normalize(email);
                             let prev_email: Option<String> = client
                                 .query_opt(
                                     "SELECT email FROM persons WHERE id = $1",
@@ -1437,18 +1471,33 @@ impl SiteAdminService {
         // 2. Update in-memory state
         let mut inner = self.state.inner.write().await;
 
-        let unit_idx = inner.units.iter().position(|u| {
-            u.id == unit_or_user_id
-                || u.owner_user_id.as_deref() == Some(unit_or_user_id)
-                || crate::db::parse_id_to_i64(&u.id) == id_numeric
-        });
+        // Resolve one unit, in order of precedence: the unit the database resolved,
+        // an exact unit id, then a unit owned by the given user id. Unit and user ids
+        // are both plain numbers, so a single OR-match picked whichever came first.
+        let unit_idx = resolved_unit_id
+            .as_deref()
+            .and_then(|rid| inner.units.iter().position(|u| u.id == rid))
+            .or_else(|| {
+                inner.units.iter().position(|u| {
+                    u.id == unit_or_user_id
+                        || (id_numeric.is_some() && crate::db::parse_id_to_i64(&u.id) == id_numeric)
+                })
+            })
+            .or_else(|| {
+                inner
+                    .units
+                    .iter()
+                    .position(|u| u.owner_user_id.as_deref() == Some(unit_or_user_id))
+            });
 
-        let user_idx = inner.users.iter().position(|u| {
-            u.id == unit_or_user_id
-                || crate::db::parse_id_to_i64(&u.id) == id_numeric
-                || (unit_idx.is_some()
-                    && inner.units[unit_idx.unwrap()].owner_user_id.as_deref() == Some(&u.id))
-        });
+        // The owner is the resolved unit's owner; only without a unit is the id read as a user id.
+        let user_idx = match unit_idx {
+            Some(uidx) => inner.units[uidx]
+                .owner_user_id
+                .clone()
+                .and_then(|oid| inner.users.iter().position(|u| u.id == oid)),
+            None => inner.users.iter().position(|u| u.id == unit_or_user_id),
+        };
 
         let tenant_user_idx = if let Some(uidx) = unit_idx {
             if let Some(ref tuid) = inner.units[uidx].tenant_user_id {
@@ -1468,7 +1517,8 @@ impl SiteAdminService {
                     inner.users[t_idx].full_name = t_name.clone();
                 }
                 if let Some(ref t_email) = req.tenant_email {
-                    inner.users[t_idx].email = t_email.trim().to_lowercase();
+                    inner.users[t_idx].email =
+                        crate::domain::email::NormalizedEmail::normalize(t_email);
                 }
                 if let Some(ref t_phone) = req.tenant_phone {
                     inner.users[t_idx].phone = t_phone.clone();
@@ -1529,7 +1579,7 @@ impl SiteAdminService {
                 inner.users[usridx].phone = phone.clone();
             }
             if let Some(ref email) = req.email {
-                inner.users[usridx].email = email.trim().to_lowercase();
+                inner.users[usridx].email = crate::domain::email::NormalizedEmail::normalize(email);
             }
         }
 
@@ -1538,9 +1588,17 @@ impl SiteAdminService {
             inner.unit_payer_names.insert(unit_id, vec![name.clone()]);
         }
 
+        let resolved_unit_id = unit_idx
+            .map(|uidx| inner.units[uidx].id.clone())
+            .or(resolved_unit_id);
         drop(inner);
 
         let all_owners = self.get_home_owners_for_site(site_id).await;
+        if let Some(ref rid) = resolved_unit_id {
+            if let Some(updated) = all_owners.iter().find(|o| &o.unit_id == rid) {
+                return Ok(updated.clone());
+            }
+        }
         if let Some(updated) = all_owners.into_iter().find(|o| {
             o.unit_id == unit_or_user_id
                 || crate::db::parse_id_to_i64(&o.unit_id) == id_numeric
@@ -1598,6 +1656,7 @@ impl SiteAdminService {
                 tenant_phone: req.tenant_phone.clone(),
                 operational_dues_balance: None,
                 capital_dues_balance: None,
+                advance_balance: None,
                 household_residents: vec![],
             })
         }
@@ -1851,7 +1910,7 @@ impl SiteAdminService {
             full_name: full_name.to_string(),
             relationship: relationship_val.to_string(),
             phone: phone.to_string(),
-            email: email.trim().to_lowercase(),
+            email: crate::domain::email::NormalizedEmail::normalize(email),
             is_owner: false,
             occupancy_id: None,
             person_id: None,
@@ -1872,12 +1931,12 @@ impl SiteAdminService {
         }
 
         // Also add to inner.users so the co-resident can log in with temporary password if needed
-        let email_norm = email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(email);
         if !email_norm.is_empty()
             && !inner
                 .users
                 .iter()
-                .any(|u| u.email.to_lowercase() == email_norm)
+                .any(|u| crate::domain::email::same_email(&u.email, &email_norm))
         {
             let temp_pass = generate_resident_temporary_password();
             let password_hash = crate::auth::hash_password_async(temp_pass.clone()).await?;
@@ -1995,25 +2054,23 @@ impl SiteAdminService {
                         &[&site_numeric],
                     )
                     .await, "site_admin_service") {
-                    if !rows.is_empty() {
-                        return rows
-                            .into_iter()
-                            .map(|row| {
-                                let id: i64 = row.get(0);
-                                let s_id: i64 = row.get(1);
-                                let type_name: String = row.get(2);
-                                let dues_amount: Decimal = row.get(3);
-                                let description: Option<String> = row.get(4);
-                                crate::models::HouseTypeTariff {
-                                    id: id.to_string(),
-                                    site_id: s_id.to_string(),
-                                    type_name,
-                                    dues_amount,
-                                    description,
-                                }
-                            })
-                            .collect();
-                    }
+                    return rows
+                        .into_iter()
+                        .map(|row| {
+                            let id: i64 = row.get(0);
+                            let s_id: i64 = row.get(1);
+                            let type_name: String = row.get(2);
+                            let dues_amount: Decimal = row.get(3);
+                            let description: Option<String> = row.get(4);
+                            crate::models::HouseTypeTariff {
+                                id: id.to_string(),
+                                site_id: s_id.to_string(),
+                                type_name,
+                                dues_amount,
+                                description,
+                            }
+                        })
+                        .collect();
                 }
             }
         }
@@ -2166,29 +2223,23 @@ impl SiteAdminService {
     }
 
     pub async fn get_blocks_for_site(&self, site_id: &str) -> Vec<crate::models::BlockDto> {
-        let mut list = Vec::new();
         if let Some(ref pool) = self.state.pool {
             if let Ok(db_blocks) = crate::db::get_blocks_for_site_from_db(pool, site_id).await {
-                if !db_blocks.is_empty() {
-                    list = db_blocks;
-                }
+                return db_blocks;
             }
         }
-
-        if list.is_empty() {
-            let site_numeric = crate::db::parse_id_to_i64(site_id);
-            let inner = self.state.inner.read().await;
-            list = inner
-                .blocks
-                .iter()
-                .filter(|b| {
-                    b.site_id == site_id
-                        || (site_numeric.is_some()
-                            && crate::db::parse_id_to_i64(&b.site_id) == site_numeric)
-                })
-                .cloned()
-                .collect();
-        }
+        let site_numeric = crate::db::parse_id_to_i64(site_id);
+        let inner = self.state.inner.read().await;
+        let mut list: Vec<crate::models::BlockDto> = inner
+            .blocks
+            .iter()
+            .filter(|b| {
+                b.site_id == site_id
+                    || (site_numeric.is_some()
+                        && crate::db::parse_id_to_i64(&b.site_id) == site_numeric)
+            })
+            .cloned()
+            .collect();
 
         if list.is_empty() {
             list = vec![
@@ -2538,7 +2589,7 @@ impl SiteAdminService {
                 let person_id: i64 = if let Some(pid) = req.person_id {
                     pid
                 } else if let Some(ref email) = req.email {
-                    let clean_email = email.trim().to_lowercase();
+                    let clean_email = crate::domain::email::NormalizedEmail::normalize(email);
                     let existing = client
                         .query_opt(
                             "SELECT id FROM persons WHERE LOWER(email) = $1",

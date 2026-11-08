@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
-use sha2::{Digest, Sha256};
 
 use crate::models::{
     AllocationBreakdownItem, AuthProvider, DebtAgingBracket, DebtAgingReport, DebtStatus,
@@ -30,16 +29,13 @@ impl PaymentTrackingService {
         total_amount: Decimal,
         issued_at: &DateTime<Utc>,
     ) -> String {
-        let mut hasher = Sha256::new();
-        let payload = format!(
-            "sitepulse:{}:{}:{:.2}:{}",
+        // Persisted contract: see `crate::domain::fingerprint::receipt_canonical_v1`.
+        crate::domain::fingerprint::receipt_hash_v1(&crate::domain::fingerprint::ReceiptFields {
             receipt_number,
             unit_id,
             total_amount,
-            issued_at.to_rfc3339()
-        );
-        hasher.update(payload.as_bytes());
-        format!("{:x}", hasher.finalize())
+            issued_at,
+        })
     }
 
     /// Detects capital expenditure keyword intent in transaction description
@@ -81,52 +77,56 @@ impl PaymentTrackingService {
 
     /// Query multi-channel payment stream with rich multi-criteria filters
     pub async fn get_payment_stream(&self, filter: PaymentStreamFilter) -> PaymentStreamResponse {
-        let inner = self.state.inner.read().await;
         let target_site = filter.site_id.unwrap_or_default();
 
-        // Gather all payment entries (including synthesizing from homeowner_payments if empty)
-        let mut all_entries = inner.payment_entries.clone();
-
-        if all_entries.is_empty() {
-            // Synthesize from existing homeowner payments and mock entries
-            for hp in &inner.homeowner_payments {
-                let unit_label = inner.unit_label(&hp.block_id, hp.unit_number);
-                let settlement_status = match hp.status {
-                    PaymentMatchStatus::MatchedDebt
-                    | PaymentMatchStatus::MatchedAdvance
-                    | PaymentMatchStatus::PartiallyMatched => SettlementStatus::Settled,
-                    PaymentMatchStatus::Pending => SettlementStatus::Unmatched,
-                };
-
-                all_entries.push(PaymentEntry {
-                    id: crate::db::parse_id_to_i64(&hp.id).unwrap_or(0),
-                    site_id: target_site.clone(),
-                    unit_id: hp.unit_id.clone(),
-                    unit_label: Some(unit_label),
-                    payer_name: hp
-                        .homeowner_name
-                        .clone()
-                        .unwrap_or_else(|| "Bilinmeyen Sakin".to_string()),
-                    payer_role: DebtorType::Owner,
-                    receipt_id: None,
-                    receipt_number: hp
-                        .reference_code
-                        .clone()
-                        .or_else(|| Some(format!("REC-{}", hp.id))),
-                    amount: hp.amount,
-                    payment_channel: hp.payment_method,
-                    settlement_status,
-                    description: hp.note.clone(),
-                    external_reference: hp.reference_code.clone(),
-                    payment_date: hp.created_at,
-                    created_at: hp.created_at,
-                    entry_type: LEDGER_KIND_COLLECTION.to_string(),
-                    reverses_entry_id: None,
-                    reversal_reason: None,
-                    recorded_by: None,
-                });
+        let all_entries = if let Some(p) = self.state.db_pool() {
+            crate::db::fetch_payment_entries_from_db(p, Some(&target_site))
+                .await
+                .unwrap_or_default()
+        } else {
+            let inner = self.state.inner.read().await;
+            let mut entries = inner.payment_entries.clone();
+            if entries.is_empty() {
+                // Synthesize from existing homeowner payments and mock entries in memory mode
+                for hp in &inner.homeowner_payments {
+                    let unit_label = inner.unit_label(&hp.block_id, hp.unit_number);
+                    let settlement_status = match hp.status {
+                        PaymentMatchStatus::MatchedDebt
+                        | PaymentMatchStatus::MatchedAdvance
+                        | PaymentMatchStatus::PartiallyMatched => SettlementStatus::Settled,
+                        PaymentMatchStatus::Pending => SettlementStatus::Unmatched,
+                    };
+                    entries.push(PaymentEntry {
+                        id: crate::db::parse_id_to_i64(&hp.id).unwrap_or(0),
+                        site_id: target_site.clone(),
+                        unit_id: hp.unit_id.clone(),
+                        unit_label: Some(unit_label),
+                        payer_name: hp
+                            .homeowner_name
+                            .clone()
+                            .unwrap_or_else(|| "Bilinmeyen Sakin".to_string()),
+                        payer_role: DebtorType::Owner,
+                        receipt_id: None,
+                        receipt_number: hp
+                            .reference_code
+                            .clone()
+                            .or_else(|| Some(format!("REC-{}", hp.id))),
+                        amount: hp.amount,
+                        payment_channel: hp.payment_method,
+                        settlement_status,
+                        description: hp.note.clone(),
+                        external_reference: hp.reference_code.clone(),
+                        payment_date: hp.created_at,
+                        created_at: hp.created_at,
+                        entry_type: LEDGER_KIND_COLLECTION.to_string(),
+                        reverses_entry_id: None,
+                        reversal_reason: None,
+                        recorded_by: None,
+                    });
+                }
             }
-        }
+            entries
+        };
 
         // Apply filters
         let search_term = filter.search.as_ref().map(|s| s.to_lowercase());
@@ -236,6 +236,13 @@ impl PaymentTrackingService {
 
     /// Calculate debt aging report grouped by brackets: current, 1-30, 31-60, 60+ days
     pub async fn get_debt_aging_report(&self, site_id: &str) -> DebtAgingReport {
+        if let Some(p) = self.state.db_pool() {
+            if let Ok(report) =
+                crate::db::dues_repository::fetch_debt_aging_report_from_db(p, site_id).await
+            {
+                return report;
+            }
+        }
         let inner = self.state.inner.read().await;
         let today = Utc::now().date_naive();
 
@@ -1016,6 +1023,10 @@ impl PaymentTrackingService {
     /// Nothing is updated in place except the liability state and the original's
     /// status (the ledger is append-only). One receipt is reversed at most once;
     /// asking again returns the existing reversal.
+    ///
+    /// A virman (`INTER_LEDGER`) receipt is reversed the same way, except that the
+    /// advance it spent is credited back to the source debtor (`VIRMAN_REVERSAL`)
+    /// instead of an advance being refunded (SPEC-007 R1).
     pub async fn reverse_payment(
         &self,
         req: ReversePaymentRequest,
@@ -1138,6 +1149,22 @@ impl PaymentTrackingService {
                 .await
                 .map_err(db_err)?;
             }
+            if is_virman(&original) {
+                crate::db::tx_credit_advance(
+                    &tx,
+                    target.unit_id,
+                    original.payer_role.as_str(),
+                    "VIRMAN_REVERSAL",
+                    original.total_amount,
+                    Some(&reversal.receipt_number),
+                    Some(&format!(
+                        "Reversal of virman {}: {}",
+                        original.receipt_number, reason
+                    )),
+                )
+                .await
+                .map_err(db_err)?;
+            }
             crate::db::tx_insert_receipt(&tx, &mut reversal, site_num, target.unit_id)
                 .await
                 .map_err(db_err)?;
@@ -1251,6 +1278,13 @@ impl PaymentTrackingService {
                 &original.unit_id,
                 &advance_debtor_of(&original),
                 -original.allocated_advance,
+            );
+        }
+        if is_virman(&original) {
+            inner.adjust_advance(
+                &original.unit_id,
+                original.payer_role.as_str(),
+                original.total_amount,
             );
         }
         if let Some(e) = inner
@@ -1593,13 +1627,12 @@ fn check_reversible(
             original.receipt_number, settlement_status
         ));
     }
-    if original.payment_channel == PaymentChannel::InterLedger {
-        return Err(format!(
-            "{} is an inter-ledger transfer; reversing a virman is not supported (record a correcting transfer)",
-            original.receipt_number
-        ));
-    }
     Ok(())
+}
+
+/// A virman receipt: its amount was taken from the payer's advance, not paid in.
+fn is_virman(receipt: &PaymentReceipt) -> bool {
+    receipt.payment_channel == PaymentChannel::InterLedger
 }
 
 /// The `IAD-YYYY-NNNNNN` reversal receipt: the original's amounts and lines, in
@@ -1635,10 +1668,14 @@ fn build_reversal_receipt(
         allocated_advance: original.allocated_advance,
         allocation_breakdown: original.allocation_breakdown.clone(),
         is_rent_offset_eligible: false,
-        legal_statutory_note: Some(format!(
-            "{} numaralı tahsilat makbuzunun iptali / iadesi. Gerekçe: {}",
-            original.receipt_number, reason
-        )),
+        legal_statutory_note: Some(if is_virman(original) {
+            format!("{} numaralı virman makbuzunun iptali; tutar avans bakiyesine geri alındı. Gerekçe: {}", original.receipt_number, reason)
+        } else {
+            format!(
+                "{} numaralı tahsilat makbuzunun iptali / iadesi. Gerekçe: {}",
+                original.receipt_number, reason
+            )
+        }),
         issued_at,
         receipt_type: LEDGER_KIND_REVERSAL.to_string(),
         reverses_receipt_id: Some(original.id),
@@ -1698,6 +1735,11 @@ fn reversal_response(
             .filter_map(|b| b.due_id.clone())
             .collect(),
         reversed_receipt_number: original.receipt_number.clone(),
+        restored_advance: if is_virman(original) {
+            original.total_amount
+        } else {
+            Decimal::ZERO
+        },
         reversal_receipt: reversal,
     }
 }

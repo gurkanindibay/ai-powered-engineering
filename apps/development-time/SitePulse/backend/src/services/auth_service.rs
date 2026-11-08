@@ -16,6 +16,12 @@ const INVALID_CREDENTIALS: &str = "Invalid email or password (kullanıcı adı v
 const GOOGLE_JWKS_URL: &str = "https://www.googleapis.com/oauth2/v3/certs";
 const GOOGLE_ISSUERS: [&str; 2] = ["accounts.google.com", "https://accounts.google.com"];
 
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+pub struct IdentityError(String);
+
+type IdentityResult<T> = Result<T, IdentityError>;
+
 pub struct AuthService {
     state: AppState,
 }
@@ -31,33 +37,34 @@ impl AuthService {
         Self { state }
     }
 
-    async fn find_user_by_email(&self, email_norm: &str) -> Result<Option<User>, String> {
-        if let Some(ref pool) = self.state.pool {
-            return crate::db::get_user_by_email(pool, email_norm)
-                .await
-                .map_err(|_| "Identity storage unavailable".to_string());
+    async fn find_user_by_email(&self, email_norm: &str) -> IdentityResult<Option<User>> {
+        async {
+            if let Some(ref pool) = self.state.pool {
+                return crate::db::get_user_by_email(pool, email_norm)
+                    .await
+                    .map_err(|_| "Identity storage unavailable".to_string());
+            }
+            let inner = self.state.inner.read().await;
+            Ok(inner
+                .users
+                .iter()
+                .find(|u| crate::domain::email::same_email(&u.email, email_norm))
+                .cloned())
         }
-        let inner = self.state.inner.read().await;
-        Ok(inner
-            .users
-            .iter()
-            .find(|u| u.email.to_lowercase() == email_norm)
-            .cloned())
+        .await
+        .map_err(IdentityError)
     }
 
     /// Resolve a current unit from authoritative relationships.
     ///
     /// # Errors
     /// Propagates database failures instead of granting cached access.
-    pub async fn resolve_unit_id(&self, user: &User) -> Result<Option<String>, String> {
+    pub async fn resolve_unit_id(&self, user: &User) -> IdentityResult<Option<String>> {
+        async {
         if !matches!(user.role, Role::HomeOwner | Role::HomeResident) {
             return Ok(None);
         }
-        if let Some(pool) = &self.state.pool {
-            let client = pool
-                .get()
-                .await
-                .map_err(|_| "Identity storage unavailable".to_string())?;
+        if let Some(client) = crate::db::security_connection(&self.state).await.map_err(|e| e.to_string())? {
             let site = crate::db::require_id("site", &user.site_id)?;
             let row=client.query_opt("SELECT u.id FROM units u WHERE u.site_id=$1 AND u.deleted_at IS NULL AND (u.owner_person_id=$2 OR u.tenant_person_id=$2 OR EXISTS(SELECT 1 FROM occupancy_members m JOIN unit_occupancies o ON o.id=m.occupancy_id WHERE o.unit_id=u.id AND o.is_active AND o.end_date IS NULL AND m.person_id=$2)) ORDER BY u.id LIMIT 1",&[&site,&user.person_id]).await.map_err(|_|"Identity storage unavailable".to_string())?;
             return Ok(row.map(|r| r.get::<_, i64>(0).to_string()));
@@ -77,33 +84,45 @@ impl AuthService {
                         }))
             })
             .map(|u| u.id.clone()))
+        }.await.map_err(IdentityError)
     }
 
     /// Users of a deleted or suspended site cannot sign in.
-    async fn ensure_site_active(&self, user: &User) -> Result<(), String> {
-        if user.role == Role::SaasAdmin || user.site_id.is_empty() {
-            return Ok(());
-        }
-        if let Some(ref pool) = self.state.pool {
-            if !crate::db::site_is_active(pool, &user.site_id)
-                .await
-                .map_err(|e| e.to_string())?
-            {
-                return Err("This site is no longer active.".to_string());
+    async fn ensure_site_active(&self, user: &User) -> IdentityResult<()> {
+        async {
+            if user.role == Role::SaasAdmin || user.site_id.is_empty() {
+                return Ok(());
             }
+            if let Some(ref pool) = self.state.pool {
+                if !crate::db::site_is_active(pool, &user.site_id)
+                    .await
+                    .map_err(|e| e.to_string())?
+                {
+                    return Err("This site is no longer active.".to_string());
+                }
+            }
+            Ok(())
         }
-        Ok(())
+        .await
+        .map_err(IdentityError)
     }
 
-    async fn auth_response(&self, user: &User) -> Result<AuthResponse, String> {
-        let unit_id = match user.role {
-            Role::HomeOwner | Role::HomeResident => self.resolve_unit_id(user).await?,
-            _ => None,
-        };
-        let credentials = crate::security::create(&self.state, user, unit_id.as_deref())
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok(create_auth_response(user, unit_id.as_deref(), credentials))
+    async fn auth_response(&self, user: &User) -> IdentityResult<AuthResponse> {
+        async {
+            let unit_id = match user.role {
+                Role::HomeOwner | Role::HomeResident => self
+                    .resolve_unit_id(user)
+                    .await
+                    .map_err(|e| e.to_string())?,
+                _ => None,
+            };
+            let credentials = crate::security::create(&self.state, user, unit_id.as_deref())
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(create_auth_response(user, unit_id.as_deref(), credentials))
+        }
+        .await
+        .map_err(IdentityError)
     }
 
     /// Consumes a unit invite token: it must exist and be unexpired, and it is
@@ -147,10 +166,11 @@ impl AuthService {
         if request.email.trim().is_empty() || request.password.is_empty() {
             return Err("Email and password are required.".to_string());
         }
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
         let user = self
             .find_user_by_email(&email_norm)
-            .await?
+            .await
+            .map_err(|e| e.to_string())?
             .ok_or_else(|| INVALID_CREDENTIALS.to_string())?;
 
         let stored = user
@@ -160,8 +180,10 @@ impl AuthService {
         if !auth::verify_password_async(request.password.clone(), stored.to_string()).await? {
             return Err(INVALID_CREDENTIALS.to_string());
         }
-        self.ensure_site_active(&user).await?;
-        self.auth_response(&user).await
+        self.ensure_site_active(&user)
+            .await
+            .map_err(|e| e.to_string())?;
+        self.auth_response(&user).await.map_err(|e| e.to_string())
     }
 
     pub async fn authenticate_with_google(
@@ -175,7 +197,7 @@ impl AuthService {
         if !payload.email_verified {
             return Err("Google account email is not verified.".to_string());
         }
-        let email_norm = payload.email.to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&payload.email);
 
         if let Some(pool) = &self.state.pool {
             let client = pool
@@ -192,10 +214,17 @@ impl AuthService {
                 let user = crate::security::user(&self.state, &id)
                     .await
                     .map_err(|e| e.to_string())?;
-                self.ensure_site_active(&user).await?;
-                return self.auth_response(&user).await;
+                self.ensure_site_active(&user)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                return self.auth_response(&user).await.map_err(|e| e.to_string());
             }
-            if self.find_user_by_email(&email_norm).await?.is_some() {
+            if self
+                .find_user_by_email(&email_norm)
+                .await
+                .map_err(|e| e.to_string())?
+                .is_some()
+            {
                 return Err(
                     "Sign in with your existing method before linking a Google identity"
                         .to_string(),
@@ -222,7 +251,7 @@ impl AuthService {
                 person_id: None,
             };
             let (user, _) = self.register_invited_db(draft, token).await?;
-            return self.auth_response(&user).await;
+            return self.auth_response(&user).await.map_err(|e| e.to_string());
         }
         let existing = {
             let inner = self.state.inner.read().await;
@@ -234,7 +263,7 @@ impl AuthService {
                     inner
                         .users
                         .iter()
-                        .position(|u| u.email.to_lowercase() == email_norm)
+                        .position(|u| crate::domain::email::same_email(&u.email, &email_norm))
                 })
         };
 
@@ -303,7 +332,9 @@ impl AuthService {
         };
 
         let mut user = user;
-        self.ensure_site_active(&user).await?;
+        self.ensure_site_active(&user)
+            .await
+            .map_err(|e| e.to_string())?;
         if let Some(ref pool) = self.state.pool {
             crate::db::save_user(pool, &user)
                 .await
@@ -312,7 +343,9 @@ impl AuthService {
                 if let Ok(Some(row)) = client
                     .query_opt(
                         "SELECT id FROM users WHERE LOWER(email) = $1",
-                        &[&user.email.to_lowercase()],
+                        &[&crate::domain::email::NormalizedEmail::normalize(
+                            &user.email,
+                        )],
                     )
                     .await
                 {
@@ -321,7 +354,7 @@ impl AuthService {
                 }
             }
         }
-        self.auth_response(&user).await
+        self.auth_response(&user).await.map_err(|e| e.to_string())
     }
 
     /// Self-service registration is only possible with a unit invitation token,
@@ -337,8 +370,13 @@ impl AuthService {
             return Err("Full name, email, and password are required.".to_string());
         }
         auth::validate_new_password(&request.password)?;
-        let email_norm = request.email.trim().to_lowercase();
-        if self.find_user_by_email(&email_norm).await?.is_some() {
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
+        if self
+            .find_user_by_email(&email_norm)
+            .await
+            .map_err(|e| e.to_string())?
+            .is_some()
+        {
             return Err(
                 "An account with this email address already exists (zaten mevcut).".to_string(),
             );
@@ -367,7 +405,7 @@ impl AuthService {
                 person_id: None,
             };
             let (user, _) = self.register_invited_db(draft, token).await?;
-            return self.auth_response(&user).await;
+            return self.auth_response(&user).await.map_err(|e| e.to_string());
         }
         let scope = self.consume_invite_token(token.trim()).await?;
 
@@ -410,7 +448,9 @@ impl AuthService {
                 if let Ok(Some(row)) = client
                     .query_opt(
                         "SELECT id FROM users WHERE LOWER(email) = $1",
-                        &[&new_user.email.to_lowercase()],
+                        &[&crate::domain::email::NormalizedEmail::normalize(
+                            &new_user.email,
+                        )],
                     )
                     .await
                 {
@@ -419,7 +459,9 @@ impl AuthService {
                 }
             }
         }
-        self.auth_response(&new_user).await
+        self.auth_response(&new_user)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     /// Link a verified Google identity after request-level step-up.
@@ -441,11 +483,10 @@ impl AuthService {
         {
             return Err("Account is already linked".to_string());
         }
-        if let Some(pool) = &self.state.pool {
-            let client = pool
-                .get()
-                .await
-                .map_err(|_| "Identity storage unavailable".to_string())?;
+        if let Some(client) = crate::db::security_connection(&self.state)
+            .await
+            .map_err(|e| e.to_string())?
+        {
             let id = crate::db::require_id("user", &user.id)?;
             let n=client.execute("UPDATE users SET google_sub=$1,auth_provider='HYBRID' WHERE id=$2 AND (google_sub IS NULL OR google_sub=$1)",&[&payload.sub,&id]).await.map_err(|_|"Google identity cannot be linked".to_string())?;
             if n != 1 {
@@ -470,7 +511,7 @@ impl AuthService {
         crate::security::revoke(&self.state, &user.id, None)
             .await
             .map_err(|e| e.to_string())?;
-        self.auth_response(&user).await
+        self.auth_response(&user).await.map_err(|e| e.to_string())
     }
 
     /// Consume a unit invitation and create its account/membership atomically.
@@ -541,9 +582,11 @@ impl AuthService {
             .await
             .map_err(|e| e.to_string())?;
         let unit_id = match user.role {
-            Role::HomeOwner | Role::HomeResident => {
-                self.resolve_unit_id(&user).await?.unwrap_or_default()
-            }
+            Role::HomeOwner | Role::HomeResident => self
+                .resolve_unit_id(&user)
+                .await
+                .map_err(|e| e.to_string())?
+                .unwrap_or_default(),
             _ => String::new(),
         };
         let permissions = Permission::permissions_for_role(user.role);
@@ -579,11 +622,12 @@ impl AuthService {
         }
         auth::validate_new_password(&request.new_password)?;
 
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
         // The same message for "no such user" and "wrong password" avoids user enumeration.
         let user = self
             .find_user_by_email(&email_norm)
-            .await?
+            .await
+            .map_err(|e| e.to_string())?
             .ok_or_else(|| INVALID_CREDENTIALS.to_string())?;
         let stored = user
             .password_hash
@@ -614,7 +658,7 @@ impl AuthService {
             if let Some(u) = inner
                 .users
                 .iter_mut()
-                .find(|u| u.email.to_lowercase() == email_norm)
+                .find(|u| crate::domain::email::same_email(&u.email, &email_norm))
             {
                 u.password_hash = Some(new_hash.clone());
                 u.must_change_password = false;
@@ -626,7 +670,9 @@ impl AuthService {
         let mut updated = user;
         updated.password_hash = Some(new_hash);
         updated.must_change_password = false;
-        self.auth_response(&updated).await
+        self.auth_response(&updated)
+            .await
+            .map_err(|e| e.to_string())
     }
 }
 

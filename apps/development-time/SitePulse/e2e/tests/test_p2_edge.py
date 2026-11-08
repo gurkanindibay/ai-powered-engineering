@@ -204,12 +204,6 @@ def test_residents_module_search_by_name_and_unit(login_as, page, stack):
 @pytest.mark.edge
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-08")
-@pytest.mark.xfail(strict=False, reason="BUG (intermittent, seen only in full-suite runs): "
-                   "SiteAdminService::update_home_owner looks the unit up with 'id = $1 OR owner_person_id = $1 OR "
-                   "tenant_person_id = $1' (unit and person ids mixed), swallows a failed lookup and falls back to "
-                   "in-memory state; the PUT then answers 200 with the unit labelled 'unit_id 2' (database id 1) and "
-                   "the tenant stays in the database. Non-strict because it passes when run alone "
-                   "(backend/src/services/site_admin_service.rs:1046)")
 def test_remove_tenant_only_keeps_the_owner(login_as, page, api, actors, stack):
     b3 = _unit_id(stack, "B Blok", 3)
     owner = stack.sql(f"SELECT owner_person_id FROM units WHERE id = {int(b3)};")
@@ -309,8 +303,6 @@ def test_debt_aging_total_matches_the_open_ledger(login_as, page, tenant_paid_ca
 @pytest.mark.edge
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-09-07")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-10-04): the virman dialog's units are hard-coded ('d-14', 'd-1'), so "
-                   "a transfer from a real unit's advance to its capital due cannot be made")
 def test_virman_moves_advance_to_the_capital_due(login_as, page, api):
     api.webhook_transfer(A14_IBAN, Decimal("3500.00"), "E2E-FAST-VIRMAN", "AHMET YILMAZ AVANS")  # no dues: all advance
     login_as("manager")

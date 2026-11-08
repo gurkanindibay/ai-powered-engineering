@@ -174,12 +174,13 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
             let block_label = if block_id == 1 { "blok-A" } else { "blok-B" };
             let resolved_viban = virtual_iban.or_else(|| {
-                Some(VirtualIbanService::generate_virtual_iban(
+                VirtualIbanService::generate_virtual_iban(
                     VirtualIbanService::KUVEYT_TURK_BANK_CODE,
                     &site_id.map(|s| s.to_string()).unwrap_or_default(),
                     block_label,
                     unit_number,
-                ))
+                )
+                .ok()
             });
 
             let unit = IndependentUnit {
@@ -890,6 +891,35 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
         info!(
             "Loaded {} reconciliation queue items from PostgreSQL",
             state.reconciliation_queue.len()
+        );
+    }
+
+    // SPEC-007: operating budgets, revaluation rates, liabilities' legal basis, card payment intents.
+    {
+        let labels: std::collections::HashMap<i64, String> = state
+            .units
+            .iter()
+            .filter_map(|u| {
+                u.id.parse::<i64>()
+                    .ok()
+                    .map(|id| (id, state.unit_label(&u.block_id, u.unit_number)))
+            })
+            .collect();
+        let snapshot = super::load_budget_snapshot(pool, |id| {
+            labels.get(&id).cloned().unwrap_or_else(|| id.to_string())
+        })
+        .await?;
+        state.operating_budgets = snapshot.budgets;
+        for rate in snapshot.rates {
+            state.revaluation_rates.insert(rate.year, rate);
+        }
+        state.budget_required_sites = snapshot.required_sites;
+        state.dues_budget_basis = snapshot.due_basis.into_iter().collect();
+        state.payment_intents = super::load_payment_intents(pool).await?;
+        info!(
+            "Loaded {} operating budgets and {} payment intents from PostgreSQL",
+            state.operating_budgets.len(),
+            state.payment_intents.len()
         );
     }
     Ok(())

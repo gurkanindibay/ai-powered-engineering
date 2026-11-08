@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:decimal/decimal.dart';
+import '../../domain/formatting/json_decimal.dart';
 import 'dart:async';
 import 'dart:ui' show Brightness, PlatformDispatcher;
 import 'package:flutter/foundation.dart';
@@ -908,8 +909,8 @@ class DashboardController extends ChangeNotifier {
         final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
 
         final viban = data['virtual_iban'] as String?;
-        final advance = Decimal.tryParse(data['advance_payment']?.toString() ?? '0') ?? Decimal.zero;
-        final totalDebt = Decimal.tryParse(data['total_debt']?.toString() ?? '0') ?? Decimal.zero;
+        final advance = readDecimal(data, 'advance_payment');
+        final totalDebt = readDecimal(data, 'total_debt');
 
         _activeUnit = _activeUnit.copyWith(
           virtualIban: viban ?? _activeUnit.virtualIban,
@@ -925,9 +926,9 @@ class DashboardController extends ChangeNotifier {
               id: item['id'] as String? ?? '',
               unitId: effectiveUnitId,
               period: item['period'] as String? ?? '',
-              principalAmount: Decimal.tryParse(item['principal_amount']?.toString() ?? '0') ?? Decimal.zero,
-              delayPenalty: isItemPaid ? Decimal.zero : (Decimal.tryParse(item['delay_penalty']?.toString() ?? '0') ?? Decimal.zero),
-              totalAmount: isItemPaid ? Decimal.zero : (Decimal.tryParse(item['total_amount']?.toString() ?? '0') ?? Decimal.zero),
+              principalAmount: readDecimal(item, 'principal_amount'),
+              delayPenalty: isItemPaid ? Decimal.zero : (readDecimal(item, 'delay_penalty')),
+              totalAmount: isItemPaid ? Decimal.zero : (readDecimal(item, 'total_amount')),
               dueDate: DateTime.tryParse(item['due_date']?.toString() ?? '') ?? DateTime.now(),
               status: isItemPaid
                   ? DebtStatus.paid
@@ -1040,7 +1041,7 @@ class DashboardController extends ChangeNotifier {
           status: 'ACTIVE',
           planType: 'STANDARD',
           totalUnits: totalUnitsCount,
-          monthlyCollectionVolume: Decimal.tryParse(summaryJson?['total_expected']?.toString() ?? '0') ?? Decimal.zero,
+          monthlyCollectionVolume: readDecimal(summaryJson, 'total_expected'),
           adminName: managerName,
           adminEmail: managerEmail,
           adminPhone: '',
@@ -1101,14 +1102,14 @@ class DashboardController extends ChangeNotifier {
             if (b.isNotEmpty && u > 0 && !seenKeys.add(key)) {
               continue;
             }
-            final adv = Decimal.tryParse(item['advance_balance']?.toString() ?? '0') ?? Decimal.zero;
+            final adv = readDecimal(item, 'advance_balance');
             totalAdvanceFromFlats += adv;
             list.add(FlatPaymentStatus(
               id: item['id'] as String? ?? '',
               block: item['block'] as String? ?? '',
               unitNo: u,
               residentName: item['resident_name'] as String? ?? '',
-              amountDue: Decimal.tryParse(item['amount_due']?.toString() ?? '0') ?? Decimal.zero,
+              amountDue: readDecimal(item, 'amount_due'),
               advanceBalance: adv,
               daysOverdue: (item['days_overdue'] as num?)?.toInt() ?? 0,
               isPaid: item['is_paid'] as bool? ?? false,
@@ -1121,12 +1122,12 @@ class DashboardController extends ChangeNotifier {
         }
 
         if (summaryJson != null) {
-          final backendAdvance = Decimal.tryParse(summaryJson['total_advance_balance']?.toString() ?? '0') ?? Decimal.zero;
+          final backendAdvance = readDecimal(summaryJson, 'total_advance_balance');
           final effectiveAdvance = backendAdvance > Decimal.zero ? backendAdvance : totalAdvanceFromFlats;
           _collectionSummary = ComplexCollectionSummary(
-            totalExpected: Decimal.tryParse(summaryJson['total_expected']?.toString() ?? '0') ?? Decimal.zero,
-            totalCollected: Decimal.tryParse(summaryJson['total_collected']?.toString() ?? '0') ?? Decimal.zero,
-            totalOverdueWithInterest: Decimal.tryParse(summaryJson['total_overdue_with_interest']?.toString() ?? '0') ?? Decimal.zero,
+            totalExpected: readDecimal(summaryJson, 'total_expected'),
+            totalCollected: readDecimal(summaryJson, 'total_collected'),
+            totalOverdueWithInterest: readDecimal(summaryJson, 'total_overdue_with_interest'),
             totalAdvanceBalance: effectiveAdvance,
             paidUnitsCount: (summaryJson['paid_units_count'] as num?)?.toInt() ?? 0,
             overdueUnitsCount: (summaryJson['overdue_units_count'] as num?)?.toInt() ?? 0,
@@ -1183,7 +1184,7 @@ class DashboardController extends ChangeNotifier {
             status: item['status'] as String? ?? 'ACTIVE',
             planType: item['plan_type'] as String? ?? 'STANDARD',
             totalUnits: (item['total_units'] as num?)?.toInt() ?? 0,
-            monthlyCollectionVolume: Decimal.tryParse(item['monthly_dues_volume']?.toString() ?? '0') ?? Decimal.zero,
+            monthlyCollectionVolume: readDecimal(item, 'monthly_dues_volume'),
             adminName: item['primary_manager_name'] as String? ?? 'Yönetici Atanmadı',
             adminEmail: item['primary_manager_email'] as String? ?? '',
             adminPhone: item['primary_manager_phone'] as String? ?? '',
@@ -3536,7 +3537,7 @@ class DashboardController extends ChangeNotifier {
       return false;
     }
 
-    final isMt940 = trimmed.startsWith(':20:') || (trimmed.contains(':61:') && trimmed.contains(':86:'));
+    final isMt940 = trimmed.startsWith(':20:') || BankFileParser.isMt940(trimmed);
 
     // Enforce statement format from active bank or explicit format parameter
     final activeAccount = _siteBankAccount;
@@ -3563,76 +3564,20 @@ class DashboardController extends ChangeNotifier {
       }
     }
 
-    final lines = content.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    // One parser for pasted text and uploaded files: MT940, CSV/TSV and
+    // free-form lines all go through BankFileParser.
     final List<ReconciliationQueueItem> parsedMatches = [];
-
-    // Check MT940 format
-    if (content.contains(':61:') && content.contains(':86:')) {
-      final reg61 = RegExp(r':61:\s*(\d{6})(?:\d{4})?(?:C|D|RC|RD|CR|DR)([0-9]+,[0-9]{2})');
-      final reg86 = RegExp(r':86:\s*(.+?)(?=(?:\r?\n:[0-9]{2}[A-Z]?:)|$)', dotAll: true);
-
-      final m61 = reg61.firstMatch(content);
-      final m86 = reg86.firstMatch(content);
-
-      if (m61 != null && m86 != null) {
-        final amtStr = m61.group(2)!.replaceAll(',', '.');
-        final amt = Decimal.tryParse(amtStr) ?? Decimal.zero;
-        final narrative = m86.group(1)!.replaceAll('\n', ' ').trim();
-
-        final matchItem = _matchTransactionToRoster(
-          description: narrative,
-          amount: amt,
-          date: DateTime(2026, 9, 15),
-          rawId: 'TXN-MT940-001',
-        );
-        parsedMatches.add(matchItem);
-      }
-    } else {
       final parsedRows = BankFileParser.parseText(content);
-      if (parsedRows.isNotEmpty) {
         for (int i = 0; i < parsedRows.length; i++) {
           final r = parsedRows[i];
-          final matchItem = _matchTransactionToRoster(
+      parsedMatches.add(_matchTransactionToRoster(
             description: r.description,
             amount: r.amount,
             date: r.date,
             rawId: r.rawId.isNotEmpty ? r.rawId : 'TXN-ROW-${i + 1}',
             explicitSender: r.senderName,
             isIncoming: r.isIncoming,
-          );
-          parsedMatches.add(matchItem);
-        }
-      } else {
-        // Delimited or free-form text lines (Excel / CSV)
-        int rowIdx = 1;
-        for (final line in lines) {
-          if (line.toLowerCase().contains('tarih') &&
-              (line.toLowerCase().contains('tutar') || line.toLowerCase().contains('alacak'))) {
-            continue; // header
-          }
-
-          final amtReg = RegExp(r'₺?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+[.,][0-9]{2})');
-          final amtMatch = amtReg.firstMatch(line);
-          if (amtMatch != null) {
-            var cleanAmt = amtMatch.group(1)!;
-            if (cleanAmt.contains('.') && cleanAmt.contains(',')) {
-              cleanAmt = cleanAmt.replaceAll('.', '').replaceAll(',', '.');
-            } else if (cleanAmt.contains(',')) {
-              cleanAmt = cleanAmt.replaceAll(',', '.');
-            }
-            final amt = Decimal.tryParse(cleanAmt) ?? Decimal.zero;
-
-            final matchItem = _matchTransactionToRoster(
-              description: line,
-              amount: amt,
-              date: DateTime(2026, 9, 15),
-              rawId: 'TXN-EXCEL-${rowIdx.toString().padLeft(3, '0')}',
-            );
-            parsedMatches.add(matchItem);
-            rowIdx++;
-          }
-        }
-      }
+      ));
     }
 
     if (parsedMatches.isEmpty) {
@@ -5024,8 +4969,8 @@ class DashboardController extends ChangeNotifier {
           installmentNumber: inst['installment_number'] as int,
           totalInstallments: inst['total_installments'] as int,
           dueDate: DateTime.tryParse(inst['due_date']?.toString() ?? '') ?? DateTime.now(),
-          installmentBudget: Decimal.tryParse(inst['installment_budget']?.toString() ?? '0') ?? Decimal.zero,
-          percentage: Decimal.tryParse(inst['percentage']?.toString() ?? '0') ?? Decimal.zero,
+          installmentBudget: readDecimal(inst, 'installment_budget'),
+          percentage: readDecimal(inst, 'percentage'),
           isAccrued: false,
         );
       }).toList();

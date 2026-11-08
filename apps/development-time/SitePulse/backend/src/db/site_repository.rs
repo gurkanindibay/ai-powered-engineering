@@ -4,7 +4,7 @@ use rust_decimal::Decimal;
 use tracing::info;
 
 use super::base::{logged, parse_id_to_i64, require_id, DbResult};
-use crate::models::{BlockDto, PlanType, SaasSiteSummaryDto, Site, SiteStatus};
+use crate::models::{BlockDto, PlanType, SaasGlobalStatsDto, SaasSiteSummaryDto, Site, SiteStatus};
 pub async fn save_site(
     pool: &Pool,
     site: &Site,
@@ -96,17 +96,25 @@ pub async fn soft_delete_site(pool: &Pool, site_id: &str) -> DbResult<()> {
 
 /// Whether a site may be used (exists, not deleted, not suspended).
 pub async fn site_is_active(pool: &Pool, site_id: &str) -> DbResult<bool> {
+    let client = pool.get().await?;
+    site_is_active_from_client(&client, site_id).await
+}
+
+/// Check site availability on an existing attributed connection.
+///
+/// # Errors
+/// Propagates database failures.
+pub async fn site_is_active_from_client(
+    client: &tokio_postgres::Client,
+    site_id: &str,
+) -> DbResult<bool> {
     let Some(id) = parse_id_to_i64(site_id) else {
         return Ok(false);
     };
-    let client = pool.get().await?;
-    Ok(client
-        .query_opt(
-            "SELECT 1 FROM sites WHERE id = $1 AND deleted_at IS NULL AND status <> 'SUSPENDED'",
-            &[&id],
-        )
-        .await?
-        .is_some())
+    Ok(client.query_opt(
+        "SELECT 1 FROM sites WHERE id=$1 AND deleted_at IS NULL AND status IN ('ACTIVE','TRIAL')",
+        &[&id],
+    ).await?.is_some())
 }
 
 /// Hard delete, used only by the development purge tooling.
@@ -293,10 +301,7 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
             )
             .await
             .unwrap_or_default();
-        let mut blocks: Vec<String> = block_rows.iter().map(|r| r.get(0)).collect();
-        if blocks.is_empty() {
-            blocks = vec!["A Blok".to_string(), "B Blok".to_string()];
-        }
+        let blocks: Vec<String> = block_rows.iter().map(|r| r.get(0)).collect();
 
         result.push(SaasSiteSummaryDto {
             site_id: id.to_string(),
@@ -425,4 +430,36 @@ pub async fn get_blocks_for_site_from_db(
         });
     }
     Ok(list)
+}
+
+pub async fn fetch_saas_global_stats(pool: &Pool) -> DbResult<SaasGlobalStatsDto> {
+    let client = pool.get().await?;
+    let sites_row = client
+        .query_one(
+            "SELECT COUNT(*)::bigint, COUNT(*) FILTER (WHERE status = 'ACTIVE')::bigint FROM sites WHERE deleted_at IS NULL",
+            &[],
+        )
+        .await?;
+    let total_sites: i64 = sites_row.get(0);
+    let active_sites: i64 = sites_row.get(1);
+
+    let units_row = client
+        .query_one("SELECT COUNT(*)::bigint FROM units", &[])
+        .await?;
+    let total_units: i64 = units_row.get(0);
+
+    let dues_row = client
+        .query_one(
+            "SELECT COALESCE(SUM(principal_amount), 0) FROM dues_liabilities",
+            &[],
+        )
+        .await?;
+    let monthly_collection_volume: Decimal = dues_row.get(0);
+
+    Ok(SaasGlobalStatsDto {
+        total_sites: total_sites as usize,
+        active_sites: active_sites as usize,
+        total_units: total_units as usize,
+        monthly_collection_volume,
+    })
 }

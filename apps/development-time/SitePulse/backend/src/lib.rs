@@ -6,6 +6,7 @@ pub mod audit;
 pub mod auth;
 pub mod authorization;
 pub mod db;
+pub mod domain;
 pub mod handlers;
 pub mod migrations;
 pub mod models;

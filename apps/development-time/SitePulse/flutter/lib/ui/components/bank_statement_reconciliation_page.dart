@@ -12,6 +12,8 @@ import 'manual_unit_assignment_page.dart';
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
 import 'sp_dialog_pages.dart';
+import '../design_system/sp_status_badge.dart';
+import '../design_system/sp_tone.dart';
 class BankStatementReconciliationPage extends StatefulWidget {
   final DashboardController controller;
 
@@ -871,38 +873,17 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: isApproved
-                          ? AppColors.accentGreen.withOpacity(0.15)
-                          : (isAlreadyUploaded
-                              ? Colors.blue.withOpacity(0.15)
-                              : (isExpense
-                                  ? Colors.grey.withOpacity(0.15)
-                                  : (isUnmatched
-                                      ? AppColors.accentOrange.withOpacity(0.15)
-                                      : AppColors.accentCyan.withOpacity(0.15)))),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      isAlreadyUploaded
-                          ? 'ZATEN YÜKLENDİ'
-                          : (isExpense
-                              ? 'GİDEN / MASRAF'
-                              : (isUnmatched ? 'ESLESTIRILEMEDI' : item.status)),
-                      style: TextStyle(
-                        color: isApproved
-                            ? AppColors.successText(context)
-                            : (isAlreadyUploaded
-                                ? Colors.blueAccent
-                                : (isExpense
-                                    ? Colors.grey
-                                    : (isUnmatched ? AppColors.warningText(context) : AppColors.primaryText(context)))),
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  SpStatusBadge(
+                    label: isAlreadyUploaded
+                        ? 'ZATEN YÜKLENDİ'
+                        : (isExpense
+                            ? 'GİDEN / MASRAF'
+                            : (isUnmatched ? 'ESLESTIRILEMEDI' : item.status)),
+                    tone: isApproved
+                        ? SpTone.success
+                        : (isAlreadyUploaded
+                            ? SpTone.info
+                            : (isExpense ? SpTone.neutral : (isUnmatched ? SpTone.warning : SpTone.info))),
                   ),
                 ])),
               if (!isApproved && !isExpense && !isUnmatched && !isAlreadyUploaded)
@@ -1709,7 +1690,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     final currentAccount = widget.controller.siteBankAccount;
     final isTest = widget.controller.isTestMode;
     SupportedBank selectedBank = currentAccount?.supportedBank ?? SupportedBank.kuveytTurk;
-    final ibanController = TextEditingController(text: currentAccount?.iban ?? (isTest ? 'TR620020500009863791600001' : ''));
+    final ibanController = TextEditingController(text: currentAccount?.iban ?? (isTest ? 'TR190020500009863791600001' : ''));
     final holderController = TextEditingController(text: currentAccount?.accountHolder ?? (widget.controller.siteName.isNotEmpty ? '${widget.controller.siteName} Yönetimi' : ''));
     String? dialogError;
 

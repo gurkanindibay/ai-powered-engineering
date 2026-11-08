@@ -12,6 +12,9 @@ import '../design_system/sp_skeleton.dart';
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
 import '../components/sp_dialog_pages.dart';
+import 'resident_directory.dart';
+import '../design_system/sp_filter_chip.dart';
+import '../design_system/sp_tone.dart';
 /// Standalone Fullscreen Module for Comprehensive Owners & Residents Management.
 ///
 /// Mandated by SitePulse UX Guidelines:
@@ -56,61 +59,24 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
       animation: widget.controller,
       builder: (context, _) {
         final homeOwners = widget.controller.homeOwners;
-        final rawBlocks = widget.controller.blocks;
-        final seenB = <String>{};
-        final availableBlocks = <String>[];
-        for (final b in rawBlocks) {
-          final t = b.trim();
-          if (t.isNotEmpty && seenB.add(t.toLowerCase())) {
-            availableBlocks.add(t);
-          }
-        }
+        final availableBlocks = distinctBlocks(widget.controller.blocks);
 
-        // Filter calculation
+        final hasInitialUnitFocus = widget.initialUnitId != null &&
+            widget.initialUnitId!.isNotEmpty &&
+            _searchQuery.isEmpty &&
+            _blockFilter == allBlocksFilter &&
+            _occupancyFilter == OccupancyFilter.all;
         final filtered = homeOwners.where((ho) {
-          if (widget.initialUnitId != null && widget.initialUnitId!.isNotEmpty && _searchQuery.isEmpty && _blockFilter == 'ALL' && _occupancyFilter == 'ALL') {
-            if (ho.unitId == widget.initialUnitId) return true;
-          }
-
-          if (_blockFilter != 'ALL') {
-            final b1 = ho.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
-            final b2 = _blockFilter.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
-            if (b1 != b2) return false;
-          }
-
-          if (_occupancyFilter == 'TENANT') {
-            if (!ho.isTenantOccupied) return false;
-          } else if (_occupancyFilter == 'OWNER') {
-            if (!ho.isOwnerOccupied) return false;
-          } else if (_occupancyFilter == 'VACANT') {
-            if (!ho.isVacant) return false;
-          }
-
-          if (_searchQuery.isNotEmpty) {
-            final q = _searchQuery.toLowerCase();
-            final matchOwner = ho.ownerFullName.toLowerCase().contains(q);
-            final matchTenant = (ho.tenantFullName ?? '').toLowerCase().contains(q);
-            final matchResponsible = ho.activeResponsibleResidentName.toLowerCase().contains(q);
-            final matchResidents = ho.householdResidents.any((r) =>
-                r.fullName.toLowerCase().contains(q) ||
-                r.phone.toLowerCase().contains(q) ||
-                r.email.toLowerCase().contains(q));
-            final matchUnit = ho.unitNo.toString().contains(q);
-            final matchPhone = ho.phone.toLowerCase().contains(q) ||
-                (ho.tenantPhone ?? '').toLowerCase().contains(q) ||
-                ho.activeResponsiblePhone.toLowerCase().contains(q);
-            final matchBlock = ho.block.toLowerCase().contains(q);
-            return matchOwner || matchTenant || matchResponsible || matchResidents || matchUnit || matchPhone || matchBlock;
-          }
-          return true;
+          if (hasInitialUnitFocus && ho.unitId == widget.initialUnitId) return true;
+          return matchesResidentFilters(
+            ho,
+            blockFilter: _blockFilter,
+            occupancyFilter: _occupancyFilter,
+            query: _searchQuery,
+          );
         }).toList();
 
-        final totalUnits = homeOwners.length;
-        final tenantCount = homeOwners.where((h) => h.isTenantOccupied).length;
-        final ownerCount = homeOwners.where((h) => h.isOwnerOccupied).length;
-        final vacantCount = homeOwners.where((h) => h.isVacant).length;
-        final totalCoResidents = homeOwners.fold<int>(0, (sum, h) => sum + h.householdResidents.length);
-        final occupancyRate = totalUnits > 0 ? (((totalUnits - vacantCount) / totalUnits) * 100).toStringAsFixed(1) : '0';
+        final stats = ResidentOccupancyStats.from(homeOwners);
 
         return AppFullscreenPage(
           title: 'Kat Malikleri & Sakinler Modülü',
@@ -162,14 +128,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // KPI Metric Cards
-              _buildKpiMetrics(
-                totalUnits: totalUnits,
-                occupancyRate: occupancyRate,
-                tenantCount: tenantCount,
-                ownerCount: ownerCount,
-                vacantCount: vacantCount,
-                totalCoResidents: totalCoResidents,
-              ),
+              ResidentSummary(stats: stats),
 
               const SizedBox(height: 16),
 
@@ -213,13 +172,13 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildOccupancyFilterChip('Tümü ($totalUnits)', 'ALL'),
-                    const SizedBox(width: 8),
-                    _buildOccupancyFilterChip('Kiracılı ($tenantCount)', 'TENANT'),
-                    const SizedBox(width: 8),
-                    _buildOccupancyFilterChip('Malik Mukim ($ownerCount)', 'OWNER'),
-                    const SizedBox(width: 8),
-                    _buildOccupancyFilterChip('Boş Daire ($vacantCount)', 'VACANT'),
+                    _buildOccupancyFilterChip('Tümü (${stats.totalUnits})', OccupancyFilter.all),
+                    const SizedBox(width: AppSpacing.sm),
+                    _buildOccupancyFilterChip('${AppStrings.tenantOccupied} (${stats.tenantCount})', OccupancyFilter.tenant),
+                    const SizedBox(width: AppSpacing.sm),
+                    _buildOccupancyFilterChip('${AppStrings.ownerOccupied} (${stats.ownerCount})', OccupancyFilter.owner),
+                    const SizedBox(width: AppSpacing.sm),
+                    _buildOccupancyFilterChip('${AppStrings.vacantUnit} (${stats.vacantCount})', OccupancyFilter.vacant),
                   ],
                 ),
               ),
@@ -231,7 +190,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildBlockFilterChip('Tüm Bloklar', 'ALL'),
+                    _buildBlockFilterChip('Tüm Bloklar', allBlocksFilter),
                     ...availableBlocks.map((b) => _buildBlockFilterChip('$b Blok', b)),
                   ],
                 ),
@@ -276,128 +235,24 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
     );
   }
 
-  Widget _buildKpiMetrics({
-    required int totalUnits,
-    required String occupancyRate,
-    required int tenantCount,
-    required int ownerCount,
-    required int vacantCount,
-    required int totalCoResidents,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface(context),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border(context)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.analytics_outlined, size: 18, color: AppColors.accentCyan),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Sakin & Mülkiyet Durum Özeti',
-                  style: TextStyle(
-                    color: AppColors.textPrimary(context),
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.accentGreen.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Doluluk: %$occupancyRate',
-                  style: TextStyle(
-                    color: AppColors.successText(context),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(child: _buildMetricItem('Toplam Daire', '$totalUnits', Icons.apartment, AppColors.accentCyan)),
-              Expanded(child: _buildMetricItem('Kiracılı', '$tenantCount', Icons.key, AppColors.accentGreen)),
-              Expanded(child: _buildMetricItem('Malik Mukim', '$ownerCount', Icons.vpn_key, AppColors.accentPurple)),
-              Expanded(child: _buildMetricItem('Boş Daire', '$vacantCount', Icons.door_back_door, AppColors.accentOrange)),
-              Expanded(child: _buildMetricItem('Hane Sakini', '$totalCoResidents', Icons.family_restroom, AppColors.accentCyan)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMetricItem(String label, String value, IconData icon, Color color) {
-    return Column(
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            color: AppColors.textPrimary(context),
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.textSecondary(context),
-            fontSize: 12,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildOccupancyFilterChip(String label, String code) {
-    final isSelected = _occupancyFilter == code;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (_) => setState(() => _occupancyFilter = code),
-      selectedColor: AppColors.accentCyan.withOpacity(0.2),
-      checkmarkColor: AppColors.accentCyan,
-      labelStyle: TextStyle(
-        color: isSelected ? AppColors.primaryText(context) : AppColors.textSecondary(context),
-        fontSize: 12,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-      ),
+    return SpFilterChip(
+      label: label,
+      selected: _occupancyFilter == code,
+      onSelected: () => setState(() => _occupancyFilter = code),
+      id: 'module_occupancy_filter_$code',
     );
   }
 
   Widget _buildBlockFilterChip(String label, String code) {
-    final isSelected = _blockFilter == code;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
-      child: FilterChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (_) => setState(() => _blockFilter = code),
-        selectedColor: AppColors.accentPurple.withOpacity(0.2),
-        checkmarkColor: AppColors.accentPurple,
-        labelStyle: TextStyle(
-          color: isSelected ? AppColors.accentPurple : AppColors.textSecondary(context),
-          fontSize: 12,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-        ),
+      child: SpFilterChip(
+        label: label,
+        selected: _blockFilter == code,
+        onSelected: () => setState(() => _blockFilter = code),
+        tone: SpTone.accent,
+        id: 'module_block_filter_$code',
       ),
     );
   }

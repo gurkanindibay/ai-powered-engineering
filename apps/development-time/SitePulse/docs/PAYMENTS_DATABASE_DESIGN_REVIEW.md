@@ -96,6 +96,6 @@ V17 `payment_ledger_hardening.sql` and the SPEC-006 code changes (`.specify/spec
 |---|---|---|
 | `scripts/schema_integrity_check.py` (fresh install + V7→latest upgrade) | ✅ 52/52 | ✅ 74/74: 14 new V17 negative cases (each checked to fail on its intended constraint), 4 positive cases and 4 upgrade assertions. The upgraded schema equals a fresh install, and every constraint is validated |
 | `scripts/api_system_check.py` (real backend, throwaway database) | ✅ 12/12 | ✅ 17/17, adding `tenant_surplus_virman`, `reversal_restores_ledger`, `webhook_claim_scoped`, `issuer_snapshot_on_receipt` and `debt_aging_snapshot_persisted` |
-| `cargo test` (backend) | — | ✅ all pass except the pre-existing `when_probing_kuveyt_turk_sandbox_status_then_reports_keys_loaded` (needs sandbox keys), including the 16 tests in `tests/payment_ledger_hardening_tests.rs` |
+| `cargo test` (backend) | — | ✅ all pass, including the 16 tests in `tests/payment_ledger_hardening_tests.rs` (the Kuveyt Türk key test no longer depends on local key files since SPEC-007) |
 
 V16 was **not** applied to the shared development database (`sitepulse`), because that database is also used by the `master` checkout. Its legacy writers insert `SETTLED` rows without receipts, which V16 now rejects. V16 and V17 will be applied when this branch is merged and the stack is restarted.

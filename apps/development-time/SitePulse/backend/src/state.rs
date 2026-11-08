@@ -8,8 +8,8 @@ use crate::models::{
     AllocationBasis, AuthProvider, BankStatementFormat, CapitalProjectCategory,
     CapitalProjectStatus, DebtStatus, DebtorType, DisbursementMethod, DuesLiability, ExpenseType,
     HomeownerPaymentRecord, IndependentUnit, PendingRegistrationResponse, PlanType,
-    ReconciliationMatch, RegistrationStatus, Role, Site, SiteBankAccount,
-    SiteInvitationLinkResponse, SiteStatus, UnitInviteLinkResponse, UnitMemberDto, User,
+    ReconciliationMatch, RegistrationStatus, Role, Site, SiteBankAccount, SiteStatus,
+    UnitInviteLinkResponse, UnitMemberDto, User,
 };
 use crate::services::VirtualIbanService;
 
@@ -46,8 +46,6 @@ pub struct AppStateInner {
     pub pending_registrations: Vec<PendingRegistrationResponse>,
     pub unit_members: HashMap<String, Vec<UnitMemberDto>>,
     pub unit_invite_tokens: HashMap<String, UnitInviteLinkResponse>,
-    #[allow(dead_code)]
-    pub site_invite_tokens: HashMap<String, SiteInvitationLinkResponse>,
     pub reconciliation_queue: Vec<ReconciliationMatch>,
     pub site_bank_accounts: Vec<SiteBankAccount>,
     /// Advance (avans) balance per unit, split by debtor like `advance_balances`.
@@ -70,6 +68,16 @@ pub struct AppStateInner {
     pub capital_projects: Vec<crate::models::CapitalProject>,
     pub capital_installments: Vec<crate::models::CapitalProjectInstallment>,
     pub capital_disbursements: Vec<crate::models::CapitalContractorDisbursement>,
+    /// İşletme projesi per site and fiscal year (SPEC-007 R5), with lines and shares.
+    pub operating_budgets: Vec<crate::models::OperatingBudget>,
+    /// Yeniden değerleme oranı per year, the interim budget cap.
+    pub revaluation_rates: HashMap<i32, crate::models::RevaluationRate>,
+    /// Sites that never accrue operational dues without a budget in force.
+    pub budget_required_sites: Vec<String>,
+    /// Dues liability id -> operating budget id (its legal basis).
+    pub dues_budget_basis: HashMap<String, String>,
+    /// Card payment intents through the licensed provider (SPEC-007 R4).
+    pub payment_intents: Vec<crate::models::PaymentIntent>,
 }
 
 impl Default for AppStateInner {
@@ -88,7 +96,6 @@ impl AppStateInner {
             pending_registrations: Vec::new(),
             unit_members: HashMap::new(),
             unit_invite_tokens: HashMap::new(),
-            site_invite_tokens: HashMap::new(),
             reconciliation_queue: Vec::new(),
             site_bank_accounts: Vec::new(),
             advance_balances: HashMap::new(),
@@ -109,6 +116,11 @@ impl AppStateInner {
             capital_projects: Vec::new(),
             capital_installments: Vec::new(),
             capital_disbursements: Vec::new(),
+            operating_budgets: Vec::new(),
+            revaluation_rates: HashMap::new(),
+            budget_required_sites: Vec::new(),
+            dues_budget_basis: HashMap::new(),
+            payment_intents: Vec::new(),
         };
         inner.seed_system_lookups();
         if Self::should_seed_test_fixtures() {
@@ -154,6 +166,12 @@ impl AppStateInner {
     /// Essential system lookups and root administrator identity required for platform operation.
     /// Production-safe: contains ZERO mock sites, ZERO flats, and ZERO debts.
     pub fn seed_system_lookups(&mut self) {
+        // Mirrors the V18 seed (the figure must be verified before production use).
+        self.revaluation_rates.entry(2026).or_insert_with(|| crate::models::RevaluationRate {
+            year: 2026,
+            rate: rust_decimal::Decimal::new(254900, 4),
+            source: Some("VUK mükerrer 298: yeniden değerleme oranı (verify against the published communiqué)".to_string()),
+        });
         if !self
             .users
             .iter()
@@ -301,7 +319,8 @@ impl AppStateInner {
                 "site-1",
                 "A",
                 14,
-            );
+            )
+            .ok();
             self.units.push(IndependentUnit {
                 id: "d-14".to_string(),
                 site_id: "site-1".to_string(),
@@ -311,7 +330,7 @@ impl AppStateInner {
                 land_share: 24,
                 owner_user_id: Some("usr-home-owner-1".to_string()),
                 tenant_user_id: None,
-                virtual_iban: Some(seeded_virtual_iban),
+                virtual_iban: seeded_virtual_iban,
                 house_type: Some("3+1".to_string()),
             });
         }
@@ -519,7 +538,6 @@ impl AppStateInner {
         self.pending_registrations.clear();
         self.unit_members.clear();
         self.unit_invite_tokens.clear();
-        self.site_invite_tokens.clear();
         self.reconciliation_queue.clear();
         self.site_bank_accounts.clear();
         self.advance_balances.clear();
@@ -532,6 +550,9 @@ impl AppStateInner {
         self.blocks.clear();
         self.payment_receipts.clear();
         self.payment_entries.clear();
+        self.operating_budgets.clear();
+        self.dues_budget_basis.clear();
+        self.payment_intents.clear();
         self.auto_scheduler_enabled = false;
         self.seed_system_lookups();
     }
@@ -544,6 +565,9 @@ impl AppStateInner {
         self.reconciliation_queue.clear();
         self.payment_receipts.clear();
         self.payment_entries.clear();
+        self.operating_budgets.clear();
+        self.dues_budget_basis.clear();
+        self.payment_intents.clear();
 
         // 100% clean slate: ₺0.00 debt
         self.dues.clear();
@@ -561,7 +585,8 @@ impl AppStateInner {
                 "site-1",
                 "A",
                 14,
-            );
+            )
+            .ok();
             self.units.push(IndependentUnit {
                 id: "d-14".to_string(),
                 site_id: "site-1".to_string(),
@@ -571,7 +596,7 @@ impl AppStateInner {
                 land_share: 24,
                 owner_user_id: Some("usr-home-owner-1".to_string()),
                 tenant_user_id: None,
-                virtual_iban: Some(seeded_virtual_iban),
+                virtual_iban: seeded_virtual_iban,
                 house_type: Some("3+1".to_string()),
             });
         }
@@ -690,6 +715,10 @@ impl Default for AppState {
 }
 
 impl AppState {
+    pub fn db_pool(&self) -> Option<&deadpool_postgres::Pool> {
+        self.pool.as_ref()
+    }
+
     #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
@@ -703,7 +732,12 @@ impl AppState {
         let mut inner = AppStateInner::new();
         // Server with database pool starts clean and loads strictly from PostgreSQL
         inner.clear_all_data();
-        inner.seed_system_lookups();
+        if pool.is_some() {
+            // When connected to PostgreSQL, no lookups or users are held/mocked in memory.
+            inner.users.clear();
+            inner.house_types.clear();
+            inner.blocks.clear();
+        }
         Self {
             security: Arc::default(),
             inner: Arc::new(RwLock::new(inner)),

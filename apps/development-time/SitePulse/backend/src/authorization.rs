@@ -173,8 +173,7 @@ async fn unit_relationship(
     owner_only: bool,
 ) -> Result<(), SecurityError> {
     let unit = UnitId::parse(id)?;
-    if let Some(pool) = &state.pool {
-        let client = pool.get().await.map_err(|_| SecurityError::Unavailable)?;
+    if let Some(client) = crate::db::security_connection(state).await? {
         let site = SiteId::parse(&claims.site_id)?;
         let user = crate::db::require_id("user", &claims.sub)
             .map_err(|_| SecurityError::Unauthenticated)?;
@@ -214,8 +213,7 @@ pub async fn resource(
     kind: &str,
     id: &str,
 ) -> Result<(), SecurityError> {
-    if let Some(pool) = &state.pool {
-        let client = pool.get().await.map_err(|_| SecurityError::Unavailable)?;
+    if let Some(client) = crate::db::security_connection(state).await? {
         let site = SiteId::parse(&claims.site_id)?;
         let row=match kind {
             "registration"=>client.query_opt("SELECT site_id FROM pending_registrations WHERE request_id=$1 AND site_id=$2",&[&id,&site.0]).await,

@@ -2,7 +2,7 @@ use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use tracing::info;
 
-use super::base::{parse_id_to_i64, require_id};
+use super::base::{parse_id_to_i64, require_id, DbResult};
 use super::user_repository::save_user;
 use crate::models::{IndependentUnit, User};
 pub async fn save_unit(
@@ -174,8 +174,8 @@ pub async fn save_unit_member(
     // Link the household member to the person record when one exists for this email.
     let person_id: Option<i64> = client
         .query_opt(
-            "SELECT id FROM persons WHERE LOWER(email) = LOWER($1)",
-            &[&email.trim()],
+            "SELECT id FROM persons WHERE LOWER(email) = $1",
+            &[&crate::domain::email::NormalizedEmail::normalize(email)],
         )
         .await?
         .map(|r| r.get(0));
@@ -301,8 +301,10 @@ pub async fn transfer_unit_ownership_db(
     let tx = client.transaction().await?;
     let new_person_id: Option<i64> = tx
         .query_opt(
-            "SELECT person_id FROM users WHERE LOWER(email) = LOWER($1)",
-            &[&new_user.email],
+            "SELECT person_id FROM users WHERE LOWER(email) = $1",
+            &[&crate::domain::email::NormalizedEmail::normalize(
+                &new_user.email,
+            )],
         )
         .await?
         .and_then(|r| r.get(0));
@@ -352,4 +354,89 @@ pub async fn transfer_unit_ownership_db(
     );
     tx.commit().await?;
     Ok(())
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UnitSummaryDto {
+    pub unit_id: String,
+    pub site_id: String,
+    pub site_name: String,
+    pub block: String,
+    pub unit_number: i32,
+    pub floor: i32,
+    pub resident_name: String,
+    pub email: String,
+    pub virtual_iban: String,
+    pub current_debt: String,
+    pub advance_balance: String,
+}
+
+pub async fn fetch_units_summary_from_db(pool: &Pool) -> DbResult<Vec<UnitSummaryDto>> {
+    let client = pool.get().await?;
+    let rows = client
+        .query(
+            r#"
+            SELECT
+                u.id::text,
+                u.site_id::text,
+                s.name as site_name,
+                b.block_name,
+                u.unit_number,
+                u.floor,
+                COALESCE(op.full_name, tp.full_name, 'Daire Sakini ' || u.unit_number) as resident_name,
+                COALESCE(op.email, tp.email, '') as email,
+                COALESCE(u.virtual_iban, '') as virtual_iban,
+                COALESCE(
+                    (SELECT SUM(dl.principal_amount + dl.delay_penalty - dl.paid_amount)
+                     FROM dues_liabilities dl
+                     WHERE dl.unit_id = u.id AND dl.status != 'PAID' AND dl.status != 'CANCELLED'),
+                    0.00
+                ) as current_debt,
+                COALESCE(
+                    (SELECT SUM(ab.balance)
+                     FROM advance_balances ab
+                     WHERE ab.unit_id = u.id),
+                    0.00
+                ) as advance_balance
+            FROM units u
+            JOIN sites s ON u.site_id = s.id
+            JOIN blocks b ON u.block_id = b.id
+            LEFT JOIN persons op ON u.owner_person_id = op.id
+            LEFT JOIN persons tp ON u.tenant_person_id = tp.id
+            WHERE u.deleted_at IS NULL
+            ORDER BY u.site_id, b.block_name, u.unit_number
+            "#,
+            &[],
+        )
+        .await?;
+
+    let mut list = Vec::new();
+    for row in rows {
+        let unit_id: String = row.get(0);
+        let site_id: String = row.get(1);
+        let site_name: String = row.get(2);
+        let block: String = row.get(3);
+        let unit_number: i32 = row.get(4);
+        let floor: i32 = row.get(5);
+        let resident_name: String = row.get(6);
+        let email: String = row.get(7);
+        let virtual_iban: String = row.get(8);
+        let current_debt: Decimal = row.get(9);
+        let advance_balance: Decimal = row.get(10);
+
+        list.push(UnitSummaryDto {
+            unit_id,
+            site_id,
+            site_name,
+            block,
+            unit_number,
+            floor,
+            resident_name,
+            email,
+            virtual_iban,
+            current_debt: current_debt.to_string(),
+            advance_balance: advance_balance.to_string(),
+        });
+    }
+    Ok(list)
 }

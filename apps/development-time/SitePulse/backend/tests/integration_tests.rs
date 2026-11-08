@@ -807,7 +807,7 @@ async fn when_site_manager_configures_bank_account_then_format_is_automatically_
 
     let req = ConfigureBankAccountRequest {
         bank_code: "KUVEYT_TURK".to_string(),
-        iban: "TR620020500009863791600001".to_string(),
+        iban: "TR190020500009863791600001".to_string(),
         account_holder: "Begonya Sitesi Yönetimi".to_string(),
         configured_by: Some("usr-site-manager-1".to_string()),
     };
@@ -844,7 +844,7 @@ async fn when_site_manager_changes_bank_account_then_previous_account_deactivate
     // Site manager switches bank to Türkiye İş Bankası (CSV)
     let req1 = ConfigureBankAccountRequest {
         bank_code: "IS_BANKASI".to_string(),
-        iban: "TR120006400000112345678901".to_string(),
+        iban: "TR290006400000112345678901".to_string(),
         account_holder: "Begonya Sitesi Yeni Hesap".to_string(),
         configured_by: Some("usr-site-manager-1".to_string()),
     };
@@ -879,7 +879,7 @@ async fn when_invalid_bank_code_or_iban_then_configuration_fails_validation() {
     // 1. Unknown bank code
     let req_unknown = ConfigureBankAccountRequest {
         bank_code: "NON_EXISTENT_BANK".to_string(),
-        iban: "TR120006400000112345678901".to_string(),
+        iban: "TR290006400000112345678901".to_string(),
         account_holder: "Begonya Sitesi".to_string(),
         configured_by: None,
     };
@@ -911,12 +911,44 @@ async fn when_invalid_bank_code_or_iban_then_configuration_fails_validation() {
     // 4. Empty account holder
     let req_empty_holder = ConfigureBankAccountRequest {
         bank_code: "IS_BANKASI".to_string(),
-        iban: "TR120006400000112345678901".to_string(),
+        iban: "TR290006400000112345678901".to_string(),
         account_holder: "   ".to_string(),
         configured_by: None,
     };
     let err4 = service.configure_account("site-1", req_empty_holder).await;
     assert!(err4.is_err());
+
+    // 5. Correct structure but wrong check digits (one mistyped digit)
+    let req_bad_checksum = ConfigureBankAccountRequest {
+        bank_code: "IS_BANKASI".to_string(),
+        iban: "TR290006400000112345678902".to_string(),
+        account_holder: "Begonya Sitesi".to_string(),
+        configured_by: None,
+    };
+    let err5 = service.configure_account("site-1", req_bad_checksum).await;
+    assert!(err5.unwrap_err().contains("check digits"));
+
+    // 6. Valid IBAN of a different bank than the one selected
+    let req_bank_mismatch = ConfigureBankAccountRequest {
+        bank_code: "KUVEYT_TURK".to_string(),
+        iban: "TR290006400000112345678901".to_string(),
+        account_holder: "Begonya Sitesi".to_string(),
+        configured_by: None,
+    };
+    let err6 = service.configure_account("site-1", req_bank_mismatch).await;
+    assert!(err6.unwrap_err().contains("does not belong to"));
+
+    // 7. Multi-byte input of IBAN length must be rejected, not panic
+    let req_multibyte = ConfigureBankAccountRequest {
+        bank_code: "IS_BANKASI".to_string(),
+        iban: "TRé00064000001123456789".to_string(),
+        account_holder: "Begonya Sitesi".to_string(),
+        configured_by: None,
+    };
+    assert!(service
+        .configure_account("site-1", req_multibyte)
+        .await
+        .is_err());
 }
 
 #[tokio::test]
@@ -972,7 +1004,7 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
     // 2. NOW: Site Manager changes the bank account to Vakıfbank (which exports MT940)
     let switch_req = ConfigureBankAccountRequest {
         bank_code: "VAKIFBANK".to_string(),
-        iban: "TR150001500000123456789012".to_string(),
+        iban: "TR790001500000123456789012".to_string(),
         account_holder: "Begonya Sitesi Yönetimi".to_string(),
         configured_by: Some("usr-site-manager-1".to_string()),
     };
@@ -1019,7 +1051,7 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
 
 #[test]
 fn when_unit_created_then_generates_unique_sanal_iban() {
-    let iban = VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 14);
+    let iban = VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 14).unwrap();
     assert_eq!(iban.len(), 26);
     assert!(iban.starts_with("TR"));
     assert!(iban.contains("00205"));

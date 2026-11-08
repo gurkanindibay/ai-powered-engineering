@@ -12,6 +12,11 @@ import 'bank_statement_reconciliation_page.dart';
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
 import 'sp_dialog_pages.dart';
+import '../../domain/models/auth_models.dart';
+import '../payments/receipt_actions.dart';
+import '../design_system/sp_status_badge.dart';
+import '../design_system/sp_tone.dart';
+import '../design_system/sp_money_field.dart';
 class PaymentTrackingPage extends StatefulWidget {
   final DashboardController controller;
   final String? initialUnitId;
@@ -143,11 +148,10 @@ class PaymentTrackingPage extends StatefulWidget {
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () async {
-                    final amt = Decimal.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? Decimal.zero;
-                    if (amt <= Decimal.zero || amt.scale > 2) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        appSnackBar(content: Text('Lütfen geçerli bir tutar girin')),
-                      );
+                    final amountError = validateMoneyInput(amountCtrl.text);
+                    final amt = MoneyInput.parse(amountCtrl.text).amount;
+                    if (amountError != null || amt == null) {
+                      SpToast.error(ctx, amountError ?? MoneyInputMessages.invalid);
                       return;
                     }
 
@@ -190,12 +194,13 @@ class PaymentTrackingPage extends StatefulWidget {
                   const SizedBox(height: 16),
                   const Text('Tahsil Edilen Tutar (₺)', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  TextField(
+                  SpMoneyFormField(
                     controller: amountCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    restrictInput: true,
                     decoration: const InputDecoration(
                       prefixText: '₺ ',
-                      hintText: '1400.00',
+                      hintText: '1400,00',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -293,12 +298,19 @@ class PaymentTrackingPage extends StatefulWidget {
     required DashboardController controller,
     String? initialUnitId,
     VoidCallback? onCompleted,
-  }) {
+  }) async {
+    // The site's real units and advance balances (STORY-10-04), never fixed sample units.
+    // Refreshed on every open so the advance balances are current.
+    await controller.fetchHomeOwners(siteId: controller.currentManagedSite?.id);
+    if (!context.mounted) return;
+    final units = controller.homeOwners;
     final amountCtrl = TextEditingController(text: '1400.00');
     final noteCtrl = TextEditingController(text: 'Ev sahibi onaylı avanstan demirbaşa virman');
-    String unitId = initialUnitId ?? 'd-14';
+    String? unitId = units.any((u) => u.unitId == initialUnitId)
+        ? initialUnitId
+        : (units.where((u) => u.advanceBalance > Decimal.zero).firstOrNull ?? units.firstOrNull)?.unitId;
 
-    return AppFullscreenPage.push(
+    await AppFullscreenPage.push(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
@@ -315,11 +327,18 @@ class PaymentTrackingPage extends StatefulWidget {
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () async {
-                    final amt = Decimal.tryParse(amountCtrl.text.trim().replaceAll(',', '.')) ?? Decimal.zero;
-                    if (amt <= Decimal.zero || amt.scale > 2) return;
+                    final amountError = validateMoneyInput(amountCtrl.text);
+                    final amt = MoneyInput.parse(amountCtrl.text).amount;
+                    if (amountError != null || amt == null) {
+                      // Previously an invalid amount was ignored silently.
+                      SpToast.error(ctx, amountError ?? MoneyInputMessages.invalid);
+                      return;
+                    }
 
+                    final selected = unitId;
+                    if (selected == null) return;
                     final res = await controller.executeInterLedgerTransfer(
-                      unitId: unitId,
+                      unitId: selected,
                       amount: amt,
                       note: noteCtrl.text.trim(),
                     );
@@ -368,20 +387,31 @@ class PaymentTrackingPage extends StatefulWidget {
                   const Text('Daire', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
                   testId('virman_unit_dropdown', DropdownButtonFormField<String>(
-                    value: unitId,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
-                    items: const [
-                      DropdownMenuItem(value: 'd-14', child: Text('A Blok D:14 (Mevcut Avans: ₺3.000,00)')),
-                      DropdownMenuItem(value: 'd-1', child: Text('A Blok D:1')),
+                    initialValue: unitId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      hintText: units.isEmpty ? 'Sitede daire bulunamadı' : null,
+                    ),
+                    items: [
+                      for (final u in units)
+                        DropdownMenuItem(
+                          value: u.unitId,
+                          child: Text(
+                            '${u.block} Blok D:${u.unitNo} (Mevcut Avans: ${formatTry(u.advanceBalance)})',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                     ],
-                    onChanged: (v) => setDialogState(() => unitId = v ?? 'd-14'),
+                    onChanged: (v) => setDialogState(() => unitId = v ?? unitId),
                   )),
                   const SizedBox(height: 16),
                   const Text('Virman Yapılacak Tutar (₺)', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  TextField(
+                  SpMoneyFormField(
                     controller: amountCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    restrictInput: true,
                     decoration: const InputDecoration(
                       prefixText: '₺ ',
                       border: OutlineInputBorder(),
@@ -420,15 +450,28 @@ class PaymentTrackingPage extends StatefulWidget {
           context: ctx,
           children: [
             testId('btn_share_receipt', OutlinedButton.icon(
-              icon: const Icon(Icons.share),
-              label: const Text('Paylaş / PDF'),
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              label: const FittedBox(fit: BoxFit.scaleDown, child: Text('Paylaş / PDF')),
               style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-              onPressed: () {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  appSnackBar(content: Text('Makbuz PDF formatında dışa aktarıldı.')),
-                );
-              },
+              onPressed: () => downloadReceiptPdf(ctx, receipt.receiptNumber, siteId: receipt.siteId),
             )),
+            // Site staff may reverse a collection or virman receipt (SPEC-006 O-2, SPEC-007 R1).
+            if (controller.userRole == UserRole.siteManager && receipt.receiptNumber.startsWith('TAH-'))
+              testId('btn_reverse_receipt', OutlinedButton.icon(
+                icon: const Icon(Icons.undo),
+                label: const FittedBox(fit: BoxFit.scaleDown, child: Text('İptal / iade')),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  foregroundColor: AppColors.dangerText(ctx),
+                ),
+                onPressed: () async {
+                  final reversal = await reverseReceiptWithReason(ctx, receipt.receiptNumber, siteId: receipt.siteId);
+                  if (reversal != null && ctx.mounted) {
+                    await controller.fetchPaymentStream(siteId: receipt.siteId);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  }
+                },
+              )),
             ElevatedButton.icon(
               icon: const Icon(Icons.check),
               label: const Text(AppStrings.close),
@@ -1188,22 +1231,9 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                           const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: isTenant
-                                  ? Colors.indigo.withOpacity(0.15)
-                                  : Colors.teal.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              isTenant ? 'Kiracı' : 'Kat Maliki',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isTenant ? Colors.indigo : AppColors.successText(context),
-                              ),
-                            ),
+                          SpStatusBadge(
+                            label: isTenant ? 'Kiracı' : 'Kat Maliki',
+                            tone: isTenant ? SpTone.accent : SpTone.success,
                           ),
                         ],
                       ),
@@ -1319,64 +1349,46 @@ class _PaymentStreamWidgetState extends State<PaymentStreamWidget> {
     );
   }
 
-  void _showChannelFilterDialog() {
-    final channels = ['ALL', 'VIRTUAL_IBAN', 'BANK_STATEMENT', 'CREDIT_CARD', 'MANUAL_CASH', 'INTER_LEDGER'];
-    showSpPage(
+  Future<void> _showChannelFilterDialog() async {
+    final choice = await showSpSelection<String>(
       context: context,
-      builder: (ctx) => SpSelectionPage(
-        title: const Text('Ödeme Kanalı Filtresi'),
-        children: channels.map((c) {
-          return testId('filter_channel_option_$c', SimpleDialogOption(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() => _selectedChannel = c);
-              _loadData();
-            },
-            child: Text(PaymentTrackingPage.channelLabel(c)),
-          ));
-        }).toList(),
-      ),
+      title: 'Ödeme Kanalı Filtresi',
+      options: const ['ALL', 'VIRTUAL_IBAN', 'BANK_STATEMENT', 'CREDIT_CARD', 'MANUAL_CASH', 'INTER_LEDGER'],
+      labelOf: PaymentTrackingPage.channelLabel,
+      selected: _selectedChannel,
+      idOf: (v) => 'filter_channel_option_$v',
     );
+    if (choice == null || choice == _selectedChannel || !mounted) return;
+    setState(() => _selectedChannel = choice);
+    _loadData();
   }
 
-  void _showRoleFilterDialog() {
-    final roles = ['ALL', 'TENANT', 'OWNER'];
-    showSpPage(
+  Future<void> _showRoleFilterDialog() async {
+    final choice = await showSpSelection<String>(
       context: context,
-      builder: (ctx) => SpSelectionPage(
-        title: const Text('Ödeyen Rolü Filtresi'),
-        children: roles.map((r) {
-          return testId('filter_role_option_$r', SimpleDialogOption(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() => _selectedRole = r);
-              _loadData();
-            },
-            child: Text(PaymentTrackingPage.roleLabel(r)),
-          ));
-        }).toList(),
-      ),
+      title: 'Ödeyen Rolü Filtresi',
+      options: const ['ALL', 'TENANT', 'OWNER'],
+      labelOf: PaymentTrackingPage.roleLabel,
+      selected: _selectedRole,
+      idOf: (v) => 'filter_role_option_$v',
     );
+    if (choice == null || choice == _selectedRole || !mounted) return;
+    setState(() => _selectedRole = choice);
+    _loadData();
   }
 
-  void _showSettlementFilterDialog() {
-    final statuses = ['ALL', 'SETTLED', 'UNMATCHED'];
-    showSpPage(
+  Future<void> _showSettlementFilterDialog() async {
+    final choice = await showSpSelection<String>(
       context: context,
-      builder: (ctx) => SpSelectionPage(
-        title: const Text('Mutabakat Durumu Filtresi'),
-        children: statuses.map((s) {
-          return SimpleDialogOption(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() => _selectedSettlement = s);
-              _loadData();
-            },
-            child: Text(PaymentTrackingPage.settlementLabel(s)),
-          );
-        }).toList(),
-      ),
+      title: 'Mutabakat Durumu Filtresi',
+      options: const ['ALL', 'SETTLED', 'UNMATCHED'],
+      labelOf: PaymentTrackingPage.settlementLabel,
+      selected: _selectedSettlement,
+      idOf: (v) => 'filter_settlement_option_$v',
     );
+    if (choice == null || choice == _selectedSettlement || !mounted) return;
+    setState(() => _selectedSettlement = choice);
+    _loadData();
   }
 }
 
@@ -1575,16 +1587,17 @@ class DebtAgingWidget extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Row(
+          Wrap(
+            runSpacing: AppSpacing.xs,
             children: [
               if (bracket.currentDue > Decimal.zero)
-                _buildBracketPill('Cari: ${formatTry(bracket.currentDue)}', Colors.blue),
+                _buildBracketPill('Cari: ${formatTry(bracket.currentDue)}', SpTone.info),
               if (bracket.overdue1to30Days > Decimal.zero)
-                _buildBracketPill('1-30g: ${formatTry(bracket.overdue1to30Days)}', Colors.amber.shade700),
+                _buildBracketPill('1-30g: ${formatTry(bracket.overdue1to30Days)}', SpTone.warning),
               if (bracket.overdue31to60Days > Decimal.zero)
-                _buildBracketPill('31-60g: ${formatTry(bracket.overdue31to60Days)}', Colors.orange.shade800),
+                _buildBracketPill('31-60g: ${formatTry(bracket.overdue31to60Days)}', SpTone.warning, icon: Icons.schedule),
               if (bracket.overdue60PlusDays > Decimal.zero)
-                _buildBracketPill('60+g: ${formatTry(bracket.overdue60PlusDays)}', Colors.red.shade700),
+                _buildBracketPill('60+g: ${formatTry(bracket.overdue60PlusDays)}', SpTone.danger, icon: Icons.error_outline),
             ],
           ),
         ],
@@ -1592,15 +1605,12 @@ class DebtAgingWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildBracketPill(String text, Color color) {
-    return Container(
-      margin: const EdgeInsets.only(right: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+  /// Aging buckets map to tones; 31-60 and 60+ also carry an icon so the two
+  /// overdue levels differ by more than colour.
+  Widget _buildBracketPill(String text, SpTone tone, {IconData? icon}) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: SpStatusBadge(label: text, tone: tone, icon: icon),
     );
   }
 }

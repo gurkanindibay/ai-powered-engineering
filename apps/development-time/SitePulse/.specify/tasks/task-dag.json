@@ -554,12 +554,43 @@
     },
     {
       "id": "task-28",
+      "name": "Payments Phase 2: Virman Reversal, Resident Statement, Receipt PDF, Card Payments via Provider, \u0130\u015fletme Projesi",
+      "module": "full-stack",
+      "status": "UNVERIFIED",
+      "depends_on": [
+        "task-27"
+      ],
+      "spec_ref": "SPEC-007",
+      "description": "VIRMAN_REVERSAL credit on virman reversal; resident statement with aging and limitation flag; receipt PDF with QR and public verification; payment intents with a signed provider webhook feeding the single ingestion path (sandbox provider only); operating budgets with interim cap, service, objections and finalization; accrual from unit shares with dues_liabilities.operating_budget_id (V18).",
+      "gates": [
+        "money-fixtures"
+      ],
+      "acceptance_tests": [
+        "rust:payment_ledger_hardening_tests::when_a_virman_receipt_is_reversed_then_the_dues_reopen_and_the_source_advance_is_restored",
+        "rust:payments_phase2_tests::when_a_draft_budget_is_created_then_unit_shares_follow_land_share_and_equal_keys",
+        "rust:payments_phase2_tests::when_an_interim_budget_exceeds_the_revaluation_rate_then_it_is_refused_and_the_assembly_can_approve_it",
+        "rust:payments_phase2_tests::when_a_budget_is_in_force_then_dues_are_accrued_from_unit_shares_with_the_budget_as_legal_basis",
+        "rust:payments_phase2_tests::when_an_approved_budget_is_served_and_the_window_closes_then_it_becomes_final_unless_an_objection_is_upheld",
+        "rust:payments_phase2_tests::when_a_card_payment_is_captured_then_it_is_recorded_once_through_the_ingestion_path",
+        "rust:payments_phase2_tests::when_a_statement_is_built_then_items_are_aged_and_each_debtor_sees_only_their_own",
+        "rust:payments_phase2_tests::when_a_receipt_pdf_is_rendered_and_verified_then_the_public_check_discloses_no_payer",
+        "system:virman_reversal_restores_advance",
+        "system:resident_statement_scoped",
+        "system:receipt_pdf_and_verification",
+        "system:card_payment_via_provider",
+        "system:budget_accrual_legal_basis",
+        "system:ledger_integrity_clean"
+      ],
+      "attempts": 0
+    },
+    {
+      "id": "task-29",
       "name": "Authentication, authorization and durable audit security remediation",
       "module": "full-stack",
       "status": "UNVERIFIED",
       "depends_on": [],
-      "spec_ref": "SPEC-007",
-      "description": "Implemented and locally validated under SPEC-007 (12 non-browser gates and full GUI suite); formal current-commit checker evidence is pending. No historical task verification is asserted.",
+      "spec_ref": "SPEC-008",
+      "description": "Implemented and locally validated under SPEC-008 (12 non-browser gates and full GUI suite); formal current-commit checker evidence is pending. No historical task verification is asserted.",
       "gates": [
         "schema-integrity",
         "api-system"

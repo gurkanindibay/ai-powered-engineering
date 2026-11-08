@@ -1,8 +1,9 @@
+use chrono::{DateTime, NaiveDate, Utc};
 use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use tracing::info;
 
-use super::base::{require_id, DbResult};
+use super::base::{parse_id_to_i64, require_id, DbResult};
 use crate::models::{DebtStatus, DuesLiability, PaymentEntry, PaymentReceipt};
 
 /// Column list read by [`receipt_from_row`] (keep the two in step).
@@ -860,4 +861,442 @@ pub async fn save_debt_aging_snapshot(
     }
     tx.commit().await?;
     Ok(written)
+}
+
+pub async fn fetch_payment_entries_from_db(
+    pool: &Pool,
+    site_id: Option<&str>,
+) -> DbResult<Vec<PaymentEntry>> {
+    let client = pool.get().await?;
+    let rows = if let Some(sid) = site_id.filter(|s| !s.is_empty() && *s != "all") {
+        let site_num = super::base::parse_id_to_i64(sid).unwrap_or(0);
+        client
+            .query(
+                "SELECT pe.id, pe.site_id, pe.unit_id, pe.payer_name, pe.payer_role, \
+                 pe.receipt_id, pe.amount, pe.payment_channel, pe.settlement_status, \
+                 pe.description, pe.external_reference, pe.payment_date, pe.created_at, \
+                 pe.entry_type, pe.reverses_entry_id, pe.reversal_reason, pe.recorded_by, \
+                 pr.receipt_number, b.block_name, u.unit_number \
+                 FROM payment_entries pe \
+                 LEFT JOIN payment_receipts pr ON pe.receipt_id = pr.id \
+                 LEFT JOIN units u ON pe.unit_id = u.id \
+                 LEFT JOIN blocks b ON u.block_id = b.id \
+                 WHERE pe.site_id = $1 \
+                 ORDER BY pe.payment_date ASC, pe.id ASC",
+                &[&site_num],
+            )
+            .await?
+    } else {
+        client
+            .query(
+                "SELECT pe.id, pe.site_id, pe.unit_id, pe.payer_name, pe.payer_role, \
+                 pe.receipt_id, pe.amount, pe.payment_channel, pe.settlement_status, \
+                 pe.description, pe.external_reference, pe.payment_date, pe.created_at, \
+                 pe.entry_type, pe.reverses_entry_id, pe.reversal_reason, pe.recorded_by, \
+                 pr.receipt_number, b.block_name, u.unit_number \
+                 FROM payment_entries pe \
+                 LEFT JOIN payment_receipts pr ON pe.receipt_id = pr.id \
+                 LEFT JOIN units u ON pe.unit_id = u.id \
+                 LEFT JOIN blocks b ON u.block_id = b.id \
+                 ORDER BY pe.payment_date ASC, pe.id ASC",
+                &[],
+            )
+            .await?
+    };
+
+    let mut entries = Vec::new();
+    for row in rows {
+        let id: i64 = row.get(0);
+        let s_id: i64 = row.get(1);
+        let u_id: i64 = row.get(2);
+        let payer_name: String = row.get(3);
+        let payer_role: crate::models::DebtorType = row.get(4);
+        let receipt_id: Option<i64> = row.get(5);
+        let amount: Decimal = row.get(6);
+        let payment_channel: crate::models::PaymentChannel = row.get(7);
+        let settlement_status: crate::models::SettlementStatus = row.get(8);
+        let description: Option<String> = row.get(9);
+        let external_reference: Option<String> = row.get(10);
+        let payment_date: Option<chrono::DateTime<chrono::Utc>> = row.get(11);
+        let created_at: Option<chrono::DateTime<chrono::Utc>> = row.get(12);
+        let entry_type: String = row.get(13);
+        let reverses_entry_id: Option<i64> = row.get(14);
+        let reversal_reason: Option<String> = row.get(15);
+        let recorded_by: Option<String> = row.get(16);
+        let receipt_number: Option<String> = row.get(17);
+        let block_name: Option<String> = row.get(18);
+        let unit_number: Option<i32> = row.get(19);
+
+        let unit_label = match (block_name, unit_number) {
+            (Some(b), Some(num)) => Some(format!("{} D:{}", b, num)),
+            _ => None,
+        };
+
+        entries.push(PaymentEntry {
+            id,
+            site_id: s_id.to_string(),
+            unit_id: u_id.to_string(),
+            unit_label,
+            payer_name,
+            payer_role,
+            receipt_id,
+            receipt_number,
+            amount,
+            payment_channel,
+            settlement_status,
+            description,
+            external_reference,
+            payment_date: payment_date.unwrap_or_else(chrono::Utc::now),
+            created_at: created_at.unwrap_or_else(chrono::Utc::now),
+            entry_type,
+            reverses_entry_id,
+            reversal_reason,
+            recorded_by,
+        });
+    }
+    Ok(entries)
+}
+
+pub async fn fetch_homeowner_payment_records_from_db(
+    pool: &Pool,
+) -> DbResult<Vec<crate::models::HomeownerPaymentRecord>> {
+    let entries = fetch_payment_entries_from_db(pool, None).await?;
+    let mut records = Vec::new();
+    for entry in entries {
+        if entry.entry_type == crate::models::LEDGER_KIND_REVERSAL {
+            continue;
+        }
+        let (block_id, unit_number) = entry
+            .unit_label
+            .as_deref()
+            .and_then(|l| {
+                let parts: Vec<&str> = l.split(" D:").collect();
+                if parts.len() == 2 {
+                    let num = parts[1].parse::<i32>().ok()?;
+                    Some((parts[0].to_string(), num))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default();
+
+        records.push(crate::models::HomeownerPaymentRecord {
+            id: entry.id.to_string(),
+            unit_id: entry.unit_id.clone(),
+            block_id,
+            unit_number,
+            homeowner_name: Some(entry.payer_name.clone()),
+            amount: entry.amount,
+            payment_method: entry.payment_channel,
+            reference_code: entry.external_reference.clone(),
+            note: entry.description.clone(),
+            status: if entry.settlement_status == crate::models::SettlementStatus::Settled {
+                crate::models::PaymentMatchStatus::MatchedDebt
+            } else if entry.settlement_status == crate::models::SettlementStatus::Unmatched {
+                crate::models::PaymentMatchStatus::Pending
+            } else {
+                crate::models::PaymentMatchStatus::MatchedDebt
+            },
+            cleared_debt_amount: if entry.settlement_status
+                == crate::models::SettlementStatus::Settled
+            {
+                entry.amount
+            } else {
+                Decimal::ZERO
+            },
+            advance_credit_amount: Decimal::ZERO,
+            created_at: entry.created_at,
+        });
+    }
+    Ok(records)
+}
+
+pub async fn fetch_site_payments_from_db(
+    pool: &Pool,
+    site_id_opt: Option<&str>,
+) -> DbResult<serde_json::Value> {
+    let client = pool.get().await?;
+
+    // 1. Resolve site
+    let site_row = if let Some(sid) = site_id_opt {
+        if sid != "undefined" && !sid.is_empty() {
+            let s_num = parse_id_to_i64(sid).unwrap_or(0);
+            client
+                .query_opt(
+                    "SELECT id, name FROM sites WHERE id = $1 AND deleted_at IS NULL",
+                    &[&s_num],
+                )
+                .await?
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let site_row =
+        match site_row {
+            Some(r) => Some(r),
+            None => client
+                .query_opt(
+                    "SELECT id, name FROM sites WHERE deleted_at IS NULL ORDER BY id ASC LIMIT 1",
+                    &[],
+                )
+                .await?,
+        };
+
+    let Some(srow) = site_row else {
+        return Ok(serde_json::json!({
+            "site_id": "",
+            "site_name": "",
+            "total_units_count": 0,
+            "total_collected": "0",
+            "total_advance_balance": "0",
+            "payments_count": 0,
+            "payments": [],
+            "guidance": "Sistemde kayıtlı bir site bulunmuyor. Ödeme takibi için önce site oluşturunuz."
+        }));
+    };
+
+    let site_id_num: i64 = srow.get(0);
+    let site_id = site_id_num.to_string();
+    let site_name: String = srow.get(1);
+
+    // 2. Total units
+    let units_count_row = client
+        .query_one(
+            "SELECT COUNT(*)::bigint FROM units WHERE site_id = $1 AND deleted_at IS NULL",
+            &[&site_id_num],
+        )
+        .await?;
+    let total_units_count: i64 = units_count_row.get(0);
+
+    // 3. Total advance
+    let advance_row = client.query_one("SELECT COALESCE(SUM(balance), 0)::numeric FROM advance_balances ab JOIN units u ON ab.unit_id = u.id WHERE u.site_id = $1", &[&site_id_num]).await?;
+    let total_advance: Decimal = advance_row.get(0);
+
+    // 4. Collect payments from reconciliation_queue for this site
+    let rq_rows = client
+        .query(
+            r#"
+        SELECT
+            rq.match_id,
+            rq.transaction_id,
+            rq.txn_date,
+            rq.amount,
+            rq.currency,
+            rq.description,
+            rq.sender_name,
+            rq.sender_iban,
+            rq.reference_no,
+            rq.matched_unit_id,
+            rq.matched_block,
+            rq.matched_unit_number,
+            rq.matched_resident_name,
+            rq.confidence_score,
+            rq.status,
+            rq.notes,
+            u.virtual_iban
+        FROM reconciliation_queue rq
+        LEFT JOIN units u ON rq.matched_unit_id = u.id
+        WHERE rq.site_id = $1
+        ORDER BY rq.txn_date DESC
+        "#,
+            &[&site_id_num],
+        )
+        .await?;
+
+    let mut payments = Vec::new();
+    let mut total_collected = Decimal::ZERO;
+
+    for row in rq_rows {
+        let match_id: String = row.get(0);
+        let transaction_id: String = row.get(1);
+        let txn_date: NaiveDate = row.get(2);
+        let amount: Decimal = row.get(3);
+        let currency: String = row.get(4);
+        let description: String = row.get(5);
+        let sender_name: Option<String> = row.get(6);
+        let sender_iban: Option<String> = row.get(7);
+        let reference_no: Option<String> = row.get(8);
+        let matched_unit_id: Option<i64> = row.get(9);
+        let matched_block: Option<String> = row.get(10);
+        let matched_unit_number: Option<i32> = row.get(11);
+        let matched_resident_name: Option<String> = row.get(12);
+        let confidence_score: i32 = row.get(13);
+        let status_str: String = row.get(14);
+        let notes: Option<String> = row.get(15);
+        let virtual_iban: Option<String> = row.get(16);
+
+        total_collected += amount;
+
+        let flat_label = match (&matched_block, matched_unit_number) {
+            (Some(b), Some(u)) => format!("{} D:{}", b, u),
+            _ => "Daire Belirlenemedi".to_string(),
+        };
+
+        let is_advance = notes
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains("avans");
+
+        let desc_upper = description.to_uppercase();
+        let txn_upper = transaction_id.to_uppercase();
+        let (payment_channel, payment_channel_label) = if desc_upper.contains("KART")
+            || desc_upper.contains("CARD")
+            || txn_upper.contains("CC")
+            || txn_upper.contains("CARD")
+        {
+            ("CREDIT_CARD", "Kredi Kartı (Online)")
+        } else if desc_upper.contains("SANAL IBAN")
+            || desc_upper.contains("VIRTUAL")
+            || txn_upper.contains("VIBAN")
+        {
+            ("VIRTUAL_IBAN", "Sanal IBAN (Virtual Account)")
+        } else if txn_upper.contains("FAST") || desc_upper.contains("FAST") {
+            ("FAST", "FAST 7/24 Anlık Takas")
+        } else if status_str == "UNMATCHED" {
+            ("UNMATCHED", "Eşleşmeyen Transfer")
+        } else {
+            ("BANK_TRANSFER", "Banka Havale / EFT")
+        };
+
+        let resolved_resident_name = matched_resident_name
+            .or_else(|| sender_name.clone())
+            .unwrap_or_else(|| "Bilinmiyor".to_string());
+
+        payments.push(serde_json::json!({
+            "match_id": match_id,
+            "transaction_id": transaction_id,
+            "date": txn_date.to_string(),
+            "unit_id": matched_unit_id.map(|id| id.to_string()),
+            "block": matched_block,
+            "unit_number": matched_unit_number,
+            "flat_label": flat_label,
+            "resident_name": resolved_resident_name,
+            "amount": amount.to_string(),
+            "currency": currency,
+            "description": description,
+            "sender_name": sender_name,
+            "sender_iban": sender_iban,
+            "virtual_iban": virtual_iban,
+            "payment_channel": payment_channel,
+            "payment_channel_label": payment_channel_label,
+            "status": status_str,
+            "status_code": status_str,
+            "notes": notes,
+            "confidence_score": confidence_score,
+            "is_advance": is_advance,
+            "reference_no": reference_no,
+        }));
+    }
+
+    // 5. Also include entries from payment_entries for units of this site not in reconciliation_queue
+    let pe_rows = client
+        .query(
+            r#"
+        SELECT
+            pe.id::text,
+            pe.receipt_number,
+            pe.payment_date,
+            pe.amount,
+            pe.payer_name,
+            pe.description,
+            pe.channel,
+            pe.settlement_status,
+            pe.unit_id::text,
+            u.unit_number,
+            b.block_name,
+            u.virtual_iban,
+            pe.external_reference
+        FROM payment_entries pe
+        JOIN units u ON pe.unit_id = u.id
+        JOIN blocks b ON u.block_id = b.id
+        WHERE pe.site_id = $1 AND pe.entry_type != 'REVERSAL'
+        ORDER BY pe.payment_date DESC
+        "#,
+            &[&site_id_num],
+        )
+        .await?;
+
+    for row in pe_rows {
+        let pe_id: String = row.get(0);
+        let receipt_number: Option<String> = row.get(1);
+        let payment_date: DateTime<Utc> = row.get(2);
+        let amount: Decimal = row.get(3);
+        let payer_name: String = row.get(4);
+        let description: Option<String> = row.get(5);
+        let channel_str: String = row.get(6);
+        let settlement_status: String = row.get(7);
+        let unit_id: String = row.get(8);
+        let unit_number: i32 = row.get(9);
+        let block_name: String = row.get(10);
+        let virtual_iban: Option<String> = row.get(11);
+        let external_ref: Option<String> = row.get(12);
+
+        let already_included = payments.iter().any(|p| {
+            p.get("transaction_id").and_then(|t| t.as_str()) == Some(&pe_id)
+                || (external_ref.is_some()
+                    && p.get("transaction_id").and_then(|t| t.as_str()) == external_ref.as_deref())
+                || (receipt_number.is_some()
+                    && p.get("reference_no").and_then(|t| t.as_str()) == receipt_number.as_deref())
+        });
+
+        if !already_included {
+            total_collected += amount;
+            let flat_label = format!("{} D:{}", block_name, unit_number);
+            let channel_label = match channel_str.as_str() {
+                "CREDIT_CARD" => "Kredi Kartı (Online)",
+                "VIRTUAL_IBAN" => "Sanal IBAN (Virtual Account)",
+                "FAST" => "FAST 7/24 Anlık Takas",
+                _ => "Banka Havale / EFT",
+            };
+
+            payments.push(serde_json::json!({
+                "match_id": format!("MATCH-PE-{}", pe_id),
+                "transaction_id": pe_id.clone(),
+                "date": payment_date.date_naive().to_string(),
+                "unit_id": Some(unit_id),
+                "block": Some(block_name),
+                "unit_number": Some(unit_number),
+                "flat_label": flat_label,
+                "resident_name": payer_name.clone(),
+                "amount": amount.to_string(),
+                "currency": "TRY",
+                "description": description.clone().unwrap_or_else(|| format!("{} ile Aidat Ödemesi", channel_label)),
+                "sender_name": Some(payer_name),
+                "sender_iban": Option::<String>::None,
+                "virtual_iban": virtual_iban,
+                "payment_channel": channel_str,
+                "payment_channel_label": channel_label,
+                "status": settlement_status,
+                "status_code": settlement_status,
+                "notes": description,
+                "confidence_score": 100,
+                "is_advance": false,
+                "reference_no": receipt_number.or(external_ref),
+            }));
+        }
+    }
+
+    let payments_count = payments.len();
+    let guidance = if total_units_count == 0 {
+        "Bu sitede henüz kayıtlı kat maliki veya daire bulunmuyor. Sanal IBAN ve FAST ödemeleri için kat maliki tanımlayınız."
+    } else if payments.is_empty() {
+        "Bu site için henüz gerçekleşmiş bir aidat ödemesi veya banka transferi bulunmuyor. Kat malikleri kendilerine tahsis edilen Sanal IBAN, FAST veya kredi kartı ile ödeme yapabilir."
+    } else {
+        ""
+    };
+
+    Ok(serde_json::json!({
+        "site_id": site_id,
+        "site_name": site_name,
+        "total_units_count": total_units_count,
+        "total_collected": total_collected.to_string(),
+        "total_advance_balance": total_advance.to_string(),
+        "payments_count": payments_count,
+        "payments": payments,
+        "guidance": guidance
+    }))
 }

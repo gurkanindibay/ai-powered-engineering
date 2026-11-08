@@ -56,13 +56,17 @@ impl SiteBankAccountService {
         })?;
 
         // --- Validate IBAN ---
-        let iban_clean = req.iban.replace(' ', "").to_uppercase();
-        if !iban_clean.starts_with("TR") || iban_clean.len() != 26 {
-            return Err(
-                "Invalid IBAN. Turkish IBANs must start with 'TR' and be 26 characters long."
-                    .to_string(),
-            );
+        // Structure and MOD-97 check digits, via the shared value object.
+        let iban = crate::domain::TrIban::parse(&req.iban).map_err(|e| e.to_string())?;
+        if iban.bank_code() != bank.eft_code() {
+            return Err(format!(
+                "Invalid IBAN. IBAN bank code {} does not belong to {} (expected {}).",
+                iban.bank_code(),
+                bank.display_name(),
+                bank.eft_code()
+            ));
         }
+        let iban_clean = iban.into_string();
         if req.account_holder.trim().is_empty() {
             return Err("Account holder name is required.".to_string());
         }
