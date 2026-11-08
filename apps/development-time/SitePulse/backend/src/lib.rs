@@ -7,6 +7,7 @@ pub mod auth;
 pub mod authorization;
 pub mod db;
 pub mod domain;
+pub mod error;
 pub mod finance_book;
 pub mod handlers;
 pub mod migrations;
@@ -15,3 +16,5 @@ pub mod scheduler;
 pub mod security;
 pub mod services;
 pub mod state;
+
+pub use error::{AppError, AppResult, ErrorBody, ErrorEnvelope};

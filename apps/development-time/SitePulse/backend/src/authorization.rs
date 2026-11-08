@@ -53,11 +53,18 @@ impl IntoResponse for SecurityError {
             Self::Conflict => (StatusCode::CONFLICT, "CONFLICT"),
             Self::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "RATE_LIMITED"),
         };
-        let mut response = (
-            status,
-            Json(serde_json::json!({"error":{"code":code,"message":self.to_string()}})),
-        )
-            .into_response();
+        let trace_id = format!("req-{}", uuid::Uuid::new_v4());
+        let timestamp = chrono::Utc::now();
+        let envelope = crate::error::ErrorEnvelope {
+            error: crate::error::ErrorBody {
+                code: code.to_string(),
+                message: self.to_string(),
+                details: None,
+                trace_id,
+                timestamp,
+            },
+        };
+        let mut response = (status, Json(envelope)).into_response();
         if status == StatusCode::UNAUTHORIZED {
             response.headers_mut().insert(
                 "www-authenticate",
