@@ -1,12 +1,11 @@
 import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 
 import '../design_system/money_formatter.dart';
-import '../design_system/sp_feedback.dart';
+import '../design_system/sp_clipboard.dart';
 class HeroBalanceCard extends StatelessWidget {
   final DuesLiability dues;
   final String siteName;
@@ -476,11 +475,7 @@ class _IbanRow extends StatelessWidget {
 
   const _IbanRow({required this.iban, required this.context});
 
-  void _copyIban() {
-    if (iban.trim().isEmpty) return;
-    Clipboard.setData(ClipboardData(text: iban.replaceAll(' ', '')));
-    SpToast.success(context, 'IBAN kopyalandı');
-  }
+  Future<void> _copyIban() => spCopyIban(context, iban, successMessage: 'IBAN kopyalandı');
 
   @override
   Widget build(BuildContext ctx) {

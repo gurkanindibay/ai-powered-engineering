@@ -84,6 +84,10 @@ class AppFullscreenPage extends StatelessWidget {
 
   /// Displays a full-screen confirmation page (e.g. for deletions or password resets)
   /// in Papara-style and returns true if confirmed.
+  ///
+  /// This is the single confirmation implementation; `showSpConfirmDialog`
+  /// (sp_feedback.dart) is a thin adapter over it. [cancelId] / [confirmId]
+  /// are the automation ids and widget keys of the two buttons.
   static Future<bool?> pushConfirmation({
     required BuildContext context,
     required String title,
@@ -93,6 +97,8 @@ class AppFullscreenPage extends StatelessWidget {
     Color confirmColor = AppColors.accentRed,
     IconData icon = Icons.warning_amber_rounded,
     Color iconColor = AppColors.accentRed,
+    String cancelId = 'btn_confirmation_cancel',
+    String confirmId = 'btn_confirmation_confirm',
   }) {
     return push<bool>(
       context: context,
@@ -118,7 +124,8 @@ class AppFullscreenPage extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: testId('btn_confirmation_cancel', OutlinedButton(
+                  child: testId(cancelId, OutlinedButton(
+                    key: Key(cancelId),
                     onPressed: () => Navigator.pop(ctx, false),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -133,7 +140,8 @@ class AppFullscreenPage extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: testId('btn_confirmation_confirm', ElevatedButton(
+                  child: testId(confirmId, ElevatedButton(
+                    key: Key(confirmId),
                     onPressed: () => Navigator.pop(ctx, true),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: confirmColor,
