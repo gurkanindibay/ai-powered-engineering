@@ -75,7 +75,16 @@ pub async fn add_unit_member(
         )
         .await
         .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(|e| {
+            (
+                if e == "Household storage unavailable" {
+                    StatusCode::SERVICE_UNAVAILABLE
+                } else {
+                    StatusCode::BAD_REQUEST
+                },
+                e,
+            )
+        })
 }
 
 pub async fn delete_unit_member(

@@ -83,7 +83,7 @@ CHECKS = [
     "tenant_surplus_virman", "reversal_restores_ledger", "webhook_claim_scoped", "issuer_snapshot_on_receipt",
     "debt_aging_snapshot_persisted", "virman_reversal_restores_advance", "resident_statement_scoped",
     "receipt_pdf_and_verification", "card_payment_via_provider", "budget_accrual_legal_basis", "ledger_integrity_clean",
-    "security_session_lifecycle", "transactional_audit", "audit_scope_and_privileges", "registration_repository_scope", "support_grant_lifecycle", "invitation_atomic_registration",
+    "security_session_lifecycle", "transactional_audit", "audit_scope_and_privileges", "registration_repository_scope", "support_grant_lifecycle", "household_members_persisted", "invitation_atomic_registration",
 ]
 
 
@@ -840,6 +840,35 @@ def check_support_grant_lifecycle(ctx: Context) -> Tuple[bool, str]:
     return self_approve==404 and receipt_access==200 and int(used)>=2 and (pending,approve,allowed,ordinary,revoke,revoked)==(403,200,200,403,200,403), f"self {self_approve}, pending {pending}, approve {approve}, granted {allowed}, receipt {receipt_access}, audited uses {used}, ordinary {ordinary}, revoke {revoke}/{revoked}"
 
 
+def check_household_members(ctx: Context) -> Tuple[bool, str]:
+    """Manager household entries persist and failed evidence rolls identity writes back."""
+    db, base = ctx.backend.db_name, ctx.backend.base
+    suffix = str(time.time_ns())
+    email = f"household-{suffix}@example.com"
+    path = f"/api/v1/home-residents/members/{ctx.unit_id}"
+    status, body = http("POST", base + path, token=ctx.manager, body={
+        "full_name": "Household Verifier", "phone": "", "email": email, "relationship": "Family"})
+    if status != 201:
+        return False, f"creation {status} {body[:160]}"
+    member = json.loads(body)
+    relogin(ctx)
+    read_status, read_body = http("GET", base + path, token=ctx.manager)
+    members = json.loads(read_body) if read_status == 200 else []
+    persisted = any(m["resident_id"] == member["resident_id"] and m["email"] == email and not m["is_owner"] for m in members)
+    ctx.psql.run(db, """CREATE FUNCTION reject_household_evidence() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Injected household failure'; END $$;
+        CREATE TRIGGER reject_household_evidence BEFORE INSERT ON occupancy_members FOR EACH ROW EXECUTE FUNCTION reject_household_evidence();""")
+    rejected_email = f"rejected-{suffix}@example.com"
+    try:
+        rejected, _ = http("POST", base + path, token=ctx.manager, body={
+            "full_name": "Rejected Household", "phone": "", "email": rejected_email, "relationship": "Family"})
+    finally:
+        ctx.psql.run(db, "DROP TRIGGER reject_household_evidence ON occupancy_members; DROP FUNCTION reject_household_evidence();")
+    count = ctx.psql.run(db, f"SELECT count(*) FROM persons WHERE email='{rejected_email}';")
+    evidence = ctx.psql.run(db, f"SELECT count(*) FROM audit_events WHERE resource_type='occupancy_members' AND resource_id='{int(member['resident_id'])}';")
+    ok = persisted and int(member["resident_id"]) > 0 and rejected == 503 and count == "0" and int(evidence) > 0
+    return ok, f"persistent {persisted}, audited {evidence}, injected failure {rejected}, orphan persons {count}"
+
+
 def check_invitation_atomic_registration(ctx: Context) -> Tuple[bool, str]:
     db, base = ctx.backend.db_name, ctx.backend.base
     hashed = hash_password("InviteOwner-123")
@@ -873,6 +902,7 @@ def check_invitation_atomic_registration(ctx: Context) -> Tuple[bool, str]:
 
 CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
     "invitation_atomic_registration":check_invitation_atomic_registration,
+    "household_members_persisted":check_household_members,
     "support_grant_lifecycle":check_support_grant_lifecycle,
     "security_session_lifecycle":check_security_session_lifecycle,
     "transactional_audit":check_transactional_audit,

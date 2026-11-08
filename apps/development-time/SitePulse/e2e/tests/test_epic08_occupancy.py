@@ -204,8 +204,6 @@ def test_household_members_are_added(two_household_members, api, actors):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-03")
-@pytest.mark.xfail(strict=True, reason="BUG: household members live only in backend memory (no occupancy_members or "
-                   "persons row, resident_id '0', a placeholder e-mail when none is given) and vanish on restart")
 def test_household_members_survive_a_backend_restart(two_household_members, api, actors, stack):
     stack.restart_backend()
     manager = api.login(**actors["manager"])
