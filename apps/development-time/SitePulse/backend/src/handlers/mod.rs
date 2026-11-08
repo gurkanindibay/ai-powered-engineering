@@ -782,18 +782,16 @@ pub async fn confirm_reconciliation(
 pub async fn remember_sender_iban(
     State(state): State<AppState>,
     Json(payload): Json<RememberSenderIbanRequest>,
-) -> Result<Json<RememberSenderIbanResponse>, (StatusCode, String)> {
+) -> Result<Json<RememberSenderIbanResponse>, crate::error::AppError> {
     let mut inner = state.inner.write().await;
     let clean = payload.sender_iban.replace(' ', "").to_uppercase();
     if clean.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "Sender IBAN cannot be empty.".to_string(),
+        return Err(crate::error::AppError::validation(
+            "Sender IBAN cannot be empty.",
         ));
     }
     if !inner.units.iter().any(|u| u.id == payload.unit_id) {
-        return Err((
-            StatusCode::NOT_FOUND,
+        return Err(crate::error::AppError::not_found(
             format!("Unit '{}' not found in this site.", payload.unit_id),
         ));
     }
@@ -837,18 +835,13 @@ pub async fn remember_sender_iban(
 pub async fn get_unit_matching_criteria(
     Path(unit_id): Path<String>,
     State(state): State<AppState>,
-) -> Result<Json<UnitMatchingCriteriaDto>, (StatusCode, String)> {
+) -> Result<Json<UnitMatchingCriteriaDto>, crate::error::AppError> {
     let inner = state.inner.read().await;
     let unit = inner
         .units
         .iter()
         .find(|u| u.id == unit_id)
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                format!("Unit '{}' not found", unit_id),
-            )
-        })?;
+        .ok_or_else(|| crate::error::AppError::not_found(format!("Unit '{}' not found", unit_id)))?;
 
     let owner_name = unit
         .owner_user_id
@@ -899,20 +892,18 @@ pub async fn add_unit_sender_iban(
     Path(unit_id): Path<String>,
     State(state): State<AppState>,
     Json(payload): Json<AddSenderIbanRequest>,
-) -> Result<Json<UnitMatchingCriteriaDto>, (StatusCode, String)> {
+) -> Result<Json<UnitMatchingCriteriaDto>, crate::error::AppError> {
     let clean = payload.sender_iban.replace(' ', "").to_uppercase();
     if clean.len() < 15 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "Geçersiz IBAN formatı (minimum 15 karakter).".to_string(),
+        return Err(crate::error::AppError::validation(
+            "Geçersiz IBAN formatı (minimum 15 karakter).",
         ));
     }
 
     {
         let mut inner = state.inner.write().await;
         if !inner.units.iter().any(|u| u.id == unit_id) {
-            return Err((
-                StatusCode::NOT_FOUND,
+            return Err(crate::error::AppError::not_found(
                 format!("Unit '{}' not found", unit_id),
             ));
         }
@@ -949,7 +940,7 @@ pub async fn add_unit_sender_iban(
 pub async fn delete_unit_sender_iban(
     Path((unit_id, sender_iban)): Path<(String, String)>,
     State(state): State<AppState>,
-) -> Result<Json<UnitMatchingCriteriaDto>, (StatusCode, String)> {
+) -> Result<Json<UnitMatchingCriteriaDto>, crate::error::AppError> {
     let clean = sender_iban.replace(' ', "").to_uppercase();
     {
         let mut inner = state.inner.write().await;
@@ -979,7 +970,7 @@ pub async fn update_unit_payer_names(
     Path(unit_id): Path<String>,
     State(state): State<AppState>,
     Json(payload): Json<UpdatePayerNamesRequest>,
-) -> Result<Json<UnitMatchingCriteriaDto>, (StatusCode, String)> {
+) -> Result<Json<UnitMatchingCriteriaDto>, crate::error::AppError> {
     let cleaned_names: Vec<String> = payload
         .payer_names
         .into_iter()
@@ -990,8 +981,7 @@ pub async fn update_unit_payer_names(
     {
         let mut inner = state.inner.write().await;
         if !inner.units.iter().any(|u| u.id == unit_id) {
-            return Err((
-                StatusCode::NOT_FOUND,
+            return Err(crate::error::AppError::not_found(
                 format!("Unit '{}' not found", unit_id),
             ));
         }

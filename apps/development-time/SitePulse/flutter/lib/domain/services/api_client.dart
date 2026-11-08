@@ -5,6 +5,9 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../errors/app_exception.dart';
+export '../errors/app_exception.dart';
+
 /// Single entry point for every call to the SitePulse backend.
 ///
 /// * The base URL comes from `--dart-define=SITEPULSE_API_BASE_URL=https://api.example.com`.
@@ -65,7 +68,9 @@ class ApiClient {
   static Future<bool> _refresh() async {
     final token = _refreshToken;
     final epoch = _sessionEpoch;
-    if (token == null) {return false;}
+    if (token == null) {
+      return false;
+    }
     try {
       final response = await transport
           .post(
@@ -74,11 +79,16 @@ class ApiClient {
             body: jsonEncode({'refresh_token': token}),
           )
           .timeout(const Duration(seconds: 8));
-      if (response.statusCode != 200 || epoch != _sessionEpoch) {return false;}
+      if (response.statusCode != 200 || epoch != _sessionEpoch) {
+        return false;
+      }
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final access = data['access_token'];
       final refresh = data['refresh_token'];
-      if (access is! String || access.isEmpty || refresh is! String || refresh.isEmpty) {
+      if (access is! String ||
+          access.isEmpty ||
+          refresh is! String ||
+          refresh.isEmpty) {
         return false;
       }
       _accessToken = access;
@@ -95,7 +105,9 @@ class ApiClient {
     Map<String, String>? headers,
   ) async {
     if (url.origin != Uri.parse(baseUrl).origin) {
-      throw ArgumentError('Credentials may only be sent to the configured API origin.');
+      throw ArgumentError(
+        'Credentials may only be sent to the configured API origin.',
+      );
     }
     final attemptedToken = _accessToken;
     final epoch = _sessionEpoch;
@@ -110,12 +122,20 @@ class ApiClient {
         }.contains(url.path)) {
       return response;
     }
-    if (_sessionEpoch != epoch) {return response;}
-    if (_accessToken != attemptedToken && _accessToken != null) {return _retry(send, headers);}
+    if (_sessionEpoch != epoch) {
+      return response;
+    }
+    if (_accessToken != attemptedToken && _accessToken != null) {
+      return _retry(send, headers);
+    }
     final renewal = _renewal ??= _refresh();
     final renewed = await renewal;
-    if (identical(_renewal, renewal)) {_renewal = null;}
-    if (renewed) {return _retry(send, headers);}
+    if (identical(_renewal, renewal)) {
+      _renewal = null;
+    }
+    if (renewed) {
+      return _retry(send, headers);
+    }
     if (_sessionEpoch == epoch) {
       clearSession();
       _expired.add(null);
@@ -134,8 +154,12 @@ class ApiClient {
     if (_configuredBaseUrl.isNotEmpty) {
       final configured = Uri.parse(_configuredBaseUrl);
       const e2e = bool.fromEnvironment('E2E');
-      if (!configured.hasAuthority || configured.userInfo.isNotEmpty || configured.hasQuery || configured.hasFragment ||
-          !['http', 'https'].contains(configured.scheme) || (kReleaseMode && !e2e && configured.scheme != 'https')) {
+      if (!configured.hasAuthority ||
+          configured.userInfo.isNotEmpty ||
+          configured.hasQuery ||
+          configured.hasFragment ||
+          !['http', 'https'].contains(configured.scheme) ||
+          (kReleaseMode && !e2e && configured.scheme != 'https')) {
         throw StateError('A valid HTTPS API origin is required.');
       }
       return _configuredBaseUrl.endsWith('/')
@@ -173,12 +197,16 @@ class ApiClient {
     );
   }
 
-  static Future<http.Response> _retry(Future<http.Response> Function(Map<String, String>) send,
-      Map<String, String>? headers) async {
+  static Future<http.Response> _retry(
+    Future<http.Response> Function(Map<String, String>) send,
+    Map<String, String>? headers,
+  ) async {
     final token = _accessToken;
     final epoch = _sessionEpoch;
     final response = await send(_headers(headers));
-    if (response.statusCode == 401 && _sessionEpoch == epoch && _accessToken == token) {
+    if (response.statusCode == 401 &&
+        _sessionEpoch == epoch &&
+        _accessToken == token) {
       clearSession();
       _expired.add(null);
     }
@@ -255,5 +283,94 @@ class ApiClient {
     } on TimeoutException {
       return await post(url, headers: headers, body: body).timeout(timeout);
     }
+  }
+
+  /// Decodes an HTTP response body.
+  ///
+  /// On success (2xx): returns the parsed JSON (Map, List, or null if body is empty).
+  /// On failure: parses standard error envelope `{"error": {"code", "message", ...}}`
+  /// or legacy/fallback formats and throws a strongly-typed [ApiException].
+  static dynamic decode(http.Response response) {
+    final bodyText = utf8.decode(response.bodyBytes);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (bodyText.trim().isEmpty) return null;
+      try {
+        return json.decode(bodyText);
+      } catch (e) {
+        throw const FormatException('Sunucudan geçersiz JSON verisi alındı.');
+      }
+    }
+
+    String? code;
+    String? message;
+    String? traceId;
+    Map<String, dynamic>? details;
+
+    try {
+      final decoded = json.decode(bodyText);
+      if (decoded is Map<String, dynamic>) {
+        if (decoded['error'] is Map<String, dynamic>) {
+          final err = decoded['error'] as Map<String, dynamic>;
+          code = err['code']?.toString();
+          message = err['message']?.toString();
+          traceId = err['trace_id']?.toString();
+          if (err['details'] is Map<String, dynamic>) {
+            details = err['details'] as Map<String, dynamic>;
+          }
+        } else if (decoded['error'] is String) {
+          message = decoded['error'] as String;
+        } else if (decoded['message'] != null) {
+          message = decoded['message'].toString();
+        }
+      }
+    } catch (_) {
+      final trimmed = bodyText.trim();
+      if (trimmed.isNotEmpty) {
+        message = trimmed;
+      }
+    }
+
+    final resolvedMessage = (message != null && message.isNotEmpty)
+        ? message
+        : _defaultStatusMessage(response.statusCode);
+
+    throw ApiException(
+      message: resolvedMessage,
+      statusCode: response.statusCode,
+      code: code,
+      traceId: traceId,
+      details: details,
+    );
+  }
+
+  static Map<String, dynamic> decodeMap(http.Response response) {
+    final result = decode(response);
+    if (result is! Map<String, dynamic>) {
+      throw const FormatException('Beklenen veri haritası (Map) alınamadı.');
+    }
+    return result;
+  }
+
+  static List<dynamic> decodeList(http.Response response) {
+    final result = decode(response);
+    if (result is! List) {
+      throw const FormatException('Beklenen veri listesi (List) alınamadı.');
+    }
+    return result;
+  }
+
+  static String _defaultStatusMessage(int statusCode) {
+    return switch (statusCode) {
+      400 => 'Geçersiz istek parametreleri (400).',
+      401 => 'Oturum açmanız gerekiyor (401).',
+      403 => 'Bu işlem için yetkiniz bulunmuyor (403).',
+      404 => 'İstenen kaynak bulunamadı (404).',
+      409 => 'İşlem mevcut durum ile çakışıyor (409).',
+      422 => 'İşlem kurallara uygun değil (422).',
+      429 => 'Çok fazla istek yapıldı. Lütfen biraz bekleyin (429).',
+      500 => 'Sunucu hatası oluştu (500).',
+      503 => 'Hizmet şu anda kullanılamıyor (503).',
+      _ => 'İstek başarısız oldu ($statusCode).',
+    };
   }
 }

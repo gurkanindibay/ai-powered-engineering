@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../domain/errors/app_exception.dart';
 import '../../l10n/app_strings.dart';
 
 import '../theme/app_theme.dart';
@@ -10,26 +12,26 @@ enum ToastKind { success, info, warning, error }
 
 extension ToastKindStyle on ToastKind {
   Color get fill => switch (this) {
-        ToastKind.success => AppColors.successFill,
-        ToastKind.info => AppColors.infoFill,
-        ToastKind.warning => AppColors.warningFill,
-        ToastKind.error => AppColors.dangerFill,
-      };
+    ToastKind.success => AppColors.successFill,
+    ToastKind.info => AppColors.infoFill,
+    ToastKind.warning => AppColors.warningFill,
+    ToastKind.error => AppColors.dangerFill,
+  };
 
   IconData get icon => switch (this) {
-        ToastKind.success => Icons.check_circle_rounded,
-        ToastKind.info => Icons.info_rounded,
-        ToastKind.warning => Icons.warning_rounded,
-        ToastKind.error => Icons.error_rounded,
-      };
+    ToastKind.success => Icons.check_circle_rounded,
+    ToastKind.info => Icons.info_rounded,
+    ToastKind.warning => Icons.warning_rounded,
+    ToastKind.error => Icons.error_rounded,
+  };
 
   /// Screen-reader prefix so the kind is announced, not only seen.
   String get spokenPrefix => switch (this) {
-        ToastKind.success => 'Başarılı',
-        ToastKind.info => 'Bilgi',
-        ToastKind.warning => 'Uyarı',
-        ToastKind.error => 'Hata',
-      };
+    ToastKind.success => 'Başarılı',
+    ToastKind.info => 'Bilgi',
+    ToastKind.warning => 'Uyarı',
+    ToastKind.error => 'Hata',
+  };
 }
 
 /// Builds a snackbar in the house style.
@@ -43,7 +45,8 @@ SnackBar spSnackBar({
   SnackBarAction? action,
   SnackBarBehavior? behavior,
 }) {
-  final resolvedDuration = duration ??
+  final resolvedDuration =
+      duration ??
       switch (kind) {
         ToastKind.success || ToastKind.info => const Duration(seconds: 4),
         ToastKind.warning => const Duration(seconds: 6),
@@ -55,7 +58,9 @@ SnackBar spSnackBar({
     duration: resolvedDuration,
     behavior: behavior,
     action: action,
-    showCloseIcon: kind == ToastKind.error || resolvedDuration > const Duration(seconds: 6),
+    showCloseIcon:
+        kind == ToastKind.error ||
+        resolvedDuration > const Duration(seconds: 6),
     closeIconColor: AppColors.onFill,
     content: Semantics(
       liveRegion: true,
@@ -68,7 +73,11 @@ SnackBar spSnackBar({
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: DefaultTextStyle.merge(
-                style: const TextStyle(color: AppColors.onFill, fontSize: 14, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  color: AppColors.onFill,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
                 child: content,
               ),
             ),
@@ -93,7 +102,12 @@ SnackBar appSnackBar({
   ToastKind? kind,
 }) {
   return spSnackBar(
-    kind: kind ?? inferToastKind(backgroundColor: backgroundColor, message: content is Text ? content.data : null),
+    kind:
+        kind ??
+        inferToastKind(
+          backgroundColor: backgroundColor,
+          message: content is Text ? content.data : null,
+        ),
     content: content,
     duration: duration,
     action: action,
@@ -102,8 +116,24 @@ SnackBar appSnackBar({
 }
 
 const _errorWords = [
-  'hata', 'başarısız', 'geçersiz', 'zorunlu', 'bulunamadı', 'yapılamadı', 'edilemedi', 'alınamadı',
-  'reddedildi', 'eşleşmiyor', 'olmalı', 'giriniz', 'girin', 'seçiniz', 'lütfen', 'error', 'failed', 'yetkisiz',
+  'hata',
+  'başarısız',
+  'geçersiz',
+  'zorunlu',
+  'bulunamadı',
+  'yapılamadı',
+  'edilemedi',
+  'alınamadı',
+  'reddedildi',
+  'eşleşmiyor',
+  'olmalı',
+  'giriniz',
+  'girin',
+  'seçiniz',
+  'lütfen',
+  'error',
+  'failed',
+  'yetkisiz',
 ];
 const _warningWords = ['uyarı', 'dikkat', 'çevrimdışı', 'bekl'];
 
@@ -121,9 +151,15 @@ ToastKind inferToastKind({Color? backgroundColor, String? message}) {
   final text = (message ?? '').toLowerCase();
   if (_errorWords.any(text.contains)) return ToastKind.error;
   if (_warningWords.any(text.contains)) return ToastKind.warning;
-  if (text.contains('başarı') || text.contains('kaydedildi') || text.contains('oluşturuldu') ||
-      text.contains('kopyalandı') || text.contains('gönderildi') || text.contains('eklendi') ||
-      text.contains('güncellendi') || text.contains('silindi') || text.contains('onaylandı')) {
+  if (text.contains('başarı') ||
+      text.contains('kaydedildi') ||
+      text.contains('oluşturuldu') ||
+      text.contains('kopyalandı') ||
+      text.contains('gönderildi') ||
+      text.contains('eklendi') ||
+      text.contains('güncellendi') ||
+      text.contains('silindi') ||
+      text.contains('onaylandı')) {
     return ToastKind.success;
   }
   return ToastKind.info;
@@ -133,17 +169,49 @@ ToastKind inferToastKind({Color? backgroundColor, String? message}) {
 class SpToast {
   const SpToast._();
 
-  static void show(BuildContext context, String message, ToastKind kind, {SnackBarAction? action}) {
+  static void show(
+    BuildContext context,
+    String message,
+    ToastKind kind, {
+    SnackBarAction? action,
+  }) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(spSnackBar(kind: kind, content: Text(message), action: action));
+      ..showSnackBar(
+        spSnackBar(kind: kind, content: Text(message), action: action),
+      );
   }
 
-  static void success(BuildContext context, String message) => show(context, message, ToastKind.success);
-  static void info(BuildContext context, String message) => show(context, message, ToastKind.info);
-  static void warning(BuildContext context, String message) => show(context, message, ToastKind.warning);
-  static void error(BuildContext context, String message, {SnackBarAction? action}) =>
-      show(context, message, ToastKind.error, action: action);
+  static void success(BuildContext context, String message) =>
+      show(context, message, ToastKind.success);
+  static void info(BuildContext context, String message) =>
+      show(context, message, ToastKind.info);
+  static void warning(BuildContext context, String message) =>
+      show(context, message, ToastKind.warning);
+  static void error(
+    BuildContext context,
+    String message, {
+    SnackBarAction? action,
+  }) => show(context, message, ToastKind.error, action: action);
+
+  /// Shows an error toast from an exception or error object, translating
+  /// known [AppException] error codes to user-friendly messages.
+  static void exception(
+    BuildContext context,
+    Object error, {
+    SnackBarAction? action,
+  }) {
+    final String message;
+    if (error is AppException) {
+      message = AppStrings.localizedErrorMessage(
+        error.code,
+        fallback: error.message,
+      );
+    } else {
+      message = error.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+    }
+    SpToast.error(context, message, action: action);
+  }
 }
 
 /// Full-screen confirmation page that names the object and the consequence.
@@ -167,7 +235,9 @@ Future<bool> showSpConfirmDialog(
     confirmLabel: confirmLabel,
     cancelLabel: cancelLabel,
     confirmColor: destructive ? AppColors.dangerFill : AppColors.primaryFill,
-    icon: destructive ? Icons.warning_amber_rounded : Icons.help_outline_rounded,
+    icon: destructive
+        ? Icons.warning_amber_rounded
+        : Icons.help_outline_rounded,
     iconColor: destructive ? AppColors.accentRed : AppColors.accentCyan,
     cancelId: 'btn_confirm_cancel',
     confirmId: confirmKey ?? 'btn_confirm_ok',
