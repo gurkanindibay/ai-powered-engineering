@@ -19,24 +19,20 @@ use crate::services::VirtualIbanService;
 pub fn bootstrap_admin_password() -> String {
     static PASSWORD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     PASSWORD
-        .get_or_init(
-            || match std::env::var("SITEPULSE_BOOTSTRAP_ADMIN_PASSWORD") {
-                Ok(p) if p.chars().count() >= crate::auth::MIN_PASSWORD_LENGTH => p,
-                _ => {
-                    let p = crate::auth::generate_temporary_password("SP-ADMIN-");
-                    tracing::warn!(
-                        "Bootstrap SaaS admin one-time password (change on first login): {}",
-                        p
-                    );
-                    p
-                }
-            },
-        )
+        .get_or_init(|| match std::env::var("SITEPULSE_BOOTSTRAP_ADMIN_PASSWORD") {
+            Ok(p) if p.chars().count() >= crate::auth::MIN_PASSWORD_LENGTH => p,
+            _ => {
+                let p = crate::auth::generate_temporary_password("SP-ADMIN-");
+                tracing::warn!("Bootstrap administrator requires a configured password for interactive sign-in");
+                p
+            }
+        })
         .clone()
 }
 
 #[derive(Clone)]
 pub struct AppState {
+    pub security: Arc<tokio::sync::Mutex<crate::security::MemorySecurity>>,
     pub inner: Arc<RwLock<AppStateInner>>,
     pub pool: Option<deadpool_postgres::Pool>,
 }
@@ -82,6 +78,8 @@ pub struct AppStateInner {
     pub dues_budget_basis: HashMap<String, String>,
     /// Card payment intents through the licensed provider (SPEC-007 R4).
     pub payment_intents: Vec<crate::models::PaymentIntent>,
+    /// SPEC-009 aggregates (KVKK, notifications, autopay, expenses, collections, ...).
+    pub finance: crate::finance_book::FinanceBook,
 }
 
 impl Default for AppStateInner {
@@ -135,6 +133,7 @@ impl AppStateInner {
             budget_required_sites: Vec::new(),
             dues_budget_basis: HashMap::new(),
             payment_intents: Vec::new(),
+            finance: crate::finance_book::FinanceBook::default(),
         }
     }
 
@@ -192,7 +191,7 @@ impl AppStateInner {
                 full_name: "SaaS Platform Admin".to_string(),
                 email: "admin@sitepulse.io".to_string(),
                 phone: "+90 532 999 0000".to_string(),
-                password_hash: Some(crate::auth::hash_password(&bootstrap_admin_password())),
+                password_hash: seed_password_hash(&bootstrap_admin_password()),
                 role: Role::SaasAdmin,
                 must_change_password: true,
                 auth_provider: AuthProvider::Local,
@@ -291,7 +290,7 @@ impl AppStateInner {
                 full_name: "Mehmet Demir".to_string(),
                 email: "mehmet.demir@begonya.com".to_string(),
                 phone: "+90 532 100 2030".to_string(),
-                password_hash: Some(crate::auth::hash_password("mehmet123")),
+                password_hash: seed_password_hash("mehmet123"),
                 role: Role::SiteManager,
                 must_change_password: false,
                 auth_provider: AuthProvider::Local,
@@ -310,7 +309,7 @@ impl AppStateInner {
                 full_name: "Ahmet Yılmaz".to_string(),
                 email: "ahmet.yilmaz@begonya.com".to_string(),
                 phone: "+90 532 111 22 33".to_string(),
-                password_hash: Some(crate::auth::hash_password("ahmet123")),
+                password_hash: seed_password_hash("ahmet123"),
                 role: Role::HomeOwner,
                 must_change_password: false,
                 auth_provider: AuthProvider::Local,
@@ -562,6 +561,7 @@ impl AppStateInner {
         self.operating_budgets.clear();
         self.dues_budget_basis.clear();
         self.payment_intents.clear();
+        self.finance = crate::finance_book::FinanceBook::default();
         self.auto_scheduler_enabled = false;
         self.seed_system_lookups();
     }
@@ -577,6 +577,7 @@ impl AppStateInner {
         self.operating_budgets.clear();
         self.dues_budget_basis.clear();
         self.payment_intents.clear();
+        self.finance = crate::finance_book::FinanceBook::default();
 
         // 100% clean slate: ₺0.00 debt
         self.dues.clear();
@@ -731,6 +732,7 @@ impl AppState {
     #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
+            security: Arc::default(),
             inner: Arc::new(RwLock::new(AppStateInner::new())),
             pool: None,
         }
@@ -747,6 +749,7 @@ impl AppState {
             inner.blocks.clear();
         }
         Self {
+            security: Arc::default(),
             inner: Arc::new(RwLock::new(inner)),
             pool,
         }
@@ -777,6 +780,7 @@ impl AppState {
         let mut inner = AppStateInner::new();
         inner.clear_all_data();
         Self {
+            security: Arc::default(),
             inner: Arc::new(RwLock::new(inner)),
             pool: None,
         }
@@ -787,8 +791,20 @@ impl AppState {
         let mut inner = AppStateInner::new();
         inner.seed_test_fixtures();
         Self {
+            security: Arc::default(),
             inner: Arc::new(RwLock::new(inner)),
             pool: None,
+        }
+    }
+}
+
+/// Development fixture accounts fail closed if password initialization fails.
+pub fn seed_password_hash(password: &str) -> Option<String> {
+    match crate::auth::hash_password(password) {
+        Ok(hash) => Some(hash),
+        Err(error) => {
+            tracing::error!(%error,"Fixture account password unavailable");
+            None
         }
     }
 }

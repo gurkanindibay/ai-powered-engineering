@@ -16,6 +16,19 @@ use sitepulse_backend::state::AppState;
 const SITE: &str = "site-1";
 const ACTOR: &str = "user:usr-site-manager-1 <mehmet.demir@begonya.com>";
 
+fn operator(id: &str) -> sitepulse_backend::authorization::AuthzContext {
+    let token =
+        sitepulse_backend::auth::issue_token(id, "", Role::SiteManager, SITE, None).unwrap();
+    let mut claims = sitepulse_backend::auth::verify_token(&token).unwrap();
+    claims.role = Role::SiteManager;
+    claims.site_id = SITE.to_string();
+    sitepulse_backend::authorization::AuthzContext {
+        claims,
+        permissions: Permission::permissions_for_role(Role::SiteManager),
+        request_id: "spec-006".to_string(),
+    }
+}
+
 fn d(s: &str) -> Decimal {
     Decimal::from_str_exact(s).unwrap()
 }
@@ -57,6 +70,7 @@ fn line(category: &str, amount: &str, key: &str) -> BudgetLineInput {
         description: None,
         annual_amount: d(amount),
         allocation_key: Some(key.to_string()),
+        unit_weights: Vec::new(),
     }
 }
 
@@ -586,7 +600,7 @@ async fn when_a_card_receipt_is_reversed_then_the_intent_is_refunded() {
                 receipt: number.clone(),
                 reason: "Kart itirazı".into(),
             },
-            ACTOR,
+            &operator("usr-site-manager-1"),
         )
         .await
         .unwrap();

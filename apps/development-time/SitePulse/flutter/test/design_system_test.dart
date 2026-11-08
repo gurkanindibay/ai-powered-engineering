@@ -1,3 +1,5 @@
+@Tags(['ui'])
+library;
 import 'dart:math' as math;
 
 import 'package:decimal/decimal.dart';

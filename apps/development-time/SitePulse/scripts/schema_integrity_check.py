@@ -267,8 +267,21 @@ NEGATIVE_CASES += [
      " SELECT site_id, id, 'X', 10, 'BANK_TRANSFER', 'UNMATCHED' FROM units LIMIT 1"),
 ]
 
+# SPEC-007 / V18: immutable evidence and bounded support elevation.
+NEGATIVE_CASES += [
+    ("audit events reject UPDATE", "UPDATE audit_events SET action='TAMPERED'"),
+    ("audit events reject DELETE", "DELETE FROM audit_events"),
+    ("audit events reject TRUNCATE", "TRUNCATE audit_events"),
+    ("support grants reject self approval", "INSERT INTO support_grants(id,operator_user_id,site_id,permissions,reason,approved_by,expires_at) SELECT 'self-approved',u.id,s.id,ARRAY['UNIT_READ'],'Test support access',u.id,now()+interval '5 minutes' FROM users u,sites s LIMIT 1"),
+    ("support grants reject excessive duration", "INSERT INTO support_grants(id,operator_user_id,site_id,permissions,reason,expires_at) SELECT 'too-long',u.id,s.id,ARRAY['UNIT_READ'],'Test support access',now()+interval '61 minutes' FROM users u,sites s LIMIT 1"),
+]
+
 # (name, statement, assertion query that must return 't')
 POSITIVE_CASES = [
+    ("audit projection removes credentials and preserves decimal amounts",
+     "SELECT 1",
+     "SELECT sp_audit_projection('{\"password_hash\":\"SECRET\",\"token\":\"SECRET\",\"status\":\"ACTIVE\",\"amount\":12.34}'::jsonb) = '{\"status\":\"ACTIVE\",\"amount\":\"12.34\"}'::jsonb"),
+
     ("national id is never stored in clear text (M6)",
      "INSERT INTO persons (national_id, full_name, person_type) VALUES ('11111111110', 'PII Check', 'HOME_OWNER')",
      "SELECT national_id IS NULL AND national_id_masked = '*******1110' AND length(national_id_hash) = 64 FROM persons WHERE full_name = 'PII Check'"),

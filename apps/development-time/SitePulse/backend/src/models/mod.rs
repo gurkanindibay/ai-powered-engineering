@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 mod payments_phase2;
 pub use payments_phase2::*;
+mod payments_phase3;
+pub use payments_phase3::*;
 
 macro_rules! impl_sql_for_enum {
     ($t:ty) => {
@@ -47,6 +49,8 @@ pub enum Role {
     HomeResident,
     SiteManager,
     SaasAdmin,
+    /// Denetçi (KMK 41): read-only access to the books; approves large expenses.
+    Auditor,
 }
 
 impl Role {
@@ -56,24 +60,27 @@ impl Role {
             Role::HomeResident => "HOME_RESIDENT",
             Role::SiteManager => "SITE_MANAGER",
             Role::SaasAdmin => "SAAS_ADMIN",
+            Role::Auditor => "AUDITOR",
         }
     }
 
-    #[allow(dead_code)]
-    pub fn from_str_loose(s: &str) -> Self {
-        match s.to_uppercase().as_str() {
-            "HOME_OWNER" | "KAT_MALIKI" => Role::HomeOwner,
-            "HOME_RESIDENT" | "EV_SAKINI" | "RESIDENT" | "KAT_SAKINI" | "TENANT" => {
-                Role::HomeResident
-            }
-            "SITE_MANAGER" | "YONETICI" => Role::SiteManager,
-            "SAAS_ADMIN" | "ADMIN" => Role::SaasAdmin,
-            _ => Role::HomeOwner,
+    /// Parse a role without granting authority to unknown values.
+    ///
+    /// # Errors
+    /// Returns an error for unrecognized or legacy role strings.
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "HOME_OWNER" => Ok(Self::HomeOwner),
+            "HOME_RESIDENT" => Ok(Self::HomeResident),
+            "SITE_MANAGER" => Ok(Self::SiteManager),
+            "SAAS_ADMIN" => Ok(Self::SaasAdmin),
+            "AUDITOR" => Ok(Self::Auditor),
+            _ => Err("Unknown role".to_string()),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Permission {
     UnitRead,
@@ -86,6 +93,27 @@ pub enum Permission {
     LedgerManageAll,
     AnnouncementBroadcast,
     TenantManage,
+    PaymentRecordManual,
+    PaymentReverse,
+    BankAccountManage,
+    ReconciliationConfirm,
+    RoleGrant,
+    AuditLogRead,
+    AuditLogExport,
+    SupportAccess,
+    PlatformIntegrationConfigure,
+    /// SPEC-009: read the books, reports, collections and analytics.
+    FinanceRead,
+    /// SPEC-009: expenses, journal, dunning, plans, cases, leases, heat-share, KVKK settings.
+    FinanceManage,
+    /// SPEC-009: approve an expense invoice (four-eyes; the auditor above the limit).
+    ExpenseApprove,
+    /// SPEC-009: approve a waiver or write-off requested by someone else.
+    AdjustmentApprove,
+    /// SPEC-009: assembly meetings, votes and the decisions book.
+    GovernanceManage,
+    /// SPEC-009: a management company's portfolio of sites.
+    PortfolioRead,
 }
 
 impl Permission {
@@ -105,6 +133,23 @@ impl Permission {
                 "Broadcast announcements and notifications to residents"
             }
             Permission::TenantManage => "Manage SaaS platform sites and subscriptions",
+            Permission::PaymentRecordManual => "Record manual payments",
+            Permission::PaymentReverse => "Reverse payments after step-up",
+            Permission::BankAccountManage => "Manage site banking configuration",
+            Permission::ReconciliationConfirm => "Confirm bank reconciliation",
+            Permission::RoleGrant => "Manage role assignments",
+            Permission::AuditLogRead => "Read scoped audit events",
+            Permission::AuditLogExport => "Export scoped audit events",
+            Permission::SupportAccess => "Request and approve support access",
+            Permission::PlatformIntegrationConfigure => "Configure platform bank integration",
+            Permission::FinanceRead => "Read the general ledger, reports, collections and analytics",
+            Permission::FinanceManage => {
+                "Manage expenses, journal entries, dunning, payment plans, collection cases and leases"
+            }
+            Permission::ExpenseApprove => "Approve expense invoices",
+            Permission::AdjustmentApprove => "Approve penalty waivers and write-offs",
+            Permission::GovernanceManage => "Manage assembly meetings and the decisions book",
+            Permission::PortfolioRead => "View a management company's site portfolio",
         }
     }
 
@@ -112,15 +157,32 @@ impl Permission {
         match role {
             Role::SaasAdmin => vec![
                 Permission::TenantManage,
-                Permission::SiteManage,
                 Permission::AnnouncementBroadcast,
+                Permission::RoleGrant,
+                Permission::AuditLogRead,
+                Permission::SupportAccess,
+                Permission::PlatformIntegrationConfigure,
             ],
             Role::SiteManager => vec![
+                Permission::UnitRead,
+                Permission::PaymentRecordManual,
+                Permission::PaymentReverse,
+                Permission::BankAccountManage,
+                Permission::ReconciliationConfirm,
+                Permission::RoleGrant,
+                Permission::AuditLogRead,
+                Permission::AuditLogExport,
                 Permission::SiteManage,
                 Permission::ResidentInviteSite,
                 Permission::ResidentApprove,
                 Permission::LedgerManageAll,
                 Permission::AnnouncementBroadcast,
+                Permission::FinanceRead,
+                Permission::FinanceManage,
+                Permission::ExpenseApprove,
+                Permission::AdjustmentApprove,
+                Permission::GovernanceManage,
+                Permission::PortfolioRead,
             ],
             Role::HomeOwner => vec![
                 Permission::UnitRead,
@@ -128,11 +190,11 @@ impl Permission {
                 Permission::UnitInviteCoResident,
                 Permission::UnitManageHousehold,
             ],
-            Role::HomeResident => vec![
-                Permission::UnitRead,
-                Permission::UnitPay,
-                Permission::UnitInviteCoResident,
-                Permission::UnitManageHousehold,
+            Role::HomeResident => vec![Permission::UnitRead, Permission::UnitPay],
+            Role::Auditor => vec![
+                Permission::FinanceRead,
+                Permission::ExpenseApprove,
+                Permission::AuditLogRead,
             ],
         }
     }
@@ -829,6 +891,7 @@ pub struct ChangePasswordRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthResponse {
+    pub refresh_token: String,
     pub access_token: String,
     pub token_type: String,
     pub expires_in: i64,

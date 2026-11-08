@@ -1,3 +1,5 @@
+@Tags(['ui'])
+library;
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,7 +11,7 @@ import 'test_fixtures.dart';
 import 'ui_test_helpers.dart';
 
 DashboardController _createTestController({bool startAuthenticated = false}) {
-  final controller = DashboardController(startAuthenticated: startAuthenticated);
+  final controller = DashboardController(startAuthenticated: startAuthenticated, isTestMode: true);
   controller.loadTestFixtures();
   return controller;
 }

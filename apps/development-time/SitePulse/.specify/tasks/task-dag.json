@@ -214,7 +214,7 @@
         "task-07"
       ],
       "spec_ref": "SPEC-003",
-      "description": "Provision ISO 7064 MOD-97-10 validated Virtual IBANs (Kuveyt Türk Sandbox) and real-time incoming transfer webhook settlement with HMAC signature and idempotency guard.",
+      "description": "Provision ISO 7064 MOD-97-10 validated Virtual IBANs (Kuveyt T\u00fcrk Sandbox) and real-time incoming transfer webhook settlement with HMAC signature and idempotency guard.",
       "gates": [],
       "acceptance_tests": [
         "rust:integration_tests::when_unit_created_then_generates_unique_sanal_iban",
@@ -554,7 +554,7 @@
     },
     {
       "id": "task-28",
-      "name": "Payments Phase 2: Virman Reversal, Resident Statement, Receipt PDF, Card Payments via Provider, İşletme Projesi",
+      "name": "Payments Phase 2: Virman Reversal, Resident Statement, Receipt PDF, Card Payments via Provider, \u0130\u015fletme Projesi",
       "module": "full-stack",
       "status": "UNVERIFIED",
       "depends_on": [
@@ -582,6 +582,33 @@
         "system:ledger_integrity_clean"
       ],
       "attempts": 0
+    },
+    {
+      "id": "task-29",
+      "name": "Authentication, authorization and durable audit security remediation",
+      "module": "full-stack",
+      "status": "UNVERIFIED",
+      "depends_on": [],
+      "spec_ref": "SPEC-008",
+      "description": "Implemented and locally validated under SPEC-008 (14 non-browser gates, 29 API scenarios and browser coverage); formal current-commit checker evidence is pending. No historical task verification is asserted.",
+      "gates": [
+        "schema-integrity",
+        "api-system"
+      ],
+      "acceptance_tests": [
+        "rust:aaa_security_tests::unknown_routes_and_cross_tenant_access_fail_closed",
+        "rust:aaa_security_tests::refresh_reuse_revokes_the_entire_session",
+        "rust:aaa_security_tests::platform_administrators_do_not_inherit_tenant_permissions",
+        "flutter:test/session_security_test.dart",
+        "system:security_session_lifecycle",
+        "system:transactional_audit",
+        "system:audit_scope_and_privileges",
+        "system:registration_repository_scope",
+        "system:support_grant_lifecycle",
+        "system:invitation_atomic_registration",
+        "system:household_members_persisted"
+      ],
+      "attempts": 1
     }
   ],
   "schema": "task-dag.schema.json"

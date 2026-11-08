@@ -50,3 +50,14 @@ The workspace is strictly partitioned into two paradigms:
      - After completing code modifications, keep the graph synchronized with: `graphify update .` (local Tree-sitter AST, zero LLM cost).
      - To re-index the full repository with docs and images, ensure `GEMINI_API_KEY` is loaded (e.g. from `.env`) or run `graphify . --code-only` for fast, keyless local AST extraction.
 
+8. **Standardized Logging & Correlation Directives**:
+   - All logging must comply with [docs/LOGGING_STANDARDS.md](file:///docs/LOGGING_STANDARDS.md) and [.agents/rules/logging-standards.md](file:///.agents/rules/logging-standards.md).
+   - In backend Rust code: use `tracing::` structured macros (`info!`, `warn!`, `error!`); raw `println!`, `eprintln!`, `dbg!` are strictly forbidden in production modules.
+   - In frontend Flutter code: use `AppLogger` (`lib/domain/logging/app_logger.dart`); raw `print()` is forbidden, and ad-hoc `debugPrint` is restricted and ratcheted toward zero.
+   - Correlate requests end-to-end via `x-request-id` headers and `trace_id` fields in error envelopes. Never log sensitive credentials or raw PII.
+   - Harness verification gate `logging-standards-lint` (`scripts/logging_standards_lint.py`) must pass on every check.
+
+
+## Durable engineering harness
+
+For persistent multi-role development runs, use `python3 scripts/development_harness.py --help` and the [team-orchestration skill](.agents/skills/team-orchestration/SKILL.md). Setup, execution boundaries and recovery are in [docs/engineering-harness.md](docs/engineering-harness.md). Preserve user changes; create runs from an explicit committed revision. Model targets require live capabilities and configured eligibility; a plan alone does not execute agents.

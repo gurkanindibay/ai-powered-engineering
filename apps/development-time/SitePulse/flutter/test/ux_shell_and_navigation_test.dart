@@ -1,3 +1,5 @@
+@Tags(['ui'])
+library;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui' show Tristate;

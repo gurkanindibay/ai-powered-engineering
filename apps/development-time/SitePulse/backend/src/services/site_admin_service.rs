@@ -121,7 +121,7 @@ impl SiteAdminService {
         let formatted_block_name = format!("{} Blok", effective_clean_block);
 
         let temp_pass = generate_resident_temporary_password();
-        let password_hash = crate::auth::hash_password(&temp_pass);
+        let password_hash = crate::auth::hash_password_async(temp_pass.clone()).await?;
 
         let effective_floor = if request.floor > 0 {
             request.floor
@@ -1905,7 +1905,7 @@ impl SiteAdminService {
                 email,
             )
             .await
-            .unwrap_or(0),
+            .map_err(|_| "Household storage unavailable".to_string())?,
             None => 0,
         };
 
@@ -1921,6 +1921,11 @@ impl SiteAdminService {
             resident_user_id: None,
         };
 
+        let memory_password = if member_id == 0 {
+            Some(crate::auth::hash_password_async(generate_resident_temporary_password()).await?)
+        } else {
+            None
+        };
         let mut inner = self.state.inner.write().await;
         for key in &[
             unit_id.to_string(),
@@ -1936,14 +1941,15 @@ impl SiteAdminService {
 
         // Also add to inner.users so the co-resident can log in with temporary password if needed
         let email_norm = crate::domain::email::NormalizedEmail::normalize(email);
-        if !email_norm.is_empty()
+        if memory_password.is_some()
+            && !email_norm.is_empty()
             && !inner
                 .users
                 .iter()
                 .any(|u| crate::domain::email::same_email(&u.email, &email_norm))
         {
-            let temp_pass = generate_resident_temporary_password();
-            let password_hash = crate::auth::hash_password(&temp_pass);
+            let password_hash =
+                memory_password.ok_or_else(|| "Memory password unavailable".to_string())?;
             let s_id = site_id.to_string();
             let max_u = inner
                 .users

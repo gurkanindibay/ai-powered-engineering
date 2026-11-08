@@ -92,7 +92,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 email,
                 phone: phone.unwrap_or_default(),
                 password_hash,
-                role: Role::from_str_loose(&role_str),
+                role: Role::parse(&role_str)?,
                 must_change_password,
                 auth_provider: auth_provider
                     .as_deref()
@@ -127,7 +127,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let p_email: Option<String> = row.get(2);
             let p_phone: Option<String> = row.get(3);
             let p_type: String = row.get(4);
-            let role = Role::from_str_loose(&p_type);
+            let role = Role::parse(&p_type)?;
 
             // Persons live in their own id namespace (`person-<id>`) so they can
             // never collide with, or overwrite, a real login account.
@@ -920,6 +920,15 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             state.payment_intents.len()
         );
     }
+
+    // SPEC-009: every payments-phase-3 aggregate.
+    state.finance = super::finance_store::load_finance_book(pool).await?;
+    info!(
+        "Loaded {} expenses, {} collection cases and {} notifications from PostgreSQL",
+        state.finance.expenses.len(),
+        state.finance.cases.len(),
+        state.finance.notifications.len()
+    );
     Ok(())
 }
 

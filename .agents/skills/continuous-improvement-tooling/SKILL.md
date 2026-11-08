@@ -107,10 +107,11 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 
 | Tool | Path | Use it for |
 | :--- | :--- | :--- |
-| `run_tests.py` | `apps/development-time/SitePulse/scripts/run_tests.py` | The full gate run before concluding any change |
-| `api_system_check.py` | `apps/development-time/SitePulse/scripts/api_system_check.py` | HTTP auth, tenancy, webhook, concurrency, restart, match-all-in-place, payer identity, site purge, per-debtor virman, reversal, scoped webhook claims, receipt issuer snapshot, aging snapshot, virman reversal, resident statement scoping, receipt PDF + public verification, sandbox card payment via signed webhook, budget-based accrual and ledger drift checks against a real DB |
+| `run_tests.py` | `apps/development-time/SitePulse/scripts/run_tests.py` | The full gate run before concluding any change; `--from-dev-container` loads local development DB settings without exposing credentials |
+| `api_system_check.py` | `apps/development-time/SitePulse/scripts/api_system_check.py` | HTTP auth, tenancy, webhook, concurrency, restart, match-all-in-place, payer identity, site purge, per-debtor virman, reversal, scoped webhook claims, receipt issuer snapshot, aging snapshot, ledger drift, session rotation/revocation, transactional audit failure, audit RLS, scoped review, support approval, atomic invitation, provider payment, household persistence/rollback and budget checks against a real DB, with ledger invariants checked after each scenario |
+
 | `schema_integrity_check.py` | `apps/development-time/SitePulse/scripts/schema_integrity_check.py` | Migration replay, constraint tests (incl. the V16 append-only payment ledger and the V17 reversal / webhook-claim / issuer / status rules) and the upgrade test |
-| `gui_e2e.py` | `apps/development-time/SitePulse/scripts/gui_e2e.py` | Playwright GUI suite in a real browser against an isolated stack (`serve` mode for writing tests) |
+| `gui_e2e.py` | `apps/development-time/SitePulse/scripts/gui_e2e.py` | Playwright GUI suite in a real browser against an isolated stack (`serve` mode for writing tests); source/API-origin fingerprint prevents stale bundle reuse and resets preserve append-only audit evidence |
 | `testid_lint.py` | `apps/development-time/SitePulse/scripts/testid_lint.py` | Every widget `Key` has a matching GUI `testId` (gate `testid-lint`) |
 | `ui_style_lint.py` | `apps/development-time/SitePulse/scripts/ui_style_lint.py` | Design-system rules: 12 px floor, `MoneyFormatter` for amounts, no emoji icons, no popups/partial sheets (`no-popup`); ratchet on literal font sizes and colours (gate `ui-style-lint`) |
 | `flutter_reuse_inventory.py` | `apps/development-time/SitePulse/scripts/flutter_reuse_inventory.py` | Flutter reuse inventory (token adoption, shared-widget usage) and guard rules: no raw clipboard writes, `Decimal.tryParse` in UI, JSON Decimal fallbacks, hand-rolled amount normalisation, raw `FilterChip`, hand-built `SpSelectionPage` or direct `SnackBar` (gate `flutter-reuse`). Catalogue: `.agents/skills/flutter-reusable-components/SKILL.md` |
@@ -123,3 +124,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |
 | `hash-password` | `apps/development-time/SitePulse/backend/src/bin/hash_password.rs` | argon2id hashes for seeds and resets |
 
+
+## Registered workspace orchestration tool
+
+`python3 scripts/development_harness.py --help` provides durable run planning/execution, candidate-bound evidence, cancellation/recovery and evaluation. Reuse it instead of scratch orchestration scripts. Guide: [docs/engineering-harness.md](../../../docs/engineering-harness.md); role workflow: [team-orchestration](../team-orchestration/SKILL.md). Registration and examples: `skills.md` section 6.

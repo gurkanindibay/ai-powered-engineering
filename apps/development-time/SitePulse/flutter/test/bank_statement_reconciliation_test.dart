@@ -1,3 +1,5 @@
+@Tags(['finance'])
+library;
 import 'dart:typed_data';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';

@@ -22,6 +22,19 @@ class Shell:
         assert key in self.NAV, key
         by_id(self.page, f"nav_{key}").first.click()
 
+    def verify_sensitive(self, password: str) -> None:
+        """Complete the real password step-up screen, then return to the caller."""
+        from support.flutter import fill
+        self.open_profile()
+        by_id(self.page,"btn_security_center").click()
+        fill(self.page,"security_password",password)
+        with self.page.expect_response(lambda response: response.request.method=="POST" and "/api/v1/auth/step-up" in response.url) as completed:
+            by_id(self.page,"security_verify").click()
+        assert completed.value.status==200
+        self.page.keyboard.press("Escape")
+        by_id(self.page,"btn_security_center").wait_for(timeout=10_000)
+        self.page.keyboard.press("Escape")
+
     def logout(self) -> None:
         """Avatar -> profile sheet -> 'Çıkış Yap' -> confirm."""
         self.open_profile().logout()

@@ -30,8 +30,10 @@ pub const BUDGET_CATEGORIES: [&str; 11] = [
     "RESERVE",
     "OTHER",
 ];
-/// `LAND_SHARE` (arsa payı, the KMK 20 default) or `EQUAL` (costs the yönetim planı shares equally).
-pub const ALLOCATION_KEYS: [&str; 2] = ["LAND_SHARE", "EQUAL"];
+/// `LAND_SHARE` (arsa payı, the KMK 20 default), `EQUAL` (costs the yönetim planı
+/// shares equally), and SPEC-009 R1: `HOUSE_TYPE` (weighted by the unit's house-type
+/// tariff), `METER` and `CUSTOM` (explicit per-unit weights on the line).
+pub const ALLOCATION_KEYS: [&str; 5] = ["LAND_SHARE", "EQUAL", "HOUSE_TYPE", "METER", "CUSTOM"];
 pub const SERVICE_METHODS: [&str; 4] = [
     "IN_ASSEMBLY",
     "SIGNATURE",
@@ -46,6 +48,9 @@ pub struct OperatingBudgetLine {
     pub description: Option<String>,
     pub annual_amount: Decimal,
     pub allocation_key: String,
+    /// Per-unit weights of a `METER` or `CUSTOM` line (SPEC-009 R1).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unit_weights: Vec<crate::models::UnitWeight>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -144,6 +149,9 @@ pub struct BudgetLineInput {
     pub annual_amount: Decimal,
     #[serde(default)]
     pub allocation_key: Option<String>,
+    /// Required for `METER` and `CUSTOM` lines: a non-negative weight per unit.
+    #[serde(default)]
+    pub unit_weights: Vec<crate::models::UnitWeight>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

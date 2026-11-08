@@ -47,7 +47,9 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(16, "V16__payment_ledger_integrity.sql"),
     migration!(17, "V17__payment_ledger_hardening.sql"),
     migration!(18, "V18__payments_phase2.sql"),
-    migration!(19, "V19__tenant_row_level_security.sql"),
+    migration!(19, "V19__authentication_authorization_audit.sql"),
+    migration!(20, "V20__payments_phase3.sql"),
+    migration!(21, "V21__tenant_row_level_security.sql"),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.
@@ -123,6 +125,34 @@ async fn apply_pending(client: &mut deadpool_postgres::Object) -> crate::db::DbR
         newly.push(m.version);
     }
     Ok(newly)
+}
+
+/// Verify production schema history without running owner-only startup maintenance.
+///
+/// # Errors
+/// Rejects a missing, changed or unapplied migration and unavailable storage.
+pub async fn verify_current(pool: &Pool) -> crate::db::DbResult<()> {
+    let client = pool.get().await?;
+    let rows = client
+        .query(
+            "SELECT version,checksum FROM schema_migrations ORDER BY version",
+            &[],
+        )
+        .await?;
+    if rows.len() != MIGRATIONS.len() {
+        return Err(
+            "Database migrations must be applied by the migration owner before starting production"
+                .into(),
+        );
+    }
+    for (row, migration) in rows.iter().zip(MIGRATIONS) {
+        if row.get::<_, i32>(0) != migration.version
+            || row.get::<_, String>(1) != checksum(migration.sql)
+        {
+            return Err("Database migration history does not match this application build".into());
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

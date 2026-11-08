@@ -162,7 +162,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         activeIcon: Icons.home_rounded,
         label: 'Ana Sayfa',
       ),
-      if (isManagerCockpit)
+      if (isManagerCockpit && session.hasPermission('LEDGER_MANAGE_ALL'))
         _NavDestination(
           id: 'nav_dues',
           icon: Icons.payments_outlined,

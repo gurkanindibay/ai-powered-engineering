@@ -36,7 +36,7 @@ impl SaasTenantService {
             crate::domain::email::NormalizedEmail::normalize(&request.site_admin_email);
         let base_slug = to_slug(&request.site_name);
 
-        let (slug, plan, license_end, temp_pass, password_hash, blocks_list) = {
+        let (slug, plan, license_end, blocks_list) = {
             let inner = self.state.inner.read().await;
             if inner
                 .users
@@ -63,23 +63,16 @@ impl SaasTenantService {
                 .unwrap_or(PlanType::Standard);
             let license_end = Utc::now().date_naive() + chrono::Days::new(365);
 
-            let temp_pass = generate_secure_temporary_password();
-            let password_hash = crate::auth::hash_password(&temp_pass);
-
             let blocks_list: Vec<String> = request
                 .blocks
                 .filter(|b| !b.is_empty())
                 .unwrap_or_else(|| vec!["A Blok".to_string(), "B Blok".to_string()]);
 
-            (
-                slug,
-                plan,
-                license_end,
-                temp_pass,
-                password_hash,
-                blocks_list,
-            )
+            (slug, plan, license_end, blocks_list)
         };
+
+        let temp_pass = generate_secure_temporary_password();
+        let password_hash = crate::auth::hash_password_async(temp_pass.clone()).await?;
 
         let (site_id, user_id, block_dtos, person_id) = if let Some(ref pool) = self.state.pool {
             let reg = crate::db::create_site_with_manager_and_blocks(
@@ -611,7 +604,7 @@ impl SaasTenantService {
         site_id: &str,
     ) -> Result<SiteAdminPasswordResetResponse, String> {
         let temp_pass = generate_secure_temporary_password();
-        let password_hash = crate::auth::hash_password(&temp_pass);
+        let password_hash = crate::auth::hash_password_async(temp_pass.clone()).await?;
 
         if let Some(ref pool) = self.state.pool {
             let res_opt =

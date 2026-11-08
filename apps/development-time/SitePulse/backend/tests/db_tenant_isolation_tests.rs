@@ -114,6 +114,7 @@ fn manager_token(site: i64) -> String {
         &site.to_string(),
         None,
     )
+    .expect("issue token")
 }
 
 async fn call(

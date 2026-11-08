@@ -785,7 +785,7 @@ impl CapitalProjectService {
             let units: Vec<crate::models::IndependentUnit> = inner
                 .units
                 .iter()
-                .filter(|u| u.site_id == project.site_id)
+                .filter(|u| crate::authorization::same_site(&u.site_id, &project.site_id))
                 .cloned()
                 .collect();
             (units, inner.dues.clone())

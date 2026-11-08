@@ -1083,7 +1083,7 @@ pub async fn fetch_site_payments_from_db(
     let rq_rows = client
         .query(
             r#"
-        SELECT 
+        SELECT
             rq.match_id,
             rq.transaction_id,
             rq.txn_date,

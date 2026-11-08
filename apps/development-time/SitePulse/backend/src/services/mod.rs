@@ -20,6 +20,21 @@ pub mod site_admin_service;
 pub mod site_bank_account_service;
 pub mod virtual_iban_service;
 
+// SPEC-009 (payments phase 3).
+pub mod accounting_service;
+pub mod assembly_service;
+pub mod autopay_service;
+pub mod bank_matching_service;
+pub mod collections_service;
+pub mod dunning_service;
+pub mod finance_common;
+pub mod heat_share_service;
+pub mod kvkk_service;
+pub mod lease_service;
+pub mod notification_service;
+pub mod plan_service;
+pub mod resident_request_service;
+
 pub use auth_service::AuthService;
 pub use bank_statement_parser::BankStatementParser;
 pub use capital_project_service::CapitalProjectService;

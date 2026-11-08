@@ -49,6 +49,7 @@ pub async fn save_user(
                 Role::HomeResident => "HOME_RESIDENT",
                 Role::SaasAdmin => "SAAS_ADMIN",
                 Role::SiteManager => "SITE_MANAGER",
+                Role::Auditor => "AUDITOR",
             };
             let row = client
                 .query_one(
@@ -146,7 +147,7 @@ pub async fn save_invitation_token(
             ],
         )
         .await?;
-    info!("Saved invitation token {} to PostgreSQL", invite.token);
+    info!("Saved unit invitation to PostgreSQL");
     Ok(())
 }
 
@@ -168,8 +169,8 @@ pub async fn upgrade_legacy_password_hashes(
         let id: i64 = row.get(0);
         let stored: String = row.get(1);
         let new_hash = match crate::auth::legacy_plaintext(&stored) {
-            Some(plain) => crate::auth::hash_password(&plain),
-            None => crate::auth::hash_password(&uuid::Uuid::new_v4().to_string()),
+            Some(plain) => crate::auth::hash_password_async(plain).await?,
+            None => crate::auth::hash_password_async(uuid::Uuid::new_v4().to_string()).await?,
         };
         changed += client
             .execute(
@@ -199,7 +200,7 @@ pub async fn ensure_bootstrap_admin(
     let email = std::env::var("SITEPULSE_BOOTSTRAP_ADMIN_EMAIL")
         .unwrap_or_else(|_| "admin@sitepulse.io".to_string())
         .to_lowercase();
-    let hash = crate::auth::hash_password(&crate::state::bootstrap_admin_password());
+    let hash = crate::auth::hash_password_async(crate::state::bootstrap_admin_password()).await?;
     let person_id: i64 = client
         .query_one(
             "INSERT INTO persons (full_name, email, person_type) VALUES ('SaaS Platform Admin', $1, 'SAAS_ADMIN')
@@ -271,7 +272,7 @@ pub async fn get_user_by_email(
             email,
             phone: phone.unwrap_or_default(),
             password_hash,
-            role: Role::from_str_loose(&role_str),
+            role: Role::parse(&role_str)?,
             must_change_password,
             auth_provider: auth_provider
                 .as_deref()
@@ -292,6 +293,17 @@ pub async fn get_user_by_id(
     user_id: &str,
 ) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
+    get_user_by_id_from_client(&client, user_id).await
+}
+
+/// Read current identity using an already attributed repository connection.
+///
+/// # Errors
+/// Propagates database and identity decoding failures.
+pub async fn get_user_by_id_from_client(
+    client: &tokio_postgres::Client,
+    user_id: &str,
+) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>> {
     let id_num = parse_id_to_i64(user_id);
     let row = if let Some(num) = id_num {
         client
@@ -329,7 +341,7 @@ pub async fn get_user_by_id(
             email,
             phone: phone.unwrap_or_default(),
             password_hash,
-            role: Role::from_str_loose(&role_str),
+            role: Role::parse(&role_str)?,
             must_change_password,
             auth_provider: auth_provider
                 .as_deref()
