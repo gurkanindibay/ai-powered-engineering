@@ -31,38 +31,42 @@ impl SaasTenantService {
             return Err("Site manager full name cannot be empty".to_string());
         }
 
-        let mut inner = self.state.inner.write().await;
-
         let email_norm = request.site_admin_email.trim().to_lowercase();
-        if inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
-            return Err(format!(
-                "An account with this email address already exists (zaten mevcut): {}",
-                request.site_admin_email
-            ));
-        }
-
         let base_slug = to_slug(&request.site_name);
-        let mut slug = base_slug.clone();
-        let mut counter = 1;
-        while inner.sites.iter().any(|s| s.slug == slug) {
-            slug = format!("{}-{}", base_slug, counter);
-            counter += 1;
-        }
 
-        let plan = request
-            .plan_type
-            .as_deref()
-            .map(PlanType::from_str_loose)
-            .unwrap_or(PlanType::Standard);
-        let license_end = Utc::now().date_naive() + chrono::Days::new(365);
+        let (slug, plan, license_end, temp_pass, password_hash, blocks_list) = {
+            let inner = self.state.inner.read().await;
+            if inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
+                return Err(format!(
+                    "An account with this email address already exists (zaten mevcut): {}",
+                    request.site_admin_email
+                ));
+            }
 
-        let temp_pass = generate_secure_temporary_password();
-        let password_hash = crate::auth::hash_password(&temp_pass);
+            let mut slug = base_slug.clone();
+            let mut counter = 1;
+            while inner.sites.iter().any(|s| s.slug == slug) {
+                slug = format!("{}-{}", base_slug, counter);
+                counter += 1;
+            }
 
-        let blocks_list: Vec<String> = request
-            .blocks
-            .filter(|b| !b.is_empty())
-            .unwrap_or_else(|| vec!["A Blok".to_string(), "B Blok".to_string()]);
+            let plan = request
+                .plan_type
+                .as_deref()
+                .map(PlanType::from_str_loose)
+                .unwrap_or(PlanType::Standard);
+            let license_end = Utc::now().date_naive() + chrono::Days::new(365);
+
+            let temp_pass = generate_secure_temporary_password();
+            let password_hash = crate::auth::hash_password(&temp_pass);
+
+            let blocks_list: Vec<String> = request
+                .blocks
+                .filter(|b| !b.is_empty())
+                .unwrap_or_else(|| vec!["A Blok".to_string(), "B Blok".to_string()]);
+
+            (slug, plan, license_end, temp_pass, password_hash, blocks_list)
+        };
 
         let (site_id, user_id, block_dtos, person_id) = if let Some(ref pool) = self.state.pool {
             let reg = crate::db::create_site_with_manager_and_blocks(
@@ -83,6 +87,7 @@ impl SaasTenantService {
 
             (reg.site_id, reg.user_id, reg.blocks, Some(reg.person_id))
         } else {
+            let inner = self.state.inner.read().await;
             let max_site = inner.sites.iter().filter_map(|s| crate::db::parse_id_to_i64(&s.id)).max().unwrap_or(0);
             let s_id = (max_site + 1).to_string();
 
@@ -116,7 +121,6 @@ impl SaasTenantService {
             tax_id: None,
             tax_office: None,
         };
-        inner.sites.push(new_site);
 
         let admin_user = User {
             id: user_id.clone(),
@@ -133,10 +137,14 @@ impl SaasTenantService {
             created_at: Utc::now(),
             person_id,
         };
-        inner.users.push(admin_user);
 
-        for b in block_dtos {
-            inner.blocks.push(b);
+        {
+            let mut inner = self.state.inner.write().await;
+            inner.sites.push(new_site);
+            inner.users.push(admin_user);
+            for b in block_dtos {
+                inner.blocks.push(b);
+            }
         }
 
         Ok(SiteRegistrationResponse {
@@ -245,47 +253,50 @@ impl SaasTenantService {
     }
 
     pub async fn delete_site(&self, site_id: &str) -> Result<(), String> {
-        let mut inner = self.state.inner.write().await;
-        let site_idx = inner
-            .sites
-            .iter()
-            .position(|s| s.id == site_id || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(site_id))
-            .ok_or_else(|| format!("Site with id '{}' not found", site_id))?;
+        let actual_site_id = {
+            let inner = self.state.inner.read().await;
+            let site = inner
+                .sites
+                .iter()
+                .find(|s| s.id == site_id || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(site_id))
+                .ok_or_else(|| format!("Site with id '{}' not found", site_id))?;
 
-        let actual_site_id = inner.sites[site_idx].id.clone();
+            let actual_site_id = site.id.clone();
 
-        // Invariant Guard 1: Check if any independent units exist for this site
-        let has_units = inner.units.iter().any(|u| u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id));
-        if has_units {
-            return Err(format!(
-                "Cannot delete site '{}': active units exist in complex (işlem kaydı mevcut)",
-                site_id
-            ));
-        }
+            // Invariant Guard 1: Check if any independent units exist for this site
+            let has_units = inner.units.iter().any(|u| u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id));
+            if has_units {
+                return Err(format!(
+                    "Cannot delete site '{}': active units exist in complex (işlem kaydı mevcut)",
+                    site_id
+                ));
+            }
 
-        // Invariant Guard 2: Check if any pending registrations exist for this site
-        let has_pending = inner.pending_registrations.iter().any(|r| r.site_id == actual_site_id || crate::db::parse_id_to_i64(&r.site_id) == crate::db::parse_id_to_i64(&actual_site_id));
-        if has_pending {
-            return Err(format!(
-                "Cannot delete site '{}': pending registration requests exist",
-                site_id
-            ));
-        }
+            // Invariant Guard 2: Check if any pending registrations exist for this site
+            let has_pending = inner.pending_registrations.iter().any(|r| r.site_id == actual_site_id || crate::db::parse_id_to_i64(&r.site_id) == crate::db::parse_id_to_i64(&actual_site_id));
+            if has_pending {
+                return Err(format!(
+                    "Cannot delete site '{}': pending registration requests exist",
+                    site_id
+                ));
+            }
 
-        // Invariant Guard 3: Check if any dues liabilities exist for units belonging to this site
-        let unit_ids: Vec<String> = inner
-            .units
-            .iter()
-            .filter(|u| u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id))
-            .map(|u| u.id.clone())
-            .collect();
-        let has_dues = inner.dues.iter().any(|d| unit_ids.contains(&d.unit_id));
-        if has_dues {
-            return Err(format!(
-                "Cannot delete site '{}': financial dues liabilities exist",
-                site_id
-            ));
-        }
+            // Invariant Guard 3: Check if any dues liabilities exist for units belonging to this site
+            let unit_ids: Vec<String> = inner
+                .units
+                .iter()
+                .filter(|u| u.site_id == actual_site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&actual_site_id))
+                .map(|u| u.id.clone())
+                .collect();
+            let has_dues = inner.dues.iter().any(|d| unit_ids.contains(&d.unit_id));
+            if has_dues {
+                return Err(format!(
+                    "Cannot delete site '{}': financial dues liabilities exist",
+                    site_id
+                ));
+            }
+            actual_site_id
+        };
 
         // Invariants passed: soft-delete. The row (and anything that references it)
         // is kept for audit; the site disappears from listings and its users can
@@ -293,8 +304,14 @@ impl SaasTenantService {
         if let Some(ref pool) = self.state.pool {
             crate::db::soft_delete_site(pool, &actual_site_id).await.map_err(|e| e.to_string())?;
         }
-        inner.sites.remove(site_idx);
-        inner.users.retain(|u| !crate::auth::same_id(&u.site_id, &actual_site_id) || u.role == Role::SaasAdmin);
+
+        {
+            let mut inner = self.state.inner.write().await;
+            if let Some(pos) = inner.sites.iter().position(|s| s.id == actual_site_id) {
+                inner.sites.remove(pos);
+            }
+            inner.users.retain(|u| !crate::auth::same_id(&u.site_id, &actual_site_id) || u.role == Role::SaasAdmin);
+        }
 
         Ok(())
     }
@@ -447,7 +464,10 @@ impl SaasTenantService {
             .map(|d| d.principal_amount)
             .sum();
 
-        // Synchronous PostgreSQL persistence
+        // Release the in-memory write lock before performing asynchronous database I/O
+        drop(inner);
+
+        // Synchronous PostgreSQL persistence without holding global memory locks
         if let Some(ref pool) = self.state.pool {
             crate::db::save_site(pool, &updated_site).await.map_err(|e| e.to_string())?;
             if let Some(ref u) = admin_user_to_save {
