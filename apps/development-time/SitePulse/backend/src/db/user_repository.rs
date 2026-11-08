@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use deadpool_postgres::Pool;
 use tracing::{info, warn};
 
-use crate::models::{Role, UnitInviteLinkResponse, User};
+use crate::models::{AuthProvider, Role, UnitInviteLinkResponse, User};
 use super::base::{parse_id_to_i64, require_id};
 pub async fn save_user(pool: &Pool, user: &User) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
@@ -241,7 +241,7 @@ pub async fn get_user_by_email(
             password_hash,
             role: Role::from_str_loose(&role_str),
             must_change_password,
-            auth_provider: auth_provider.unwrap_or_else(|| "LOCAL".to_string()),
+            auth_provider: auth_provider.as_deref().map(AuthProvider::from_str_loose).unwrap_or(AuthProvider::Local),
             google_sub,
             avatar_url,
             created_at: created_at.unwrap_or_else(Utc::now),
@@ -296,7 +296,7 @@ pub async fn get_user_by_id(
             password_hash,
             role: Role::from_str_loose(&role_str),
             must_change_password,
-            auth_provider: auth_provider.unwrap_or_else(|| "LOCAL".to_string()),
+            auth_provider: auth_provider.as_deref().map(AuthProvider::from_str_loose).unwrap_or(AuthProvider::Local),
             google_sub,
             avatar_url,
             created_at: created_at.unwrap_or_else(Utc::now),

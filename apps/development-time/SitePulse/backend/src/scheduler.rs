@@ -3,7 +3,7 @@ use chrono::{Datelike, NaiveDate, Utc};
 use rust_decimal::Decimal;
 
 use crate::handlers::apply_advance_payments_offset;
-use crate::models::{DebtStatus, DuesLiability};
+use crate::models::{DebtStatus, DebtorType, DuesLiability, ExpenseType};
 use crate::state::AppState;
 
 /// Formats a naive date into standard Turkish month and year, e.g. "Ekim 2026".
@@ -69,7 +69,7 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
                 let already = inner
                     .dues
                     .iter()
-                    .any(|d| d.unit_id == unit.id && d.period == period && d.expense_type == "OPERATIONAL_DUES");
+                    .any(|d| d.unit_id == unit.id && d.period == period && d.expense_type == ExpenseType::OperationalDues);
                 if already {
                     continue;
                 }
@@ -77,7 +77,7 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
                     tracing::warn!("[Scheduler] Unit {} in site {} has no house-type tariff; dues not accrued", unit.id, site_id);
                     continue;
                 };
-                let debtor = if unit.tenant_user_id.is_some() { "TENANT" } else { "OWNER" };
+                let debtor = if unit.tenant_user_id.is_some() { DebtorType::Tenant } else { DebtorType::Owner };
                 to_accrue.push((site_id.clone(), DuesLiability {
                     id: String::new(),
                     unit_id: unit.id.clone(),
@@ -89,8 +89,9 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
                     status: DebtStatus::Pending,
                     paid_principal: Decimal::ZERO,
                     paid_penalty: Decimal::ZERO,
-                    debtor_type: debtor.to_string(),
-                    expense_type: "OPERATIONAL_DUES".to_string(),
+                    debtor_type: debtor,
+                    expense_type: ExpenseType::OperationalDues,
+                    penalty_accrued_through: None,
                 }));
             }
         }
@@ -188,6 +189,28 @@ pub async fn start_automated_dues_accrual_scheduler(state: AppState) {
                 sites_accrued,
                 units_accrued
             );
+        }
+    }
+}
+
+/// Daily debt aging snapshot worker (O-8, regulatory report F17): once per
+/// calendar day (UTC) it writes every site's aging report to
+/// `debt_aging_snapshots`, so collection trends survive restarts.
+pub async fn start_debt_aging_snapshot_worker(state: AppState) {
+    let mut ticker = tokio::time::interval(Duration::from_secs(3600));
+    let mut last_day: Option<NaiveDate> = None;
+    loop {
+        ticker.tick().await;
+        let today = Utc::now().date_naive();
+        if last_day == Some(today) || state.pool.is_none() {
+            continue;
+        }
+        match crate::services::PaymentTrackingService::new(state.clone()).snapshot_debt_aging(None).await {
+            Ok(rows) => {
+                last_day = Some(today);
+                tracing::info!("[Scheduler] Debt aging snapshot for {}: {} rows", today, rows);
+            }
+            Err(e) => tracing::error!("[Scheduler] Debt aging snapshot failed: {}", e),
         }
     }
 }
