@@ -4,6 +4,7 @@ pub mod bank_statement_parser;
 pub mod dues_calculation_service;
 pub mod home_resident_invitation_service;
 pub mod kuveyt_turk_service;
+pub mod ledger_application;
 pub mod mt940_engine;
 pub mod reconciliation_service;
 pub mod registration_approval_service;

@@ -61,9 +61,9 @@ impl RegistrationApprovalService {
         }
 
         let mut inner = self.state.inner.write().await;
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
 
-        if inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
+        if inner.users.iter().any(|u| crate::domain::email::same_email(&u.email, &email_norm)) {
             return Err(format!(
                 "An account with this email address already exists (zaten mevcut): {}",
                 request.email
@@ -200,7 +200,8 @@ impl RegistrationApprovalService {
             &site_numeric_id.to_string(),
             &format!("blok-{}", effective_clean_block),
             req.unit_no,
-        );
+        )
+        .map_err(|e| e.to_string())?;
 
         let mut user_numeric_id = 0i64;
         #[allow(unused_assignments)]
@@ -236,7 +237,11 @@ impl RegistrationApprovalService {
                 // Find or create person
                 let person_type = if req.is_resident { "HOME_RESIDENT" } else { "HOME_OWNER" };
                 let existing_person = client
-                    .query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&req.email])
+                    .query_opt(
+                        "SELECT id FROM persons WHERE LOWER(email) = $1",
+                        // The parameter must be normalized too: LOWER() only applies to the column.
+                        &[&crate::domain::email::NormalizedEmail::normalize(&req.email)],
+                    )
                     .await
                     .ok()
                     .flatten();

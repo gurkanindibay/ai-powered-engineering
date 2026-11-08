@@ -100,9 +100,9 @@ impl HomeResidentInvitationService {
         }
 
         let mut inner = self.state.inner.write().await;
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
 
-        if inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
+        if inner.users.iter().any(|u| crate::domain::email::same_email(&u.email, &email_norm)) {
             return Err(format!(
                 "An account with this email address already exists (zaten mevcut): {}",
                 request.email

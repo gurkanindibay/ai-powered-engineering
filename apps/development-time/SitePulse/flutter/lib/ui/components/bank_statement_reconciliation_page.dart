@@ -1709,7 +1709,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     final currentAccount = widget.controller.siteBankAccount;
     final isTest = widget.controller.isTestMode;
     SupportedBank selectedBank = currentAccount?.supportedBank ?? SupportedBank.kuveytTurk;
-    final ibanController = TextEditingController(text: currentAccount?.iban ?? (isTest ? 'TR620020500009863791600001' : ''));
+    final ibanController = TextEditingController(text: currentAccount?.iban ?? (isTest ? 'TR190020500009863791600001' : ''));
     final holderController = TextEditingController(text: currentAccount?.accountHolder ?? (widget.controller.siteName.isNotEmpty ? '${widget.controller.siteName} Yönetimi' : ''));
     String? dialogError;
 
