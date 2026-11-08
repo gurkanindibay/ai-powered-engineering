@@ -52,3 +52,6 @@ apps/development-time/SitePulse/backend/keys/*
 .envrc
 graphify-out
 
+
+# Private development harness state, source snapshots and evidence
+.engineering-harness/
