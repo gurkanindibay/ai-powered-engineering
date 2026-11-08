@@ -2,7 +2,6 @@ import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
-import 'package:flutter/services.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 
@@ -10,6 +9,11 @@ import 'app_fullscreen_page.dart';
 
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
+import 'package:flutter/services.dart';
+import '../design_system/sp_clipboard.dart';
+import '../design_system/sp_money_field.dart';
+import '../../domain/models/payments_phase2_models.dart';
+import '../payments/card_payment_panel.dart';
 enum CheckoutPaymentMethod {
   card,
   virtualIban,
@@ -22,7 +26,10 @@ class PaymentCheckoutDialog extends StatefulWidget {
   final String virtualIban;
   final CheckoutPaymentMethod initialMethod;
   final bool isTest;
-  final void Function(Decimal amount) onPaymentSuccess;
+  /// The unit the card payment is for (SPEC-007 R4: paid on the provider's page).
+  final String unitId;
+  /// Called once the provider reports the card payment captured (a receipt exists).
+  final void Function(CardPaymentIntent intent)? onCardPaymentCaptured;
 
   const PaymentCheckoutDialog({
     super.key,
@@ -32,7 +39,8 @@ class PaymentCheckoutDialog extends StatefulWidget {
     this.virtualIban = '',
     this.initialMethod = CheckoutPaymentMethod.card,
     this.isTest = false,
-    required this.onPaymentSuccess,
+    this.unitId = '',
+    this.onCardPaymentCaptured,
   });
 
   @override
@@ -43,10 +51,6 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
   late CheckoutPaymentMethod _selectedMethod;
   late final TextEditingController _amountCtrl;
   Decimal _enteredAmount = Decimal.zero;
-  late final TextEditingController _cardNumberCtrl;
-  late final TextEditingController _cardHolderCtrl;
-  late final TextEditingController _expiryCtrl;
-  late final TextEditingController _cvvCtrl;
 
   @override
   void initState() {
@@ -58,17 +62,12 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
     _enteredAmount = initialVal;
     _amountCtrl = TextEditingController(text: initialVal.toStringAsFixed(2));
     _amountCtrl.addListener(_onAmountChanged);
-
-    final isTest = widget.isTest;
-    _cardNumberCtrl = TextEditingController(text: isTest ? '5428 •••• •••• 9012' : '');
-    _cardHolderCtrl = TextEditingController(text: isTest ? 'Ahmet Yılmaz' : '');
-    _expiryCtrl = TextEditingController(text: isTest ? '12/28' : '');
-    _cvvCtrl = TextEditingController(text: isTest ? '884' : '');
   }
 
   void _onAmountChanged() {
-    final clean = _amountCtrl.text.replaceAll(',', '.').replaceAll('₺', '').trim();
-    final parsed = Decimal.tryParse(clean) ?? Decimal.zero;
+    // Invalid or partial text counts as zero, which keeps the pay button
+    // disabled; it is never submitted as an amount.
+    final parsed = MoneyInput.parse(_amountCtrl.text).amount ?? Decimal.zero;
     if (parsed != _enteredAmount) {
       setState(() {
         _enteredAmount = parsed;
@@ -80,10 +79,6 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
   void dispose() {
     _amountCtrl.removeListener(_onAmountChanged);
     _amountCtrl.dispose();
-    _cardNumberCtrl.dispose();
-    _cardHolderCtrl.dispose();
-    _expiryCtrl.dispose();
-    _cvvCtrl.dispose();
     super.dispose();
   }
 
@@ -563,110 +558,11 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
   }
 
   Widget _buildCardPaymentView() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: _cardHolderCtrl,
-          style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-          decoration: InputDecoration(
-            labelText: 'Kart Üzerindeki İsim',
-            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-            filled: true,
-            fillColor: AppColors.card(context),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _cardNumberCtrl,
-          style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-          decoration: InputDecoration(
-            labelText: 'Kart Numarası',
-            labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-            prefixIcon: const Icon(Icons.credit_card, size: 18),
-            filled: true,
-            fillColor: AppColors.card(context),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _expiryCtrl,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'SKT (AA/YY)',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: _cvvCtrl,
-                obscureText: true,
-                style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'CVV / CVC',
-                  labelStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                  filled: true,
-                  fillColor: AppColors.card(context),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            const Icon(Icons.verified_user_outlined, size: 14, color: AppColors.accentGreen),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                '256-Bit SSL & 3D Secure banka güvencesiyle korunur',
-                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: _enteredAmount > Decimal.zero
-                ? () {
-                    Navigator.pop(context);
-                    widget.onPaymentSuccess(_enteredAmount);
-                  }
-                : null,
-            icon: const Icon(Icons.lock, size: 16),
-            label: Text(
-              widget.dues.totalAmount > Decimal.zero
-                  ? '3D Secure ile ${formatTry(_enteredAmount)} Öde'
-                  : '3D Secure ile ${formatTry(_enteredAmount)} Avans Yükle',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryFill,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ),
-      ],
+    return CardPaymentPanel(
+      unitId: widget.unitId,
+      amount: _enteredAmount,
+      settlesDebt: widget.dues.totalAmount > Decimal.zero,
+      onCaptured: widget.onCardPaymentCaptured,
     );
   }
 
@@ -709,64 +605,7 @@ class _PaymentCheckoutDialogState extends State<PaymentCheckoutDialog> {
                 ],
               ),
               const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.background(context),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.border(context)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.virtualIban,
-                        style: TextStyle(
-                          fontFamily: 'monospace',
-                          color: AppColors.textPrimary(context),
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.6,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    InkWell(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: widget.virtualIban.replaceAll(' ', '')));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          appSnackBar(
-                            content: Text('Sanal IBAN panoya kopyalandı!'),
-                            duration: Duration(seconds: 2),
-                            backgroundColor: AppColors.successFill,
-                          ),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentCyan.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.copy, size: 12, color: AppColors.accentCyan),
-                            SizedBox(width: 4),
-                            Text(
-                              AppStrings.copy,
-                              style: TextStyle(color: AppColors.primaryText(context), fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              SpIbanCopyRow(iban: widget.virtualIban, compact: true, copyButtonId: 'btn_checkout_copy_iban'),
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

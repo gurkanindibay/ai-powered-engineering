@@ -217,24 +217,9 @@ pub fn designated_dues(
         .collect()
 }
 
-/// Case- and diacritic-insensitive form of Turkish text for matching bank
-/// narratives, which arrive upper-cased and often ASCII-only ("EKIM 2026",
-/// "EYLUL 2026"): lower-cases and maps ı/i̇/ş/ğ/ü/ö/ç to their ASCII letters.
-pub fn fold_turkish(text: &str) -> String {
-    text.chars()
-        .flat_map(char::to_lowercase)
-        .filter(|c| *c != '\u{0307}')
-        .map(|c| match c {
-            'ı' => 'i',
-            'ş' => 's',
-            'ğ' => 'g',
-            'ü' => 'u',
-            'ö' => 'o',
-            'ç' => 'c',
-            other => other,
-        })
-        .collect()
-}
+/// Re-exported so existing callers keep working; the rule lives in
+/// [`crate::domain::text`].
+pub use crate::domain::text::fold_turkish;
 
 /// TBK 101–102 allocation: the designated liabilities first (each with the TBK
 /// 100 penalty-first waterfall), then the payer's other candidates oldest first.

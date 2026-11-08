@@ -9,16 +9,6 @@ RECONCILIATION_NOT_PERSISTED = (
     "sends nothing to the backend, so no payment, receipt or liability change is stored "
     "(flutter/lib/ui/dashboard/dashboard_controller.dart)")
 
-OPERATIONAL_DUES_DEBTOR = (
-    "BUG: POST /api/v1/dues/accrue-period writes debtor_type = TENANT for owner-occupied units (no tenant), so the "
-    "owner's operational dues sit on a tenant ledger")
-
 BANK_ACCOUNT_NOT_LOADED = (
     "BUG (STORY-07-06): the client never loads the site bank account (only setSiteBankAccountForTesting sets it), so "
     "the statement format guard is skipped: an MT940 .sta file is accepted for the Kuveyt Türk EXCEL account")
-
-
-LIABILITY_ID_SEQUENCE = (
-    "BUG: accrue-period inserts dues_liabilities with explicit ids but leaves the identity sequence behind "
-    "(ids 1,2 exist, dues_liabilities_id_seq next value is 1), so the next identity insert, e.g. accrue-installment, "
-    "fails with 400 'db error' until the sequence passes the existing ids")

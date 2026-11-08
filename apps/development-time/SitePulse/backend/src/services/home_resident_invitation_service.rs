@@ -106,7 +106,7 @@ impl HomeResidentInvitationService {
                 id: String::new(),
                 site_id: String::new(),
                 full_name: request.full_name.clone(),
-                email: request.email.trim().to_lowercase(),
+                email: crate::domain::email::NormalizedEmail::normalize(&request.email),
                 phone: request.phone.clone().unwrap_or_default(),
                 password_hash: Some(crate::auth::hash_password_async(password.clone()).await?),
                 role: Role::HomeResident,
@@ -133,12 +133,12 @@ impl HomeResidentInvitationService {
             });
         }
         let mut inner = self.state.inner.write().await;
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
 
         if inner
             .users
             .iter()
-            .any(|u| u.email.to_lowercase() == email_norm)
+            .any(|u| crate::domain::email::same_email(&u.email, &email_norm))
         {
             return Err(format!(
                 "An account with this email address already exists (zaten mevcut): {}",
@@ -275,22 +275,20 @@ impl HomeResidentInvitationService {
                         &[&crate::db::parse_id_to_i64(unit_id).unwrap_or(0)],
                     )
                     .await, "home_resident_invitation_service") {
-                    if !rows.is_empty() {
-                        return rows
-                            .into_iter()
-                            .map(|r| UnitMemberDto {
-                                resident_id: r.get::<_, i64>(0).to_string(),
-                                full_name: r.get(1),
-                                relationship: r.get(2),
-                                phone: r.get::<_, Option<String>>(3).unwrap_or_default(),
-                                email: r.get::<_, Option<String>>(4).unwrap_or_default(),
-                                is_owner: r.get(5),
-                                occupancy_id: r.try_get(6).ok().flatten(),
-                                person_id: r.try_get(7).ok().flatten(),
-                                resident_user_id: r.try_get(8).ok().flatten(),
-                            })
-                            .collect();
-                    }
+                    return rows
+                        .into_iter()
+                        .map(|r| UnitMemberDto {
+                            resident_id: r.get::<_, i64>(0).to_string(),
+                            full_name: r.get(1),
+                            relationship: r.get(2),
+                            phone: r.get::<_, Option<String>>(3).unwrap_or_default(),
+                            email: r.get::<_, Option<String>>(4).unwrap_or_default(),
+                            is_owner: r.get(5),
+                            occupancy_id: r.try_get(6).ok().flatten(),
+                            person_id: r.try_get(7).ok().flatten(),
+                            resident_user_id: r.try_get(8).ok().flatten(),
+                        })
+                        .collect();
                 }
             }
         }

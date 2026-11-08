@@ -2,8 +2,8 @@ use chrono::{Datelike, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use std::time::Duration;
 
-use crate::handlers::apply_advance_payments_offset;
 use crate::models::{DebtStatus, DebtorType, DuesLiability, ExpenseType};
+use crate::services::ledger_application::apply_advance_payments_offset;
 use crate::state::AppState;
 
 /// Formats a naive date into standard Turkish month and year, e.g. "Ekim 2026".
@@ -51,8 +51,10 @@ pub fn tariff_for(
 /// Runs the monthly accrual for every site, idempotently.
 ///
 /// * Each site's period is derived from *its* local date (site `timezone`).
-/// * The amount is the unit's house-type tariff; units without a tariff are
-///   skipped with a warning instead of receiving an invented amount.
+/// * The amount is the unit's monthly share of the operating budget in force
+///   (SPEC-007 R5), recorded as the liability's legal basis; a site without a
+///   budget that does not require one falls back to its house-type tariff.
+///   Units with neither are skipped with a warning instead of an invented amount.
 /// * The tenant is liable when the unit has one; a vacant unit's dues fall to
 ///   the owner (KMK), so vacancy changes the debtor rather than being ignored.
 /// * With PostgreSQL the liability is inserted first (the unique index
@@ -62,8 +64,23 @@ pub async fn run_periodic_accrual_for_all_sites(
     state: &AppState,
     now: chrono::DateTime<Utc>,
 ) -> (usize, usize) {
+    // Occupancy from PostgreSQL when available: a tenant without a user account
+    // is not visible on the in-memory unit.
+    let tenanted = match state.pool {
+        Some(ref pool) => match crate::db::tenanted_unit_ids(pool, "").await {
+            Ok(t) => Some(t),
+            Err(e) => {
+                tracing::error!(
+                    "[Scheduler] Occupancy could not be read; accrual skipped: {}",
+                    e
+                );
+                return (0, 0);
+            }
+        },
+        None => None,
+    };
     // 1. Inspect state with a READ lock to collect units needing accrual without blocking readers
-    let candidates: Vec<(String, DuesLiability)> = {
+    let candidates: Vec<(String, DuesLiability, Option<String>)> = {
         let inner = state.inner.read().await;
         let sites: Vec<(String, String)> = inner
             .sites
@@ -92,15 +109,26 @@ pub async fn run_periodic_accrual_for_all_sites(
                 if already {
                     continue;
                 }
-                let Some(amount) = tariff_for(&inner, unit) else {
-                    tracing::warn!(
-                        "[Scheduler] Unit {} in site {} has no house-type tariff; dues not accrued",
-                        unit.id,
-                        site_id
-                    );
-                    continue;
+                let basis = match crate::services::operating_budget_service::operational_dues_basis(
+                    &inner, unit, due_date,
+                ) {
+                    Ok(b) => b,
+                    Err(reason) => {
+                        tracing::warn!(
+                            "[Scheduler] Unit {} in site {}: dues not accrued: {}",
+                            unit.id,
+                            site_id,
+                            reason
+                        );
+                        continue;
+                    }
                 };
-                let debtor = if unit.tenant_user_id.is_some() {
+                let amount = basis.amount;
+                let let_to_tenant = tenanted
+                    .as_ref()
+                    .map(|t| t.contains(&unit.id))
+                    .unwrap_or(unit.tenant_user_id.is_some());
+                let debtor = if let_to_tenant {
                     DebtorType::Tenant
                 } else {
                     DebtorType::Owner
@@ -122,6 +150,7 @@ pub async fn run_periodic_accrual_for_all_sites(
                         expense_type: ExpenseType::OperationalDues,
                         penalty_accrued_through: None,
                     },
+                    basis.operating_budget_id,
                 ));
             }
         }
@@ -133,16 +162,25 @@ pub async fn run_periodic_accrual_for_all_sites(
     }
 
     // 2. Perform DB operations without holding the global memory lock
-    let mut persisted_dues: Vec<(String, DuesLiability)> = Vec::new();
+    let mut persisted_dues: Vec<(String, DuesLiability, Option<String>)> = Vec::new();
     let mut sites_accrued_set = std::collections::HashSet::new();
 
-    for (site_id, mut due) in candidates {
+    for (site_id, mut due, basis) in candidates {
         if let Some(ref pool) = state.pool {
             match crate::db::insert_accrued_due(pool, &due).await {
                 Ok(Some(id)) => {
                     due.id = id.to_string();
+                    if let Some(ref b) = basis {
+                        if let Err(e) = crate::db::set_due_budget_basis(pool, &due.id, b).await {
+                            tracing::error!(
+                                "[Scheduler] Legal basis of liability {} not saved: {}",
+                                due.id,
+                                e
+                            );
+                        }
+                    }
                     sites_accrued_set.insert(site_id.clone());
-                    persisted_dues.push((site_id, due));
+                    persisted_dues.push((site_id, due, basis));
                 }
                 Ok(None) => continue, // already accrued in DB
                 Err(e) => {
@@ -152,7 +190,7 @@ pub async fn run_periodic_accrual_for_all_sites(
             }
         } else {
             sites_accrued_set.insert(site_id.clone());
-            persisted_dues.push((site_id, due));
+            persisted_dues.push((site_id, due, basis));
         }
     }
 
@@ -166,9 +204,9 @@ pub async fn run_periodic_accrual_for_all_sites(
 
     {
         let mut inner = state.inner.write().await;
-        let ledger_before = crate::handlers::ledger_snapshot(&inner);
+        let ledger_before = crate::services::ledger_application::ledger_snapshot(&inner);
 
-        for (site_id, mut due) in persisted_dues {
+        for (site_id, mut due, basis) in persisted_dues {
             if due.id.is_empty() {
                 let max_d = inner
                     .dues
@@ -177,6 +215,9 @@ pub async fn run_periodic_accrual_for_all_sites(
                     .max()
                     .unwrap_or(0);
                 due.id = (max_d + 1).to_string();
+            }
+            if let Some(b) = basis {
+                inner.dues_budget_basis.insert(due.id.clone(), b);
             }
             let p = due.period.clone();
             let u_id = due.unit_id.clone();
@@ -197,8 +238,12 @@ pub async fn run_periodic_accrual_for_all_sites(
                 total_offset
             );
             if let Some(ref pool) = state.pool {
-                if let Err(e) =
-                    crate::handlers::persist_ledger_changes(pool, &ledger_before, &inner).await
+                if let Err(e) = crate::services::ledger_application::persist_ledger_changes(
+                    pool,
+                    &ledger_before,
+                    &inner,
+                )
+                .await
                 {
                     tracing::error!("[Scheduler] {}", e);
                 }

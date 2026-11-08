@@ -44,7 +44,7 @@ The original report had material flaws:
 
 This report uses AAA to mean authentication, authorization, and audit. In other security contexts the final A commonly means accounting. Roles belong to authorization; authentication establishes identity.
 
-## 2. Reviewed baseline before SPEC-007 implementation
+## 2. Reviewed baseline before SPEC-008 implementation
 
 Paths below are relative to `apps/development-time/SitePulse/`.
 
@@ -610,7 +610,7 @@ Use real PostgreSQL integration tests for transactions, privileges, migrations a
 
 ## 11. Decisions and deployment choices
 
-The implementation choices and retained deployment decisions are recorded in §12.4 and SPEC-007. The table below preserves the alternatives considered during review.
+The implementation choices and retained deployment decisions are recorded in §12.4 and SPEC-008. The table below preserves the alternatives considered during review.
 
 | # | Decision | Options | Recommendation | Blocks |
 | --- | --- | --- | --- | --- |
@@ -624,7 +624,7 @@ The implementation choices and retained deployment decisions are recorded in §1
 | D8 | Audit retention periods | By event class | Requires legal input; not prescribed here | §6.4 |
 | D9 | Bank integration status and test-connection scope | Per site; platform only | Per site for status; platform for configuration | §5.2 |
 
-## 12. Implemented structure and operator guide (SPEC-007)
+## 12. Implemented structure and operator guide (SPEC-008)
 
 The security baseline is implemented in this repository. Sections 2 and 2.1 preserve the reviewed pre-implementation findings; the executable behavior is described here and in `../.specify/specs/007-authentication-authorization-audit/spec.md`.
 
@@ -635,7 +635,7 @@ The security baseline is implemented in this repository. Sections 2 and 2.1 pres
 - `backend/src/security.rs` persists sessions and hashed refresh credentials. Access tokens last 600 seconds and session/refresh expiry is seven days. Refresh is single-use and transactional; replay revokes its session family. Logout, password changes, account disablement and credential/role changes invalidate access. Sensitive operations require password step-up within five minutes.
 - `backend/src/authorization.rs` owns typed site/unit IDs, the required `AuthzContext` extractor, resource resolvers, role changes, support grants and audit queries. `models::Permission::permissions_for_role` remains the one role-permission mapping. Owners can manage their own household; residents read and pay. Site managers administer household records through their explicitly site-scoped `SiteManage` permission, without inheriting owner invitation rights. Platform administrators have platform permissions, with no implicit tenant access.
 - Resource checks resolve current unit, registration, receipt, project and house-type scope from PostgreSQL when configured. Database misses/errors do not fall back to cached tenant authority. Registration review is a scoped transaction; indirect resources are checked before handlers run. Receipt access follows the current unit relationship rather than a cached first-unit claim. Project shares are limited to the project's site and, for residents, their authorized units.
-- `backend/migrations/V18__authentication_authorization_audit.sql` adds session/refresh/support/audit storage. Database triggers insert redacted audit events in the transaction that changes the audited row. Failure to write evidence aborts that transaction. Payment/reversal and registration transactions therefore cannot commit their changes without their evidence. Invitations, account creation and household membership also commit atomically; a failed account/membership write restores the invitation for retry.
+- `backend/migrations/V19__authentication_authorization_audit.sql` adds session/refresh/support/audit storage. Database triggers insert redacted audit events in the transaction that changes the audited row. Failure to write evidence aborts that transaction. Payment/reversal and registration transactions therefore cannot commit their changes without their evidence. Invitations, account creation and household membership also commit atomically; a failed account/membership write restores the invitation for retry.
 - Audited rows include tenant/user/unit changes, ownership/occupancy/memberships, invitations, sessions, support grants, liabilities, periods, payment entries/receipts/allocations, advance ledger entries, reconciliation, bank accounts, webhook claims and capital project records. Secondary changes use `table.OPERATION` action names; key actions use the event catalog names. Each event records the historical resource identifiers without live-entity foreign keys.
 - `backend/src/audit.rs` generates server-owned request IDs, carries verified actor/session/support-grant context, and resets connection attribution on **every** checkout, including background work. Direct peer IP and a bounded user agent are recorded; forwarded IP headers are not trusted. Verified bank webhooks and scheduled work use service identities, rather than human administrator identities.
 - Audit evidence rejects update, delete and truncate. RLS bounds non-owner reads by tenant and audit permission; native platform readers see platform events. Support access requires a different active platform administrator's approval, explicit permissions, an active site, and an expiry of at most 60 minutes. Successful support use is recorded before returning protected data; unavailable required evidence fails closed.
@@ -703,7 +703,7 @@ dotnet test factory/DevFactory
 
 `--from-dev-container` loads the local development container's database settings without printing credentials. Use explicit `DB_PASS`/connection settings for another database. The API and schema gates operate on disposable databases; they do not seed or erase the live application database. GUI fixture resets preserve audit evidence and use pre-provisioned permanent test accounts; temporary-account scenarios create their own accounts. GUI builds are cached only while source, dependency inputs, assets and API origin match their recorded fingerprint.
 
-SPEC-007 API checks cover refresh replay/logout, audit attribution and rollback injection, non-owner RLS/immutability, database-only tenant review, support approval/use/revocation, and concurrent invitation consumption with account/membership rollback. The earlier ledger and financial fixture checks remain in the gate run. The final local non-browser run passed all 12 gates (the GUI gate was explicitly skipped there and run separately), including warning-free Clippy and Flutter analysis/tests; formatting and whitespace checks passed. DevFactory passed all 15 tests. The separate full Chromium run completed successfully: 98 cases, 63 passed and 35 existing expected failures, with zero unexpected failures/errors (859.6 seconds). It used a rebuilt final Flutter bundle and disposable PostgreSQL database on isolated ports 8183/9193. Expected failures remain tracked pre-existing application defects; they are not counted as passing tests. Local gate results do not fabricate CI evidence or mark historical unverified tasks as verified.
+SPEC-008 API checks cover refresh replay/logout, audit attribution and rollback injection, non-owner RLS/immutability, database-only tenant review, support approval/use/revocation, and concurrent invitation consumption with account/membership rollback. The earlier ledger and financial fixture checks remain in the gate run. The final local non-browser run passed all 12 gates (the GUI gate was explicitly skipped there and run separately), including warning-free Clippy and Flutter analysis/tests; formatting and whitespace checks passed. DevFactory passed all 15 tests. The separate full Chromium run completed successfully: 98 cases, 63 passed and 35 existing expected failures, with zero unexpected failures/errors (859.6 seconds). It used a rebuilt final Flutter bundle and disposable PostgreSQL database on isolated ports 8183/9193. Expected failures remain tracked pre-existing application defects; they are not counted as passing tests. Local gate results do not fabricate CI evidence or mark historical unverified tasks as verified.
 
 
 ### 12.6 Local development instance

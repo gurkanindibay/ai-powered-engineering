@@ -10,7 +10,7 @@ pub async fn save_user(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let role_str = user.role.as_str();
-    let email = user.email.trim().to_lowercase();
+    let email = crate::domain::email::NormalizedEmail::normalize(&user.email);
     let site_id_num = if user.site_id.is_empty() {
         None
     } else {
@@ -238,7 +238,7 @@ pub async fn get_user_by_email(
     email: &str,
 ) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let email_norm = email.trim().to_lowercase();
+    let email_norm = crate::domain::email::NormalizedEmail::normalize(email);
     let row = client
         .query_opt(
             "SELECT u.id, u.site_id, COALESCE(p.full_name, ''), u.email, COALESCE(p.phone, ''), u.password_hash, u.role, u.must_change_password, u.auth_provider, u.google_sub, u.avatar_url, u.created_at, u.person_id
@@ -292,6 +292,17 @@ pub async fn get_user_by_id(
     user_id: &str,
 ) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
+    get_user_by_id_from_client(&client, user_id).await
+}
+
+/// Read current identity using an already attributed repository connection.
+///
+/// # Errors
+/// Propagates database and identity decoding failures.
+pub async fn get_user_by_id_from_client(
+    client: &tokio_postgres::Client,
+    user_id: &str,
+) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>> {
     let id_num = parse_id_to_i64(user_id);
     let row = if let Some(num) = id_num {
         client

@@ -106,12 +106,19 @@ BEGIN
     IF tenant IS NULL AND value->>'project_id' IS NOT NULL THEN
         SELECT site_id INTO tenant FROM capital_projects WHERE id=(value->>'project_id')::bigint;
     END IF;
+    IF tenant IS NULL AND value->>'budget_id' IS NOT NULL THEN
+        SELECT site_id INTO tenant FROM operating_budgets WHERE id=(value->>'budget_id')::bigint;
+    END IF;
     IF tenant IS NULL AND unit IS NOT NULL THEN
         SELECT site_id INTO tenant FROM units WHERE id = unit;
     END IF;
     IF context->>'actor_kind'='SERVICE' AND context->>'actor_id'='bank-webhook'
        AND TG_TABLE_NAME NOT IN ('payment_entries','payment_receipts','payment_allocations','advance_ledger_entries','dues_liabilities','reconciliation_queue','processed_bank_webhooks','unit_sender_ibans','unit_payer_names') THEN
         RAISE EXCEPTION 'Webhook identity cannot perform this action' USING ERRCODE='42501';
+    END IF;
+    IF context->>'actor_kind'='SERVICE' AND context->>'actor_id'='payment-provider'
+       AND TG_TABLE_NAME NOT IN ('payment_intents','payment_entries','payment_receipts','payment_allocations','advance_ledger_entries','dues_liabilities','reconciliation_queue','processed_bank_webhooks','unit_sender_ibans','unit_payer_names') THEN
+        RAISE EXCEPTION 'Provider identity cannot perform this action' USING ERRCODE='42501';
     END IF;
     IF context->>'actor_kind'='SERVICE' AND context->>'actor_id'='dues-scheduler'
        AND TG_TABLE_NAME NOT IN ('dues_liabilities','dues_periods','advance_ledger_entries') THEN
@@ -196,6 +203,8 @@ BEGIN
         'payment_entries','payment_receipts','payment_allocations','advance_ledger_entries',
         'dues_liabilities','dues_periods','site_bank_accounts','reconciliation_queue',
         'capital_projects','capital_project_installments','capital_contractor_disbursements',
+        'payment_intents','operating_budgets','operating_budget_lines','operating_budget_unit_shares',
+        'budget_service_records','budget_objections','revaluation_rates',
         'auth_sessions','support_grants','invitation_tokens','processed_bank_webhooks','unit_sender_ibans','unit_payer_names']
     LOOP
         IF to_regclass('public.' || name) IS NOT NULL THEN

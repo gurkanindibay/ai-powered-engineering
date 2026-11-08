@@ -1,4 +1,4 @@
-# SPEC-007 — Authentication, Authorization and Audit
+# SPEC-008 — Authentication, Authorization and Audit
 
 Implement the latest ROLE_BASED_AUTH_AND_AUDIT_ARCHITECTURE_REPORT.md as the security baseline.
 This is an independent remediation task against the existing application, not a child of unverified historical feature tasks.

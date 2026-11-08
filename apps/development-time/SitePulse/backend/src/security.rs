@@ -59,8 +59,8 @@ fn fingerprint(user: &User) -> String {
 /// # Errors
 /// Fails closed on an unavailable dependency or unknown user.
 pub async fn user(state: &AppState, id: &str) -> Result<User, SecurityError> {
-    if let Some(pool) = &state.pool {
-        return crate::db::get_user_by_id(pool, id)
+    if let Some(client) = crate::db::security_connection(state).await? {
+        return crate::db::get_user_by_id_from_client(&client, id)
             .await
             .map_err(|_| SecurityError::Unavailable)?
             .ok_or(SecurityError::Unauthenticated);
@@ -77,8 +77,7 @@ pub async fn user(state: &AppState, id: &str) -> Result<User, SecurityError> {
 }
 
 async fn version(state: &AppState, user: &User) -> Result<i64, SecurityError> {
-    if let Some(pool) = &state.pool {
-        let client = pool.get().await.map_err(|_| SecurityError::Unavailable)?;
+    if let Some(client) = crate::db::security_connection(state).await? {
         let id =
             crate::db::require_id("user", &user.id).map_err(|_| SecurityError::Unauthenticated)?;
         let row = client
@@ -98,8 +97,8 @@ async fn site_active(state: &AppState, user: &User) -> Result<(), SecurityError>
     if user.role == Role::SaasAdmin {
         return Ok(());
     }
-    if let Some(pool) = &state.pool {
-        if !crate::db::site_is_active(pool, &user.site_id)
+    if let Some(client) = crate::db::security_connection(state).await? {
+        if !crate::db::site_is_active_from_client(&client, &user.site_id)
             .await
             .map_err(|_| SecurityError::Unavailable)?
         {
@@ -151,8 +150,7 @@ pub async fn create(
     let result = mint(user, &session, unit_id)?;
     crate::audit::identify(&user.id, user.role.as_str(), &session.id, &user.site_id);
     let digest = auth::token_digest(&result.refresh_token);
-    if let Some(pool) = &state.pool {
-        let mut client = pool.get().await.map_err(|_| SecurityError::Unavailable)?;
+    if let Some(mut client) = crate::db::security_connection(state).await? {
         let tx = client
             .transaction()
             .await
@@ -198,8 +196,7 @@ pub async fn validate(
     let user = user(state, &claims.sub).await?;
     let current_version = version(state, &user).await?;
     site_active(state, &user).await?;
-    let step_up = if let Some(pool) = &state.pool {
-        let client = pool.get().await.map_err(|_| SecurityError::Unavailable)?;
+    let step_up = if let Some(client) = crate::db::security_connection(state).await? {
         let id =
             crate::db::require_id("user", &user.id).map_err(|_| SecurityError::Unauthenticated)?;
         let row=client.query_opt("SELECT stepped_up_at FROM auth_sessions WHERE id=$1 AND user_id=$2 AND auth_version=$3 AND revoked_at IS NULL AND expires_at>now()",&[&claims.sid,&id,&current_version]).await.map_err(|_|SecurityError::Unavailable)?.ok_or(SecurityError::Unauthenticated)?;
@@ -252,8 +249,7 @@ pub async fn refresh(
         return Err(SecurityError::Unauthenticated);
     }
     let digest = auth::token_digest(&input.refresh_token);
-    if let Some(pool) = &state.pool {
-        let mut client = pool.get().await.map_err(|_| SecurityError::Unavailable)?;
+    if let Some(mut client) = crate::db::security_connection(&state).await? {
         let tx = client
             .transaction()
             .await
@@ -388,8 +384,7 @@ pub async fn logout_all(
 /// # Errors
 /// Returns unavailable on persistence failure.
 pub async fn revoke(state: &AppState, user: &str, sid: Option<&str>) -> Result<(), SecurityError> {
-    if let Some(pool) = &state.pool {
-        let client = pool.get().await.map_err(|_| SecurityError::Unavailable)?;
+    if let Some(client) = crate::db::security_connection(state).await? {
         let id = crate::db::require_id("user", user).map_err(|_| SecurityError::Unauthenticated)?;
         client.execute("UPDATE auth_sessions SET revoked_at=now() WHERE user_id=$1 AND ($2::text IS NULL OR id=$2) AND revoked_at IS NULL",&[&id,&sid]).await.map_err(|_|SecurityError::Unavailable)?;
     } else {
@@ -446,8 +441,7 @@ pub async fn step_up(
     if !valid {
         return Err(SecurityError::Unauthenticated);
     }
-    if let Some(pool) = &state.pool {
-        let client = pool.get().await.map_err(|_| SecurityError::Unavailable)?;
+    if let Some(client) = crate::db::security_connection(&state).await? {
         client
             .execute(
                 "UPDATE auth_sessions SET stepped_up_at=now() WHERE id=$1 AND revoked_at IS NULL",

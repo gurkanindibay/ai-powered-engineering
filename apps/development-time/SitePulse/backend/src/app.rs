@@ -134,6 +134,30 @@ routes! {
     post "/api/v1/support/grants" => authorization::request_grant, Require(SupportAccess);
     post "/api/v1/support/grants/approve" => authorization::approve_grant, Require(SupportAccess);
     post "/api/v1/support/grants/revoke" => authorization::revoke_grant, Require(SupportAccess);
+    get "/api/v1/payments/receipts/:id/pdf" => handlers::get_payment_receipt_pdf, Require(UnitRead);
+    get "/api/v1/public/receipts/verify" => handlers::verify_receipt, Public;
+    post "/api/v1/payments/provider/webhook" => handlers::provider_webhook, Public;
+    get "/api/v1/payment-provider/sandbox/checkout/:reference" => handlers::sandbox_checkout_page, Public;
+    post "/api/v1/payment-provider/sandbox/checkout/:reference/complete" => handlers::sandbox_checkout_complete, Public;
+    get "/api/v1/residents/:unit_id/statement" => handlers::get_resident_statement, Require(UnitRead);
+    get "/api/v1/residents/:unit_id/operating-budget" => handlers::get_resident_operating_budget, Require(UnitRead);
+    post "/api/v1/residents/:unit_id/payment-intents" => handlers::create_payment_intent, Require(UnitPay);
+    get "/api/v1/residents/:unit_id/payment-intents/:intent_id" => handlers::get_payment_intent, Require(UnitPay);
+    get "/api/v1/operating-budgets" => handlers::list_operating_budgets, Require(SiteManage);
+    post "/api/v1/operating-budgets" => handlers::create_operating_budget, Require(SiteManage);
+    get "/api/v1/operating-budgets/compliance" => handlers::get_budget_compliance, Require(SiteManage);
+    put "/api/v1/operating-budgets/policy" => handlers::set_budget_policy, Require(SiteManage);
+    get "/api/v1/operating-budgets/:id" => handlers::get_operating_budget, Require(SiteManage);
+    delete "/api/v1/operating-budgets/:id" => handlers::delete_operating_budget, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/issue-interim" => handlers::issue_interim_budget, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/approve" => handlers::approve_operating_budget, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/reject" => handlers::reject_operating_budget, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/finalize" => handlers::finalize_operating_budget, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/service" => handlers::record_budget_service, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/objections" => handlers::file_budget_objection, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/objections/:objection_id/resolve" => handlers::resolve_budget_objection, Require(SiteManage);
+    get "/api/v1/revaluation-rates" => handlers::list_revaluation_rates, SelfOnly;
+    put "/api/v1/revaluation-rates" => handlers::set_revaluation_rate, Require(TenantManage);
 }
 pub fn build_router(state: AppState) -> Router {
     let cors = CorsLayer::new()

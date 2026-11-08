@@ -57,13 +57,11 @@ def test_tenant_move_out_keeps_history_and_debt(login_as, page, api, actors, bui
 
 from pages import CapitalProjects, DuesManagement, Shell  # noqa: E402
 from support.flutter import by_id, by_id_prefix, fill, text_of  # noqa: E402
-from support.known_issues import LIABILITY_ID_SEQUENCE, OPERATIONAL_DUES_DEBTOR  # noqa: E402
 
 
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-02")
-@pytest.mark.xfail(strict=True, reason=LIABILITY_ID_SEQUENCE)
 def test_operational_dues_go_to_the_tenant_and_capital_dues_to_the_owner(login_as, page, api, actors, stack):
     b3 = _unit_id(stack, "B Blok", 3)
     manager = api.login(**actors["manager"])
@@ -91,7 +89,6 @@ def test_operational_dues_go_to_the_tenant_and_capital_dues_to_the_owner(login_a
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-02")
-@pytest.mark.xfail(strict=True, reason=OPERATIONAL_DUES_DEBTOR)
 def test_owner_occupied_unit_operational_dues_go_to_the_owner(login_as, page, api, actors, stack):
     a14 = _unit_id(stack, "A Blok", 14)
     manager = api.login(**actors["manager"])

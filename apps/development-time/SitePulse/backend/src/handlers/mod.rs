@@ -11,245 +11,32 @@ use serde_json::json;
 
 use crate::models::*;
 use crate::services::{
-    AuthService, CapitalProjectService, DuesCalculationService, HomeResidentInvitationService,
-    KuveytTurkSandboxService, ReconciliationService, RegistrationApprovalService,
-    SaasTenantService, SiteAdminService, SiteBankAccountService, VirtualIbanService,
+    CapitalProjectService, DuesCalculationService, KuveytTurkSandboxService, ReconciliationService,
+    SiteBankAccountService, VirtualIbanService,
 };
 use crate::state::AppState;
 
-/// Snapshot of the in-memory ledger (liability payment state and advance
-/// balances), used to persist exactly what an in-memory operation changed.
-pub struct LedgerSnapshot {
-    dues: std::collections::HashMap<String, (Decimal, Decimal, Decimal, DebtStatus)>,
-    advances: std::collections::HashMap<String, UnitAdvance>,
-}
+mod payments_phase2;
+pub use payments_phase2::*;
 
-pub fn ledger_snapshot(inner: &crate::state::AppStateInner) -> LedgerSnapshot {
-    LedgerSnapshot {
-        dues: inner
-            .dues
-            .iter()
-            .map(|d| {
-                (
-                    d.id.clone(),
-                    (d.paid_principal, d.paid_penalty, d.delay_penalty, d.status),
-                )
-            })
-            .collect(),
-        advances: inner.advance_balances.clone(),
-    }
-}
+mod auth;
+pub use auth::*;
 
-/// Persists every liability and advance balance that differs from `before`.
-/// Errors are returned (and logged), never discarded.
-pub async fn persist_ledger_changes(
-    pool: &deadpool_postgres::Pool,
-    before: &LedgerSnapshot,
-    inner: &crate::state::AppStateInner,
-) -> Result<(), String> {
-    let mut errors: Vec<String> = Vec::new();
-    for d in &inner.dues {
-        let now = (d.paid_principal, d.paid_penalty, d.delay_penalty, d.status);
-        if before.dues.get(&d.id) != Some(&now) && crate::db::parse_id_to_i64(&d.id).is_some() {
-            if let Err(e) = crate::db::sync_due_payment_state(pool, d).await {
-                errors.push(format!("dues liability {}: {}", d.id, e));
-            }
-        }
-    }
-    for (unit, adv) in &inner.advance_balances {
-        let old = before.advances.get(unit).copied().unwrap_or_default();
-        for (debtor, now, was) in [
-            ("OWNER", adv.owner, old.owner),
-            ("TENANT", adv.tenant, old.tenant),
-        ] {
-            if now != was {
-                if let Err(e) = crate::db::save_advance_balance(pool, unit, debtor, now).await {
-                    errors.push(format!("advance balance {}/{}: {}", unit, debtor, e));
-                }
-            }
-        }
-    }
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        tracing::error!("Ledger persistence failed: {}", errors.join("; "));
-        Err(format!(
-            "Ledger changes were not fully saved: {}",
-            errors.join("; ")
-        ))
-    }
-}
+mod saas;
+pub use saas::*;
 
-/// Domain Service / Rule: Advance Balance Auto-Offsetting
-/// When dues liabilities exist or arrive for a unit, available advance balance
-/// (Avans Bakiye) is automatically deducted against the debt (FIFO order by
-/// due_date). Each liability is offset only from its own debtor's advance
-/// (O-1): a tenant's surplus never silently pays the owner's dues; that takes an
-/// explicit TENANT -> OWNER inter-ledger transfer.
-pub fn apply_advance_payments_offset(
-    inner: &mut crate::state::AppStateInner,
-    target_unit_id: Option<&str>,
-) -> (usize, Decimal) {
-    let unit_ids: Vec<String> = match target_unit_id {
-        Some(u) => vec![u.to_string()],
-        None => inner.units.iter().map(|u| u.id.clone()).collect(),
-    };
+mod site_admin;
+pub use site_admin::*;
 
-    let mut auto_settled_count = 0;
-    let mut total_offset_amount = Decimal::ZERO;
+mod registration;
+pub use registration::*;
 
-    for u_id in unit_ids {
-        let mut buckets = match inner.advance_balances.get(&u_id) {
-            Some(adv) if adv.total() > Decimal::ZERO => *adv,
-            _ => continue,
-        };
+mod residents;
+pub use residents::*;
 
-        // Find all unpaid dues for this unit
-        let mut unpaid_indices: Vec<usize> = inner
-            .dues
-            .iter()
-            .enumerate()
-            .filter(|(_, d)| d.unit_id == u_id && d.status != DebtStatus::Paid)
-            .map(|(i, _)| i)
-            .collect();
-
-        // FIFO: Sort by due_date ascending
-        unpaid_indices.sort_by_key(|&i| inner.dues[i].due_date);
-
-        let unit_site_id = inner
-            .units
-            .iter()
-            .find(|u| u.id == *u_id)
-            .map(|u| u.site_id.clone())
-            .unwrap_or_else(|| "1".to_string());
-        let unit_block = inner
-            .units
-            .iter()
-            .find(|u| u.id == *u_id)
-            .map(|u| u.block_id.clone())
-            .unwrap_or_else(|| "A".to_string());
-        let unit_number = inner
-            .units
-            .iter()
-            .find(|u| u.id == *u_id)
-            .map(|u| u.unit_number)
-            .unwrap_or(1);
-        let unit_resident_name = inner
-            .units
-            .iter()
-            .find(|u| u.id == *u_id)
-            .and_then(|u| u.owner_user_id.as_ref())
-            .and_then(|uid| inner.users.iter().find(|user| &user.id == uid))
-            .map(|user| user.full_name.clone());
-
-        for idx in unpaid_indices {
-            let debtor = inner.dues[idx].debtor_type;
-            let advance = buckets.bucket_mut(debtor.as_str());
-            if *advance <= Decimal::ZERO {
-                continue;
-            }
-
-            let due = &mut inner.dues[idx];
-            // KMK 20 segmented accrual: bring the penalty up to today before the
-            // offset changes the principal it accrues on.
-            *due = crate::services::DuesCalculationService::new()
-                .calculate_delay_penalty(due.clone(), Utc::now().date_naive());
-            let due_amount = due.total_amount;
-            let period = due.period.clone();
-            let due_id = due.id.clone();
-
-            if *advance >= due_amount {
-                // Full settlement of this due liability (penalty first, then principal)
-                let settled = crate::services::dues_ledger::settle(due, due_amount);
-                *advance -= settled.total();
-                total_offset_amount += settled.total();
-                auto_settled_count += 1;
-
-                let offset_txn_id = format!("TXN-ADV-OFFSET-{}", due_id);
-                if !inner
-                    .reconciliation_queue
-                    .iter()
-                    .any(|m| m.transaction.transaction_id == offset_txn_id)
-                {
-                    let match_seq = inner.reconciliation_queue.len() + 1;
-                    inner.reconciliation_queue.push(ReconciliationMatch {
-                        match_id: format!("MATCH-OFFSET-{}", match_seq),
-                        site_id: unit_site_id.clone(),
-                        transaction: BankTransactionItem {
-                            transaction_id: offset_txn_id,
-                            date: Utc::now().date_naive(),
-                            amount: due_amount,
-                            currency: "TRY".to_string(),
-                            description: format!("Avans Mahsubu: {} Aidatı", period),
-                            sender_name: Some("Otomatik Avans Mahsubu".to_string()),
-                            sender_iban: None,
-                            reference_no: Some(due_id.clone()),
-                        },
-                        matched_unit_id: Some(u_id.clone()),
-                        matched_block: Some(unit_block.clone()),
-                        matched_unit_number: Some(unit_number),
-                        matched_resident_name: unit_resident_name.clone(),
-                        confidence_score: 100,
-                        matched_due_id: Some(due_id),
-                        outstanding_balance: Some(due_amount),
-                        amount_matches_balance: true,
-                        status: ReconciliationStatus::Approved,
-                        status_code: ReconciliationStatus::Approved.as_str().to_string(),
-                        notes: Some(format!(
-                            "{} aidatı avans bakiyenizden otomatik mahsup edildi",
-                            period
-                        )),
-                    });
-                }
-            } else {
-                // Partial deduction
-                let partial = crate::services::dues_ledger::settle(due, *advance).total();
-                *advance -= partial;
-                total_offset_amount += partial;
-
-                let offset_txn_id = format!("TXN-ADV-PARTIAL-{}", due_id);
-                if !inner
-                    .reconciliation_queue
-                    .iter()
-                    .any(|m| m.transaction.transaction_id == offset_txn_id)
-                {
-                    let match_seq = inner.reconciliation_queue.len() + 1;
-                    inner.reconciliation_queue.push(ReconciliationMatch {
-                        match_id: format!("MATCH-OFFSET-PARTIAL-{}", match_seq),
-                        site_id: unit_site_id.clone(),
-                        transaction: BankTransactionItem {
-                            transaction_id: offset_txn_id,
-                            date: Utc::now().date_naive(),
-                            amount: partial,
-                            currency: "TRY".to_string(),
-                            description: format!("Kısmi Avans Mahsubu: {} Aidatı", period),
-                            sender_name: Some("Otomatik Avans Mahsubu".to_string()),
-                            sender_iban: None,
-                            reference_no: Some(due_id.clone()),
-                        },
-                        matched_unit_id: Some(u_id.clone()),
-                        matched_block: Some(unit_block.clone()),
-                        matched_unit_number: Some(unit_number),
-                        matched_resident_name: unit_resident_name.clone(),
-                        confidence_score: 100,
-                        matched_due_id: Some(due_id),
-                        outstanding_balance: Some(partial),
-                        amount_matches_balance: false,
-                        status: ReconciliationStatus::Approved,
-                        status_code: ReconciliationStatus::Approved.as_str().to_string(),
-                        notes: Some(format!(
-                            "₺{:.2} tutarındaki avans {} aidatından mahsup edildi",
-                            partial, period
-                        )),
-                    });
-                }
-            }
-        }
-        inner.advance_balances.insert(u_id.clone(), buckets);
-    }
-
-    (auto_settled_count, total_offset_amount)
-}
+pub use crate::services::ledger_application::{
+    apply_advance_payments_offset, ledger_snapshot, persist_ledger_changes, LedgerSnapshot,
+};
 
 fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, String) {
     let note = m.notes.as_deref().unwrap_or("");
@@ -513,6 +300,21 @@ pub async fn get_resident_dashboard(
             && m.status == ReconciliationStatus::Approved
         {
             let (title, subtitle) = format_resident_transaction_display(m);
+            // The receipt the ledger issued for this bank transaction, not the bank's id.
+            let receipt_number = inner
+                .payment_entries
+                .iter()
+                .filter(|e| {
+                    crate::auth::same_id(&e.unit_id, &unit_id)
+                        && e.entry_type == LEDGER_KIND_COLLECTION
+                })
+                .find(|e| {
+                    e.external_reference.as_deref().is_some_and(|r| {
+                        r == m.transaction.transaction_id
+                            || Some(r) == m.transaction.reference_no.as_deref()
+                    })
+                })
+                .and_then(|e| e.receipt_number.clone());
             transactions.push(AccountTransactionDto {
                 id: m.transaction.transaction_id.clone(),
                 title,
@@ -520,6 +322,7 @@ pub async fn get_resident_dashboard(
                 amount: m.transaction.amount,
                 date: m.transaction.date.format("%d.%m.%Y").to_string(),
                 is_credit: true,
+                receipt_number,
             });
         }
     }
@@ -538,6 +341,7 @@ pub async fn get_resident_dashboard(
             amount: due.total_amount,
             date: due.due_date.format("%d.%m.%Y").to_string(),
             is_credit: false,
+            receipt_number: None,
         });
     }
 
@@ -559,470 +363,10 @@ pub async fn get_resident_dashboard(
     (StatusCode::OK, Json(response)).into_response()
 }
 
-// 2. Auth Handlers
-pub async fn login_password(
-    State(state): State<AppState>,
-    Json(payload): Json<PasswordLoginRequest>,
-) -> Result<Json<AuthResponse>, (StatusCode, String)> {
-    let service = AuthService::new(state);
-    service
-        .authenticate_with_password(payload)
-        .await
-        .map(Json)
-        .map_err(|e| (StatusCode::UNAUTHORIZED, e))
-}
-
-pub async fn login_google(
-    State(state): State<AppState>,
-    Json(payload): Json<GoogleLoginRequest>,
-) -> Result<Json<AuthResponse>, (StatusCode, String)> {
-    let service = AuthService::new(state);
-    service
-        .authenticate_with_google(payload)
-        .await
-        .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn register_password(
-    State(state): State<AppState>,
-    Json(payload): Json<RegisterUserRequest>,
-) -> Result<(StatusCode, Json<AuthResponse>), (StatusCode, String)> {
-    let service = AuthService::new(state);
-    service
-        .register_with_password(payload)
-        .await
-        .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn change_password(
-    State(state): State<AppState>,
-    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
-    Json(payload): Json<ChangePasswordRequest>,
-) -> Result<Json<AuthResponse>, (StatusCode, String)> {
-    if !payload.email.trim().eq_ignore_ascii_case(&claims.email) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "You can only change your own password".to_string(),
-        ));
-    }
-    let service = AuthService::new(state);
-    service
-        .change_password(payload)
-        .await
-        .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-/// Returns the profile of the authenticated caller (identity comes from the token).
-pub async fn get_profile(
-    State(state): State<AppState>,
-    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
-) -> Result<Json<UserProfileResponse>, (StatusCode, String)> {
-    let service = AuthService::new(state);
-    service
-        .get_current_profile(&claims.sub)
-        .await
-        .map(Json)
-        .map_err(|e| (StatusCode::NOT_FOUND, e))
-}
-
-// 3. SaaS Tenant Handlers
-pub async fn register_site(
-    State(state): State<AppState>,
-    Json(payload): Json<RegisterSiteRequest>,
-) -> Result<(StatusCode, Json<SiteRegistrationResponse>), (StatusCode, String)> {
-    let service = SaasTenantService::new(state);
-    service
-        .register_site(payload)
-        .await
-        .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn get_all_sites(State(state): State<AppState>) -> Json<Vec<SaasSiteSummaryDto>> {
-    let service = SaasTenantService::new(state);
-    Json(service.get_all_sites().await)
-}
-
-pub async fn get_saas_stats(State(state): State<AppState>) -> Json<SaasGlobalStatsDto> {
-    let service = SaasTenantService::new(state);
-    Json(service.get_global_stats().await)
-}
-
-pub async fn delete_site(
-    Path(site_id): Path<String>,
-    State(state): State<AppState>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let service = SaasTenantService::new(state);
-    service
-        .delete_site(&site_id)
-        .await
-        .map(|_| {
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "success": true,
-                    "message": format!("Site '{}' successfully deleted", site_id)
-                })),
-            )
-        })
-        .map_err(|e| (StatusCode::CONFLICT, e))
-}
-
-pub async fn update_site(
-    Path(site_id): Path<String>,
-    State(state): State<AppState>,
-    Json(payload): Json<UpdateSiteRequest>,
-) -> Result<(StatusCode, Json<SaasSiteSummaryDto>), (StatusCode, String)> {
-    let service = SaasTenantService::new(state);
-    service
-        .update_site(&site_id, payload)
-        .await
-        .map(|res| (StatusCode::OK, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn reset_site_admin_password(
-    Path(site_id): Path<String>,
-    State(state): State<AppState>,
-) -> Result<(StatusCode, Json<SiteAdminPasswordResetResponse>), (StatusCode, String)> {
-    let service = SaasTenantService::new(state);
-    service
-        .reset_site_admin_password(&site_id)
-        .await
-        .map(|res| (StatusCode::OK, Json(res)))
-        .map_err(|e| (StatusCode::NOT_FOUND, e))
-}
-
-// 4. Site Admin Handlers
-#[derive(Deserialize)]
-pub struct SiteIdParam {
-    pub site_id: Option<String>,
-}
-
-pub async fn register_home_owner(
-    State(state): State<AppState>,
-    Query(q): Query<SiteIdParam>,
-    Json(payload): Json<RegisterHomeOwnerRequest>,
-) -> Result<(StatusCode, Json<HomeOwnerResponse>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    service
-        .register_home_owner(&site_id, payload)
-        .await
-        .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn get_home_owners(
-    State(state): State<AppState>,
-    Query(q): Query<SiteIdParam>,
-) -> Json<Vec<HomeOwnerResponse>> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    Json(service.get_home_owners_for_site(&site_id).await)
-}
-
-pub async fn update_home_owner(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Query(q): Query<SiteIdParam>,
-    Json(payload): Json<crate::models::UpdateHomeOwnerRequest>,
-) -> Result<Json<HomeOwnerResponse>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    service
-        .update_home_owner(&site_id, &id, payload)
-        .await
-        .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn delete_home_owner(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Query(q): Query<SiteIdParam>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    service
-        .delete_home_owner(&site_id, &id)
-        .await
-        .map(|_| StatusCode::NO_CONTENT)
-        .map_err(|e| {
-            let code = if e == crate::services::site_admin_service::UNIT_HAS_FINANCIAL_HISTORY {
-                StatusCode::CONFLICT
-            } else {
-                StatusCode::BAD_REQUEST
-            };
-            (code, e)
-        })
-}
-
-pub async fn move_out_resident(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Query(q): Query<SiteIdParam>,
-    Json(payload): Json<crate::models::MoveOutResidentRequest>,
-) -> Result<Json<crate::models::OccupancyHistoryItem>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    service
-        .move_out_resident(&site_id, &id, payload)
-        .await
-        .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn move_in_resident(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Query(q): Query<SiteIdParam>,
-    Json(payload): Json<crate::models::MoveInResidentRequest>,
-) -> Result<Json<crate::models::OccupancyHistoryItem>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    service
-        .move_in_resident(&site_id, &id, payload)
-        .await
-        .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn get_unit_occupancy_history(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Query(q): Query<SiteIdParam>,
-) -> Result<Json<Vec<crate::models::OccupancyHistoryItem>>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    service
-        .get_unit_occupancy_history(&site_id, &id)
-        .await
-        .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn get_house_types(
-    State(state): State<AppState>,
-    Query(q): Query<SiteIdParam>,
-) -> Json<Vec<crate::models::HouseTypeTariff>> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    Json(service.get_house_types_for_site(&site_id).await)
-}
-
-pub async fn create_house_type(
-    State(state): State<AppState>,
-    Query(q): Query<SiteIdParam>,
-    Json(payload): Json<crate::models::CreateHouseTypeRequest>,
-) -> Result<(StatusCode, Json<crate::models::HouseTypeTariff>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    service
-        .create_or_update_house_type(&site_id, payload)
-        .await
-        .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn delete_house_type(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Query(q): Query<SiteIdParam>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    service
-        .delete_house_type(&site_id, &id)
-        .await
-        .map(|_| StatusCode::NO_CONTENT)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn get_blocks(
-    State(state): State<AppState>,
-    Query(q): Query<SiteIdParam>,
-) -> Json<Vec<crate::models::BlockDto>> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    Json(service.get_blocks_for_site(&site_id).await)
-}
-
-pub async fn create_block(
-    State(state): State<AppState>,
-    Query(q): Query<SiteIdParam>,
-    Json(payload): Json<crate::models::CreateBlockRequest>,
-) -> Result<(StatusCode, Json<crate::models::BlockDto>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    service
-        .create_or_update_block(&site_id, payload)
-        .await
-        .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-// 5. Registration Approval Handlers
-pub async fn generate_registration_link(
-    State(state): State<AppState>,
-    Query(q): Query<SiteIdParam>,
-) -> Json<SiteInvitationLinkResponse> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = RegistrationApprovalService::new(state);
-    Json(service.generate_invitation_link(&site_id).await)
-}
-
-pub async fn submit_self_registration(
-    Path(slug): Path<String>,
-    State(state): State<AppState>,
-    Json(payload): Json<SubmitSelfRegistrationRequest>,
-) -> Result<(StatusCode, Json<PendingRegistrationResponse>), (StatusCode, String)> {
-    let service = RegistrationApprovalService::new(state);
-    service
-        .submit_self_registration(&slug, payload)
-        .await
-        .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn get_pending_registrations(
-    State(state): State<AppState>,
-    Query(q): Query<SiteIdParam>,
-) -> Json<Vec<PendingRegistrationResponse>> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = RegistrationApprovalService::new(state);
-    Json(service.get_pending_registrations(&site_id).await)
-}
-
-pub async fn approve_registration(
-    Path(request_id): Path<String>,
-    State(state): State<AppState>,
-    ctx: crate::authorization::AuthzContext,
-) -> Result<Json<ApprovalResultResponse>, crate::authorization::SecurityError> {
-    RegistrationApprovalService::new(state)
-        .approve_registration(&ctx, &request_id)
-        .await
-        .map(Json)
-}
-pub async fn reject_registration(
-    Path(request_id): Path<String>,
-    State(state): State<AppState>,
-    ctx: crate::authorization::AuthzContext,
-) -> Result<Json<PendingRegistrationResponse>, crate::authorization::SecurityError> {
-    RegistrationApprovalService::new(state)
-        .reject_registration(&ctx, &request_id)
-        .await
-        .map(Json)
-}
-
-// 6. Unit Co-Resident Invitation Handlers
-pub async fn generate_unit_invite_link(
-    Path(unit_id): Path<String>,
-    State(state): State<AppState>,
-) -> Result<Json<UnitInviteLinkResponse>, crate::authorization::SecurityError> {
-    HomeResidentInvitationService::new(state)
-        .generate_unit_invite_link(&unit_id, None)
-        .await
-        .map(Json)
-        .map_err(|_| crate::authorization::SecurityError::Unavailable)
-}
-
-pub async fn register_home_resident(
-    State(state): State<AppState>,
-    Json(payload): Json<RegisterHomeResidentRequest>,
-) -> Result<(StatusCode, Json<HomeResidentResponse>), (StatusCode, String)> {
-    let service = HomeResidentInvitationService::new(state);
-    service
-        .register_home_resident(payload)
-        .await
-        .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn get_unit_members(
-    Path(unit_id): Path<String>,
-    State(state): State<AppState>,
-) -> Json<Vec<UnitMemberDto>> {
-    let service = HomeResidentInvitationService::new(state);
-    Json(service.get_unit_members(&unit_id).await)
-}
-
-pub async fn add_unit_member(
-    State(state): State<AppState>,
-    Path(unit_id): Path<String>,
-    Query(q): Query<SiteIdParam>,
-    Json(payload): Json<crate::models::AddUnitMemberRequest>,
-) -> Result<(StatusCode, Json<UnitMemberDto>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    let relationship = payload
-        .relationship
-        .unwrap_or_else(|| "Ev Sakini".to_string());
-    service
-        .add_unit_member(
-            &site_id,
-            &unit_id,
-            &payload.full_name,
-            &payload.phone,
-            &payload.email,
-            &relationship,
-        )
-        .await
-        .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-pub async fn delete_unit_member(
-    State(state): State<AppState>,
-    Path((unit_id, resident_id)): Path<(String, String)>,
-    Query(q): Query<SiteIdParam>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    service
-        .delete_unit_member(&site_id, &unit_id, &resident_id)
-        .await
-        .map(|_| StatusCode::NO_CONTENT)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct UpdateUnitMemberRequest {
-    pub full_name: String,
-    pub phone: String,
-    pub email: String,
-    #[serde(default)]
-    pub relationship: Option<String>,
-}
-
-pub async fn update_unit_member(
-    State(state): State<AppState>,
-    Path((unit_id, resident_id)): Path<(String, String)>,
-    Query(q): Query<SiteIdParam>,
-    Json(payload): Json<UpdateUnitMemberRequest>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    let relationship = payload
-        .relationship
-        .unwrap_or_else(|| "Ev Sakini".to_string());
-    service
-        .update_unit_member(
-            &site_id,
-            &unit_id,
-            &resident_id,
-            &payload.full_name,
-            &payload.phone,
-            &payload.email,
-            &relationship,
-        )
-        .await
-        .map(|_| StatusCode::OK)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
-}
+// Handlers for Auth, SaaS Multi-Tenancy, Site Administration, Registration, and
+// Household Residents have been modularized into their respective submodules
+// (handlers/auth.rs, handlers/saas.rs, handlers/site_admin.rs, handlers/registration.rs,
+// handlers/residents.rs) and re-exported at the top of this module.
 
 // 7. Health Check
 pub async fn health_check() -> impl IntoResponse {
@@ -1101,11 +445,11 @@ pub async fn parse_bank_statement(
     let parser = crate::services::BankStatementParser::new();
     let recon_service = crate::services::ReconciliationService::new();
 
-    let txns = parser
-        .parse_statement(&payload.content, effective_format)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-
     let today = Utc::now().date_naive();
+    let report = parser
+        .parse_statement_report(&payload.content, effective_format, today)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let txns = report.transactions;
     let mut inner = state.inner.write().await;
 
     // Filter units, users, and dues for the requested site_id
@@ -1183,6 +527,7 @@ pub async fn parse_bank_statement(
             unmatched_count,
             already_processed_count,
             matches,
+            skipped_entries: report.skipped,
         }),
     ))
 }
@@ -1191,8 +536,16 @@ pub async fn get_reconciliation_queue(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Json<Vec<ReconciliationMatch>> {
+    let site_id = params
+        .get("site_id")
+        .or_else(|| params.get("siteId"))
+        .map(String::as_str);
+    if let Some(p) = state.db_pool() {
+        if let Ok(db_queue) = crate::db::fetch_reconciliation_queue_from_db(p, site_id).await {
+            return Json(db_queue);
+        }
+    }
     let inner = state.inner.read().await;
-    let site_id = params.get("site_id").or_else(|| params.get("siteId"));
     if let Some(target_site) = site_id {
         let filtered: Vec<ReconciliationMatch> = inner
             .reconciliation_queue
@@ -1727,7 +1080,8 @@ pub async fn get_or_allocate_virtual_iban(
         &unit.site_id,
         &unit.block_id,
         unit.unit_number,
-    );
+    )
+    .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))?;
     unit.virtual_iban = Some(generated.clone());
 
     Ok(Json(json!({
@@ -1898,25 +1252,17 @@ fn resp_site(inner: &crate::state::AppStateInner, resp: &BankIncomingWebhookResp
 }
 
 /// SHA-256 over the fields that define a bank transfer, so a redelivery can be
-/// told apart from a transaction id reused for a different transfer.
+/// told apart from a transaction id reused for a different transfer. The
+/// canonical form is the persisted contract [`crate::domain::fingerprint::transfer_canonical_v1`].
 pub fn webhook_payload_hash(payload: &BankIncomingWebhookRequest) -> String {
-    use sha2::{Digest, Sha256};
-    let clean = |s: Option<&str>| s.unwrap_or("").replace(' ', "").to_uppercase();
-    let canonical = format!(
-        "{}|{:.2}|{}|{}|{}|{}",
-        payload.transaction_id.trim(),
-        payload.amount,
-        payload
-            .currency
-            .as_deref()
-            .unwrap_or("TRY")
-            .trim()
-            .to_uppercase(),
-        clean(Some(&payload.virtual_iban)),
-        clean(payload.sender_iban.as_deref()),
-        payload.description.as_deref().unwrap_or("").trim(),
-    );
-    hex::encode(Sha256::digest(canonical.as_bytes()))
+    crate::domain::fingerprint::transfer_hash_v1(&crate::domain::fingerprint::TransferFields {
+        transaction_id: &payload.transaction_id,
+        amount: payload.amount,
+        currency: payload.currency.as_deref(),
+        virtual_iban: &payload.virtual_iban,
+        sender_iban: payload.sender_iban.as_deref(),
+        description: payload.description.as_deref(),
+    })
 }
 
 fn duplicate_webhook_response(transaction_id: String) -> BankIncomingWebhookResponse {
@@ -2461,141 +1807,235 @@ pub async fn create_dues_period(
 }
 
 // Periodic Dues Accrual & Automatic Advance Balance Offsetting
+//
+// SPEC-007 R5: the amount is the unit's monthly share of the operating budget
+// (işletme projesi) in force on the due date, and the liability records that
+// budget as its legal basis. A free-typed amount is refused while a budget is in
+// force or when the site requires one; only a site without a budget falls back to
+// its house-type tariffs, and the response then carries a KMK 37 warning.
 pub async fn accrue_monthly_dues(
     State(state): State<AppState>,
     Json(payload): Json<AccrueDuesPeriodRequest>,
 ) -> Result<(StatusCode, Json<AccrueDuesPeriodResponse>), (StatusCode, String)> {
-    let mut inner = state.inner.write().await;
-    let ledger_before = ledger_snapshot(&inner);
-    let units_in_site: Vec<IndependentUnit> = inner
-        .units
-        .iter()
-        .filter(|u| u.site_id == payload.site_id)
-        .cloned()
-        .collect();
+    use crate::services::operating_budget_service as budgets;
 
-    if units_in_site.is_empty() {
-        return Err((
-            StatusCode::NOT_FOUND,
-            format!("No units found for site '{}'", payload.site_id),
-        ));
+    // 1. Decide every unit's amount and basis under a read lock.
+    let (units_in_site, planned, skipped, budget_id) = {
+        let inner = state.inner.read().await;
+        let units_in_site: Vec<IndependentUnit> = inner
+            .units
+            .iter()
+            .filter(|u| crate::auth::same_id(&u.site_id, &payload.site_id))
+            .cloned()
+            .collect();
+        if units_in_site.is_empty() {
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!("No units found for site '{}'", payload.site_id),
+            ));
+        }
+        let in_force = budgets::budget_in_force(&inner, &payload.site_id, payload.due_date)
+            .map(|b| (b.id.clone(), b.fiscal_year));
+        let required = budgets::site_requires_budget(&inner, &payload.site_id);
+        if payload.amount > Decimal::ZERO {
+            if let Some((id, year)) = &in_force {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!("Operating budget {} ({}) is in force on {}; dues are accrued from its unit shares, not a typed amount", id, year, payload.due_date),
+                ));
+            }
+            if required {
+                return Err((
+                    StatusCode::CONFLICT,
+                    "This site requires an operating budget (işletme projesi); a typed dues amount has no legal basis".to_string(),
+                ));
+            }
+        } else if in_force.is_none() && required {
+            return Err((
+                StatusCode::CONFLICT,
+                format!(
+                    "No operating budget (işletme projesi) is in force on {}; issue an interim budget or record the assembly's approval first",
+                    payload.due_date
+                ),
+            ));
+        }
+        let mut planned: Vec<(IndependentUnit, Decimal, Option<String>)> = Vec::new();
+        let mut skipped: Vec<String> = Vec::new();
+        for unit in &units_in_site {
+            let already = inner.dues.iter().any(|d| {
+                d.unit_id == unit.id
+                    && d.period == payload.period
+                    && d.expense_type == ExpenseType::OperationalDues
+            });
+            if already {
+                continue;
+            }
+            let basis = if payload.amount > Decimal::ZERO {
+                Ok(budgets::DuesBasis {
+                    amount: payload.amount,
+                    operating_budget_id: None,
+                })
+            } else {
+                match budgets::operational_dues_basis(&inner, unit, payload.due_date) {
+                    // Legacy sites without a tariff keep the historical default amount.
+                    Err(_) if in_force.is_none() && !required => Ok(budgets::DuesBasis {
+                        amount: Decimal::new(1400, 0),
+                        operating_budget_id: None,
+                    }),
+                    other => other,
+                }
+            };
+            match basis {
+                Ok(b) if b.amount > Decimal::ZERO => {
+                    planned.push((unit.clone(), b.amount, b.operating_budget_id))
+                }
+                Ok(_) => skipped.push(format!(
+                    "{}: zero share",
+                    inner.unit_label(&unit.block_id, unit.unit_number)
+                )),
+                Err(reason) => skipped.push(format!(
+                    "{}: {}",
+                    inner.unit_label(&unit.block_id, unit.unit_number),
+                    reason
+                )),
+            }
+        }
+        (units_in_site, planned, skipped, in_force.map(|(id, _)| id))
+    };
+    let total_units_in_site = units_in_site.len();
+    // With PostgreSQL the occupancy (tenant or not) is read from the units table: a
+    // tenant moved in without a user account has no in-memory tenant user.
+    let tenanted: Option<std::collections::HashSet<String>> = match state.pool {
+        Some(ref pool) => Some(
+            crate::db::tenanted_unit_ids(pool, &payload.site_id)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        format!("Database unavailable: {}", e),
+                    )
+                })?,
+        ),
+        None => None,
+    };
+
+    // 2. The billing period row.
+    let period_record = {
+        let mut inner = state.inner.write().await;
+        let exists = inner.dues_periods.iter().any(|p| {
+            crate::auth::same_id(&p.site_id, &payload.site_id)
+                && p.period_name.eq_ignore_ascii_case(&payload.period)
+        });
+        if exists {
+            None
+        } else {
+            let max_p = inner
+                .dues_periods
+                .iter()
+                .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
+                .max()
+                .unwrap_or(0);
+            let record = DuesPeriod {
+                id: (max_p + 1).to_string(),
+                site_id: payload.site_id.clone(),
+                period_name: payload.period.clone(),
+                due_date: payload.due_date,
+                status: DuesPeriodStatus::Active,
+                created_at: Some(chrono::Utc::now()),
+            };
+            inner.dues_periods.push(record.clone());
+            Some(record)
+        }
+    };
+    if let (Some(ref pool), Some(ref record)) = (&state.pool, &period_record) {
+        crate::db::save_dues_period(pool, record)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!("Database write failed: {}", e),
+                )
+            })?;
     }
 
-    let total_units_in_site = units_in_site.len();
-
-    // Ensure period is stored in the separate dues_periods table
-    let period_exists = inner.dues_periods.iter().any(|p| {
-        (p.site_id == payload.site_id
-            || crate::db::parse_id_to_i64(&p.site_id)
-                == crate::db::parse_id_to_i64(&payload.site_id))
-            && p.period_name.eq_ignore_ascii_case(&payload.period)
-    });
-    if !period_exists {
-        let max_p = inner
-            .dues_periods
-            .iter()
-            .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
-            .max()
-            .unwrap_or(0);
-        let period_record = DuesPeriod {
-            id: (max_p + 1).to_string(),
-            site_id: payload.site_id.clone(),
-            period_name: payload.period.clone(),
+    // 3. Insert the liabilities. With PostgreSQL the identity column assigns the id
+    //    and the unique (unit, period, expense) index is the duplicate guard.
+    let mut accrued: Vec<(DuesLiability, Option<String>)> = Vec::new();
+    for (unit, amount, basis) in planned {
+        let mut due = DuesLiability {
+            id: String::new(),
+            unit_id: unit.id.clone(),
+            period: payload.period.clone(),
+            principal_amount: amount,
+            delay_penalty: Decimal::ZERO,
+            total_amount: amount,
             due_date: payload.due_date,
-            status: DuesPeriodStatus::Active,
-            created_at: Some(chrono::Utc::now()),
+            status: DebtStatus::Pending,
+            paid_principal: Decimal::ZERO,
+            paid_penalty: Decimal::ZERO,
+            // Operational dues are the occupant's: the tenant's when the unit is
+            // let, otherwise the owner's (same rule as the scheduler).
+            debtor_type: if tenanted
+                .as_ref()
+                .map(|t| t.contains(&unit.id))
+                .unwrap_or(unit.tenant_user_id.is_some())
+            {
+                DebtorType::Tenant
+            } else {
+                DebtorType::Owner
+            },
+            expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: None,
         };
-        inner.dues_periods.push(period_record.clone());
         if let Some(ref pool) = state.pool {
-            crate::db::save_dues_period(pool, &period_record)
+            match crate::db::insert_accrued_due(pool, &due)
                 .await
                 .map_err(|e| {
                     (
                         StatusCode::SERVICE_UNAVAILABLE,
                         format!("Database write failed: {}", e),
                     )
-                })?;
+                })? {
+                Some(id) => due.id = id.to_string(),
+                None => continue, // accrued concurrently
+            }
+            if let Some(ref b) = basis {
+                crate::db::set_due_budget_basis(pool, &due.id, b)
+                    .await
+                    .map_err(|e| {
+                        (
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            format!("Database write failed: {}", e),
+                        )
+                    })?;
+            }
         }
+        accrued.push((due, basis));
     }
 
-    // Invariant Guard: Prevent duplicate accrual for already-accrued units
-    let mut newly_accrued_units_count = 0;
+    let mut inner = state.inner.write().await;
     let mut total_amount_accrued = Decimal::ZERO;
-
-    for unit in &units_in_site {
-        let already_exists = inner
-            .dues
-            .iter()
-            .any(|d| d.unit_id == unit.id && d.period == payload.period);
-        if !already_exists {
-            let effective_amount = if payload.amount > Decimal::ZERO {
-                payload.amount
-            } else {
-                let unit_house_type = unit.house_type.as_deref().unwrap_or("2+1");
-                inner
-                    .house_types
-                    .iter()
-                    .find(|ht| {
-                        (ht.site_id == payload.site_id
-                            || crate::db::parse_id_to_i64(&ht.site_id)
-                                == crate::db::parse_id_to_i64(&payload.site_id))
-                            && ht.type_name.eq_ignore_ascii_case(unit_house_type)
-                    })
-                    .map(|ht| ht.dues_amount)
-                    .unwrap_or(Decimal::new(1400, 0))
-            };
-
-            let max_d = inner
+    let newly_accrued_units_count = accrued.len();
+    for (mut due, basis) in accrued {
+        if due.id.is_empty() {
+            due.id = (inner
                 .dues
                 .iter()
                 .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
                 .max()
-                .unwrap_or(0);
-            let due_id = (max_d + 1).to_string();
-            inner.dues.push(DuesLiability {
-                id: due_id,
-                unit_id: unit.id.clone(),
-                period: payload.period.clone(),
-                principal_amount: effective_amount,
-                delay_penalty: Decimal::ZERO,
-                total_amount: effective_amount,
-                due_date: payload.due_date,
-                status: DebtStatus::Pending,
-                paid_principal: Decimal::ZERO,
-                paid_penalty: Decimal::ZERO,
-                // Operational dues are the occupant's: the tenant's when the unit is
-                // let, otherwise the owner's (same rule as the scheduler).
-                debtor_type: if unit.tenant_user_id.is_some() {
-                    DebtorType::Tenant
-                } else {
-                    DebtorType::Owner
-                },
-                expense_type: ExpenseType::OperationalDues,
-                penalty_accrued_through: None,
-            });
-            total_amount_accrued += effective_amount;
-            newly_accrued_units_count += 1;
+                .unwrap_or(0)
+                + 1)
+            .to_string();
         }
-    }
-
-    if let Some(ref pool) = state.pool {
-        let dues_to_save: Vec<DuesLiability> = inner
-            .dues
-            .iter()
-            .filter(|d| d.period == payload.period)
-            .cloned()
-            .collect();
-        for due in &dues_to_save {
-            crate::db::save_due_liability(pool, due)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        format!("Database write failed: {}", e),
-                    )
-                })?;
+        total_amount_accrued += due.principal_amount;
+        if let Some(b) = basis {
+            inner.dues_budget_basis.insert(due.id.clone(), b);
         }
+        inner.dues.push(due);
     }
+    let legal_basis_warning = budget_id.is_none().then(|| {
+        "KMK 37 (Law 7579): these dues were accrued without an operating budget (işletme projesi) in force; they have no assembly-approved basis".to_string()
+    });
 
     if newly_accrued_units_count == 0 {
         return Ok((
@@ -2608,16 +2048,25 @@ pub async fn accrue_monthly_dues(
                 auto_settled_units_count: 0,
                 total_amount_accrued: Decimal::ZERO,
                 total_amount_offset_from_advance: Decimal::ZERO,
-                already_accrued: true,
-                message: format!(
-                    "'{}' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi.",
-                    payload.period
-                ),
+                already_accrued: skipped.is_empty(),
+                message: if skipped.is_empty() {
+                    format!("'{}' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi.", payload.period)
+                } else {
+                    format!(
+                        "'{}' dönemi için tahakkuk yapılamadı: {}",
+                        payload.period,
+                        skipped.join("; ")
+                    )
+                },
+                operating_budget_id: budget_id,
+                legal_basis_warning: None,
+                skipped_units: skipped,
             }),
         ));
     }
 
     // Automatically apply available advance payments against newly accrued dues!
+    let ledger_before = ledger_snapshot(&inner);
     let (auto_settled_count, total_offset) = apply_advance_payments_offset(&mut inner, None);
     if let Some(ref pool) = state.pool {
         persist_ledger_changes(pool, &ledger_before, &inner)
@@ -2640,6 +2089,9 @@ pub async fn accrue_monthly_dues(
                 "'{}' dönemi için {} daireye başarıyla aidat tahakkuk ettirildi. {} daire avanstan otomatik kapatıldı.",
                 payload.period, newly_accrued_units_count, auto_settled_count
             ),
+            operating_budget_id: budget_id,
+            legal_basis_warning,
+            skipped_units: skipped,
         }),
     ))
 }
@@ -2898,8 +2350,21 @@ pub async fn match_all_homeowner_payments(
 
 /// Returns the list of homeowner payment records
 pub async fn get_homeowner_payments(State(state): State<AppState>) -> impl IntoResponse {
+    if let Some(p) = state.db_pool() {
+        if let Ok(records) = crate::db::fetch_homeowner_payment_records_from_db(p).await {
+            return (
+                StatusCode::OK,
+                Json(serde_json::to_value(records).unwrap_or_default()),
+            )
+                .into_response();
+        }
+    }
     let inner = state.inner.read().await;
-    (StatusCode::OK, Json(inner.homeowner_payments.clone()))
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(&inner.homeowner_payments).unwrap_or_default()),
+    )
+        .into_response()
 }
 
 /// Resets all payments, advance balances, reconciliation items, and dues back to a 100% clean state (₺0.00 debt, 0 transactions)
@@ -3225,6 +2690,7 @@ async fn purge_site_rows(
         "payment_entries WHERE site_id = $1 AND reverses_entry_id IS NOT NULL",
         "payment_entries WHERE site_id = $1",
         "payment_idempotency_keys WHERE site_id = $1",
+        "payment_intents WHERE site_id = $1",
         "payment_receipts WHERE site_id = $1 AND reverses_receipt_id IS NOT NULL",
         "payment_receipts WHERE site_id = $1",
         "receipt_counters WHERE site_id = $1",
@@ -3235,6 +2701,8 @@ async fn purge_site_rows(
         "unit_sender_ibans WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
         "unit_payer_names WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
         "dues_liabilities WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
+        // Budget lines, shares, service records and objections cascade with the budget.
+        "operating_budgets WHERE site_id = $1",
         "occupancy_members WHERE occupancy_id IN (SELECT o.id FROM unit_occupancies o JOIN units u ON u.id = o.unit_id WHERE u.site_id = $1)",
         "unit_occupancies WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
         "unit_ownerships WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
@@ -3645,12 +3113,20 @@ pub async fn provision_site_units(
         let email = format!("daire{}@{}.com", i, site_slug);
         let phone = format!("+90 532 555 {:04}", i + 100);
 
-        let virtual_iban = VirtualIbanService::generate_virtual_iban(
+        let virtual_iban = match VirtualIbanService::generate_virtual_iban(
             VirtualIbanService::KUVEYT_TURK_BANK_CODE,
             &site_id,
             &block_name,
             unit_number,
-        );
+        ) {
+            Ok(iban) => iban,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "status": "ERROR", "message": e.to_string() })),
+                )
+            }
+        };
 
         // Add or update resident user
         let user_id =
@@ -3832,6 +3308,11 @@ pub async fn provision_site_units(
 
 /// Returns a summary list of all units in the system for testing & simulator dropdowns
 pub async fn get_units_summary(State(state): State<AppState>) -> impl IntoResponse {
+    if let Some(p) = state.db_pool() {
+        if let Ok(units) = crate::db::unit_repository::fetch_units_summary_from_db(p).await {
+            return (StatusCode::OK, Json(units)).into_response();
+        }
+    }
     let inner = state.inner.read().await;
     let mut result = Vec::new();
 
@@ -3887,7 +3368,7 @@ pub async fn get_units_summary(State(state): State<AppState>) -> impl IntoRespon
         }));
     }
 
-    (StatusCode::OK, Json(result))
+    (StatusCode::OK, Json(result)).into_response()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -3900,6 +3381,15 @@ pub async fn get_site_payments(
     State(state): State<AppState>,
     Query(query): Query<SitePaymentsQuery>,
 ) -> impl IntoResponse {
+    if let Some(p) = state.db_pool() {
+        if let Ok(res) =
+            crate::db::payment_repository::fetch_site_payments_from_db(p, query.site_id.as_deref())
+                .await
+        {
+            return (StatusCode::OK, Json(res)).into_response();
+        }
+    }
+
     let inner = state.inner.read().await;
 
     // 1. Resolve site
@@ -4135,6 +3625,7 @@ pub async fn get_site_payments(
             "guidance": guidance
         })),
     )
+        .into_response()
 }
 
 /// Returns the comprehensive overview for the Site Manager:
@@ -4569,11 +4060,26 @@ pub async fn reverse_payment(
     {
         payload.site_id = Some(ctx.claims.site_id.clone());
     }
-    crate::services::PaymentTrackingService::new(state)
+    let site_id = payload.site_id.clone().unwrap_or_default();
+    let service = crate::services::PaymentTrackingService::new(state.clone());
+    let reversal = service
         .reverse_payment(payload, &ctx)
         .await
-        .map(|r| (StatusCode::CREATED, Json(r)))
-        .map_err(payment_error_status)
+        .map_err(payment_error_status)?;
+    // A reversed card payment is refunded at the provider (SPEC-007 R4).
+    if reversal.reversal_receipt.payment_channel == PaymentChannel::CreditCard {
+        if let Err(e) = crate::services::CardPaymentService::new(state)
+            .refund_for_receipt(&site_id, &reversal.reversed_receipt_number)
+            .await
+        {
+            tracing::error!(
+                "Card refund for {} was not completed: {}",
+                reversal.reversed_receipt_number,
+                e
+            );
+        }
+    }
+    Ok((StatusCode::CREATED, Json(reversal)))
 }
 
 /// Writes today's debt aging snapshot (O-8). The daily worker does the same.

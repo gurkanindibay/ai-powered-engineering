@@ -247,7 +247,9 @@ pub async fn reset_db_to_seed_data(
         .batch_execute(
             r#"
             TRUNCATE TABLE payment_entries RESTART IDENTITY CASCADE;
+            TRUNCATE TABLE payment_intents RESTART IDENTITY CASCADE;
             TRUNCATE TABLE dues_liabilities RESTART IDENTITY CASCADE;
+            TRUNCATE TABLE operating_budgets RESTART IDENTITY CASCADE;
             TRUNCATE TABLE reconciliation_queue CASCADE;
             TRUNCATE TABLE advance_balances CASCADE;
             TRUNCATE TABLE pending_registrations CASCADE;

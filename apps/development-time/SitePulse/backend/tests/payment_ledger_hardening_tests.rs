@@ -505,9 +505,11 @@ async fn when_the_credited_advance_was_already_used_then_the_reversal_is_rejecte
     );
 }
 
-/// Virman reversal is deferred: it is refused rather than half-done.
+/// SPEC-007 R1: reversing a virman reopens the dues it settled and credits the
+/// spent advance back to the source debtor; it is reversed at most once.
 #[tokio::test]
-async fn when_a_virman_receipt_is_reversed_then_it_is_refused() {
+async fn when_a_virman_receipt_is_reversed_then_the_dues_reopen_and_the_source_advance_is_restored()
+{
     let state = tenanted_state_with(vec![liability(
         "cap-1",
         "Asansör Taksit 1",
@@ -522,24 +524,65 @@ async fn when_a_virman_receipt_is_reversed_then_it_is_refused() {
         .inner
         .write()
         .await
-        .adjust_advance(UNIT, "OWNER", d("300.00"));
+        .adjust_advance(UNIT, "TENANT", d("500.00"));
     let virman = service
         .inter_ledger_transfer(InterLedgerTransferRequest {
             site_id: Some(SITE.to_string()),
             unit_id: UNIT.to_string(),
             amount: d("300.00"),
+            source_debtor: Some("TENANT".to_string()),
+            target_debtor: Some("OWNER".to_string()),
             ..Default::default()
         })
         .await
         .unwrap();
-    let err = service
+    assert_eq!(
+        state.inner.read().await.advance_of(UNIT, "TENANT"),
+        d("200.00")
+    );
+
+    let resp = service
         .reverse_payment(
             reverse(&virman.receipt_number, "Hatalı virman"),
             &operator(OPERATOR),
         )
         .await
-        .unwrap_err();
-    assert!(err.contains("inter-ledger"), "{}", err);
+        .unwrap();
+    assert!(resp.reversal_receipt.receipt_number.starts_with("IAD-"));
+    assert_eq!(resp.restored_advance, d("300.00"));
+    assert_eq!(resp.refunded_advance, Decimal::ZERO);
+    assert_eq!(resp.reopened_due_ids, vec!["cap-1".to_string()]);
+    assert!(resp
+        .reversal_receipt
+        .legal_statutory_note
+        .as_deref()
+        .unwrap_or("")
+        .contains("virman"));
+    {
+        let inner = state.inner.read().await;
+        assert_eq!(inner.advance_of(UNIT, "TENANT"), d("500.00"));
+        assert_eq!(inner.advance_of(UNIT, "OWNER"), Decimal::ZERO);
+        let cap = inner.dues.iter().find(|x| x.id == "cap-1").unwrap();
+        assert_ne!(cap.status, DebtStatus::Paid);
+        assert_eq!(cap.paid_principal, Decimal::ZERO);
+    }
+
+    // Asking again returns the same reversal and changes nothing.
+    let again = service
+        .reverse_payment(
+            reverse(&virman.receipt_number, "Hatalı virman"),
+            &operator(OPERATOR),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        again.reversal_receipt.receipt_number,
+        resp.reversal_receipt.receipt_number
+    );
+    assert_eq!(
+        state.inner.read().await.advance_of(UNIT, "TENANT"),
+        d("500.00")
+    );
 }
 
 // ---------------------------------------------------------------------------
