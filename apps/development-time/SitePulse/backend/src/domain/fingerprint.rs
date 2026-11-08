@@ -111,6 +111,51 @@ fn hmac_sha256(secret: &[u8], body: &[u8]) -> Vec<u8> {
     }
 }
 
+/// One allocation line covered by a v2 receipt hash.
+#[derive(Debug, Clone, Copy)]
+pub struct AllocationLine<'a> {
+    pub due_id: &'a str,
+    pub principal: Decimal,
+    pub penalty: Decimal,
+}
+
+/// Fields of a v2 receipt hash: v1 plus the payer and every allocation line, so
+/// a receipt whose payer or allocation was altered no longer verifies.
+#[derive(Debug, Clone, Copy)]
+pub struct ReceiptFieldsV2<'a> {
+    pub base: ReceiptFields<'a>,
+    pub payer_name: &'a str,
+    pub payer_role: &'a str,
+    pub allocations: &'a [AllocationLine<'a>],
+}
+
+/// Canonical form v2 of a receipt:
+/// `sitepulse:v2:<v1 fields>:<payer role>:<payer name>:<due=principal/penalty;...>`.
+/// The payer name is trimmed; allocation lines keep the receipt's order.
+pub fn receipt_canonical_v2(fields: &ReceiptFieldsV2<'_>) -> String {
+    let lines: Vec<String> = fields
+        .allocations
+        .iter()
+        .map(|a| format!("{}={:.2}/{:.2}", a.due_id, a.principal, a.penalty))
+        .collect();
+    format!(
+        "sitepulse:v2:{}:{}:{:.2}:{}:{}:{}:{}",
+        fields.base.receipt_number,
+        fields.base.unit_id,
+        fields.base.total_amount,
+        fields.base.issued_at.to_rfc3339(),
+        fields.payer_role,
+        fields.payer_name.trim(),
+        lines.join(";")
+    )
+}
+
+/// SHA-256 (lower-case hex) of [`receipt_canonical_v2`]. Same length as v1, so
+/// stored and printed codes of both versions verify by equality.
+pub fn receipt_hash_v2(fields: &ReceiptFieldsV2<'_>) -> String {
+    sha256_hex(receipt_canonical_v2(fields).as_bytes())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,5 +228,38 @@ mod tests {
             body,
             &hmac_sha256_hex(b"", body)
         ));
+    }
+
+    #[test]
+    fn receipt_hash_v2_is_a_persisted_contract() {
+        let issued = chrono::DateTime::parse_from_rfc3339("2027-01-15T10:30:00+00:00")
+            .map(|d| d.with_timezone(&Utc))
+            .unwrap_or_default();
+        let lines = [AllocationLine {
+            due_id: "42",
+            principal: Decimal::new(150000, 2),
+            penalty: Decimal::new(7500, 2),
+        }];
+        let fields = ReceiptFieldsV2 {
+            base: ReceiptFields {
+                receipt_number: "TAH-2027-000001",
+                unit_id: "14",
+                total_amount: Decimal::new(157500, 2),
+                issued_at: &issued,
+            },
+            payer_name: " Ayşe Yılmaz ",
+            payer_role: "OWNER",
+            allocations: &lines,
+        };
+        assert_eq!(
+            receipt_canonical_v2(&fields),
+            "sitepulse:v2:TAH-2027-000001:14:1575.00:2027-01-15T10:30:00+00:00:OWNER:Ayşe Yılmaz:42=1500.00/75.00"
+        );
+        assert_eq!(receipt_hash_v2(&fields).len(), 64);
+        assert_eq!(
+            receipt_hash_v2(&fields),
+            "2f9cadb362efbab5f06eab01ec6144c748c890988ea9edd1febfe05cdc0ad015",
+            "persisted contract: receipt_hash_v2 must never change"
+        );
     }
 }

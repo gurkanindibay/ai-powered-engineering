@@ -2,6 +2,8 @@ pub mod bank_account_repository;
 pub mod base;
 pub mod budget_repository;
 pub mod dues_repository;
+pub mod finance_records;
+pub mod finance_store;
 pub mod payment_intent_repository;
 pub mod payment_repository;
 pub mod reconciliation_repository;

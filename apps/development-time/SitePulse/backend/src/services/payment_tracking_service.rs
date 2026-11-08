@@ -38,6 +38,32 @@ impl PaymentTrackingService {
         })
     }
 
+    /// SPEC-009 R15: the v2 hash of an issued receipt, which also covers the payer
+    /// and the allocation lines. New receipts carry it; v1 receipts keep theirs.
+    pub fn compute_verification_hash_v2(receipt: &PaymentReceipt) -> String {
+        use crate::domain::fingerprint::{receipt_hash_v2, AllocationLine, ReceiptFields, ReceiptFieldsV2};
+        let lines: Vec<AllocationLine<'_>> = receipt
+            .allocation_breakdown
+            .iter()
+            .map(|b| AllocationLine {
+                due_id: b.due_id.as_deref().unwrap_or(&b.period),
+                principal: b.principal_paid,
+                penalty: b.penalty_paid,
+            })
+            .collect();
+        receipt_hash_v2(&ReceiptFieldsV2 {
+            base: ReceiptFields {
+                receipt_number: &receipt.receipt_number,
+                unit_id: &receipt.unit_id,
+                total_amount: receipt.total_amount,
+                issued_at: &receipt.issued_at,
+            },
+            payer_name: &receipt.payer_name,
+            payer_role: receipt.payer_role.as_str(),
+            allocations: &lines,
+        })
+    }
+
     /// Detects capital expenditure keyword intent in transaction description
     pub fn is_capital_expenditure_intent(desc: &str) -> bool {
         let upper = desc.to_uppercase();
@@ -1744,7 +1770,10 @@ fn reversal_response(
     }
 }
 
-const RENT_OFFSET_NOTE: &str = "634 sayılı KMK Madde 20 & 22 uyarınca ana gayrimenkulün ortak demirbaş/yatırım giderleri bağımsız bölüm malikinin (Kat Maliki) yasal sorumluluğundadır. Kiracı tarafından ödenen bu tutar TBK Madde 314 gereğince kira bedelinden mahsuba uygundur.";
+/// SPEC-009 R3: the tenant pays the owner's items as the owner's joint debtor
+/// (KMK 22, capped at the rent) and deducts it from the rent (TBK 314). Verify
+/// the wording with counsel before it is printed in production.
+const RENT_OFFSET_NOTE: &str = "634 sayılı KMK md. 22 uyarınca kiracı, kat malikinin ortak gider ve avans borcundan kira bedeli ile sınırlı olarak malikle birlikte sorumludur; ana gayrimenkulün demirbaş/yatırım giderleri kat malikine aittir (KMK md. 20). Kiracının kat maliki adına ödediği bu tutar kira bedelinden mahsup edilebilir (TBK md. 314; verify).";
 
 fn build_receipt(
     ctx: &ReceiptContext,
@@ -1774,16 +1803,11 @@ fn build_receipt(
         .iter()
         .any(|b| b.expense_type == ExpenseType::CapitalDues);
     let is_rent_offset_eligible = ctx.on_behalf_of_owner && paid_capital;
-    PaymentReceipt {
+    let mut receipt = PaymentReceipt {
         id: 0,
         site_id: ctx.site_id.clone(),
         unit_id: ctx.unit_id.clone(),
-        verification_hash: PaymentTrackingService::compute_verification_hash(
-            &receipt_number,
-            &ctx.unit_id,
-            ctx.amount,
-            &ctx.issued_at,
-        ),
+        verification_hash: String::new(),
         receipt_number,
         sequence_number,
         payer_name: ctx.payer_name.clone(),
@@ -1819,7 +1843,10 @@ fn build_receipt(
         issuer_address: None,
         issuer_tax_id: None,
         issuer_tax_office: None,
-    }
+    };
+    // SPEC-009 R15: new collection receipts carry the v2 hash (payer + allocation).
+    receipt.verification_hash = PaymentTrackingService::compute_verification_hash_v2(&receipt);
+    receipt
 }
 
 fn build_entry(ctx: &ReceiptContext, receipt: &PaymentReceipt) -> PaymentEntry {

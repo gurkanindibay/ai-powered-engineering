@@ -70,6 +70,7 @@ fn line(category: &str, amount: &str, key: &str) -> BudgetLineInput {
         description: None,
         annual_amount: d(amount),
         allocation_key: Some(key.to_string()),
+        unit_weights: Vec::new(),
     }
 }
 

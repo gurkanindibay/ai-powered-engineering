@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 mod payments_phase2;
 pub use payments_phase2::*;
+mod payments_phase3;
+pub use payments_phase3::*;
 
 macro_rules! impl_sql_for_enum {
     ($t:ty) => {
@@ -47,6 +49,8 @@ pub enum Role {
     HomeResident,
     SiteManager,
     SaasAdmin,
+    /// Denetçi (KMK 41): read-only access to the books; approves large expenses.
+    Auditor,
 }
 
 impl Role {
@@ -56,6 +60,7 @@ impl Role {
             Role::HomeResident => "HOME_RESIDENT",
             Role::SiteManager => "SITE_MANAGER",
             Role::SaasAdmin => "SAAS_ADMIN",
+            Role::Auditor => "AUDITOR",
         }
     }
 
@@ -69,6 +74,7 @@ impl Role {
             "HOME_RESIDENT" => Ok(Self::HomeResident),
             "SITE_MANAGER" => Ok(Self::SiteManager),
             "SAAS_ADMIN" => Ok(Self::SaasAdmin),
+            "AUDITOR" => Ok(Self::Auditor),
             _ => Err("Unknown role".to_string()),
         }
     }
@@ -96,6 +102,18 @@ pub enum Permission {
     AuditLogExport,
     SupportAccess,
     PlatformIntegrationConfigure,
+    /// SPEC-009: read the books, reports, collections and analytics.
+    FinanceRead,
+    /// SPEC-009: expenses, journal, dunning, plans, cases, leases, heat-share, KVKK settings.
+    FinanceManage,
+    /// SPEC-009: approve an expense invoice (four-eyes; the auditor above the limit).
+    ExpenseApprove,
+    /// SPEC-009: approve a waiver or write-off requested by someone else.
+    AdjustmentApprove,
+    /// SPEC-009: assembly meetings, votes and the decisions book.
+    GovernanceManage,
+    /// SPEC-009: a management company's portfolio of sites.
+    PortfolioRead,
 }
 
 impl Permission {
@@ -124,6 +142,14 @@ impl Permission {
             Permission::AuditLogExport => "Export scoped audit events",
             Permission::SupportAccess => "Request and approve support access",
             Permission::PlatformIntegrationConfigure => "Configure platform bank integration",
+            Permission::FinanceRead => "Read the general ledger, reports, collections and analytics",
+            Permission::FinanceManage => {
+                "Manage expenses, journal entries, dunning, payment plans, collection cases and leases"
+            }
+            Permission::ExpenseApprove => "Approve expense invoices",
+            Permission::AdjustmentApprove => "Approve penalty waivers and write-offs",
+            Permission::GovernanceManage => "Manage assembly meetings and the decisions book",
+            Permission::PortfolioRead => "View a management company's site portfolio",
         }
     }
 
@@ -151,6 +177,12 @@ impl Permission {
                 Permission::ResidentApprove,
                 Permission::LedgerManageAll,
                 Permission::AnnouncementBroadcast,
+                Permission::FinanceRead,
+                Permission::FinanceManage,
+                Permission::ExpenseApprove,
+                Permission::AdjustmentApprove,
+                Permission::GovernanceManage,
+                Permission::PortfolioRead,
             ],
             Role::HomeOwner => vec![
                 Permission::UnitRead,
@@ -159,6 +191,11 @@ impl Permission {
                 Permission::UnitManageHousehold,
             ],
             Role::HomeResident => vec![Permission::UnitRead, Permission::UnitPay],
+            Role::Auditor => vec![
+                Permission::FinanceRead,
+                Permission::ExpenseApprove,
+                Permission::AuditLogRead,
+            ],
         }
     }
 }

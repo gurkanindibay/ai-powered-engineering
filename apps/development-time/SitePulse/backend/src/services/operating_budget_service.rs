@@ -77,7 +77,9 @@ pub fn operational_dues_basis(
             )),
         };
     }
-    if site_requires_budget(inner, &unit.site_id) {
+    if site_requires_budget(inner, &unit.site_id)
+        && !in_budget_transition(inner, &unit.site_id, due_date)
+    {
         return Err(format!(
             "No operating budget (işletme projesi) is in force on {} for this site; issue an interim budget or record the assembly's approval first",
             due_date
@@ -106,6 +108,16 @@ pub fn budget_in_force<'a>(
                 b.period_start,
             )
         })
+}
+
+/// SPEC-009 R1: a site migrating mid-year may accrue the legacy tariff until its
+/// transition date; such liabilities have no legal basis and are reported.
+pub fn in_budget_transition(inner: &AppStateInner, site_id: &str, due_date: NaiveDate) -> bool {
+    inner
+        .finance
+        .budget_transitions
+        .iter()
+        .any(|(s, until)| crate::auth::same_id(s, site_id) && due_date <= *until)
 }
 
 pub fn site_requires_budget(inner: &AppStateInner, site_id: &str) -> bool {
@@ -162,16 +174,8 @@ pub fn compute_unit_shares(
 ) -> Vec<OperatingBudgetUnitShare> {
     let mut annual = vec![Decimal::ZERO; units.len()];
     for line in lines {
-        let weights: Vec<i64> = units
-            .iter()
-            .map(|u| {
-                if line.allocation_key == "EQUAL" {
-                    1
-                } else {
-                    i64::from(u.land_share.max(1))
-                }
-            })
-            .collect();
+        let weights: Vec<i64> = line_weights(inner, units, line)
+            .unwrap_or_else(|_| units.iter().map(|u| i64::from(u.land_share.max(1))).collect());
         for (i, part) in allocate_by_weight(line.annual_amount, &weights)
             .into_iter()
             .enumerate()
@@ -294,6 +298,9 @@ impl OperatingBudgetService {
                     .cmp(&b.block_id)
                     .then(a.unit_number.cmp(&b.unit_number))
             });
+            for l in &lines {
+                line_weights(&inner, &units, l)?;
+            }
             let previous = inner
                 .operating_budgets
                 .iter()
@@ -950,8 +957,68 @@ fn validate_line(index: usize, l: &BudgetLineInput) -> BudgetResult<OperatingBud
         category,
         description: l.description.clone().filter(|d| !d.trim().is_empty()),
         annual_amount: l.annual_amount,
+        unit_weights: if matches!(key.as_str(), "METER" | "CUSTOM") {
+            if l.unit_weights.is_empty() {
+                return Err(BudgetError::Invalid(format!(
+                    "line {}: a {} line needs unit_weights",
+                    index + 1,
+                    key
+                )));
+            }
+            l.unit_weights.clone()
+        } else {
+            Vec::new()
+        },
         allocation_key: key,
     })
+}
+
+/// SPEC-009 R1: the weight of each unit for a line, or why it cannot be split.
+pub fn line_weights(
+    inner: &AppStateInner,
+    units: &[IndependentUnit],
+    line: &OperatingBudgetLine,
+) -> BudgetResult<Vec<i64>> {
+    let weights: Vec<i64> = match line.allocation_key.as_str() {
+        "EQUAL" => vec![1; units.len()],
+        "HOUSE_TYPE" => units
+            .iter()
+            .map(|u| {
+                crate::scheduler::tariff_for(inner, u)
+                    .map(|t| (t * Decimal::ONE_HUNDRED).trunc())
+                    .and_then(|c| c.to_string().parse::<i64>().ok())
+                    .ok_or_else(|| {
+                        BudgetError::Invalid(format!(
+                            "{} line: unit {} has no house-type tariff to weigh by",
+                            line.category, u.id
+                        ))
+                    })
+            })
+            .collect::<BudgetResult<_>>()?,
+        "METER" | "CUSTOM" => units
+            .iter()
+            .map(|u| {
+                line.unit_weights
+                    .iter()
+                    .find(|w| crate::auth::same_id(&w.unit_id, &u.id))
+                    .map(|w| i64::try_from(w.weight).unwrap_or(i64::MAX))
+                    .ok_or_else(|| {
+                        BudgetError::Invalid(format!(
+                            "{} line: unit {} has no weight",
+                            line.category, u.id
+                        ))
+                    })
+            })
+            .collect::<BudgetResult<_>>()?,
+        _ => units.iter().map(|u| i64::from(u.land_share.max(1))).collect(),
+    };
+    if weights.iter().sum::<i64>() <= 0 {
+        return Err(BudgetError::Invalid(format!(
+            "{} line: the weights add up to zero",
+            line.category
+        )));
+    }
+    Ok(weights)
 }
 
 fn next_id<'a>(ids: impl Iterator<Item = &'a str>) -> String {

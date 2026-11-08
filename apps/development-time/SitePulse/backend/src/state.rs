@@ -78,6 +78,8 @@ pub struct AppStateInner {
     pub dues_budget_basis: HashMap<String, String>,
     /// Card payment intents through the licensed provider (SPEC-007 R4).
     pub payment_intents: Vec<crate::models::PaymentIntent>,
+    /// SPEC-009 aggregates (KVKK, notifications, autopay, expenses, collections, ...).
+    pub finance: crate::finance_book::FinanceBook,
 }
 
 impl Default for AppStateInner {
@@ -121,6 +123,7 @@ impl AppStateInner {
             budget_required_sites: Vec::new(),
             dues_budget_basis: HashMap::new(),
             payment_intents: Vec::new(),
+            finance: crate::finance_book::FinanceBook::default(),
         };
         inner.seed_system_lookups();
         if Self::should_seed_test_fixtures() {
@@ -553,6 +556,7 @@ impl AppStateInner {
         self.operating_budgets.clear();
         self.dues_budget_basis.clear();
         self.payment_intents.clear();
+        self.finance = crate::finance_book::FinanceBook::default();
         self.auto_scheduler_enabled = false;
         self.seed_system_lookups();
     }
@@ -568,6 +572,7 @@ impl AppStateInner {
         self.operating_budgets.clear();
         self.dues_budget_basis.clear();
         self.payment_intents.clear();
+        self.finance = crate::finance_book::FinanceBook::default();
 
         // 100% clean slate: ₺0.00 debt
         self.dues.clear();
