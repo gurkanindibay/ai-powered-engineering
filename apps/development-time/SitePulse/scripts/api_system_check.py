@@ -25,6 +25,7 @@ local port (the backend applies the migrations), seeds it, and checks over HTTP:
   receipt_pdf_and_verification     a receipt downloads as a PDF; the public QR check confirms it without payer data (R3)
   card_payment_via_provider        a sandbox card payment is captured through the signed webhook exactly once (R4)
   budget_accrual_legal_basis       accrual from an approved işletme projesi records the budget on each liability (R5)
+  finance_desk_over_http           SPEC-009: balanced ledger, dunning, analytics, four-eyes invoices, isolation, lawyer token
   ledger_integrity_clean           v_integrity_violations is empty after all checks
 
 PostgreSQL access: set DB_HOST/DB_PORT/DB_USER/DB_PASS. SQL is run with `psql`
@@ -72,6 +73,8 @@ PUBLIC_ROUTES = {
     "/api/v1/registration/submit/:slug",
     "/api/v1/public/receipts/verify", "/api/v1/payments/provider/webhook",
     "/api/v1/payment-provider/sandbox/checkout/:reference", "/api/v1/payment-provider/sandbox/checkout/:reference/complete",
+    # SPEC-009 R8: the lawyer's evidence pack is authenticated by its one-time token.
+    "/api/v1/public/collection-cases/pack",
 }
 SAMPLE_PARAMS = {"unit_id": "14", "id": "14", "site_id": "1", "resident_id": "1", "sender_iban": "TR1", "slug": "x",
                  "reference": "SBX-x", "intent_id": "1", "objection_id": "1"}
@@ -84,6 +87,7 @@ CHECKS = [
     "debt_aging_snapshot_persisted", "virman_reversal_restores_advance", "resident_statement_scoped",
     "receipt_pdf_and_verification", "card_payment_via_provider", "budget_accrual_legal_basis", "ledger_integrity_clean",
     "security_session_lifecycle", "transactional_audit", "audit_scope_and_privileges", "registration_repository_scope", "support_grant_lifecycle", "household_members_persisted", "invitation_atomic_registration",
+    "finance_desk_over_http",
 ]
 
 
@@ -639,6 +643,48 @@ def check_resident_statement(ctx: Context) -> Tuple[bool, str]:
     return ok, f"owner principal {owner and owner['principal_outstanding']} = buckets {buckets}, receipts {len(st['receipts'])}, other site {other}"
 
 
+def check_finance_desk(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-009 over HTTP and PostgreSQL: the derived ledger balances, dunning and
+    analytics run, the debtor export is named for staff, an invoice is never
+    approved by the person who recorded it, another site sees none of it, a
+    forged lawyer token is refused, and the SPEC-009 integrity view is clean."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    tb_status, tb_body = http("GET", f"{b}/api/v1/accounting/trial-balance", token=ctx.manager)
+    balanced = tb_status == 200 and json.loads(tb_body).get("balanced") is True
+    dunning = http("POST", f"{b}/api/v1/dunning/run", token=ctx.manager)[0]
+    analytics = http("GET", f"{b}/api/v1/analytics/collections?months=3", token=ctx.manager)[0]
+    ex_status, ex_body = http("GET", f"{b}/api/v1/kvkk/debtor-export", token=ctx.manager)
+    named = ex_status == 200 and json.loads(ex_body).get("masked") is False
+    vendor_status, vendor_body = http("POST", f"{b}/api/v1/accounting/vendors", token=ctx.manager,
+                                      body={"name": "Syscheck Temizlik", "tax_id": "0010180009"})
+    if vendor_status == 409:
+        vendors = json.loads(http("GET", f"{b}/api/v1/accounting/vendors", token=ctx.manager)[1])
+        vendor_id = next(v["id"] for v in vendors if v["tax_id"] == "0010180009")
+    elif vendor_status == 201:
+        vendor_id = json.loads(vendor_body)["id"]
+    else:
+        return False, f"vendor {vendor_status} {vendor_body[:200]}"
+    inv_status, inv_body = http("POST", f"{b}/api/v1/accounting/expenses", token=ctx.manager, body={
+        "vendor_id": vendor_id, "invoice_number": f"SYS-{time.time_ns()}", "invoice_date": time.strftime("%Y-%m-%d"),
+        "category": "CLEANING", "net_amount": "100.00"})
+    if inv_status != 201:
+        return False, f"expense {inv_status} {inv_body[:200]}"
+    self_approve = http("POST", f"{b}/api/v1/accounting/expenses/{json.loads(inv_body)['id']}/approve", token=ctx.manager)[0]
+    # Earlier checks purge the second site, so a live foreign manager is provisioned here.
+    suffix = str(time.time_ns())
+    foreign_site = ctx.psql.run(db, f"INSERT INTO sites(name,slug,address,status,plan_type) VALUES ('Finance Foreign','fin-{suffix}','Test','ACTIVE','STANDARD') RETURNING id;")
+    ctx.psql.run(db, f"INSERT INTO users(site_id,email,password_hash,role,must_change_password) VALUES ({foreign_site},'fin-{suffix}@example.com','{hash_password('Finance-Foreign-123')}','SITE_MANAGER',false);")
+    foreign_token = login(ctx.backend, f"fin-{suffix}@example.com", "Finance-Foreign-123")
+    foreign = http("GET", f"{b}/api/v1/accounting/vendors", token=foreign_token)
+    isolated = foreign[0] == 200 and json.loads(foreign[1]) == []
+    lawyer = http("GET", f"{b}/api/v1/public/collection-cases/pack?token=forged")[0]
+    violations = ctx.psql.run(db, "SELECT count(*) FROM v_finance_integrity_violations;").strip()
+    ok = (balanced and dunning == 200 and analytics == 200 and named and self_approve == 403
+          and isolated and lawyer == 403 and violations == "0")
+    return ok, (f"trial balance {tb_status}/{balanced}, dunning {dunning}, analytics {analytics}, export named {named}, "
+                f"self-approval {self_approve}, foreign isolated {isolated}, forged lawyer token {lawyer}, violations {violations}")
+
+
 def check_receipt_pdf(ctx: Context) -> Tuple[bool, str]:
     """SPEC-007 R3: PDF download and public verification without payer data."""
     db, b = ctx.backend.db_name, ctx.backend.base
@@ -930,6 +976,7 @@ CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
     "card_payment_via_provider": check_card_payment,
     "budget_accrual_legal_basis": check_budget_accrual,
     "ledger_integrity_clean": check_ledger_integrity,
+    "finance_desk_over_http": check_finance_desk,
 }
 
 

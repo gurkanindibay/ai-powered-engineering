@@ -2,13 +2,16 @@ enum UserRole {
   homeOwner('Kat Maliki (Ev Sahibi)', 'AY'),
   homeResident('Ev Sakini (Aile / Kiracı)', 'ZY'),
   siteManager('Site Yöneticisi', 'MD'),
-  saasAdmin('SaaS Platform Admin', 'SA');
+  saasAdmin('SaaS Platform Admin', 'SA'),
+  /// Denetçi (KMK 41): read-only books and large-expense approval (SPEC-009).
+  auditor('Denetçi', 'DN');
 
   static UserRole fromApi(Object? value) => switch (value) {
     'HOME_OWNER' => UserRole.homeOwner,
     'HOME_RESIDENT' => UserRole.homeResident,
     'SITE_MANAGER' => UserRole.siteManager,
     'SAAS_ADMIN' => UserRole.saasAdmin,
+    'AUDITOR' => UserRole.auditor,
     _ => throw const FormatException('Unknown server role'),
   };
 

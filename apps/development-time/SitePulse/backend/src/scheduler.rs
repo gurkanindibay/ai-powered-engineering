@@ -313,3 +313,68 @@ pub async fn start_debt_aging_snapshot_worker(state: AppState) {
         }
     }
 }
+
+/// SPEC-009 daily collections worker: once per calendar day it closes or breaks
+/// payment plans, charges autopay mandates, runs each site's dunning schedule and
+/// reminds managers of interim budget deadlines. Each step is idempotent, so a
+/// restart on the same day repeats nothing. Requires `auto_scheduler_enabled`.
+pub async fn start_collections_worker(state: AppState) {
+    let mut ticker = tokio::time::interval(Duration::from_secs(3600));
+    let mut last_day: Option<NaiveDate> = None;
+    loop {
+        ticker.tick().await;
+        let today = Utc::now().date_naive();
+        let enabled = state.inner.read().await.auto_scheduler_enabled;
+        if !enabled || last_day == Some(today) {
+            continue;
+        }
+        let (plans, autopay, dunning, reminders) = run_daily_collections(&state).await;
+        last_day = Some(today);
+        tracing::info!(
+            "[Scheduler] Daily collections: {} plans closed, {} autopay charges, {} dunning steps, {} budget reminders",
+            plans,
+            autopay,
+            dunning,
+            reminders
+        );
+    }
+}
+
+/// One pass of the daily collections jobs over every site (also used by tests).
+pub async fn run_daily_collections(state: &AppState) -> (usize, usize, usize, usize) {
+    use crate::services::{
+        autopay_service::AutopayService, budget_compliance_service::BudgetComplianceService,
+        dunning_service::DunningService, plan_service::PlanService,
+    };
+    let sites: Vec<String> = state
+        .inner
+        .read()
+        .await
+        .sites
+        .iter()
+        .map(|s| s.id.clone())
+        .collect();
+    let (mut plans, mut charges) = (0, 0);
+    for site in &sites {
+        match PlanService::new(state).run(site, None).await {
+            Ok(r) => plans += r.completed.len() + r.broken.len(),
+            Err(e) => tracing::error!("[Scheduler] Plans for site {}: {}", site, e),
+        }
+        match AutopayService::new(state).run(site, None).await {
+            Ok(r) => charges += r.charged,
+            Err(e) => tracing::warn!("[Scheduler] Autopay for site {}: {}", site, e),
+        }
+    }
+    let dunning = DunningService::new(state).run_all().await;
+    let reminders = match BudgetComplianceService::new(state)
+        .remind_interim_deadlines()
+        .await
+    {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!("[Scheduler] Interim budget reminders: {}", e);
+            0
+        }
+    };
+    (plans, charges, dunning, reminders)
+}

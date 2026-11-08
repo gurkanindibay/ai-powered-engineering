@@ -27,15 +27,29 @@ impl BudgetComplianceService {
         }
     }
 
-    pub async fn set_transition(&self, caller: &Caller, req: SetTransitionRequest) -> FinanceResult<LegalBasisReport> {
+    pub async fn set_transition(
+        &self,
+        caller: &Caller,
+        req: SetTransitionRequest,
+    ) -> FinanceResult<LegalBasisReport> {
         if !(0..=MAX_TRANSITION_DAYS).contains(&req.transition_days) {
-            return Err(invalid(format!("transition_days must be between 0 and {}", MAX_TRANSITION_DAYS)));
+            return Err(invalid(format!(
+                "transition_days must be between 0 and {}",
+                MAX_TRANSITION_DAYS
+            )));
         }
-        let today = self.store.read(|inner| site_today(inner, &caller.site_id)).await;
+        let today = self
+            .store
+            .read(|inner| site_today(inner, &caller.site_id))
+            .await;
         let until = (req.transition_days > 0)
-            .then(|| today.checked_add_days(Days::new(u64::try_from(req.transition_days).unwrap_or(0))))
+            .then(|| {
+                today.checked_add_days(Days::new(u64::try_from(req.transition_days).unwrap_or(0)))
+            })
             .flatten();
-        self.store.set_budget_transition(&caller.site_id, until).await?;
+        self.store
+            .set_budget_transition(&caller.site_id, until)
+            .await?;
         Ok(self.legal_basis(&caller.site_id).await)
     }
 
@@ -57,7 +71,10 @@ impl BudgetComplianceService {
                     .filter_map(|s| s.due_id.as_deref())
                     .collect();
                 let operational: Vec<&DuesLiability> = site_dues(inner, site_id)
-                    .filter(|d| d.expense_type == ExpenseType::OperationalDues && !heat.contains(&d.id.as_str()))
+                    .filter(|d| {
+                        d.expense_type == ExpenseType::OperationalDues
+                            && !heat.contains(&d.id.as_str())
+                    })
                     .collect();
                 let without: Vec<LiabilityWithoutBasis> = operational
                     .iter()
@@ -103,7 +120,13 @@ impl BudgetComplianceService {
                         let today = site_today(inner, &b.site_id);
                         let days = (deadline - today).num_days();
                         (days <= INTERIM_REMINDER_DAYS).then(|| {
-                            (b.site_id.clone(), b.id.clone(), b.fiscal_year, deadline, days < 0)
+                            (
+                                b.site_id.clone(),
+                                b.id.clone(),
+                                b.fiscal_year,
+                                deadline,
+                                days < 0,
+                            )
                         })
                     })
                     .collect()
@@ -113,9 +136,18 @@ impl BudgetComplianceService {
         let mut sent = 0;
         for (site, id, year, deadline, past) in due {
             let (subject, stage) = if past {
-                (format!("Geçici işletme projesi {} süresi doldu", year), "past")
+                (
+                    format!("Geçici işletme projesi {} süresi doldu", year),
+                    "past",
+                )
             } else {
-                (format!("Geçici işletme projesi {} için genel kurul süresi yaklaşıyor", year), "soon")
+                (
+                    format!(
+                        "Geçici işletme projesi {} için genel kurul süresi yaklaşıyor",
+                        year
+                    ),
+                    "soon",
+                )
             };
             let body = format!(
                 "KMK 37: geçici işletme projesi #{} en geç {} tarihine kadar kat malikleri kuruluna sunulmalıdır.",
@@ -123,7 +155,13 @@ impl BudgetComplianceService {
                 deadline.format("%d.%m.%Y")
             );
             sent += notifier
-                .notify_staff(&site, "BUDGET", &subject, &body, &format!("interim-deadline:{}:{}", id, stage))
+                .notify_staff(
+                    &site,
+                    "BUDGET",
+                    &subject,
+                    &body,
+                    &format!("interim-deadline:{}:{}", id, stage),
+                )
                 .await?
                 .len();
         }
