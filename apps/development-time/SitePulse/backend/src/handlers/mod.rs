@@ -429,7 +429,7 @@ pub async fn get_resident_dashboard(
         .find(|s| s.id == unit.site_id)
         .map(|s| s.name.clone())
         .unwrap_or_else(|| "Site".to_string());
-    let site_title = format!("{} • {} Blok D:{}", site_name, unit.block_id, unit.unit_number);
+    let site_title = format!("{} • {}", site_name, inner.unit_label(&unit.block_id, unit.unit_number));
     let advance_payment = inner.advance_total(&unit_id);
 
     let mut transactions: Vec<AccountTransactionDto> = Vec::new();
@@ -1335,7 +1335,7 @@ pub async fn get_unit_matching_criteria(
         .cloned()
         .unwrap_or_else(|| vec![owner_name.clone()]);
 
-    let recommended_desc = format!("{} Blok D:{}", unit.block_id, unit.unit_number);
+    let recommended_desc = inner.unit_label(&unit.block_id, unit.unit_number);
 
     Ok(Json(UnitMatchingCriteriaDto {
         unit_id: unit.id.clone(),
@@ -1946,11 +1946,7 @@ async fn process_bank_incoming_webhook_scoped(
         .map(|d| d.total_amount)
         .sum();
 
-    let unit_block_desc = if unit.block_id.contains("Blok") {
-        unit.block_id.clone()
-    } else {
-        format!("{} Blok", unit.block_id)
-    };
+    let unit_block_desc = inner.block_label(&unit.block_id);
 
     let message = if let Some(ref period) = cleared_period {
         if surplus > Decimal::ZERO {
@@ -3416,11 +3412,7 @@ pub async fn get_site_payments(
         if is_site_item {
             total_collected += item.transaction.amount;
             let flat_label = if let (Some(ref b), Some(u_num)) = (&item.matched_block, item.matched_unit_number) {
-                if b.contains("Blok") {
-                    format!("{} D:{}", b, u_num)
-                } else {
-                    format!("{} Blok D:{}", b, u_num)
-                }
+                inner.unit_label(b, u_num)
             } else {
                 "Daire Belirlenemedi".to_string()
             };
@@ -3522,11 +3514,7 @@ pub async fn get_site_payments(
             if !already_included {
                 total_collected += hp.amount;
                 let unit = inner.units.iter().find(|u| u.id == hp.unit_id);
-                let flat_label = if hp.block_id.contains("Blok") {
-                    format!("{} D:{}", hp.block_id, hp.unit_number)
-                } else {
-                    format!("{} Blok D:{}", hp.block_id, hp.unit_number)
-                };
+                let flat_label = inner.unit_label(&hp.block_id, hp.unit_number);
 
                 let resident_name = hp.homeowner_name.clone().unwrap_or_else(|| {
                     unit.and_then(|u| u.owner_user_id.as_ref())

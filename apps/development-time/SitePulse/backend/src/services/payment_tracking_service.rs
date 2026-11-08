@@ -88,7 +88,7 @@ impl PaymentTrackingService {
         if all_entries.is_empty() {
             // Synthesize from existing homeowner payments and mock entries
             for hp in &inner.homeowner_payments {
-                let unit_label = format!("{} Blok D:{}", hp.block_id, hp.unit_number);
+                let unit_label = inner.unit_label(&hp.block_id, hp.unit_number);
                 let settlement_status = match hp.status {
                     PaymentMatchStatus::MatchedDebt
                     | PaymentMatchStatus::MatchedAdvance
@@ -248,7 +248,7 @@ impl PaymentTrackingService {
                 "Daire Sakini".to_string()
             };
 
-            let unit_label = format!("{} Blok D:{}", unit.block_id, unit.unit_number);
+            let unit_label = inner.unit_label(&unit.block_id, unit.unit_number);
             let key = (unit.id.clone(), debtor_type.clone());
 
             let bracket = brackets_map.entry(key).or_insert_with(|| DebtAgingBracket {
@@ -388,6 +388,7 @@ impl PaymentTrackingService {
         let ctx = ReceiptContext {
             site_id: site_id.clone(),
             unit_id: unit.id.clone(),
+            unit_label: self.state.inner.read().await.unit_label(&unit.block_id, unit.unit_number),
             payer_name: req.payer_name.clone(),
             payer_role: payer_role.clone(),
             payment_channel: payment_channel.clone(),
@@ -433,7 +434,7 @@ impl PaymentTrackingService {
             let sequence = crate::db::tx_next_receipt_sequence(&tx, site_num, LEDGER_KIND_COLLECTION).await.map_err(db_err)?;
             let mut receipt = build_receipt(&ctx, &dues, &lines, surplus, sequence);
             crate::db::tx_insert_receipt(&tx, &mut receipt, site_num, unit_num).await.map_err(db_err)?;
-            let mut entry = build_entry(&ctx, &unit, &receipt);
+            let mut entry = build_entry(&ctx, &receipt);
             entry.description = entry_description(req.description.as_deref(), designation.as_ref(), designated_any);
             entry.id = match unmatched_entry.as_deref() {
                 Some(uid) => {
@@ -497,7 +498,7 @@ impl PaymentTrackingService {
             let mut receipt = build_receipt(&ctx, &dues, &lines, surplus, next_seq);
             receipt.id = next_receipt_id;
             issuer.apply(&mut receipt);
-            let mut entry = build_entry(&ctx, &unit, &receipt);
+            let mut entry = build_entry(&ctx, &receipt);
             entry.id = unmatched_entry.as_deref().and_then(crate::db::parse_id_to_i64).unwrap_or(next_entry_id);
             entry.description = entry_description(req.description.as_deref(), designation.as_ref(), designated_any);
             let touched: Vec<DuesLiability> = lines.iter().map(|l| dues[l.due_index].clone()).collect();
@@ -612,6 +613,7 @@ impl PaymentTrackingService {
         let ctx = ReceiptContext {
             site_id: site_id.clone(),
             unit_id: unit.id.clone(),
+            unit_label: self.state.inner.read().await.unit_label(&unit.block_id, unit.unit_number),
             payer_name,
             payer_role: source.to_string(),
             payment_channel: "INTER_LEDGER".to_string(),
@@ -666,7 +668,7 @@ impl PaymentTrackingService {
             let mut receipt = build_receipt(&c, &dues, &lines, Decimal::ZERO, seq);
             receipt.legal_statutory_note.get_or_insert_with(|| VIRMAN_NOTE.to_string());
             crate::db::tx_insert_receipt(&tx, &mut receipt, site_num, unit_num).await.map_err(db_err)?;
-            let mut entry = build_entry(&c, &unit, &receipt);
+            let mut entry = build_entry(&c, &receipt);
             entry.description = Some(note.clone());
             entry.id = crate::db::tx_insert_entry(&tx, &entry, site_num, unit_num).await.map_err(db_err)?;
             for line in &lines {
@@ -709,7 +711,7 @@ impl PaymentTrackingService {
             receipt.id = rid;
             receipt.legal_statutory_note.get_or_insert_with(|| VIRMAN_NOTE.to_string());
             issuer.apply(&mut receipt);
-            let mut entry = build_entry(&c, &unit, &receipt);
+            let mut entry = build_entry(&c, &receipt);
             entry.id = eid;
             entry.description = Some(note.clone());
             let touched: Vec<DuesLiability> = lines.iter().map(|l| dues[l.due_index].clone()).collect();
@@ -1112,6 +1114,8 @@ struct ReceiptContext {
     external_reference: Option<String>,
     /// The debtor whose advance receives the surplus (or is debited by a virman).
     advance_debtor: String,
+    /// Display label of the unit ("A Blok D:14").
+    unit_label: String,
 }
 
 const VIRMAN_NOTE: &str = "Avans bakiyesinden demirbaş/ortak gider borcuna virman işlemi.";
@@ -1321,12 +1325,12 @@ fn build_receipt(
     }
 }
 
-fn build_entry(ctx: &ReceiptContext, unit: &crate::models::IndependentUnit, receipt: &PaymentReceipt) -> PaymentEntry {
+fn build_entry(ctx: &ReceiptContext, receipt: &PaymentReceipt) -> PaymentEntry {
     PaymentEntry {
         id: 0,
         site_id: ctx.site_id.clone(),
         unit_id: ctx.unit_id.clone(),
-        unit_label: Some(format!("{} Blok D:{}", unit.block_id, unit.unit_number)),
+        unit_label: Some(ctx.unit_label.clone()),
         payer_name: ctx.payer_name.clone(),
         payer_role: ctx.payer_role.clone(),
         receipt_id: if receipt.id > 0 { Some(receipt.id) } else { None },

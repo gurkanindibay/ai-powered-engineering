@@ -1401,8 +1401,9 @@ impl SiteAdminService {
                         .unwrap_or(0);
 
                     if other_units == 0 && other_occ == 0 {
+                        // The login account goes; the person stays, because the closed
+                        // ownership/occupancy history references it (zero data loss).
                         tx.execute("DELETE FROM users WHERE site_id = $1 AND email = (SELECT email FROM persons WHERE id = $2)", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
-                        tx.execute("DELETE FROM persons WHERE id = $1", &[&person_id]).await.map_err(|e| e.to_string())?;
                     }
                 }
             }

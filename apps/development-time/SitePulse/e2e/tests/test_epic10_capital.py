@@ -160,8 +160,10 @@ def test_disbursement_within_collected_cash_updates_the_reserve(login_as, page, 
     by_id(page, "btn_submit_disbursement").click()
     by_id(page, "btn_submit_disbursement").wait_for(state="detached", timeout=10_000)
 
-    page.wait_for_function("() => (document.querySelector('[flt-semantics-identifier=\"capital_metric_disbursed\"]')"
-                           "?.textContent || '').includes('1000')", timeout=10_000)
+    # Amounts are Turkish-formatted ("₺1.000,00"), so wait for that form, in the text or the label.
+    page.wait_for_function("() => { const e = document.querySelector('[flt-semantics-identifier=\"capital_metric_disbursed\"]');"
+                           " return !!e && ((e.textContent || '') + ' ' + (e.getAttribute('aria-label') || '')).includes('1.000,00'); }",
+                           timeout=10_000)
     assert _metric(page, "disbursed") == Decimal("1000.00")
     assert _metric(page, "reserve") == Decimal("3000.00")
     assert stack.sql("SELECT amount FROM capital_contractor_disbursements;") == "1000.00"
