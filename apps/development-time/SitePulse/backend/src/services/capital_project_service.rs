@@ -402,47 +402,17 @@ impl CapitalProjectService {
             return Err(format!("{}. taksit daha önce tahakkuk ettirilmiş. Mükerrer tahakkuk engellendi.", installment_number));
         }
 
-        // Get all units for this site
-        let units;
-        {
-            let inner = self.state.inner.read().await;
-            units = inner.units.clone();
-        }
-
-        if units.is_empty() {
+        // Only the project's own site: `inner.units` holds every tenant's units.
+        let site_units = self.site_units(&project.site_id).await;
+        if site_units.is_empty() {
             return Err("Sitede kayıtlı bağımsız bölüm (daire) bulunamadı.".to_string());
         }
 
         let installment_budget = installment.installment_budget;
-        let total_land_share: i32 = units.iter().map(|u| u.land_share).sum();
-        let unit_count = units.len();
-
-        let mut unit_shares: Vec<(&crate::models::IndependentUnit, Decimal)> = Vec::new();
-        let mut running_sum = Decimal::ZERO;
-
-        for unit in &units {
-            let share: Decimal;
-            if project.allocation_basis == AllocationBasis::EqualPerUnit {
-                share = (installment_budget / Decimal::from(unit_count)).round_dp(2);
-            } else {
-                // By Land Share (KMK Madde 20/a kanuni oran)
-                if total_land_share > 0 {
-                    let ratio = Decimal::from(unit.land_share) / Decimal::from(total_land_share);
-                    share = (installment_budget * ratio).round_dp(2);
-                } else {
-                    share = (installment_budget / Decimal::from(unit_count)).round_dp(2);
-                }
-            }
-            running_sum += share;
-            unit_shares.push((unit, share));
-        }
-
-        // Kuruş Düzeltmesi (Zero-Cent Drift Reconciliation)
-        // If there is any penny discrepancy, adjust the unit with highest land share
-        let diff = installment_budget - running_sum;
-        if diff != Decimal::ZERO && !unit_shares.is_empty() {
-            unit_shares[0].1 += diff;
-        }
+        // Shares sum exactly to the installment budget (largest remainder).
+        let shares = Self::apportion_to_units(&project, installment_budget, &site_units)?;
+        let unit_shares: Vec<(&crate::models::IndependentUnit, Decimal)> =
+            site_units.iter().zip(shares).collect();
 
         let period_name = format!(
             "{}: Taksit {}/{}",
@@ -542,6 +512,33 @@ impl CapitalProjectService {
             charged_units_count: unit_shares.len() as i64,
             accrued_at: now,
         })
+    }
+
+    /// Units belonging to `site_id`.
+    async fn site_units(&self, site_id: &str) -> Vec<crate::models::IndependentUnit> {
+        let inner = self.state.inner.read().await;
+        inner.units.iter().filter(|u| u.site_id == site_id).cloned().collect()
+    }
+
+    /// Splits `amount` across `units` per the project's allocation basis
+    /// (equal per unit, or KMK 20/a land share). Shares always sum exactly to
+    /// `amount`; when no unit has a land share the split is equal.
+    pub fn apportion_to_units(
+        project: &CapitalProject,
+        amount: Decimal,
+        units: &[crate::models::IndependentUnit],
+    ) -> Result<Vec<Decimal>, String> {
+        let weights: Vec<u64> = match project.allocation_basis {
+            AllocationBasis::EqualPerUnit => vec![1; units.len()],
+            AllocationBasis::ByLandShare => units
+                .iter()
+                .map(|u| {
+                    u64::try_from(u.land_share)
+                        .map_err(|_| format!("Bağımsız bölüm {} için arsa payı negatif olamaz.", u.id))
+                })
+                .collect::<Result<_, _>>()?,
+        };
+        crate::domain::apportion(amount, &weights).map_err(|e| e.to_string())
     }
 
     /// Records a contractor progress payment (hakediş).
@@ -711,39 +708,30 @@ impl CapitalProjectService {
             .await
             .ok_or_else(|| "Demirbaş projesi bulunamadı.".to_string())?;
 
-        let units;
-        let dues;
-        {
+        let (site_units, dues) = {
             let inner = self.state.inner.read().await;
-            units = inner.units.clone();
-            dues = inner.dues.clone();
+            let units: Vec<crate::models::IndependentUnit> =
+                inner.units.iter().filter(|u| u.site_id == project.site_id).cloned().collect();
+            (units, inner.dues.clone())
+        };
+        if site_units.is_empty() {
+            return Ok(Vec::new());
         }
 
-        let total_land_share: i32 = units.iter().map(|u| u.land_share).sum();
-        let unit_count = units.len();
+        // Same apportionment as accrual, so the summary matches what is charged.
+        let shares = Self::apportion_to_units(&project, project.total_budget, &site_units)?;
+        let period_prefix = format!("{}: ", project.title);
         let mut summaries = Vec::new();
 
-        for unit in &units {
-            let total_share: Decimal;
-            if project.allocation_basis == AllocationBasis::EqualPerUnit {
-                total_share = (project.total_budget / Decimal::from(unit_count)).round_dp(2);
-            } else {
-                if total_land_share > 0 {
-                    let ratio = Decimal::from(unit.land_share) / Decimal::from(total_land_share);
-                    total_share = (project.total_budget * ratio).round_dp(2);
-                } else {
-                    total_share = (project.total_budget / Decimal::from(unit_count)).round_dp(2);
-                }
-            }
-
+        for (unit, total_share) in site_units.iter().zip(shares) {
             // Find accrued dues for this unit belonging to this project
             let unit_project_dues: Vec<&DuesLiability> = dues
                 .iter()
                 .filter(|d| {
+                    // Accrual names capital dues "<project title>: Taksit n/m".
                     d.unit_id == unit.id
-                        && (d.period.contains(&project.title)
-                            || d.period.contains("Demirbaş")
-                            || d.period.contains("Asansör"))
+                        && d.expense_type == ExpenseType::CapitalDues
+                        && d.period.starts_with(&period_prefix)
                 })
                 .collect();
 

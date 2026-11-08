@@ -22,7 +22,6 @@ use axum::{
     Json,
 };
 use chrono::Utc;
-use hmac::{Hmac, Mac};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -187,23 +186,25 @@ pub fn token_digest(token: &str) -> String {
 // Webhook signatures
 // ---------------------------------------------------------------------------
 
-/// Verifies `hex(HMAC-SHA256(secret, raw_body))` in constant time.
+/// Environment variable holding the shared bank webhook secret.
+pub const BANK_WEBHOOK_SECRET_ENV: &str = "SITEPULSE_BANK_WEBHOOK_SECRET";
+
+/// Verifies `hex(HMAC-SHA256(secret, raw_body))` in constant time against the
+/// secret configured in [`BANK_WEBHOOK_SECRET_ENV`]. A missing or empty secret
+/// rejects every request. The cryptography lives in
+/// [`crate::domain::fingerprint::verify_hmac_sha256_hex`], which takes the
+/// secret as a parameter; this wrapper only resolves configuration.
+///
+/// No timestamp or replay window is enforced: redeliveries are handled by the
+/// payload-hash idempotency claim, not by the signature.
 pub fn verify_webhook_signature(raw_body: &[u8], signature_hex: Option<&str>) -> bool {
-    let secret = match std::env::var("SITEPULSE_BANK_WEBHOOK_SECRET") {
-        Ok(s) if !s.is_empty() => s,
-        _ => return false,
-    };
+    let Ok(secret) = std::env::var(BANK_WEBHOOK_SECRET_ENV) else { return false };
     let Some(sig) = signature_hex else { return false };
-    let Ok(sig_bytes) = hex::decode(sig.trim().trim_start_matches("sha256=")) else { return false };
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
-    mac.update(raw_body);
-    mac.verify_slice(&sig_bytes).is_ok()
+    crate::domain::fingerprint::verify_hmac_sha256_hex(secret.as_bytes(), raw_body, sig)
 }
 
 pub fn sign_webhook_body(secret: &str, raw_body: &[u8]) -> String {
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
-    mac.update(raw_body);
-    hex::encode(mac.finalize().into_bytes())
+    crate::domain::fingerprint::hmac_sha256_hex(secret.as_bytes(), raw_body)
 }
 
 // ---------------------------------------------------------------------------

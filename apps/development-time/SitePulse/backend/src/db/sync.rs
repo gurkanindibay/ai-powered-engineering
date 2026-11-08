@@ -158,12 +158,13 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
             let block_label = if block_id == 1 { "blok-A" } else { "blok-B" };
             let resolved_viban = virtual_iban.or_else(|| {
-                Some(VirtualIbanService::generate_virtual_iban(
+                VirtualIbanService::generate_virtual_iban(
                     VirtualIbanService::KUVEYT_TURK_BANK_CODE,
                     &site_id.map(|s| s.to_string()).unwrap_or_default(),
                     block_label,
                     unit_number,
-                ))
+                )
+                .ok()
             });
 
             let unit = IndependentUnit {

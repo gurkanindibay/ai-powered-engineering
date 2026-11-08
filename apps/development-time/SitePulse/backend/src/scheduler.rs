@@ -2,7 +2,7 @@ use std::time::Duration;
 use chrono::{Datelike, NaiveDate, Utc};
 use rust_decimal::Decimal;
 
-use crate::handlers::apply_advance_payments_offset;
+use crate::services::ledger_application::apply_advance_payments_offset;
 use crate::models::{DebtStatus, DebtorType, DuesLiability, ExpenseType};
 use crate::state::AppState;
 
@@ -136,7 +136,7 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
 
     {
         let mut inner = state.inner.write().await;
-        let ledger_before = crate::handlers::ledger_snapshot(&inner);
+        let ledger_before = crate::services::ledger_application::ledger_snapshot(&inner);
 
         for (site_id, mut due) in persisted_dues {
             if due.id.is_empty() {
@@ -153,7 +153,7 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
         if auto_settled_count > 0 {
             tracing::info!("[Scheduler] Advance offset: {} dues settled, total ₺{}", auto_settled_count, total_offset);
             if let Some(ref pool) = state.pool {
-                if let Err(e) = crate::handlers::persist_ledger_changes(pool, &ledger_before, &inner).await {
+                if let Err(e) = crate::services::ledger_application::persist_ledger_changes(pool, &ledger_before, &inner).await {
                     tracing::error!("[Scheduler] {}", e);
                 }
             }

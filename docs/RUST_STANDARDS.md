@@ -1,11 +1,13 @@
 # Rust Engineering & Architectural Standards Specification
 
-> **Version:** 1.1.0  
+> **Version:** 1.2.0  
 > **Status:** Active Organizational Standard  
-> **Target Toolchain:** Rust 2021 Edition (LTS / 1.78+) & Rust 2024 Readiness  
+> **Target Toolchain:** Rust 2021 Edition, minimum Rust 1.80 (`std::sync::LazyLock`) & Rust 2024 Readiness  
 > **Skill Foundation:** [leonardomso/rust-skills](https://github.com/leonardomso/rust-skills) (265 Rules across 26 Categories)  
 > **Local Skill Path:** [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md)  
 > **Governing Agents:** **Architect Agent (System Architect)** & **Developer Agent (The Maker)**  
+> **Workflow Skill:** [.agents/skills/sitepulse-rust-backend/SKILL.md](file:///.agents/skills/sitepulse-rust-backend/SKILL.md) (how to apply these rules in the SitePulse backend)  
+> **Enforcement:** `scripts/rust_standards_lint.py` (gate `rust-standards-lint`) checks sections 10–16 mechanically  
 
 ---
 
@@ -95,7 +97,7 @@ graph TD
 - Ensure no database or web framework dependencies enter the core domain.
 
 ### 3.2 Developer Responsibilities:
-- Implement Axum handlers extracting state via `State(Arc<AppState>)` and payloads via `Json<T>`.
+- Implement Axum handlers extracting state via `State(AppState)` (a cheap `Clone` holding `Arc<RwLock<..>>` and the optional pool) and payloads via `Json<T>`.
 - Map DTOs to domain entities using `TryFrom` / `From` conversions (`conv-tryfrom-fallible`).
 - Keep handlers thin: delegate validation and coordination to the Service Layer.
 
@@ -112,8 +114,9 @@ In accordance with `num-overflow-explicit`, `num-cast-try-from`, and statutory r
 3. **Database Column Types:**  
    PostgreSQL financial columns must strictly be `NUMERIC(15, 2)` (or `NUMERIC(18, 4)` for high-precision rates).
 4. **Rounding Policy:**  
-   Calculations must use banker's rounding (`RoundingStrategy::MidpointNearestEven`) to 2 decimal places (`round_dp_with_strategy(2, ...)`). Remainder reconciliation must ensure:
+   Calculations must use banker's rounding (`RoundingStrategy::MidpointNearestEven`) to 2 decimal places (`round_dp_with_strategy(2, ...)`). The strategy is always written out: `round_dp(..)` (implicit strategy) is forbidden. Splitting a total across recipients never rounds per share; it uses `domain::apportion` (largest remainder on whole cents), which guarantees:
    $$\sum \text{UnitShares} = \text{TotalExpense}$$
+   **Recorded exception (pending decision):** the KMK 20 delay penalty in `dues_calculation_service.rs` uses `MidpointAwayFromZero`. It must not be changed silently; a change needs a product decision, updated midpoint fixtures in `harness/fixtures/financial_cases.json`, and a note here.
 5. **No Loss in Type Narrowing:**  
    Never cast financial IDs or amounts with `as`. Use `From` for lossless widening and `TryFrom` with explicit errors for narrowing.
 
@@ -165,7 +168,7 @@ In accordance with `num-overflow-explicit`, `num-cast-try-from`, and statutory r
    - Be registered in `backend/src/migrations.rs`.
    - Pass the automated upgrade test in `scripts/schema_integrity_check.py`.
 3. **Optimistic Locking:**  
-   All entity records undergoing concurrent state updates (such as unit balances) must include an integer `version` column. Concurrent update collisions must return `AppError::Conflict`.
+   All entity records undergoing concurrent state updates (such as unit balances) must include an integer `version` column. Concurrent update collisions must be reported as a conflict (HTTP 409), never silently overwritten. (`AppError::Conflict` is the target variant once the typed error taxonomy of section 5 is in place.)
 
 ---
 
@@ -186,10 +189,13 @@ cargo fmt --check
 # 4. Automated Unit & Integration Tests
 cargo test --all-targets
 
-# 5. Persistence Lint & Financial Integrity Gates
+# 5. Persistence Lint, Rust Standards Lint & Financial Integrity Gates
 python3 scripts/memory_persistence_lint.py
-python3 scripts/run_tests.py --only rust-build,rust-clippy,rust-test,money-fixtures,persistence-lint
+python3 scripts/rust_standards_lint.py
+python3 scripts/run_tests.py --only rust-build,rust-clippy,rust-test,money-fixtures,persistence-lint,rust-standards-lint
 ```
+
+**Formatting policy.** `cargo fmt --check` does not pass on the legacy files yet. Until the dedicated formatting-only commit lands: new files are `rustfmt`-clean, every file under `src/domain/` is `rustfmt`-clean (hard rule), and the number of unformatted files may only go down (ratchet). Do not reformat a legacy file inside a behavior change; it hides the diff.
 
 ---
 
@@ -206,3 +212,86 @@ python3 scripts/run_tests.py --only rust-build,rust-clippy,rust-test,money-fixtu
 - **Borrowing First:** Implement borrowing (`&str`, `&[T]`) instead of cloning. Avoid unnecessary heap allocations.
 - **Zero Panic Rule:** Zero occurrences of `.unwrap()` in production paths.
 - **Persistence Verification:** Ensure all database operations are checked and propagated. Run `memory_persistence_lint.py` before completing any task.
+- **SitePulse Workflow:** Follow [.agents/skills/sitepulse-rust-backend/SKILL.md](file:///.agents/skills/sitepulse-rust-backend/SKILL.md) and run `rust_standards_lint.py` (sections 10–16) before completing any task.
+
+---
+
+## 10. Module Layout & Dependency Direction (SitePulse backend)
+
+The layer diagram of section 3 maps onto the crate like this:
+
+| Module | Contains | May depend on | Must not depend on |
+|:---|:---|:---|:---|
+| `src/domain/` | Pure value objects and rules: `apportionment`, `text`, `iban`, `email`, `fingerprint` | `std`, `rust_decimal`, `chrono`, `thiserror`, crypto crates | `axum`, `tokio_postgres`, `deadpool_postgres`, `reqwest`, `crate::{state, db, services, handlers, auth}`, `std::env`, global state |
+| `src/services/` | Use cases and residential policy (ledger, reconciliation, capital projects, ...) | `domain`, `models`, `db`, `state` | `handlers` |
+| `src/db/` | Repositories and transaction helpers | `domain`, `models` | `handlers`, `services` |
+| `src/handlers/` | Axum extraction, HTTP status mapping, response DTO assembly | everything above | — |
+| `src/scheduler.rs` | Background jobs | `services`, `db` | `handlers` |
+
+1. **One rule, one place.** When a rule already has a home in `domain`, call it. Re-implementing it inline is a lint failure (section 16). When a rule has no home and is needed in a second place, move it to `domain` first, then call it from both.
+2. **Handlers stay thin.** A function that the scheduler or another service needs does not live in `handlers`. `handlers` may re-export it for compatibility (`pub use`).
+3. **Re-exports keep call sites stable.** Moving a function keeps a `pub use` at the old path until every caller is migrated; tests in `tests/` are callers.
+
+## 11. Persisted Contracts
+
+A persisted contract is any value whose exact bytes are stored, printed, or compared later. In SitePulse these include generated virtual IBANs, tenant slugs, webhook payload hashes, receipt verification hashes, receipt numbers, and migration checksums.
+
+1. **Never change a contract in place.** Add a versioned function (`transfer_hash_v2`) and migrate callers deliberately. The canonical forms in `domain::fingerprint` are versioned for this reason.
+2. **Pin every contract with a golden test.** The test asserts the literal output for a fixed input, with a message saying it is a persisted contract.
+3. **Fixing a bug in a generator must not change existing outputs.** Example: the virtual IBAN overflow was fixed with `wrapping_add` (identical release output), and known prefix collisions were documented and tested instead of re-hashed.
+4. **Regeneration needs a migration.** Changing how a stored identifier is derived requires a migration plan for the stored values, not just new code.
+
+## 12. Money Splitting & Rounding
+
+1. Split a total across recipients only with `domain::apportion(total, &weights)`. It works on whole cents, returns shares that sum exactly to the total, and is deterministic (largest remainder, then larger weight, then lower position).
+2. Never compute `total / n` per recipient and "fix the drift" on one recipient afterwards.
+3. Any view or summary of an apportionment calls the same function as the code that posts it, so displayed and charged amounts cannot differ.
+4. Weights are non-negative integers (`u64`). Convert signed inputs with `u64::try_from` and reject negatives with a domain error.
+5. Explicit strategy only: `round_dp_with_strategy(2, RoundingStrategy::MidpointNearestEven)` unless an exception is recorded in section 4.
+
+## 13. Identity & Text Normalization
+
+1. **Email.** Compare and look up email addresses only through `domain::email`: `NormalizedEmail::parse` for new input, `NormalizedEmail::normalize` for lookup keys and SQL parameters, `same_email(a, b)` for in-memory comparison. Both sides of a comparison are normalized. A SQL `LOWER(email) = $1` needs a normalized `$1`.
+2. **Turkish text.** Fold for matching only with `domain::fold_turkish`. It handles `İ`→`i` (dropping U+0307) and decomposed input. Never chain `.to_lowercase().replace('ı', "i")...`: lower-casing `İ` first leaves a combining dot behind.
+3. **Identifiers derived from text** (slugs) are persisted contracts (section 11): stored values are never regenerated by a folding change.
+4. **IBANs.** Parse and validate only with `domain::TrIban` (checksum, ASCII-before-slicing, bank code). Check `TrIban::bank_code()` against `SupportedBank::eft_code()` when the user selects a bank. Never hand-write `starts_with("TR") && len() == 26`.
+
+## 14. Parsing External Input
+
+Bank statements, webhooks, CSV files, and provider responses are external input.
+
+1. **Report, never drop.** A parser returns accepted records plus a report of rejected entries with a line number and reason (`ParseReport`, `SkippedStatementEntry`). `continue` without recording why is forbidden for external rows.
+2. **No hidden clocks.** Fallback values such as "today" are parameters (`fallback_date`), so parsing is deterministic and testable.
+3. **Direction and sign are data.** Debits, credits, and reversals are distinguished explicitly. Only entries that are incoming payments may reach reconciliation.
+4. **Byte-safe slicing.** Prove input is ASCII (or use `char` iteration) before slicing at fixed offsets; a 26-byte string is not 26 characters.
+5. **Precompiled patterns.** Regular expressions are `static NAME: LazyLock<Result<Regex, regex::Error>>`, used via `.as_ref().ok()?` or `.map_err(..)?`, with a unit test asserting every pattern compiles. `Regex::new` inside a function body is forbidden.
+6. **State unsupported formats.** Document what a parser does not handle (for example `.xlsx` binary, quoted CSV) and reject it rather than guessing.
+
+## 15. Tenant Scoping & Shared State
+
+1. `AppStateInner` holds every tenant's data. Every read of `inner.units`, `inner.users`, `inner.dues`, or similar collections in a service filters by the site (or unit) the operation belongs to, before any calculation.
+2. Every multi-tenant calculation has a test with **two sites** in state that proves the other site is untouched.
+3. Do not add new `if let Some(pool)` / `state.pool` branches in services. New persistence goes into a `db` repository function; the ratchet `pool-branch` may only go down.
+4. Never hold an `inner` guard across `.await`. Clone or collect what is needed, drop the guard, then await (section 6).
+
+## 16. Testing & Mechanical Enforcement
+
+1. **Hermetic by default.** A test needing secrets, keys, a database, or the network is opt-in through an explicit environment variable (for example `SITEPULSE_REQUIRE_KT_KEYS=1`) and prints a `SKIPPED ...` line otherwise. It must not fail in a clean checkout.
+2. **Bug fixes start with a failing test** that reproduces the defect at the call site (not only in the extracted helper).
+3. **Domain modules carry their own unit tests**, including boundary cases (empty, zero, negative, overflow, multi-byte input).
+4. **Shared fixtures** (`harness/fixtures/*.json`) are the channel for cross-language reuse (Rust, Dart, future .NET). Decimal values are strings in fixtures.
+5. **`rust_standards_lint.py` enforces** sections 10–15:
+
+| Rule | Kind | Enforces |
+|:---|:---|:---|
+| `domain-purity` | hard | §10 domain dependency limits |
+| `layering` | hard | §10 only `handlers`, `app.rs`, `main.rs` import `crate::handlers` |
+| `inline-email`, `inline-turkish-fold`, `inline-iban-check` | hard | §13 shared normalization |
+| `regex-per-call` | hard | §14.5 |
+| `implicit-rounding`, `float-money` | hard | §4, §12 |
+| `ad-hoc-hash` | hard | §11 hashing only in `domain::fingerprint` (allow-list: token hash in `auth.rs`, checksums in `migrations.rs`) |
+| `non-english-identifier` | hard | workspace English-only rule |
+| `domain-unformatted` | hard | §8 formatting policy |
+| `unwrap`, `expect`, `string-error`, `pool-branch`, `unformatted-file` | ratchet | counts in `scripts/rust_standards_baseline.json` may only go down |
+
+After paying down debt, lower the ratchet with `python3 scripts/rust_standards_lint.py --update-baseline`. Never raise a count with `--force` to make a change pass.

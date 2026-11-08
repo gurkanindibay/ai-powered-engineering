@@ -84,12 +84,12 @@ impl SiteAdminService {
         validate_email(&request.email)?;
         validate_phone(&request.phone)?;
 
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
 
         // 1. Check in-memory state for duplicate email first
         {
             let inner = self.state.inner.read().await;
-            if inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
+            if inner.users.iter().any(|u| crate::domain::email::same_email(&u.email, &email_norm)) {
                 return Err(format!(
                     "An account with this email address already exists (zaten mevcut): {}",
                     request.email
@@ -142,7 +142,8 @@ impl SiteAdminService {
             &site_numeric_id.to_string(),
             &format!("blok-{}", effective_clean_block),
             request.unit_no,
-        );
+        )
+        .map_err(|e| e.to_string())?;
 
         let mut user_numeric_id = 0i64;
         #[allow(unused_assignments)]
@@ -244,7 +245,7 @@ impl SiteAdminService {
             if has_explicit_tenant {
                 let t_name = request.tenant_full_name.as_deref().unwrap_or("").trim();
                 let t_phone = request.tenant_phone.as_deref().unwrap_or("").trim();
-                let t_email_norm = request.tenant_email.as_deref().unwrap_or("").trim().to_lowercase();
+                let t_email_norm = crate::domain::email::NormalizedEmail::normalize(request.tenant_email.as_deref().unwrap_or(""));
 
                 let existing_t_person = if !t_email_norm.is_empty() {
                     client.query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&t_email_norm]).await.ok().flatten()
@@ -1115,7 +1116,7 @@ impl SiteAdminService {
                             client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[t_phone, &tenant_person_id]).await.map_err(|e| e.to_string())?;
                         }
                         if let Some(ref t_email) = req.tenant_email {
-                            let email_norm = t_email.trim().to_lowercase();
+                            let email_norm = crate::domain::email::NormalizedEmail::normalize(t_email);
                             let prev_email: Option<String> = client.query_opt("SELECT email FROM persons WHERE id = $1", &[&tenant_person_id]).await.ok().flatten().map(|r| r.get(0));
                             client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &tenant_person_id]).await.map_err(|e| e.to_string())?;
                             if let Some(ref pe) = prev_email {
@@ -1153,7 +1154,7 @@ impl SiteAdminService {
                             client.execute("UPDATE persons SET phone = $1 WHERE id = $2", &[phone, &owner_person_id]).await.map_err(|e| e.to_string())?;
                         }
                         if let Some(ref email) = req.email {
-                            let email_norm = email.trim().to_lowercase();
+                            let email_norm = crate::domain::email::NormalizedEmail::normalize(email);
                             let prev_email: Option<String> = client.query_opt("SELECT email FROM persons WHERE id = $1", &[&owner_person_id]).await.ok().flatten().map(|r| r.get(0));
                             client.execute("UPDATE persons SET email = $1 WHERE id = $2", &[&email_norm, &owner_person_id]).await.map_err(|e| e.to_string())?;
                             if let Some(ref pe) = prev_email {
@@ -1208,7 +1209,7 @@ impl SiteAdminService {
                     inner.users[t_idx].full_name = t_name.clone();
                 }
                 if let Some(ref t_email) = req.tenant_email {
-                    inner.users[t_idx].email = t_email.trim().to_lowercase();
+                    inner.users[t_idx].email = crate::domain::email::NormalizedEmail::normalize(t_email);
                 }
                 if let Some(ref t_phone) = req.tenant_phone {
                     inner.users[t_idx].phone = t_phone.clone();
@@ -1257,7 +1258,7 @@ impl SiteAdminService {
                 inner.users[usridx].phone = phone.clone();
             }
             if let Some(ref email) = req.email {
-                inner.users[usridx].email = email.trim().to_lowercase();
+                inner.users[usridx].email = crate::domain::email::NormalizedEmail::normalize(email);
             }
         }
 
@@ -1529,7 +1530,7 @@ impl SiteAdminService {
             full_name: full_name.to_string(),
             relationship: relationship_val.to_string(),
             phone: phone.to_string(),
-            email: email.trim().to_lowercase(),
+            email: crate::domain::email::NormalizedEmail::normalize(email),
             is_owner: false,
             occupancy_id: None,
             person_id: None,
@@ -1542,8 +1543,8 @@ impl SiteAdminService {
         }
 
         // Also add to inner.users so the co-resident can log in with temporary password if needed
-        let email_norm = email.trim().to_lowercase();
-        if !email_norm.is_empty() && !inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(email);
+        if !email_norm.is_empty() && !inner.users.iter().any(|u| crate::domain::email::same_email(&u.email, &email_norm)) {
             let temp_pass = generate_resident_temporary_password();
             let password_hash = crate::auth::hash_password(&temp_pass);
             let s_id = site_id.to_string();
@@ -2135,7 +2136,7 @@ impl SiteAdminService {
                 let person_id: i64 = if let Some(pid) = req.person_id {
                     pid
                 } else if let Some(ref email) = req.email {
-                    let clean_email = email.trim().to_lowercase();
+                    let clean_email = crate::domain::email::NormalizedEmail::normalize(email);
                     let existing = client
                         .query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&clean_email])
                         .await
