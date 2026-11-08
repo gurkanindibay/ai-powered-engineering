@@ -53,6 +53,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from decimal import Decimal
 from typing import Callable, Dict, List, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -611,8 +612,8 @@ def check_virman_reversal(ctx: Context) -> Tuple[bool, str]:
         f" AND debtor_type = 'OWNER') || '|' || (SELECT count(*) FROM advance_ledger_entries WHERE entry_type = 'VIRMAN_REVERSAL'"
         f" AND reference_id = '{rev['reversal_receipt']['receipt_number']}' AND amount = 9.00)"
         f" FROM dues_liabilities d WHERE d.period = '{period}';"))
-    expected = f"PENDING|0.00|{float(before):.2f}|1"
-    ok = row == expected and float(rev.get("restored_advance", 0)) == 9.0
+    expected = f"PENDING|0.00|{Decimal(before):.2f}|1"
+    ok = row == expected and Decimal(str(rev.get("restored_advance", 0))) == Decimal("9.00")
     return ok, f"{virman_no} -> {rev['reversal_receipt']['receipt_number']}, due|paid|advance|ledger {row} (want {expected})"
 
 
@@ -620,14 +621,21 @@ def check_resident_statement(ctx: Context) -> Tuple[bool, str]:
     """SPEC-007 R2: the statement is served for the unit and scoped to its site."""
     b = ctx.backend.base
     status, body = http("GET", f"{b}/api/v1/residents/{ctx.unit_id}/statement", token=ctx.manager)
-    other = http("GET", f"{b}/api/v1/residents/{ctx.unit_id}/statement", token=ctx.other_manager)[0]
+    # The earlier purge intentionally deleted the original second site and actor.
+    # Provision a live foreign actor so this assertion tests scope, not revocation.
+    suffix = str(time.time_ns())
+    foreign_site = ctx.psql.run(ctx.backend.db_name, f"INSERT INTO sites(name,slug,address,status,plan_type) VALUES ('Foreign Site','scope-{suffix}','Test','ACTIVE','STANDARD') RETURNING id;")
+    foreign_hash = hash_password("Scope-Manager-123")
+    ctx.psql.run(ctx.backend.db_name, f"INSERT INTO users(site_id,email,password_hash,role,must_change_password) VALUES ({foreign_site},'scope-{suffix}@example.com','{foreign_hash}','SITE_MANAGER',false);")
+    foreign_token = login(ctx.backend, f"scope-{suffix}@example.com", "Scope-Manager-123")
+    other = http("GET", f"{b}/api/v1/residents/{ctx.unit_id}/statement", token=foreign_token)[0]
     if status != 200:
         return False, f"statement {status} {body[:200]}"
     st = json.loads(body)
     owner = next((d for d in st["debtors"] if d["debtor_type"] == "OWNER"), None)
-    buckets = owner and sum(float(owner[k]) for k in ("current_due", "overdue_1_30_days", "overdue_31_60_days",
+    buckets = owner and sum(Decimal(owner[k]) for k in ("current_due", "overdue_1_30_days", "overdue_31_60_days",
                                                       "overdue_61_90_days", "overdue_90_plus_days"))
-    ok = owner is not None and abs(buckets - float(owner["principal_outstanding"])) < 0.001 and other == 403
+    ok = owner is not None and buckets == Decimal(owner["principal_outstanding"]) and other == 404
     return ok, f"owner principal {owner and owner['principal_outstanding']} = buckets {buckets}, receipts {len(st['receipts'])}, other site {other}"
 
 
@@ -651,7 +659,10 @@ def check_receipt_pdf(ctx: Context) -> Tuple[bool, str]:
 def check_card_payment(ctx: Context) -> Tuple[bool, str]:
     """SPEC-007 R4: sandbox hosted page -> signed notifications -> one receipt; forged notifications rejected."""
     db, b = ctx.backend.db_name, ctx.backend.base
-    status, body = http("POST", f"{b}/api/v1/residents/{ctx.unit_id}/payment-intents", token=ctx.manager,
+    owner_hash = hash_password("CardOwner-123")
+    owner_email = ctx.psql.run(db, f"UPDATE users SET password_hash='{owner_hash}',must_change_password=false WHERE person_id=(SELECT owner_person_id FROM units WHERE id={int(ctx.unit_id)}) AND role='HOME_OWNER' RETURNING email;")
+    owner_token = login(ctx.backend, owner_email, "CardOwner-123")
+    status, body = http("POST", f"{b}/api/v1/residents/{ctx.unit_id}/payment-intents", token=owner_token,
                         body={"amount": "9.50", "debtor_type": "OWNER"})
     if status != 201:
         return False, f"intent {status} {body[:200]}"
@@ -709,7 +720,7 @@ def check_budget_accrual(ctx: Context) -> Tuple[bool, str]:
         f" FROM dues_liabilities WHERE period = '{period}';"))
     count, linked, amount, owner_rows = (row.split("|") + ["", "", "", ""])[:4]
     ok = (reloaded.get("status") == "APPROVED" and share is not None and acc_status == 200 and typed == 409
-          and count == linked and int(count or 0) > 0 and float(amount) == float(share["monthly_amount"])
+          and count == linked and int(count or 0) > 0 and Decimal(amount) == Decimal(share["monthly_amount"])
           and int(owner_rows or 0) > 0)
     return ok, (f"budget {budget['id']} reloaded {reloaded.get('status')}, accrue {acc_status}, typed amount {typed}, "
                 f"rows|linked|unit amount|owner rows {row} (share {share and share['monthly_amount']})")
@@ -930,6 +941,12 @@ def run(selected: List[str], container: str, keep: bool, log_dir: Path) -> Dict[
                 continue
             try:
                 ok, detail = CHECK_FUNCS[name](ctx)
+                # Check at each boundary: later payments must not conceal earlier drift.
+                if name != "ledger_integrity_clean":
+                    clean, evidence = check_ledger_integrity(ctx)
+                    if not clean:
+                        ok = False
+                        detail += "; ledger postcondition: " + evidence
             except Exception as e:  # a crashing check is a failing check
                 ok, detail = False, f"{type(e).__name__}: {e}"
             results.append({"name": name, "passed": ok, "detail": detail})
