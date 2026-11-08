@@ -6,7 +6,7 @@
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::Deserialize;
-use sitepulse_backend::models::{DebtStatus, DuesLiability};
+use sitepulse_backend::models::{DebtStatus, DebtorType, DuesLiability, ExpenseType};
 use sitepulse_backend::services::dues_ledger;
 use sitepulse_backend::services::DuesCalculationService;
 
@@ -72,8 +72,8 @@ fn liability(id: &str, principal: Decimal, penalty: Decimal, due_date: NaiveDate
         status: DebtStatus::Pending,
         paid_principal: Decimal::ZERO,
         paid_penalty: Decimal::ZERO,
-        debtor_type: debtor.to_string(),
-        expense_type: expense.to_string(),
+        debtor_type: DebtorType::from_str_loose(debtor),
+        expense_type: ExpenseType::from_str_loose(expense),
     }
 }
 
@@ -160,7 +160,7 @@ fn waterfall_properties_hold_for_random_inputs() {
             assert!(d.paid_principal >= Decimal::ZERO && d.paid_principal <= d.principal_amount, "case {}: paid <= owed", case);
             assert!(d.paid_penalty >= Decimal::ZERO && d.paid_penalty <= d.delay_penalty, "case {}: paid <= owed", case);
             assert_eq!(d.total_amount, principal + penalty - d.paid_principal - d.paid_penalty, "case {}: outstanding", case);
-            if role == "TENANT" && d.expense_type == "CAPITAL_DUES" {
+            if role == "TENANT" && d.expense_type == ExpenseType::CapitalDues {
                 assert_eq!(d.paid_principal + d.paid_penalty, Decimal::ZERO, "case {}: tenant never pays capital", case);
             }
         }

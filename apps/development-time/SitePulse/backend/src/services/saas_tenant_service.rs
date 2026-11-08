@@ -3,8 +3,8 @@ use chrono::Utc;
 use rust_decimal::Decimal;
 
 use crate::models::{
-    RegisterSiteRequest, Role, SaasGlobalStatsDto, SaasSiteSummaryDto, Site,
-    SiteAdminPasswordResetResponse, SiteRegistrationResponse, UpdateSiteRequest, User,
+    AuthProvider, PlanType, RegisterSiteRequest, Role, SaasGlobalStatsDto, SaasSiteSummaryDto, Site,
+    SiteAdminPasswordResetResponse, SiteRegistrationResponse, SiteStatus, UpdateSiteRequest, User,
 };
 use crate::state::AppState;
 
@@ -51,8 +51,9 @@ impl SaasTenantService {
 
         let plan = request
             .plan_type
-            .unwrap_or_else(|| "STANDARD".to_string())
-            .to_uppercase();
+            .as_deref()
+            .map(PlanType::from_str_loose)
+            .unwrap_or(PlanType::Standard);
         let license_end = Utc::now().date_naive() + chrono::Days::new(365);
 
         let temp_pass = generate_secure_temporary_password();
@@ -69,7 +70,7 @@ impl SaasTenantService {
                 &request.site_name,
                 &request.address,
                 &slug,
-                &plan,
+                plan.as_str(),
                 license_end,
                 &request.site_admin_full_name,
                 &request.site_admin_phone,
@@ -108,8 +109,8 @@ impl SaasTenantService {
             name: request.site_name.clone(),
             address: request.address.clone(),
             slug: slug.clone(),
-            status: "ACTIVE".to_string(),
-            plan_type: plan.clone(),
+            status: SiteStatus::Active,
+            plan_type: plan,
             license_end_date: license_end,
             timezone: crate::models::default_site_timezone(),
         };
@@ -124,7 +125,7 @@ impl SaasTenantService {
             password_hash: Some(password_hash),
             role: Role::SiteManager,
             must_change_password: true,
-            auth_provider: "LOCAL".to_string(),
+            auth_provider: AuthProvider::Local,
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
@@ -140,7 +141,7 @@ impl SaasTenantService {
             site_id,
             site_name: request.site_name,
             slug,
-            status: "ACTIVE".to_string(),
+            status: SiteStatus::Active,
             plan_type: plan,
             admin_user_id: user_id,
             admin_full_name: request.site_admin_full_name,
@@ -202,8 +203,8 @@ impl SaasTenantService {
                     site_name: site.name.clone(),
                     slug: site.slug.clone(),
                     address: site.address.clone(),
-                    status: site.status.clone(),
-                    plan_type: site.plan_type.clone(),
+                    status: site.status,
+                    plan_type: site.plan_type,
                     license_end_date: site.license_end_date,
                     total_units: total_units as i32,
                     monthly_dues_volume,
@@ -228,7 +229,7 @@ impl SaasTenantService {
         let active_sites = inner
             .sites
             .iter()
-            .filter(|s| s.status.eq_ignore_ascii_case("ACTIVE"))
+            .filter(|s| s.status == SiteStatus::Active)
             .count();
         let total_units = total_sites * 20;
         let volume = Decimal::from_str_exact("80000.00").unwrap() * Decimal::from(total_sites);
@@ -319,10 +320,10 @@ impl SaasTenantService {
             inner.sites[site_idx].address = addr.trim().to_string();
         }
         if let Some(ref status) = req.status {
-            inner.sites[site_idx].status = status.trim().to_uppercase();
+            inner.sites[site_idx].status = SiteStatus::from_str_loose(status);
         }
         if let Some(ref plan) = req.plan_type {
-            inner.sites[site_idx].plan_type = plan.trim().to_uppercase();
+            inner.sites[site_idx].plan_type = PlanType::from_str_loose(plan);
         }
 
         let actual_site_id = inner.sites[site_idx].id.clone();

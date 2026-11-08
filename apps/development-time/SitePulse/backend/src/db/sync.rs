@@ -34,12 +34,12 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let name: String = row.get(1);
             let address: String = row.get::<_, Option<String>>(2).unwrap_or_default();
             let slug: String = row.get::<_, Option<String>>(3).unwrap_or_else(|| id.to_string());
-            let status: String = row
-                .get::<_, Option<String>>(4)
-                .unwrap_or_else(|| "ACTIVE".to_string());
-            let plan_type: String = row
-                .get::<_, Option<String>>(5)
-                .unwrap_or_else(|| "STANDARD".to_string());
+            let status = row
+                .get::<_, Option<SiteStatus>>(4)
+                .unwrap_or(SiteStatus::Active);
+            let plan_type = row
+                .get::<_, Option<PlanType>>(5)
+                .unwrap_or(PlanType::Standard);
             let license_end_date: Option<NaiveDate> = row.get(6);
 
             let s = Site {
@@ -89,7 +89,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 password_hash,
                 role: Role::from_str_loose(&role_str),
                 must_change_password,
-                auth_provider: auth_provider.unwrap_or_else(|| "LOCAL".to_string()),
+                auth_provider: auth_provider.as_deref().map(AuthProvider::from_str_loose).unwrap_or(AuthProvider::Local),
                 google_sub,
                 avatar_url,
                 created_at: created_at.unwrap_or_else(Utc::now),
@@ -126,7 +126,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 password_hash: None,
                 role,
                 must_change_password: false,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
@@ -275,8 +275,8 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let delay_penalty: Decimal = row.get(6);
             let paid_principal: Decimal = row.get(7);
             let paid_penalty: Decimal = row.get(8);
-            let debtor_type: String = row.get(9);
-            let expense_type: String = row.get(10);
+            let debtor_type: DebtorType = row.get(9);
+            let expense_type: ExpenseType = row.get(10);
 
             let status = match status_str.to_uppercase().as_str() {
                 "PAID" => DebtStatus::Paid,
@@ -313,7 +313,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let site_id: i64 = row.get(1);
             let period_name: String = row.get(2);
             let due_date: NaiveDate = row.get(3);
-            let status: String = row.get(4);
+            let status: DuesPeriodStatus = row.get(4);
             let created_at: Option<DateTime<Utc>> = row.get(5);
 
             let site_id_str = site_id.to_string();
@@ -355,7 +355,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let bank_name: String = row.get(3);
             let iban: String = row.get(4);
             let account_holder: String = row.get(5);
-            let statement_format: String = row.get(6);
+            let statement_format: BankStatementFormat = row.get(6);
             let is_active: bool = row.get(7);
             let configured_by: Option<i64> = row.get(8);
             let created_at: Option<DateTime<Utc>> = row.get(9);
@@ -404,11 +404,11 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let unit_id: i64 = row.get(2);
             let _dues_liability_id: Option<i64> = row.get(3);
             let payer_name: String = row.get(4);
-            let payer_role: String = row.get(5);
+            let payer_role: DebtorType = row.get(5);
             let receipt_id: Option<i64> = row.get(6);
             let amount: Decimal = row.get(7);
-            let payment_channel: String = row.get(8);
-            let settlement_status: String = row.get(9);
+            let payment_channel: PaymentChannel = row.get(8);
+            let settlement_status: SettlementStatus = row.get(9);
             let description: Option<String> = row.get(10);
             let external_reference: Option<String> = row.get(11);
             let payment_date: Option<DateTime<Utc>> = row.get(12);
@@ -424,8 +424,8 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 receipt_id,
                 receipt_number: None,
                 amount,
-                payment_channel: payment_channel.clone(),
-                settlement_status: settlement_status.clone(),
+                payment_channel,
+                settlement_status,
                 description: description.clone(),
                 external_reference: external_reference.clone(),
                 payment_date: payment_date.unwrap_or_else(Utc::now),
@@ -450,14 +450,14 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 payment_method: payment_channel,
                 reference_code: external_reference,
                 note: description,
-                status: if settlement_status == "SETTLED" {
+                status: if settlement_status == SettlementStatus::Settled {
                     PaymentMatchStatus::MatchedDebt
-                } else if settlement_status == "UNMATCHED" {
+                } else if settlement_status == SettlementStatus::Unmatched {
                     PaymentMatchStatus::Pending
                 } else {
                     PaymentMatchStatus::MatchedDebt
                 },
-                cleared_debt_amount: if settlement_status == "SETTLED" { amount } else { Decimal::ZERO },
+                cleared_debt_amount: if settlement_status == SettlementStatus::Settled { amount } else { Decimal::ZERO },
                 advance_credit_amount: Decimal::ZERO,
                 created_at: created_at.unwrap_or_else(Utc::now),
             };
@@ -484,11 +484,11 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let receipt_number: String = row.get(3);
             let sequence_number: i64 = row.get(4);
             let payer_name: String = row.get(5);
-            let payer_role: String = row.get(6);
+            let payer_role: DebtorType = row.get(6);
             let on_behalf_of_name: Option<String> = row.get(7);
-            let on_behalf_of_role: Option<String> = row.get(8);
+            let on_behalf_of_role: Option<DebtorType> = row.get(8);
             let total_amount: Decimal = row.get(9);
-            let payment_channel: String = row.get(10);
+            let payment_channel: PaymentChannel = row.get(10);
             let channel_reference: Option<String> = row.get(11);
             let allocated_principal: Decimal = row.get(12);
             let allocated_penalty: Decimal = row.get(13);
@@ -616,7 +616,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let person_name: String = row.get(3);
             let person_phone: Option<String> = row.get(4);
             let person_email: Option<String> = row.get(5);
-            let role: String = row.get(6);
+            let role: DebtorType = row.get(6);
             let start_date: NaiveDate = row.get(7);
             let end_date: Option<NaiveDate> = row.get(8);
             let is_active: bool = row.get(9);

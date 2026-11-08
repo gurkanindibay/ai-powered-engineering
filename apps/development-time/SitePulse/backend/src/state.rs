@@ -5,9 +5,11 @@ use rust_decimal::Decimal;
 use tokio::sync::RwLock;
 
 use crate::models::{
-    DebtStatus, DuesLiability, HomeownerPaymentRecord, IndependentUnit, PendingRegistrationResponse,
-    ReconciliationMatch, Role, Site, SiteBankAccount, SiteInvitationLinkResponse,
-    UnitInviteLinkResponse, UnitMemberDto, User,
+    AllocationBasis, AuthProvider, BankStatementFormat, CapitalProjectCategory,
+    CapitalProjectStatus, DebtStatus, DebtorType, DisbursementMethod, DuesLiability,
+    ExpenseType, HomeownerPaymentRecord, IndependentUnit, PendingRegistrationResponse,
+    PlanType, ReconciliationMatch, RegistrationStatus, Role, Site, SiteBankAccount,
+    SiteInvitationLinkResponse, SiteStatus, UnitInviteLinkResponse, UnitMemberDto, User,
 };
 use crate::services::VirtualIbanService;
 
@@ -157,7 +159,7 @@ impl AppStateInner {
                 password_hash: Some(crate::auth::hash_password(&bootstrap_admin_password())),
                 role: Role::SaasAdmin,
                 must_change_password: true,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
@@ -220,8 +222,8 @@ impl AppStateInner {
                 name: "Begonya Sitesi".to_string(),
                 address: "Ataşehir, Begonya Sok. No:14, İstanbul".to_string(),
                 slug: "begonya-sitesi".to_string(),
-                status: "ACTIVE".to_string(),
-                plan_type: "PREMIUM".to_string(),
+                status: SiteStatus::Active,
+                plan_type: PlanType::Premium,
                 license_end_date: NaiveDate::from_ymd_opt(2027, 9, 1).unwrap(),
                 timezone: crate::models::default_site_timezone(),
             });
@@ -233,8 +235,8 @@ impl AppStateInner {
                 name: "Kardelen Rezidans".to_string(),
                 address: "Çankaya, Kardelen Cad. No:8, Ankara".to_string(),
                 slug: "kardelen-rezidans".to_string(),
-                status: "ACTIVE".to_string(),
-                plan_type: "STANDARD".to_string(),
+                status: SiteStatus::Active,
+                plan_type: PlanType::Standard,
                 license_end_date: NaiveDate::from_ymd_opt(2027, 10, 15).unwrap(),
                 timezone: crate::models::default_site_timezone(),
             });
@@ -252,7 +254,7 @@ impl AppStateInner {
                 password_hash: Some(crate::auth::hash_password("mehmet123")),
                 role: Role::SiteManager,
                 must_change_password: false,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
@@ -271,7 +273,7 @@ impl AppStateInner {
                 password_hash: Some(crate::auth::hash_password("ahmet123")),
                 role: Role::HomeOwner,
                 must_change_password: false,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
@@ -323,7 +325,7 @@ impl AppStateInner {
                 person_name: "Ahmet Yılmaz".to_string(),
                 person_phone: Some("+90 532 111 22 33".to_string()),
                 person_email: Some("ahmet.yilmaz@begonya.com".to_string()),
-                role: "OWNER".to_string(),
+                role: DebtorType::Owner,
                 start_date: "2025-01-01".to_string(),
                 end_date: Some("2026-01-01".to_string()),
                 is_active: false,
@@ -338,7 +340,7 @@ impl AppStateInner {
                 person_name: "Zeynep Kaya".to_string(),
                 person_phone: Some("+90 542 333 44 55".to_string()),
                 person_email: Some("zeynep@example.com".to_string()),
-                role: "TENANT".to_string(),
+                role: DebtorType::Tenant,
                 start_date: "2026-01-01".to_string(),
                 end_date: None,
                 is_active: true,
@@ -368,8 +370,8 @@ impl AppStateInner {
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: "TENANT".to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
+                debtor_type: DebtorType::Tenant,
+                expense_type: ExpenseType::OperationalDues,
             });
         }
 
@@ -385,7 +387,7 @@ impl AppStateInner {
                 email: "kerem.yilmaz@gmail.com".to_string(),
                 phone: "+90 533 111 22 33".to_string(),
                 is_resident: true,
-                status: "PENDING".to_string(),
+                status: RegistrationStatus::Pending,
                 submitted_at: Utc::now(),
             });
         }
@@ -415,7 +417,7 @@ impl AppStateInner {
                 bank_name: "Kuveyt Türk Katılım Bankası".to_string(),
                 iban: "TR620020500009863791600001".to_string(),
                 account_holder: "Begonya Sitesi Yönetimi".to_string(),
-                statement_format: "EXCEL".to_string(),
+                statement_format: BankStatementFormat::Excel,
                 is_active: true,
                 configured_by: Some("usr-site-manager-1".to_string()),
                 created_at: Utc::now(),
@@ -505,8 +507,8 @@ impl AppStateInner {
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: "TENANT".to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
+                debtor_type: DebtorType::Tenant,
+                expense_type: ExpenseType::OperationalDues,
             });
         }
 
@@ -515,17 +517,17 @@ impl AppStateInner {
                 id: "cproj-1".to_string(),
                 site_id: "site-1".to_string(),
                 title: "A & B Blok Asansör Revizyonu ve Yeşil Etiket".to_string(),
-                category: "ELEVATOR".to_string(),
+                category: CapitalProjectCategory::Elevator,
                 description: Some("TSE standartlarına uyum, motor yenileme ve kabin modernizasyonu".to_string()),
                 total_budget: Decimal::from_str_exact("360000.00").unwrap(),
-                allocation_basis: "BY_LAND_SHARE".to_string(),
+                allocation_basis: AllocationBasis::ByLandShare,
                 target_start_date: NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
                 target_completion_date: Some(NaiveDate::from_ymd_opt(2027, 1, 15).unwrap()),
                 contractor_name: Some("Otis Asansör San. ve Tic. A.Ş.".to_string()),
                 contractor_tax_no: Some("6480029182".to_string()),
                 contractor_iban: Some("TR120006200000000000000099".to_string()),
                 contract_amount: Some(Decimal::from_str_exact("360000.00").unwrap()),
-                status: "ACTIVE".to_string(),
+                status: CapitalProjectStatus::Active,
                 collected_amount: Decimal::from_str_exact("120000.00").unwrap(),
                 disbursed_amount: Decimal::from_str_exact("60000.00").unwrap(),
                 remaining_fund_balance: Decimal::from_str_exact("60000.00").unwrap(),
@@ -581,7 +583,7 @@ impl AppStateInner {
                 recipient_name: "Otis Asansör San. ve Tic. A.Ş.".to_string(),
                 recipient_iban: "TR120006200000000000000099".to_string(),
                 payment_reference: Some("OTIS-HAKEDIS-1".to_string()),
-                disbursement_method: "BANK_TRANSFER".to_string(),
+                disbursement_method: DisbursementMethod::BankTransfer,
                 notes: Some("Sözleşme gereği peşin avans ödendi".to_string()),
                 created_at: Some(Utc::now()),
             });

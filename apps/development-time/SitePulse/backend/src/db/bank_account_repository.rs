@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use deadpool_postgres::Pool;
 use tracing::info;
 
-use crate::models::SiteBankAccount;
+use crate::models::{BankStatementFormat, SiteBankAccount};
 use super::base::{parse_id_to_i64, require_id};
 pub async fn save_site_bank_account(
     pool: &Pool,
@@ -97,7 +97,7 @@ pub async fn get_active_site_bank_account(
         let bank_name: String = row.get(3);
         let iban: String = row.get(4);
         let account_holder: String = row.get(5);
-        let statement_format: String = row.get(6);
+        let statement_format: BankStatementFormat = row.get(6);
         let is_active: bool = row.get(7);
         let configured_by: Option<i64> = row.get(8);
         let created_at: Option<DateTime<Utc>> = row.get(9);

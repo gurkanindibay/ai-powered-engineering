@@ -117,7 +117,7 @@ impl SiteBankAccountService {
             bank_name: bank.display_name().to_string(),
             iban: iban_clean,
             account_holder: req.account_holder.trim().to_string(),
-            statement_format: format_str.to_string(),
+            statement_format: format,
             is_active: true,
             configured_by: req.configured_by,
             created_at: now,
@@ -158,16 +158,10 @@ impl SiteBankAccountService {
         ALL_BANKS
             .iter()
             .map(|b| {
-                let fmt = match b.statement_format() {
-                    BankStatementFormat::Excel => "EXCEL",
-                    BankStatementFormat::Csv => "CSV",
-                    BankStatementFormat::Mt940 => "MT940",
-                    BankStatementFormat::Auto => "AUTO",
-                };
                 SupportedBankEntry {
                     code: b.as_code().to_string(),
                     display_name: b.display_name().to_string(),
-                    statement_format: fmt.to_string(),
+                    statement_format: b.statement_format(),
                 }
             })
             .collect()
@@ -183,7 +177,7 @@ impl SiteBankAccountService {
             bank_name: a.bank_name.clone(),
             iban: a.iban.clone(),
             account_holder: a.account_holder.clone(),
-            statement_format: a.statement_format.clone(),
+            statement_format: a.statement_format,
             is_active: a.is_active,
             configured_by: a.configured_by.clone(),
             updated_at: a.updated_at,

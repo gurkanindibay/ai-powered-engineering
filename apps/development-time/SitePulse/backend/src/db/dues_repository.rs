@@ -3,7 +3,7 @@ use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use tracing::info;
 
-use crate::models::{DebtStatus, DuesLiability};
+use crate::models::{DebtStatus, DuesLiability, DuesPeriodStatus};
 use super::base::{parse_id_to_i64, require_id, DbResult};
 pub async fn save_dues_period(
     pool: &Pool,
@@ -80,7 +80,7 @@ pub async fn get_dues_periods_for_site_from_db(
         let s_id: i64 = row.get(1);
         let period_name: String = row.get(2);
         let due_date: NaiveDate = row.get(3);
-        let status: String = row.get(4);
+        let status: DuesPeriodStatus = row.get(4);
         let created_at: Option<DateTime<Utc>> = row.get(5);
         list.push(crate::models::DuesPeriod {
             id: id.to_string(),
