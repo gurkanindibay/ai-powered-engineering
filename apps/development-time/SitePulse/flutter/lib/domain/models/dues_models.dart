@@ -1,4 +1,5 @@
 import 'package:decimal/decimal.dart';
+import '../formatting/json_decimal.dart';
 import '../formatting/money_formatter.dart';
 
 enum DebtStatus {
@@ -463,7 +464,7 @@ class AccountTransactionItem {
       id: json['id'] as String? ?? '',
       title: json['title'] as String? ?? 'Aidat Hareketi',
       subtitle: json['subtitle'] as String? ?? '',
-      amount: Decimal.tryParse(json['amount']?.toString() ?? '0') ?? Decimal.zero,
+      amount: readDecimal(json, 'amount'),
       date: json['date'] as String? ?? 'Bugün',
       isCredit: json['is_credit'] as bool? ?? false,
     );
@@ -614,7 +615,7 @@ class HouseTypeTariff {
       id: json['id']?.toString() ?? '',
       siteId: json['site_id']?.toString() ?? '',
       typeName: json['type_name']?.toString() ?? '',
-      duesAmount: Decimal.tryParse(json['dues_amount']?.toString() ?? '0') ?? Decimal.zero,
+      duesAmount: readDecimal(json, 'dues_amount'),
       description: json['description'] as String?,
     );
   }
@@ -981,7 +982,7 @@ class HomeOwnerItem {
       email: json['email']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
       landShare: json['land_share']?.toString() ?? '1/24',
-      monthlyDues: Decimal.tryParse(json['monthly_dues']?.toString() ?? '0') ?? Decimal.zero,
+      monthlyDues: readDecimal(json, 'monthly_dues'),
       houseType: json['house_type']?.toString(),
       isResident: json['is_resident'] as bool? ?? true,
       temporaryPassword: json['temporary_password']?.toString(),
@@ -998,8 +999,8 @@ class HomeOwnerItem {
               ?.map((m) => UnitResidentMember.fromJson(m as Map<String, dynamic>))
               .toList() ??
           const [],
-      operationalDuesBalance: Decimal.tryParse(json['operational_dues_balance']?.toString() ?? '0') ?? Decimal.zero,
-      capitalDuesBalance: Decimal.tryParse(json['capital_dues_balance']?.toString() ?? '0') ?? Decimal.zero,
+      operationalDuesBalance: readDecimal(json, 'operational_dues_balance'),
+      capitalDuesBalance: readDecimal(json, 'capital_dues_balance'),
       primaryResponsibleName: json['primary_responsible_name']?.toString(),
       primaryResponsibleRole: json['primary_responsible_role']?.toString(),
       primaryResponsiblePhone: json['primary_responsible_phone']?.toString(),
@@ -1146,7 +1147,7 @@ class OccupancyHistoryItem {
       startDate: json['start_date']?.toString() ?? '',
       endDate: json['end_date']?.toString(),
       isActive: json['is_active'] as bool? ?? false,
-      exitBalance: Decimal.tryParse(json['exit_balance']?.toString() ?? '0') ?? Decimal.zero,
+      exitBalance: readDecimal(json, 'exit_balance'),
       notes: json['notes']?.toString(),
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
@@ -1231,7 +1232,7 @@ class BankStatementParsedItem {
     return BankStatementParsedItem(
       transactionId: json['transaction_id'] ?? '',
       date: DateTime.tryParse(json['date'] ?? '') ?? DateTime.now(),
-      amount: Decimal.tryParse(json['amount']?.toString() ?? '0') ?? Decimal.zero,
+      amount: readDecimal(json, 'amount'),
       currency: json['currency'] ?? 'TRY',
       description: json['description'] ?? '',
       senderName: json['sender_name'],
@@ -1318,9 +1319,7 @@ class ReconciliationQueueItem {
       matchedResidentName: json['matched_resident_name'],
       confidenceScore: json['confidence_score'] ?? 0,
       matchedDueId: json['matched_due_id'],
-      outstandingBalance: json['outstanding_balance'] != null
-          ? Decimal.tryParse(json['outstanding_balance'].toString())
-          : null,
+      outstandingBalance: readDecimalOrNull(json, 'outstanding_balance'),
       amountMatchesBalance: json['amount_matches_balance'] ?? false,
       status: json['status_code'] ?? json['status'] ?? 'ONAY_BEKLIYOR',
       notes: json['notes'],
@@ -1663,8 +1662,8 @@ class AllocationBreakdownItemDto {
       dueId: json['due_id']?.toString(),
       period: json['period']?.toString() ?? '',
       expenseType: json['expense_type']?.toString() ?? 'OPERATIONAL_DUES',
-      principalPaid: Decimal.tryParse(json['principal_paid']?.toString() ?? '0') ?? Decimal.zero,
-      penaltyPaid: Decimal.tryParse(json['penalty_paid']?.toString() ?? '0') ?? Decimal.zero,
+      principalPaid: readDecimal(json, 'principal_paid'),
+      penaltyPaid: readDecimal(json, 'penalty_paid'),
     );
   }
 
@@ -1745,12 +1744,12 @@ class PaymentReceiptDto {
       payerRole: json['payer_role']?.toString() ?? 'TENANT',
       onBehalfOfName: json['on_behalf_of_name']?.toString(),
       onBehalfOfRole: json['on_behalf_of_role']?.toString(),
-      totalAmount: Decimal.tryParse(json['total_amount']?.toString() ?? '0') ?? Decimal.zero,
+      totalAmount: readDecimal(json, 'total_amount'),
       paymentChannel: json['payment_channel']?.toString() ?? 'MANUAL_CASH',
       channelReference: json['channel_reference']?.toString(),
-      allocatedPrincipal: Decimal.tryParse(json['allocated_principal']?.toString() ?? '0') ?? Decimal.zero,
-      allocatedPenalty: Decimal.tryParse(json['allocated_penalty']?.toString() ?? '0') ?? Decimal.zero,
-      allocatedAdvance: Decimal.tryParse(json['allocated_advance']?.toString() ?? '0') ?? Decimal.zero,
+      allocatedPrincipal: readDecimal(json, 'allocated_principal'),
+      allocatedPenalty: readDecimal(json, 'allocated_penalty'),
+      allocatedAdvance: readDecimal(json, 'allocated_advance'),
       allocationBreakdown: breakdown,
       isRentOffsetEligible: json['is_rent_offset_eligible'] == true,
       legalStatutoryNote: json['legal_statutory_note']?.toString(),
@@ -1811,7 +1810,7 @@ class PaymentEntryDto {
       payerRole: json['payer_role']?.toString() ?? 'TENANT',
       receiptId: (json['receipt_id'] as num?)?.toInt(),
       receiptNumber: json['receipt_number']?.toString(),
-      amount: Decimal.tryParse(json['amount']?.toString() ?? '0') ?? Decimal.zero,
+      amount: readDecimal(json, 'amount'),
       paymentChannel: json['payment_channel']?.toString() ?? 'MANUAL_CASH',
       settlementStatus: json['settlement_status']?.toString() ?? 'SETTLED',
       description: json['description']?.toString(),
@@ -1852,9 +1851,9 @@ class PaymentStreamResponseDto {
 
     return PaymentStreamResponseDto(
       entries: list,
-      totalVolume: Decimal.tryParse(json['total_volume']?.toString() ?? '0') ?? Decimal.zero,
-      settledVolume: Decimal.tryParse(json['settled_volume']?.toString() ?? '0') ?? Decimal.zero,
-      unmatchedVolume: Decimal.tryParse(json['unmatched_volume']?.toString() ?? '0') ?? Decimal.zero,
+      totalVolume: readDecimal(json, 'total_volume'),
+      settledVolume: readDecimal(json, 'settled_volume'),
+      unmatchedVolume: readDecimal(json, 'unmatched_volume'),
       totalCount: (json['total_count'] as num?)?.toInt() ?? list.length,
     );
   }
@@ -1891,12 +1890,12 @@ class DebtAgingBracketDto {
       unitLabel: json['unit_label']?.toString() ?? '',
       residentName: json['resident_name']?.toString() ?? '',
       debtorType: json['debtor_type']?.toString() ?? 'TENANT',
-      currentDue: Decimal.tryParse(json['current_due']?.toString() ?? '0') ?? Decimal.zero,
-      overdue1to30Days: Decimal.tryParse(json['overdue_1_30_days']?.toString() ?? '0') ?? Decimal.zero,
-      overdue31to60Days: Decimal.tryParse(json['overdue_31_60_days']?.toString() ?? '0') ?? Decimal.zero,
-      overdue60PlusDays: Decimal.tryParse(json['overdue_60_plus_days']?.toString() ?? '0') ?? Decimal.zero,
-      accruedDelayPenalty: Decimal.tryParse(json['accrued_delay_penalty']?.toString() ?? '0') ?? Decimal.zero,
-      totalOutstanding: Decimal.tryParse(json['total_outstanding']?.toString() ?? '0') ?? Decimal.zero,
+      currentDue: readDecimal(json, 'current_due'),
+      overdue1to30Days: readDecimal(json, 'overdue_1_30_days'),
+      overdue31to60Days: readDecimal(json, 'overdue_31_60_days'),
+      overdue60PlusDays: readDecimal(json, 'overdue_60_plus_days'),
+      accruedDelayPenalty: readDecimal(json, 'accrued_delay_penalty'),
+      totalOutstanding: readDecimal(json, 'total_outstanding'),
     );
   }
 }
@@ -1935,12 +1934,12 @@ class DebtAgingReportDto {
       asOfDate: json['as_of_date'] != null
           ? DateTime.tryParse(json['as_of_date'].toString()) ?? DateTime.now()
           : DateTime.now(),
-      totalCurrent: Decimal.tryParse(json['total_current']?.toString() ?? '0') ?? Decimal.zero,
-      total1to30Days: Decimal.tryParse(json['total_1_30_days']?.toString() ?? '0') ?? Decimal.zero,
-      total31to60Days: Decimal.tryParse(json['total_31_60_days']?.toString() ?? '0') ?? Decimal.zero,
-      total60PlusDays: Decimal.tryParse(json['total_60_plus_days']?.toString() ?? '0') ?? Decimal.zero,
-      totalPenalty: Decimal.tryParse(json['total_penalty']?.toString() ?? '0') ?? Decimal.zero,
-      grandTotal: Decimal.tryParse(json['grand_total']?.toString() ?? '0') ?? Decimal.zero,
+      totalCurrent: readDecimal(json, 'total_current'),
+      total1to30Days: readDecimal(json, 'total_1_30_days'),
+      total31to60Days: readDecimal(json, 'total_31_60_days'),
+      total60PlusDays: readDecimal(json, 'total_60_plus_days'),
+      totalPenalty: readDecimal(json, 'total_penalty'),
+      grandTotal: readDecimal(json, 'grand_total'),
       brackets: list,
     );
   }
@@ -2035,7 +2034,7 @@ class CapitalProjectItem {
       title: json['title']?.toString() ?? '',
       category: json['category']?.toString() ?? 'ELEVATOR',
       description: json['description']?.toString(),
-      totalBudget: Decimal.tryParse(json['total_budget']?.toString() ?? '0') ?? Decimal.zero,
+      totalBudget: readDecimal(json, 'total_budget'),
       allocationBasis: json['allocation_basis']?.toString() ?? 'BY_LAND_SHARE',
       targetStartDate: json['target_start_date'] != null
           ? DateTime.tryParse(json['target_start_date'].toString()) ?? DateTime.now()
@@ -2046,13 +2045,11 @@ class CapitalProjectItem {
       contractorName: json['contractor_name']?.toString(),
       contractorTaxNo: json['contractor_tax_no']?.toString(),
       contractorIban: json['contractor_iban']?.toString(),
-      contractAmount: json['contract_amount'] != null
-          ? Decimal.tryParse(json['contract_amount'].toString())
-          : null,
+      contractAmount: readDecimalOrNull(json, 'contract_amount'),
       status: json['status']?.toString() ?? 'ACTIVE',
-      collectedAmount: Decimal.tryParse(json['collected_amount']?.toString() ?? '0') ?? Decimal.zero,
-      disbursedAmount: Decimal.tryParse(json['disbursed_amount']?.toString() ?? '0') ?? Decimal.zero,
-      remainingFundBalance: Decimal.tryParse(json['remaining_fund_balance']?.toString() ?? '0') ?? Decimal.zero,
+      collectedAmount: readDecimal(json, 'collected_amount'),
+      disbursedAmount: readDecimal(json, 'disbursed_amount'),
+      remainingFundBalance: readDecimal(json, 'remaining_fund_balance'),
       totalUnitsCount: json['total_units_count'] is int ? json['total_units_count'] : 12,
       installmentsCount: json['installments_count'] is int ? json['installments_count'] : 0,
       createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
@@ -2092,8 +2089,8 @@ class CapitalProjectInstallmentItem {
       dueDate: json['due_date'] != null
           ? DateTime.tryParse(json['due_date'].toString()) ?? DateTime.now()
           : DateTime.now(),
-      installmentBudget: Decimal.tryParse(json['installment_budget']?.toString() ?? '0') ?? Decimal.zero,
-      percentage: Decimal.tryParse(json['percentage']?.toString() ?? '0') ?? Decimal.zero,
+      installmentBudget: readDecimal(json, 'installment_budget'),
+      percentage: readDecimal(json, 'percentage'),
       isAccrued: json['is_accrued'] == true,
       accruedAt: json['accrued_at'] != null ? DateTime.tryParse(json['accrued_at'].toString()) : null,
     );
@@ -2137,7 +2134,7 @@ class CapitalContractorDisbursementItem {
       projectId: json['project_id']?.toString() ?? '',
       milestoneName: json['milestone_name']?.toString() ?? '',
       invoiceNumber: json['invoice_number']?.toString(),
-      amount: Decimal.tryParse(json['amount']?.toString() ?? '0') ?? Decimal.zero,
+      amount: readDecimal(json, 'amount'),
       disbursementDate: json['disbursement_date'] != null
           ? DateTime.tryParse(json['disbursement_date'].toString()) ?? DateTime.now()
           : DateTime.now(),
@@ -2186,10 +2183,10 @@ class UnitCapitalShareItem {
       ownerName: json['owner_name']?.toString() ?? '',
       ownerPhone: json['owner_phone']?.toString(),
       landShare: json['land_share'] is int ? json['land_share'] : 24,
-      totalProjectShare: Decimal.tryParse(json['total_project_share']?.toString() ?? '0') ?? Decimal.zero,
-      totalAccrued: Decimal.tryParse(json['total_accrued']?.toString() ?? '0') ?? Decimal.zero,
-      totalPaid: Decimal.tryParse(json['total_paid']?.toString() ?? '0') ?? Decimal.zero,
-      remainingDebt: Decimal.tryParse(json['remaining_debt']?.toString() ?? '0') ?? Decimal.zero,
+      totalProjectShare: readDecimal(json, 'total_project_share'),
+      totalAccrued: readDecimal(json, 'total_accrued'),
+      totalPaid: readDecimal(json, 'total_paid'),
+      remainingDebt: readDecimal(json, 'remaining_debt'),
       isSettled: json['is_settled'] == true,
     );
   }

@@ -206,3 +206,40 @@ class SpSelectionPage extends StatelessWidget {
     );
   }
 }
+
+/// Opens a full-screen single-choice list and returns the chosen option, or
+/// `null` when the user goes back without choosing (callers must treat `null`
+/// as "no change").
+///
+/// The [selected] option is marked with a check icon and announced as
+/// selected. [idOf] supplies stable automation ids (also used as keys).
+Future<T?> showSpSelection<T>({
+  required BuildContext context,
+  required String title,
+  required List<T> options,
+  required String Function(T option) labelOf,
+  T? selected,
+  String Function(T option)? idOf,
+}) {
+  return showSpPage<T>(
+    context: context,
+    builder: (ctx) => SpSelectionPage(
+      title: Text(title),
+      children: options.map((option) {
+        final isSelected = option == selected;
+        final id = idOf?.call(option);
+        final tile = Semantics(
+          selected: isSelected,
+          inMutuallyExclusiveGroup: true,
+          child: ListTile(
+            key: id == null ? null : Key(id),
+            title: Text(labelOf(option)),
+            trailing: isSelected ? Icon(Icons.check_rounded, color: AppColors.primaryText(ctx)) : null,
+            onTap: () => Navigator.pop(ctx, option),
+          ),
+        );
+        return id == null ? tile : testId(id, tile);
+      }).toList(),
+    ),
+  );
+}
