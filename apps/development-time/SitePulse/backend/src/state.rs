@@ -5,9 +5,11 @@ use rust_decimal::Decimal;
 use tokio::sync::RwLock;
 
 use crate::models::{
-    DebtStatus, DuesLiability, HomeownerPaymentRecord, IndependentUnit, PendingRegistrationResponse,
-    ReconciliationMatch, Role, Site, SiteBankAccount, SiteInvitationLinkResponse,
-    UnitInviteLinkResponse, UnitMemberDto, User,
+    AllocationBasis, AuthProvider, BankStatementFormat, CapitalProjectCategory,
+    CapitalProjectStatus, DebtStatus, DebtorType, DisbursementMethod, DuesLiability,
+    ExpenseType, HomeownerPaymentRecord, IndependentUnit, PendingRegistrationResponse,
+    PlanType, ReconciliationMatch, RegistrationStatus, Role, Site, SiteBankAccount,
+    SiteInvitationLinkResponse, SiteStatus, UnitInviteLinkResponse, UnitMemberDto, User,
 };
 use crate::services::VirtualIbanService;
 
@@ -47,7 +49,10 @@ pub struct AppStateInner {
     pub site_invite_tokens: HashMap<String, SiteInvitationLinkResponse>,
     pub reconciliation_queue: Vec<ReconciliationMatch>,
     pub site_bank_accounts: Vec<SiteBankAccount>,
-    pub advance_payments: HashMap<String, Decimal>,
+    /// Advance (avans) balance per unit, split by debtor like `advance_balances`.
+    pub advance_balances: HashMap<String, crate::models::UnitAdvance>,
+    /// Idempotency keys: (site id, key) -> receipt id. Mirrors `payment_idempotency_keys`.
+    pub payment_idempotency: HashMap<(String, String), i64>,
     pub homeowner_payments: Vec<HomeownerPaymentRecord>,
     pub remembered_sender_ibans: HashMap<String, String>,
     pub sender_iban_metadata: HashMap<String, (Option<String>, Option<String>)>,
@@ -85,7 +90,8 @@ impl AppStateInner {
             site_invite_tokens: HashMap::new(),
             reconciliation_queue: Vec::new(),
             site_bank_accounts: Vec::new(),
-            advance_payments: HashMap::new(),
+            advance_balances: HashMap::new(),
+            payment_idempotency: HashMap::new(),
             homeowner_payments: Vec::new(),
             remembered_sender_ibans: HashMap::new(),
             sender_iban_metadata: HashMap::new(),
@@ -157,7 +163,7 @@ impl AppStateInner {
                 password_hash: Some(crate::auth::hash_password(&bootstrap_admin_password())),
                 role: Role::SaasAdmin,
                 must_change_password: true,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
@@ -220,10 +226,12 @@ impl AppStateInner {
                 name: "Begonya Sitesi".to_string(),
                 address: "Ataşehir, Begonya Sok. No:14, İstanbul".to_string(),
                 slug: "begonya-sitesi".to_string(),
-                status: "ACTIVE".to_string(),
-                plan_type: "PREMIUM".to_string(),
+                status: SiteStatus::Active,
+                plan_type: PlanType::Premium,
                 license_end_date: NaiveDate::from_ymd_opt(2027, 9, 1).unwrap(),
                 timezone: crate::models::default_site_timezone(),
+                tax_id: None,
+                tax_office: None,
             });
         }
 
@@ -233,10 +241,12 @@ impl AppStateInner {
                 name: "Kardelen Rezidans".to_string(),
                 address: "Çankaya, Kardelen Cad. No:8, Ankara".to_string(),
                 slug: "kardelen-rezidans".to_string(),
-                status: "ACTIVE".to_string(),
-                plan_type: "STANDARD".to_string(),
+                status: SiteStatus::Active,
+                plan_type: PlanType::Standard,
                 license_end_date: NaiveDate::from_ymd_opt(2027, 10, 15).unwrap(),
                 timezone: crate::models::default_site_timezone(),
+                tax_id: None,
+                tax_office: None,
             });
         }
 
@@ -252,7 +262,7 @@ impl AppStateInner {
                 password_hash: Some(crate::auth::hash_password("mehmet123")),
                 role: Role::SiteManager,
                 must_change_password: false,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
@@ -271,7 +281,7 @@ impl AppStateInner {
                 password_hash: Some(crate::auth::hash_password("ahmet123")),
                 role: Role::HomeOwner,
                 must_change_password: false,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
@@ -323,7 +333,7 @@ impl AppStateInner {
                 person_name: "Ahmet Yılmaz".to_string(),
                 person_phone: Some("+90 532 111 22 33".to_string()),
                 person_email: Some("ahmet.yilmaz@begonya.com".to_string()),
-                role: "OWNER".to_string(),
+                role: DebtorType::Owner,
                 start_date: "2025-01-01".to_string(),
                 end_date: Some("2026-01-01".to_string()),
                 is_active: false,
@@ -338,7 +348,7 @@ impl AppStateInner {
                 person_name: "Zeynep Kaya".to_string(),
                 person_phone: Some("+90 542 333 44 55".to_string()),
                 person_email: Some("zeynep@example.com".to_string()),
-                role: "TENANT".to_string(),
+                role: DebtorType::Tenant,
                 start_date: "2026-01-01".to_string(),
                 end_date: None,
                 is_active: true,
@@ -368,8 +378,9 @@ impl AppStateInner {
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: "TENANT".to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
+                debtor_type: DebtorType::Tenant,
+                expense_type: ExpenseType::OperationalDues,
+                penalty_accrued_through: None,
             });
         }
 
@@ -385,7 +396,7 @@ impl AppStateInner {
                 email: "kerem.yilmaz@gmail.com".to_string(),
                 phone: "+90 533 111 22 33".to_string(),
                 is_resident: true,
-                status: "PENDING".to_string(),
+                status: RegistrationStatus::Pending,
                 submitted_at: Utc::now(),
             });
         }
@@ -415,7 +426,7 @@ impl AppStateInner {
                 bank_name: "Kuveyt Türk Katılım Bankası".to_string(),
                 iban: "TR620020500009863791600001".to_string(),
                 account_holder: "Begonya Sitesi Yönetimi".to_string(),
-                statement_format: "EXCEL".to_string(),
+                statement_format: BankStatementFormat::Excel,
                 is_active: true,
                 configured_by: Some("usr-site-manager-1".to_string()),
                 created_at: Utc::now(),
@@ -426,6 +437,44 @@ impl AppStateInner {
 
     /// Backward compatibility alias for seed_test_fixtures
     #[allow(dead_code)]
+    /// Display name of a block: units loaded from PostgreSQL carry the numeric
+    /// block id, fixtures carry a letter; both resolve through `blocks`.
+    /// Always ends in "Blok" (e.g. "A Blok").
+    pub fn block_label(&self, block_id: &str) -> String {
+        let name = self
+            .blocks
+            .iter()
+            .find(|b| crate::auth::same_id(&b.id, block_id))
+            .map(|b| b.block_name.clone())
+            .unwrap_or_else(|| block_id.to_string());
+        if name.to_lowercase().contains("blok") {
+            name
+        } else {
+            format!("{} Blok", name)
+        }
+    }
+
+    /// "A Blok D:14" for a unit.
+    pub fn unit_label(&self, block_id: &str, unit_number: i32) -> String {
+        format!("{} D:{}", self.block_label(block_id), unit_number)
+    }
+
+    /// Total advance of a unit (owner + tenant buckets).
+    pub fn advance_total(&self, unit_id: &str) -> Decimal {
+        self.advance_balances.get(unit_id).map(|a| a.total()).unwrap_or(Decimal::ZERO)
+    }
+
+    /// Advance of one debtor (`OWNER` / `TENANT`) of a unit.
+    pub fn advance_of(&self, unit_id: &str, debtor_type: &str) -> Decimal {
+        self.advance_balances.get(unit_id).map(|a| a.of(debtor_type)).unwrap_or(Decimal::ZERO)
+    }
+
+    /// Adds `delta` (may be negative) to one debtor's advance of a unit.
+    pub fn adjust_advance(&mut self, unit_id: &str, debtor_type: &str, delta: Decimal) {
+        let entry = self.advance_balances.entry(unit_id.to_string()).or_default();
+        *entry.bucket_mut(debtor_type) += delta;
+    }
+
     pub fn seed(&mut self) {
         self.seed_test_fixtures();
     }
@@ -442,7 +491,8 @@ impl AppStateInner {
         self.site_invite_tokens.clear();
         self.reconciliation_queue.clear();
         self.site_bank_accounts.clear();
-        self.advance_payments.clear();
+        self.advance_balances.clear();
+        self.payment_idempotency.clear();
         self.homeowner_payments.clear();
         self.remembered_sender_ibans.clear();
         self.sender_iban_metadata.clear();
@@ -457,7 +507,8 @@ impl AppStateInner {
 
     pub fn reset_all_payments_and_balances(&mut self) {
         self.auto_scheduler_enabled = false;
-        self.advance_payments.clear();
+        self.advance_balances.clear();
+        self.payment_idempotency.clear();
         self.homeowner_payments.clear();
         self.reconciliation_queue.clear();
         self.payment_receipts.clear();
@@ -505,8 +556,9 @@ impl AppStateInner {
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: "TENANT".to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
+                debtor_type: DebtorType::Tenant,
+                expense_type: ExpenseType::OperationalDues,
+                penalty_accrued_through: None,
             });
         }
 
@@ -515,17 +567,17 @@ impl AppStateInner {
                 id: "cproj-1".to_string(),
                 site_id: "site-1".to_string(),
                 title: "A & B Blok Asansör Revizyonu ve Yeşil Etiket".to_string(),
-                category: "ELEVATOR".to_string(),
+                category: CapitalProjectCategory::Elevator,
                 description: Some("TSE standartlarına uyum, motor yenileme ve kabin modernizasyonu".to_string()),
                 total_budget: Decimal::from_str_exact("360000.00").unwrap(),
-                allocation_basis: "BY_LAND_SHARE".to_string(),
+                allocation_basis: AllocationBasis::ByLandShare,
                 target_start_date: NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
                 target_completion_date: Some(NaiveDate::from_ymd_opt(2027, 1, 15).unwrap()),
                 contractor_name: Some("Otis Asansör San. ve Tic. A.Ş.".to_string()),
                 contractor_tax_no: Some("6480029182".to_string()),
                 contractor_iban: Some("TR120006200000000000000099".to_string()),
                 contract_amount: Some(Decimal::from_str_exact("360000.00").unwrap()),
-                status: "ACTIVE".to_string(),
+                status: CapitalProjectStatus::Active,
                 collected_amount: Decimal::from_str_exact("120000.00").unwrap(),
                 disbursed_amount: Decimal::from_str_exact("60000.00").unwrap(),
                 remaining_fund_balance: Decimal::from_str_exact("60000.00").unwrap(),
@@ -581,7 +633,7 @@ impl AppStateInner {
                 recipient_name: "Otis Asansör San. ve Tic. A.Ş.".to_string(),
                 recipient_iban: "TR120006200000000000000099".to_string(),
                 payment_reference: Some("OTIS-HAKEDIS-1".to_string()),
-                disbursement_method: "BANK_TRANSFER".to_string(),
+                disbursement_method: DisbursementMethod::BankTransfer,
                 notes: Some("Sözleşme gereği peşin avans ödendi".to_string()),
                 created_at: Some(Utc::now()),
             });

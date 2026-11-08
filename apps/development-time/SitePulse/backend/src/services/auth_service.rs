@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use crate::auth;
 use crate::models::{
-    AuthResponse, ChangePasswordRequest, GoogleLoginRequest, PasswordLoginRequest, Permission, RegisterUserRequest,
+    AuthResponse, AuthProvider, ChangePasswordRequest, GoogleLoginRequest, PasswordLoginRequest, Permission, RegisterUserRequest,
     Role, User, UserProfileResponse, UserSummary,
 };
 use crate::state::AppState;
@@ -206,7 +206,7 @@ impl AuthService {
             if !payload.picture.is_empty() {
                 u.avatar_url = Some(payload.picture.clone());
             }
-            u.auth_provider = if u.password_hash.is_some() { "HYBRID" } else { "GOOGLE" }.to_string();
+            u.auth_provider = if u.password_hash.is_some() { AuthProvider::Hybrid } else { AuthProvider::Google };
             u.clone()
         } else {
             // A brand-new account must come through a unit invitation; otherwise
@@ -231,7 +231,7 @@ impl AuthService {
                 password_hash: None,
                 role: Role::HomeResident,
                 must_change_password: false,
-                auth_provider: "GOOGLE".to_string(),
+                auth_provider: AuthProvider::Google,
                 google_sub: Some(payload.sub.clone()),
                 avatar_url: Some(payload.picture.clone()),
                 created_at: Utc::now(),
@@ -290,7 +290,7 @@ impl AuthService {
             password_hash: Some(auth::hash_password(&request.password)),
             role: Role::HomeResident,
             must_change_password: false,
-            auth_provider: "LOCAL".to_string(),
+            auth_provider: AuthProvider::Local,
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
@@ -343,7 +343,7 @@ impl AuthService {
             site_id: user.site_id.clone(),
             unit_id,
             avatar_url: user.avatar_url.clone(),
-            auth_provider: user.auth_provider.clone(),
+            auth_provider: user.auth_provider,
             must_change_password: user.must_change_password,
             permissions,
             permission_descriptions: descriptions,
@@ -423,7 +423,7 @@ fn create_auth_response(user: &User, unit_id: Option<&str>) -> AuthResponse {
         site_id: user.site_id.clone(),
         unit_id: unit_id.unwrap_or_default().to_string(),
         avatar_url: user.avatar_url.clone(),
-        auth_provider: user.auth_provider.clone(),
+        auth_provider: user.auth_provider,
         must_change_password: user.must_change_password,
         permissions,
     };

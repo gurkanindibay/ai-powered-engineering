@@ -2,7 +2,7 @@ use chrono::Utc;
 use rand::{distributions::Alphanumeric, Rng};
 
 use crate::models::{
-    HomeResidentResponse, RegisterHomeResidentRequest, Role, UnitInviteLinkResponse,
+    AuthProvider, HomeResidentResponse, RegisterHomeResidentRequest, Role, UnitInviteLinkResponse,
     UnitMemberDto, User,
 };
 use crate::state::AppState;
@@ -149,7 +149,7 @@ impl HomeResidentInvitationService {
             password_hash: Some(crate::auth::hash_password(&temp_pass)),
             role: Role::HomeResident,
             must_change_password: true,
-            auth_provider: "LOCAL".to_string(),
+            auth_provider: AuthProvider::Local,
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
