@@ -125,6 +125,10 @@ pub struct DuesLiability {
     /// `OPERATIONAL_DUES` or `CAPITAL_DUES`.
     #[serde(default = "default_expense_type")]
     pub expense_type: String,
+    /// Date up to which `delay_penalty` has been accrued (KMK 20 segmented accrual).
+    /// `None` for liabilities that never accrued a segment (legacy rule applies).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub penalty_accrued_through: Option<NaiveDate>,
 }
 
 fn default_debtor_type() -> String {
@@ -1398,7 +1402,7 @@ pub struct InterLedgerTransferResponse {
     pub verification_hash: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RecordManualPaymentRequest {
     #[serde(default)]
     pub site_id: Option<String>,
@@ -1416,6 +1420,52 @@ pub struct RecordManualPaymentRequest {
     /// Client-generated key; retrying with the same key returns the first receipt.
     #[serde(default)]
     pub idempotency_key: Option<String>,
+    /// TBK 101: which liabilities the payer is paying (settled first).
+    #[serde(default)]
+    pub designation: Option<PaymentDesignation>,
+    /// Bank/channel transaction reference, stored on the ledger entry.
+    #[serde(default)]
+    pub external_reference: Option<String>,
+    /// When set (bank channels), a period named in `description` designates
+    /// the liability if no explicit `designation` is given.
+    #[serde(default)]
+    pub designate_from_description: bool,
+    /// Settles this existing UNMATCHED ledger entry instead of inserting a new
+    /// one (match-all, SPEC-005 R2). Its amount must equal `amount`.
+    #[serde(default)]
+    pub settles_unmatched_entry_id: Option<String>,
+}
+
+/// Payer's designation of the liabilities a payment settles (TBK 101).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PaymentDesignation {
+    #[serde(default)]
+    pub due_ids: Vec<String>,
+    #[serde(default)]
+    pub periods: Vec<String>,
+    #[serde(default)]
+    pub expense_type: Option<String>,
+}
+
+impl PaymentDesignation {
+    pub fn is_empty(&self) -> bool {
+        self.due_ids.is_empty() && self.periods.is_empty() && self.expense_type.is_none()
+    }
+
+    /// Human-readable form recorded on the ledger entry.
+    pub fn describe(&self) -> String {
+        let mut parts = Vec::new();
+        if !self.periods.is_empty() {
+            parts.push(format!("periods={}", self.periods.join(",")));
+        }
+        if !self.due_ids.is_empty() {
+            parts.push(format!("dues={}", self.due_ids.join(",")));
+        }
+        if let Some(e) = &self.expense_type {
+            parts.push(format!("expense={}", e));
+        }
+        parts.join("; ")
+    }
 }
 
 fn default_payer_role() -> String {

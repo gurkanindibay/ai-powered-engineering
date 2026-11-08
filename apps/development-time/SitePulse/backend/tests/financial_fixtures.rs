@@ -74,6 +74,7 @@ fn liability(id: &str, principal: Decimal, penalty: Decimal, due_date: NaiveDate
         paid_penalty: Decimal::ZERO,
         debtor_type: debtor.to_string(),
         expense_type: expense.to_string(),
+        penalty_accrued_through: None,
     }
 }
 

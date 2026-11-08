@@ -488,6 +488,38 @@
         "flutter:test/capital_projects_view_test.dart"
       ],
       "attempts": 0
+    },
+    {
+      "id": "task-26",
+      "name": "Payment Compliance Phase 1: Single Ingestion, KMK 20 Penalty Base, TBK 101 Designation, Ledger Integrity",
+      "module": "full-stack",
+      "status": "UNVERIFIED",
+      "depends_on": [
+        "task-16",
+        "task-17",
+        "task-22",
+        "task-24"
+      ],
+      "spec_ref": "SPEC-005",
+      "description": "Every channel (webhook, statement, staff record, match-all) settles through record_and_allocate_payment with a TAH receipt and allocation rows; segmented penalty accrual on unpaid principal; payer designation; V16 append-only ledger, payer identity and integrity constraints.",
+      "gates": [
+        "money-fixtures"
+      ],
+      "acceptance_tests": [
+        "rust:payment_compliance_tests::when_overdue_due_is_paid_by_webhook_then_penalty_is_collected_first_with_a_tah_receipt",
+        "rust:payment_compliance_tests::when_bank_webhook_is_redelivered_then_only_one_receipt_exists",
+        "rust:payment_compliance_tests::when_payer_designates_a_period_then_that_due_is_settled_before_older_dues",
+        "rust:payment_compliance_tests::when_no_designation_is_given_then_the_oldest_due_is_settled_first",
+        "rust:payment_compliance_tests::when_a_statement_line_is_confirmed_twice_then_it_is_settled_once",
+        "rust:payment_compliance_tests::when_match_all_settles_a_pending_payment_then_no_duplicate_ledger_row_is_created",
+        "rust:payment_compliance_tests::when_payment_channel_is_unknown_then_the_payment_is_rejected",
+        "rust:payment_compliance_tests::when_debt_aging_is_computed_then_it_uses_outstanding_amounts_and_the_liabilitys_debtor",
+        "system:match_all_settles_in_place",
+        "system:payer_identity_recorded",
+        "system:site_purge_is_atomic",
+        "system:ledger_integrity_clean"
+      ],
+      "attempts": 0
     }
   ],
   "schema": "task-dag.schema.json"

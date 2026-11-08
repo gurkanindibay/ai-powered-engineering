@@ -49,7 +49,8 @@ This document lists the available skills and custom tools available to AI agents
 
 ### Capabilities:
 - **Negative cases:** domains and vocabularies, FKs (phantom unit/site), ledgers RESTRICT unit deletion, paid-amount invariants, case-insensitive e-mail uniqueness, receipt sequence uniqueness, IBAN format, one active bank account per site.
-- **Positive cases:** national ids never stored in clear text, unit owner follows the ownership history, `v_integrity_violations` empty on seed data.
+- **Negative cases (V16 payment ledger):** receipts, allocations, advance ledger and idempotency keys are append-only; a `SETTLED` entry needs a receipt; one entry per receipt; entry amount/unit/channel/date are immutable; only `UNMATCHED -> SETTLED` (with receipt) and `SETTLED -> REVERSED` transitions; penalty accrual date not before the due date.
+- **Positive cases:** national ids never stored in clear text, unit owner follows the ownership history, an `UNMATCHED` entry settles in place, payer identity resolves from the ownership history, the purge switch lifts the ledger guard for one transaction only, `v_integrity_violations` empty on seed data.
 - **Upgrade path:** existing rows survive V8+; the upgraded schema has no drift from a fresh install.
 
 ### Quick Usage Examples:
@@ -103,7 +104,7 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 ## 5b. API System Check (`api_system_check.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/api_system_check.py](file:///apps/development-time/SitePulse/scripts/api_system_check.py) (symlinked to `scripts/api_system_check.py`)
-- **Purpose:** Creates a throwaway database, boots the real backend binary on a free port, seeds it, and checks over HTTP: every non-public route returns 401 without a token, forged tokens are rejected, cross-site access is 403, bank webhooks need a valid HMAC, 20 concurrent payments get unique receipt numbers, idempotent retries return the first receipt, and receipts/inserts survive a backend restart.
+- **Purpose:** Creates a throwaway database, boots the real backend binary on a free port, seeds it, and checks over HTTP: every non-public route returns 401 without a token, forged tokens are rejected, cross-site access is 403, bank webhooks need a valid HMAC, 20 concurrent payments get unique receipt numbers, idempotent retries return the first receipt, receipts/inserts survive a backend restart, match-all settles an `UNMATCHED` entry in place (no duplicate ledger row), payments record the payer person on entry and receipt, the non-production site purge removes a site with ledger history atomically, and `v_integrity_violations` is empty afterwards (SPEC-005 / V16).
 
 ```bash
 DB_PASS=... ./scripts/api_system_check.py                    # all checks

@@ -12,6 +12,10 @@ local port (the backend applies the migrations), seeds it, and checks over HTTP:
   idempotent_payment_retry         a retried payment with the same Idempotency-Key returns the first receipt
   restart_persistence              a receipt issued before a backend restart is still served after it
   sequences_survive_restart        payments and new dues still insert after a restart (no id collisions)
+  match_all_settles_in_place       match-all settles an UNMATCHED row in place, with receipt and allocations (SPEC-005)
+  payer_identity_recorded          a payment records the payer person on its entry and receipt (V16)
+  site_purge_is_atomic             the non-production purge removes a site with ledger history (V16 guard)
+  ledger_integrity_clean           v_integrity_violations is empty after all checks
 
 PostgreSQL access: set DB_HOST/DB_PORT/DB_USER/DB_PASS. SQL is run with `psql`
 when it is on PATH, otherwise through `docker exec <container> psql`
@@ -60,6 +64,7 @@ SAMPLE_PARAMS = {"unit_id": "14", "id": "14", "site_id": "1", "resident_id": "1"
 CHECKS = [
     "unauthenticated_routes_rejected", "forged_token_rejected", "cross_site_forbidden", "webhook_signature_enforced",
     "concurrent_receipts_unique", "idempotent_payment_retry", "restart_persistence", "sequences_survive_restart",
+    "match_all_settles_in_place", "payer_identity_recorded", "site_purge_is_atomic", "ledger_integrity_clean",
 ]
 
 
@@ -337,6 +342,78 @@ def check_sequences(ctx: Context) -> Tuple[bool, str]:
     return status == 201 and inserted.isdigit(), f"payment after restart {status}, new dues id {inserted}"
 
 
+def check_match_all_in_place(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-005 R2: match-all turns the UNMATCHED row into the settled entry (no duplicate)."""
+    db = ctx.backend.db_name
+    site = ctx.psql.run(db, f"SELECT site_id FROM units WHERE id = {ctx.unit_id};")
+    ref = f"SYS-UNM-{time.time_ns()}"
+    entry_id = ctx.psql.run(db, (
+        "INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel,"
+        f" settlement_status, external_reference) VALUES ({site}, {ctx.unit_id}, 'Bank Sender', 'OWNER', 4.00,"
+        f" 'BANK_TRANSFER', 'UNMATCHED', '{ref}') RETURNING id;"))
+    before = ctx.psql.run(db, "SELECT count(*) FROM payment_entries;")
+    ctx.backend.restart()  # the pending row is loaded from PostgreSQL
+    ctx.manager = login(ctx.backend, "mehmet.demir@begonya.com", "mehmet123")
+    status, body = http("POST", ctx.backend.base + "/api/v1/payments/match-all", token=ctx.manager, body={"site_id": site})
+    after = ctx.psql.run(db, "SELECT count(*) FROM payment_entries;")
+    row = ctx.psql.run(db, f"SELECT settlement_status || '|' || (receipt_id IS NOT NULL) FROM payment_entries WHERE id = {entry_id};")
+    allocations = ctx.psql.run(db, f"SELECT count(*) FROM payment_allocations WHERE payment_entry_id = {entry_id};")
+    ok = status == 200 and after == before and row == "SETTLED|true" and int(allocations or 0) >= 1
+    return ok, f"status {status}, entries {before}->{after}, entry {entry_id} {row}, allocations {allocations}"
+
+
+def check_payer_identity(ctx: Context) -> Tuple[bool, str]:
+    """V16 P-02: canonical payments record the payer person on entry and receipt."""
+    status, body = pay(ctx, "1.00")
+    if status != 201:
+        return False, f"payment failed: {status} {body[:200]}"
+    receipt_id = json.loads(body)["id"]
+    row = ctx.psql.run(ctx.backend.db_name, (
+        "SELECT (e.payer_person_id IS NOT NULL) || '|' || (r.payer_person_id IS NOT NULL) || '|' ||"
+        " (e.payer_person_id = u.owner_person_id) FROM payment_entries e JOIN payment_receipts r ON r.id = e.receipt_id"
+        f" JOIN units u ON u.id = e.unit_id WHERE r.id = {receipt_id};"))
+    return row == "true|true|true", f"receipt {receipt_id}: entry/receipt payer set, matches owner -> {row}"
+
+
+def check_site_purge(ctx: Context) -> Tuple[bool, str]:
+    """V16 P-06: the non-production purge removes a site with ledger history in one transaction."""
+    db = ctx.backend.db_name
+    site = ctx.psql.run(db, "SELECT id FROM sites WHERE slug = 'syscheck-2';")
+    ctx.psql.run(db, f"""
+        INSERT INTO blocks (site_id, block_name, total_floors) VALUES ({site}, 'P', 1);
+        INSERT INTO units (block_id, site_id, unit_number, floor, land_share)
+            SELECT id, {site}, 1, 1, 10 FROM blocks WHERE site_id = {site};
+        INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role,
+                                      total_amount, allocated_advance, payment_channel, verification_hash)
+            SELECT {site}, id, 'PURGE-1', 1, 'P', 'OWNER', 5, 5, 'MANUAL_CASH', 'h' FROM units WHERE site_id = {site};
+        INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel, receipt_id)
+            SELECT {site}, unit_id, 'P', 'OWNER', 5, 'MANUAL_CASH', id FROM payment_receipts WHERE receipt_number = 'PURGE-1';
+        INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount)
+            SELECT id, 'OWNER', 'PAYMENT_SURPLUS', 5 FROM units WHERE site_id = {site};
+    """)
+    # The purge is a dev route: enabled for this check only, then switched off again.
+    ctx.backend.extra_env["SITEPULSE_ENABLE_DEV_ROUTES"] = "true"
+    ctx.backend.restart()
+    try:
+        admin = login(ctx.backend, "admin@sitepulse.io", ADMIN_PASSWORD)
+        status, body = http("POST", f"{ctx.backend.base}/api/v1/system/purge-site/{site}", token=admin)
+    finally:
+        ctx.backend.extra_env.pop("SITEPULSE_ENABLE_DEV_ROUTES", None)
+        ctx.backend.restart()
+        ctx.manager = login(ctx.backend, "mehmet.demir@begonya.com", "mehmet123")
+    left = ctx.psql.run(db, (
+        f"SELECT (SELECT count(*) FROM sites WHERE id = {site}) + (SELECT count(*) FROM payment_receipts WHERE site_id = {site})"
+        f" + (SELECT count(*) FROM payment_entries WHERE site_id = {site});"))
+    guard = ctx.psql.run(db, "SELECT coalesce(current_setting('sitepulse.allow_ledger_purge', true), '');")
+    return status == 200 and left == "0" and guard != "on", f"status {status}, rows left {left}, guard after '{guard}'"
+
+
+def check_ledger_integrity(ctx: Context) -> Tuple[bool, str]:
+    """After every other check: no drift reported by v_integrity_violations."""
+    rows = ctx.psql.run(ctx.backend.db_name, "SELECT check_name || ':' || subject FROM v_integrity_violations;")
+    return rows == "", f"violations: {rows.replace(chr(10), ', ') or 'none'}"
+
+
 CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
     "unauthenticated_routes_rejected": check_unauthenticated,
     "forged_token_rejected": check_forged,
@@ -346,6 +423,10 @@ CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
     "idempotent_payment_retry": check_idempotent,
     "restart_persistence": check_restart,
     "sequences_survive_restart": check_sequences,
+    "match_all_settles_in_place": check_match_all_in_place,
+    "payer_identity_recorded": check_payer_identity,
+    "site_purge_is_atomic": check_site_purge,
+    "ledger_integrity_clean": check_ledger_integrity,
 }
 
 

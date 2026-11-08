@@ -91,6 +91,7 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
                     paid_penalty: Decimal::ZERO,
                     debtor_type: debtor.to_string(),
                     expense_type: "OPERATIONAL_DUES".to_string(),
+                    penalty_accrued_through: None,
                 }));
             }
         }

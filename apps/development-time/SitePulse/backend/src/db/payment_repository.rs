@@ -3,10 +3,10 @@ use rust_decimal::Decimal;
 use tracing::info;
 
 use crate::models::{
-    DebtStatus, DuesLiability, HomeownerPaymentRecord, PaymentEntry, PaymentMatchStatus,
+    DebtStatus, DuesLiability, PaymentEntry,
     PaymentReceipt,
 };
-use super::base::{parse_id_to_i64, require_id, DbResult};
+use super::base::{require_id, DbResult};
 pub async fn save_payment_receipt(
     pool: &Pool,
     receipt: &PaymentReceipt,
@@ -16,8 +16,9 @@ pub async fn save_payment_receipt(
     let unit_id_num = require_id("entity", &receipt.unit_id)?;
     let breakdown_json_str = serde_json::to_string(&receipt.allocation_breakdown)?;
 
+    // Receipts are append-only (V16): an existing receipt is never rewritten.
     let row = client
-        .query_one(
+        .query_opt(
             r#"
             INSERT INTO payment_receipts (
                 site_id, unit_id, receipt_number, sequence_number,
@@ -28,9 +29,7 @@ pub async fn save_payment_receipt(
                 verification_hash, issued_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::text::jsonb, $16, $17, $18, $19)
-            ON CONFLICT (site_id, receipt_number) DO UPDATE SET
-                payer_name = EXCLUDED.payer_name,
-                total_amount = EXCLUDED.total_amount
+            ON CONFLICT (site_id, receipt_number) DO NOTHING
             RETURNING id
             "#,
             &[
@@ -56,7 +55,16 @@ pub async fn save_payment_receipt(
             ],
         )
         .await?;
-    let receipt_id: i64 = row.get(0);
+    let receipt_id: i64 = match row {
+        Some(r) => r.get(0),
+        None => client
+            .query_one(
+                "SELECT id FROM payment_receipts WHERE site_id = $1 AND receipt_number = $2",
+                &[&site_id_num, &receipt.receipt_number],
+            )
+            .await?
+            .get(0),
+    };
     info!("Saved payment receipt {} (id: {}) to PostgreSQL", receipt.receipt_number, receipt_id);
     Ok(receipt_id)
 }
@@ -77,124 +85,8 @@ pub async fn get_next_receipt_sequence(
     Ok(next_seq)
 }
 
-pub async fn save_payment_entry(
-    pool: &Pool,
-    entry: &PaymentEntry,
-) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
-    let site_id_num = require_id("entity", &entry.site_id)?;
-    let unit_id_num = require_id("entity", &entry.unit_id)?;
 
-    let row = client
-        .query_one(
-            r#"
-            INSERT INTO payment_entries (
-                site_id, unit_id, payer_name, payer_role, receipt_id,
-                amount, payment_channel, settlement_status, description,
-                external_reference, payment_date, created_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            RETURNING id
-            "#,
-            &[
-                &site_id_num,
-                &unit_id_num,
-                &entry.payer_name,
-                &entry.payer_role,
-                &entry.receipt_id,
-                &entry.amount,
-                &entry.payment_channel,
-                &entry.settlement_status,
-                &entry.description,
-                &entry.external_reference,
-                &entry.payment_date,
-                &entry.created_at,
-            ],
-        )
-        .await?;
-    let entry_id: i64 = row.get(0);
-    info!("Saved payment entry (id: {}) to PostgreSQL", entry_id);
-    Ok(entry_id)
-}
 
-pub async fn save_payment_allocation(
-    pool: &Pool,
-    payment_entry_id: i64,
-    dues_liability_id: i64,
-    principal_amount: Decimal,
-    penalty_amount: Decimal,
-) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
-    let row = client
-        .query_one(
-            r#"
-            INSERT INTO payment_allocations (payment_entry_id, dues_liability_id, principal_amount, penalty_amount, created_at)
-            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-            RETURNING id
-            "#,
-            &[&payment_entry_id, &dues_liability_id, &principal_amount, &penalty_amount],
-        )
-        .await?;
-    let alloc_id: i64 = row.get(0);
-    Ok(alloc_id)
-}
-
-#[allow(clippy::too_many_arguments)]
-pub async fn save_collection_transaction(
-    pool: &Pool,
-    _id: &str,
-    dues_liability_id: Option<&str>,
-    unit_id: Option<&str>,
-    transaction_type: &str,
-    paid_amount: Decimal,
-    reference_code: Option<&str>,
-    description: Option<&str>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
-
-    let parsed_due_id = dues_liability_id.and_then(parse_id_to_i64);
-    let parsed_unit_id = unit_id.and_then(parse_id_to_i64).or(Some(14));
-
-    // The unified ledger is FK-bound to both sites and units, so resolve the site
-    // from the unit instead of trusting the caller's string site id.
-    let site_id: i64 = client
-        .query_opt("SELECT site_id FROM units WHERE id = $1", &[&parsed_unit_id])
-        .await?
-        .map(|r| r.get(0))
-        .unwrap_or(1);
-
-    let channel = match transaction_type {
-        "CREDIT_CARD_POS" => "CREDIT_CARD",
-        "BANK_TRANSFER" => "BANK_TRANSFER",
-        "CASH" => "MANUAL_CASH",
-        other => other,
-    };
-
-    client
-        .execute(
-            r#"
-            INSERT INTO payment_entries (site_id, unit_id, dues_liability_id, payer_name, payer_role, amount, payment_channel, settlement_status, description, external_reference, payment_date, created_at)
-            VALUES ($1, $2, $3, $4, 'OWNER', $5, $6, 'SETTLED', $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            "#,
-            &[
-                &site_id,
-                &parsed_unit_id,
-                &parsed_due_id,
-                &description.map(|d| d.to_string()).unwrap_or_else(|| "Unknown payer".to_string()),
-                &paid_amount,
-                &channel,
-                &description,
-                &reference_code,
-            ],
-        )
-        .await?;
-
-    info!(
-        "Saved collection transaction (₺{}) to the unified payment_entries ledger",
-        paid_amount
-    );
-    Ok(())
-}
 
 
 pub async fn claim_bank_webhook_transaction(pool: &Pool, transaction_id: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
@@ -208,73 +100,19 @@ pub async fn claim_bank_webhook_transaction(pool: &Pool, transaction_id: &str) -
     Ok(n == 1)
 }
 
-
-pub async fn save_homeowner_payment(
-    pool: &Pool,
-    rec: &HomeownerPaymentRecord,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+/// Gives a claimed webhook transaction back when processing failed before the
+/// payment committed, so the bank's retry is applied instead of being ignored.
+/// (The payment itself is idempotent on `BANK:<transaction_id>`.)
+pub async fn release_bank_webhook_transaction(pool: &Pool, transaction_id: &str) -> DbResult<()> {
     let client = pool.get().await?;
-
-    let parsed_unit_id = require_id("entity", &rec.unit_id)?;
-    let site_id: i64 = client
-        .query_opt("SELECT site_id FROM units WHERE id = $1", &[&parsed_unit_id])
-        .await?
-        .map(|r| r.get(0))
-        .unwrap_or(1);
-
-    let settlement_status = match rec.status {
-        PaymentMatchStatus::Pending => "UNMATCHED",
-        _ => "SETTLED",
-    };
-
     client
-        .execute(
-            r#"
-            INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel, settlement_status, description, external_reference, payment_date, created_at)
-            VALUES ($1, $2, $3, 'OWNER', $4, $5, $6, $7, $8, $9, $9)
-            "#,
-            &[
-                &site_id,
-                &parsed_unit_id,
-                &rec.homeowner_name.clone().unwrap_or_else(|| "Unknown payer".to_string()),
-                &rec.amount,
-                &rec.payment_method,
-                &settlement_status,
-                &rec.note,
-                &rec.reference_code.clone().unwrap_or_else(|| rec.id.clone()),
-                &rec.created_at,
-            ],
-        )
+        .execute("DELETE FROM processed_bank_webhooks WHERE transaction_id = $1", &[&transaction_id])
         .await?;
-    info!("Saved homeowner payment {} (₺{}) to the unified payment_entries ledger", rec.id, rec.amount);
     Ok(())
 }
 
-pub async fn update_homeowner_payment_match(
-    pool: &Pool,
-    id: &str,
-    status: &str,
-    _cleared: Decimal,
-    _advance: Decimal,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // The debt/advance split is recomputed in memory by match_all; persist only the
-    // resulting settlement state onto the canonical ledger (identified by external ref).
-    let settlement_status = match status {
-        "Pending" => "UNMATCHED",
-        "Unmatched" => "UNMATCHED",
-        "Refunded" => "REFUNDED",
-        _ => "SETTLED",
-    };
-    let client = pool.get().await?;
-    client
-        .execute(
-            "UPDATE payment_entries SET settlement_status = $2 WHERE external_reference = $1 OR id::text = $1",
-            &[&id, &settlement_status],
-        )
-        .await?;
-    info!("Updated payment entry {} match in PostgreSQL", id);
-    Ok(())
-}
+
+
 
 
 pub async fn tx_find_idempotent_receipt(tx: &deadpool_postgres::Transaction<'_>, site_id: i64, key: &str) -> DbResult<Option<i64>> {
@@ -310,7 +148,7 @@ pub async fn tx_load_open_dues(tx: &deadpool_postgres::Transaction<'_>, unit_id:
         .query(
             r#"
             SELECT id, period, principal_amount, delay_penalty, paid_principal, paid_penalty,
-                   due_date, status, debtor_type, expense_type
+                   due_date, status, debtor_type, expense_type, penalty_accrued_through
             FROM dues_liabilities
             WHERE unit_id = $1 AND status NOT IN ('PAID', 'CANCELLED')
             ORDER BY due_date, id
@@ -336,6 +174,7 @@ pub async fn tx_load_open_dues(tx: &deadpool_postgres::Transaction<'_>, unit_id:
                 paid_penalty: r.get(5),
                 debtor_type: r.get(8),
                 expense_type: r.get(9),
+                penalty_accrued_through: r.get(10),
             };
             crate::services::dues_ledger::refresh(&mut d);
             d
@@ -371,9 +210,12 @@ pub async fn tx_insert_receipt(tx: &deadpool_postgres::Transaction<'_>, receipt:
                 total_amount, payment_channel, channel_reference,
                 allocated_principal, allocated_penalty, allocated_advance,
                 allocation_breakdown, is_rent_offset_eligible, legal_statutory_note,
-                verification_hash, issued_at
+                verification_hash, issued_at, payer_person_id, on_behalf_of_person_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::text::jsonb, $16, $17, $18, $19)
+            SELECT $1, $2, $3, $4, $5, $6::text, $7, $8::text, $9, $10, $11, $12, $13, $14, $15::text::jsonb, $16, $17, $18, $19,
+                   (SELECT p.person_id FROM sp_unit_party_at($2, $6::text, ($19::timestamptz)::date) p),
+                   CASE WHEN $8::text = 'OWNER'
+                        THEN (SELECT p.person_id FROM sp_unit_party_at($2, 'OWNER', ($19::timestamptz)::date) p) END
             RETURNING id
             "#,
             &[
@@ -409,9 +251,11 @@ pub async fn tx_insert_entry(tx: &deadpool_postgres::Transaction<'_>, entry: &Pa
             INSERT INTO payment_entries (
                 site_id, unit_id, payer_name, payer_role, receipt_id,
                 amount, payment_channel, settlement_status, description,
-                external_reference, payment_date, created_at
+                external_reference, payment_date, created_at, payer_person_id, occupancy_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            SELECT $1, $2, $3, $4::text, $5, $6, $7, $8, $9, $10, $11, $12, p.person_id, p.occupancy_id
+            FROM (SELECT 1) AS one
+            LEFT JOIN LATERAL sp_unit_party_at($2, $4::text, ($11::timestamptz)::date) p ON TRUE
             RETURNING id
             "#,
             &[
@@ -433,6 +277,37 @@ pub async fn tx_insert_entry(tx: &deadpool_postgres::Transaction<'_>, entry: &Pa
     Ok(row.get(0))
 }
 
+/// Turns an open UNMATCHED/PENDING entry of this unit into the settled entry of
+/// `receipt_id` (match-all, SPEC-005 R2) instead of inserting a duplicate.
+/// Returns `None` when no such open entry with exactly `amount` exists.
+pub async fn tx_claim_unmatched_entry(
+    tx: &deadpool_postgres::Transaction<'_>,
+    entry_id: i64,
+    site_id: i64,
+    unit_id: i64,
+    amount: Decimal,
+    receipt_id: i64,
+) -> DbResult<Option<i64>> {
+    let row = tx
+        .query_opt(
+            r#"
+            UPDATE payment_entries e
+            SET settlement_status = 'SETTLED',
+                receipt_id = $5,
+                payer_person_id = COALESCE(e.payer_person_id,
+                    (SELECT p.person_id FROM sp_unit_party_at(e.unit_id, e.payer_role, e.payment_date::date) p)),
+                occupancy_id = COALESCE(e.occupancy_id,
+                    (SELECT p.occupancy_id FROM sp_unit_party_at(e.unit_id, e.payer_role, e.payment_date::date) p))
+            WHERE e.id = $1 AND e.site_id = $2 AND e.unit_id = $3 AND e.amount = $4
+              AND e.settlement_status IN ('UNMATCHED', 'PENDING') AND e.receipt_id IS NULL
+            RETURNING e.id
+            "#,
+            &[&entry_id, &site_id, &unit_id, &amount, &receipt_id],
+        )
+        .await?;
+    Ok(row.map(|r| r.get(0)))
+}
+
 /// Records a settlement on a liability (paid amounts only; owed amounts untouched
 /// except that the accrued penalty is brought up to date) plus its allocation row.
 pub async fn tx_settle_due(
@@ -449,6 +324,7 @@ pub async fn tx_settle_due(
             r#"
             UPDATE dues_liabilities
             SET delay_penalty  = $2,
+                penalty_accrued_through = COALESCE($6, penalty_accrued_through),
                 paid_principal = paid_principal + $3,
                 paid_penalty   = paid_penalty + $4,
                 paid_amount    = paid_amount + $3 + $4,
@@ -457,7 +333,7 @@ pub async fn tx_settle_due(
                 version        = version + 1
             WHERE id = $1
             "#,
-            &[&due_id, &due.delay_penalty, &principal, &penalty, &status],
+            &[&due_id, &due.delay_penalty, &principal, &penalty, &status, &due.penalty_accrued_through],
         )
         .await?;
     if n != 1 {
