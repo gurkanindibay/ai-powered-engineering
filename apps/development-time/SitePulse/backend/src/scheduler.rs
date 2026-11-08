@@ -3,7 +3,7 @@ use rust_decimal::Decimal;
 use std::time::Duration;
 
 use crate::models::{DebtStatus, DebtorType, DuesLiability, ExpenseType};
-use crate::services::ledger_application::apply_advance_payments_offset;
+use crate::services::advance_offset_service::{settle_advances, OffsetScope};
 use crate::state::AppState;
 
 /// Formats a naive date into standard Turkish month and year, e.g. "Ekim 2026".
@@ -198,14 +198,12 @@ pub async fn run_periodic_accrual_for_all_sites(
         return (0, 0);
     }
 
-    // 3. Briefly acquire WRITE lock to record new liabilities and apply advance offsets
+    // 3. Briefly acquire WRITE lock to record new liabilities (no I/O under it)
     let total_sites_accrued = sites_accrued_set.len();
     let total_newly_accrued = persisted_dues.len();
 
     {
         let mut inner = state.inner.write().await;
-        let ledger_before = crate::services::ledger_application::ledger_snapshot(&inner);
-
         for (site_id, mut due, basis) in persisted_dues {
             if due.id.is_empty() {
                 let max_d = inner
@@ -229,29 +227,72 @@ pub async fn run_periodic_accrual_for_all_sites(
                 p
             );
         }
-
-        let (auto_settled_count, total_offset) = apply_advance_payments_offset(&mut inner, None);
-        if auto_settled_count > 0 {
-            tracing::info!(
-                "[Scheduler] Advance offset: {} dues settled, total ₺{}",
-                auto_settled_count,
-                total_offset
-            );
-            if let Some(ref pool) = state.pool {
-                if let Err(e) = crate::services::ledger_application::persist_ledger_changes(
-                    pool,
-                    &ledger_before,
-                    &inner,
-                )
-                .await
-                {
-                    tracing::error!("[Scheduler] {}", e);
-                }
-            }
-        }
     }
 
+    // 4. Offset advances against the new liabilities (transactional per unit).
+    sweep_advance_offsets(state).await;
+
     (total_sites_accrued, total_newly_accrued)
+}
+
+/// Platform-wide advance offset after a scheduled accrual. Offsets are write
+/// operations: they run on the events that create liabilities or credit
+/// advances (accruals, virman reversals), never on reads or on a timer.
+pub async fn sweep_advance_offsets(state: &AppState) {
+    match settle_advances(state, OffsetScope::Platform).await {
+        Ok(summary) if summary.settled_lines > 0 => tracing::info!(
+            "[Scheduler] Advance offset: {} liabilities settled, total ₺{}",
+            summary.settled_lines,
+            summary.total_offset
+        ),
+        Ok(_) => {}
+        Err(e) => tracing::error!("[Scheduler] {}", e),
+    }
+}
+
+/// Key of the advisory lock that lets only one backend instance run a
+/// scheduler tick at a time ("SPSCHED").
+const SCHEDULER_LOCK_KEY: i64 = 0x0053_5053_4348_4544;
+
+/// Runs `job` only if this instance wins the cluster-wide scheduler lock.
+/// Without a database there is a single instance, so the job always runs.
+/// Returns `None` when another instance holds the lock.
+pub async fn with_scheduler_lock<F, Fut, T>(state: &AppState, job: F) -> Option<T>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = T>,
+{
+    let Some(pool) = state.db_pool() else {
+        return Some(job().await);
+    };
+    let client = match pool.get().await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("[Scheduler] Lock connection unavailable: {}", e);
+            return None;
+        }
+    };
+    let acquired = match client
+        .query_one("SELECT pg_try_advisory_lock($1)", &[&SCHEDULER_LOCK_KEY])
+        .await
+    {
+        Ok(row) => row.get::<_, bool>(0),
+        Err(e) => {
+            tracing::error!("[Scheduler] Lock query failed: {}", e);
+            return None;
+        }
+    };
+    if !acquired {
+        return None;
+    }
+    let out = job().await;
+    if let Err(e) = client
+        .execute("SELECT pg_advisory_unlock($1)", &[&SCHEDULER_LOCK_KEY])
+        .await
+    {
+        tracing::error!("[Scheduler] Lock release failed: {}", e);
+    }
+    Some(out)
 }
 
 /// Embedded Tokio background scheduler daemon.
@@ -272,8 +313,13 @@ pub async fn start_automated_dues_accrual_scheduler(state: AppState) {
             continue;
         }
 
-        let (sites_accrued, units_accrued) =
-            run_periodic_accrual_for_all_sites(&state, Utc::now()).await;
+        let Some((sites_accrued, units_accrued)) = with_scheduler_lock(&state, || async {
+            run_periodic_accrual_for_all_sites(&state, Utc::now()).await
+        })
+        .await
+        else {
+            continue;
+        };
 
         if units_accrued > 0 {
             tracing::info!(

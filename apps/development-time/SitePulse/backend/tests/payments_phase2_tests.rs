@@ -226,6 +226,7 @@ async fn accrue(
 ) -> Result<AccrueDuesPeriodResponse, (axum::http::StatusCode, String)> {
     sitepulse_backend::handlers::accrue_monthly_dues(
         State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
         Json(AccrueDuesPeriodRequest {
             site_id: SITE.to_string(),
             period: period.to_string(),

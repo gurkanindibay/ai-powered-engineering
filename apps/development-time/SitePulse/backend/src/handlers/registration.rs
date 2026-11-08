@@ -16,11 +16,12 @@ use crate::state::AppState;
 
 pub async fn generate_registration_link(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Query(q): Query<SiteIdParam>,
-) -> Json<SiteInvitationLinkResponse> {
-    let site_id = q.site_id.unwrap_or_default();
+) -> Result<Json<SiteInvitationLinkResponse>, crate::tenancy::TenantDenied> {
+    let site_id = scope.pinned(q.site_id)?;
     let service = RegistrationApprovalService::new(state);
-    Json(service.generate_invitation_link(&site_id).await)
+    Ok(Json(service.generate_invitation_link(&site_id).await))
 }
 
 pub async fn submit_self_registration(
@@ -38,11 +39,12 @@ pub async fn submit_self_registration(
 
 pub async fn get_pending_registrations(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Query(q): Query<SiteIdParam>,
-) -> Json<Vec<PendingRegistrationResponse>> {
-    let site_id = q.site_id.unwrap_or_default();
+) -> Result<Json<Vec<PendingRegistrationResponse>>, crate::tenancy::TenantDenied> {
+    let site_id = scope.pinned(q.site_id)?;
     let service = RegistrationApprovalService::new(state);
-    Json(service.get_pending_registrations(&site_id).await)
+    Ok(Json(service.get_pending_registrations(&site_id).await))
 }
 
 pub async fn approve_registration(

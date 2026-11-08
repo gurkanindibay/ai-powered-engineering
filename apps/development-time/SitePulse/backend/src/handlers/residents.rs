@@ -52,11 +52,12 @@ pub async fn get_unit_members(
 
 pub async fn add_unit_member(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Path(unit_id): Path<String>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<crate::models::AddUnitMemberRequest>,
 ) -> Result<(StatusCode, Json<UnitMemberDto>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     let relationship = payload
         .relationship
@@ -77,10 +78,11 @@ pub async fn add_unit_member(
 
 pub async fn delete_unit_member(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Path((unit_id, resident_id)): Path<(String, String)>,
     Query(q): Query<SiteIdParam>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     service
         .delete_unit_member(&site_id, &unit_id, &resident_id)
@@ -91,11 +93,12 @@ pub async fn delete_unit_member(
 
 pub async fn update_unit_member(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Path((unit_id, resident_id)): Path<(String, String)>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<UpdateUnitMemberRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     let relationship = payload
         .relationship

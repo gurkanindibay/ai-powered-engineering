@@ -543,6 +543,15 @@ impl CapitalProjectService {
             installment_budget,
             unit_shares.len()
         );
+        // Owners' advances settle the new installment dues of this site only.
+        if let Err(e) = crate::services::advance_offset_service::settle_advances(
+            &self.state,
+            crate::services::advance_offset_service::OffsetScope::Site(&project.site_id),
+        )
+        .await
+        {
+            tracing::error!("Advance offset after installment accrual: {}", e);
+        }
 
         Ok(AccrueInstallmentResponse {
             success: true,

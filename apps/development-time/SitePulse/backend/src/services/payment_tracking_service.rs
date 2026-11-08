@@ -13,6 +13,15 @@ use crate::models::{
 use crate::services::dues_ledger;
 use crate::state::AppState;
 
+/// A ledger read that could not be served from PostgreSQL. It is surfaced
+/// (503) rather than replaced by an empty or cached result, which would read as
+/// "no money received" or "no debt".
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum LedgerReadError {
+    #[error("ledger unavailable: {0}")]
+    Unavailable(String),
+}
+
 pub struct PaymentTrackingService {
     pub state: AppState,
 }
@@ -76,13 +85,18 @@ impl PaymentTrackingService {
     }
 
     /// Query multi-channel payment stream with rich multi-criteria filters
-    pub async fn get_payment_stream(&self, filter: PaymentStreamFilter) -> PaymentStreamResponse {
+    /// A database error is returned, never replaced by an empty list: an empty
+    /// payment stream would read as "no money received".
+    pub async fn get_payment_stream(
+        &self,
+        filter: PaymentStreamFilter,
+    ) -> Result<PaymentStreamResponse, LedgerReadError> {
         let target_site = filter.site_id.unwrap_or_default();
 
         let all_entries = if let Some(p) = self.state.db_pool() {
             crate::db::fetch_payment_entries_from_db(p, Some(&target_site))
                 .await
-                .unwrap_or_default()
+                .map_err(|e| LedgerReadError::Unavailable(format!("payment stream: {}", e)))?
         } else {
             let inner = self.state.inner.read().await;
             let mut entries = inner.payment_entries.clone();
@@ -225,23 +239,26 @@ impl PaymentTrackingService {
             filtered
         };
 
-        PaymentStreamResponse {
+        Ok(PaymentStreamResponse {
             entries: paged_entries,
             total_volume,
             settled_volume,
             unmatched_volume,
             total_count,
-        }
+        })
     }
 
     /// Calculate debt aging report grouped by brackets: current, 1-30, 31-60, 60+ days
-    pub async fn get_debt_aging_report(&self, site_id: &str) -> DebtAgingReport {
+    /// With PostgreSQL the report comes from the database only; an error is
+    /// returned rather than silently falling back to the in-memory copy.
+    pub async fn get_debt_aging_report(
+        &self,
+        site_id: &str,
+    ) -> Result<DebtAgingReport, LedgerReadError> {
         if let Some(p) = self.state.db_pool() {
-            if let Ok(report) =
-                crate::db::dues_repository::fetch_debt_aging_report_from_db(p, site_id).await
-            {
-                return report;
-            }
+            return crate::db::dues_repository::fetch_debt_aging_report_from_db(p, site_id)
+                .await
+                .map_err(|e| LedgerReadError::Unavailable(format!("debt aging report: {}", e)));
         }
         let inner = self.state.inner.read().await;
         let today = Utc::now().date_naive();
@@ -338,7 +355,7 @@ impl PaymentTrackingService {
         let total_penalty: Decimal = brackets.iter().map(|b| b.accrued_delay_penalty).sum();
         let grand_total: Decimal = brackets.iter().map(|b| b.total_outstanding).sum();
 
-        DebtAgingReport {
+        Ok(DebtAgingReport {
             as_of_date: today,
             total_current,
             total_1_30_days,
@@ -347,7 +364,7 @@ impl PaymentTrackingService {
             total_penalty,
             grand_total,
             brackets,
-        }
+        })
     }
 
     /// The single ingestion path for every payment channel (SPEC-005 R1).
@@ -511,6 +528,11 @@ impl PaymentTrackingService {
                     crate::db::describe_db_error(e.as_ref())
                 )
             };
+            // Tenant guardrail: from here on PostgreSQL row-level security
+            // hides every other site's rows (V19).
+            crate::db::tx_bind_tenant(&tx, site_num)
+                .await
+                .map_err(db_err)?;
 
             if let Some(key) = idempotency_key.as_deref() {
                 if let Some(rid) = crate::db::tx_find_idempotent_receipt(&tx, site_num, key)
@@ -863,6 +885,11 @@ impl PaymentTrackingService {
                     crate::db::describe_db_error(e.as_ref())
                 )
             };
+            // Tenant guardrail: from here on PostgreSQL row-level security
+            // hides every other site's rows (V19).
+            crate::db::tx_bind_tenant(&tx, site_num)
+                .await
+                .map_err(db_err)?;
             if !crate::db::tx_lock_unit(&tx, unit_num, site_num)
                 .await
                 .map_err(db_err)?
@@ -1073,6 +1100,11 @@ impl PaymentTrackingService {
                     crate::db::describe_db_error(e.as_ref())
                 )
             };
+            // Tenant guardrail: from here on PostgreSQL row-level security
+            // hides every other site's rows (V19).
+            crate::db::tx_bind_tenant(&tx, site_num)
+                .await
+                .map_err(db_err)?;
             let target = crate::db::tx_lock_entry_of_receipt(&tx, site_num, &identifier)
                 .await
                 .map_err(db_err)?
@@ -1316,7 +1348,10 @@ impl PaymentTrackingService {
         };
         let mut written = 0;
         for site in site_ids {
-            let report = self.get_debt_aging_report(&site).await;
+            let report = self
+                .get_debt_aging_report(&site)
+                .await
+                .map_err(|e| e.to_string())?;
             written += match self.state.pool {
                 Some(ref pool) => crate::db::save_debt_aging_snapshot(pool, &site, &report)
                     .await

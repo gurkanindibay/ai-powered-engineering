@@ -3,9 +3,8 @@ use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use tracing::info;
 
-use super::base::{parse_id_to_i64, require_id, DbResult};
+use super::base::{parse_id_to_i64, DbResult};
 use super::dues_repository::*;
-use super::payment_repository::*;
 use super::site_repository::*;
 use super::unit_repository::*;
 use super::user_repository::*;
@@ -845,9 +844,8 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let status_str: String = row.get(17);
             let notes: Option<String> = row.get(18);
             let site_id_num: Option<i64> = row.get(19);
-            let site_id = site_id_num
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "1".to_string());
+            // A row without a site belongs to no tenant (never to site 1).
+            let site_id = site_id_num.map(|s| s.to_string()).unwrap_or_default();
 
             let status = ReconciliationStatus::from_db_code(&status_str);
             let status_code = status.as_str().to_string();
@@ -925,105 +923,120 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
     Ok(())
 }
 
-pub async fn sync_all_in_memory_to_db(
-    pool: &Pool,
-    state: &AppStateInner,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+/// The rows one `provision-site-units` call created or changed, all of a single
+/// site. Replaces the former `sync_all_in_memory_to_db`, which re-upserted every
+/// tenant's sites, users, units, dues and advance balances from memory (and so
+/// could overwrite committed payments of other tenants with stale values).
+pub struct ProvisionedSiteBatch {
+    pub site: Option<Site>,
+    pub users: Vec<User>,
+    pub units: Vec<IndependentUnit>,
+    pub new_dues: Vec<DuesLiability>,
+    pub sender_ibans: Vec<(String, String, Option<String>, Option<String>)>,
+    pub payer_names: Vec<(String, Vec<String>)>,
+}
 
-    // 1. Sync Sites
-    for site in &state.sites {
-        save_site(pool, site).await.map_err(|e| e.to_string())?;
-    }
-
-    // 2. Sync Blocks
-    for block in &state.blocks {
-        let site_id_num = require_id("entity", &block.site_id)?;
-        if let Some(block_id_num) = parse_id_to_i64(&block.id) {
-            client
-                .execute(
-                    r#"
-                    INSERT INTO blocks (id, site_id, block_name, total_floors)
-                    VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (id) DO UPDATE SET
-                        site_id = EXCLUDED.site_id,
-                        block_name = EXCLUDED.block_name,
-                        total_floors = EXCLUDED.total_floors
-                    "#,
-                    &[
-                        &block_id_num,
-                        &site_id_num,
-                        &block.block_name,
-                        &block.total_floors,
-                    ],
-                )
-                .await
-                .map_err(|e| e.to_string())?;
-        } else {
-            client
-                .execute(
-                    r#"
-                    INSERT INTO blocks (site_id, block_name, total_floors)
-                    VALUES ($1, $2, $3)
-                    ON CONFLICT DO NOTHING
-                    "#,
-                    &[&site_id_num, &block.block_name, &block.total_floors],
-                )
-                .await
-                .map_err(|e| e.to_string())?;
+impl ProvisionedSiteBatch {
+    /// Copies the touched rows of `site_id` out of memory (call under the lock,
+    /// persist after releasing it). Rows of other sites are never included.
+    pub fn collect(
+        state: &AppStateInner,
+        site_id: &str,
+        user_ids: &[String],
+        unit_ids: &[String],
+        sender_ibans: &[String],
+        dues_period: &str,
+    ) -> Self {
+        let in_site = |s: &str| crate::auth::same_id(s, site_id);
+        let units: Vec<IndependentUnit> = state
+            .units
+            .iter()
+            .filter(|u| in_site(&u.site_id) && unit_ids.contains(&u.id))
+            .cloned()
+            .collect();
+        Self {
+            site: state.sites.iter().find(|s| in_site(&s.id)).cloned(),
+            users: state
+                .users
+                .iter()
+                .filter(|u| in_site(&u.site_id) && user_ids.contains(&u.id))
+                .cloned()
+                .collect(),
+            new_dues: state
+                .dues
+                .iter()
+                .filter(|d| {
+                    d.period == dues_period
+                        && d.paid_principal + d.paid_penalty == Decimal::ZERO
+                        && units.iter().any(|u| u.id == d.unit_id)
+                })
+                .cloned()
+                .collect(),
+            sender_ibans: sender_ibans
+                .iter()
+                .filter_map(|iban| {
+                    let unit = state.remembered_sender_ibans.get(iban)?;
+                    if !units.iter().any(|u| &u.id == unit) {
+                        return None;
+                    }
+                    let meta = state.sender_iban_metadata.get(iban);
+                    Some((
+                        iban.clone(),
+                        unit.clone(),
+                        meta.and_then(|m| m.0.clone()),
+                        meta.and_then(|m| m.1.clone()),
+                    ))
+                })
+                .collect(),
+            payer_names: units
+                .iter()
+                .filter_map(|u| {
+                    state
+                        .unit_payer_names
+                        .get(&u.id)
+                        .map(|n| (u.id.clone(), n.clone()))
+                })
+                .collect(),
+            units,
         }
     }
+}
 
-    // 3. Sync Users and Persons
-    for user in &state.users {
+/// Persists one provisioned site's rows. Stops at the first error.
+pub async fn persist_provisioned_site(
+    pool: &Pool,
+    batch: &ProvisionedSiteBatch,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if let Some(site) = &batch.site {
+        save_site(pool, site).await.map_err(|e| e.to_string())?;
+    }
+    for user in &batch.users {
         save_user(pool, user).await.map_err(|e| e.to_string())?;
     }
-
-    // 4. Sync Units
-    for unit in &state.units {
+    for unit in &batch.units {
         save_unit(pool, unit).await.map_err(|e| e.to_string())?;
     }
-
-    // 5. Sync Dues Liabilities
-    for due in &state.dues {
+    for due in &batch.new_dues {
         save_due_liability(pool, due)
             .await
             .map_err(|e| e.to_string())?;
     }
-
-    // 6. Sync Remembered Sender IBANs & Payer Names
-    for (iban, unit_id) in &state.remembered_sender_ibans {
-        let meta = state.sender_iban_metadata.get(iban);
-        let label = meta.and_then(|m| m.0.as_deref());
-        let bank = meta.and_then(|m| m.1.as_deref());
-        save_remembered_sender_iban(pool, iban, unit_id, label, bank)
+    for (iban, unit_id, label, bank) in &batch.sender_ibans {
+        save_remembered_sender_iban(pool, iban, unit_id, label.as_deref(), bank.as_deref())
             .await
             .map_err(|e| e.to_string())?;
     }
-    for (unit_id, names) in &state.unit_payer_names {
+    for (unit_id, names) in &batch.payer_names {
         save_unit_payer_names(pool, unit_id, names)
             .await
             .map_err(|e| e.to_string())?;
     }
-
-    // 7. Sync Advance Balances
-    for (unit_id, adv) in &state.advance_balances {
-        save_advance_balance(pool, unit_id, "OWNER", adv.owner)
-            .await
-            .map_err(|e| e.to_string())?;
-        save_advance_balance(pool, unit_id, "TENANT", adv.tenant)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-
-    // 8. Sync Payment Receipts
-    for r in &state.payment_receipts {
-        save_payment_receipt(pool, r)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-
-    info!("Synchronized all in-memory state to PostgreSQL database successfully.");
+    info!(
+        "Persisted provisioned site: {} users, {} units, {} dues",
+        batch.users.len(),
+        batch.units.len(),
+        batch.new_dues.len()
+    );
     Ok(())
 }
 

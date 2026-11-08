@@ -92,7 +92,17 @@ impl Default for AppStateInner {
 
 impl AppStateInner {
     pub fn new() -> Self {
-        let mut inner = AppStateInner {
+        let mut inner = Self::blank();
+        inner.seed_system_lookups();
+        if Self::should_seed_test_fixtures() {
+            inner.seed_test_fixtures();
+        }
+        inner
+    }
+
+    /// An empty state with no seeded lookups (no password hashing, no fixtures).
+    pub fn blank() -> Self {
+        AppStateInner {
             sites: Vec::new(),
             users: Vec::new(),
             units: Vec::new(),
@@ -125,12 +135,7 @@ impl AppStateInner {
             budget_required_sites: Vec::new(),
             dues_budget_basis: HashMap::new(),
             payment_intents: Vec::new(),
-        };
-        inner.seed_system_lookups();
-        if Self::should_seed_test_fixtures() {
-            inner.seed_test_fixtures();
         }
-        inner
     }
 
     /// Strictly verifies whether the backend is executing in a production environment
@@ -745,6 +750,26 @@ impl AppState {
             inner: Arc::new(RwLock::new(inner)),
             pool,
         }
+    }
+
+    /// Rebuilds the in-memory read model from PostgreSQL without holding the
+    /// global lock during I/O: a fresh state is loaded first and swapped in
+    /// atomically. Settings that do not live in the database (Kuveyt Türk
+    /// credentials) are carried over. A no-op without a database.
+    pub async fn reload_from_db(&self) -> Result<(), String> {
+        let Some(pool) = self.pool.as_ref() else {
+            return Ok(());
+        };
+        let mut fresh = AppStateInner::blank();
+        fresh.clear_all_data();
+        crate::db::load_all_from_db(pool, &mut fresh)
+            .await
+            .map_err(|e| format!("Reloading state from PostgreSQL failed: {}", e))?;
+        let mut inner = self.inner.write().await;
+        fresh.kuveyt_turk_client_id = inner.kuveyt_turk_client_id.take();
+        fresh.kuveyt_turk_client_secret = inner.kuveyt_turk_client_secret.take();
+        *inner = fresh;
+        Ok(())
     }
 
     #[allow(dead_code)]

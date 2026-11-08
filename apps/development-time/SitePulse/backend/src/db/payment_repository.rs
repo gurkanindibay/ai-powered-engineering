@@ -863,16 +863,15 @@ pub async fn save_debt_aging_snapshot(
     Ok(written)
 }
 
+/// Payment entries of one site, or of every site when `site_id` is `None`,
+/// empty or `"all"` (platform callers only: handlers pin the site through
+/// `TenantScope` first). A single-site read runs in a tenant-bound read-only
+/// transaction, so row-level security backs up the `WHERE site_id` filter.
 pub async fn fetch_payment_entries_from_db(
     pool: &Pool,
     site_id: Option<&str>,
 ) -> DbResult<Vec<PaymentEntry>> {
-    let client = pool.get().await?;
-    let rows = if let Some(sid) = site_id.filter(|s| !s.is_empty() && *s != "all") {
-        let site_num = super::base::parse_id_to_i64(sid).unwrap_or(0);
-        client
-            .query(
-                "SELECT pe.id, pe.site_id, pe.unit_id, pe.payer_name, pe.payer_role, \
+    const SELECT: &str = "SELECT pe.id, pe.site_id, pe.unit_id, pe.payer_name, pe.payer_role, \
                  pe.receipt_id, pe.amount, pe.payment_channel, pe.settlement_status, \
                  pe.description, pe.external_reference, pe.payment_date, pe.created_at, \
                  pe.entry_type, pe.reverses_entry_id, pe.reversal_reason, pe.recorded_by, \
@@ -880,25 +879,28 @@ pub async fn fetch_payment_entries_from_db(
                  FROM payment_entries pe \
                  LEFT JOIN payment_receipts pr ON pe.receipt_id = pr.id \
                  LEFT JOIN units u ON pe.unit_id = u.id \
-                 LEFT JOIN blocks b ON u.block_id = b.id \
-                 WHERE pe.site_id = $1 \
-                 ORDER BY pe.payment_date ASC, pe.id ASC",
+                 LEFT JOIN blocks b ON u.block_id = b.id";
+    let mut client = pool.get().await?;
+    let rows = if let Some(sid) = site_id.filter(|s| !s.is_empty() && *s != "all") {
+        let Some(site_num) = super::base::parse_id_to_i64(sid) else {
+            return Ok(Vec::new());
+        };
+        let tx = super::tenant_guard::begin_tenant_read(&mut client, site_num).await?;
+        let rows = tx
+            .query(
+                &format!(
+                    "{} WHERE pe.site_id = $1 ORDER BY pe.payment_date ASC, pe.id ASC",
+                    SELECT
+                ),
                 &[&site_num],
             )
-            .await?
+            .await?;
+        tx.commit().await?;
+        rows
     } else {
         client
             .query(
-                "SELECT pe.id, pe.site_id, pe.unit_id, pe.payer_name, pe.payer_role, \
-                 pe.receipt_id, pe.amount, pe.payment_channel, pe.settlement_status, \
-                 pe.description, pe.external_reference, pe.payment_date, pe.created_at, \
-                 pe.entry_type, pe.reverses_entry_id, pe.reversal_reason, pe.recorded_by, \
-                 pr.receipt_number, b.block_name, u.unit_number \
-                 FROM payment_entries pe \
-                 LEFT JOIN payment_receipts pr ON pe.receipt_id = pr.id \
-                 LEFT JOIN units u ON pe.unit_id = u.id \
-                 LEFT JOIN blocks b ON u.block_id = b.id \
-                 ORDER BY pe.payment_date ASC, pe.id ASC",
+                &format!("{} ORDER BY pe.payment_date ASC, pe.id ASC", SELECT),
                 &[],
             )
             .await?
@@ -957,10 +959,12 @@ pub async fn fetch_payment_entries_from_db(
     Ok(entries)
 }
 
+/// Homeowner payment records of one site (`None`: every site, platform only).
 pub async fn fetch_homeowner_payment_records_from_db(
     pool: &Pool,
+    site_id: Option<&str>,
 ) -> DbResult<Vec<crate::models::HomeownerPaymentRecord>> {
-    let entries = fetch_payment_entries_from_db(pool, None).await?;
+    let entries = fetch_payment_entries_from_db(pool, site_id).await?;
     let mut records = Vec::new();
     for entry in entries {
         if entry.entry_type == crate::models::LEDGER_KIND_REVERSAL {

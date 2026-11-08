@@ -272,7 +272,16 @@ Bank statements, webhooks, CSV files, and provider responses are external input.
 1. `AppStateInner` holds every tenant's data. Every read of `inner.units`, `inner.users`, `inner.dues`, or similar collections in a service filters by the site (or unit) the operation belongs to, before any calculation.
 2. Every multi-tenant calculation has a test with **two sites** in state that proves the other site is untouched.
 3. Do not add new `if let Some(pool)` / `state.pool` branches in services. New persistence goes into a `db` repository function; the ratchet `pool-branch` may only go down.
-4. Never hold an `inner` guard across `.await`. Clone or collect what is needed, drop the guard, then await (section 6).
+4. Never hold an `inner` guard across `.await`. Clone or collect what is needed, drop the guard, then await (section 6). Enforced by `lock_scope_lint.py` (gate `lock-lint`).
+5. **The tenant comes from the token, not the request.** Every handler that accepts a request type with a `site_id` field takes a `crate::tenancy::TenantScope` and pins the site through it (`scope.pin(..)`, `pin_opt(..)`, `pinned(..)`) before calling a service. A site staff scope turns a missing site into its own and refuses a foreign one (403); only the platform (SaaS admin) scope may name any site. The middleware's body/query scan is a second line of defence, not the first.
+6. **Object ids are checked against their owner.** A route whose path carries an id the middleware cannot attribute to a site (capital projects, budgets, receipts) loads the object and checks `scope.allows(&object.site_id)`. A foreign object is reported as **404**, never 403, so ids of other tenants cannot be probed.
+7. **Never guess a tenant.** When a record's site is unknown, leave it empty (unattributed) so that no tenant can see it. Fallbacks such as `unwrap_or_else(|| "1".to_string())` or a hard-coded `"site-..."` are forbidden outside `src/state.rs` fixtures and tests.
+8. **Tenant transactions bind their tenant.** A transaction opened for one site calls `crate::db::tx_bind_tenant(&tx, site)` first: PostgreSQL row-level security (V19) then hides and refuses every other site's rows inside it, even for a query that forgets its `site_id` predicate. Tenant-scoped reads use `db::begin_tenant_read`. Every table with a tenant key (`site_id`, `unit_id`, `payment_entry_id`, `project_id`, `budget_id`) is passed to `sp_enable_tenant_rls` in a migration; identity tables that span tenants are listed in `RLS_EXEMPT` with a reason.
+9. **Reads never move money.** A `GET` takes the state lock for reading only and never settles, offsets or rewrites ledger rows. Advance offsets (avans mahsubu) run on the write paths that create liabilities (accruals) through `services::advance_offset_service::settle_advances`, which books them as same-debtor virman receipts with allocations in one tenant-bound transaction.
+10. **No absolute overwrites of the ledger from memory.** Paid amounts and advance balances are changed only by increments inside a locked transaction, each with its ledger row. Writing a balance or a paid amount computed from the in-memory copy back to PostgreSQL is forbidden.
+11. **Financial reads fail loudly.** With PostgreSQL, a failed ledger read is a 503 (`LedgerReadError`), never an empty list or the cached in-memory copy.
+
+Rules 5–8 are enforced by `tenant_isolation_lint.py` (gate `tenant-lint`); rules 8–11 are tested against PostgreSQL by `tests/db_tenant_isolation_tests.rs` (gate `rust-db-test`).
 
 ## 16. Testing & Mechanical Enforcement
 

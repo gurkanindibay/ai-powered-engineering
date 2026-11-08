@@ -22,10 +22,11 @@ pub struct SiteIdParam {
 
 pub async fn register_home_owner(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<RegisterHomeOwnerRequest>,
 ) -> Result<(StatusCode, Json<HomeOwnerResponse>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     service
         .register_home_owner(&site_id, payload)
@@ -36,20 +37,22 @@ pub async fn register_home_owner(
 
 pub async fn get_home_owners(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Query(q): Query<SiteIdParam>,
-) -> Json<Vec<HomeOwnerResponse>> {
-    let site_id = q.site_id.unwrap_or_default();
+) -> Result<Json<Vec<HomeOwnerResponse>>, crate::tenancy::TenantDenied> {
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
-    Json(service.get_home_owners_for_site(&site_id).await)
+    Ok(Json(service.get_home_owners_for_site(&site_id).await))
 }
 
 pub async fn update_home_owner(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<UpdateHomeOwnerRequest>,
 ) -> Result<Json<HomeOwnerResponse>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     service
         .update_home_owner(&site_id, &id, payload)
@@ -60,10 +63,11 @@ pub async fn update_home_owner(
 
 pub async fn delete_home_owner(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     service
         .delete_home_owner(&site_id, &id)
@@ -81,11 +85,12 @@ pub async fn delete_home_owner(
 
 pub async fn move_out_resident(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<MoveOutResidentRequest>,
 ) -> Result<Json<OccupancyHistoryItem>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     service
         .move_out_resident(&site_id, &id, payload)
@@ -96,11 +101,12 @@ pub async fn move_out_resident(
 
 pub async fn move_in_resident(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<MoveInResidentRequest>,
 ) -> Result<Json<OccupancyHistoryItem>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     service
         .move_in_resident(&site_id, &id, payload)
@@ -111,10 +117,11 @@ pub async fn move_in_resident(
 
 pub async fn get_unit_occupancy_history(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
 ) -> Result<Json<Vec<OccupancyHistoryItem>>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     service
         .get_unit_occupancy_history(&site_id, &id)
@@ -125,19 +132,21 @@ pub async fn get_unit_occupancy_history(
 
 pub async fn get_house_types(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Query(q): Query<SiteIdParam>,
-) -> Json<Vec<HouseTypeTariff>> {
-    let site_id = q.site_id.unwrap_or_default();
+) -> Result<Json<Vec<HouseTypeTariff>>, crate::tenancy::TenantDenied> {
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
-    Json(service.get_house_types_for_site(&site_id).await)
+    Ok(Json(service.get_house_types_for_site(&site_id).await))
 }
 
 pub async fn create_house_type(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<CreateHouseTypeRequest>,
 ) -> Result<(StatusCode, Json<HouseTypeTariff>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     service
         .create_or_update_house_type(&site_id, payload)
@@ -148,10 +157,11 @@ pub async fn create_house_type(
 
 pub async fn delete_house_type(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     service
         .delete_house_type(&site_id, &id)
@@ -162,19 +172,21 @@ pub async fn delete_house_type(
 
 pub async fn get_blocks(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Query(q): Query<SiteIdParam>,
-) -> Json<Vec<BlockDto>> {
-    let site_id = q.site_id.unwrap_or_default();
+) -> Result<Json<Vec<BlockDto>>, crate::tenancy::TenantDenied> {
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
-    Json(service.get_blocks_for_site(&site_id).await)
+    Ok(Json(service.get_blocks_for_site(&site_id).await))
 }
 
 pub async fn create_block(
     State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<CreateBlockRequest>,
 ) -> Result<(StatusCode, Json<BlockDto>), (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_default();
+    let site_id = scope.pinned(q.site_id)?;
     let service = SiteAdminService::new(state);
     service
         .create_or_update_block(&site_id, payload)
