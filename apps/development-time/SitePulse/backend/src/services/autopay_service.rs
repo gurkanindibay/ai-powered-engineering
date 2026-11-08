@@ -39,7 +39,12 @@ pub struct ChargeError(pub String);
 /// A provider that charges a saved card token (merchant-initiated transaction).
 pub trait TokenCharger: Send + Sync {
     fn name(&self) -> &'static str;
-    fn charge(&self, token: &str, amount: Decimal, reference: &str) -> Result<ChargeOutcome, ChargeError>;
+    fn charge(
+        &self,
+        token: &str,
+        amount: Decimal,
+        reference: &str,
+    ) -> Result<ChargeOutcome, ChargeError>;
     /// Card instalment counts the provider offers.
     fn installments(&self) -> &'static [i32] {
         &CARD_INSTALLMENTS
@@ -54,7 +59,12 @@ impl TokenCharger for SandboxCharger {
     fn name(&self) -> &'static str {
         crate::services::card_payment_service::SANDBOX_PROVIDER
     }
-    fn charge(&self, token: &str, _amount: Decimal, reference: &str) -> Result<ChargeOutcome, ChargeError> {
+    fn charge(
+        &self,
+        token: &str,
+        _amount: Decimal,
+        reference: &str,
+    ) -> Result<ChargeOutcome, ChargeError> {
         Ok(if token.contains("expired") {
             ChargeOutcome::ExpiredCard
         } else if token.contains("decline") {
@@ -84,8 +94,7 @@ pub fn configured_charger() -> Result<Box<dyn TokenCharger>, ChargeError> {
 }
 
 fn card_expired(method: &SavedPaymentMethod, on: NaiveDate) -> bool {
-    (method.exp_year, method.exp_month)
-        < (on.year(), i32::try_from(on.month()).unwrap_or(12))
+    (method.exp_year, method.exp_month) < (on.year(), i32::try_from(on.month()).unwrap_or(12))
 }
 
 pub struct AutopayService {
@@ -118,7 +127,9 @@ impl AutopayService {
             )));
         }
         if n != 1 || save_card {
-            self.store.set_intent_options(intent_id, n, save_card).await?;
+            self.store
+                .set_intent_options(intent_id, n, save_card)
+                .await?;
         }
         Ok(())
     }
@@ -247,7 +258,9 @@ impl AutopayService {
                     .finance
                     .payment_methods
                     .iter()
-                    .find(|m| m.id == req.payment_method_id && crate::auth::same_id(&m.unit_id, &unit.id))
+                    .find(|m| {
+                        m.id == req.payment_method_id && crate::auth::same_id(&m.unit_id, &unit.id)
+                    })
                     .cloned()
                     .ok_or_else(|| not_found("Saved card not found for this unit"))?;
                 Ok::<_, FinanceError>((unit, method))
@@ -255,12 +268,19 @@ impl AutopayService {
             .await?;
         let debtor = match resident_debtor(caller, &unit) {
             Some(own) => own.to_string(),
-            None => parse_debtor(req.debtor_type.as_deref().or(Some(&method.debtor_type)))?.to_string(),
+            None => {
+                parse_debtor(req.debtor_type.as_deref().or(Some(&method.debtor_type)))?.to_string()
+            }
         };
         if method.debtor_type != debtor {
-            return Err(FinanceError::Forbidden("The card belongs to the other debtor of the unit".into()));
+            return Err(FinanceError::Forbidden(
+                "The card belongs to the other debtor of the unit".into(),
+            ));
         }
-        let today = self.store.read(|inner| site_today(inner, &caller.site_id)).await;
+        let today = self
+            .store
+            .read(|inner| site_today(inner, &caller.site_id))
+            .await;
         if method.status != MANDATE_ACTIVE || card_expired(&method, today) {
             return Err(conflict("The saved card is not active or has expired"));
         }
@@ -275,7 +295,9 @@ impl AutopayService {
             })
             .await;
         if exists {
-            return Err(conflict("An active autopay mandate already exists for this debtor"));
+            return Err(conflict(
+                "An active autopay mandate already exists for this debtor",
+            ));
         }
         let now = Utc::now();
         let mandate = AutopayMandate {
@@ -294,7 +316,12 @@ impl AutopayService {
         Ok(self.store.insert(mandate, col::mandates).await?)
     }
 
-    pub async fn cancel_mandate(&self, caller: &Caller, unit_id: &str, mandate_id: i64) -> FinanceResult<AutopayMandate> {
+    pub async fn cancel_mandate(
+        &self,
+        caller: &Caller,
+        unit_id: &str,
+        mandate_id: i64,
+    ) -> FinanceResult<AutopayMandate> {
         let mut mandate = self
             .store
             .read(|inner| {
@@ -318,7 +345,11 @@ impl AutopayService {
     }
 
     /// Charges every active mandate's due items (daily job).
-    pub async fn run(&self, site_id: &str, as_of: Option<NaiveDate>) -> FinanceResult<AutopayRunReport> {
+    pub async fn run(
+        &self,
+        site_id: &str,
+        as_of: Option<NaiveDate>,
+    ) -> FinanceResult<AutopayRunReport> {
         let as_of = match as_of {
             Some(d) => d,
             None => self.store.read(|inner| site_today(inner, site_id)).await,
@@ -333,13 +364,15 @@ impl AutopayService {
             .store
             .read(|inner| {
                 let mut work = Vec::new();
-                for m in inner
-                    .finance
-                    .mandates
-                    .iter()
-                    .filter(|m| m.status == MANDATE_ACTIVE && crate::auth::same_id(&m.site_id, site_id))
-                {
-                    let Some(method) = inner.finance.payment_methods.iter().find(|p| p.id == m.payment_method_id) else {
+                for m in inner.finance.mandates.iter().filter(|m| {
+                    m.status == MANDATE_ACTIVE && crate::auth::same_id(&m.site_id, site_id)
+                }) {
+                    let Some(method) = inner
+                        .finance
+                        .payment_methods
+                        .iter()
+                        .find(|p| p.id == m.payment_method_id)
+                    else {
                         continue;
                     };
                     let mut dues: Vec<&DuesLiability> = inner
@@ -388,7 +421,9 @@ impl AutopayService {
                 continue;
             }
             let outstanding = dues_ledger::outstanding(&due);
-            let amount = mandate.max_amount.map_or(outstanding, |max| outstanding.min(max));
+            let amount = mandate
+                .max_amount
+                .map_or(outstanding, |max| outstanding.min(max));
             if amount <= Decimal::ZERO {
                 continue;
             }
@@ -466,10 +501,25 @@ impl AutopayService {
                         .and_then(|i| RETRY_OFFSETS.get(i))
                         .and_then(|days| base.checked_add_days(Days::new(*days)));
                     report.declined += 1;
-                    self.notify(&mandate, "AUTOPAY", &format!("Otomatik ödeme reddedildi ({})", due.period),
-                        &format!("{} ****{} kartınızdan ₺{:.2} tahsil edilemedi: {}. {}", method.brand, method.last4, amount, reason,
-                            if attempt.next_retry_on.is_some() { "Tekrar denenecek." } else { "Lütfen ödemeyi elle yapın." }),
-                        &format!("autopay-decline:{}:{}:{}", mandate.id, due.id, attempt_no)).await?;
+                    self.notify(
+                        &mandate,
+                        "AUTOPAY",
+                        &format!("Otomatik ödeme reddedildi ({})", due.period),
+                        &format!(
+                            "{} ****{} kartınızdan ₺{:.2} tahsil edilemedi: {}. {}",
+                            method.brand,
+                            method.last4,
+                            amount,
+                            reason,
+                            if attempt.next_retry_on.is_some() {
+                                "Tekrar denenecek."
+                            } else {
+                                "Lütfen ödemeyi elle yapın."
+                            }
+                        ),
+                        &format!("autopay-decline:{}:{}:{}", mandate.id, due.id, attempt_no),
+                    )
+                    .await?;
                 }
                 ChargeOutcome::ExpiredCard => {
                     attempt.status = "EXPIRED_CARD".into();
@@ -489,12 +539,21 @@ impl AutopayService {
                         &format!("autopay-expired:{}", mandate.id)).await?;
                 }
             }
-            report.attempts.push(self.store.insert(attempt, col::autopay_attempts).await?);
+            report
+                .attempts
+                .push(self.store.insert(attempt, col::autopay_attempts).await?);
         }
         Ok(report)
     }
 
-    async fn notify(&self, mandate: &AutopayMandate, category: &'static str, subject: &str, body: &str, key: &str) -> FinanceResult<()> {
+    async fn notify(
+        &self,
+        mandate: &AutopayMandate,
+        category: &'static str,
+        subject: &str,
+        body: &str,
+        key: &str,
+    ) -> FinanceResult<()> {
         let unit = self
             .store
             .read(|inner| find_unit(inner, &mandate.site_id, &mandate.unit_id))

@@ -53,7 +53,11 @@ impl LeaseService {
     }
 
     /// Records the unit's lease; the previous active lease of the unit ends.
-    pub async fn upsert(&self, caller: &Caller, req: UpsertLeaseRequest) -> FinanceResult<TenancyLease> {
+    pub async fn upsert(
+        &self,
+        caller: &Caller,
+        req: UpsertLeaseRequest,
+    ) -> FinanceResult<TenancyLease> {
         money(req.monthly_rent, "monthly_rent")?;
         if req.lease_end.is_some_and(|e| e < req.lease_start) {
             return Err(invalid("lease_end is before lease_start"));

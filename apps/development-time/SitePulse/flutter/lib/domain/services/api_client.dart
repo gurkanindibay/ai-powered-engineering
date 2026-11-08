@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../errors/app_exception.dart';
+import '../logging/app_logger.dart';
 export '../errors/app_exception.dart';
+export '../logging/app_logger.dart';
 
 /// Single entry point for every call to the SitePulse backend.
 ///
@@ -109,9 +111,56 @@ class ApiClient {
         'Credentials may only be sent to the configured API origin.',
       );
     }
+    final reqHeaders = _headers(headers);
+    final traceId = reqHeaders['x-request-id'];
+    final stopwatch = Stopwatch()..start();
+
+    AppLogger.debug(
+      '--> HTTP request: ${url.path}',
+      tag: 'ApiClient',
+      traceId: traceId,
+      context: {'origin': url.origin, 'query': url.queryParameters},
+    );
+
     final attemptedToken = _accessToken;
     final epoch = _sessionEpoch;
-    final response = await send(_headers(headers));
+    http.Response response;
+    try {
+      response = await send(reqHeaders);
+    } catch (e, stack) {
+      stopwatch.stop();
+      AppLogger.error(
+        '<-- Network failure: ${url.path} (${stopwatch.elapsedMilliseconds}ms)',
+        tag: 'ApiClient',
+        traceId: traceId,
+        error: e,
+        stackTrace: stack,
+      );
+      rethrow;
+    }
+
+    stopwatch.stop();
+    final respTraceId = response.headers['x-request-id'] ?? traceId;
+    if (response.statusCode >= 500) {
+      AppLogger.error(
+        '<-- ${response.statusCode} ${url.path} (${stopwatch.elapsedMilliseconds}ms)',
+        tag: 'ApiClient',
+        traceId: respTraceId,
+      );
+    } else if (response.statusCode >= 400) {
+      AppLogger.warn(
+        '<-- ${response.statusCode} ${url.path} (${stopwatch.elapsedMilliseconds}ms)',
+        tag: 'ApiClient',
+        traceId: respTraceId,
+      );
+    } else {
+      AppLogger.info(
+        '<-- ${response.statusCode} ${url.path} (${stopwatch.elapsedMilliseconds}ms)',
+        tag: 'ApiClient',
+        traceId: respTraceId,
+      );
+    }
+
     if (response.statusCode != 401 ||
         attemptedToken == null ||
         const {
@@ -215,6 +264,7 @@ class ApiClient {
 
   static Map<String, String> _headers(Map<String, String>? headers) {
     final merged = <String, String>{...?headers};
+    merged.putIfAbsent('x-request-id', () => AppLogger.newTraceId());
     final token = _accessToken;
     if (token != null) {
       merged['Authorization'] = 'Bearer $token';
@@ -333,6 +383,19 @@ class ApiClient {
     final resolvedMessage = (message != null && message.isNotEmpty)
         ? message
         : _defaultStatusMessage(response.statusCode);
+
+    traceId ??= response.headers['x-request-id'];
+
+    final errorContext = <String, dynamic>{'status': response.statusCode};
+    if (code != null) errorContext['code'] = code;
+    if (details != null) errorContext['details'] = details;
+
+    AppLogger.error(
+      'API Error: ${response.statusCode} - $resolvedMessage',
+      tag: 'ApiClient',
+      traceId: traceId,
+      context: errorContext,
+    );
 
     throw ApiException(
       message: resolvedMessage,

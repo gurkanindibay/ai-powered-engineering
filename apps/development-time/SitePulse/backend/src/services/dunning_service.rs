@@ -140,7 +140,11 @@ impl DunningService {
     }
 
     /// Executes the due step of every overdue liability of the site, once.
-    pub async fn run(&self, site_id: &str, as_of: Option<NaiveDate>) -> FinanceResult<DunningRunReport> {
+    pub async fn run(
+        &self,
+        site_id: &str,
+        as_of: Option<NaiveDate>,
+    ) -> FinanceResult<DunningRunReport> {
         let policy = self.policy(site_id).await;
         let as_of = match as_of {
             Some(d) => d,
@@ -217,7 +221,9 @@ impl DunningService {
                     ),
                 ),
             };
-            let to = notifier.debtor_recipient(&unit, due.debtor_type.as_str()).await;
+            let to = notifier
+                .debtor_recipient(&unit, due.debtor_type.as_str())
+                .await;
             let note = notifier
                 .deliver(
                     Message {
@@ -319,9 +325,9 @@ impl DunningService {
                         },
                         DocSection {
                             heading: Some("İhtar".into()),
-                            paragraphs: vec![format!(
-                                "Yukarıda dökümü verilen ortak gider ve avans borcunuzu bu ihtarnamenin tebliğinden itibaren 7 gün içinde site yönetiminin hesabına ödemenizi; aksi halde 634 sayılı Kat Mülkiyeti Kanunu'nun 20. maddesi uyarınca aylık %5 gecikme tazminatı ile birlikte icra takibi ve dava yoluna başvurulacağını, doğacak tüm masrafların tarafınıza ait olacağını ihtar ederiz. (Arabuluculuk ön şartı ve süreler avukat tarafından teyit edilmelidir.)"
-                            )],
+                            paragraphs: vec![
+                                "Yukarıda dökümü verilen ortak gider ve avans borcunuzu bu ihtarnamenin tebliğinden itibaren 7 gün içinde site yönetiminin hesabına ödemenizi; aksi halde 634 sayılı Kat Mülkiyeti Kanunu'nun 20. maddesi uyarınca aylık %5 gecikme tazminatı ile birlikte icra takibi ve dava yoluna başvurulacağını, doğacak tüm masrafların tarafınıza ait olacağını ihtar ederiz. (Arabuluculuk ön şartı ve süreler avukat tarafından teyit edilmelidir.)".to_string()
+                            ],
                             ..DocSection::default()
                         },
                     ],

@@ -51,7 +51,7 @@ pub(crate) fn record_context(context: &AuditContext) {
         }
     });
 }
-fn current_context() -> Option<AuditContext> {
+pub fn current_context() -> Option<AuditContext> {
     let explicit = CONTEXT.try_with(Clone::clone).ok();
     if explicit
         .as_ref()
@@ -64,6 +64,10 @@ fn current_context() -> Option<AuditContext> {
         .ok()
         .flatten()
         .or(explicit)
+}
+
+pub fn current_request_id() -> Option<String> {
+    current_context().map(|c| c.request_id)
 }
 
 /// Replace connection-local context on every checkout, including background tasks.
@@ -90,8 +94,24 @@ pub fn checkout_hook() -> deadpool_postgres::Hook {
 
 /// Generate server-owned correlation IDs, propagate them on success and rejection.
 pub async fn correlate(mut req: Request, next: Next) -> Response {
-    let request_id = Uuid::new_v4().to_string();
-    let authentication_response = req.uri().path().starts_with("/api/v1/auth/");
+    let incoming_id = req
+        .headers()
+        .get("x-request-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim())
+        .filter(|s| {
+            !s.is_empty()
+                && s.len() <= 64
+                && s.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        });
+    let request_id = incoming_id
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let path = req.uri().path().to_string();
+    let method = req.method().to_string();
+    let authentication_response = path.starts_with("/api/v1/auth/");
+    let start = std::time::Instant::now();
     let context = AuditContext {
         source_ip: req
             .extensions()
@@ -114,8 +134,49 @@ pub async fn correlate(mut req: Request, next: Next) -> Response {
         session_id: None,
     };
     req.extensions_mut().insert(context.clone());
+
+    tracing::debug!(
+        request_id = %request_id,
+        method = %method,
+        path = %path,
+        source_ip = ?context.source_ip,
+        "--> HTTP request started"
+    );
+
     let trace = std::sync::Arc::new(std::sync::Mutex::new(context));
     let mut response = TRACE.scope(trace, next.run(req)).await;
+    let latency_ms = start.elapsed().as_millis();
+    let status = response.status();
+
+    if status.is_server_error() {
+        tracing::error!(
+            request_id = %request_id,
+            method = %method,
+            path = %path,
+            status = %status.as_u16(),
+            latency_ms = %latency_ms,
+            "<-- HTTP request completed with server error"
+        );
+    } else if status.is_client_error() {
+        tracing::warn!(
+            request_id = %request_id,
+            method = %method,
+            path = %path,
+            status = %status.as_u16(),
+            latency_ms = %latency_ms,
+            "<-- HTTP request completed with client rejection"
+        );
+    } else {
+        tracing::info!(
+            request_id = %request_id,
+            method = %method,
+            path = %path,
+            status = %status.as_u16(),
+            latency_ms = %latency_ms,
+            "<-- HTTP request completed successfully"
+        );
+    }
+
     if authentication_response {
         response
             .headers_mut()

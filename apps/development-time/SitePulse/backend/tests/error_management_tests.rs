@@ -67,3 +67,65 @@ async fn security_error_maps_cleanly_with_trace_id() {
     assert_eq!(envelope.error.code, "AUTHENTICATION_REQUIRED");
     assert!(envelope.error.trace_id.starts_with("req-"));
 }
+
+#[tokio::test]
+async fn response_includes_matching_x_request_id_header() {
+    let err = AppError::not_found("Resource missing");
+    let response = err.into_response();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let header_val = response
+        .headers()
+        .get("x-request-id")
+        .expect("x-request-id header must be present")
+        .to_str()
+        .expect("valid str")
+        .to_string();
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), 1024 * 16)
+        .await
+        .expect("body read failed");
+    let envelope: ErrorEnvelope =
+        serde_json::from_slice(&body_bytes).expect("deserialization to ErrorEnvelope failed");
+
+    assert_eq!(header_val, envelope.error.trace_id);
+}
+
+#[tokio::test]
+async fn correlate_middleware_propagates_client_request_id() {
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    let app = axum::Router::new()
+        .route(
+            "/test-error",
+            axum::routing::get(|| async { AppError::validation("Client input invalid") }),
+        )
+        .layer(axum::middleware::from_fn(
+            sitepulse_backend::audit::correlate,
+        ));
+
+    let req = Request::builder()
+        .uri("/test-error")
+        .header("x-request-id", "client-trace-12345")
+        .body(axum::body::Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let header_val = response
+        .headers()
+        .get("x-request-id")
+        .expect("x-request-id header must be present")
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(header_val, "client-trace-12345");
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), 1024 * 16)
+        .await
+        .unwrap();
+    let envelope: ErrorEnvelope = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(envelope.error.trace_id, "client-trace-12345");
+}

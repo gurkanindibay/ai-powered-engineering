@@ -105,7 +105,11 @@ impl HeatShareService {
         }
     }
 
-    pub async fn create_period(&self, caller: &Caller, req: CreateHeatPeriodRequest) -> FinanceResult<HeatPeriodView> {
+    pub async fn create_period(
+        &self,
+        caller: &Caller,
+        req: CreateHeatPeriodRequest,
+    ) -> FinanceResult<HeatPeriodView> {
         let label = non_empty(&req.label, 3, "label")?;
         money(req.total_cost, "total_cost")?;
         if req.period_end < req.period_start {
@@ -115,18 +119,18 @@ impl HeatShareService {
             .consumption_share_percent
             .unwrap_or_else(|| Decimal::from(DEFAULT_CONSUMPTION_PERCENT));
         if percent < Decimal::ZERO || percent > Decimal::ONE_HUNDRED || percent.scale() > 2 {
-            return Err(invalid("consumption_share_percent must be between 0 and 100"));
+            return Err(invalid(
+                "consumption_share_percent must be between 0 and 100",
+            ));
         }
-        let duplicate = self
-            .store
-            .read(|inner| {
-                inner
-                    .finance
-                    .heat_periods
-                    .iter()
-                    .any(|p| crate::auth::same_id(&p.site_id, &caller.site_id) && p.label == label)
-            })
-            .await;
+        let duplicate =
+            self.store
+                .read(|inner| {
+                    inner.finance.heat_periods.iter().any(|p| {
+                        crate::auth::same_id(&p.site_id, &caller.site_id) && p.label == label
+                    })
+                })
+                .await;
         if duplicate {
             return Err(conflict(format!("A heating period '{}' exists", label)));
         }
@@ -183,14 +187,24 @@ impl HeatShareService {
     }
 
     /// Records (or replaces) the readings of a draft period.
-    pub async fn record_readings(&self, caller: &Caller, id: i64, req: RecordReadingsRequest) -> FinanceResult<HeatPeriodView> {
+    pub async fn record_readings(
+        &self,
+        caller: &Caller,
+        id: i64,
+        req: RecordReadingsRequest,
+    ) -> FinanceResult<HeatPeriodView> {
         let period = self.find(&caller.site_id, id).await?;
         if period.status != "DRAFT" {
             return Err(conflict("Readings of an approved period cannot change"));
         }
         for input in req.readings {
-            if input.current_reading < input.previous_reading || input.previous_reading < Decimal::ZERO {
-                return Err(invalid(format!("Unit {}: the current reading is below the previous one", input.unit_id)));
+            if input.current_reading < input.previous_reading
+                || input.previous_reading < Decimal::ZERO
+            {
+                return Err(invalid(format!(
+                    "Unit {}: the current reading is below the previous one",
+                    input.unit_id
+                )));
             }
             let (unit, existing) = self
                 .store
@@ -233,7 +247,11 @@ impl HeatShareService {
             .read(|inner| {
                 let shares = preview(inner, &period)?;
                 let missing: Vec<String> = site_units(inner, &caller.site_id)
-                    .filter(|u| !shares.iter().any(|s| crate::auth::same_id(&s.unit_id, &u.id)))
+                    .filter(|u| {
+                        !shares
+                            .iter()
+                            .any(|s| crate::auth::same_id(&s.unit_id, &u.id))
+                    })
                     .map(|u| unit_label(inner, u))
                     .collect();
                 Ok::<_, FinanceError>((shares, missing))
@@ -243,7 +261,10 @@ impl HeatShareService {
             return Err(conflict("Record the meter readings first"));
         }
         if !missing.is_empty() {
-            return Err(conflict(format!("Readings are missing for: {}", missing.join(", "))));
+            return Err(conflict(format!(
+                "Readings are missing for: {}",
+                missing.join(", ")
+            )));
         }
         let tenanted = self.store.tenanted_units(&caller.site_id).await?;
         for s in shares {

@@ -82,7 +82,7 @@ extension DashboardControllerReconciliation on DashboardController {
         }
       }
     } catch (e) {
-      debugPrint('Sync bank account error: $e');
+      AppLogger.warn('Sync bank account error', tag: 'ReconciliationController', error: e);
     }
   }
 
@@ -472,11 +472,15 @@ extension DashboardControllerReconciliation on DashboardController {
           }),
         ).timeout(const Duration(seconds: 5));
         if (response.statusCode != 200 && response.statusCode != 204) {
-          debugPrint('confirmReconciliation remote rejected: ${response.statusCode}');
+          AppLogger.warn(
+            'confirmReconciliation remote rejected',
+            tag: 'ReconciliationController',
+            context: {'status': response.statusCode},
+          );
           return;
         }
       } catch (e) {
-        debugPrint('confirmReconciliation remote error: $e');
+        AppLogger.error('confirmReconciliation remote error', tag: 'ReconciliationController', error: e);
         return;
       }
     }
@@ -621,7 +625,7 @@ extension DashboardControllerReconciliation on DashboardController {
         body: json.encode(payload),
       ).timeout(const Duration(seconds: 4));
     } catch (e) {
-      debugPrint('Confirm reconciliation backend error: $e');
+      AppLogger.warn('Confirm reconciliation backend error', tag: 'ReconciliationController', error: e);
     }
 
     // Refresh live site overview from backend
@@ -632,7 +636,7 @@ extension DashboardControllerReconciliation on DashboardController {
       );
       await fetchReconciliationQueue(_currentManagedSite?.id ?? _activeUnit.siteId);
     } catch (e) {
-      debugPrint('Overview refresh after reconciliation error: $e');
+      AppLogger.warn('Overview refresh after reconciliation error', tag: 'ReconciliationController', error: e);
     }
   }
 
@@ -697,7 +701,11 @@ extension DashboardControllerReconciliation on DashboardController {
         ).timeout(const Duration(seconds: 4));
 
         if (response.statusCode != 200 && response.statusCode != 201) {
-          debugPrint('recordHomeownerPayment rejected: ${response.statusCode}');
+          AppLogger.warn(
+            'recordHomeownerPayment rejected',
+            tag: 'ReconciliationController',
+            context: {'status': response.statusCode},
+          );
           return;
         }
         await fetchResidentDashboard(_activeUnit.id);
@@ -708,7 +716,7 @@ extension DashboardControllerReconciliation on DashboardController {
           );
         }
       } catch (e) {
-        debugPrint('recordHomeownerPayment backend sync error: $e');
+        AppLogger.error('recordHomeownerPayment backend sync error', tag: 'ReconciliationController', error: e);
         return;
       }
     }
