@@ -1378,23 +1378,20 @@ impl SiteAdminService {
                 .filter_map(|u| u.owner_user_id.clone())
                 .collect();
 
-            // Clear matching units for this site
-            inner.units.retain(|u| {
-                let matches_site = u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == Some(site_numeric);
-                if !matches_site {
-                    return true;
-                }
-                !target_unit_ids.contains(&u.id)
-            });
-
-            // Clean dues strictly for target units in this site
-            inner.dues.retain(|d| !target_unit_ids.contains(&d.unit_id));
-
-            // Clean advance and mappings strictly for target units
+            // Mirror the database dissociation exactly (AF-19): the physical unit, its
+            // dues history, advance balance and payer names stay; only the owner link
+            // and the owner's household membership are removed.
+            let owner_emails: Vec<String> = target_owner_uids
+                .iter()
+                .filter_map(|uid| inner.users.iter().find(|u| &u.id == uid).map(|u| u.email.to_lowercase()))
+                .collect();
+            for unit in inner.units.iter_mut().filter(|u| target_unit_ids.contains(&u.id)) {
+                unit.owner_user_id = None;
+            }
             for u_id in &target_unit_ids {
-                inner.advance_payments.remove(u_id);
-                inner.unit_members.remove(u_id);
-                inner.unit_payer_names.remove(u_id);
+                if let Some(members) = inner.unit_members.get_mut(u_id) {
+                    members.retain(|m| !(m.is_owner && owner_emails.contains(&m.email.to_lowercase())));
+                }
                 inner.unit_invite_tokens.remove(u_id);
             }
 

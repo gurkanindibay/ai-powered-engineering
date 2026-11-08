@@ -1,6 +1,6 @@
 use chrono::Utc;
 use rust_decimal::Decimal;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::models::{
     AccrueInstallmentResponse, CapitalContractorDisbursement, CapitalProject,
@@ -17,6 +17,24 @@ pub struct CapitalProjectService {
 impl CapitalProjectService {
     pub fn new(state: AppState) -> Self {
         Self { state }
+    }
+
+    /// Units of one site only. Every capital allocation is computed over the
+    /// project's own site, never over every tenant in memory (AF-12).
+    fn site_units(inner: &crate::state::AppStateInner, site_id: &str) -> Vec<crate::models::IndependentUnit> {
+        inner
+            .units
+            .iter()
+            .filter(|u| crate::auth::same_id(&u.site_id, site_id))
+            .cloned()
+            .collect()
+    }
+
+    /// Whether an in-memory liability is a capital installment of `project`
+    /// on one of `unit_ids`. Matches the period label written by
+    /// [`Self::accrue_installment`] instead of loose keywords (AF-12).
+    fn is_project_due(project: &CapitalProject, unit_ids: &[String], d: &DuesLiability) -> bool {
+        d.expense_type == "CAPITAL_DUES" && unit_ids.contains(&d.unit_id) && d.period.starts_with(&project.title)
     }
 
     /// Creates a new Capital Project with optional installment scheduling.
@@ -36,144 +54,114 @@ impl CapitalProjectService {
         let allocation_basis = req.allocation_basis.unwrap_or_else(|| "BY_LAND_SHARE".to_string());
         let target_start_date = req.target_start_date.unwrap_or_else(|| Utc::now().date_naive());
 
-        let project_id_str: String;
         let now = Utc::now();
 
-        // 1. Database persistence if pool is present
+        // Installment plan (percentages default to an even split).
+        let plan: Vec<(crate::models::CreateInstallmentItem, Decimal)> = {
+            let items = req.installments.unwrap_or_default();
+            let total_count = items.len() as i32;
+            items
+                .into_iter()
+                .map(|item| {
+                    let pct = item.percentage.unwrap_or_else(|| {
+                        if total_count > 0 {
+                            Decimal::from(100) / Decimal::from(total_count)
+                        } else {
+                            Decimal::from(100)
+                        }
+                    });
+                    (item, pct)
+                })
+                .collect()
+        };
+        let installments_count = plan.len() as i64;
+        let total_count = plan.len() as i32;
+
+        // 1. Persist the project and its installments in ONE transaction. A database
+        // failure is returned: nothing is kept in memory only (AF-17).
+        let project_id_str: String;
+        let mut installment_ids: Vec<String> = Vec::with_capacity(plan.len());
         if let Some(pool) = &self.state.pool {
-            if let Ok(client) = pool.get().await {
-                let row_res = client
+            let mut client = pool.get().await.map_err(|e| format!("Database connection error: {}", e))?;
+            let tx = client.transaction().await.map_err(|e| format!("Transaction error: {}", e))?;
+            let row = tx
+                .query_one(
+                    r#"
+                    INSERT INTO capital_projects (
+                        site_id, title, category, description, total_budget, allocation_basis,
+                        target_start_date, target_completion_date, contractor_name,
+                        contractor_tax_no, contractor_iban, contract_amount, status, created_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'ACTIVE', $13)
+                    RETURNING id
+                    "#,
+                    &[
+                        &crate::db::require_id("entity", &site_id)?,
+                        &req.title,
+                        &category,
+                        &req.description,
+                        &req.total_budget,
+                        &allocation_basis,
+                        &target_start_date,
+                        &req.target_completion_date,
+                        &req.contractor_name,
+                        &req.contractor_tax_no,
+                        &req.contractor_iban,
+                        &req.contract_amount,
+                        &now,
+                    ],
+                )
+                .await
+                .map_err(|e| format!("Database write failed (capital_projects): {}", e))?;
+            let p_id: i64 = row.get("id");
+            for (item, pct) in &plan {
+                let row = tx
                     .query_one(
                         r#"
-                        INSERT INTO capital_projects (
-                            site_id, title, category, description, total_budget, allocation_basis,
-                            target_start_date, target_completion_date, contractor_name,
-                            contractor_tax_no, contractor_iban, contract_amount, status, created_at
+                        INSERT INTO capital_project_installments (
+                            project_id, installment_number, total_installments,
+                            due_date, installment_budget, percentage, is_accrued, created_at
                         )
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'ACTIVE', $13)
+                        VALUES ($1, $2, $3, $4, $5, $6, FALSE, $7)
                         RETURNING id
                         "#,
-                        &[
-                            &crate::db::require_id("entity", &site_id)?,
-                            &req.title,
-                            &category,
-                            &req.description,
-                            &req.total_budget,
-                            &allocation_basis,
-                            &target_start_date,
-                            &req.target_completion_date,
-                            &req.contractor_name,
-                            &req.contractor_tax_no,
-                            &req.contractor_iban,
-                            &req.contract_amount,
-                            &now,
-                        ],
+                        &[&p_id, &item.installment_number, &total_count, &item.due_date, &item.installment_budget, pct, &now],
                     )
-                    .await;
-
-                match row_res {
-                    Ok(row) => {
-                        let id_num: i64 = row.get("id");
-                        project_id_str = id_num.to_string();
-                    }
-                    Err(e) => {
-                        warn!("PostgreSQL error inserting capital_project: {}. Falling back to memory.", e);
-                        let inner = self.state.inner.read().await;
-                        let max_id = inner.capital_projects.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
-                        project_id_str = (max_id + 1).to_string();
-                    }
-                }
-            } else {
-                let inner = self.state.inner.read().await;
-                let max_id = inner.capital_projects.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
-                project_id_str = (max_id + 1).to_string();
+                    .await
+                    .map_err(|e| format!("Database write failed (capital_project_installments): {}", e))?;
+                installment_ids.push(row.get::<_, i64>("id").to_string());
             }
+            tx.commit().await.map_err(|e| format!("Transaction commit error: {}", e))?;
+            project_id_str = p_id.to_string();
         } else {
             let inner = self.state.inner.read().await;
             let max_id = inner.capital_projects.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
             project_id_str = (max_id + 1).to_string();
+            let max_inst = inner.capital_installments.iter().filter_map(|i| crate::db::parse_id_to_i64(&i.id)).max().unwrap_or(0);
+            installment_ids = (1..=plan.len() as i64).map(|n| (max_inst + n).to_string()).collect();
         }
 
-        let total_units_count: i64;
-        {
+        let total_units_count: i64 = {
             let inner = self.state.inner.read().await;
-            total_units_count = inner.units.iter().filter(|u| u.site_id == site_id).count() as i64;
-        }
+            Self::site_units(&inner, &site_id).len() as i64
+        };
 
-        let mut installments_count = 0i64;
-        let mut created_installments = Vec::new();
-
-        if let Some(installment_items) = req.installments {
-            installments_count = installment_items.len() as i64;
-            let total_count = installments_count as i32;
-
-            for item in installment_items {
-                let pct = item.percentage.unwrap_or_else(|| {
-                    if total_count > 0 {
-                        Decimal::from(100) / Decimal::from(total_count)
-                    } else {
-                        Decimal::from(100)
-                    }
-                });
-
-                let mut inst_id = String::new();
-
-                // DB insert if available
-                if let Some(pool) = &self.state.pool {
-                    if let Ok(client) = pool.get().await {
-                        if let Some(p_id) = crate::db::parse_id_to_i64(&project_id_str) {
-                            let row_res = client
-                                .query_one(
-                                    r#"
-                                    INSERT INTO capital_project_installments (
-                                        project_id, installment_number, total_installments,
-                                        due_date, installment_budget, percentage, is_accrued, created_at
-                                    )
-                                    VALUES ($1, $2, $3, $4, $5, $6, FALSE, $7)
-                                    ON CONFLICT (project_id, installment_number) DO UPDATE SET total_installments = EXCLUDED.total_installments
-                                    RETURNING id
-                                    "#,
-                                    &[
-                                        &p_id,
-                                        &item.installment_number,
-                                        &total_count,
-                                        &item.due_date,
-                                        &item.installment_budget,
-                                        &pct,
-                                        &now,
-                                    ],
-                                )
-                                .await;
-                            if let Ok(row) = row_res {
-                                let id_val: i64 = row.get("id");
-                                inst_id = id_val.to_string();
-                            }
-                        }
-                    }
-                }
-
-                if inst_id.is_empty() {
-                    let inner = self.state.inner.read().await;
-                    let max_inst = inner.capital_installments.iter().filter_map(|i| crate::db::parse_id_to_i64(&i.id)).max().unwrap_or(0);
-                    inst_id = (max_inst + 1 + created_installments.len() as i64).to_string();
-                }
-
-                let installment = CapitalProjectInstallment {
-                    id: inst_id,
-                    project_id: project_id_str.clone(),
-                    installment_number: item.installment_number,
-                    total_installments: total_count,
-                    due_date: item.due_date,
-                    installment_budget: item.installment_budget,
-                    percentage: pct,
-                    is_accrued: false,
-                    accrued_at: None,
-                    created_at: Some(now),
-                };
-
-                created_installments.push(installment);
-            }
-        }
+        let created_installments: Vec<CapitalProjectInstallment> = plan
+            .into_iter()
+            .zip(installment_ids)
+            .map(|((item, pct), inst_id)| CapitalProjectInstallment {
+                id: inst_id,
+                project_id: project_id_str.clone(),
+                installment_number: item.installment_number,
+                total_installments: total_count,
+                due_date: item.due_date,
+                installment_budget: item.installment_budget,
+                percentage: pct,
+                is_accrued: false,
+                accrued_at: None,
+                created_at: Some(now),
+            })
+            .collect();
 
         let project = CapitalProject {
             id: project_id_str.clone(),
@@ -193,7 +181,7 @@ impl CapitalProjectService {
             collected_amount: Decimal::ZERO,
             disbursed_amount: Decimal::ZERO,
             remaining_fund_balance: Decimal::ZERO,
-            total_units_count: if total_units_count > 0 { total_units_count } else { 12 },
+            total_units_count,
             installments_count,
             created_at: Some(now),
         };
@@ -234,7 +222,8 @@ impl CapitalProjectService {
                                 SELECT SUM(amount) FROM capital_contractor_disbursements 
                                 WHERE project_id = cp.id
                             ), 0.00) as disbursed_amount,
-                            (SELECT COUNT(*) FROM capital_project_installments WHERE project_id = cp.id) as installments_count
+                            (SELECT COUNT(*) FROM capital_project_installments WHERE project_id = cp.id) as installments_count,
+                            (SELECT COUNT(*) FROM units WHERE site_id = cp.site_id) as total_units_count
                         FROM capital_projects cp
                         WHERE $1::bigint IS NULL OR cp.site_id = $1
                         ORDER BY cp.created_at DESC
@@ -269,7 +258,7 @@ impl CapitalProjectService {
                             collected_amount: coll_b,
                             disbursed_amount: disb_b,
                             remaining_fund_balance: coll_b - disb_b,
-                            total_units_count: 12,
+                            total_units_count: r.get("total_units_count"),
                             installments_count: inst_c,
                             created_at: r.get("created_at"),
                         });
@@ -282,17 +271,15 @@ impl CapitalProjectService {
         if projects.is_empty() {
             let inner = self.state.inner.read().await;
             for p in &inner.capital_projects {
-                if site_id.is_empty() || p.site_id == site_id {
+                if site_id.is_empty() || crate::auth::same_id(&p.site_id, site_id) {
                     let mut proj_copy = p.clone();
 
-                    // Calculate live collected from dues in memory
+                    // Live collected amount from this project's own dues in its own site (AF-12)
+                    let unit_ids: Vec<String> = Self::site_units(&inner, &p.site_id).into_iter().map(|u| u.id).collect();
                     let collected: Decimal = inner
                         .dues
                         .iter()
-                        .filter(|d| {
-                            (d.status == DebtStatus::Paid)
-                                && (d.period.contains(&p.title) || d.period.contains("Demirbaş") || d.period.contains("Asansör"))
-                        })
+                        .filter(|d| d.status == DebtStatus::Paid && Self::is_project_due(p, &unit_ids, d))
                         .map(|d| d.principal_amount)
                         .sum();
 
@@ -401,12 +388,11 @@ impl CapitalProjectService {
             return Err(format!("{}. taksit daha önce tahakkuk ettirilmiş. Mükerrer tahakkuk engellendi.", installment_number));
         }
 
-        // Get all units for this site
-        let units;
-        {
+        // Only the project's own site is charged (AF-12).
+        let units = {
             let inner = self.state.inner.read().await;
-            units = inner.units.clone();
-        }
+            Self::site_units(&inner, &project.site_id)
+        };
 
         if units.is_empty() {
             return Err("Sitede kayıtlı bağımsız bölüm (daire) bulunamadı.".to_string());
@@ -420,24 +406,18 @@ impl CapitalProjectService {
         let mut running_sum = Decimal::ZERO;
 
         for unit in &units {
-            let share: Decimal;
-            if project.allocation_basis == "EQUAL_PER_UNIT" {
-                share = (installment_budget / Decimal::from(unit_count)).round_dp(2);
+            let share: Decimal = if project.allocation_basis == "EQUAL_PER_UNIT" || total_land_share <= 0 {
+                (installment_budget / Decimal::from(unit_count)).round_dp(2)
             } else {
                 // By Land Share (KMK Madde 20/a kanuni oran)
-                if total_land_share > 0 {
-                    let ratio = Decimal::from(unit.land_share) / Decimal::from(total_land_share);
-                    share = (installment_budget * ratio).round_dp(2);
-                } else {
-                    share = (installment_budget / Decimal::from(unit_count)).round_dp(2);
-                }
-            }
+                let ratio = Decimal::from(unit.land_share) / Decimal::from(total_land_share);
+                (installment_budget * ratio).round_dp(2)
+            };
             running_sum += share;
             unit_shares.push((unit, share));
         }
 
         // Kuruş Düzeltmesi (Zero-Cent Drift Reconciliation)
-        // If there is any penny discrepancy, adjust the unit with highest land share
         let diff = installment_budget - running_sum;
         if diff != Decimal::ZERO && !unit_shares.is_empty() {
             unit_shares[0].1 += diff;
@@ -449,54 +429,71 @@ impl CapitalProjectService {
         );
         let now = Utc::now();
 
-        // Generate dues_liabilities in DB if available
+        // DB-first, in ONE transaction (AF-13). The conditional UPDATE is the
+        // idempotency guard: a concurrent or repeated accrual finds no row with
+        // `is_accrued = FALSE` and is rejected before any liability is written.
+        let mut db_due_ids: Option<Vec<i64>> = None;
         if let Some(pool) = &self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
-                    for (unit, share) in &unit_shares {
-                        if let Some(u_id) = crate::db::parse_id_to_i64(&unit.id) {
-                            client
-                                .execute(
-                                    r#"
-                                    INSERT INTO dues_liabilities (
-                                        unit_id, period, debtor_type, expense_type,
-                                        principal_amount, due_date, status, delay_penalty,
-                                        paid_amount, capital_project_id, installment_number, created_at
-                                    )
-                                    VALUES ($1, $2, 'OWNER', 'CAPITAL_DUES', $3, $4, 'PENDING', 0.00, 0.00, $5, $6, $7)
-                                    "#,
-                                    &[
-                                        &u_id,
-                                        &period_name,
-                                        share,
-                                        &installment.due_date,
-                                        &p_id,
-                                        &installment_number,
-                                        &now,
-                                    ],
-                                )
-                                .await.map_err(|e| e.to_string())?;
-                        }
-                    }
-
-                    // Mark installment accrued in DB
-                    client
-                        .execute(
-                            "UPDATE capital_project_installments SET is_accrued = TRUE, accrued_at = $1 WHERE project_id = $2 AND installment_number = $3",
-                            &[&now, &p_id, &installment_number],
-                        )
-                        .await.map_err(|e| e.to_string())?;
-                }
+            let p_id = crate::db::require_id("capital project", project_id)?;
+            let mut client = pool.get().await.map_err(|e| format!("Database connection error: {}", e))?;
+            let tx = client.transaction().await.map_err(|e| format!("Transaction error: {}", e))?;
+            let claimed = tx
+                .execute(
+                    "UPDATE capital_project_installments SET is_accrued = TRUE, accrued_at = $1 \
+                     WHERE project_id = $2 AND installment_number = $3 AND is_accrued = FALSE",
+                    &[&now, &p_id, &installment_number],
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            if claimed == 0 {
+                return Err(format!("{}. taksit daha önce tahakkuk ettirilmiş. Mükerrer tahakkuk engellendi.", installment_number));
             }
+            let mut ids = Vec::with_capacity(unit_shares.len());
+            for (unit, share) in &unit_shares {
+                let u_id = crate::db::require_id("unit", &unit.id)?;
+                let row = tx
+                    .query_one(
+                        r#"
+                        INSERT INTO dues_liabilities (
+                            unit_id, period, debtor_type, expense_type,
+                            principal_amount, due_date, status, delay_penalty,
+                            paid_amount, capital_project_id, installment_number, created_at
+                        )
+                        VALUES ($1, $2, 'OWNER', 'CAPITAL_DUES', $3, $4, 'PENDING', 0.00, 0.00, $5, $6, $7)
+                        RETURNING id
+                        "#,
+                        &[&u_id, &period_name, share, &installment.due_date, &p_id, &installment_number, &now],
+                    )
+                    .await
+                    .map_err(|e| format!("Database write failed (dues_liabilities): {}", e))?;
+                ids.push(row.get::<_, i64>(0));
+            }
+            tx.commit().await.map_err(|e| format!("Transaction commit error: {}", e))?;
+            db_due_ids = Some(ids);
         }
 
-        // Also update memory state
+        // Memory mirrors the committed rows, with their database ids.
         {
             let mut inner = self.state.inner.write().await;
+            if db_due_ids.is_none() {
+                // Without a database the write lock is the guard: re-check it here.
+                let already = inner
+                    .capital_installments
+                    .iter()
+                    .any(|i| i.project_id == project_id && i.installment_number == installment_number && i.is_accrued);
+                if already {
+                    return Err(format!("{}. taksit daha önce tahakkuk ettirilmiş. Mükerrer tahakkuk engellendi.", installment_number));
+                }
+            }
             let mut next_due = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
-            for (unit, share) in &unit_shares {
-                next_due += 1;
-                let due_id = next_due.to_string();
+            for (idx, (unit, share)) in unit_shares.iter().enumerate() {
+                let due_id = match &db_due_ids {
+                    Some(ids) => ids[idx].to_string(),
+                    None => {
+                        next_due += 1;
+                        next_due.to_string()
+                    }
+                };
                 inner.dues.push(DuesLiability {
                     id: due_id,
                     unit_id: unit.id.clone(),
@@ -563,42 +560,39 @@ impl CapitalProjectService {
         let now = Utc::now();
         let mut dis_id = String::new();
 
-        // Insert into DB if available
+        // Insert into DB if available. A failed write is an error, never a silent
+        // memory-only payment record (AF-17).
         if let Some(pool) = &self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
-                    let row_res = client
-                        .query_one(
-                            r#"
-                            INSERT INTO capital_contractor_disbursements (
-                                project_id, milestone_name, invoice_number, amount,
-                                disbursement_date, recipient_name, recipient_iban,
-                                payment_reference, disbursement_method, notes, created_at
-                            )
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                            RETURNING id
-                            "#,
-                            &[
-                                &[&p_id][0],
-                                &req.milestone_name,
-                                &req.invoice_number,
-                                &req.amount,
-                                &disbursement_date,
-                                &req.recipient_name,
-                                &req.recipient_iban,
-                                &req.payment_reference,
-                                &disbursement_method,
-                                &req.notes,
-                                &now,
-                            ],
-                        )
-                        .await;
-                    if let Ok(row) = row_res {
-                        let id_val: i64 = row.get("id");
-                        dis_id = id_val.to_string();
-                    }
-                }
-            }
+            let p_id = crate::db::require_id("capital project", project_id)?;
+            let client = pool.get().await.map_err(|e| format!("Database connection error: {}", e))?;
+            let row = client
+                .query_one(
+                    r#"
+                    INSERT INTO capital_contractor_disbursements (
+                        project_id, milestone_name, invoice_number, amount,
+                        disbursement_date, recipient_name, recipient_iban,
+                        payment_reference, disbursement_method, notes, created_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    RETURNING id
+                    "#,
+                    &[
+                        &p_id,
+                        &req.milestone_name,
+                        &req.invoice_number,
+                        &req.amount,
+                        &disbursement_date,
+                        &req.recipient_name,
+                        &req.recipient_iban,
+                        &req.payment_reference,
+                        &disbursement_method,
+                        &req.notes,
+                        &now,
+                    ],
+                )
+                .await
+                .map_err(|e| format!("Database write failed (capital_contractor_disbursements): {}", e))?;
+            dis_id = row.get::<_, i64>("id").to_string();
         }
 
         if dis_id.is_empty() {
@@ -709,12 +703,21 @@ impl CapitalProjectService {
             .await
             .ok_or_else(|| "Demirbaş projesi bulunamadı.".to_string())?;
 
+        // The project's own site only (AF-12).
         let units;
         let dues;
+        let users;
         {
             let inner = self.state.inner.read().await;
-            units = inner.units.clone();
-            dues = inner.dues.clone();
+            units = Self::site_units(&inner, &project.site_id);
+            let unit_ids: Vec<String> = units.iter().map(|u| u.id.clone()).collect();
+            dues = inner
+                .dues
+                .iter()
+                .filter(|d| Self::is_project_due(&project, &unit_ids, d))
+                .cloned()
+                .collect::<Vec<_>>();
+            users = inner.users.clone();
         }
 
         let total_land_share: i32 = units.iter().map(|u| u.land_share).sum();
@@ -735,15 +738,7 @@ impl CapitalProjectService {
             }
 
             // Find accrued dues for this unit belonging to this project
-            let unit_project_dues: Vec<&DuesLiability> = dues
-                .iter()
-                .filter(|d| {
-                    d.unit_id == unit.id
-                        && (d.period.contains(&project.title)
-                            || d.period.contains("Demirbaş")
-                            || d.period.contains("Asansör"))
-                })
-                .collect();
+            let unit_project_dues: Vec<&DuesLiability> = dues.iter().filter(|d| d.unit_id == unit.id).collect();
 
             let total_accrued: Decimal = unit_project_dues.iter().map(|d| d.principal_amount).sum();
             let total_paid: Decimal = unit_project_dues
@@ -758,12 +753,17 @@ impl CapitalProjectService {
                 Decimal::ZERO
             };
 
+            let owner = unit
+                .owner_user_id
+                .as_deref()
+                .and_then(|uid| users.iter().find(|u| u.id == uid));
             summaries.push(UnitCapitalShareSummary {
                 unit_id: unit.id.clone(),
                 block: unit.block_id.clone(),
                 unit_number: unit.unit_number,
-                owner_name: unit.owner_user_id.clone().unwrap_or_else(|| "Kat Maliki".to_string()),
-                owner_phone: Some("+90 532 111 22 33".to_string()),
+                owner_name: owner.map(|u| u.full_name.clone()).unwrap_or_else(|| "Kat Maliki".to_string()),
+                // Real contact data or nothing; no fabricated phone number (AF-20).
+                owner_phone: owner.map(|u| u.phone.clone()).filter(|p| !p.trim().is_empty()),
                 land_share: unit.land_share,
                 total_project_share: total_share,
                 total_accrued,

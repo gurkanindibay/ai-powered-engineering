@@ -88,19 +88,23 @@ pub fn apply_advance_payments_offset(
             _ => continue,
         };
 
-        // Find all unpaid dues for this unit
+        // Find all unpaid operational dues for this unit. The in-memory advance is one
+        // balance per unit (owner and tenant money together), so it must never settle
+        // the owner's CAPITAL_DUES automatically: EPIC-09 "Dual-Ledger Audit Gate"
+        // allows that only through an explicit inter-ledger transfer (AF-18).
         let mut unpaid_indices: Vec<usize> = inner
             .dues
             .iter()
             .enumerate()
-            .filter(|(_, d)| d.unit_id == u_id && d.status != DebtStatus::Paid)
+            .filter(|(_, d)| d.unit_id == u_id && d.status != DebtStatus::Paid && d.expense_type != "CAPITAL_DUES")
             .map(|(i, _)| i)
             .collect();
 
         // FIFO: Sort by due_date ascending
         unpaid_indices.sort_by_key(|&i| inner.dues[i].due_date);
 
-        let unit_site_id = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.site_id.clone()).unwrap_or_else(|| "1".to_string());
+        // No invented tenant: an unknown unit leaves the site empty (visible to SaaS admins only).
+        let unit_site_id = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.site_id.clone()).unwrap_or_default();
         let unit_block = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.block_id.clone()).unwrap_or_else(|| "A".to_string());
         let unit_number = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.unit_number).unwrap_or(1);
         let unit_resident_name = inner
@@ -1705,15 +1709,31 @@ pub async fn process_bank_incoming_webhook(
             .unwrap_or(false)
     });
 
+    // Tenant that owns the receiving account (AF-16). A virtual IBAN identifies the
+    // unit (and so the site) directly; otherwise the receiving IBAN must be one of a
+    // site's configured bank accounts. Every fallback match below is confined to that
+    // site, and with no known receiving site nothing is matched at all.
+    let receiving_site_id: Option<String> = match unit_index {
+        Some(idx) => Some(inner.units[idx].site_id.clone()),
+        None => inner
+            .site_bank_accounts
+            .iter()
+            .find(|ba| ba.iban.replace(' ', "").to_uppercase() == clean_viban)
+            .map(|ba| ba.site_id.clone()),
+    };
+    let in_receiving_site = |u: &IndependentUnit| -> bool {
+        receiving_site_id.as_deref().is_some_and(|s| crate::auth::same_id(&u.site_id, s))
+    };
+
     if unit_index.is_some() {
         is_virtual_iban = true;
         match_mechanism = "Virtual IBAN";
-    } else {
+    } else if receiving_site_id.is_some() {
         // Priority 1: Check if sender_iban was previously remembered/authorized by site manager for a unit
         if let Some(ref sender_iban) = payload.sender_iban {
             let clean_sender = sender_iban.replace(' ', "").to_uppercase();
             if let Some(saved_unit_id) = inner.remembered_sender_ibans.get(&clean_sender) {
-                unit_index = inner.units.iter().position(|u| u.id == *saved_unit_id);
+                unit_index = inner.units.iter().position(|u| u.id == *saved_unit_id && in_receiving_site(u));
                 if unit_index.is_some() {
                     match_mechanism = "Remembered Sender IBAN (Yönetici Tarafından Eşleştirilmiş Gönderici IBAN'ı)";
                 }
@@ -1727,6 +1747,9 @@ pub async fn process_bank_incoming_webhook(
             if let Some((ref blk, unit_no)) = ReconciliationService::extract_block_and_flat(desc) {
                 let clean_blk = blk.to_uppercase().replace("BLOK", "").replace("BLOCK", "").replace(['-', '_', ' '], "");
                 unit_index = inner.units.iter().position(|u| {
+                    if !in_receiving_site(u) {
+                        return false;
+                    }
                     let u_blk = u.block_id.to_uppercase().replace("BLOK", "").replace("BLOCK", "").replace(['-', '_', ' '], "");
                     (u_blk == clean_blk || u.block_id.eq_ignore_ascii_case(blk)) && u.unit_number == unit_no
                 });
@@ -1745,7 +1768,7 @@ pub async fn process_bank_incoming_webhook(
                         let nl = n.to_lowercase();
                         sender_lower.contains(&nl) || nl.contains(&sender_lower)
                     }) {
-                        unit_index = inner.units.iter().position(|u| u.id == *u_id);
+                        unit_index = inner.units.iter().position(|u| u.id == *u_id && in_receiving_site(u));
                         if unit_index.is_some() {
                             match_mechanism = "Regular IBAN & Registered Payer Name Matching (Kayıtlı Gönderen İsim Eşleşmesi)";
                             break;
@@ -1756,7 +1779,10 @@ pub async fn process_bank_incoming_webhook(
                 if unit_index.is_none() {
                     for user in &inner.users {
                         if user.full_name.to_lowercase().contains(&sender_lower) || sender_lower.contains(&user.full_name.to_lowercase()) {
-                            unit_index = inner.units.iter().position(|u| u.owner_user_id.as_deref() == Some(&user.id));
+                            unit_index = inner
+                                .units
+                                .iter()
+                                .position(|u| u.owner_user_id.as_deref() == Some(&user.id) && in_receiving_site(u));
                             if unit_index.is_some() {
                                 match_mechanism = "Regular IBAN & Sender Name Matching (Gönderen İsim Eşleşmesi)";
                                 break;
@@ -1771,12 +1797,9 @@ pub async fn process_bank_incoming_webhook(
     let unit = match unit_index {
         Some(idx) => inner.units[idx].clone(),
         None => {
-            let bank_site_id = inner
-                .site_bank_accounts
-                .iter()
-                .find(|ba| ba.iban.replace(' ', "").to_uppercase() == clean_viban)
-                .map(|ba| ba.site_id.clone())
-                .unwrap_or_else(|| "1".to_string());
+            // Unknown receiving account: no tenant is invented; the item is visible
+            // to SaaS administrators only (empty site id).
+            let bank_site_id = receiving_site_id.clone().unwrap_or_default();
 
             let txn_desc = payload.description.clone().unwrap_or_else(|| {
                 format!("Site Ana Hesabı FAST Transferi: {}", payload.virtual_iban)
@@ -2042,12 +2065,17 @@ pub async fn list_dues_periods(
     State(state): State<AppState>,
     Query(query): Query<DuesPeriodsQuery>,
 ) -> Result<Json<Vec<DuesPeriod>>, (StatusCode, String)> {
+    // The middleware pins `site_id` for site users; a SaaS admin must name the site.
+    // There is no default tenant (AF-20).
+    let site_id = query
+        .site_id
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "site_id is required".to_string()))?;
     let inner = state.inner.read().await;
-    let site_id = query.site_id.unwrap_or_else(|| "site-begonya".to_string());
     let periods: Vec<DuesPeriod> = inner
         .dues_periods
         .iter()
-        .filter(|p| p.site_id == site_id || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&site_id))
+        .filter(|p| crate::auth::same_id(&p.site_id, &site_id))
         .cloned()
         .collect();
     Ok(Json(periods))
@@ -2088,106 +2116,72 @@ pub async fn create_dues_period(
 }
 
 // Periodic Dues Accrual & Automatic Advance Balance Offsetting
+///
+/// Uses the same accrual rule as the background scheduler
+/// (`scheduler::build_operational_accruals`, AF-15) and persists DB-first: only the
+/// newly created liabilities of *this* site are written, each with a
+/// database-generated id (AF-14). The global write lock is not held while the
+/// liabilities are inserted.
 pub async fn accrue_monthly_dues(
     State(state): State<AppState>,
     Json(payload): Json<AccrueDuesPeriodRequest>,
 ) -> Result<(StatusCode, Json<AccrueDuesPeriodResponse>), (StatusCode, String)> {
-    let mut inner = state.inner.write().await;
-    let ledger_before = ledger_snapshot(&inner);
-    let units_in_site: Vec<IndependentUnit> = inner
-        .units
-        .iter()
-        .filter(|u| u.site_id == payload.site_id)
-        .cloned()
-        .collect();
+    // 1. Ensure the billing period exists for the site.
+    {
+        let mut inner = state.inner.write().await;
+        let period_exists = inner.dues_periods.iter().any(|p| {
+            crate::auth::same_id(&p.site_id, &payload.site_id) && p.period_name.eq_ignore_ascii_case(&payload.period)
+        });
+        if !period_exists {
+            let max_p = inner.dues_periods.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
+            let period_record = DuesPeriod {
+                id: (max_p + 1).to_string(),
+                site_id: payload.site_id.clone(),
+                period_name: payload.period.clone(),
+                due_date: payload.due_date,
+                status: "ACTIVE".to_string(),
+                created_at: Some(chrono::Utc::now()),
+            };
+            inner.dues_periods.push(period_record.clone());
+            drop(inner);
+            if let Some(ref pool) = state.pool {
+                crate::db::save_dues_period(pool, &period_record)
+                    .await
+                    .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+            }
+        }
+    }
 
-    if units_in_site.is_empty() {
+    // 2. Build the candidates for this site only, under a read lock.
+    let (candidates, outcome) = {
+        let inner = state.inner.read().await;
+        crate::scheduler::build_operational_accruals(
+            &inner,
+            &payload.site_id,
+            &payload.period,
+            payload.due_date,
+            Some(payload.amount),
+        )
+    };
+
+    if outcome.units_in_site == 0 {
         return Err((
             StatusCode::NOT_FOUND,
             format!("No units found for site '{}'", payload.site_id),
         ));
     }
 
-    let total_units_in_site = units_in_site.len();
+    // 3. Persist DB-first (database ids, unique-index duplicate guard), without the lock.
+    let persisted = crate::scheduler::persist_accruals(&state, candidates)
+        .await
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
 
-    // Ensure period is stored in the separate dues_periods table
-    let period_exists = inner.dues_periods.iter().any(|p| {
-        (p.site_id == payload.site_id || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&payload.site_id))
-            && p.period_name.eq_ignore_ascii_case(&payload.period)
-    });
-    if !period_exists {
-        let max_p = inner.dues_periods.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
-        let period_record = DuesPeriod {
-            id: (max_p + 1).to_string(),
-            site_id: payload.site_id.clone(),
-            period_name: payload.period.clone(),
-            due_date: payload.due_date,
-            status: "ACTIVE".to_string(),
-            created_at: Some(chrono::Utc::now()),
-        };
-        inner.dues_periods.push(period_record.clone());
-        if let Some(ref pool) = state.pool {
-            crate::db::save_dues_period(pool, &period_record).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
-        }
-    }
-
-    // Invariant Guard: Prevent duplicate accrual for already-accrued units
-    let mut newly_accrued_units_count = 0;
-    let mut total_amount_accrued = Decimal::ZERO;
-
-    for unit in &units_in_site {
-        let already_exists = inner
-            .dues
-            .iter()
-            .any(|d| d.unit_id == unit.id && d.period == payload.period);
-        if !already_exists {
-            let effective_amount = if payload.amount > Decimal::ZERO {
-                payload.amount
-            } else {
-                let unit_house_type = unit.house_type.as_deref().unwrap_or("2+1");
-                inner
-                    .house_types
-                    .iter()
-                    .find(|ht| {
-                        (ht.site_id == payload.site_id || crate::db::parse_id_to_i64(&ht.site_id) == crate::db::parse_id_to_i64(&payload.site_id))
-                            && ht.type_name.eq_ignore_ascii_case(unit_house_type)
-                    })
-                    .map(|ht| ht.dues_amount)
-                    .unwrap_or(Decimal::new(1400, 0))
-            };
-
-            let max_d = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
-            let due_id = (max_d + 1).to_string();
-            inner.dues.push(DuesLiability {
-                id: due_id,
-                unit_id: unit.id.clone(),
-                period: payload.period.clone(),
-                principal_amount: effective_amount,
-                delay_penalty: Decimal::ZERO,
-                total_amount: effective_amount,
-                due_date: payload.due_date,
-                status: DebtStatus::Pending,
-                paid_principal: Decimal::ZERO,
-                paid_penalty: Decimal::ZERO,
-                debtor_type: "TENANT".to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
-            });
-            total_amount_accrued += effective_amount;
-            newly_accrued_units_count += 1;
-        }
-    }
-
-    if let Some(ref pool) = state.pool {
-        let dues_to_save: Vec<DuesLiability> = inner
-            .dues
-            .iter()
-            .filter(|d| d.period == payload.period)
-            .cloned()
-            .collect();
-        for due in &dues_to_save {
-            crate::db::save_due_liability(pool, due).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
-        }
-    }
+    // 4. Record in memory and offset advances under a short write lock.
+    let mut inner = state.inner.write().await;
+    let ledger_before = ledger_snapshot(&inner);
+    let recorded = crate::scheduler::record_accruals(&mut inner, persisted);
+    let newly_accrued_units_count = recorded.len();
+    let total_amount_accrued: Decimal = recorded.iter().map(|d| d.principal_amount).sum();
 
     if newly_accrued_units_count == 0 {
         return Ok((
@@ -2195,22 +2189,41 @@ pub async fn accrue_monthly_dues(
             Json(AccrueDuesPeriodResponse {
                 site_id: payload.site_id,
                 period: payload.period.clone(),
-                total_units_accrued: total_units_in_site,
+                total_units_accrued: outcome.units_in_site,
                 newly_accrued_units_count: 0,
                 auto_settled_units_count: 0,
                 total_amount_accrued: Decimal::ZERO,
                 total_amount_offset_from_advance: Decimal::ZERO,
-                already_accrued: true,
-                message: format!(
-                    "'{}' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi.",
-                    payload.period
-                ),
+                already_accrued: outcome.skipped_without_tariff == 0,
+                message: if outcome.skipped_without_tariff > 0 {
+                    format!(
+                        "'{}' dönemi için tahakkuk yapılamadı: {} dairenin konut tipi tarifesi yok.",
+                        payload.period, outcome.skipped_without_tariff
+                    )
+                } else {
+                    format!(
+                        "'{}' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi.",
+                        payload.period
+                    )
+                },
             }),
         ));
     }
 
-    // Automatically apply available advance payments against newly accrued dues!
-    let (auto_settled_count, total_offset) = apply_advance_payments_offset(&mut inner, None);
+    // Automatically apply available advance payments against newly accrued dues of this site.
+    let site_unit_ids: Vec<String> = inner
+        .units
+        .iter()
+        .filter(|u| crate::auth::same_id(&u.site_id, &payload.site_id))
+        .map(|u| u.id.clone())
+        .collect();
+    let mut auto_settled_count = 0;
+    let mut total_offset = Decimal::ZERO;
+    for unit_id in &site_unit_ids {
+        let (n, amount) = apply_advance_payments_offset(&mut inner, Some(unit_id));
+        auto_settled_count += n;
+        total_offset += amount;
+    }
     if let Some(ref pool) = state.pool {
         persist_ledger_changes(pool, &ledger_before, &inner)
             .await
@@ -2222,7 +2235,7 @@ pub async fn accrue_monthly_dues(
         Json(AccrueDuesPeriodResponse {
             site_id: payload.site_id,
             period: payload.period.clone(),
-            total_units_accrued: total_units_in_site,
+            total_units_accrued: outcome.units_in_site,
             newly_accrued_units_count,
             auto_settled_units_count: auto_settled_count,
             total_amount_accrued,
@@ -4022,31 +4035,50 @@ pub async fn create_capital_project(
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
+/// Object-level authorization for `/api/v1/capital-projects/:id/*` (AF-11).
+///
+/// The middleware only pins `site_id` in the query and body; a project id in the
+/// path is not tied to a tenant there. A project of another site is reported as
+/// 404 (not 403) so ids cannot be enumerated across tenants.
+async fn authorize_capital_project(
+    state: &AppState,
+    claims: &crate::auth::Claims,
+    project_id: &str,
+) -> Result<CapitalProject, (StatusCode, String)> {
+    let not_found = || (StatusCode::NOT_FOUND, "Demirbaş projesi bulunamadı.".to_string());
+    let project = CapitalProjectService::new(state.clone()).get_project(project_id).await.ok_or_else(not_found)?;
+    if claims.is_saas_admin() || crate::auth::same_id(&project.site_id, &claims.site_id) {
+        Ok(project)
+    } else {
+        Err(not_found())
+    }
+}
+
 pub async fn get_capital_project(
     State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
     Path(id): Path<String>,
 ) -> Result<Json<CapitalProject>, (StatusCode, String)> {
-    let service = CapitalProjectService::new(state);
-    service
-        .get_project(&id)
-        .await
-        .map(Json)
-        .ok_or_else(|| (StatusCode::NOT_FOUND, "Demirbaş projesi bulunamadı.".to_string()))
+    authorize_capital_project(&state, &claims, &id).await.map(Json)
 }
 
 pub async fn list_capital_installments(
     State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
     Path(id): Path<String>,
-) -> Json<Vec<CapitalProjectInstallment>> {
+) -> Result<Json<Vec<CapitalProjectInstallment>>, (StatusCode, String)> {
+    authorize_capital_project(&state, &claims, &id).await?;
     let service = CapitalProjectService::new(state);
-    Json(service.list_installments(&id).await)
+    Ok(Json(service.list_installments(&id).await))
 }
 
 pub async fn accrue_capital_installment(
     State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
     Path(id): Path<String>,
     Json(payload): Json<AccrueInstallmentRequest>,
 ) -> Result<Json<AccrueInstallmentResponse>, (StatusCode, String)> {
+    authorize_capital_project(&state, &claims, &id).await?;
     let service = CapitalProjectService::new(state);
     service
         .accrue_installment(&id, payload.installment_number)
@@ -4057,9 +4089,11 @@ pub async fn accrue_capital_installment(
 
 pub async fn record_capital_disbursement(
     State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
     Path(id): Path<String>,
     Json(payload): Json<RecordDisbursementRequest>,
 ) -> Result<(StatusCode, Json<CapitalContractorDisbursement>), (StatusCode, String)> {
+    authorize_capital_project(&state, &claims, &id).await?;
     let service = CapitalProjectService::new(state);
     service
         .record_disbursement(&id, payload)
@@ -4070,22 +4104,28 @@ pub async fn record_capital_disbursement(
 
 pub async fn list_capital_disbursements(
     State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
     Path(id): Path<String>,
-) -> Json<Vec<CapitalContractorDisbursement>> {
+) -> Result<Json<Vec<CapitalContractorDisbursement>>, (StatusCode, String)> {
+    authorize_capital_project(&state, &claims, &id).await?;
     let service = CapitalProjectService::new(state);
-    Json(service.list_disbursements(&id).await)
+    Ok(Json(service.list_disbursements(&id).await))
 }
 
 pub async fn get_unit_capital_shares(
     State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
     Path(id): Path<String>,
 ) -> Result<Json<Vec<UnitCapitalShareSummary>>, (StatusCode, String)> {
+    authorize_capital_project(&state, &claims, &id).await?;
     let service = CapitalProjectService::new(state);
-    service
-        .get_unit_capital_shares(&id)
-        .await
-        .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+    let mut shares = service.get_unit_capital_shares(&id).await.map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    // Residents see only their own unit's line, not other owners' names and phones.
+    if !claims.is_site_staff() {
+        let own = claims.unit_id.as_deref().unwrap_or("");
+        shares.retain(|s| !own.is_empty() && crate::auth::same_id(&s.unit_id, own));
+    }
+    Ok(Json(shares))
 }
 
 
