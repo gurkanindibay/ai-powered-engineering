@@ -11,7 +11,9 @@
 
 use std::sync::OnceLock;
 
-use argon2::password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::{
+    rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+};
 use argon2::Argon2;
 use axum::{
     body::{to_bytes, Body},
@@ -22,7 +24,6 @@ use axum::{
     Json,
 };
 use chrono::Utc;
-use hmac::{Hmac, Mac};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -84,7 +85,9 @@ fn jwt_secret() -> &'static [u8] {
 /// Fails fast at startup when required secrets are missing in production.
 pub fn validate_configuration() {
     let _ = jwt_secret();
-    if crate::state::AppStateInner::is_production() && std::env::var("SITEPULSE_BANK_WEBHOOK_SECRET").is_err() {
+    if crate::state::AppStateInner::is_production()
+        && std::env::var("SITEPULSE_BANK_WEBHOOK_SECRET").is_err()
+    {
         panic!("SITEPULSE_BANK_WEBHOOK_SECRET is required in production");
     }
 }
@@ -93,7 +96,13 @@ pub fn validate_configuration() {
 // Tokens
 // ---------------------------------------------------------------------------
 
-pub fn issue_token(user_id: &str, email: &str, role: Role, site_id: &str, unit_id: Option<&str>) -> String {
+pub fn issue_token(
+    user_id: &str,
+    email: &str,
+    role: Role,
+    site_id: &str,
+    unit_id: Option<&str>,
+) -> String {
     let now = Utc::now().timestamp();
     let claims = Claims {
         sub: user_id.to_string(),
@@ -104,8 +113,12 @@ pub fn issue_token(user_id: &str, email: &str, role: Role, site_id: &str, unit_i
         iat: now,
         exp: now + TOKEN_TTL_SECONDS,
     };
-    encode(&Header::new(Algorithm::HS256), &claims, &EncodingKey::from_secret(jwt_secret()))
-        .expect("HS256 encoding of typed claims cannot fail")
+    encode(
+        &Header::new(Algorithm::HS256),
+        &claims,
+        &EncodingKey::from_secret(jwt_secret()),
+    )
+    .expect("HS256 encoding of typed claims cannot fail")
 }
 
 pub fn verify_token(token: &str) -> Result<Claims, String> {
@@ -132,7 +145,9 @@ pub fn hash_password(password: &str) -> String {
 /// format (plaintext, placeholder prefixes, unsalted digests) never verifies.
 pub fn verify_password(password: &str, stored_hash: &str) -> bool {
     match PasswordHash::new(stored_hash) {
-        Ok(parsed) => Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok(),
+        Ok(parsed) => Argon2::default()
+            .verify_password(password.as_bytes(), &parsed)
+            .is_ok(),
         Err(_) => false,
     }
 }
@@ -161,7 +176,10 @@ pub fn legacy_plaintext(stored: &str) -> Option<String> {
 
 pub fn validate_new_password(password: &str) -> Result<(), String> {
     if password.chars().count() < MIN_PASSWORD_LENGTH {
-        return Err(format!("Password must be at least {} characters.", MIN_PASSWORD_LENGTH));
+        return Err(format!(
+            "Password must be at least {} characters.",
+            MIN_PASSWORD_LENGTH
+        ));
     }
     Ok(())
 }
@@ -172,7 +190,9 @@ pub fn generate_temporary_password(prefix: &str) -> String {
     const ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let mut rng = rand::thread_rng();
     let mut part = || -> String {
-        (0..5).map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char).collect()
+        (0..5)
+            .map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char)
+            .collect()
     };
     format!("{}{}-{}", prefix, part(), part())
 }
@@ -187,23 +207,29 @@ pub fn token_digest(token: &str) -> String {
 // Webhook signatures
 // ---------------------------------------------------------------------------
 
-/// Verifies `hex(HMAC-SHA256(secret, raw_body))` in constant time.
+/// Environment variable holding the shared bank webhook secret.
+pub const BANK_WEBHOOK_SECRET_ENV: &str = "SITEPULSE_BANK_WEBHOOK_SECRET";
+
+/// Verifies `hex(HMAC-SHA256(secret, raw_body))` in constant time against the
+/// secret configured in [`BANK_WEBHOOK_SECRET_ENV`]. A missing or empty secret
+/// rejects every request. The cryptography lives in
+/// [`crate::domain::fingerprint::verify_hmac_sha256_hex`], which takes the
+/// secret as a parameter; this wrapper only resolves configuration.
+///
+/// No timestamp or replay window is enforced: redeliveries are handled by the
+/// payload-hash idempotency claim, not by the signature.
 pub fn verify_webhook_signature(raw_body: &[u8], signature_hex: Option<&str>) -> bool {
-    let secret = match std::env::var("SITEPULSE_BANK_WEBHOOK_SECRET") {
-        Ok(s) if !s.is_empty() => s,
-        _ => return false,
+    let Ok(secret) = std::env::var(BANK_WEBHOOK_SECRET_ENV) else {
+        return false;
     };
-    let Some(sig) = signature_hex else { return false };
-    let Ok(sig_bytes) = hex::decode(sig.trim().trim_start_matches("sha256=")) else { return false };
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
-    mac.update(raw_body);
-    mac.verify_slice(&sig_bytes).is_ok()
+    let Some(sig) = signature_hex else {
+        return false;
+    };
+    crate::domain::fingerprint::verify_hmac_sha256_hex(secret.as_bytes(), raw_body, sig)
 }
 
 pub fn sign_webhook_body(secret: &str, raw_body: &[u8]) -> String {
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
-    mac.update(raw_body);
-    hex::encode(mac.finalize().into_bytes())
+    crate::domain::fingerprint::hmac_sha256_hex(secret.as_bytes(), raw_body)
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +248,9 @@ fn route_access(method: &Method, path: &str) -> Access {
     let p = path.trim_end_matches('/');
     match p {
         "/health" | "/api/v1/health" => return Access::Public,
-        "/api/v1/auth/login" | "/api/v1/auth/google" | "/api/v1/auth/register" => return Access::Public,
+        "/api/v1/auth/login" | "/api/v1/auth/google" | "/api/v1/auth/register" => {
+            return Access::Public
+        }
         "/api/v1/home-residents/register" => return Access::Public,
         // Authenticated by HMAC signature inside the handler, not by a user token.
         "/api/v1/bank/webhook/incoming-transfer" => return Access::Public,
@@ -253,7 +281,10 @@ fn route_access(method: &Method, path: &str) -> Access {
         return Access::Authenticated;
     }
     // Unit-scoped resident routes: residents reach only their own unit (checked below).
-    if p.starts_with("/api/v1/residents/") || p.starts_with("/api/v1/units/") || p.starts_with("/api/v1/payments/receipts/") {
+    if p.starts_with("/api/v1/residents/")
+        || p.starts_with("/api/v1/units/")
+        || p.starts_with("/api/v1/payments/receipts/")
+    {
         return Access::Authenticated;
     }
     if p.starts_with("/api/v1/home-residents/") {
@@ -275,8 +306,12 @@ fn path_unit_id(path: &str) -> Option<String> {
     match (segs[2], segs.get(3).copied()) {
         ("residents", Some(u)) => Some(u.to_string()),
         ("units", Some(u)) => Some(u.to_string()),
-        ("home-residents", Some("invite-link")) | ("home-residents", Some("members")) => segs.get(4).map(|s| s.to_string()),
-        ("site-admin", Some("units")) | ("site-admin", Some("home-owners")) => segs.get(4).map(|s| s.to_string()),
+        ("home-residents", Some("invite-link")) | ("home-residents", Some("members")) => {
+            segs.get(4).map(|s| s.to_string())
+        }
+        ("site-admin", Some("units")) | ("site-admin", Some("home-owners")) => {
+            segs.get(4).map(|s| s.to_string())
+        }
         _ => None,
     }
 }
@@ -296,14 +331,21 @@ pub fn same_id(a: &str, b: &str) -> bool {
         return true;
     }
     let num = |s: &str| -> Option<i64> {
-        let stripped = s.trim_start_matches("site-").trim_start_matches("d-").trim_start_matches("unit-");
+        let stripped = s
+            .trim_start_matches("site-")
+            .trim_start_matches("d-")
+            .trim_start_matches("unit-");
         stripped.parse::<i64>().ok()
     };
     matches!((num(a), num(b)), (Some(x), Some(y)) if x == y)
 }
 
 fn error(status: StatusCode, message: &str) -> Response {
-    (status, Json(serde_json::json!({ "status": "ERROR", "message": message }))).into_response()
+    (
+        status,
+        Json(serde_json::json!({ "status": "ERROR", "message": message })),
+    )
+        .into_response()
 }
 
 async fn unit_site_id(state: &AppState, unit_id: &str) -> Option<String> {
@@ -316,11 +358,18 @@ async fn unit_site_id(state: &AppState, unit_id: &str) -> Option<String> {
     let pool = state.pool.as_ref()?;
     let id: i64 = unit_id.trim_start_matches("d-").parse().ok()?;
     let client = pool.get().await.ok()?;
-    let row = client.query_opt("SELECT site_id FROM units WHERE id = $1", &[&id]).await.ok()??;
+    let row = client
+        .query_opt("SELECT site_id FROM units WHERE id = $1", &[&id])
+        .await
+        .ok()??;
     row.get::<_, Option<i64>>(0).map(|s| s.to_string())
 }
 
-async fn check_unit_access(state: &AppState, claims: &Claims, unit_id: &str) -> Result<(), Response> {
+async fn check_unit_access(
+    state: &AppState,
+    claims: &Claims,
+    unit_id: &str,
+) -> Result<(), Response> {
     if claims.is_saas_admin() {
         return Ok(());
     }
@@ -333,7 +382,10 @@ async fn check_unit_access(state: &AppState, claims: &Claims, unit_id: &str) -> 
     }
     match &claims.unit_id {
         Some(own) if same_id(own, unit_id) => Ok(()),
-        _ => Err(error(StatusCode::FORBIDDEN, "You may only access your own unit")),
+        _ => Err(error(
+            StatusCode::FORBIDDEN,
+            "You may only access your own unit",
+        )),
     }
 }
 
@@ -341,7 +393,10 @@ fn check_site_access(claims: &Claims, site_id: &str) -> Result<(), Response> {
     if claims.is_saas_admin() || same_id(site_id, &claims.site_id) {
         Ok(())
     } else {
-        Err(error(StatusCode::FORBIDDEN, "Site belongs to another tenant"))
+        Err(error(
+            StatusCode::FORBIDDEN,
+            "Site belongs to another tenant",
+        ))
     }
 }
 
@@ -364,10 +419,16 @@ fn pin_query_site(uri: &Uri, claims: &Claims) -> Result<Uri, Response> {
     // An empty `site_id=` counts as missing and is replaced by the caller's site.
     pairs.retain(|(k, _)| !is_site_key(k));
     pairs.push(("site_id".to_string(), claims.site_id.clone()));
-    let new_query: Vec<String> = pairs.iter().map(|(k, v)| format!("{}={}", encode_component(k), encode_component(v))).collect();
+    let new_query: Vec<String> = pairs
+        .iter()
+        .map(|(k, v)| format!("{}={}", encode_component(k), encode_component(v)))
+        .collect();
     let pq = format!("{}?{}", uri.path(), new_query.join("&"));
     let mut parts = uri.clone().into_parts();
-    parts.path_and_query = Some(pq.parse().map_err(|_| error(StatusCode::BAD_REQUEST, "Malformed query"))?);
+    parts.path_and_query = Some(
+        pq.parse()
+            .map_err(|_| error(StatusCode::BAD_REQUEST, "Malformed query"))?,
+    );
     Uri::from_parts(parts).map_err(|_| error(StatusCode::BAD_REQUEST, "Malformed query"))
 }
 
@@ -392,7 +453,10 @@ fn decode_component(s: &str) -> String {
         match bytes[i] {
             b'+' => out.push(b' '),
             b'%' if i + 2 < bytes.len() => {
-                if let Some(b) = s.get(i + 1..i + 3).and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                if let Some(b) = s
+                    .get(i + 1..i + 3)
+                    .and_then(|h| u8::from_str_radix(h, 16).ok())
+                {
                     out.push(b);
                     i += 3;
                     continue;
@@ -468,7 +532,9 @@ fn json_id(v: &serde_json::Value) -> String {
 
 pub fn bearer_token(req: &Request) -> Option<String> {
     let value = req.headers().get(header::AUTHORIZATION)?.to_str().ok()?;
-    let token = value.strip_prefix("Bearer ").or_else(|| value.strip_prefix("bearer "))?;
+    let token = value
+        .strip_prefix("Bearer ")
+        .or_else(|| value.strip_prefix("bearer "))?;
     Some(token.trim().to_string())
 }
 
@@ -495,7 +561,10 @@ pub async fn require_auth(State(state): State<AppState>, req: Request, next: Nex
         Access::SaasAdmin => claims.is_saas_admin(),
     };
     if !allowed {
-        return error(StatusCode::FORBIDDEN, "Your role is not allowed to use this endpoint");
+        return error(
+            StatusCode::FORBIDDEN,
+            "Your role is not allowed to use this endpoint",
+        );
     }
 
     if let Some(unit) = path_unit_id(&path) {
@@ -515,7 +584,9 @@ pub async fn require_auth(State(state): State<AppState>, req: Request, next: Nex
         Err(resp) => return resp,
     }
 
-    let body = if matches!(method, Method::POST | Method::PUT | Method::PATCH) && !claims.is_saas_admin() {
+    let body = if matches!(method, Method::POST | Method::PUT | Method::PATCH)
+        && !claims.is_saas_admin()
+    {
         let bytes = match to_bytes(body, MAX_INSPECTED_BODY_BYTES).await {
             Ok(b) => b,
             Err(_) => return error(StatusCode::PAYLOAD_TOO_LARGE, "Request body too large"),
@@ -527,10 +598,19 @@ pub async fn require_auth(State(state): State<AppState>, req: Request, next: Nex
                 }
                 // Pin a missing site to the caller's own site, as for the query string.
                 if let Some(obj) = value.as_object_mut() {
-                    let has_site = obj.get("site_id").map(|v| !json_id(v).is_empty()).unwrap_or(false)
-                        || obj.get("siteId").map(|v| !json_id(v).is_empty()).unwrap_or(false);
+                    let has_site = obj
+                        .get("site_id")
+                        .map(|v| !json_id(v).is_empty())
+                        .unwrap_or(false)
+                        || obj
+                            .get("siteId")
+                            .map(|v| !json_id(v).is_empty())
+                            .unwrap_or(false);
                     if !has_site && !claims.site_id.is_empty() {
-                        obj.insert("site_id".to_string(), serde_json::Value::String(claims.site_id.clone()));
+                        obj.insert(
+                            "site_id".to_string(),
+                            serde_json::Value::String(claims.site_id.clone()),
+                        );
                         match serde_json::to_vec(&value) {
                             Ok(v) => {
                                 parts.headers.remove(header::CONTENT_LENGTH);
@@ -561,7 +641,13 @@ mod tests {
 
     #[test]
     fn token_round_trip_and_tamper_detection() {
-        let t = issue_token("usr-1", "a\"b@x.io", Role::HomeOwner, "site-1", Some("d-14"));
+        let t = issue_token(
+            "usr-1",
+            "a\"b@x.io",
+            Role::HomeOwner,
+            "site-1",
+            Some("d-14"),
+        );
         let c = verify_token(&t).expect("valid");
         assert_eq!(c.email, "a\"b@x.io");
         assert_eq!(c.role, Role::HomeOwner);
@@ -581,7 +667,10 @@ mod tests {
         assert!(!verify_password("wrong", &h));
         assert!(!verify_password("admin123", "ARGON2_HASH_admin123"));
         assert!(!verify_password("admin123", "admin123"));
-        assert_eq!(legacy_plaintext("ARGON2_HASH_admin123").as_deref(), Some("admin123"));
+        assert_eq!(
+            legacy_plaintext("ARGON2_HASH_admin123").as_deref(),
+            Some("admin123")
+        );
         assert_eq!(legacy_plaintext(&h), None);
     }
 

@@ -3,10 +3,28 @@ use regex::Regex;
 use rust_decimal::Decimal;
 
 use crate::models::{
-    BankTransactionItem, DebtStatus, DuesLiability, IndependentUnit,
-    ReconciliationMatch, ReconciliationStatus, User,
+    BankTransactionItem, DebtStatus, DuesLiability, IndependentUnit, ReconciliationMatch,
+    ReconciliationStatus, User,
 };
 use crate::services::dues_calculation_service::DuesCalculationService;
+use std::sync::LazyLock;
+
+/// Compiled once; `all_patterns_compile` guarantees it is `Ok`.
+static BLOCK_THEN_FLAT_RE: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)\b([A-Z0-9]+)\s*blok\b.*?\b(?:d[:\.\s-]*|daire[:\.\s-]*|no[:\.\s-]*|k[:\.\s-]*\d+\s+d[:\.\s-]*)(\d+)\b",
+    )
+});
+/// Compiled once; `all_patterns_compile` guarantees it is `Ok`.
+static BLOK_PREFIX_FLAT_RE: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
+    Regex::new(r"(?i)\bblok\s*([A-Z0-9]+)\b.*?\b(?:d[:\.\s-]*|daire[:\.\s-]*)(\d+)\b")
+});
+/// Compiled once; `all_patterns_compile` guarantees it is `Ok`.
+static COMPACT_BLOCK_FLAT_RE: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(r"(?i)\b([A-Z])\s*[-/]\s*(\d+)\b"));
+/// Compiled once; `all_patterns_compile` guarantees it is `Ok`.
+static FLAT_ONLY_RE: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(r"(?i)\b(?:d[:\.\s-]*|daire[:\.\s-]*|no[:\.\s-]*)(\d+)\b"));
 
 pub struct ReconciliationService {
     dues_service: DuesCalculationService,
@@ -34,7 +52,14 @@ impl ReconciliationService {
         dues: &[DuesLiability],
         evaluation_date: NaiveDate,
     ) -> Vec<ReconciliationMatch> {
-        self.reconcile_transactions_with_site(None, transactions, units, users, dues, evaluation_date)
+        self.reconcile_transactions_with_site(
+            None,
+            transactions,
+            units,
+            users,
+            dues,
+            evaluation_date,
+        )
     }
 
     pub fn reconcile_transactions_with_site(
@@ -49,7 +74,14 @@ impl ReconciliationService {
         let mut results = Vec::new();
 
         for txn in transactions {
-            let matched = self.match_single_transaction_with_site(site_id, txn, units, users, dues, evaluation_date);
+            let matched = self.match_single_transaction_with_site(
+                site_id,
+                txn,
+                units,
+                users,
+                dues,
+                evaluation_date,
+            );
             results.push(matched);
         }
 
@@ -105,20 +137,28 @@ impl ReconciliationService {
         if matched_unit.is_none() {
             let extracted_unit = Self::extract_block_and_flat(desc);
             if let Some((ref blk, unit_no)) = extracted_unit {
-                let clean_blk = blk.to_uppercase().replace("BLOK", "").replace("BLOCK", "").replace(['-', '_', ' '], "");
+                let clean_blk = blk
+                    .to_uppercase()
+                    .replace("BLOK", "")
+                    .replace("BLOCK", "")
+                    .replace(['-', '_', ' '], "");
                 matched_unit = units.iter().find(|u| {
-                    let u_blk = u.block_id.to_uppercase().replace("BLOK", "").replace("BLOCK", "").replace(['-', '_', ' '], "");
-                    (u_blk == clean_blk || u.block_id.eq_ignore_ascii_case(blk)) && u.unit_number == unit_no
+                    let u_blk = u
+                        .block_id
+                        .to_uppercase()
+                        .replace("BLOK", "")
+                        .replace("BLOCK", "")
+                        .replace(['-', '_', ' '], "");
+                    (u_blk == clean_blk || u.block_id.eq_ignore_ascii_case(blk))
+                        && u.unit_number == unit_no
                 });
             }
 
             // If block wasn't extracted but flat was, try matching by flat number alone if unique
             if matched_unit.is_none() {
                 if let Some(flat_no) = Self::extract_flat_only(desc) {
-                    let candidate_units: Vec<&IndependentUnit> = units
-                        .iter()
-                        .filter(|u| u.unit_number == flat_no)
-                        .collect();
+                    let candidate_units: Vec<&IndependentUnit> =
+                        units.iter().filter(|u| u.unit_number == flat_no).collect();
                     if candidate_units.len() == 1 {
                         matched_unit = Some(candidate_units[0]);
                     }
@@ -158,7 +198,9 @@ impl ReconciliationService {
 
             if let Some(first_due) = unit_dues.first() {
                 // Calculate dynamic KMK penalty up to evaluation date
-                let evaluated = self.dues_service.calculate_delay_penalty((*first_due).clone(), evaluation_date);
+                let evaluated = self
+                    .dues_service
+                    .calculate_delay_penalty((*first_due).clone(), evaluation_date);
                 let balance = evaluated.total_amount;
                 outstanding_balance = Some(balance);
                 matched_due = Some(evaluated);
@@ -175,7 +217,8 @@ impl ReconciliationService {
         // 4. Calculate Confidence Score & Status
         let mut confidence: u8 = 0;
         let has_unit = matched_unit.is_some();
-        let has_name = matched_user.is_some() && Self::text_contains_name(desc, &matched_user.unwrap().full_name);
+        let has_name = matched_user.is_some()
+            && Self::text_contains_name(desc, &matched_user.unwrap().full_name);
         let is_advance_match = matched_unit.is_some() && matched_due.is_none();
 
         if is_already_processed {
@@ -224,7 +267,10 @@ impl ReconciliationService {
                         Some("100% Match via Flat-Specific Virtual IBAN (Sanal IBAN). Zero manual narrative entry required.".to_string())
                     }
                 } else if amount_matches {
-                    Some("Exact amount matches outstanding dues balance (including KMK penalty)".to_string())
+                    Some(
+                        "Exact amount matches outstanding dues balance (including KMK penalty)"
+                            .to_string(),
+                    )
                 } else if txn.amount > outstanding_balance.unwrap_or(Decimal::ZERO) {
                     let surplus = txn.amount - outstanding_balance.unwrap_or(Decimal::ZERO);
                     Some(format!(
@@ -277,9 +323,7 @@ impl ReconciliationService {
     /// - "A-14"
     pub fn extract_block_and_flat(text: &str) -> Option<(String, i32)> {
         // Pattern 1: [A-Z0-9]+ BLOK D:(\d+) or DAIRE (\d+)
-        let re1 = Regex::new(
-            r"(?i)\b([A-Z0-9]+)\s*blok\b.*?\b(?:d[:\.\s-]*|daire[:\.\s-]*|no[:\.\s-]*|k[:\.\s-]*\d+\s+d[:\.\s-]*)(\d+)\b",
-        ).ok()?;
+        let re1 = BLOCK_THEN_FLAT_RE.as_ref().ok()?;
 
         if let Some(caps) = re1.captures(text) {
             let blk = caps.get(1)?.as_str().to_uppercase();
@@ -288,9 +332,7 @@ impl ReconciliationService {
         }
 
         // Pattern 2: BLOK [A-Z0-9]+ D:(\d+)
-        let re2 = Regex::new(
-            r"(?i)\bblok\s*([A-Z0-9]+)\b.*?\b(?:d[:\.\s-]*|daire[:\.\s-]*)(\d+)\b",
-        ).ok()?;
+        let re2 = BLOK_PREFIX_FLAT_RE.as_ref().ok()?;
 
         if let Some(caps) = re2.captures(text) {
             let blk = caps.get(1)?.as_str().to_uppercase();
@@ -299,7 +341,7 @@ impl ReconciliationService {
         }
 
         // Pattern 3: Compact format e.g. "A/14" or "A-14"
-        let re3 = Regex::new(r"(?i)\b([A-Z])\s*[-/]\s*(\d+)\b").ok()?;
+        let re3 = COMPACT_BLOCK_FLAT_RE.as_ref().ok()?;
         if let Some(caps) = re3.captures(text) {
             let blk = caps.get(1)?.as_str().to_uppercase();
             let flat: i32 = caps.get(2)?.as_str().parse().ok()?;
@@ -311,7 +353,7 @@ impl ReconciliationService {
 
     /// Extracts standalone flat number if preceded by D:, DAIRE, or NO.
     pub fn extract_flat_only(text: &str) -> Option<i32> {
-        let re = Regex::new(r"(?i)\b(?:d[:\.\s-]*|daire[:\.\s-]*|no[:\.\s-]*)(\d+)\b").ok()?;
+        let re = FLAT_ONLY_RE.as_ref().ok()?;
         if let Some(caps) = re.captures(text) {
             return caps.get(1)?.as_str().parse().ok();
         }
@@ -336,15 +378,31 @@ impl ReconciliationService {
         needle_words.iter().all(|w| norm_haystack.contains(w))
     }
 
-    /// Normalizes Turkish characters to lowercase ASCII equivalents for robust fuzzy matching.
+    /// Normalizes Turkish characters to lowercase ASCII equivalents for robust
+    /// fuzzy matching. Delegates to the shared [`crate::domain::fold_turkish`],
+    /// which also strips the combining dot left by lower-casing `İ`.
     pub fn normalize_turkish(input: &str) -> String {
-        input
-            .to_lowercase()
-            .replace(['ı', 'İ'], "i")
-            .replace(['ğ', 'Ğ'], "g")
-            .replace(['ü', 'Ü'], "u")
-            .replace(['ş', 'Ş'], "s")
-            .replace(['ö', 'Ö'], "o")
-            .replace(['ç', 'Ç'], "c")
+        crate::domain::fold_turkish(input)
+    }
+}
+
+#[cfg(test)]
+mod pattern_tests {
+    use super::*;
+
+    #[test]
+    fn all_patterns_compile() {
+        for (name, pattern) in [
+            ("BLOCK_THEN_FLAT_RE", &*BLOCK_THEN_FLAT_RE),
+            ("BLOK_PREFIX_FLAT_RE", &*BLOK_PREFIX_FLAT_RE),
+            ("COMPACT_BLOCK_FLAT_RE", &*COMPACT_BLOCK_FLAT_RE),
+            ("FLAT_ONLY_RE", &*FLAT_ONLY_RE),
+        ] {
+            assert!(
+                pattern.is_ok(),
+                "{name} failed to compile: {:?}",
+                pattern.as_ref().err()
+            );
+        }
     }
 }

@@ -26,7 +26,8 @@ macro_rules! impl_sql_for_enum {
                 &self,
                 ty: &tokio_postgres::types::Type,
                 out: &mut tokio_postgres::types::private::BytesMut,
-            ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+            ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
+            {
                 self.as_str().to_sql(ty, out)
             }
 
@@ -62,7 +63,9 @@ impl Role {
     pub fn from_str_loose(s: &str) -> Self {
         match s.to_uppercase().as_str() {
             "HOME_OWNER" | "KAT_MALIKI" => Role::HomeOwner,
-            "HOME_RESIDENT" | "EV_SAKINI" | "RESIDENT" | "KAT_SAKINI" | "TENANT" => Role::HomeResident,
+            "HOME_RESIDENT" | "EV_SAKINI" | "RESIDENT" | "KAT_SAKINI" | "TENANT" => {
+                Role::HomeResident
+            }
             "SITE_MANAGER" | "YONETICI" => Role::SiteManager,
             "SAAS_ADMIN" | "ADMIN" => Role::SaasAdmin,
             _ => Role::HomeOwner,
@@ -95,8 +98,12 @@ impl Permission {
             Permission::SiteManage => "Manage site, blocks, units, and staff infrastructure",
             Permission::ResidentInviteSite => "Generate site-wide resident registration link",
             Permission::ResidentApprove => "Review and approve resident registration applications",
-            Permission::LedgerManageAll => "Manage dues liabilities and statutory delay penalties for all units",
-            Permission::AnnouncementBroadcast => "Broadcast announcements and notifications to residents",
+            Permission::LedgerManageAll => {
+                "Manage dues liabilities and statutory delay penalties for all units"
+            }
+            Permission::AnnouncementBroadcast => {
+                "Broadcast announcements and notifications to residents"
+            }
             Permission::TenantManage => "Manage SaaS platform sites and subscriptions",
         }
     }
@@ -427,7 +434,11 @@ impl PaymentChannel {
             PaymentChannel::BankStatement
         } else if u.contains("ONLINE") {
             PaymentChannel::OnlinePayment
-        } else if u.contains("BANK") || u.contains("HAVALE") || u.contains("EFT") || u.contains("TRANSFER") {
+        } else if u.contains("BANK")
+            || u.contains("HAVALE")
+            || u.contains("EFT")
+            || u.contains("TRANSFER")
+        {
             PaymentChannel::BankTransfer
         } else if u.contains("MANUAL") {
             PaymentChannel::ManualCash
@@ -1238,6 +1249,22 @@ impl SupportedBank {
         }
     }
 
+    /// Five-digit EFT bank code carried in characters 5–9 of the bank's IBANs.
+    pub fn eft_code(&self) -> &'static str {
+        match self {
+            SupportedBank::KuveytTurk => "00205",
+            SupportedBank::IsBankasi => "00064",
+            SupportedBank::ZiraatBankasi => "00010",
+            SupportedBank::GarantiBbva => "00062",
+            SupportedBank::AkBank => "00046",
+            SupportedBank::YapiKredi => "00067",
+            SupportedBank::Halkbank => "00012",
+            SupportedBank::Vakifbank => "00015",
+            SupportedBank::DenizBank => "00134",
+            SupportedBank::QnbFinansbank => "00111",
+        }
+    }
+
     /// Human-readable display name for the bank.
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -1263,9 +1290,9 @@ impl SupportedBank {
             // Kuveyt Türk and Yapı Kredi export XLSX from online banking
             SupportedBank::KuveytTurk | SupportedBank::YapiKredi => BankStatementFormat::Excel,
             // Ziraat, Halkbank, Vakıfbank support MT940 exports
-            SupportedBank::ZiraatBankasi
-            | SupportedBank::Halkbank
-            | SupportedBank::Vakifbank => BankStatementFormat::Mt940,
+            SupportedBank::ZiraatBankasi | SupportedBank::Halkbank | SupportedBank::Vakifbank => {
+                BankStatementFormat::Mt940
+            }
             // All others use CSV
             _ => BankStatementFormat::Csv,
         }
@@ -1474,6 +1501,19 @@ pub struct ParseBankStatementResponse {
     #[serde(default)]
     pub already_processed_count: usize,
     pub matches: Vec<ReconciliationMatch>,
+    /// Statement entries that were not imported, with the reason. Previously
+    /// such rows were dropped silently.
+    #[serde(default)]
+    pub skipped_entries: Vec<SkippedStatementEntry>,
+}
+
+/// A statement line or MT940 entry that was not turned into a transaction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkippedStatementEntry {
+    /// 1-based line number in the uploaded content.
+    pub line_number: usize,
+    pub reason: String,
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1871,11 +1911,19 @@ impl UnitAdvance {
 
     /// Balance of one debtor (`OWNER` or `TENANT`, case-insensitive).
     pub fn of(&self, debtor_type: &str) -> Decimal {
-        if debtor_type.eq_ignore_ascii_case("OWNER") { self.owner } else { self.tenant }
+        if debtor_type.eq_ignore_ascii_case("OWNER") {
+            self.owner
+        } else {
+            self.tenant
+        }
     }
 
     pub fn bucket_mut(&mut self, debtor_type: &str) -> &mut Decimal {
-        if debtor_type.eq_ignore_ascii_case("OWNER") { &mut self.owner } else { &mut self.tenant }
+        if debtor_type.eq_ignore_ascii_case("OWNER") {
+            &mut self.owner
+        } else {
+            &mut self.tenant
+        }
     }
 }
 
@@ -2127,7 +2175,9 @@ impl CapitalProjectCategory {
         match s.to_uppercase().as_str() {
             "ELEVATOR" | "ASANSOR" => CapitalProjectCategory::Elevator,
             "FACADE_INSULATION" | "MANTOLAMA" => CapitalProjectCategory::FacadeInsulation,
-            "ROOF_WATERPROOFING" | "ROOF_FACADE" | "CATI" => CapitalProjectCategory::RoofWaterproofing,
+            "ROOF_WATERPROOFING" | "ROOF_FACADE" | "CATI" => {
+                CapitalProjectCategory::RoofWaterproofing
+            }
             "GENERATOR" | "JENERATOR" => CapitalProjectCategory::Generator,
             "SECURITY_SYSTEM" | "GUVENLIK" => CapitalProjectCategory::SecuritySystem,
             "FIRE_SAFETY" | "YANGIN" => CapitalProjectCategory::FireSafety,
@@ -2331,6 +2381,3 @@ pub struct RecordDisbursementRequest {
     #[serde(default)]
     pub notes: Option<String>,
 }
-
-
-

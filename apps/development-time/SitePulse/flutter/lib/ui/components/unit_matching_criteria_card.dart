@@ -1,13 +1,13 @@
 import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
-import 'package:flutter/services.dart';
 import '../../domain/models/dues_models.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
 
 import '../design_system/sp_feedback.dart';
 import 'sp_dialog_pages.dart';
+import '../design_system/sp_clipboard.dart';
 /// Card component allowing homeowners to see their automated payment
 /// matching criteria (Virtual IBAN, registered sender IBANs, payer names, and description format)
 /// and modify them at will.
@@ -389,16 +389,9 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
     );
   }
 
-  void _copyToClipboard(BuildContext context, String text, String label) {
-    Clipboard.setData(ClipboardData(text: text.replaceAll(' ', '')));
-    ScaffoldMessenger.of(context).showSnackBar(
-      appSnackBar(
-        content: Text('$label panoya kopyalandı!'),
-        duration: const Duration(seconds: 2),
-        backgroundColor: AppColors.successFill,
-      ),
-    );
-  }
+  /// Copies [text] exactly as shown (descriptions keep their spaces).
+  Future<void> _copyToClipboard(BuildContext context, String text, String label) =>
+      spCopyToClipboard(context, text, successMessage: '$label panoya kopyalandı!');
 
   @override
   Widget build(BuildContext context) {
@@ -534,10 +527,9 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                     IconButton(
                       icon: const Icon(Icons.copy, size: 16, color: AppColors.accentCyan),
                       tooltip: 'IBAN Kopyala',
-                      onPressed: () => _copyToClipboard(
+                      onPressed: () => spCopyIban(
                         context,
                         criteria.virtualIban ?? 'TR41 0020 5042 1399 1067 0000 14',
-                        'Sanal IBAN',
                       ),
                     ),
                   ],

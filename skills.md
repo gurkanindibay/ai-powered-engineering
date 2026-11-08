@@ -72,6 +72,28 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 - **Purpose:** 265 coding rules across 26 categories ([leonardomso/rust-skills](https://github.com/leonardomso/rust-skills)) covering ownership, error handling, async patterns, concurrency, memory optimization, and numeric precision (`rust_decimal`).
 - **Agent Bindings:** Formally bound to **Architect Agent** (contracts, DTOs, migrations, concurrency models) and **Developer Agent** (synthesis, zero-clippy, zero-unwrap, persistence safety).
 
+### 2a. SitePulse Rust Backend Workflow (`sitepulse-rust-backend`)
+
+- **Skill Definition:** [.agents/skills/sitepulse-rust-backend/SKILL.md](file:///.agents/skills/sitepulse-rust-backend/SKILL.md)
+- **Purpose:** How to apply `docs/RUST_STANDARDS.md` sections 10–16 in the backend. Covers where new code goes (`src/domain/` vs services vs db vs handlers), which shared primitives to reuse (`apportion`, `fold_turkish`, `TrIban`, `NormalizedEmail`, `fingerprint`, `ParseReport`), recipes for domain primitives, persisted contracts, money, external input and multi-tenant state, test conventions, verification commands, and a review checklist.
+
+### 2b. Rust Standards Lint (`rust_standards_lint.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/rust_standards_lint.py](file:///apps/development-time/SitePulse/scripts/rust_standards_lint.py) (symlinked to `scripts/rust_standards_lint.py`)
+- **Purpose:** Mechanically enforces `docs/RUST_STANDARDS.md` sections 10–16 on `backend/src`.
+  - **Hard rules** fail on any hit: `domain-purity` (no Axum/PostgreSQL/AppState/env in `src/domain/`), `layering` (only handlers/app/main import `crate::handlers`), `inline-email`, `inline-turkish-fold`, `inline-iban-check`, `regex-per-call`, `implicit-rounding` (`round_dp(..)`), `float-money`, `ad-hoc-hash` (SHA-256/HMAC outside `domain::fingerprint`), `non-english-identifier`, and `domain-unformatted`.
+  - **Ratchet rules** count `unwrap`, `expect`, `string-error` (`Result<_, String>` in services), `pool-branch` and `unformatted-file`. These counts in `scripts/rust_standards_baseline.json` may only go down.
+  - Comments, string/char literals and `#[cfg(test)]` modules are ignored. Run against the baseline commit, it reports all 75 issues fixed by the reusability work.
+  - Gate `rust-standards-lint` in `run_tests.py`. Self-tests are in `harness/tests/test_rust_standards_lint.py`.
+
+### Quick Usage Examples:
+```bash
+./scripts/rust_standards_lint.py                    # human-readable, exit 1 on findings
+./scripts/rust_standards_lint.py --json             # CI / harness gate
+./scripts/rust_standards_lint.py --no-fmt           # skip rustfmt-based rules (no cargo)
+./scripts/rust_standards_lint.py --update-baseline  # lower the ratchet after paying down debt
+```
+
 ---
 
 ## 3. Flutter & Dart Development Skills
@@ -84,6 +106,7 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 - [flutter-implement-json-serialization](file:///.agents/skills/flutter-implement-json-serialization/SKILL.md): JSON serialization models.
 - [flutter-apply-architecture-best-practices](file:///.agents/skills/flutter-apply-architecture-best-practices/SKILL.md): Layered architecture (UI, Logic, Data).
 - [dart-run-static-analysis](file:///.agents/skills/dart-run-static-analysis/SKILL.md): Static analysis and mechanical lint fixes.
+- **[flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md)**: SitePulse's shared Flutter component catalogue (`SpTone`, metrics, guidance cards, status badges, filter chips, `showSpSelection`, `SpMoneyFormField`/`MoneyInput`, `sp_clipboard.dart`, `ResidentSummary`, `readDecimal`, `BankFileParser`), when to promote a widget to a shared component, and the review checklist. Mandatory for SitePulse Flutter work through [.agents/rules/flutter-components.md](file:///.agents/rules/flutter-components.md); enforced by gate `flutter-reuse`.
 
 ---
 
@@ -151,6 +174,19 @@ Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/
 ./scripts/ui_style_lint.py --json
 ./scripts/ui_style_lint.py --update-baseline  # after removing literals: record the lower counts
 ```
+
+## 5b-3c. Flutter Reuse Inventory (`flutter_reuse_inventory.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/flutter_reuse_inventory.py](file:///apps/development-time/SitePulse/scripts/flutter_reuse_inventory.py) (symlinked to `scripts/flutter_reuse_inventory.py`)
+- **Purpose:** Tracks component reuse from [docs/flutter-reusability-report.md](file:///docs/flutter-reusability-report.md). The inventory counts design-token adoption and repeated patterns in `flutter/lib/ui` (`EdgeInsets.` vs `AppSpacing.`, raw colours vs `SpTone.`, `appSnackBar(` vs `spSnackBar(`, shared-widget usage). Reuse rules fail with `--check`: `clipboard` (raw `Clipboard.setData` outside `sp_clipboard.dart`), `money-parse` (`Decimal.tryParse` in `lib/ui`; use `MoneyInput`/`SpMoneyFormField`), `json-decimal` (the `?? '0') ?? Decimal.zero` fallback; use `readDecimal`), and `bank-amount` (hand-rolled `.replaceAll('.', '').replaceAll(',', '.')`; use `BankFileParser.parseAmount`), `filter-chip` (raw `FilterChip(`; use `SpFilterChip`), `selection-page` (hand-built `SpSelectionPage(`; use `showSpSelection<T>`), and `raw-snackbar` (direct `SnackBar(`; use `SpToast`/`spSnackBar(kind:)`). Comments are ignored. Gate `flutter-reuse` in `run_tests.py`.
+
+```bash
+./scripts/flutter_reuse_inventory.py           # inventory table + rule findings (exit 0)
+./scripts/flutter_reuse_inventory.py --check   # exit 1 when a reuse rule fires
+./scripts/flutter_reuse_inventory.py --json
+```
+
+The full catalogue and the promotion procedure are in the [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md) skill. Shared Flutter components that the rules point to live in `flutter/lib/ui/design_system/` (`SpTone`, `SpMetricValue`/`SpIconMetric`, `SpGuidanceCard`, `SpStatusBadge`, `SpFilterChip`, `SpMoneyFormField`/`MoneyInput`, `SpIbanCopyRow`/`spCopyToClipboard`), `ui/components/sp_dialog_pages.dart` (`showSpSelection<T>`), `ui/residents/resident_directory.dart` (`ResidentSummary`, `matchesResidentFilters`, `ResidentOccupancyStats`) and `domain/formatting/json_decimal.dart` (`readDecimal`).
 
 ## 5b-4. GUI Traceability (`gui_traceability.py`)
 

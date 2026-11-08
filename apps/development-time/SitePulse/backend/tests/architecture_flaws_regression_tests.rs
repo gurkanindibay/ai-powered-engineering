@@ -8,7 +8,8 @@ use sitepulse_backend::{
     auth,
     models::{
         BankTransactionItem, ConfirmReconciliationRequest, PaymentStreamFilter,
-        PendingRegistrationResponse, ReconciliationMatch, ReconciliationStatus, RegistrationStatus, Role,
+        PendingRegistrationResponse, ReconciliationMatch, ReconciliationStatus, RegistrationStatus,
+        Role,
     },
     services::PaymentTrackingService,
     state::AppState,
@@ -50,7 +51,13 @@ async fn test_cross_tenant_reconciliation_confirmation_blocked() {
 
     let app = build_router(state);
     // Manager of site-2 attempts to confirm site-1's match
-    let token = auth::issue_token("mgr-site-2", "manager2@site2.com", Role::SiteManager, "site-2", None);
+    let token = auth::issue_token(
+        "mgr-site-2",
+        "manager2@site2.com",
+        Role::SiteManager,
+        "site-2",
+        None,
+    );
     let payload = ConfirmReconciliationRequest {
         site_id: "site-2".to_string(),
         match_ids: vec!["MATCH-SITE1-01".to_string()],
@@ -75,24 +82,32 @@ async fn test_cross_tenant_registration_approval_blocked() {
     let state = AppState::new();
     {
         let mut inner = state.inner.write().await;
-        inner.pending_registrations.push(PendingRegistrationResponse {
-            request_id: "req-site-1-99".to_string(),
-            site_id: "site-1".to_string(),
-            block: "A Blok".to_string(),
-            unit_no: 10,
-            floor: 3,
-            full_name: "Yabanci Basvuru".to_string(),
-            email: "yabanci@sitepulse.io".to_string(),
-            phone: "05551112233".to_string(),
-            is_resident: true,
-            status: RegistrationStatus::Pending,
-            submitted_at: chrono::Utc::now(),
-        });
+        inner
+            .pending_registrations
+            .push(PendingRegistrationResponse {
+                request_id: "req-site-1-99".to_string(),
+                site_id: "site-1".to_string(),
+                block: "A Blok".to_string(),
+                unit_no: 10,
+                floor: 3,
+                full_name: "Yabanci Basvuru".to_string(),
+                email: "yabanci@sitepulse.io".to_string(),
+                phone: "05551112233".to_string(),
+                is_resident: true,
+                status: RegistrationStatus::Pending,
+                submitted_at: chrono::Utc::now(),
+            });
     }
 
     let app = build_router(state);
     // Site manager of site-2 attempts to approve site-1's pending application
-    let token = auth::issue_token("mgr-site-2", "manager2@site2.com", Role::SiteManager, "site-2", None);
+    let token = auth::issue_token(
+        "mgr-site-2",
+        "manager2@site2.com",
+        Role::SiteManager,
+        "site-2",
+        None,
+    );
 
     let req = Request::builder()
         .method("POST")
@@ -110,23 +125,31 @@ async fn test_reject_registration_already_processed_blocked() {
     let state = AppState::new();
     {
         let mut inner = state.inner.write().await;
-        inner.pending_registrations.push(PendingRegistrationResponse {
-            request_id: "req-already-approved".to_string(),
-            site_id: "site-1".to_string(),
-            block: "A Blok".to_string(),
-            unit_no: 12,
-            floor: 3,
-            full_name: "Onaylanmis Basvuru".to_string(),
-            email: "onayli@sitepulse.io".to_string(),
-            phone: "05551112233".to_string(),
-            is_resident: true,
-            status: RegistrationStatus::Approved,
-            submitted_at: chrono::Utc::now(),
-        });
+        inner
+            .pending_registrations
+            .push(PendingRegistrationResponse {
+                request_id: "req-already-approved".to_string(),
+                site_id: "site-1".to_string(),
+                block: "A Blok".to_string(),
+                unit_no: 12,
+                floor: 3,
+                full_name: "Onaylanmis Basvuru".to_string(),
+                email: "onayli@sitepulse.io".to_string(),
+                phone: "05551112233".to_string(),
+                is_resident: true,
+                status: RegistrationStatus::Approved,
+                submitted_at: chrono::Utc::now(),
+            });
     }
 
     let app = build_router(state);
-    let token = auth::issue_token("mgr-site-1", "manager1@site1.com", Role::SiteManager, "site-1", None);
+    let token = auth::issue_token(
+        "mgr-site-1",
+        "manager1@site1.com",
+        Role::SiteManager,
+        "site-1",
+        None,
+    );
 
     let req = Request::builder()
         .method("POST")
@@ -144,7 +167,13 @@ async fn test_reject_registration_already_processed_blocked() {
 async fn test_recursive_body_inspection_rejects_nested_foreign_tenant() {
     let state = AppState::new_with_test_fixtures();
     let app = build_router(state);
-    let token = auth::issue_token("mgr-site-1", "manager1@site1.com", Role::SiteManager, "site-1", None);
+    let token = auth::issue_token(
+        "mgr-site-1",
+        "manager1@site1.com",
+        Role::SiteManager,
+        "site-1",
+        None,
+    );
 
     // Nested payload containing a foreign unit_id belonging to site-2
     let nested_payload = serde_json::json!({

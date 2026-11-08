@@ -20,7 +20,11 @@ pub struct Migration {
 
 macro_rules! migration {
     ($v:expr, $file:literal) => {
-        Migration { version: $v, name: $file, sql: include_str!(concat!("../migrations/", $file)) }
+        Migration {
+            version: $v,
+            name: $file,
+            sql: include_str!(concat!("../migrations/", $file)),
+        }
     };
 }
 
@@ -70,9 +74,13 @@ pub async fn run(pool: &Pool) -> crate::db::DbResult<Vec<i32>> {
              )",
         )
         .await?;
-    client.execute("SELECT pg_advisory_lock($1)", &[&MIGRATION_LOCK_KEY]).await?;
+    client
+        .execute("SELECT pg_advisory_lock($1)", &[&MIGRATION_LOCK_KEY])
+        .await?;
     let result = apply_pending(&mut client).await;
-    client.execute("SELECT pg_advisory_unlock($1)", &[&MIGRATION_LOCK_KEY]).await?;
+    client
+        .execute("SELECT pg_advisory_unlock($1)", &[&MIGRATION_LOCK_KEY])
+        .await?;
     result
 }
 
@@ -98,7 +106,10 @@ async fn apply_pending(client: &mut deadpool_postgres::Object) -> crate::db::DbR
         }
         let tx = client.transaction().await?;
         tx.batch_execute(m.sql).await.map_err(|e| {
-            let detail = e.as_db_error().map(|d| format!("{} ({:?})", d.message(), d.where_())).unwrap_or_else(|| e.to_string());
+            let detail = e
+                .as_db_error()
+                .map(|d| format!("{} ({:?})", d.message(), d.where_()))
+                .unwrap_or_else(|| e.to_string());
             format!("Migration {} failed: {}", m.name, detail)
         })?;
         tx.execute(
@@ -128,10 +139,20 @@ mod tests {
             .map(|n| (n[1..n.find("__").unwrap()].parse().unwrap(), n))
             .collect();
         files.sort();
-        let registered: Vec<(i32, String)> = MIGRATIONS.iter().map(|m| (m.version, m.name.to_string())).collect();
-        assert_eq!(registered, files, "MIGRATIONS must list every file in migrations/, in version order");
+        let registered: Vec<(i32, String)> = MIGRATIONS
+            .iter()
+            .map(|m| (m.version, m.name.to_string()))
+            .collect();
+        assert_eq!(
+            registered, files,
+            "MIGRATIONS must list every file in migrations/, in version order"
+        );
         for w in MIGRATIONS.windows(2) {
-            assert_eq!(w[1].version, w[0].version + 1, "versions must be contiguous");
+            assert_eq!(
+                w[1].version,
+                w[0].version + 1,
+                "versions must be contiguous"
+            );
         }
     }
 }

@@ -6,13 +6,13 @@ use axum::{
     Json,
 };
 
+use super::site_admin::SiteIdParam;
 use crate::models::{
     ApprovalResultResponse, PendingRegistrationResponse, SiteInvitationLinkResponse,
     SubmitSelfRegistrationRequest,
 };
 use crate::services::RegistrationApprovalService;
 use crate::state::AppState;
-use super::site_admin::SiteIdParam;
 
 pub async fn generate_registration_link(
     State(state): State<AppState>,
@@ -53,9 +53,16 @@ pub async fn approve_registration(
     if let Some(axum::Extension(ref c)) = claims {
         if !c.is_saas_admin() {
             let inner = state.inner.read().await;
-            if let Some(r) = inner.pending_registrations.iter().find(|r| r.request_id == request_id) {
+            if let Some(r) = inner
+                .pending_registrations
+                .iter()
+                .find(|r| r.request_id == request_id)
+            {
                 if !crate::auth::same_id(&r.site_id, &c.site_id) {
-                    return Err((StatusCode::FORBIDDEN, "Registration application belongs to another site".to_string()));
+                    return Err((
+                        StatusCode::FORBIDDEN,
+                        "Registration application belongs to another site".to_string(),
+                    ));
                 }
             }
         }
@@ -76,9 +83,16 @@ pub async fn reject_registration(
     if let Some(axum::Extension(ref c)) = claims {
         if !c.is_saas_admin() {
             let inner = state.inner.read().await;
-            if let Some(r) = inner.pending_registrations.iter().find(|r| r.request_id == request_id) {
+            if let Some(r) = inner
+                .pending_registrations
+                .iter()
+                .find(|r| r.request_id == request_id)
+            {
                 if !crate::auth::same_id(&r.site_id, &c.site_id) {
-                    return Err((StatusCode::FORBIDDEN, "Registration application belongs to another site".to_string()));
+                    return Err((
+                        StatusCode::FORBIDDEN,
+                        "Registration application belongs to another site".to_string(),
+                    ));
                 }
             }
         }

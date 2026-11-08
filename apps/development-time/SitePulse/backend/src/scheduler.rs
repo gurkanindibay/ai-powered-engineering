@@ -1,9 +1,9 @@
-use std::time::Duration;
 use chrono::{Datelike, NaiveDate, Utc};
 use rust_decimal::Decimal;
+use std::time::Duration;
 
-use crate::handlers::apply_advance_payments_offset;
 use crate::models::{DebtStatus, DebtorType, DuesLiability, ExpenseType};
+use crate::services::ledger_application::apply_advance_payments_offset;
 use crate::state::AppState;
 
 /// Formats a naive date into standard Turkish month and year, e.g. "Ekim 2026".
@@ -33,12 +33,18 @@ pub fn site_local_date(timezone: &str, now: chrono::DateTime<Utc>) -> NaiveDate 
 }
 
 /// Monthly dues for a unit: the tariff of its house type in its own site.
-pub fn tariff_for(inner: &crate::state::AppStateInner, unit: &crate::models::IndependentUnit) -> Option<Decimal> {
+pub fn tariff_for(
+    inner: &crate::state::AppStateInner,
+    unit: &crate::models::IndependentUnit,
+) -> Option<Decimal> {
     let house_type = unit.house_type.as_deref()?;
     inner
         .house_types
         .iter()
-        .find(|h| crate::auth::same_id(&h.site_id, &unit.site_id) && h.type_name.eq_ignore_ascii_case(house_type))
+        .find(|h| {
+            crate::auth::same_id(&h.site_id, &unit.site_id)
+                && h.type_name.eq_ignore_ascii_case(house_type)
+        })
         .map(|h| h.dues_amount)
 }
 
@@ -54,14 +60,20 @@ pub fn tariff_for(inner: &crate::state::AppStateInner, unit: &crate::models::Ind
 /// * With PostgreSQL the liability is inserted first (the unique index
 ///   `uq_unit_period_expense` is the duplicate guard) and only then added to
 ///   memory with its database id, so accruals survive restarts.
-pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::DateTime<Utc>) -> (usize, usize) {
+pub async fn run_periodic_accrual_for_all_sites(
+    state: &AppState,
+    now: chrono::DateTime<Utc>,
+) -> (usize, usize) {
     // Occupancy from PostgreSQL when available: a tenant without a user account
     // is not visible on the in-memory unit.
     let tenanted = match state.pool {
         Some(ref pool) => match crate::db::tenanted_unit_ids(pool, "").await {
             Ok(t) => Some(t),
             Err(e) => {
-                tracing::error!("[Scheduler] Occupancy could not be read; accrual skipped: {}", e);
+                tracing::error!(
+                    "[Scheduler] Occupancy could not be read; accrual skipped: {}",
+                    e
+                );
                 return (0, 0);
             }
         },
@@ -70,48 +82,76 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
     // 1. Inspect state with a READ lock to collect units needing accrual without blocking readers
     let candidates: Vec<(String, DuesLiability, Option<String>)> = {
         let inner = state.inner.read().await;
-        let sites: Vec<(String, String)> = inner.sites.iter().map(|s| (s.id.clone(), s.timezone.clone())).collect();
+        let sites: Vec<(String, String)> = inner
+            .sites
+            .iter()
+            .map(|s| (s.id.clone(), s.timezone.clone()))
+            .collect();
         let mut to_accrue = Vec::new();
 
         for (site_id, timezone) in sites {
             let local = site_local_date(&timezone, now);
             let period = format_turkish_month_year(local);
-            let due_date = NaiveDate::from_ymd_opt(local.year(), local.month(), 15).unwrap_or(local);
-            let units_in_site: Vec<_> = inner.units.iter().filter(|u| u.site_id == site_id).collect();
+            let due_date =
+                NaiveDate::from_ymd_opt(local.year(), local.month(), 15).unwrap_or(local);
+            let units_in_site: Vec<_> = inner
+                .units
+                .iter()
+                .filter(|u| u.site_id == site_id)
+                .collect();
 
             for unit in units_in_site {
-                let already = inner
-                    .dues
-                    .iter()
-                    .any(|d| d.unit_id == unit.id && d.period == period && d.expense_type == ExpenseType::OperationalDues);
+                let already = inner.dues.iter().any(|d| {
+                    d.unit_id == unit.id
+                        && d.period == period
+                        && d.expense_type == ExpenseType::OperationalDues
+                });
                 if already {
                     continue;
                 }
-                let basis = match crate::services::operating_budget_service::operational_dues_basis(&inner, unit, due_date) {
+                let basis = match crate::services::operating_budget_service::operational_dues_basis(
+                    &inner, unit, due_date,
+                ) {
                     Ok(b) => b,
                     Err(reason) => {
-                        tracing::warn!("[Scheduler] Unit {} in site {}: dues not accrued: {}", unit.id, site_id, reason);
+                        tracing::warn!(
+                            "[Scheduler] Unit {} in site {}: dues not accrued: {}",
+                            unit.id,
+                            site_id,
+                            reason
+                        );
                         continue;
                     }
                 };
                 let amount = basis.amount;
-                let let_to_tenant = tenanted.as_ref().map(|t| t.contains(&unit.id)).unwrap_or(unit.tenant_user_id.is_some());
-                let debtor = if let_to_tenant { DebtorType::Tenant } else { DebtorType::Owner };
-                to_accrue.push((site_id.clone(), DuesLiability {
-                    id: String::new(),
-                    unit_id: unit.id.clone(),
-                    period: period.clone(),
-                    principal_amount: amount,
-                    delay_penalty: Decimal::ZERO,
-                    total_amount: amount,
-                    due_date,
-                    status: DebtStatus::Pending,
-                    paid_principal: Decimal::ZERO,
-                    paid_penalty: Decimal::ZERO,
-                    debtor_type: debtor,
-                    expense_type: ExpenseType::OperationalDues,
-                    penalty_accrued_through: None,
-                }, basis.operating_budget_id));
+                let let_to_tenant = tenanted
+                    .as_ref()
+                    .map(|t| t.contains(&unit.id))
+                    .unwrap_or(unit.tenant_user_id.is_some());
+                let debtor = if let_to_tenant {
+                    DebtorType::Tenant
+                } else {
+                    DebtorType::Owner
+                };
+                to_accrue.push((
+                    site_id.clone(),
+                    DuesLiability {
+                        id: String::new(),
+                        unit_id: unit.id.clone(),
+                        period: period.clone(),
+                        principal_amount: amount,
+                        delay_penalty: Decimal::ZERO,
+                        total_amount: amount,
+                        due_date,
+                        status: DebtStatus::Pending,
+                        paid_principal: Decimal::ZERO,
+                        paid_penalty: Decimal::ZERO,
+                        debtor_type: debtor,
+                        expense_type: ExpenseType::OperationalDues,
+                        penalty_accrued_through: None,
+                    },
+                    basis.operating_budget_id,
+                ));
             }
         }
         to_accrue
@@ -132,7 +172,11 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
                     due.id = id.to_string();
                     if let Some(ref b) = basis {
                         if let Err(e) = crate::db::set_due_budget_basis(pool, &due.id, b).await {
-                            tracing::error!("[Scheduler] Legal basis of liability {} not saved: {}", due.id, e);
+                            tracing::error!(
+                                "[Scheduler] Legal basis of liability {} not saved: {}",
+                                due.id,
+                                e
+                            );
                         }
                     }
                     sites_accrued_set.insert(site_id.clone());
@@ -160,11 +204,16 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
 
     {
         let mut inner = state.inner.write().await;
-        let ledger_before = crate::handlers::ledger_snapshot(&inner);
+        let ledger_before = crate::services::ledger_application::ledger_snapshot(&inner);
 
         for (site_id, mut due, basis) in persisted_dues {
             if due.id.is_empty() {
-                let max_d = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
+                let max_d = inner
+                    .dues
+                    .iter()
+                    .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
+                    .max()
+                    .unwrap_or(0);
                 due.id = (max_d + 1).to_string();
             }
             if let Some(b) = basis {
@@ -173,14 +222,29 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
             let p = due.period.clone();
             let u_id = due.unit_id.clone();
             inner.dues.push(due);
-            tracing::info!("[Scheduler] Accrued unit {} for site '{}' for period '{}'", u_id, site_id, p);
+            tracing::info!(
+                "[Scheduler] Accrued unit {} for site '{}' for period '{}'",
+                u_id,
+                site_id,
+                p
+            );
         }
 
         let (auto_settled_count, total_offset) = apply_advance_payments_offset(&mut inner, None);
         if auto_settled_count > 0 {
-            tracing::info!("[Scheduler] Advance offset: {} dues settled, total ₺{}", auto_settled_count, total_offset);
+            tracing::info!(
+                "[Scheduler] Advance offset: {} dues settled, total ₺{}",
+                auto_settled_count,
+                total_offset
+            );
             if let Some(ref pool) = state.pool {
-                if let Err(e) = crate::handlers::persist_ledger_changes(pool, &ledger_before, &inner).await {
+                if let Err(e) = crate::services::ledger_application::persist_ledger_changes(
+                    pool,
+                    &ledger_before,
+                    &inner,
+                )
+                .await
+                {
                     tracing::error!("[Scheduler] {}", e);
                 }
             }
@@ -208,7 +272,8 @@ pub async fn start_automated_dues_accrual_scheduler(state: AppState) {
             continue;
         }
 
-        let (sites_accrued, units_accrued) = run_periodic_accrual_for_all_sites(&state, Utc::now()).await;
+        let (sites_accrued, units_accrued) =
+            run_periodic_accrual_for_all_sites(&state, Utc::now()).await;
 
         if units_accrued > 0 {
             tracing::info!(
@@ -232,10 +297,17 @@ pub async fn start_debt_aging_snapshot_worker(state: AppState) {
         if last_day == Some(today) || state.pool.is_none() {
             continue;
         }
-        match crate::services::PaymentTrackingService::new(state.clone()).snapshot_debt_aging(None).await {
+        match crate::services::PaymentTrackingService::new(state.clone())
+            .snapshot_debt_aging(None)
+            .await
+        {
             Ok(rows) => {
                 last_day = Some(today);
-                tracing::info!("[Scheduler] Debt aging snapshot for {}: {} rows", today, rows);
+                tracing::info!(
+                    "[Scheduler] Debt aging snapshot for {}: {} rows",
+                    today,
+                    rows
+                );
             }
             Err(e) => tracing::error!("[Scheduler] Debt aging snapshot failed: {}", e),
         }

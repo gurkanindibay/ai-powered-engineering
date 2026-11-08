@@ -12,7 +12,11 @@ use sitepulse_backend::state::AppState;
 async fn fixture_dues_not_yet_due(state: &AppState) {
     let due = Utc::now().date_naive() + chrono::Days::new(15);
     let mut inner = state.inner.write().await;
-    for d in inner.dues.iter_mut().filter(|d| d.status != DebtStatus::Paid) {
+    for d in inner
+        .dues
+        .iter_mut()
+        .filter(|d| d.status != DebtStatus::Paid)
+    {
         d.due_date = due;
         d.status = DebtStatus::Pending;
         d.delay_penalty = Decimal::ZERO;
@@ -44,8 +48,14 @@ fn when_overdue_by_10_days_then_calculates_exact_5_percent_pro_rated_penalty() {
     let result = service.calculate_delay_penalty(base_dues, evaluation_date);
 
     assert_eq!(result.status, DebtStatus::Overdue);
-    assert_eq!(result.delay_penalty, Decimal::from_str_exact("23.33").unwrap());
-    assert_eq!(result.total_amount, Decimal::from_str_exact("1423.33").unwrap());
+    assert_eq!(
+        result.delay_penalty,
+        Decimal::from_str_exact("23.33").unwrap()
+    );
+    assert_eq!(
+        result.total_amount,
+        Decimal::from_str_exact("1423.33").unwrap()
+    );
 }
 
 #[test]
@@ -72,7 +82,10 @@ fn when_not_overdue_then_penalty_remains_zero() {
 
     assert_eq!(result.status, DebtStatus::Pending);
     assert_eq!(result.delay_penalty, Decimal::ZERO);
-    assert_eq!(result.total_amount, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(
+        result.total_amount,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
 }
 
 #[tokio::test]
@@ -90,7 +103,10 @@ async fn when_registering_new_site_then_provisions_site_and_manager_with_tempora
         blocks: Some(vec!["A Blok".to_string(), "B Blok".to_string()]),
     };
 
-    let res = service.register_site(req).await.expect("Site registration failed");
+    let res = service
+        .register_site(req)
+        .await
+        .expect("Site registration failed");
     assert_eq!(res.site_name, "Yıldız Park Evleri");
     assert_eq!(res.slug, "yildiz-park-evleri");
     assert_eq!(res.admin_email, "kemal.sunal@yildizpark.com");
@@ -113,7 +129,10 @@ async fn when_updating_site_then_site_details_and_admin_info_are_updated() {
         plan_type: Some("STANDARD".to_string()),
         blocks: Some(vec!["A Blok".to_string(), "B Blok".to_string()]),
     };
-    let reg_res = service.register_site(reg_req).await.expect("Registration failed");
+    let reg_res = service
+        .register_site(reg_req)
+        .await
+        .expect("Registration failed");
 
     let update_req = UpdateSiteRequest {
         site_name: Some("Nilüfer Lüks Rezidans".to_string()),
@@ -123,12 +142,19 @@ async fn when_updating_site_then_site_details_and_admin_info_are_updated() {
         site_admin_full_name: Some("Ali Veli Kaya".to_string()),
         site_admin_email: Some("ali.kaya@nilufer.com".to_string()),
         site_admin_phone: Some("+90 532 999 8877".to_string()),
-        blocks: Some(vec!["A Blok".to_string(), "B Blok".to_string(), "C Blok".to_string()]),
+        blocks: Some(vec![
+            "A Blok".to_string(),
+            "B Blok".to_string(),
+            "C Blok".to_string(),
+        ]),
         tax_id: None,
         tax_office: None,
     };
 
-    let updated = service.update_site(&reg_res.site_id, update_req).await.expect("Update failed");
+    let updated = service
+        .update_site(&reg_res.site_id, update_req)
+        .await
+        .expect("Update failed");
     assert_eq!(updated.site_name, "Nilüfer Lüks Rezidans");
     assert_eq!(updated.address, "Bursa, Nilüfer, Çamlık Cad. No:12");
     assert_eq!(updated.plan_type, PlanType::Premium);
@@ -181,7 +207,10 @@ async fn when_registering_home_owner_then_provisions_user_with_resident_password
         role: None,
     };
 
-    let res = service.register_home_owner("site-1", req).await.expect("Registration failed");
+    let res = service
+        .register_home_owner("site-1", req)
+        .await
+        .expect("Registration failed");
     assert_eq!(res.owner_full_name, "Canan Dağ");
     assert!(res.temporary_password.unwrap().starts_with("SP-SAKIN-"));
     assert!(res.must_change_password);
@@ -222,7 +251,9 @@ async fn when_generating_invite_link_then_returns_valid_url_and_token() {
 
     let res = service.generate_invitation_link("site-1").await;
     assert!(res.token.starts_with("SP-INV-"));
-    assert!(res.join_url.contains("https://sitepulse.app/join/begonya-sitesi?token="));
+    assert!(res
+        .join_url
+        .contains("https://sitepulse.app/join/begonya-sitesi?token="));
 }
 
 #[tokio::test]
@@ -240,7 +271,10 @@ async fn when_submitting_self_registration_then_creates_pending_request() {
         is_resident: true,
     };
 
-    let res = service.submit_self_registration("begonya-sitesi", req).await.expect("Submit failed");
+    let res = service
+        .submit_self_registration("begonya-sitesi", req)
+        .await
+        .expect("Submit failed");
     assert_eq!(res.status, RegistrationStatus::Pending);
     assert_eq!(res.full_name, "Murat Güven");
 }
@@ -250,7 +284,10 @@ async fn when_approving_pending_registration_then_provisions_user_and_returns_cr
     let state = AppState::new();
     let service = RegistrationApprovalService::new(state);
 
-    let res = service.approve_registration("req-seed-01").await.expect("Approval failed");
+    let res = service
+        .approve_registration("req-seed-01")
+        .await
+        .expect("Approval failed");
     assert_eq!(res.status, RegistrationStatus::Approved);
     assert!(res.temporary_password.starts_with("SP-SAKIN-"));
     assert_eq!(res.email, "kerem.yilmaz@gmail.com");
@@ -261,7 +298,9 @@ async fn when_generating_unit_invite_link_then_returns_unit_scoped_url_and_token
     let state = AppState::new();
     let service = HomeResidentInvitationService::new(state);
 
-    let res = service.generate_unit_invite_link("d-14", Some("Aile Bireyi".to_string())).await;
+    let res = service
+        .generate_unit_invite_link("d-14", Some("Aile Bireyi".to_string()))
+        .await;
     assert!(res.token.starts_with("SP-HANE-"));
     assert!(res.invite_url.contains("units/d-14?token="));
     assert!(res.security_notice.contains("A Blok D:14 yetkisi tanımlar"));
@@ -272,7 +311,9 @@ async fn when_registering_home_resident_then_assigns_home_resident_role_and_unit
     let state = AppState::new();
     let service = HomeResidentInvitationService::new(state);
 
-    let invite = service.generate_unit_invite_link("d-14", Some("Kardeş".to_string())).await;
+    let invite = service
+        .generate_unit_invite_link("d-14", Some("Kardeş".to_string()))
+        .await;
 
     let req = RegisterHomeResidentRequest {
         token: invite.token,
@@ -282,7 +323,10 @@ async fn when_registering_home_resident_then_assigns_home_resident_role_and_unit
         relationship: Some("Kardeş".to_string()),
     };
 
-    let res = service.register_home_resident(req).await.expect("Registration failed");
+    let res = service
+        .register_home_resident(req)
+        .await
+        .expect("Registration failed");
     assert_eq!(res.role, "HOME_RESIDENT");
     assert!(res.permission_scope.contains("UNIT_ONLY (d-14)"));
     assert!(res.temporary_password.starts_with("SP-HANE-"));
@@ -325,11 +369,18 @@ async fn when_valid_password_registration_then_can_authenticate() {
         unit_invite_token: Some(invite.token.clone()),
     };
 
-    let reg_res = service.register_with_password(reg_req).await.expect("Register failed");
+    let reg_res = service
+        .register_with_password(reg_req)
+        .await
+        .expect("Register failed");
     assert_eq!(reg_res.user.full_name, "Emre Aydın");
-    assert_eq!(reg_res.user.site_id, "site-1", "site comes from the invited unit");
+    assert_eq!(
+        reg_res.user.site_id, "site-1",
+        "site comes from the invited unit"
+    );
     assert_eq!(reg_res.user.unit_id, "d-14");
-    let claims = sitepulse_backend::auth::verify_token(&reg_res.access_token).expect("signed token");
+    let claims =
+        sitepulse_backend::auth::verify_token(&reg_res.access_token).expect("signed token");
     assert_eq!(claims.unit_id.as_deref(), Some("d-14"));
 
     // The invite token is single-use.
@@ -349,7 +400,10 @@ async fn when_valid_password_registration_then_can_authenticate() {
         password: "SuperSecretPassword123".to_string(),
     };
 
-    let login_res = service.authenticate_with_password(login_req).await.expect("Login failed");
+    let login_res = service
+        .authenticate_with_password(login_req)
+        .await
+        .expect("Login failed");
     assert_eq!(login_res.user.email, "emre.aydin@gmail.com");
     assert_eq!(login_res.token_type, "Bearer");
 }
@@ -380,11 +434,15 @@ async fn when_valid_google_id_token_then_authenticates_and_links_account() {
     let service = AuthService::new(state);
 
     let req = GoogleLoginRequest {
-        id_token: "mock-google-token:sub-998877:google.ahmet@gmail.com:Ahmet Yılmaz Google".to_string(),
+        id_token: "mock-google-token:sub-998877:google.ahmet@gmail.com:Ahmet Yılmaz Google"
+            .to_string(),
         unit_invite_token: Some(invite.token),
     };
 
-    let res = service.authenticate_with_google(req).await.expect("Google auth failed");
+    let res = service
+        .authenticate_with_google(req)
+        .await
+        .expect("Google auth failed");
     assert_eq!(res.user.email, "google.ahmet@gmail.com");
     assert_eq!(res.user.auth_provider, AuthProvider::Google);
 }
@@ -427,7 +485,10 @@ async fn when_deleting_action_free_site_then_succeeds_and_removes_site() {
         blocks: None,
     };
 
-    let reg_res = service.register_site(reg_req).await.expect("Site registration failed");
+    let reg_res = service
+        .register_site(reg_req)
+        .await
+        .expect("Site registration failed");
     let site_id = reg_res.site_id;
 
     // Delete the action-free site
@@ -504,7 +565,10 @@ async fn when_parsing_turkish_bank_excel_then_matches_flat_and_amount() {
     let excel_content = "HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33";
 
     let txns = parser
-        .parse_statement(excel_content, Some(sitepulse_backend::models::BankStatementFormat::Excel))
+        .parse_statement(
+            excel_content,
+            Some(sitepulse_backend::models::BankStatementFormat::Excel),
+        )
         .expect("Failed to parse Excel statement row");
 
     assert_eq!(txns.len(), 1);
@@ -531,11 +595,17 @@ async fn when_parsing_turkish_bank_excel_then_matches_flat_and_amount() {
     assert_eq!(m.confidence_score, 100);
 
     // And matches the exact outstanding dues balance ₺1.423,33
-    assert_eq!(m.outstanding_balance, Some(Decimal::from_str_exact("1423.33").unwrap()));
+    assert_eq!(
+        m.outstanding_balance,
+        Some(Decimal::from_str_exact("1423.33").unwrap())
+    );
     assert!(m.amount_matches_balance);
 
     // And marks the transaction as "ONAY_BEKLIYOR" in the reconciliation queue
-    assert_eq!(m.status, sitepulse_backend::models::ReconciliationStatus::PendingApproval);
+    assert_eq!(
+        m.status,
+        sitepulse_backend::models::ReconciliationStatus::PendingApproval
+    );
     assert_eq!(m.status_code, "ONAY_BEKLIYOR");
 }
 
@@ -555,7 +625,10 @@ async fn when_parsing_mt940_statement_then_extracts_transactions_and_matches_due
 -"#;
 
     let txns = parser
-        .parse_statement(mt940_content, Some(sitepulse_backend::models::BankStatementFormat::Mt940))
+        .parse_statement(
+            mt940_content,
+            Some(sitepulse_backend::models::BankStatementFormat::Mt940),
+        )
         .expect("Failed to parse SWIFT MT940 content");
 
     assert_eq!(txns.len(), 1);
@@ -567,7 +640,13 @@ async fn when_parsing_mt940_statement_then_extracts_transactions_and_matches_due
     let inner = state.inner.read().await;
     let eval_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
 
-    let matches = recon_service.reconcile_transactions(&txns, &inner.units, &inner.users, &inner.dues, eval_date);
+    let matches = recon_service.reconcile_transactions(
+        &txns,
+        &inner.units,
+        &inner.users,
+        &inner.dues,
+        eval_date,
+    );
     assert_eq!(matches.len(), 1);
 
     let m = &matches[0];
@@ -588,7 +667,13 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
 
     let eval_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
     let mut inner = state.inner.write().await;
-    let matches = recon_service.reconcile_transactions(&txns, &inner.units, &inner.users, &inner.dues, eval_date);
+    let matches = recon_service.reconcile_transactions(
+        &txns,
+        &inner.units,
+        &inner.users,
+        &inner.dues,
+        eval_date,
+    );
 
     for m in &matches {
         inner.reconciliation_queue.push(m.clone());
@@ -613,7 +698,10 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
 
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(res.confirmed_count, 1);
-    assert_eq!(res.total_amount_cleared, Decimal::from_str_exact("1423.33").unwrap());
+    assert_eq!(
+        res.total_amount_cleared,
+        Decimal::from_str_exact("1423.33").unwrap()
+    );
     assert_eq!(res.updated_unit_ids, vec!["d-14".to_string()]);
     assert!(!res.message_sent);
     assert!(res.notification_summary.is_none());
@@ -624,8 +712,15 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
     assert_eq!(due.status, sitepulse_backend::models::DebtStatus::Paid);
 
     // Check queue item is Approved
-    let queue_item = inner.reconciliation_queue.iter().find(|m| m.match_id == match_id).unwrap();
-    assert_eq!(queue_item.status, sitepulse_backend::models::ReconciliationStatus::Approved);
+    let queue_item = inner
+        .reconciliation_queue
+        .iter()
+        .find(|m| m.match_id == match_id)
+        .unwrap();
+    assert_eq!(
+        queue_item.status,
+        sitepulse_backend::models::ReconciliationStatus::Approved
+    );
 }
 
 #[tokio::test]
@@ -639,7 +734,13 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
 
     let eval_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
     let mut inner = state.inner.write().await;
-    let matches = recon_service.reconcile_transactions(&txns, &inner.units, &inner.users, &inner.dues, eval_date);
+    let matches = recon_service.reconcile_transactions(
+        &txns,
+        &inner.units,
+        &inner.users,
+        &inner.dues,
+        eval_date,
+    );
 
     for m in &matches {
         inner.reconciliation_queue.push(m.clone());
@@ -650,7 +751,9 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
     let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
         site_id: "site-1".to_string(),
         match_ids: vec![match_id.clone()],
-        optional_message: Some("Sayın Ahmet Yılmaz, ₺1.423,33 aidat ödemeniz onaylanmıştır.".to_string()),
+        optional_message: Some(
+            "Sayın Ahmet Yılmaz, ₺1.423,33 aidat ödemeniz onaylanmıştır.".to_string(),
+        ),
         remember_sender_iban: None,
     };
 
@@ -664,7 +767,11 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(res.confirmed_count, 1);
     assert!(res.message_sent);
-    assert!(res.notification_summary.as_ref().unwrap().contains("iletildi"));
+    assert!(res
+        .notification_summary
+        .as_ref()
+        .unwrap()
+        .contains("iletildi"));
 }
 
 #[tokio::test]
@@ -674,7 +781,7 @@ async fn when_site_manager_configures_bank_account_then_format_is_automatically_
 
     let req = ConfigureBankAccountRequest {
         bank_code: "KUVEYT_TURK".to_string(),
-        iban: "TR620020500009863791600001".to_string(),
+        iban: "TR190020500009863791600001".to_string(),
         account_holder: "Begonya Sitesi Yönetimi".to_string(),
         configured_by: Some("usr-site-manager-1".to_string()),
     };
@@ -690,13 +797,17 @@ async fn when_site_manager_configures_bank_account_then_format_is_automatically_
     assert!(res.is_active);
 
     // Verify retrieval
-    let active = service.get_active_account("site-1").await.expect("Account not found");
+    let active = service
+        .get_active_account("site-1")
+        .await
+        .expect("Account not found");
     assert_eq!(active.id, res.id);
     assert_eq!(active.statement_format, BankStatementFormat::Excel);
 }
 
 #[tokio::test]
-async fn when_site_manager_changes_bank_account_then_previous_account_deactivated_and_new_format_set() {
+async fn when_site_manager_changes_bank_account_then_previous_account_deactivated_and_new_format_set(
+) {
     let state = AppState::new();
     let service = SiteBankAccountService::new(state.clone());
 
@@ -707,7 +818,7 @@ async fn when_site_manager_changes_bank_account_then_previous_account_deactivate
     // Site manager switches bank to Türkiye İş Bankası (CSV)
     let req1 = ConfigureBankAccountRequest {
         bank_code: "IS_BANKASI".to_string(),
-        iban: "TR120006400000112345678901".to_string(),
+        iban: "TR290006400000112345678901".to_string(),
         account_holder: "Begonya Sitesi Yeni Hesap".to_string(),
         configured_by: Some("usr-site-manager-1".to_string()),
     };
@@ -726,7 +837,11 @@ async fn when_site_manager_changes_bank_account_then_previous_account_deactivate
     assert_eq!(active_accounts[0].id, updated1.id);
 
     // Check old account is marked inactive
-    let old = inner.site_bank_accounts.iter().find(|a| a.id == initial.id).unwrap();
+    let old = inner
+        .site_bank_accounts
+        .iter()
+        .find(|a| a.id == initial.id)
+        .unwrap();
     assert!(!old.is_active);
 }
 
@@ -738,7 +853,7 @@ async fn when_invalid_bank_code_or_iban_then_configuration_fails_validation() {
     // 1. Unknown bank code
     let req_unknown = ConfigureBankAccountRequest {
         bank_code: "NON_EXISTENT_BANK".to_string(),
-        iban: "TR120006400000112345678901".to_string(),
+        iban: "TR290006400000112345678901".to_string(),
         account_holder: "Begonya Sitesi".to_string(),
         configured_by: None,
     };
@@ -770,16 +885,49 @@ async fn when_invalid_bank_code_or_iban_then_configuration_fails_validation() {
     // 4. Empty account holder
     let req_empty_holder = ConfigureBankAccountRequest {
         bank_code: "IS_BANKASI".to_string(),
-        iban: "TR120006400000112345678901".to_string(),
+        iban: "TR290006400000112345678901".to_string(),
         account_holder: "   ".to_string(),
         configured_by: None,
     };
     let err4 = service.configure_account("site-1", req_empty_holder).await;
     assert!(err4.is_err());
+
+    // 5. Correct structure but wrong check digits (one mistyped digit)
+    let req_bad_checksum = ConfigureBankAccountRequest {
+        bank_code: "IS_BANKASI".to_string(),
+        iban: "TR290006400000112345678902".to_string(),
+        account_holder: "Begonya Sitesi".to_string(),
+        configured_by: None,
+    };
+    let err5 = service.configure_account("site-1", req_bad_checksum).await;
+    assert!(err5.unwrap_err().contains("check digits"));
+
+    // 6. Valid IBAN of a different bank than the one selected
+    let req_bank_mismatch = ConfigureBankAccountRequest {
+        bank_code: "KUVEYT_TURK".to_string(),
+        iban: "TR290006400000112345678901".to_string(),
+        account_holder: "Begonya Sitesi".to_string(),
+        configured_by: None,
+    };
+    let err6 = service.configure_account("site-1", req_bank_mismatch).await;
+    assert!(err6.unwrap_err().contains("does not belong to"));
+
+    // 7. Multi-byte input of IBAN length must be rejected, not panic
+    let req_multibyte = ConfigureBankAccountRequest {
+        bank_code: "IS_BANKASI".to_string(),
+        iban: "TRé00064000001123456789".to_string(),
+        account_holder: "Begonya Sitesi".to_string(),
+        configured_by: None,
+    };
+    assert!(service
+        .configure_account("site-1", req_multibyte)
+        .await
+        .is_err());
 }
 
 #[tokio::test]
-async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permits_new_format_after_change() {
+async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permits_new_format_after_change(
+) {
     let state = AppState::new();
 
     // 1. Initial state: site-1 is Kuveyt Türk (requires EXCEL)
@@ -830,7 +978,7 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
     // 2. NOW: Site Manager changes the bank account to Vakıfbank (which exports MT940)
     let switch_req = ConfigureBankAccountRequest {
         bank_code: "VAKIFBANK".to_string(),
-        iban: "TR150001500000123456789012".to_string(),
+        iban: "TR790001500000123456789012".to_string(),
         account_holder: "Begonya Sitesi Yönetimi".to_string(),
         configured_by: Some("usr-site-manager-1".to_string()),
     };
@@ -877,7 +1025,7 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
 
 #[test]
 fn when_unit_created_then_generates_unique_sanal_iban() {
-    let iban = VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 14);
+    let iban = VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 14).unwrap();
     assert_eq!(iban.len(), 26);
     assert!(iban.starts_with("TR"));
     assert!(iban.contains("00205"));
@@ -887,16 +1035,30 @@ fn when_unit_created_then_generates_unique_sanal_iban() {
 #[tokio::test]
 async fn when_probing_kuveyt_turk_sandbox_status_then_reports_keys_loaded() {
     let state = AppState::new();
-    let status_json = sitepulse_backend::handlers::get_kuveyt_turk_status(axum::extract::State(state.clone())).await;
+    let status_json =
+        sitepulse_backend::handlers::get_kuveyt_turk_status(axum::extract::State(state.clone()))
+            .await;
     assert!(status_json.is_sandbox);
-    assert_eq!(status_json.identity_url, "https://prep-identity.kuveytturk.com.tr");
-    assert_eq!(status_json.gateway_url, "https://prep-gateway.kuveytturk.com.tr");
-    // The key files are secrets kept out of git (backend/keys/), so a fresh checkout has
-    // none: the status must report what is actually on disk, not assume it.
-    let svc = sitepulse_backend::services::kuveyt_turk_service::KuveytTurkSandboxService::new();
-    let (private_on_disk, public_on_disk) = svc.get_key_status();
-    assert_eq!(status_json.private_key_present, private_on_disk);
-    assert_eq!(status_json.public_key_present, public_on_disk);
+    assert_eq!(
+        status_json.identity_url,
+        "https://prep-identity.kuveytturk.com.tr"
+    );
+    assert_eq!(
+        status_json.gateway_url,
+        "https://prep-gateway.kuveytturk.com.tr"
+    );
+    // Keys live in backend/keys/, which is git-ignored, so they never exist in
+    // a clean checkout. Assert presence only where keys are provisioned
+    // (SITEPULSE_REQUIRE_KT_KEYS=1); otherwise report the skip explicitly.
+    if std::env::var("SITEPULSE_REQUIRE_KT_KEYS").as_deref() == Ok("1") {
+        assert!(status_json.private_key_present);
+        assert!(status_json.public_key_present);
+    } else if !(status_json.private_key_present && status_json.public_key_present) {
+        eprintln!(
+            "SKIPPED key-presence assertions: Kuveyt Türk sandbox keys are not provisioned \
+             (set SITEPULSE_REQUIRE_KT_KEYS=1 to require them)."
+        );
+    }
 }
 
 #[test]
@@ -988,7 +1150,13 @@ async fn when_statement_contains_virtual_iban_then_matches_flat_with_100_percent
         reference_no: None,
     }];
 
-    let matches = service.reconcile_transactions(&txns, &units, &[], &dues, NaiveDate::from_ymd_opt(2026, 9, 15).unwrap());
+    let matches = service.reconcile_transactions(
+        &txns,
+        &units,
+        &[],
+        &dues,
+        NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
+    );
     assert_eq!(matches.len(), 1);
     let m = &matches[0];
     assert_eq!(m.matched_unit_id.as_deref(), Some("d-14"));
@@ -1013,8 +1181,8 @@ async fn when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_ge
     };
 
     let (status, axum::Json(res)) = call_signed_webhook(state.clone(), webhook_req.clone())
-    .await
-    .unwrap();
+        .await
+        .unwrap();
 
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(res.status, "CLEARED");
@@ -1022,7 +1190,11 @@ async fn when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_ge
     assert_eq!(res.matched_block, "A");
     assert_eq!(res.matched_unit_number, 14);
     assert_eq!(res.cleared_due_period.as_deref(), Some("Eylül 2026"));
-    assert!(res.receipt_id.starts_with("TAH-"), "canonical receipt (SPEC-005 R1): {}", res.receipt_id);
+    assert!(
+        res.receipt_id.starts_with("TAH-"),
+        "canonical receipt (SPEC-005 R1): {}",
+        res.receipt_id
+    );
 
     // Verify state: due is now PAID!
     let inner = state.inner.read().await;
@@ -1032,8 +1204,8 @@ async fn when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_ge
     // Verify Idempotency Gate (Duplicate Delivery)
     drop(inner);
     let (status2, axum::Json(res2)) = call_signed_webhook(state.clone(), webhook_req)
-    .await
-    .unwrap();
+        .await
+        .unwrap();
 
     assert_eq!(status2, axum::http::StatusCode::OK);
     assert_eq!(res2.status, "DUPLICATE_IGNORED");
@@ -1057,11 +1229,14 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
     };
 
     let (status1, axum::Json(res1)) = call_signed_webhook(state.clone(), webhook_req_1)
-    .await
-    .unwrap();
+        .await
+        .unwrap();
 
     assert_eq!(status1, axum::http::StatusCode::OK);
-    assert_eq!(res1.cleared_amount, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(
+        res1.cleared_amount,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
     assert_eq!(res1.remaining_debt, Decimal::ZERO);
     assert_eq!(res1.advance_payment, Decimal::ZERO);
 
@@ -1078,14 +1253,17 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
     };
 
     let (status2, axum::Json(res2)) = call_signed_webhook(state.clone(), webhook_req_2)
-    .await
-    .unwrap();
+        .await
+        .unwrap();
 
     assert_eq!(status2, axum::http::StatusCode::OK);
     assert_eq!(res2.status, "CLEARED");
     assert_eq!(res2.cleared_due_period, None);
     assert_eq!(res2.remaining_debt, Decimal::ZERO);
-    assert_eq!(res2.advance_payment, Decimal::from_str_exact("1460.67").unwrap());
+    assert_eq!(
+        res2.advance_payment,
+        Decimal::from_str_exact("1460.67").unwrap()
+    );
     assert!(res2.message.contains("advance payment"));
 
     // 3. Third payment adds another ₺500 to advance payment
@@ -1101,10 +1279,13 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
     };
 
     let (_, axum::Json(res3)) = call_signed_webhook(state.clone(), webhook_req_3)
-    .await
-    .unwrap();
+        .await
+        .unwrap();
 
-    assert_eq!(res3.advance_payment, Decimal::from_str_exact("1960.67").unwrap());
+    assert_eq!(
+        res3.advance_payment,
+        Decimal::from_str_exact("1960.67").unwrap()
+    );
 
     // 4. Verify Resident Dashboard reflects the accumulated advance payment
     let res = sitepulse_backend::handlers::get_resident_dashboard(
@@ -1119,20 +1300,35 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
     let dash: ResidentDashboardDto = serde_json::from_slice(&json_bytes).unwrap();
 
     assert_eq!(dash.total_debt, Decimal::ZERO);
-    assert_eq!(dash.advance_payment, Decimal::from_str_exact("1960.67").unwrap());
+    assert_eq!(
+        dash.advance_payment,
+        Decimal::from_str_exact("1960.67").unwrap()
+    );
 
     // 5. Verify user-friendly transaction titles and subtitles
-    let adv_tx = dash.transactions.iter().find(|t| t.id == "TXN-ADV-002").unwrap();
+    let adv_tx = dash
+        .transactions
+        .iter()
+        .find(|t| t.id == "TXN-ADV-002")
+        .unwrap();
     assert_eq!(adv_tx.title, "FAST ile Avans Yükleme");
-    assert_eq!(adv_tx.subtitle, "Aktif borç bulunmuyor • Avans bakiyenize aktarıldı");
+    assert_eq!(
+        adv_tx.subtitle,
+        "Aktif borç bulunmuyor • Avans bakiyenize aktarıldı"
+    );
 
-    let due_tx = dash.transactions.iter().find(|t| t.id == "TXN-ADV-001").unwrap();
+    let due_tx = dash
+        .transactions
+        .iter()
+        .find(|t| t.id == "TXN-ADV-001")
+        .unwrap();
     assert_eq!(due_tx.title, "FAST ile Aidat Ödemesi");
     assert_eq!(due_tx.subtitle, "Eylül 2026 aidat borcu kapatıldı");
 }
 
 #[tokio::test]
-async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_automatically_offsets_debt() {
+async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_automatically_offsets_debt(
+) {
     let state = AppState::new();
     fixture_dues_not_yet_due(&state).await;
 
@@ -1149,12 +1345,15 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
     };
 
     let (status, axum::Json(res)) = call_signed_webhook(state.clone(), webhook_req)
-    .await
-    .unwrap();
+        .await
+        .unwrap();
 
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(res.remaining_debt, Decimal::ZERO);
-    assert_eq!(res.advance_payment, Decimal::from_str_exact("1460.67").unwrap());
+    assert_eq!(
+        res.advance_payment,
+        Decimal::from_str_exact("1460.67").unwrap()
+    );
 
     // 2. New monthly dues period arrives: "Ekim 2026" (₺1400.00)
     let accrue_req = AccrueDuesPeriodRequest {
@@ -1174,7 +1373,10 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
 
     assert_eq!(accrue_status, axum::http::StatusCode::OK);
     assert_eq!(accrue_res.auto_settled_units_count, 1);
-    assert_eq!(accrue_res.total_amount_offset_from_advance, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(
+        accrue_res.total_amount_offset_from_advance,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
 
     // 3. Verify Resident Dashboard:
     // - New October due is automatically marked as PAID!
@@ -1192,15 +1394,28 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
     let dash: ResidentDashboardDto = serde_json::from_slice(&json_bytes).unwrap();
 
     assert_eq!(dash.total_debt, Decimal::ZERO);
-    assert_eq!(dash.advance_payment, Decimal::from_str_exact("60.67").unwrap());
+    assert_eq!(
+        dash.advance_payment,
+        Decimal::from_str_exact("60.67").unwrap()
+    );
 
     let oct_due = dash.dues.iter().find(|d| d.period == "Ekim 2026").unwrap();
     assert_eq!(oct_due.status, "PAID");
 
     // 4. Verify transaction history records the automatic advance offset!
-    let offset_tx = dash.transactions.iter().find(|t| t.title == "Avans ile Aidat Tahsili").unwrap();
-    assert_eq!(offset_tx.amount, Decimal::from_str_exact("1400.00").unwrap());
-    assert_eq!(offset_tx.subtitle, "Ekim 2026 aidatı avans bakiyenizden otomatik mahsup edildi");
+    let offset_tx = dash
+        .transactions
+        .iter()
+        .find(|t| t.title == "Avans ile Aidat Tahsili")
+        .unwrap();
+    assert_eq!(
+        offset_tx.amount,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
+    assert_eq!(
+        offset_tx.subtitle,
+        "Ekim 2026 aidatı avans bakiyenizden otomatik mahsup edildi"
+    );
     assert!(offset_tx.is_credit);
 }
 
@@ -1229,7 +1444,11 @@ async fn when_dues_period_already_accrued_then_duplicate_accrual_is_prevented() 
 
     let initial_dues_count = {
         let inner = state.inner.read().await;
-        inner.dues.iter().filter(|d| d.period == "Kasım 2026").count()
+        inner
+            .dues
+            .iter()
+            .filter(|d| d.period == "Kasım 2026")
+            .count()
     };
     assert_eq!(initial_dues_count, res1.newly_accrued_units_count);
 
@@ -1249,7 +1468,11 @@ async fn when_dues_period_already_accrued_then_duplicate_accrual_is_prevented() 
     // Verify dues count did not increase
     let final_dues_count = {
         let inner = state.inner.read().await;
-        inner.dues.iter().filter(|d| d.period == "Kasım 2026").count()
+        inner
+            .dues
+            .iter()
+            .filter(|d| d.period == "Kasım 2026")
+            .count()
     };
     assert_eq!(final_dues_count, initial_dues_count);
 }
@@ -1257,7 +1480,11 @@ async fn when_dues_period_already_accrued_then_duplicate_accrual_is_prevented() 
 #[tokio::test]
 async fn when_scheduler_batch_runs_then_accrues_and_prevents_duplicate_accrual() {
     let state = AppState::new();
-    let test_date = NaiveDate::from_ymd_opt(2026, 12, 1).unwrap().and_hms_opt(9, 0, 0).unwrap().and_utc();
+    let test_date = NaiveDate::from_ymd_opt(2026, 12, 1)
+        .unwrap()
+        .and_hms_opt(9, 0, 0)
+        .unwrap()
+        .and_utc();
 
     // First batch run: accrues for all sites
     let (sites_accrued_1, units_accrued_1) =
@@ -1269,8 +1496,15 @@ async fn when_scheduler_batch_runs_then_accrues_and_prevents_duplicate_accrual()
         // Priced from the unit's house-type tariff (d-14 is a 3+1 at ₺1800), not a flat ₺1400;
         // d-14 has no tenant, so the owner is liable.
         let inner = state.inner.read().await;
-        let accrued = inner.dues.iter().find(|d| d.unit_id == "d-14" && d.period == "Aralık 2026").unwrap();
-        assert_eq!(accrued.principal_amount, Decimal::from_str_exact("1800.00").unwrap());
+        let accrued = inner
+            .dues
+            .iter()
+            .find(|d| d.unit_id == "d-14" && d.period == "Aralık 2026")
+            .unwrap();
+        assert_eq!(
+            accrued.principal_amount,
+            Decimal::from_str_exact("1800.00").unwrap()
+        );
         assert_eq!(accrued.debtor_type, DebtorType::Owner);
     }
 
@@ -1305,10 +1539,16 @@ async fn when_homeowner_records_payment_with_existing_debt_then_clears_debt() {
     .unwrap();
 
     assert_eq!(status, axum::http::StatusCode::OK);
-    assert_eq!(res.cleared_debt_amount, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(
+        res.cleared_debt_amount,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
     assert_eq!(res.advance_payment_amount, Decimal::ZERO);
     assert_eq!(res.remaining_debt, Decimal::ZERO);
-    assert_eq!(res.status, sitepulse_backend::models::PaymentMatchStatus::MatchedDebt);
+    assert_eq!(
+        res.status,
+        sitepulse_backend::models::PaymentMatchStatus::MatchedDebt
+    );
 
     // Verify due liability is marked as Paid in state
     let inner = state.inner.read().await;
@@ -1323,18 +1563,20 @@ async fn when_homeowner_records_payment_with_no_debt_then_matches_as_advance_pay
     // Add unit d-1 with no dues liabilities
     {
         let mut inner = state.inner.write().await;
-        inner.units.push(sitepulse_backend::models::IndependentUnit {
-            id: "d-1".to_string(),
-            site_id: "site-1".to_string(),
-            block_id: "A".to_string(),
-            unit_number: 1,
-            floor: 1,
-            land_share: 20,
-            owner_user_id: None,
-            tenant_user_id: None,
-            virtual_iban: None,
-            house_type: Some("2+1".to_string()),
-        });
+        inner
+            .units
+            .push(sitepulse_backend::models::IndependentUnit {
+                id: "d-1".to_string(),
+                site_id: "site-1".to_string(),
+                block_id: "A".to_string(),
+                unit_number: 1,
+                floor: 1,
+                land_share: 20,
+                owner_user_id: None,
+                tenant_user_id: None,
+                virtual_iban: None,
+                house_type: Some("2+1".to_string()),
+            });
     }
 
     let payload = sitepulse_backend::models::RecordHomeownerPaymentRequest {
@@ -1355,9 +1597,18 @@ async fn when_homeowner_records_payment_with_no_debt_then_matches_as_advance_pay
 
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(res.cleared_debt_amount, Decimal::ZERO);
-    assert_eq!(res.advance_payment_amount, Decimal::from_str_exact("2000.00").unwrap());
-    assert_eq!(res.total_unit_advance_balance, Decimal::from_str_exact("2000.00").unwrap());
-    assert_eq!(res.status, sitepulse_backend::models::PaymentMatchStatus::MatchedAdvance);
+    assert_eq!(
+        res.advance_payment_amount,
+        Decimal::from_str_exact("2000.00").unwrap()
+    );
+    assert_eq!(
+        res.total_unit_advance_balance,
+        Decimal::from_str_exact("2000.00").unwrap()
+    );
+    assert_eq!(
+        res.status,
+        sitepulse_backend::models::PaymentMatchStatus::MatchedAdvance
+    );
 
     let inner = state.inner.read().await;
     let adv = inner.advance_total("d-1");
@@ -1365,7 +1616,8 @@ async fn when_homeowner_records_payment_with_no_debt_then_matches_as_advance_pay
 }
 
 #[tokio::test]
-async fn when_homeowner_records_payment_exceeding_debt_then_clears_debt_and_credits_surplus_as_advance() {
+async fn when_homeowner_records_payment_exceeding_debt_then_clears_debt_and_credits_surplus_as_advance(
+) {
     let state = AppState::new();
     fixture_dues_not_yet_due(&state).await;
 
@@ -1387,11 +1639,23 @@ async fn when_homeowner_records_payment_exceeding_debt_then_clears_debt_and_cred
     .unwrap();
 
     assert_eq!(status, axum::http::StatusCode::OK);
-    assert_eq!(res.cleared_debt_amount, Decimal::from_str_exact("1400.00").unwrap());
-    assert_eq!(res.advance_payment_amount, Decimal::from_str_exact("1100.00").unwrap());
+    assert_eq!(
+        res.cleared_debt_amount,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
+    assert_eq!(
+        res.advance_payment_amount,
+        Decimal::from_str_exact("1100.00").unwrap()
+    );
     assert_eq!(res.remaining_debt, Decimal::ZERO);
-    assert_eq!(res.total_unit_advance_balance, Decimal::from_str_exact("1100.00").unwrap());
-    assert_eq!(res.status, sitepulse_backend::models::PaymentMatchStatus::PartiallyMatched);
+    assert_eq!(
+        res.total_unit_advance_balance,
+        Decimal::from_str_exact("1100.00").unwrap()
+    );
+    assert_eq!(
+        res.status,
+        sitepulse_backend::models::PaymentMatchStatus::PartiallyMatched
+    );
 
     let inner = state.inner.read().await;
     let adv = inner.advance_total("d-14");
@@ -1399,59 +1663,66 @@ async fn when_homeowner_records_payment_exceeding_debt_then_clears_debt_and_cred
 }
 
 #[tokio::test]
-async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_payments_with_debts_and_advance() {
+async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_payments_with_debts_and_advance(
+) {
     let state = AppState::new();
     fixture_dues_not_yet_due(&state).await;
 
     // Add unit d-1 and record two pending payments in state
     {
         let mut inner = state.inner.write().await;
-        inner.units.push(sitepulse_backend::models::IndependentUnit {
-            id: "d-1".to_string(),
-            site_id: "site-1".to_string(),
-            block_id: "A".to_string(),
-            unit_number: 1,
-            floor: 1,
-            land_share: 20,
-            owner_user_id: None,
-            tenant_user_id: None,
-            virtual_iban: None,
-            house_type: Some("2+1".to_string()),
-        });
+        inner
+            .units
+            .push(sitepulse_backend::models::IndependentUnit {
+                id: "d-1".to_string(),
+                site_id: "site-1".to_string(),
+                block_id: "A".to_string(),
+                unit_number: 1,
+                floor: 1,
+                land_share: 20,
+                owner_user_id: None,
+                tenant_user_id: None,
+                virtual_iban: None,
+                house_type: Some("2+1".to_string()),
+            });
 
         // Payment 1 for d-14 (has debt ₺1400) of ₺1400
-        inner.homeowner_payments.push(sitepulse_backend::models::HomeownerPaymentRecord {
-            id: "PAY-PENDING-1".to_string(),
-            unit_id: "d-14".to_string(),
-            block_id: "A".to_string(),
-            unit_number: 14,
-            homeowner_name: Some("Ahmet Yılmaz".to_string()),
-            amount: Decimal::from_str_exact("1400.00").unwrap(),
-            payment_method: PaymentMethod::BankTransfer,
-            reference_code: Some("REF-1".to_string()),
-            note: Some("Aidat".to_string()),
-            status: sitepulse_backend::models::PaymentMatchStatus::Pending,
-            cleared_debt_amount: Decimal::ZERO,
-            advance_credit_amount: Decimal::ZERO,
-            created_at: Utc::now(),
-        });
+        inner
+            .homeowner_payments
+            .push(sitepulse_backend::models::HomeownerPaymentRecord {
+                id: "PAY-PENDING-1".to_string(),
+                unit_id: "d-14".to_string(),
+                block_id: "A".to_string(),
+                unit_number: 14,
+                homeowner_name: Some("Ahmet Yılmaz".to_string()),
+                amount: Decimal::from_str_exact("1400.00").unwrap(),
+                payment_method: PaymentMethod::BankTransfer,
+                reference_code: Some("REF-1".to_string()),
+                note: Some("Aidat".to_string()),
+                status: sitepulse_backend::models::PaymentMatchStatus::Pending,
+                cleared_debt_amount: Decimal::ZERO,
+                advance_credit_amount: Decimal::ZERO,
+                created_at: Utc::now(),
+            });
 
         // Payment 2 for d-1 (no debt) of ₺1500
-        inner.homeowner_payments.push(sitepulse_backend::models::HomeownerPaymentRecord {
-            id: "PAY-PENDING-2".to_string(),
-            unit_id: "d-1".to_string(),
-            block_id: "A".to_string(),
-            unit_number: 1,
-            homeowner_name: Some("Selim Ak".to_string()),
-            amount: Decimal::from_str_exact("1500.00").unwrap(),
-            payment_method: PaymentMethod::BankTransfer,
-            reference_code: Some("REF-2".to_string()),
-            note: Some("Avans".to_string()),
-            status: sitepulse_backend::models::PaymentMatchStatus::Pending,
-            cleared_debt_amount: Decimal::ZERO,
-            advance_credit_amount: Decimal::ZERO,
-            created_at: Utc::now(),
-        });
+        inner
+            .homeowner_payments
+            .push(sitepulse_backend::models::HomeownerPaymentRecord {
+                id: "PAY-PENDING-2".to_string(),
+                unit_id: "d-1".to_string(),
+                block_id: "A".to_string(),
+                unit_number: 1,
+                homeowner_name: Some("Selim Ak".to_string()),
+                amount: Decimal::from_str_exact("1500.00").unwrap(),
+                payment_method: PaymentMethod::BankTransfer,
+                reference_code: Some("REF-2".to_string()),
+                note: Some("Avans".to_string()),
+                status: sitepulse_backend::models::PaymentMatchStatus::Pending,
+                cleared_debt_amount: Decimal::ZERO,
+                advance_credit_amount: Decimal::ZERO,
+                created_at: Utc::now(),
+            });
     }
 
     // Call match_all_homeowner_payments
@@ -1466,8 +1737,14 @@ async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_
 
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(res.total_payments_processed, 2);
-    assert_eq!(res.total_debt_cleared, Decimal::from_str_exact("1400.00").unwrap());
-    assert_eq!(res.total_advance_credited, Decimal::from_str_exact("1500.00").unwrap());
+    assert_eq!(
+        res.total_debt_cleared,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
+    assert_eq!(
+        res.total_advance_credited,
+        Decimal::from_str_exact("1500.00").unwrap()
+    );
     assert_eq!(res.matched_debts_count, 1);
     assert_eq!(res.matched_advance_count, 1);
 
@@ -1500,17 +1777,31 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
 
     let eval_date = NaiveDate::from_ymd_opt(2026, 9, 20).unwrap();
     let inner = state.inner.read().await;
-    let matches = recon_service.reconcile_transactions(&[txn1], &inner.units, &inner.users, &inner.dues, eval_date);
+    let matches = recon_service.reconcile_transactions(
+        &[txn1],
+        &inner.units,
+        &inner.users,
+        &inner.dues,
+        eval_date,
+    );
     drop(inner);
 
     assert_eq!(matches.len(), 1);
     let m = &matches[0];
     assert_eq!(m.matched_unit_id.as_deref(), Some("d-14"));
     assert_eq!(m.confidence_score, 90);
-    assert_eq!(m.status, sitepulse_backend::models::ReconciliationStatus::PendingApproval);
+    assert_eq!(
+        m.status,
+        sitepulse_backend::models::ReconciliationStatus::PendingApproval
+    );
 
     let match_id = m.match_id.clone();
-    state.inner.write().await.reconciliation_queue.push(m.clone());
+    state
+        .inner
+        .write()
+        .await
+        .reconciliation_queue
+        .push(m.clone());
 
     let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
         site_id: "site-1".to_string(),
@@ -1528,7 +1819,10 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
 
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(res.confirmed_count, 1);
-    assert_eq!(res.total_amount_cleared, Decimal::from_str_exact("2000.00").unwrap());
+    assert_eq!(
+        res.total_amount_cleared,
+        Decimal::from_str_exact("2000.00").unwrap()
+    );
 
     // Verify:
     // 1) Due is Paid
@@ -1575,8 +1869,8 @@ async fn when_sender_iban_is_remembered_subsequent_blank_desc_payment_auto_match
     };
 
     let (status, axum::Json(webhook_res)) = call_signed_webhook(state.clone(), webhook_payload)
-    .await
-    .expect("Webhook processing should succeed");
+        .await
+        .expect("Webhook processing should succeed");
 
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(webhook_res.status, "CLEARED");
@@ -1601,8 +1895,8 @@ async fn when_transfer_cannot_be_matched_then_enters_unmatched_pool_successfully
     };
 
     let (status, axum::Json(webhook_res)) = call_signed_webhook(state.clone(), webhook_payload)
-    .await
-    .expect("Webhook processing should succeed");
+        .await
+        .expect("Webhook processing should succeed");
 
     // Money arrived at the bank, so HTTP 200 OK
     assert_eq!(status, axum::http::StatusCode::OK);
@@ -1619,7 +1913,10 @@ async fn when_transfer_cannot_be_matched_then_enters_unmatched_pool_successfully
 
     assert!(found.is_some());
     let item = found.unwrap();
-    assert_eq!(item.status, sitepulse_backend::models::ReconciliationStatus::Unmatched);
+    assert_eq!(
+        item.status,
+        sitepulse_backend::models::ReconciliationStatus::Unmatched
+    );
     assert!(item.matched_unit_id.is_none());
 }
 
@@ -1640,7 +1937,10 @@ async fn when_homeowner_manages_matching_criteria_then_criteria_can_be_viewed_ad
     assert_eq!(criteria.unit_number, 14);
     assert!(criteria.virtual_iban.is_some());
     assert_eq!(criteria.recommended_description, "A Blok D:14");
-    assert!(criteria.remembered_ibans.iter().any(|i| i.sender_iban == "TR120006200000000000000001"));
+    assert!(criteria
+        .remembered_ibans
+        .iter()
+        .any(|i| i.sender_iban == "TR120006200000000000000001"));
 
     // 2. Add a new sender IBAN (e.g. İş Bankası)
     let add_req = sitepulse_backend::models::AddSenderIbanRequest {
@@ -1657,11 +1957,18 @@ async fn when_homeowner_manages_matching_criteria_then_criteria_can_be_viewed_ad
     .await
     .expect("Should add sender IBAN");
 
-    assert!(updated.remembered_ibans.iter().any(|i| i.sender_iban == "TR770006400000112233445566"));
+    assert!(updated
+        .remembered_ibans
+        .iter()
+        .any(|i| i.sender_iban == "TR770006400000112233445566"));
 
     // 3. Update payer names (add family member)
     let payer_req = sitepulse_backend::models::UpdatePayerNamesRequest {
-        payer_names: vec!["Ahmet Yılmaz".to_string(), "Zeynep Kaya".to_string(), "Can Yılmaz".to_string()],
+        payer_names: vec![
+            "Ahmet Yılmaz".to_string(),
+            "Zeynep Kaya".to_string(),
+            "Can Yılmaz".to_string(),
+        ],
     };
 
     let axum::Json(updated_names) = sitepulse_backend::handlers::update_unit_payer_names(
@@ -1673,7 +1980,9 @@ async fn when_homeowner_manages_matching_criteria_then_criteria_can_be_viewed_ad
     .expect("Should update payer names");
 
     assert_eq!(updated_names.registered_payer_names.len(), 3);
-    assert!(updated_names.registered_payer_names.contains(&"Can Yılmaz".to_string()));
+    assert!(updated_names
+        .registered_payer_names
+        .contains(&"Can Yılmaz".to_string()));
 
     // 4. Delete the added sender IBAN
     let axum::Json(after_delete) = sitepulse_backend::handlers::delete_unit_sender_iban(
@@ -1683,7 +1992,10 @@ async fn when_homeowner_manages_matching_criteria_then_criteria_can_be_viewed_ad
     .await
     .expect("Should delete sender IBAN");
 
-    assert!(!after_delete.remembered_ibans.iter().any(|i| i.sender_iban == "TR770006400000112233445566"));
+    assert!(!after_delete
+        .remembered_ibans
+        .iter()
+        .any(|i| i.sender_iban == "TR770006400000112233445566"));
 }
 
 #[tokio::test]
@@ -1704,15 +2016,18 @@ async fn when_reset_demo_data_invoked_then_payments_and_dues_are_restored_to_cle
     };
 
     let (status, _) = call_signed_webhook(state.clone(), webhook_req)
-    .await
-    .expect("Payment should process");
+        .await
+        .expect("Payment should process");
 
     assert_eq!(status, axum::http::StatusCode::OK);
 
     // Verify state has advance payment and paid due
     {
         let inner = state.inner.read().await;
-        assert_eq!(Some(inner.advance_total("d-14")), Some(rust_decimal::Decimal::from_str_exact("600.00").unwrap()));
+        assert_eq!(
+            Some(inner.advance_total("d-14")),
+            Some(rust_decimal::Decimal::from_str_exact("600.00").unwrap())
+        );
         let due = inner.dues.iter().find(|d| d.id == "b-101").unwrap();
         assert_eq!(due.status, sitepulse_backend::models::DebtStatus::Paid);
     }
@@ -1735,7 +2050,10 @@ async fn when_reset_demo_data_invoked_then_payments_and_dues_are_restored_to_cle
         let inner = state.inner.read().await;
         let due = inner.dues.iter().find(|d| d.id == "b-101").unwrap();
         assert_eq!(due.status, sitepulse_backend::models::DebtStatus::Pending);
-        assert_eq!(due.total_amount, rust_decimal::Decimal::from_str_exact("1400.00").unwrap());
+        assert_eq!(
+            due.total_amount,
+            rust_decimal::Decimal::from_str_exact("1400.00").unwrap()
+        );
     }
 }
 
@@ -1759,15 +2077,26 @@ async fn when_wipe_all_data_invoked_then_all_sites_units_and_residents_are_purge
         assert_eq!(inner.sites.len(), 0);
         assert_eq!(inner.units.len(), 0);
         assert_eq!(inner.dues.len(), 0);
-        assert_eq!(inner.advance_balances.values().filter(|a| !a.total().is_zero()).count(), 0);
+        assert_eq!(
+            inner
+                .advance_balances
+                .values()
+                .filter(|a| !a.total().is_zero())
+                .count(),
+            0
+        );
         assert_eq!(inner.reconciliation_queue.len(), 0);
         // Only SaaS platform admin user remains
-        assert!(inner.users.iter().all(|u| u.role == sitepulse_backend::models::Role::SaasAdmin));
+        assert!(inner
+            .users
+            .iter()
+            .all(|u| u.role == sitepulse_backend::models::Role::SaasAdmin));
     }
 }
 
 #[tokio::test]
-async fn when_purge_site_cascade_invoked_then_site_and_associated_units_and_residents_are_removed() {
+async fn when_purge_site_cascade_invoked_then_site_and_associated_units_and_residents_are_removed()
+{
     let state = AppState::new();
 
     // Verify site-1 exists with units
@@ -1781,7 +2110,8 @@ async fn when_purge_site_cascade_invoked_then_site_and_associated_units_and_resi
     let _ = sitepulse_backend::handlers::purge_site_cascade(
         axum::extract::Path("site-1".to_string()),
         axum::extract::State(state.clone()),
-    ).await;
+    )
+    .await;
 
     // Verify site-1 and its units are removed
     {
@@ -1811,18 +2141,28 @@ async fn when_provisioning_12_units_for_site_then_creates_residents_and_virtual_
     let resp = sitepulse_backend::handlers::provision_site_units(
         axum::extract::State(state.clone()),
         axum::Json(req),
-    ).await.into_response();
+    )
+    .await
+    .into_response();
 
     assert_eq!(resp.status(), axum::http::StatusCode::OK);
 
     // Verify state
     {
         let inner = state.inner.read().await;
-        let site = inner.sites.iter().find(|s| s.name == "Kardelen Sitesi").expect("Site should be created");
+        let site = inner
+            .sites
+            .iter()
+            .find(|s| s.name == "Kardelen Sitesi")
+            .expect("Site should be created");
         assert_eq!(site.status, SiteStatus::Active);
 
         // Verify 12 units were created
-        let site_units: Vec<_> = inner.units.iter().filter(|u| u.site_id == site.id).collect();
+        let site_units: Vec<_> = inner
+            .units
+            .iter()
+            .filter(|u| u.site_id == site.id)
+            .collect();
         assert_eq!(site_units.len(), 12);
 
         // Check unit 1
@@ -1835,14 +2175,22 @@ async fn when_provisioning_12_units_for_site_then_creates_residents_and_virtual_
         assert!(u12.virtual_iban.as_ref().unwrap().starts_with("TR"));
 
         // Check dues accrued
-        let dues: Vec<_> = inner.dues.iter().filter(|d| d.period == "Kasım 2026").collect();
+        let dues: Vec<_> = inner
+            .dues
+            .iter()
+            .filter(|d| d.period == "Kasım 2026")
+            .collect();
         assert_eq!(dues.len(), 12);
-        assert_eq!(dues[0].total_amount, rust_decimal::Decimal::from_str_exact("1500.00").unwrap());
+        assert_eq!(
+            dues[0].total_amount,
+            rust_decimal::Decimal::from_str_exact("1500.00").unwrap()
+        );
     }
 
-    let summary_resp = sitepulse_backend::handlers::get_units_summary(
-        axum::extract::State(state.clone()),
-    ).await.into_response();
+    let summary_resp =
+        sitepulse_backend::handlers::get_units_summary(axum::extract::State(state.clone()))
+            .await
+            .into_response();
     assert_eq!(summary_resp.status(), axum::http::StatusCode::OK);
 
     // Test get_site_overview
@@ -1853,7 +2201,9 @@ async fn when_provisioning_12_units_for_site_then_creates_residents_and_virtual_
     let overview_resp = sitepulse_backend::handlers::get_site_overview(
         axum::extract::State(state.clone()),
         axum::extract::Query(overview_query),
-    ).await.into_response();
+    )
+    .await
+    .into_response();
 
     assert_eq!(overview_resp.status(), axum::http::StatusCode::OK);
 }
@@ -1879,17 +2229,19 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
             site_id: None,
             period: None,
         }),
-    ).await.into_response();
+    )
+    .await
+    .into_response();
 
     assert_eq!(empty_overview_resp.status(), axum::http::StatusCode::OK);
 
     // Call get_site_payments with zero data
     let empty_payments_resp = sitepulse_backend::handlers::get_site_payments(
         axum::extract::State(state.clone()),
-        axum::extract::Query(sitepulse_backend::handlers::SitePaymentsQuery {
-            site_id: None,
-        }),
-    ).await.into_response();
+        axum::extract::Query(sitepulse_backend::handlers::SitePaymentsQuery { site_id: None }),
+    )
+    .await
+    .into_response();
 
     assert_eq!(empty_payments_resp.status(), axum::http::StatusCode::OK);
 
@@ -1916,25 +2268,29 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
             site_id: Some("site-zero-units".to_string()),
             period: None,
         }),
-    ).await.into_response();
+    )
+    .await
+    .into_response();
 
     assert_eq!(zero_units_resp.status(), axum::http::StatusCode::OK);
 
     // 3. Test Site & Units exist, but Zero Periodic Dues
     {
         let mut inner = state.inner.write().await;
-        inner.units.push(sitepulse_backend::models::IndependentUnit {
-            id: "unit-z1".to_string(),
-            site_id: "site-zero-units".to_string(),
-            block_id: "A".to_string(),
-            unit_number: 1,
-            floor: 1,
-            land_share: 10,
-            owner_user_id: None,
-            tenant_user_id: None,
-            virtual_iban: None,
-            house_type: Some("2+1".to_string()),
-        });
+        inner
+            .units
+            .push(sitepulse_backend::models::IndependentUnit {
+                id: "unit-z1".to_string(),
+                site_id: "site-zero-units".to_string(),
+                block_id: "A".to_string(),
+                unit_number: 1,
+                floor: 1,
+                land_share: 10,
+                owner_user_id: None,
+                tenant_user_id: None,
+                virtual_iban: None,
+                house_type: Some("2+1".to_string()),
+            });
     }
 
     let zero_dues_resp = sitepulse_backend::handlers::get_site_overview(
@@ -1943,7 +2299,9 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
             site_id: Some("site-zero-units".to_string()),
             period: None,
         }),
-    ).await.into_response();
+    )
+    .await
+    .into_response();
 
     assert_eq!(zero_dues_resp.status(), axum::http::StatusCode::OK);
 }
@@ -1970,7 +2328,9 @@ async fn when_invalid_email_or_phone_then_registration_rejected_with_validation_
         is_resident: true,
         role: None,
     };
-    let res = service.register_home_owner("site-1", invalid_email_req).await;
+    let res = service
+        .register_home_owner("site-1", invalid_email_req)
+        .await;
     assert!(res.is_err());
     assert!(res.unwrap_err().contains("Geçerli bir e-posta"));
 
@@ -1991,7 +2351,9 @@ async fn when_invalid_email_or_phone_then_registration_rejected_with_validation_
         is_resident: true,
         role: None,
     };
-    let res = service.register_home_owner("site-1", invalid_phone_req).await;
+    let res = service
+        .register_home_owner("site-1", invalid_phone_req)
+        .await;
     assert!(res.is_err());
     assert!(res.unwrap_err().contains("Geçerli bir cep telefonu"));
 }
@@ -2019,8 +2381,14 @@ async fn when_house_type_selected_then_sets_monthly_dues_from_tariff() {
         role: None,
     };
 
-    let res = service.register_home_owner("site-1", req).await.expect("Registration should succeed");
-    assert_eq!(res.monthly_dues, Decimal::from_str_exact("1800.00").unwrap());
+    let res = service
+        .register_home_owner("site-1", req)
+        .await
+        .expect("Registration should succeed");
+    assert_eq!(
+        res.monthly_dues,
+        Decimal::from_str_exact("1800.00").unwrap()
+    );
     assert_eq!(res.house_type, Some("3+1".to_string()));
 }
 
@@ -2035,24 +2403,33 @@ async fn when_managing_house_types_then_can_list_create_and_delete() {
     assert!(initial_types.iter().any(|h| h.type_name == "3+1"));
 
     // Create a new house type
-    let new_type = service.create_or_update_house_type(
-        "site-1",
-        sitepulse_backend::models::CreateHouseTypeRequest {
-            type_name: "5+1 Villa".to_string(),
-            dues_amount: Decimal::from_str_exact("3500.00").unwrap(),
-            description: Some("Müstakil Girişli Villa".to_string()),
-        },
-    ).await.expect("Create house type should succeed");
+    let new_type = service
+        .create_or_update_house_type(
+            "site-1",
+            sitepulse_backend::models::CreateHouseTypeRequest {
+                type_name: "5+1 Villa".to_string(),
+                dues_amount: Decimal::from_str_exact("3500.00").unwrap(),
+                description: Some("Müstakil Girişli Villa".to_string()),
+            },
+        )
+        .await
+        .expect("Create house type should succeed");
 
     assert_eq!(new_type.type_name, "5+1 Villa");
-    assert_eq!(new_type.dues_amount, Decimal::from_str_exact("3500.00").unwrap());
+    assert_eq!(
+        new_type.dues_amount,
+        Decimal::from_str_exact("3500.00").unwrap()
+    );
 
     // Verify it is listed
     let after_create = service.get_house_types_for_site("site-1").await;
     assert!(after_create.iter().any(|h| h.type_name == "5+1 Villa"));
 
     // Delete it
-    service.delete_house_type("site-1", &new_type.id).await.expect("Delete should succeed");
+    service
+        .delete_house_type("site-1", &new_type.id)
+        .await
+        .expect("Delete should succeed");
     let after_delete = service.get_house_types_for_site("site-1").await;
     assert!(!after_delete.iter().any(|h| h.id == new_type.id));
 }
@@ -2068,13 +2445,16 @@ async fn when_managing_blocks_then_can_list_and_create() {
     assert!(initial_blocks.iter().any(|b| b.block_name == "A Blok"));
 
     // Create a new block
-    let new_block = service.create_or_update_block(
-        "site-1",
-        sitepulse_backend::models::CreateBlockRequest {
-            block_name: "C Blok".to_string(),
-            total_floors: Some(12),
-        },
-    ).await.expect("Create block should succeed");
+    let new_block = service
+        .create_or_update_block(
+            "site-1",
+            sitepulse_backend::models::CreateBlockRequest {
+                block_name: "C Blok".to_string(),
+                total_floors: Some(12),
+            },
+        )
+        .await
+        .expect("Create block should succeed");
 
     assert_eq!(new_block.block_name, "C Blok");
     assert_eq!(new_block.total_floors, 12);
@@ -2097,10 +2477,17 @@ async fn when_registering_site_with_blocks_then_blocks_are_stored() {
         site_admin_email: "ali@palmiye.com".to_string(),
         site_admin_phone: "+90 532 111 2233".to_string(),
         plan_type: Some("PREMIUM".to_string()),
-        blocks: Some(vec!["1. Blok".to_string(), "2. Blok".to_string(), "3. Blok".to_string()]),
+        blocks: Some(vec![
+            "1. Blok".to_string(),
+            "2. Blok".to_string(),
+            "3. Blok".to_string(),
+        ]),
     };
 
-    let res = saas_service.register_site(req).await.expect("Register site should succeed");
+    let res = saas_service
+        .register_site(req)
+        .await
+        .expect("Register site should succeed");
     assert_eq!(res.blocks, vec!["1. Blok", "2. Blok", "3. Blok"]);
 
     // Check blocks available for that site
@@ -2158,7 +2545,9 @@ async fn when_managing_dues_periods_then_can_list_and_create_period_in_separate_
     .unwrap();
 
     assert_eq!(updated_periods.len(), initial_count + 1);
-    assert!(updated_periods.iter().any(|p| p.period_name == "Kasım 2026"));
+    assert!(updated_periods
+        .iter()
+        .any(|p| p.period_name == "Kasım 2026"));
 }
 
 #[tokio::test]
@@ -2183,7 +2572,10 @@ async fn when_managing_home_owners_then_can_delete_home_owner() {
         is_resident: true,
         role: None,
     };
-    let created = service.register_home_owner("site-1", reg_req).await.unwrap();
+    let created = service
+        .register_home_owner("site-1", reg_req)
+        .await
+        .unwrap();
 
     // 2. Call delete_home_owner handler
     let q = sitepulse_backend::handlers::SiteIdParam {
@@ -2201,7 +2593,9 @@ async fn when_managing_home_owners_then_can_delete_home_owner() {
 
     // 3. Verify the unit is removed
     let owners = service.get_home_owners_for_site("site-1").await;
-    assert!(!owners.iter().any(|o| o.unit_id == created.unit_id || o.email == "silinecek@sitepulse.io"));
+    assert!(!owners
+        .iter()
+        .any(|o| o.unit_id == created.unit_id || o.email == "silinecek@sitepulse.io"));
 }
 
 #[tokio::test]
@@ -2227,7 +2621,10 @@ async fn when_managing_occupancy_lifecycle_then_can_move_out_and_move_in_without
         role: None,
     };
 
-    let created = service.register_home_owner("site-1", reg_req).await.unwrap();
+    let created = service
+        .register_home_owner("site-1", reg_req)
+        .await
+        .unwrap();
 
     // 2. Move in a tenant
     let move_in_req = sitepulse_backend::models::MoveInResidentRequest {
@@ -2240,7 +2637,9 @@ async fn when_managing_occupancy_lifecycle_then_can_move_out_and_move_in_without
         notes: Some("1 yıllık kira sözleşmesi".to_string()),
     };
 
-    let move_in_res = service.move_in_resident("site-1", &created.unit_id, move_in_req).await;
+    let move_in_res = service
+        .move_in_resident("site-1", &created.unit_id, move_in_req)
+        .await;
     if let Ok(item) = move_in_res {
         assert_eq!(item.role, DebtorType::Tenant);
         assert_eq!(item.person_name, "Şener Şen");
@@ -2252,18 +2651,25 @@ async fn when_managing_occupancy_lifecycle_then_can_move_out_and_move_in_without
             notes: Some("Sözleşme sonu tahliye".to_string()),
         };
 
-        let move_out_res = service.move_out_resident("site-1", &created.unit_id, move_out_req).await.unwrap();
+        let move_out_res = service
+            .move_out_resident("site-1", &created.unit_id, move_out_req)
+            .await
+            .unwrap();
         assert!(!move_out_res.is_active);
 
         // 4. Fetch history and verify zero data loss
-        let history = service.get_unit_occupancy_history("site-1", &created.unit_id).await.unwrap();
+        let history = service
+            .get_unit_occupancy_history("site-1", &created.unit_id)
+            .await
+            .unwrap();
         assert!(!history.is_empty());
         assert!(history.iter().any(|h| h.person_name == "Şener Şen"));
     }
 }
 
 #[tokio::test]
-async fn when_registering_new_owner_or_tenant_to_existing_unit_then_archives_previous_occupant_in_history() {
+async fn when_registering_new_owner_or_tenant_to_existing_unit_then_archives_previous_occupant_in_history(
+) {
     let state = AppState::new();
     let service = sitepulse_backend::services::SiteAdminService::new(state.clone());
 
@@ -2287,7 +2693,10 @@ async fn when_registering_new_owner_or_tenant_to_existing_unit_then_archives_pre
     let owner = service.register_home_owner("site-1", req1).await.unwrap();
 
     // Verify initial occupancy history has Kemal Sunal as active
-    let hist1 = service.get_unit_occupancy_history("site-1", &owner.unit_id).await.unwrap();
+    let hist1 = service
+        .get_unit_occupancy_history("site-1", &owner.unit_id)
+        .await
+        .unwrap();
     assert_eq!(hist1.len(), 1);
     assert_eq!(hist1[0].person_name, "Kemal Sunal");
     assert!(hist1[0].is_active);
@@ -2313,13 +2722,22 @@ async fn when_registering_new_owner_or_tenant_to_existing_unit_then_archives_pre
     assert_eq!(tenant.unit_id, owner.unit_id);
 
     // 3. Verify history now has 2 entries: Kemal Sunal is inactive (archived), Halit Akçatepe is active
-    let hist2 = service.get_unit_occupancy_history("site-1", &owner.unit_id).await.unwrap();
+    let hist2 = service
+        .get_unit_occupancy_history("site-1", &owner.unit_id)
+        .await
+        .unwrap();
     assert_eq!(hist2.len(), 2);
-    let previous = hist2.iter().find(|h| h.person_name == "Kemal Sunal").unwrap();
+    let previous = hist2
+        .iter()
+        .find(|h| h.person_name == "Kemal Sunal")
+        .unwrap();
     assert!(!previous.is_active);
     assert!(previous.end_date.is_some());
 
-    let current = hist2.iter().find(|h| h.person_name == "Halit Akçatepe").unwrap();
+    let current = hist2
+        .iter()
+        .find(|h| h.person_name == "Halit Akçatepe")
+        .unwrap();
     assert!(current.is_active);
     assert_eq!(current.role, DebtorType::Tenant);
 }
@@ -2347,11 +2765,14 @@ async fn when_homeowner_or_tenant_manually_adds_household_member_then_stored_and
 
     let invitation_service = HomeResidentInvitationService::new(state);
     let members = invitation_service.get_unit_members("d-14").await;
-    assert!(members.iter().any(|m| m.full_name == "Zeynep Yılmaz" && m.relationship == "Eş"));
+    assert!(members
+        .iter()
+        .any(|m| m.full_name == "Zeynep Yılmaz" && m.relationship == "Eş"));
 }
 
 #[tokio::test]
-async fn when_registering_co_resident_then_attached_to_household_and_does_not_alter_dues_primary_payer() {
+async fn when_registering_co_resident_then_attached_to_household_and_does_not_alter_dues_primary_payer(
+) {
     let state = AppState::new();
     let service = SiteAdminService::new(state.clone());
 
@@ -2372,7 +2793,10 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
         is_resident: false,
         role: Some("OWNER".to_string()),
     };
-    service.register_home_owner("site-1", owner_req).await.unwrap();
+    service
+        .register_home_owner("site-1", owner_req)
+        .await
+        .unwrap();
 
     // 2. Register tenant (primary contact living there)
     let tenant_req = sitepulse_backend::models::RegisterHomeOwnerRequest {
@@ -2391,7 +2815,10 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
         is_resident: true,
         role: Some("TENANT".to_string()),
     };
-    service.register_home_owner("site-1", tenant_req).await.unwrap();
+    service
+        .register_home_owner("site-1", tenant_req)
+        .await
+        .unwrap();
 
     // 3. Register co-resident (Ev Sakini) to unit 14
     let resident_req = sitepulse_backend::models::RegisterHomeOwnerRequest {
@@ -2410,13 +2837,22 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
         is_resident: true,
         role: Some("RESIDENT".to_string()),
     };
-    service.register_home_owner("site-1", resident_req).await.unwrap();
+    service
+        .register_home_owner("site-1", resident_req)
+        .await
+        .unwrap();
 
     // 4. Verify in get_home_owners_for_site:
     // Unit 14 has owner, tenant, and household_residents containing "Sakin Kardeş"
     let owners = service.get_home_owners_for_site("site-1").await;
-    let u14 = owners.iter().find(|o| o.unit_no == 14).expect("Unit 14 must exist");
-    assert!(u14.household_residents.iter().any(|m| m.full_name == "Sakin Kardeş" && m.relationship == "Ev Sakini"));
+    let u14 = owners
+        .iter()
+        .find(|o| o.unit_no == 14)
+        .expect("Unit 14 must exist");
+    assert!(u14
+        .household_residents
+        .iter()
+        .any(|m| m.full_name == "Sakin Kardeş" && m.relationship == "Ev Sakini"));
 
     // 5. Verify in get_site_overview:
     // Flat in overview shows Canan Can as primary resident_name (NOT Sakin Kardeş, and not duplicated)
@@ -2426,13 +2862,22 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
             site_id: Some("site-1".to_string()),
             period: None,
         }),
-    ).await.into_response();
+    )
+    .await
+    .into_response();
     assert_eq!(overview_resp.status(), axum::http::StatusCode::OK);
 
-    let overview_body = axum::body::to_bytes(overview_resp.into_body(), usize::MAX).await.unwrap();
+    let overview_body = axum::body::to_bytes(overview_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let overview_json: serde_json::Value = serde_json::from_slice(&overview_body).unwrap();
-    let flats = overview_json["flats"].as_array().expect("flats must be array");
-    let f14 = flats.iter().find(|f| f["unit_no"] == 14).expect("Flat 14 must be in overview");
+    let flats = overview_json["flats"]
+        .as_array()
+        .expect("flats must be array");
+    let f14 = flats
+        .iter()
+        .find(|f| f["unit_no"] == 14)
+        .expect("Flat 14 must be in overview");
     assert_eq!(f14["resident_name"], "Canan Can");
 }
 
@@ -2458,7 +2903,10 @@ async fn when_tenant_moves_out_then_household_members_are_archived_and_cleared_f
         is_resident: true,
         role: Some("TENANT".to_string()),
     };
-    let created = service.register_home_owner("site-1", tenant_req).await.unwrap();
+    let created = service
+        .register_home_owner("site-1", tenant_req)
+        .await
+        .unwrap();
 
     // 2. Add household co-resident
     service
@@ -2482,12 +2930,18 @@ async fn when_tenant_moves_out_then_household_members_are_archived_and_cleared_f
         end_date: Some("2026-11-04".to_string()),
         notes: Some("Kiracı tahliyesi".to_string()),
     };
-    let move_out_res = service.move_out_resident("site-1", &created.unit_id, move_out_req).await.unwrap();
+    let move_out_res = service
+        .move_out_resident("site-1", &created.unit_id, move_out_req)
+        .await
+        .unwrap();
     assert!(!move_out_res.is_active);
 
     // 4. Verify household members are cleared from active unit
     let members_after = invitation_service.get_unit_members(&created.unit_id).await;
-    assert!(members_after.is_empty(), "Active household members must be empty after move-out");
+    assert!(
+        members_after.is_empty(),
+        "Active household members must be empty after move-out"
+    );
 }
 
 #[tokio::test]
@@ -2525,29 +2979,41 @@ async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_k
     service.record_and_allocate_payment(p2).await.unwrap();
 
     // 1. Query all
-    let all = service.get_payment_stream(PaymentStreamFilter {
-        site_id: Some("site-1".to_string()),
-        ..Default::default()
-    }).await;
+    let all = service
+        .get_payment_stream(PaymentStreamFilter {
+            site_id: Some("site-1".to_string()),
+            ..Default::default()
+        })
+        .await;
     assert!(all.total_count >= 2);
     assert!(all.total_volume >= Decimal::from_str_exact("4500.00").unwrap());
 
     // 2. Query filtered by channel
-    let cash_only = service.get_payment_stream(PaymentStreamFilter {
-        site_id: Some("site-1".to_string()),
-        channel: Some(PaymentChannel::ManualCash),
-        ..Default::default()
-    }).await;
+    let cash_only = service
+        .get_payment_stream(PaymentStreamFilter {
+            site_id: Some("site-1".to_string()),
+            channel: Some(PaymentChannel::ManualCash),
+            ..Default::default()
+        })
+        .await;
     assert_eq!(cash_only.total_count, 1);
-    assert_eq!(cash_only.entries[0].amount, Decimal::from_str_exact("1500.00").unwrap());
+    assert_eq!(
+        cash_only.entries[0].amount,
+        Decimal::from_str_exact("1500.00").unwrap()
+    );
 
     // 3. Query filtered by payer role
-    let tenant_only = service.get_payment_stream(PaymentStreamFilter {
-        site_id: Some("site-1".to_string()),
-        payer_role: Some(DebtorType::Tenant),
-        ..Default::default()
-    }).await;
-    assert!(tenant_only.entries.iter().all(|e| e.payer_role == DebtorType::Tenant));
+    let tenant_only = service
+        .get_payment_stream(PaymentStreamFilter {
+            site_id: Some("site-1".to_string()),
+            payer_role: Some(DebtorType::Tenant),
+            ..Default::default()
+        })
+        .await;
+    assert!(tenant_only
+        .entries
+        .iter()
+        .all(|e| e.payer_role == DebtorType::Tenant));
 }
 
 #[tokio::test]
@@ -2630,23 +3096,47 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
     }
 
     let report = service.get_debt_aging_report("site-1").await;
-    assert_eq!(report.total_current, Decimal::from_str_exact("1000.00").unwrap());
-    assert_eq!(report.total_1_30_days, Decimal::from_str_exact("1200.00").unwrap());
-    assert_eq!(report.total_31_60_days, Decimal::from_str_exact("1400.00").unwrap());
-    assert_eq!(report.total_60_plus_days, Decimal::from_str_exact("1600.00").unwrap());
+    assert_eq!(
+        report.total_current,
+        Decimal::from_str_exact("1000.00").unwrap()
+    );
+    assert_eq!(
+        report.total_1_30_days,
+        Decimal::from_str_exact("1200.00").unwrap()
+    );
+    assert_eq!(
+        report.total_31_60_days,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
+    assert_eq!(
+        report.total_60_plus_days,
+        Decimal::from_str_exact("1600.00").unwrap()
+    );
     // Penalties as of today (KMK 20): 40.00 + 105.00 + 1,600 × 5% × 80 / 30 = 213.33.
     // The stored 200.00 on the 80-day due was below the statutory figure.
-    assert_eq!(report.total_penalty, Decimal::from_str_exact("358.33").unwrap());
-    assert_eq!(report.grand_total, Decimal::from_str_exact("5558.33").unwrap());
+    assert_eq!(
+        report.total_penalty,
+        Decimal::from_str_exact("358.33").unwrap()
+    );
+    assert_eq!(
+        report.grand_total,
+        Decimal::from_str_exact("5558.33").unwrap()
+    );
     assert_eq!(report.brackets.len(), 1);
     assert_eq!(report.brackets[0].unit_id, "d-14");
 }
 
 #[tokio::test]
-async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_marks_rent_offset_eligible() {
+async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_marks_rent_offset_eligible(
+) {
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());
-    state.inner.write().await.dues.push(owner_capital_due("cap-1", "2000.00"));
+    state
+        .inner
+        .write()
+        .await
+        .dues
+        .push(owner_capital_due("cap-1", "2000.00"));
 
     let req = RecordManualPaymentRequest {
         site_id: Some("site-1".to_string()),
@@ -2664,14 +3154,28 @@ async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_m
     let receipt = service.record_and_allocate_payment(req).await.unwrap();
 
     assert!(receipt.receipt_number.starts_with("TAH-2026-"));
-    assert_eq!(receipt.total_amount, Decimal::from_str_exact("2500.00").unwrap());
+    assert_eq!(
+        receipt.total_amount,
+        Decimal::from_str_exact("2500.00").unwrap()
+    );
     assert!(receipt.is_rent_offset_eligible);
     assert_eq!(receipt.on_behalf_of_role, Some(DebtorType::Owner));
     assert!(receipt.legal_statutory_note.is_some());
-    assert!(receipt.legal_statutory_note.unwrap().contains("TBK Madde 314"));
+    assert!(receipt
+        .legal_statutory_note
+        .unwrap()
+        .contains("TBK Madde 314"));
     assert_eq!(receipt.verification_hash.len(), 64);
-    let capital_line = receipt.allocation_breakdown.iter().find(|b| b.due_id.as_deref() == Some("cap-1")).unwrap();
-    assert_eq!(capital_line.expense_type, ExpenseType::CapitalDues, "label comes from the liability");
+    let capital_line = receipt
+        .allocation_breakdown
+        .iter()
+        .find(|b| b.due_id.as_deref() == Some("cap-1"))
+        .unwrap();
+    assert_eq!(
+        capital_line.expense_type,
+        ExpenseType::CapitalDues,
+        "label comes from the liability"
+    );
 }
 
 fn owner_capital_due(id: &str, amount: &str) -> DuesLiability {
@@ -2695,7 +3199,12 @@ fn owner_capital_due(id: &str, amount: &str) -> DuesLiability {
 #[tokio::test]
 async fn when_tenant_pays_without_capital_intent_then_owner_capital_dues_are_untouched() {
     let state = AppState::new();
-    state.inner.write().await.dues.push(owner_capital_due("cap-2", "2000.00"));
+    state
+        .inner
+        .write()
+        .await
+        .dues
+        .push(owner_capital_due("cap-2", "2000.00"));
     let receipt = PaymentTrackingService::new(state.clone())
         .record_and_allocate_payment(RecordManualPaymentRequest {
             site_id: Some("site-1".to_string()),
@@ -2711,7 +3220,10 @@ async fn when_tenant_pays_without_capital_intent_then_owner_capital_dues_are_unt
         })
         .await
         .unwrap();
-    assert!(receipt.allocation_breakdown.iter().all(|b| b.due_id.as_deref() != Some("cap-2")));
+    assert!(receipt
+        .allocation_breakdown
+        .iter()
+        .all(|b| b.due_id.as_deref() != Some("cap-2")));
     assert!(!receipt.is_rent_offset_eligible);
     let inner = state.inner.read().await;
     let cap = inner.dues.iter().find(|d| d.id == "cap-2").unwrap();
@@ -2747,18 +3259,40 @@ async fn when_payment_is_allocated_then_amount_owed_is_preserved_and_penalty_is_
         })
         .await
         .unwrap();
-    let allocated: Decimal = receipt.allocation_breakdown.iter().map(|b| b.principal_paid + b.penalty_paid).sum();
-    assert_eq!(allocated + receipt.allocated_advance, receipt.total_amount, "allocations sum to the payment");
-    assert!(receipt.allocation_breakdown[0].penalty_paid > Decimal::ZERO, "penalty allocation is recorded");
+    let allocated: Decimal = receipt
+        .allocation_breakdown
+        .iter()
+        .map(|b| b.principal_paid + b.penalty_paid)
+        .sum();
+    assert_eq!(
+        allocated + receipt.allocated_advance,
+        receipt.total_amount,
+        "allocations sum to the payment"
+    );
+    assert!(
+        receipt.allocation_breakdown[0].penalty_paid > Decimal::ZERO,
+        "penalty allocation is recorded"
+    );
     let inner = state.inner.read().await;
     let d = inner.dues.iter().find(|d| d.id == "op-1").unwrap();
-    assert_eq!(d.principal_amount, Decimal::from_str_exact("1000.00").unwrap(), "owed principal unchanged");
-    assert_eq!(d.paid_principal + d.paid_penalty, Decimal::from_str_exact("300.00").unwrap());
-    assert_eq!(d.total_amount, d.principal_amount + d.delay_penalty - d.paid_principal - d.paid_penalty);
+    assert_eq!(
+        d.principal_amount,
+        Decimal::from_str_exact("1000.00").unwrap(),
+        "owed principal unchanged"
+    );
+    assert_eq!(
+        d.paid_principal + d.paid_penalty,
+        Decimal::from_str_exact("300.00").unwrap()
+    );
+    assert_eq!(
+        d.total_amount,
+        d.principal_amount + d.delay_penalty - d.paid_principal - d.paid_penalty
+    );
 }
 
 #[tokio::test]
-async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capital_and_issues_receipt() {
+async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capital_and_issues_receipt(
+) {
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());
 
@@ -2767,7 +3301,10 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
         let mut inner = state.inner.write().await;
         inner.advance_balances.insert(
             "d-14".to_string(),
-            sitepulse_backend::models::UnitAdvance { owner: Decimal::from_str_exact("3000.00").unwrap(), tenant: Decimal::ZERO },
+            sitepulse_backend::models::UnitAdvance {
+                owner: Decimal::from_str_exact("3000.00").unwrap(),
+                tenant: Decimal::ZERO,
+            },
         );
         inner.dues.clear();
         inner.dues.push(DuesLiability {
@@ -2799,9 +3336,18 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
 
     let resp = service.inter_ledger_transfer(transfer_req).await.unwrap();
     assert!(resp.success);
-    assert_eq!(resp.transferred_amount, Decimal::from_str_exact("1400.00").unwrap());
-    assert_eq!(resp.remaining_advance_balance, Decimal::from_str_exact("1600.00").unwrap());
-    assert_eq!(resp.cleared_capital_due_amount, Decimal::from_str_exact("1400.00").unwrap());
+    assert_eq!(
+        resp.transferred_amount,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
+    assert_eq!(
+        resp.remaining_advance_balance,
+        Decimal::from_str_exact("1600.00").unwrap()
+    );
+    assert_eq!(
+        resp.cleared_capital_due_amount,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
     assert!(resp.receipt_number.starts_with("TAH-2026-"));
 
     // Verify due is marked as Paid in state
@@ -2811,7 +3357,8 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
 }
 
 #[tokio::test]
-async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tenant_lease_preserved() {
+async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tenant_lease_preserved()
+{
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());
 
@@ -2853,7 +3400,10 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
     let resp = service.transfer_ownership(transfer_req).await.unwrap();
     assert!(resp.success);
     assert_eq!(resp.new_owner_name, "Mehmet Yeni Malik");
-    assert_eq!(resp.old_owner_exit_balance, Decimal::from_str_exact("2800.00").unwrap());
+    assert_eq!(
+        resp.old_owner_exit_balance,
+        Decimal::from_str_exact("2800.00").unwrap()
+    );
 
     // Verify unit state
     let inner = state.inner.read().await;
@@ -2865,7 +3415,9 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
     assert_eq!(unit.tenant_user_id, Some("usr-tenant-1".to_string()));
     // Old owner archived in unit occupancies
     let occs = inner.unit_occupancies.get("d-14").unwrap();
-    assert!(occs.iter().any(|o| o.person_name == resp.old_owner_name && !o.is_active));
+    assert!(occs
+        .iter()
+        .any(|o| o.person_name == resp.old_owner_name && !o.is_active));
 }
 
 // ---------------------------------------------------------------------------
@@ -2917,12 +3469,18 @@ async fn when_creating_capital_project_with_installments_then_calculates_plan_co
 
     let project = service.create_project(req).await.unwrap();
     assert_eq!(project.title, "Çatı İzolasyon ve Mantolama");
-    assert_eq!(project.total_budget, Decimal::from_str_exact("300000.00").unwrap());
+    assert_eq!(
+        project.total_budget,
+        Decimal::from_str_exact("300000.00").unwrap()
+    );
     assert_eq!(project.installments_count, 3);
 
     let installments = service.list_installments(&project.id).await;
     assert_eq!(installments.len(), 3);
-    assert_eq!(installments[0].installment_budget, Decimal::from_str_exact("100000.00").unwrap());
+    assert_eq!(
+        installments[0].installment_budget,
+        Decimal::from_str_exact("100000.00").unwrap()
+    );
 }
 
 #[tokio::test]
@@ -2944,21 +3502,22 @@ async fn when_accruing_capital_installment_then_reconciles_penny_drift_exactly()
         contractor_tax_no: None,
         contractor_iban: None,
         contract_amount: None,
-        installments: Some(vec![
-            CreateInstallmentItem {
-                installment_number: 1,
-                total_installments: 1,
-                due_date: Utc::now().date_naive(),
-                installment_budget: Decimal::from_str_exact("10000.00").unwrap(),
-                percentage: Some(Decimal::from_str_exact("100.00").unwrap()),
-            },
-        ]),
+        installments: Some(vec![CreateInstallmentItem {
+            installment_number: 1,
+            total_installments: 1,
+            due_date: Utc::now().date_naive(),
+            installment_budget: Decimal::from_str_exact("10000.00").unwrap(),
+            percentage: Some(Decimal::from_str_exact("100.00").unwrap()),
+        }]),
     };
 
     let project = service.create_project(req).await.unwrap();
     let accrue_res = service.accrue_installment(&project.id, 1).await.unwrap();
     assert!(accrue_res.success);
-    assert_eq!(accrue_res.total_accrued_amount, Decimal::from_str_exact("10000.00").unwrap());
+    assert_eq!(
+        accrue_res.total_accrued_amount,
+        Decimal::from_str_exact("10000.00").unwrap()
+    );
 
     // Sum of all created dues for this project must equal exactly ₺10,000.00
     let inner = state.inner.read().await;
@@ -3006,20 +3565,30 @@ async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
         notes: Some("Söküm tutanağı imzalandı".to_string()),
     };
 
-    let disb = service.record_disbursement(&project.id, disb_req).await.unwrap();
+    let disb = service
+        .record_disbursement(&project.id, disb_req)
+        .await
+        .unwrap();
     assert_eq!(disb.amount, Decimal::from_str_exact("25000.00").unwrap());
     assert_eq!(disb.milestone_name, "1. Hakediş: Eski Kazan Sökümü");
 
     let disbursements = service.list_disbursements(&project.id).await;
     assert_eq!(disbursements.len(), 1);
-    assert_eq!(disbursements[0].amount, Decimal::from_str_exact("25000.00").unwrap());
+    assert_eq!(
+        disbursements[0].amount,
+        Decimal::from_str_exact("25000.00").unwrap()
+    );
 
     let updated_proj = service.get_project(&project.id).await.unwrap();
-    assert_eq!(updated_proj.disbursed_amount, Decimal::from_str_exact("25000.00").unwrap());
+    assert_eq!(
+        updated_proj.disbursed_amount,
+        Decimal::from_str_exact("25000.00").unwrap()
+    );
 }
 
 #[tokio::test]
-async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tbk100_and_surplus_to_advance() {
+async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tbk100_and_surplus_to_advance(
+) {
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());
 
@@ -3058,10 +3627,22 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
 
     let receipt = service.record_and_allocate_payment(req).await.unwrap();
 
-    assert_eq!(receipt.allocated_penalty, Decimal::from_str_exact("50.00").unwrap());
-    assert_eq!(receipt.allocated_principal, Decimal::from_str_exact("1000.00").unwrap());
-    assert_eq!(receipt.allocated_advance, Decimal::from_str_exact("150.00").unwrap());
-    assert_eq!(receipt.total_amount, Decimal::from_str_exact("1200.00").unwrap());
+    assert_eq!(
+        receipt.allocated_penalty,
+        Decimal::from_str_exact("50.00").unwrap()
+    );
+    assert_eq!(
+        receipt.allocated_principal,
+        Decimal::from_str_exact("1000.00").unwrap()
+    );
+    assert_eq!(
+        receipt.allocated_advance,
+        Decimal::from_str_exact("150.00").unwrap()
+    );
+    assert_eq!(
+        receipt.total_amount,
+        Decimal::from_str_exact("1200.00").unwrap()
+    );
     assert!(receipt.receipt_number.starts_with("TAH-2026-"));
     assert!(!receipt.verification_hash.is_empty());
 
@@ -3075,7 +3656,8 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
 }
 
 #[tokio::test]
-async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_occupancy_history() {
+async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_occupancy_history()
+{
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());
 
@@ -3113,7 +3695,10 @@ async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_
     let res = service.transfer_ownership(req).await.unwrap();
 
     assert!(res.success);
-    assert_eq!(res.old_owner_exit_balance, Decimal::from_str_exact("800.00").unwrap());
+    assert_eq!(
+        res.old_owner_exit_balance,
+        Decimal::from_str_exact("800.00").unwrap()
+    );
     assert_eq!(res.new_owner_name, "Fatma Yılmaz");
 
     let inner = state.inner.read().await;
@@ -3122,7 +3707,10 @@ async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_
     let last = occupancies.last().unwrap();
     assert_eq!(last.role, DebtorType::Owner);
     assert!(!last.is_active);
-    assert_eq!(last.exit_balance, Decimal::from_str_exact("800.00").unwrap());
+    assert_eq!(
+        last.exit_balance,
+        Decimal::from_str_exact("800.00").unwrap()
+    );
 }
 
 const TEST_WEBHOOK_SECRET: &str = "integration-test-webhook-secret";
@@ -3131,12 +3719,21 @@ const TEST_WEBHOOK_SECRET: &str = "integration-test-webhook-secret";
 async fn call_signed_webhook(
     state: AppState,
     req: BankIncomingWebhookRequest,
-) -> Result<(axum::http::StatusCode, axum::Json<BankIncomingWebhookResponse>), (axum::http::StatusCode, String)> {
+) -> Result<
+    (
+        axum::http::StatusCode,
+        axum::Json<BankIncomingWebhookResponse>,
+    ),
+    (axum::http::StatusCode, String),
+> {
     std::env::set_var("SITEPULSE_BANK_WEBHOOK_SECRET", TEST_WEBHOOK_SECRET);
     let body = serde_json::to_vec(&req).unwrap();
     let sig = sitepulse_backend::auth::sign_webhook_body(TEST_WEBHOOK_SECRET, &body);
     let mut headers = axum::http::HeaderMap::new();
-    headers.insert(sitepulse_backend::handlers::BANK_WEBHOOK_SIGNATURE_HEADER, sig.parse().unwrap());
+    headers.insert(
+        sitepulse_backend::handlers::BANK_WEBHOOK_SIGNATURE_HEADER,
+        sig.parse().unwrap(),
+    );
     sitepulse_backend::handlers::handle_bank_incoming_webhook(
         axum::extract::State(state),
         headers,
@@ -3166,11 +3763,17 @@ async fn when_webhook_is_unsigned_or_forged_then_it_is_rejected() {
         axum::body::Bytes::from(body.clone()),
     )
     .await;
-    assert_eq!(unsigned.unwrap_err().0, axum::http::StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        unsigned.unwrap_err().0,
+        axum::http::StatusCode::UNAUTHORIZED
+    );
 
     let mut headers = axum::http::HeaderMap::new();
     let wrong = sitepulse_backend::auth::sign_webhook_body("attacker-secret", &body);
-    headers.insert(sitepulse_backend::handlers::BANK_WEBHOOK_SIGNATURE_HEADER, wrong.parse().unwrap());
+    headers.insert(
+        sitepulse_backend::handlers::BANK_WEBHOOK_SIGNATURE_HEADER,
+        wrong.parse().unwrap(),
+    );
     let forged = sitepulse_backend::handlers::handle_bank_incoming_webhook(
         axum::extract::State(state.clone()),
         headers,
@@ -3195,7 +3798,10 @@ async fn when_webhook_currency_is_not_try_then_it_is_rejected() {
         signature: None,
     };
     let res = call_signed_webhook(state, req).await;
-    assert_eq!(res.unwrap_err().0, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        res.unwrap_err().0,
+        axum::http::StatusCode::UNPROCESSABLE_ENTITY
+    );
 }
 
 #[tokio::test]
@@ -3242,7 +3848,10 @@ async fn when_using_former_backdoor_or_placeholder_passwords_then_login_fails() 
         ("mehmet.demir@begonya.com", "ARGON2_HASH_mehmet123"),
     ] {
         let res = service
-            .authenticate_with_password(PasswordLoginRequest { email: email.to_string(), password: password.to_string() })
+            .authenticate_with_password(PasswordLoginRequest {
+                email: email.to_string(),
+                password: password.to_string(),
+            })
             .await;
         assert!(res.is_err(), "{} must not log in with {}", email, password);
     }
@@ -3273,8 +3882,15 @@ async fn when_changing_password_then_policy_is_uniform_and_errors_do_not_enumera
 
 #[test]
 fn when_utc_is_late_evening_then_accrual_uses_the_site_local_date() {
-    let late = NaiveDate::from_ymd_opt(2026, 11, 30).unwrap().and_hms_opt(22, 30, 0).unwrap().and_utc();
+    let late = NaiveDate::from_ymd_opt(2026, 11, 30)
+        .unwrap()
+        .and_hms_opt(22, 30, 0)
+        .unwrap()
+        .and_utc();
     let local = sitepulse_backend::scheduler::site_local_date("Europe/Istanbul", late);
     assert_eq!(local, NaiveDate::from_ymd_opt(2026, 12, 1).unwrap());
-    assert_eq!(sitepulse_backend::scheduler::format_turkish_month_year(local), "Aralık 2026");
+    assert_eq!(
+        sitepulse_backend::scheduler::format_turkish_month_year(local),
+        "Aralık 2026"
+    );
 }

@@ -6,12 +6,12 @@ use axum::{
     Json,
 };
 
+use super::site_admin::SiteIdParam;
 use crate::models::{
     HomeResidentResponse, RegisterHomeResidentRequest, UnitInviteLinkResponse, UnitMemberDto,
 };
 use crate::services::{HomeResidentInvitationService, SiteAdminService};
 use crate::state::AppState;
-use super::site_admin::SiteIdParam;
 
 #[derive(Debug, serde::Deserialize)]
 pub struct UpdateUnitMemberRequest {
@@ -58,7 +58,9 @@ pub async fn add_unit_member(
 ) -> Result<(StatusCode, Json<UnitMemberDto>), (StatusCode, String)> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
-    let relationship = payload.relationship.unwrap_or_else(|| "Ev Sakini".to_string());
+    let relationship = payload
+        .relationship
+        .unwrap_or_else(|| "Ev Sakini".to_string());
     service
         .add_unit_member(
             &site_id,
@@ -95,7 +97,9 @@ pub async fn update_unit_member(
 ) -> Result<StatusCode, (StatusCode, String)> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
-    let relationship = payload.relationship.unwrap_or_else(|| "Ev Sakini".to_string());
+    let relationship = payload
+        .relationship
+        .unwrap_or_else(|| "Ev Sakini".to_string());
     service
         .update_unit_member(
             &site_id,

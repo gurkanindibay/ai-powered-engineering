@@ -1,14 +1,14 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use chrono::{NaiveDate, Utc};
 use rust_decimal::Decimal;
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::models::{
     AllocationBasis, AuthProvider, BankStatementFormat, CapitalProjectCategory,
-    CapitalProjectStatus, DebtStatus, DebtorType, DisbursementMethod, DuesLiability,
-    ExpenseType, HomeownerPaymentRecord, IndependentUnit, PendingRegistrationResponse,
-    PlanType, ReconciliationMatch, RegistrationStatus, Role, Site, SiteBankAccount,
+    CapitalProjectStatus, DebtStatus, DebtorType, DisbursementMethod, DuesLiability, ExpenseType,
+    HomeownerPaymentRecord, IndependentUnit, PendingRegistrationResponse, PlanType,
+    ReconciliationMatch, RegistrationStatus, Role, Site, SiteBankAccount,
     SiteInvitationLinkResponse, SiteStatus, UnitInviteLinkResponse, UnitMemberDto, User,
 };
 use crate::services::VirtualIbanService;
@@ -19,14 +19,19 @@ use crate::services::VirtualIbanService;
 pub fn bootstrap_admin_password() -> String {
     static PASSWORD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     PASSWORD
-        .get_or_init(|| match std::env::var("SITEPULSE_BOOTSTRAP_ADMIN_PASSWORD") {
-            Ok(p) if p.chars().count() >= crate::auth::MIN_PASSWORD_LENGTH => p,
-            _ => {
-                let p = crate::auth::generate_temporary_password("SP-ADMIN-");
-                tracing::warn!("Bootstrap SaaS admin one-time password (change on first login): {}", p);
-                p
-            }
-        })
+        .get_or_init(
+            || match std::env::var("SITEPULSE_BOOTSTRAP_ADMIN_PASSWORD") {
+                Ok(p) if p.chars().count() >= crate::auth::MIN_PASSWORD_LENGTH => p,
+                _ => {
+                    let p = crate::auth::generate_temporary_password("SP-ADMIN-");
+                    tracing::warn!(
+                        "Bootstrap SaaS admin one-time password (change on first login): {}",
+                        p
+                    );
+                    p
+                }
+            },
+        )
         .clone()
 }
 
@@ -174,7 +179,11 @@ impl AppStateInner {
             rate: rust_decimal::Decimal::new(254900, 4),
             source: Some("VUK mükerrer 298: yeniden değerleme oranı (verify against the published communiqué)".to_string()),
         });
-        if !self.users.iter().any(|u| u.id == "usr-saas-root" || u.id == "usr-saas-admin-1") {
+        if !self
+            .users
+            .iter()
+            .any(|u| u.id == "usr-saas-root" || u.id == "usr-saas-admin-1")
+        {
             self.users.push(User {
                 id: "usr-saas-admin-1".to_string(),
                 site_id: "site-1".to_string(),
@@ -317,7 +326,8 @@ impl AppStateInner {
                 "site-1",
                 "A",
                 14,
-            );
+            )
+            .ok();
             self.units.push(IndependentUnit {
                 id: "d-14".to_string(),
                 site_id: "site-1".to_string(),
@@ -327,7 +337,7 @@ impl AppStateInner {
                 land_share: 24,
                 owner_user_id: Some("usr-home-owner-1".to_string()),
                 tenant_user_id: None,
-                virtual_iban: Some(seeded_virtual_iban),
+                virtual_iban: seeded_virtual_iban,
                 house_type: Some("3+1".to_string()),
             });
         }
@@ -337,13 +347,14 @@ impl AppStateInner {
             "d-14".to_string(),
             vec!["Ahmet Yılmaz".to_string(), "Zeynep Kaya".to_string()],
         );
-        self.remembered_sender_ibans.insert(
-            "TR120006200000000000000001".to_string(),
-            "d-14".to_string(),
-        );
+        self.remembered_sender_ibans
+            .insert("TR120006200000000000000001".to_string(), "d-14".to_string());
         self.sender_iban_metadata.insert(
             "TR120006200000000000000001".to_string(),
-            (Some("Garanti BBVA - Maaş Hesabı".to_string()), Some("Garanti BBVA".to_string())),
+            (
+                Some("Garanti BBVA - Maaş Hesabı".to_string()),
+                Some("Garanti BBVA".to_string()),
+            ),
         );
 
         let initial_history = vec![
@@ -378,14 +389,21 @@ impl AppStateInner {
                 created_at: Utc::now(),
             },
         ];
-        self.unit_occupancies.insert("d-14".to_string(), initial_history.clone());
-        self.unit_occupancies.insert("14".to_string(), initial_history);
+        self.unit_occupancies
+            .insert("d-14".to_string(), initial_history.clone());
+        self.unit_occupancies
+            .insert("14".to_string(), initial_history);
 
         // Seed September 2026 Dues only when actively executing cargo test suites
-        let is_running_test = cfg!(test) || std::env::current_exe().map(|exe| {
-            let s = exe.to_string_lossy();
-            s.contains("/deps/integration_tests") || s.contains("/deps/sitepulse_backend") || s.ends_with("test")
-        }).unwrap_or(false);
+        let is_running_test = cfg!(test)
+            || std::env::current_exe()
+                .map(|exe| {
+                    let s = exe.to_string_lossy();
+                    s.contains("/deps/integration_tests")
+                        || s.contains("/deps/sitepulse_backend")
+                        || s.ends_with("test")
+                })
+                .unwrap_or(false);
 
         if is_running_test && !self.dues.iter().any(|d| d.id == "b-101") {
             self.dues.push(DuesLiability {
@@ -406,20 +424,25 @@ impl AppStateInner {
         }
 
         // Seed pending registration
-        if !self.pending_registrations.iter().any(|r| r.request_id == "req-seed-01") {
-            self.pending_registrations.push(PendingRegistrationResponse {
-                request_id: "req-seed-01".to_string(),
-                site_id: "site-1".to_string(),
-                block: "B Blok".to_string(),
-                unit_no: 18,
-                floor: 5,
-                full_name: "Kerem Yılmaz".to_string(),
-                email: "kerem.yilmaz@gmail.com".to_string(),
-                phone: "+90 533 111 22 33".to_string(),
-                is_resident: true,
-                status: RegistrationStatus::Pending,
-                submitted_at: Utc::now(),
-            });
+        if !self
+            .pending_registrations
+            .iter()
+            .any(|r| r.request_id == "req-seed-01")
+        {
+            self.pending_registrations
+                .push(PendingRegistrationResponse {
+                    request_id: "req-seed-01".to_string(),
+                    site_id: "site-1".to_string(),
+                    block: "B Blok".to_string(),
+                    unit_no: 18,
+                    floor: 5,
+                    full_name: "Kerem Yılmaz".to_string(),
+                    email: "kerem.yilmaz@gmail.com".to_string(),
+                    phone: "+90 533 111 22 33".to_string(),
+                    is_resident: true,
+                    status: RegistrationStatus::Pending,
+                    submitted_at: Utc::now(),
+                });
         }
 
         // Seed household member
@@ -439,7 +462,11 @@ impl AppStateInner {
         );
 
         // Seed Bank Account for Begonya Sitesi (site-1)
-        if !self.site_bank_accounts.iter().any(|b| b.id == "sba-site-1-kt") {
+        if !self
+            .site_bank_accounts
+            .iter()
+            .any(|b| b.id == "sba-site-1-kt")
+        {
             self.site_bank_accounts.push(SiteBankAccount {
                 id: "sba-site-1-kt".to_string(),
                 site_id: "site-1".to_string(),
@@ -482,17 +509,26 @@ impl AppStateInner {
 
     /// Total advance of a unit (owner + tenant buckets).
     pub fn advance_total(&self, unit_id: &str) -> Decimal {
-        self.advance_balances.get(unit_id).map(|a| a.total()).unwrap_or(Decimal::ZERO)
+        self.advance_balances
+            .get(unit_id)
+            .map(|a| a.total())
+            .unwrap_or(Decimal::ZERO)
     }
 
     /// Advance of one debtor (`OWNER` / `TENANT`) of a unit.
     pub fn advance_of(&self, unit_id: &str, debtor_type: &str) -> Decimal {
-        self.advance_balances.get(unit_id).map(|a| a.of(debtor_type)).unwrap_or(Decimal::ZERO)
+        self.advance_balances
+            .get(unit_id)
+            .map(|a| a.of(debtor_type))
+            .unwrap_or(Decimal::ZERO)
     }
 
     /// Adds `delta` (may be negative) to one debtor's advance of a unit.
     pub fn adjust_advance(&mut self, unit_id: &str, debtor_type: &str, delta: Decimal) {
-        let entry = self.advance_balances.entry(unit_id.to_string()).or_default();
+        let entry = self
+            .advance_balances
+            .entry(unit_id.to_string())
+            .or_default();
         *entry.bucket_mut(debtor_type) += delta;
     }
 
@@ -557,7 +593,8 @@ impl AppStateInner {
                 "site-1",
                 "A",
                 14,
-            );
+            )
+            .ok();
             self.units.push(IndependentUnit {
                 id: "d-14".to_string(),
                 site_id: "site-1".to_string(),
@@ -567,11 +604,15 @@ impl AppStateInner {
                 land_share: 24,
                 owner_user_id: Some("usr-home-owner-1".to_string()),
                 tenant_user_id: None,
-                virtual_iban: Some(seeded_virtual_iban),
+                virtual_iban: seeded_virtual_iban,
                 house_type: Some("3+1".to_string()),
             });
         }
-        if !self.dues.iter().any(|d| d.unit_id == "d-14" && d.period == "Eylül 2026") {
+        if !self
+            .dues
+            .iter()
+            .any(|d| d.unit_id == "d-14" && d.period == "Eylül 2026")
+        {
             self.dues.push(DuesLiability {
                 id: "b-101".to_string(),
                 unit_id: "d-14".to_string(),
@@ -595,7 +636,9 @@ impl AppStateInner {
                 site_id: "site-1".to_string(),
                 title: "A & B Blok Asansör Revizyonu ve Yeşil Etiket".to_string(),
                 category: CapitalProjectCategory::Elevator,
-                description: Some("TSE standartlarına uyum, motor yenileme ve kabin modernizasyonu".to_string()),
+                description: Some(
+                    "TSE standartlarına uyum, motor yenileme ve kabin modernizasyonu".to_string(),
+                ),
                 total_budget: Decimal::from_str_exact("360000.00").unwrap(),
                 allocation_basis: AllocationBasis::ByLandShare,
                 target_start_date: NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
@@ -613,57 +656,62 @@ impl AppStateInner {
                 created_at: Some(Utc::now()),
             });
 
-            self.capital_installments.push(crate::models::CapitalProjectInstallment {
-                id: "cinst-1".to_string(),
-                project_id: "cproj-1".to_string(),
-                installment_number: 1,
-                total_installments: 3,
-                due_date: NaiveDate::from_ymd_opt(2026, 10, 31).unwrap(),
-                installment_budget: Decimal::from_str_exact("120000.00").unwrap(),
-                percentage: Decimal::from_str_exact("33.33").unwrap(),
-                is_accrued: true,
-                accrued_at: Some(Utc::now()),
-                created_at: Some(Utc::now()),
-            });
-            self.capital_installments.push(crate::models::CapitalProjectInstallment {
-                id: "cinst-2".to_string(),
-                project_id: "cproj-1".to_string(),
-                installment_number: 2,
-                total_installments: 3,
-                due_date: NaiveDate::from_ymd_opt(2026, 11, 30).unwrap(),
-                installment_budget: Decimal::from_str_exact("120000.00").unwrap(),
-                percentage: Decimal::from_str_exact("33.33").unwrap(),
-                is_accrued: false,
-                accrued_at: None,
-                created_at: Some(Utc::now()),
-            });
-            self.capital_installments.push(crate::models::CapitalProjectInstallment {
-                id: "cinst-3".to_string(),
-                project_id: "cproj-1".to_string(),
-                installment_number: 3,
-                total_installments: 3,
-                due_date: NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
-                installment_budget: Decimal::from_str_exact("120000.00").unwrap(),
-                percentage: Decimal::from_str_exact("33.34").unwrap(),
-                is_accrued: false,
-                accrued_at: None,
-                created_at: Some(Utc::now()),
-            });
+            self.capital_installments
+                .push(crate::models::CapitalProjectInstallment {
+                    id: "cinst-1".to_string(),
+                    project_id: "cproj-1".to_string(),
+                    installment_number: 1,
+                    total_installments: 3,
+                    due_date: NaiveDate::from_ymd_opt(2026, 10, 31).unwrap(),
+                    installment_budget: Decimal::from_str_exact("120000.00").unwrap(),
+                    percentage: Decimal::from_str_exact("33.33").unwrap(),
+                    is_accrued: true,
+                    accrued_at: Some(Utc::now()),
+                    created_at: Some(Utc::now()),
+                });
+            self.capital_installments
+                .push(crate::models::CapitalProjectInstallment {
+                    id: "cinst-2".to_string(),
+                    project_id: "cproj-1".to_string(),
+                    installment_number: 2,
+                    total_installments: 3,
+                    due_date: NaiveDate::from_ymd_opt(2026, 11, 30).unwrap(),
+                    installment_budget: Decimal::from_str_exact("120000.00").unwrap(),
+                    percentage: Decimal::from_str_exact("33.33").unwrap(),
+                    is_accrued: false,
+                    accrued_at: None,
+                    created_at: Some(Utc::now()),
+                });
+            self.capital_installments
+                .push(crate::models::CapitalProjectInstallment {
+                    id: "cinst-3".to_string(),
+                    project_id: "cproj-1".to_string(),
+                    installment_number: 3,
+                    total_installments: 3,
+                    due_date: NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
+                    installment_budget: Decimal::from_str_exact("120000.00").unwrap(),
+                    percentage: Decimal::from_str_exact("33.34").unwrap(),
+                    is_accrued: false,
+                    accrued_at: None,
+                    created_at: Some(Utc::now()),
+                });
 
-            self.capital_disbursements.push(crate::models::CapitalContractorDisbursement {
-                id: "cdis-1".to_string(),
-                project_id: "cproj-1".to_string(),
-                milestone_name: "1. Hakediş: Malzeme Temini ve Sözleşme Avansı (%50)".to_string(),
-                invoice_number: Some("OTIS-2026-00441".to_string()),
-                amount: Decimal::from_str_exact("60000.00").unwrap(),
-                disbursement_date: NaiveDate::from_ymd_opt(2026, 10, 15).unwrap(),
-                recipient_name: "Otis Asansör San. ve Tic. A.Ş.".to_string(),
-                recipient_iban: "TR120006200000000000000099".to_string(),
-                payment_reference: Some("OTIS-HAKEDIS-1".to_string()),
-                disbursement_method: DisbursementMethod::BankTransfer,
-                notes: Some("Sözleşme gereği peşin avans ödendi".to_string()),
-                created_at: Some(Utc::now()),
-            });
+            self.capital_disbursements
+                .push(crate::models::CapitalContractorDisbursement {
+                    id: "cdis-1".to_string(),
+                    project_id: "cproj-1".to_string(),
+                    milestone_name: "1. Hakediş: Malzeme Temini ve Sözleşme Avansı (%50)"
+                        .to_string(),
+                    invoice_number: Some("OTIS-2026-00441".to_string()),
+                    amount: Decimal::from_str_exact("60000.00").unwrap(),
+                    disbursement_date: NaiveDate::from_ymd_opt(2026, 10, 15).unwrap(),
+                    recipient_name: "Otis Asansör San. ve Tic. A.Ş.".to_string(),
+                    recipient_iban: "TR120006200000000000000099".to_string(),
+                    payment_reference: Some("OTIS-HAKEDIS-1".to_string()),
+                    disbursement_method: DisbursementMethod::BankTransfer,
+                    notes: Some("Sözleşme gereği peşin avans ödendi".to_string()),
+                    created_at: Some(Utc::now()),
+                });
         }
     }
 }
@@ -714,4 +762,3 @@ impl AppState {
         }
     }
 }
-

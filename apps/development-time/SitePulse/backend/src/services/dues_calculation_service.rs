@@ -36,7 +36,11 @@ impl DuesCalculationService {
     ///   is `None`) is evaluated as one segment from the due date, and never
     ///   ends up below its stored penalty.
     /// * `total_amount` is always the outstanding balance.
-    pub fn calculate_delay_penalty(&self, mut dues: DuesLiability, evaluation_date: NaiveDate) -> DuesLiability {
+    pub fn calculate_delay_penalty(
+        &self,
+        mut dues: DuesLiability,
+        evaluation_date: NaiveDate,
+    ) -> DuesLiability {
         if dues.status == DebtStatus::Paid {
             dues_ledger::refresh(&mut dues);
             return dues;
@@ -50,8 +54,9 @@ impl DuesCalculationService {
         };
         let segment_days = (evaluation_date - segment_start).num_days();
         let segment = if segment_days > 0 && outstanding_principal > Decimal::ZERO {
-            (outstanding_principal * Self::monthly_rate() * Decimal::from(segment_days) / Decimal::from(30))
-                .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
+            (outstanding_principal * Self::monthly_rate() * Decimal::from(segment_days)
+                / Decimal::from(30))
+            .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
         } else {
             Decimal::ZERO
         };
@@ -61,12 +66,18 @@ impl DuesCalculationService {
             None => accrued.max(segment),
         };
         if evaluation_date > dues.due_date {
-            let through = dues.penalty_accrued_through.map_or(evaluation_date, |t| t.max(evaluation_date));
+            let through = dues
+                .penalty_accrued_through
+                .map_or(evaluation_date, |t| t.max(evaluation_date));
             dues.penalty_accrued_through = Some(through);
         }
 
         let days_overdue = (evaluation_date - dues.due_date).num_days();
-        dues.status = if days_overdue > 0 { DebtStatus::Overdue } else { DebtStatus::Pending };
+        dues.status = if days_overdue > 0 {
+            DebtStatus::Overdue
+        } else {
+            DebtStatus::Pending
+        };
         dues_ledger::refresh(&mut dues);
         dues
     }
@@ -105,9 +116,18 @@ mod tests {
         let day = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
         let first = svc.calculate_delay_penalty(due("700.00", "23.33"), day);
         let again = svc.calculate_delay_penalty(first.clone(), day);
-        assert_eq!(first.delay_penalty, Decimal::from_str_exact("23.33").unwrap());
-        assert_eq!(again.delay_penalty, first.delay_penalty, "recalculation must not change the penalty");
-        assert_eq!(again.total_amount, Decimal::from_str_exact("700.00").unwrap());
+        assert_eq!(
+            first.delay_penalty,
+            Decimal::from_str_exact("23.33").unwrap()
+        );
+        assert_eq!(
+            again.delay_penalty, first.delay_penalty,
+            "recalculation must not change the penalty"
+        );
+        assert_eq!(
+            again.total_amount,
+            Decimal::from_str_exact("700.00").unwrap()
+        );
     }
 
     #[test]
@@ -147,11 +167,23 @@ mod tests {
         at_payment.paid_principal = d("600.00");
 
         let later = svc.calculate_delay_penalty(at_payment, date(10, 1));
-        assert_eq!(later.delay_penalty, d("35.00"), "₺25.00 + ₺400.00 × 5% × 15 / 30");
+        assert_eq!(
+            later.delay_penalty,
+            d("35.00"),
+            "₺25.00 + ₺400.00 × 5% × 15 / 30"
+        );
         let again = svc.calculate_delay_penalty(later.clone(), date(10, 1));
-        assert_eq!(again.delay_penalty, d("35.00"), "same-day re-evaluation adds nothing");
+        assert_eq!(
+            again.delay_penalty,
+            d("35.00"),
+            "same-day re-evaluation adds nothing"
+        );
         let earlier = svc.calculate_delay_penalty(later, date(9, 20));
-        assert_eq!(earlier.delay_penalty, d("35.00"), "an earlier evaluation date never removes accrual");
+        assert_eq!(
+            earlier.delay_penalty,
+            d("35.00"),
+            "an earlier evaluation date never removes accrual"
+        );
         assert_eq!(earlier.penalty_accrued_through, Some(date(10, 1)));
     }
 

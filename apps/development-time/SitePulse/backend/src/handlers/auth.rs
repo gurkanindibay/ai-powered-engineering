@@ -1,12 +1,11 @@
 //! Authentication route handlers.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 
-use crate::models::{AuthResponse, ChangePasswordRequest, GoogleLoginRequest, PasswordLoginRequest, RegisterUserRequest, UserProfileResponse};
+use crate::models::{
+    AuthResponse, ChangePasswordRequest, GoogleLoginRequest, PasswordLoginRequest,
+    RegisterUserRequest, UserProfileResponse,
+};
 use crate::services::AuthService;
 use crate::state::AppState;
 
@@ -52,7 +51,10 @@ pub async fn change_password(
     Json(payload): Json<ChangePasswordRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, String)> {
     if !payload.email.trim().eq_ignore_ascii_case(&claims.email) {
-        return Err((StatusCode::FORBIDDEN, "You can only change your own password".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "You can only change your own password".to_string(),
+        ));
     }
     let service = AuthService::new(state);
     service

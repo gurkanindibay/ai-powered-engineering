@@ -17,13 +17,11 @@
 use std::sync::OnceLock;
 
 use chrono::Utc;
-use hmac::{Hmac, Mac};
 use rust_decimal::Decimal;
-use sha2::Sha256;
 
 use crate::models::{
-    CreatePaymentIntentRequest, PaymentIntent, ProviderWebhookEvent, RecordManualPaymentRequest, INTENT_AUTHORIZED,
-    INTENT_CAPTURED, INTENT_CREATED, INTENT_FAILED, INTENT_REFUNDED,
+    CreatePaymentIntentRequest, PaymentIntent, ProviderWebhookEvent, RecordManualPaymentRequest,
+    INTENT_AUTHORIZED, INTENT_CAPTURED, INTENT_CREATED, INTENT_FAILED, INTENT_REFUNDED,
 };
 use crate::state::AppState;
 
@@ -50,7 +48,11 @@ impl PaymentProvider for SandboxProvider {
 
     fn create_checkout(&self, _intent: &PaymentIntent) -> Result<(String, String), String> {
         let reference = format!("SBX-{}", uuid::Uuid::new_v4().simple());
-        let url = format!("{}/api/v1/payment-provider/sandbox/checkout/{}", public_base_url(), reference);
+        let url = format!(
+            "{}/api/v1/payment-provider/sandbox/checkout/{}",
+            public_base_url(),
+            reference
+        );
         Ok((reference, url))
     }
 
@@ -61,11 +63,20 @@ impl PaymentProvider for SandboxProvider {
 
 /// The provider configured for this deployment. The sandbox is never used in production.
 pub fn configured_provider() -> Result<Box<dyn PaymentProvider>, String> {
-    let name = std::env::var("SITEPULSE_PAYMENT_PROVIDER").unwrap_or_else(|_| SANDBOX_PROVIDER.to_string());
+    let name = std::env::var("SITEPULSE_PAYMENT_PROVIDER")
+        .unwrap_or_else(|_| SANDBOX_PROVIDER.to_string());
     match name.trim().to_uppercase().as_str() {
-        SANDBOX_PROVIDER if !crate::state::AppStateInner::is_production() => Ok(Box::new(SandboxProvider)),
-        SANDBOX_PROVIDER => Err("Card payments are not available: no licensed payment provider is configured".to_string()),
-        other => Err(format!("Card payment provider '{}' is not integrated in this build", other)),
+        SANDBOX_PROVIDER if !crate::state::AppStateInner::is_production() => {
+            Ok(Box::new(SandboxProvider))
+        }
+        SANDBOX_PROVIDER => Err(
+            "Card payments are not available: no licensed payment provider is configured"
+                .to_string(),
+        ),
+        other => Err(format!(
+            "Card payment provider '{}' is not integrated in this build",
+            other
+        )),
     }
 }
 
@@ -105,17 +116,12 @@ fn webhook_secret() -> &'static [u8] {
 }
 
 pub fn sign_provider_body(body: &[u8]) -> String {
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(webhook_secret()).expect("HMAC accepts any key length");
-    mac.update(body);
-    hex::encode(mac.finalize().into_bytes())
+    crate::domain::fingerprint::hmac_sha256_hex(webhook_secret(), body)
 }
 
 pub fn verify_provider_signature(body: &[u8], signature: Option<&str>) -> bool {
     let Some(sig) = signature else { return false };
-    let Ok(bytes) = hex::decode(sig.trim().trim_start_matches("sha256=")) else { return false };
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(webhook_secret()).expect("HMAC accepts any key length");
-    mac.update(body);
-    mac.verify_slice(&bytes).is_ok()
+    crate::domain::fingerprint::verify_hmac_sha256_hex(webhook_secret(), body, sig)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -158,19 +164,31 @@ impl CardPaymentService {
     ) -> Result<PaymentIntent, CardPaymentError> {
         let provider = configured_provider().map_err(CardPaymentError::Unavailable)?;
         if req.amount <= Decimal::ZERO || req.amount.scale() > 2 {
-            return Err(CardPaymentError::Invalid("amount must be positive with at most 2 decimals".into()));
+            return Err(CardPaymentError::Invalid(
+                "amount must be positive with at most 2 decimals".into(),
+            ));
         }
         if req.amount > Decimal::from(1_000_000) {
-            return Err(CardPaymentError::Invalid("amount exceeds the single card payment limit (₺1.000.000)".into()));
+            return Err(CardPaymentError::Invalid(
+                "amount exceeds the single card payment limit (₺1.000.000)".into(),
+            ));
         }
         let requested = req.debtor_type.as_deref().map(|d| d.trim().to_uppercase());
         let debtor = match (caller_role, requested.as_deref()) {
             (Some(own), Some(asked)) if asked != own => {
-                return Err(CardPaymentError::Invalid(format!("You can only pay your own ({}) debts", own)));
+                return Err(CardPaymentError::Invalid(format!(
+                    "You can only pay your own ({}) debts",
+                    own
+                )));
             }
             (Some(own), _) => own.to_string(),
             (None, Some(asked)) if asked == "OWNER" || asked == "TENANT" => asked.to_string(),
-            (None, Some(asked)) => return Err(CardPaymentError::Invalid(format!("debtor_type must be OWNER or TENANT, got '{}'", asked))),
+            (None, Some(asked)) => {
+                return Err(CardPaymentError::Invalid(format!(
+                    "debtor_type must be OWNER or TENANT, got '{}'",
+                    asked
+                )))
+            }
             (None, None) => "OWNER".to_string(),
         };
         let (unit, payer_name) = {
@@ -181,13 +199,30 @@ impl CardPaymentService {
                 .find(|u| crate::auth::same_id(&u.id, unit_id))
                 .cloned()
                 .ok_or_else(|| CardPaymentError::NotFound(format!("Unit {} not found", unit_id)))?;
-            let holder = if debtor == "TENANT" { unit.tenant_user_id.clone() } else { unit.owner_user_id.clone() };
+            let holder = if debtor == "TENANT" {
+                unit.tenant_user_id.clone()
+            } else {
+                unit.owner_user_id.clone()
+            };
             if debtor == "TENANT" && holder.is_none() {
                 return Err(CardPaymentError::Invalid("The unit has no tenant".into()));
             }
             let name = holder
-                .and_then(|id| inner.users.iter().find(|u| u.id == id).map(|u| u.full_name.clone()))
-                .unwrap_or_else(|| if debtor == "TENANT" { "Kiracı" } else { "Kat Maliki" }.to_string());
+                .and_then(|id| {
+                    inner
+                        .users
+                        .iter()
+                        .find(|u| u.id == id)
+                        .map(|u| u.full_name.clone())
+                })
+                .unwrap_or_else(|| {
+                    if debtor == "TENANT" {
+                        "Kiracı"
+                    } else {
+                        "Kat Maliki"
+                    }
+                    .to_string()
+                });
             (unit, name)
         };
         let now = Utc::now();
@@ -196,7 +231,11 @@ impl CardPaymentService {
             site_id: unit.site_id.clone(),
             unit_id: unit.id.clone(),
             debtor_type: debtor,
-            payer_name: req.payer_name.clone().filter(|n| !n.trim().is_empty()).unwrap_or(payer_name),
+            payer_name: req
+                .payer_name
+                .clone()
+                .filter(|n| !n.trim().is_empty())
+                .unwrap_or(payer_name),
             amount: req.amount,
             currency: "TRY".to_string(),
             provider: provider.name().to_string(),
@@ -213,44 +252,78 @@ impl CardPaymentService {
             updated_at: now,
             captured_at: None,
         };
-        let (reference, url) = provider.create_checkout(&intent).map_err(CardPaymentError::Unavailable)?;
+        let (reference, url) = provider
+            .create_checkout(&intent)
+            .map_err(CardPaymentError::Unavailable)?;
         intent.provider_ref = reference;
         intent.checkout_url = Some(url);
         if let Some(ref pool) = self.state.pool {
             intent.id = crate::db::insert_payment_intent(pool, &intent)
                 .await
-                .map_err(|e| CardPaymentError::Unavailable(format!("Payment intent was not saved: {}", e)))?
+                .map_err(|e| {
+                    CardPaymentError::Unavailable(format!("Payment intent was not saved: {}", e))
+                })?
                 .to_string();
         } else {
             let inner = self.state.inner.read().await;
-            intent.id = (inner.payment_intents.iter().filter_map(|i| i.id.parse::<i64>().ok()).max().unwrap_or(0) + 1).to_string();
+            intent.id = (inner
+                .payment_intents
+                .iter()
+                .filter_map(|i| i.id.parse::<i64>().ok())
+                .max()
+                .unwrap_or(0)
+                + 1)
+            .to_string();
         }
-        self.state.inner.write().await.payment_intents.push(intent.clone());
+        self.state
+            .inner
+            .write()
+            .await
+            .payment_intents
+            .push(intent.clone());
         Ok(intent)
     }
 
-    pub async fn get_intent(&self, unit_id: &str, intent_id: &str) -> Result<PaymentIntent, CardPaymentError> {
+    pub async fn get_intent(
+        &self,
+        unit_id: &str,
+        intent_id: &str,
+    ) -> Result<PaymentIntent, CardPaymentError> {
         let inner = self.state.inner.read().await;
         inner
             .payment_intents
             .iter()
             .find(|i| i.id == intent_id && crate::auth::same_id(&i.unit_id, unit_id))
             .cloned()
-            .ok_or_else(|| CardPaymentError::NotFound(format!("Payment intent {} not found", intent_id)))
+            .ok_or_else(|| {
+                CardPaymentError::NotFound(format!("Payment intent {} not found", intent_id))
+            })
     }
 
     pub async fn intent_by_ref(&self, provider: &str, reference: &str) -> Option<PaymentIntent> {
         let inner = self.state.inner.read().await;
-        inner.payment_intents.iter().find(|i| i.provider == provider && i.provider_ref == reference).cloned()
+        inner
+            .payment_intents
+            .iter()
+            .find(|i| i.provider == provider && i.provider_ref == reference)
+            .cloned()
     }
 
     /// Applies a verified provider notification. A capture records the payment
     /// (once) and stores its receipt number on the intent.
-    pub async fn apply_provider_event(&self, event: ProviderWebhookEvent) -> Result<PaymentIntent, CardPaymentError> {
+    pub async fn apply_provider_event(
+        &self,
+        event: ProviderWebhookEvent,
+    ) -> Result<PaymentIntent, CardPaymentError> {
         let mut intent = self
             .intent_by_ref(&event.provider, &event.provider_ref)
             .await
-            .ok_or_else(|| CardPaymentError::NotFound(format!("Unknown payment reference {}", event.provider_ref)))?;
+            .ok_or_else(|| {
+                CardPaymentError::NotFound(format!(
+                    "Unknown payment reference {}",
+                    event.provider_ref
+                ))
+            })?;
         let status = event.status.trim().to_uppercase();
         if event.amount != intent.amount {
             return Err(CardPaymentError::Conflict(format!(
@@ -261,15 +334,23 @@ impl CardPaymentService {
         match (intent.status.as_str(), status.as_str()) {
             // Repeated notifications are answered with the current state.
             (current, next) if current == next => return Ok(intent),
-            (INTENT_CAPTURED | INTENT_REFUNDED, INTENT_AUTHORIZED | INTENT_FAILED) => return Ok(intent),
+            (INTENT_CAPTURED | INTENT_REFUNDED, INTENT_AUTHORIZED | INTENT_FAILED) => {
+                return Ok(intent)
+            }
             (INTENT_CREATED, INTENT_AUTHORIZED) => {}
             (INTENT_CREATED | INTENT_AUTHORIZED, INTENT_CAPTURED | INTENT_FAILED) => {}
             (INTENT_CAPTURED, INTENT_REFUNDED) => {}
             (current, next) => {
-                return Err(CardPaymentError::Conflict(format!("Payment intent {} cannot move from {} to {}", intent.id, current, next)));
+                return Err(CardPaymentError::Conflict(format!(
+                    "Payment intent {} cannot move from {} to {}",
+                    intent.id, current, next
+                )));
             }
         }
-        intent.three_ds_status = event.three_ds_status.clone().or(intent.three_ds_status.take());
+        intent.three_ds_status = event
+            .three_ds_status
+            .clone()
+            .or(intent.three_ds_status.take());
         intent.fee_amount = event.fee_amount.or(intent.fee_amount);
         intent.updated_at = Utc::now();
         match status.as_str() {
@@ -284,19 +365,30 @@ impl CardPaymentService {
                         payment_channel: crate::models::PaymentChannel::CreditCard,
                         description: Some(format!("Kredi kartı ile ödeme ({})", intent.provider)),
                         payment_date: None,
-                        idempotency_key: Some(format!("PSP:{}:{}", intent.provider, intent.provider_ref)),
+                        idempotency_key: Some(format!(
+                            "PSP:{}:{}",
+                            intent.provider, intent.provider_ref
+                        )),
                         designation: intent.designation.clone(),
                         external_reference: Some(intent.provider_ref.clone()),
                         designate_from_description: false,
                         settles_unmatched_entry_id: None,
                     })
                     .await
-                    .map_err(|e| CardPaymentError::Conflict(format!("The captured payment could not be recorded: {}", e)))?;
+                    .map_err(|e| {
+                        CardPaymentError::Conflict(format!(
+                            "The captured payment could not be recorded: {}",
+                            e
+                        ))
+                    })?;
                 intent.receipt_number = Some(receipt.receipt_number);
                 intent.captured_at = Some(Utc::now());
             }
             INTENT_FAILED => {
-                intent.failure_reason = event.failure_reason.clone().or_else(|| Some("Declined by the provider".to_string()));
+                intent.failure_reason = event
+                    .failure_reason
+                    .clone()
+                    .or_else(|| Some("Declined by the provider".to_string()));
             }
             _ => {}
         }
@@ -306,24 +398,38 @@ impl CardPaymentService {
     }
 
     /// After a card payment's receipt is reversed: refund it at the provider and mark it REFUNDED.
-    pub async fn refund_for_receipt(&self, site_id: &str, receipt_number: &str) -> Result<Option<PaymentIntent>, CardPaymentError> {
+    pub async fn refund_for_receipt(
+        &self,
+        site_id: &str,
+        receipt_number: &str,
+    ) -> Result<Option<PaymentIntent>, CardPaymentError> {
         let found = {
             let inner = self.state.inner.read().await;
             inner
                 .payment_intents
                 .iter()
-                .find(|i| crate::auth::same_id(&i.site_id, site_id) && i.receipt_number.as_deref() == Some(receipt_number))
+                .find(|i| {
+                    crate::auth::same_id(&i.site_id, site_id)
+                        && i.receipt_number.as_deref() == Some(receipt_number)
+                })
                 .cloned()
         };
-        let Some(mut intent) = found else { return Ok(None) };
+        let Some(mut intent) = found else {
+            return Ok(None);
+        };
         if intent.status == INTENT_REFUNDED {
             return Ok(Some(intent));
         }
         let provider = configured_provider().map_err(CardPaymentError::Unavailable)?;
         if provider.name() != intent.provider {
-            return Err(CardPaymentError::Unavailable(format!("Provider {} is not configured; refund it there", intent.provider)));
+            return Err(CardPaymentError::Unavailable(format!(
+                "Provider {} is not configured; refund it there",
+                intent.provider
+            )));
         }
-        provider.refund(&intent).map_err(CardPaymentError::Unavailable)?;
+        provider
+            .refund(&intent)
+            .map_err(CardPaymentError::Unavailable)?;
         intent.status = INTENT_REFUNDED.to_string();
         intent.updated_at = Utc::now();
         self.save(&intent).await?;
@@ -334,7 +440,9 @@ impl CardPaymentService {
         if let Some(ref pool) = self.state.pool {
             crate::db::update_payment_intent(pool, intent)
                 .await
-                .map_err(|e| CardPaymentError::Unavailable(format!("Payment intent was not saved: {}", e)))?;
+                .map_err(|e| {
+                    CardPaymentError::Unavailable(format!("Payment intent was not saved: {}", e))
+                })?;
         }
         let mut inner = self.state.inner.write().await;
         if let Some(slot) = inner.payment_intents.iter_mut().find(|i| i.id == intent.id) {
@@ -346,10 +454,18 @@ impl CardPaymentService {
 
 /// The sandbox provider's hosted page: a simulated 3-D Secure step, no card fields.
 pub fn sandbox_checkout_page(intent: &PaymentIntent) -> String {
-    let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+    let esc = |s: &str| {
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+    };
     let done = intent.status != INTENT_CREATED && intent.status != INTENT_AUTHORIZED;
     let actions = if done {
-        format!("<p class=\"state\">Bu ödeme tamamlandı: <b>{}</b>. Bu pencereyi kapatabilirsiniz.</p>", esc(&intent.status))
+        format!(
+            "<p class=\"state\">Bu ödeme tamamlandı: <b>{}</b>. Bu pencereyi kapatabilirsiniz.</p>",
+            esc(&intent.status)
+        )
     } else {
         format!(
             r#"<form method="post" action="{base}/api/v1/payment-provider/sandbox/checkout/{r}/complete">

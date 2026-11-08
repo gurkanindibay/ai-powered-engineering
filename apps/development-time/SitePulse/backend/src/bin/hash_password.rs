@@ -5,7 +5,9 @@ use std::io::Read;
 
 fn main() {
     let mut input = String::new();
-    std::io::stdin().read_to_string(&mut input).expect("read stdin");
+    std::io::stdin()
+        .read_to_string(&mut input)
+        .expect("read stdin");
     let password = input.trim_end_matches(['\n', '\r']);
     if password.is_empty() {
         eprintln!("usage: echo -n '<password>' | hash-password");

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
-import 'package:flutter/services.dart';
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
 import '../components/app_fullscreen_page.dart';
@@ -27,6 +26,11 @@ import '../design_system/sp_feedback.dart';
 import '../components/sp_dialog_pages.dart';
 import '../payments/resident_statement_page.dart';
 import '../design_system/sp_typography.dart';
+import '../design_system/sp_guidance_card.dart';
+import '../design_system/sp_tone.dart';
+import '../residents/resident_directory.dart';
+import '../design_system/sp_filter_chip.dart';
+import '../design_system/sp_clipboard.dart';
 class DashboardScreen extends StatefulWidget {
   final DashboardController controller;
 
@@ -588,68 +592,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildNoHomeownerGuidanceCard() {
-    final isDark = AppColors.isDark(context);
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.accentOrange.withOpacity(0.35)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: AppColors.accentOrange.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.home_work_outlined, size: 30, color: AppColors.accentOrange),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Tanımlı Daireniz Bulunmuyor',
-            style: TextStyle(
-              color: AppColors.textPrimary(context),
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'SitePulse hesabınıza henüz bir daire kaydı atanmamıştır. Site yöneticinizden WhatsApp/SMS davet bağlantısı alarak veya bina yönetiminizle iletişime geçerek dairenizi tanımlatabilirsiniz.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.textSecondary(context),
-              fontSize: 13,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.surface(context),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.border(context)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const ExcludeSemantics(child: Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppColors.accentOrange)),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    'Daireniz tanımlandığında adınıza tahakkuk eden aidatlar, Sanal IBAN ve hesap hareketleriniz burada listelenir.',
-                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return const SpGuidanceCard(
+      icon: Icons.home_work_outlined,
+      tone: SpTone.warning,
+      prominent: true,
+      tonedBorder: true,
+      title: 'Tanımlı Daireniz Bulunmuyor',
+      message: 'SitePulse hesabınıza henüz bir daire kaydı atanmamıştır. Site yöneticinizden WhatsApp/SMS davet bağlantısı alarak veya bina yönetiminizle iletişime geçerek dairenizi tanımlatabilirsiniz.',
+      tip: 'Daireniz tanımlandığında adınıza tahakkuk eden aidatlar, Sanal IBAN ve hesap hareketleriniz burada listelenir.',
     );
   }
 
@@ -714,55 +664,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final homeOwners = widget.controller.homeOwners;
     final isLoading = widget.controller.isLoadingHomeOwners;
 
-    final rawBlocks = widget.controller.blocks;
-    final seenB = <String>{};
-    final availableBlocks = <String>[];
-    for (final b in rawBlocks) {
-      final t = b.trim();
-      if (t.isNotEmpty && seenB.add(t.toLowerCase())) {
-        availableBlocks.add(t);
-      }
-    }
+    final availableBlocks = distinctBlocks(widget.controller.blocks);
+    final stats = ResidentOccupancyStats.from(homeOwners);
 
-    final totalUnits = homeOwners.length;
-    final tenantCount = homeOwners.where((h) => h.isTenantOccupied).length;
-    final ownerCount = homeOwners.where((h) => h.isOwnerOccupied).length;
-    final vacantCount = homeOwners.where((h) => h.isVacant).length;
-    final totalCoResidents = homeOwners.fold<int>(0, (sum, h) => sum + h.householdResidents.length);
-    final occupancyRate = totalUnits > 0 ? (((totalUnits - vacantCount) / totalUnits) * 100).toStringAsFixed(1) : '0';
-
-    final filtered = homeOwners.where((ho) {
-      if (_homeOwnerBlockFilter != 'ALL') {
-        final b1 = ho.block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
-        final b2 = _homeOwnerBlockFilter.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
-        if (b1 != b2) return false;
-      }
-      if (_homeOwnerOccupancyFilter == 'TENANT') {
-        if (!ho.isTenantOccupied) return false;
-      } else if (_homeOwnerOccupancyFilter == 'OWNER') {
-        if (!ho.isOwnerOccupied) return false;
-      } else if (_homeOwnerOccupancyFilter == 'VACANT') {
-        if (!ho.isVacant) return false;
-      }
-      if (_homeOwnerSearchQuery.isNotEmpty) {
-        final q = _homeOwnerSearchQuery.toLowerCase();
-        final matchName = ho.ownerFullName.toLowerCase().contains(q);
-        final matchTenant = (ho.tenantFullName ?? '').toLowerCase().contains(q);
-        final matchResponsible = ho.activeResponsibleResidentName.toLowerCase().contains(q);
-        final matchResidents = ho.householdResidents.any((r) =>
-            r.fullName.toLowerCase().contains(q) ||
-            r.phone.toLowerCase().contains(q) ||
-            r.email.toLowerCase().contains(q));
-        final matchUnit = ho.unitNo.toString().contains(q);
-        final matchPhone = ho.phone.toLowerCase().contains(q) ||
-            (ho.tenantPhone ?? '').toLowerCase().contains(q) ||
-            ho.activeResponsiblePhone.toLowerCase().contains(q);
-        final matchEmail = ho.email.toLowerCase().contains(q) || (ho.tenantEmail ?? '').toLowerCase().contains(q);
-        final matchBlock = ho.block.toLowerCase().contains(q);
-        return matchName || matchTenant || matchResponsible || matchResidents || matchUnit || matchPhone || matchEmail || matchBlock;
-      }
-      return true;
-    }).toList();
+    final filtered = homeOwners
+        .where((ho) => matchesResidentFilters(
+              ho,
+              blockFilter: _homeOwnerBlockFilter,
+              occupancyFilter: _homeOwnerOccupancyFilter,
+              query: _homeOwnerSearchQuery,
+            ))
+        .toList();
 
     final totalCount = widget.controller.collectionSummary.totalUnitsCount > 0
         ? widget.controller.collectionSummary.totalUnitsCount
@@ -877,14 +789,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 8),
 
         // Live KPI Metrics Bar
-        _buildKpiMetrics(
-          totalUnits: totalUnits,
-          occupancyRate: occupancyRate,
-          tenantCount: tenantCount,
-          ownerCount: ownerCount,
-          vacantCount: vacantCount,
-          totalCoResidents: totalCoResidents,
-        ),
+        ResidentSummary(stats: stats, dense: true),
 
         const SizedBox(height: 8),
 
@@ -931,17 +836,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              _buildOccupancyFilterChip('Tümü ($totalUnits)', 'ALL'),
+              _buildOccupancyFilterChip('Tümü (${stats.totalUnits})', OccupancyFilter.all),
               const SizedBox(width: 6),
-              _buildOccupancyFilterChip('Kiracılı ($tenantCount)', 'TENANT'),
+              _buildOccupancyFilterChip('${AppStrings.tenantOccupied} (${stats.tenantCount})', OccupancyFilter.tenant),
               const SizedBox(width: 6),
-              _buildOccupancyFilterChip('Malik Mukim ($ownerCount)', 'OWNER'),
+              _buildOccupancyFilterChip('${AppStrings.ownerOccupied} (${stats.ownerCount})', OccupancyFilter.owner),
               const SizedBox(width: 6),
-              _buildOccupancyFilterChip('Boş Daire ($vacantCount)', 'VACANT'),
+              _buildOccupancyFilterChip('${AppStrings.vacantUnit} (${stats.vacantCount})', OccupancyFilter.vacant),
               const SizedBox(width: 8),
               Container(width: 1, height: 16, color: AppColors.border(context)),
               const SizedBox(width: 8),
-              _buildBlockFilterChip('Tümü', 'ALL'),
+              _buildBlockFilterChip('Tümü', allBlocksFilter),
               ...availableBlocks.map((b) => _buildBlockFilterChip(b, b)),
             ],
           ),
@@ -986,136 +891,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildKpiMetrics({
-    required int totalUnits,
-    required String occupancyRate,
-    required int tenantCount,
-    required int ownerCount,
-    required int vacantCount,
-    required int totalCoResidents,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface(context),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border(context)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.analytics_outlined, size: 16, color: AppColors.accentCyan),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Sakin & Mülkiyet Durum Özeti',
-                  style: TextStyle(
-                    color: AppColors.textPrimary(context),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.accentGreen.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'Doluluk: %$occupancyRate',
-                  style: TextStyle(
-                    color: AppColors.successText(context),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(child: _buildMetricItem('Toplam Daire', '$totalUnits', Icons.apartment, AppColors.accentCyan)),
-              Expanded(child: _buildMetricItem('Kiracılı', '$tenantCount', Icons.key, AppColors.accentGreen)),
-              Expanded(child: _buildMetricItem('Malik Mukim', '$ownerCount', Icons.vpn_key, AppColors.accentPurple)),
-              Expanded(child: _buildMetricItem('Boş Daire', '$vacantCount', Icons.door_back_door, AppColors.accentOrange)),
-              Expanded(child: _buildMetricItem('Hane Sakini', '$totalCoResidents', Icons.family_restroom, AppColors.accentCyan)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMetricItem(String label, String value, IconData icon, Color color) {
-    return Column(
-      children: [
-        Icon(icon, size: 15, color: color),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            color: AppColors.textPrimary(context),
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.textSecondary(context),
-            fontSize: 12,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildOccupancyFilterChip(String label, String code) {
-    final isSelected = _homeOwnerOccupancyFilter == code;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (_) {
-        setState(() {
-          _homeOwnerOccupancyFilter = code;
-        });
-      },
-      selectedColor: AppColors.accentCyan.withOpacity(0.2),
-      checkmarkColor: AppColors.accentCyan,
-      labelStyle: TextStyle(
-        color: isSelected ? AppColors.primaryText(context) : AppColors.textSecondary(context),
-        fontSize: 12,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-      ),
+    return SpFilterChip(
+      label: label,
+      selected: _homeOwnerOccupancyFilter == code,
+      onSelected: () => setState(() => _homeOwnerOccupancyFilter = code),
+      id: 'directory_occupancy_filter_$code',
     );
   }
 
   Widget _buildBlockFilterChip(String label, String code) {
-    final isSelected = _homeOwnerBlockFilter == code;
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (_) {
-          setState(() {
-            _homeOwnerBlockFilter = code;
-          });
-        },
-        selectedColor: AppColors.accentCyan.withOpacity(0.2),
-        checkmarkColor: AppColors.accentCyan,
-        labelStyle: TextStyle(
-          color: isSelected ? AppColors.primaryText(context) : AppColors.textSecondary(context),
-          fontSize: 12,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-        ),
+      padding: const EdgeInsets.only(right: AppSpacing.sm),
+      child: SpFilterChip(
+        label: label,
+        selected: _homeOwnerBlockFilter == code,
+        onSelected: () => setState(() => _homeOwnerBlockFilter = code),
+        id: 'directory_block_filter_$code',
       ),
     );
   }
@@ -3669,7 +3461,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           try {
                             final messenger = ScaffoldMessenger.of(this.context);
                             final selectedTariff = houseTypes.where((ht) => ht.typeName == selectedHouseType).firstOrNull;
-                            final dues = selectedTariff?.duesAmount ?? (Decimal.tryParse(duesCtrl.text.replaceAll(',', '.')) ?? resident.monthlyDues);
+                            final dues = selectedTariff?.duesAmount ?? (MoneyFormatter.tryParse(duesCtrl.text) ?? resident.monthlyDues);
                             final success = await widget.controller.updateHomeOwner(
                               unitId: resident.unitId,
                               fullName: oName.isNotEmpty ? oName : resident.ownerFullName,
@@ -5925,12 +5717,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           context: ctx,
           children: [
             testId('btn_copy_invite_link', OutlinedButton(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: invite.inviteUrl));
+              onPressed: () async {
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  appSnackBar(content: Text('Davet linki kopyalandı!'), backgroundColor: AppColors.successFill),
-                );
+                // Invitation URLs are copied verbatim (no IBAN normalisation).
+                await spCopyToClipboard(context, invite.inviteUrl, successMessage: 'Davet linki kopyalandı!');
               },
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),

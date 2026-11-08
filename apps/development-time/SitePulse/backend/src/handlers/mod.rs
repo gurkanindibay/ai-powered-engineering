@@ -11,8 +11,8 @@ use serde_json::json;
 
 use crate::models::*;
 use crate::services::{
-    CapitalProjectService, DuesCalculationService, KuveytTurkSandboxService,
-    ReconciliationService, SiteBankAccountService, VirtualIbanService,
+    CapitalProjectService, DuesCalculationService, KuveytTurkSandboxService, ReconciliationService,
+    SiteBankAccountService, VirtualIbanService,
 };
 use crate::state::AppState;
 
@@ -34,199 +34,9 @@ pub use registration::*;
 mod residents;
 pub use residents::*;
 
-
-/// Snapshot of the in-memory ledger (liability payment state and advance
-/// balances), used to persist exactly what an in-memory operation changed.
-pub struct LedgerSnapshot {
-    dues: std::collections::HashMap<String, (Decimal, Decimal, Decimal, DebtStatus)>,
-    advances: std::collections::HashMap<String, UnitAdvance>,
-}
-
-pub fn ledger_snapshot(inner: &crate::state::AppStateInner) -> LedgerSnapshot {
-    LedgerSnapshot {
-        dues: inner
-            .dues
-            .iter()
-            .map(|d| (d.id.clone(), (d.paid_principal, d.paid_penalty, d.delay_penalty, d.status)))
-            .collect(),
-        advances: inner.advance_balances.clone(),
-    }
-}
-
-/// Persists every liability and advance balance that differs from `before`.
-/// Errors are returned (and logged), never discarded.
-pub async fn persist_ledger_changes(
-    pool: &deadpool_postgres::Pool,
-    before: &LedgerSnapshot,
-    inner: &crate::state::AppStateInner,
-) -> Result<(), String> {
-    let mut errors: Vec<String> = Vec::new();
-    for d in &inner.dues {
-        let now = (d.paid_principal, d.paid_penalty, d.delay_penalty, d.status);
-        if before.dues.get(&d.id) != Some(&now) && crate::db::parse_id_to_i64(&d.id).is_some() {
-            if let Err(e) = crate::db::sync_due_payment_state(pool, d).await {
-                errors.push(format!("dues liability {}: {}", d.id, e));
-            }
-        }
-    }
-    for (unit, adv) in &inner.advance_balances {
-        let old = before.advances.get(unit).copied().unwrap_or_default();
-        for (debtor, now, was) in [("OWNER", adv.owner, old.owner), ("TENANT", adv.tenant, old.tenant)] {
-            if now != was {
-                if let Err(e) = crate::db::save_advance_balance(pool, unit, debtor, now).await {
-                    errors.push(format!("advance balance {}/{}: {}", unit, debtor, e));
-                }
-            }
-        }
-    }
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        tracing::error!("Ledger persistence failed: {}", errors.join("; "));
-        Err(format!("Ledger changes were not fully saved: {}", errors.join("; ")))
-    }
-}
-
-/// Domain Service / Rule: Advance Balance Auto-Offsetting
-/// When dues liabilities exist or arrive for a unit, available advance balance
-/// (Avans Bakiye) is automatically deducted against the debt (FIFO order by
-/// due_date). Each liability is offset only from its own debtor's advance
-/// (O-1): a tenant's surplus never silently pays the owner's dues; that takes an
-/// explicit TENANT -> OWNER inter-ledger transfer.
-pub fn apply_advance_payments_offset(
-    inner: &mut crate::state::AppStateInner,
-    target_unit_id: Option<&str>,
-) -> (usize, Decimal) {
-    let unit_ids: Vec<String> = match target_unit_id {
-        Some(u) => vec![u.to_string()],
-        None => inner.units.iter().map(|u| u.id.clone()).collect(),
-    };
-
-    let mut auto_settled_count = 0;
-    let mut total_offset_amount = Decimal::ZERO;
-
-    for u_id in unit_ids {
-        let mut buckets = match inner.advance_balances.get(&u_id) {
-            Some(adv) if adv.total() > Decimal::ZERO => *adv,
-            _ => continue,
-        };
-
-        // Find all unpaid dues for this unit
-        let mut unpaid_indices: Vec<usize> = inner
-            .dues
-            .iter()
-            .enumerate()
-            .filter(|(_, d)| d.unit_id == u_id && d.status != DebtStatus::Paid)
-            .map(|(i, _)| i)
-            .collect();
-
-        // FIFO: Sort by due_date ascending
-        unpaid_indices.sort_by_key(|&i| inner.dues[i].due_date);
-
-        let unit_site_id = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.site_id.clone()).unwrap_or_else(|| "1".to_string());
-        let unit_block = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.block_id.clone()).unwrap_or_else(|| "A".to_string());
-        let unit_number = inner.units.iter().find(|u| u.id == *u_id).map(|u| u.unit_number).unwrap_or(1);
-        let unit_resident_name = inner
-            .units
-            .iter()
-            .find(|u| u.id == *u_id)
-            .and_then(|u| u.owner_user_id.as_ref())
-            .and_then(|uid| inner.users.iter().find(|user| &user.id == uid))
-            .map(|user| user.full_name.clone());
-
-        for idx in unpaid_indices {
-            let debtor = inner.dues[idx].debtor_type;
-            let advance = buckets.bucket_mut(debtor.as_str());
-            if *advance <= Decimal::ZERO {
-                continue;
-            }
-
-            let due = &mut inner.dues[idx];
-            // KMK 20 segmented accrual: bring the penalty up to today before the
-            // offset changes the principal it accrues on.
-            *due = crate::services::DuesCalculationService::new().calculate_delay_penalty(due.clone(), Utc::now().date_naive());
-            let due_amount = due.total_amount;
-            let period = due.period.clone();
-            let due_id = due.id.clone();
-
-            if *advance >= due_amount {
-                // Full settlement of this due liability (penalty first, then principal)
-                let settled = crate::services::dues_ledger::settle(due, due_amount);
-                *advance -= settled.total();
-                total_offset_amount += settled.total();
-                auto_settled_count += 1;
-
-                let offset_txn_id = format!("TXN-ADV-OFFSET-{}", due_id);
-                if !inner.reconciliation_queue.iter().any(|m| m.transaction.transaction_id == offset_txn_id) {
-                    let match_seq = inner.reconciliation_queue.len() + 1;
-                    inner.reconciliation_queue.push(ReconciliationMatch {
-                        match_id: format!("MATCH-OFFSET-{}", match_seq),
-                        site_id: unit_site_id.clone(),
-                        transaction: BankTransactionItem {
-                            transaction_id: offset_txn_id,
-                            date: Utc::now().date_naive(),
-                            amount: due_amount,
-                            currency: "TRY".to_string(),
-                            description: format!("Avans Mahsubu: {} Aidatı", period),
-                            sender_name: Some("Otomatik Avans Mahsubu".to_string()),
-                            sender_iban: None,
-                            reference_no: Some(due_id.clone()),
-                        },
-                        matched_unit_id: Some(u_id.clone()),
-                        matched_block: Some(unit_block.clone()),
-                        matched_unit_number: Some(unit_number),
-                        matched_resident_name: unit_resident_name.clone(),
-                        confidence_score: 100,
-                        matched_due_id: Some(due_id),
-                        outstanding_balance: Some(due_amount),
-                        amount_matches_balance: true,
-                        status: ReconciliationStatus::Approved,
-                        status_code: ReconciliationStatus::Approved.as_str().to_string(),
-                        notes: Some(format!("{} aidatı avans bakiyenizden otomatik mahsup edildi", period)),
-                    });
-                }
-            } else {
-                // Partial deduction
-                let partial = crate::services::dues_ledger::settle(due, *advance).total();
-                *advance -= partial;
-                total_offset_amount += partial;
-
-                let offset_txn_id = format!("TXN-ADV-PARTIAL-{}", due_id);
-                if !inner.reconciliation_queue.iter().any(|m| m.transaction.transaction_id == offset_txn_id) {
-                    let match_seq = inner.reconciliation_queue.len() + 1;
-                    inner.reconciliation_queue.push(ReconciliationMatch {
-                        match_id: format!("MATCH-OFFSET-PARTIAL-{}", match_seq),
-                        site_id: unit_site_id.clone(),
-                        transaction: BankTransactionItem {
-                            transaction_id: offset_txn_id,
-                            date: Utc::now().date_naive(),
-                            amount: partial,
-                            currency: "TRY".to_string(),
-                            description: format!("Kısmi Avans Mahsubu: {} Aidatı", period),
-                            sender_name: Some("Otomatik Avans Mahsubu".to_string()),
-                            sender_iban: None,
-                            reference_no: Some(due_id.clone()),
-                        },
-                        matched_unit_id: Some(u_id.clone()),
-                        matched_block: Some(unit_block.clone()),
-                        matched_unit_number: Some(unit_number),
-                        matched_resident_name: unit_resident_name.clone(),
-                        confidence_score: 100,
-                        matched_due_id: Some(due_id),
-                        outstanding_balance: Some(partial),
-                        amount_matches_balance: false,
-                        status: ReconciliationStatus::Approved,
-                        status_code: ReconciliationStatus::Approved.as_str().to_string(),
-                        notes: Some(format!("₺{:.2} tutarındaki avans {} aidatından mahsup edildi", partial, period)),
-                    });
-                }
-            }
-        }
-        inner.advance_balances.insert(u_id.clone(), buckets);
-    }
-
-    (auto_settled_count, total_offset_amount)
-}
+pub use crate::services::ledger_application::{
+    apply_advance_payments_offset, ledger_snapshot, persist_ledger_changes, LedgerSnapshot,
+};
 
 fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, String) {
     let note = m.notes.as_deref().unwrap_or("");
@@ -234,9 +44,9 @@ fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, Stri
     let desc_upper = desc.to_uppercase();
     let note_upper = note.to_uppercase();
 
-    let is_card = desc_upper.contains("KART") 
-        || desc_upper.contains("CREDIT_CARD") 
-        || desc_upper.contains("CARD") 
+    let is_card = desc_upper.contains("KART")
+        || desc_upper.contains("CREDIT_CARD")
+        || desc_upper.contains("CARD")
         || note_upper.contains("KART")
         || note_upper.contains("CREDIT_CARD");
 
@@ -252,10 +62,13 @@ fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, Stri
     }
 
     // Case 1: Advance top-up (pure advance when no debt exists)
-    if note.contains("No outstanding debt") 
-        || note.contains("Aktif aidat borcu bulunmuyor") 
-        || note.contains("Aktif borç bulunmuyor") 
-        || (m.matched_due_id.is_none() && !note.contains("Settled") && (note.contains("advance payment") || note.contains("avans bakiyenize eklendi"))) {
+    if note.contains("No outstanding debt")
+        || note.contains("Aktif aidat borcu bulunmuyor")
+        || note.contains("Aktif borç bulunmuyor")
+        || (m.matched_due_id.is_none()
+            && !note.contains("Settled")
+            && (note.contains("advance payment") || note.contains("avans bakiyenize eklendi")))
+    {
         let title = if is_card {
             "Kart ile Avans Yükleme".to_string()
         } else {
@@ -266,14 +79,23 @@ fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, Stri
     }
 
     // Case 2: Settled dues (with or without surplus)
-    if note.contains("Settled") || note.contains("aidat") || note.contains("Aidat") || m.matched_due_id.is_some() || desc_upper.contains("AIDAT") {
+    if note.contains("Settled")
+        || note.contains("aidat")
+        || note.contains("Aidat")
+        || m.matched_due_id.is_some()
+        || desc_upper.contains("AIDAT")
+    {
         let title = if is_card {
             "Kart ile Aidat Ödemesi".to_string()
         } else {
             "FAST ile Aidat Ödemesi".to_string()
         };
 
-        let subtitle = if note.contains("surplus") || note.contains("artan") || note.contains("avans bakiyenize") || note.contains("avans bakiyesine") {
+        let subtitle = if note.contains("surplus")
+            || note.contains("artan")
+            || note.contains("avans bakiyenize")
+            || note.contains("avans bakiyesine")
+        {
             // Support legacy English notes from queue: "100% Match via Virtual IBAN. Settled Eylül 2026; ₺60.67 surplus credited to advance payment."
             if let Some(settled_idx) = note.find("Settled ") {
                 let after_settled = &note[settled_idx + 8..];
@@ -286,9 +108,15 @@ fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, Stri
                 };
                 let surplus_formatted = surplus.replace('.', ",");
                 if !surplus_formatted.is_empty() {
-                    format!("{} aidatı ödendi • {} avans bakiyenize aktarıldı", period, surplus_formatted)
+                    format!(
+                        "{} aidatı ödendi • {} avans bakiyenize aktarıldı",
+                        period, surplus_formatted
+                    )
                 } else {
-                    format!("{} aidatı ödendi • Kalan tutar avans bakiyenize aktarıldı", period)
+                    format!(
+                        "{} aidatı ödendi • Kalan tutar avans bakiyenize aktarıldı",
+                        period
+                    )
                 }
             } else if note.contains("aidatı ödendi") || note.contains("aidat borcu ödendi") {
                 note.to_string()
@@ -299,14 +127,16 @@ fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, Stri
             let after_settled = &note[settled_idx + 8..];
             let period = after_settled.split(';').next().unwrap_or("Dönem").trim();
             format!("{} aidat borcu kapatıldı", period)
-        } else if note.contains("aidat borcu kapatıldı") || note.contains("aidat borcu başarıyla kapatıldı") {
+        } else if note.contains("aidat borcu kapatıldı")
+            || note.contains("aidat borcu başarıyla kapatıldı")
+        {
             note.to_string()
         } else {
             "Aidat borcu başarıyla kapatıldı".to_string()
         };
 
         (title, subtitle)
-    } 
+    }
     // Case 3: Other bank transfer
     else {
         let title = if is_card {
@@ -336,7 +166,15 @@ pub async fn get_resident_dashboard(
     let mut inner = state.inner.write().await;
     let ledger_before = ledger_snapshot(&inner);
 
-    let unit_opt = if let Some(u) = inner.units.iter().find(|u| u.id == unit_id || crate::db::parse_id_to_i64(&u.id) == crate::db::parse_id_to_i64(&unit_id)).cloned() {
+    let unit_opt = if let Some(u) = inner
+        .units
+        .iter()
+        .find(|u| {
+            u.id == unit_id
+                || crate::db::parse_id_to_i64(&u.id) == crate::db::parse_id_to_i64(&unit_id)
+        })
+        .cloned()
+    {
         Some(u)
     } else if let Some(ref pool) = state.pool {
         if let Ok(client) = pool.get().await {
@@ -380,15 +218,14 @@ pub async fn get_resident_dashboard(
     let unit = match unit_opt {
         Some(u) => u,
         None => {
-            {
-                return (
-                    StatusCode::NOT_FOUND,
-                    Json(serde_json::json!({
-                        "status": "ERROR",
-                        "message": format!("Unit '{}' not found in database", unit_id)
-                    })),
-                ).into_response();
-            }
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "status": "ERROR",
+                    "message": format!("Unit '{}' not found in database", unit_id)
+                })),
+            )
+                .into_response();
         }
     };
 
@@ -408,7 +245,9 @@ pub async fn get_resident_dashboard(
         .collect();
 
     let total_debt: Decimal = evaluated_dues.iter().map(|d| d.total_amount).sum();
-    let is_overdue = evaluated_dues.iter().any(|d| d.status == DebtStatus::Overdue);
+    let is_overdue = evaluated_dues
+        .iter()
+        .any(|d| d.status == DebtStatus::Overdue);
 
     let dues_dtos: Vec<DuesSummaryDto> = inner
         .dues
@@ -446,23 +285,33 @@ pub async fn get_resident_dashboard(
         .find(|s| s.id == unit.site_id)
         .map(|s| s.name.clone())
         .unwrap_or_else(|| "Site".to_string());
-    let site_title = format!("{} • {}", site_name, inner.unit_label(&unit.block_id, unit.unit_number));
+    let site_title = format!(
+        "{} • {}",
+        site_name,
+        inner.unit_label(&unit.block_id, unit.unit_number)
+    );
     let advance_payment = inner.advance_total(&unit_id);
 
     let mut transactions: Vec<AccountTransactionDto> = Vec::new();
 
     // 1. Approved bank transactions from reconciliation queue for this unit
     for m in inner.reconciliation_queue.iter().rev() {
-        if m.matched_unit_id.as_deref() == Some(&unit_id) && m.status == ReconciliationStatus::Approved {
+        if m.matched_unit_id.as_deref() == Some(&unit_id)
+            && m.status == ReconciliationStatus::Approved
+        {
             let (title, subtitle) = format_resident_transaction_display(m);
             // The receipt the ledger issued for this bank transaction, not the bank's id.
             let receipt_number = inner
                 .payment_entries
                 .iter()
-                .filter(|e| crate::auth::same_id(&e.unit_id, &unit_id) && e.entry_type == LEDGER_KIND_COLLECTION)
+                .filter(|e| {
+                    crate::auth::same_id(&e.unit_id, &unit_id)
+                        && e.entry_type == LEDGER_KIND_COLLECTION
+                })
                 .find(|e| {
                     e.external_reference.as_deref().is_some_and(|r| {
-                        r == m.transaction.transaction_id || Some(r) == m.transaction.reference_no.as_deref()
+                        r == m.transaction.transaction_id
+                            || Some(r) == m.transaction.reference_no.as_deref()
                     })
                 })
                 .and_then(|e| e.receipt_number.clone());
@@ -483,7 +332,12 @@ pub async fn get_resident_dashboard(
         transactions.push(AccountTransactionDto {
             id: due.id.clone(),
             title: format!("{} Aidatı", due.period),
-            subtitle: if is_overdue { "Gecikmeli Aidat Borcu" } else { "Ödeme Bekleniyor" }.to_string(),
+            subtitle: if is_overdue {
+                "Gecikmeli Aidat Borcu"
+            } else {
+                "Ödeme Bekleniyor"
+            }
+            .to_string(),
             amount: due.total_amount,
             date: due.due_date.format("%d.%m.%Y").to_string(),
             is_credit: false,
@@ -560,7 +414,8 @@ pub async fn parse_bank_statement(
 
             // Validate file content structure against bank's format
             let trimmed = payload.content.trim();
-            let is_mt940 = trimmed.starts_with(":20:") || (trimmed.contains(":61:") && trimmed.contains(":86:"));
+            let is_mt940 = trimmed.starts_with(":20:")
+                || (trimmed.contains(":61:") && trimmed.contains(":86:"));
             if bank_fmt == BankStatementFormat::Mt940 && !is_mt940 {
                 return Err((
                     StatusCode::BAD_REQUEST,
@@ -569,7 +424,10 @@ pub async fn parse_bank_statement(
                         account.bank_name
                     ),
                 ));
-            } else if (bank_fmt == BankStatementFormat::Excel || bank_fmt == BankStatementFormat::Csv) && is_mt940 {
+            } else if (bank_fmt == BankStatementFormat::Excel
+                || bank_fmt == BankStatementFormat::Csv)
+                && is_mt940
+            {
                 return Err((
                     StatusCode::BAD_REQUEST,
                     format!(
@@ -587,11 +445,11 @@ pub async fn parse_bank_statement(
     let parser = crate::services::BankStatementParser::new();
     let recon_service = crate::services::ReconciliationService::new();
 
-    let txns = parser
-        .parse_statement(&payload.content, effective_format)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-
     let today = Utc::now().date_naive();
+    let report = parser
+        .parse_statement_report(&payload.content, effective_format, today)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let txns = report.transactions;
     let mut inner = state.inner.write().await;
 
     // Filter units, users, and dues for the requested site_id
@@ -616,7 +474,14 @@ pub async fn parse_bank_statement(
         .cloned()
         .collect();
 
-    let matches = recon_service.reconcile_transactions_with_site(Some(&payload.site_id), &txns, &site_units, &site_users, &site_dues, today);
+    let matches = recon_service.reconcile_transactions_with_site(
+        Some(&payload.site_id),
+        &txns,
+        &site_units,
+        &site_users,
+        &site_dues,
+        today,
+    );
 
     // Append to reconciliation queue in state
     for m in &matches {
@@ -625,15 +490,33 @@ pub async fn parse_bank_statement(
     drop(inner);
 
     if let Some(ref pool) = state.pool {
-        let site_bank_id = active_account.as_ref().and_then(|a| crate::db::parse_id_to_i64(&a.id));
+        let site_bank_id = active_account
+            .as_ref()
+            .and_then(|a| crate::db::parse_id_to_i64(&a.id));
         for m in &matches {
-            crate::db::save_reconciliation_match_for_site(pool, m, &payload.site_id, site_bank_id).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+            crate::db::save_reconciliation_match_for_site(pool, m, &payload.site_id, site_bank_id)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        format!("Database write failed: {}", e),
+                    )
+                })?;
         }
     }
 
-    let matched_count = matches.iter().filter(|m| m.status == ReconciliationStatus::PendingApproval).count();
-    let already_processed_count = matches.iter().filter(|m| m.status == ReconciliationStatus::AlreadyProcessed).count();
-    let unmatched_count = matches.iter().filter(|m| m.status == ReconciliationStatus::Unmatched).count();
+    let matched_count = matches
+        .iter()
+        .filter(|m| m.status == ReconciliationStatus::PendingApproval)
+        .count();
+    let already_processed_count = matches
+        .iter()
+        .filter(|m| m.status == ReconciliationStatus::AlreadyProcessed)
+        .count();
+    let unmatched_count = matches
+        .iter()
+        .filter(|m| m.status == ReconciliationStatus::Unmatched)
+        .count();
 
     Ok((
         StatusCode::OK,
@@ -644,6 +527,7 @@ pub async fn parse_bank_statement(
             unmatched_count,
             already_processed_count,
             matches,
+            skipped_entries: report.skipped,
         }),
     ))
 }
@@ -683,27 +567,56 @@ pub async fn confirm_reconciliation(
     let lines: Vec<Line> = {
         let inner = state.inner.read().await;
         for match_id in &payload.match_ids {
-            if let Some(m) = inner.reconciliation_queue.iter().find(|m| m.match_id == *match_id) {
+            if let Some(m) = inner
+                .reconciliation_queue
+                .iter()
+                .find(|m| m.match_id == *match_id)
+            {
                 if !crate::auth::same_id(&m.site_id, &payload.site_id) {
                     return Err((
                         StatusCode::FORBIDDEN,
-                        format!("Match {} belongs to site {}, not {}", match_id, m.site_id, payload.site_id),
+                        format!(
+                            "Match {} belongs to site {}, not {}",
+                            match_id, m.site_id, payload.site_id
+                        ),
                     ));
                 }
             }
         }
         let mut lines = Vec::new();
         for match_id in &payload.match_ids {
-            let Some(m) = inner.reconciliation_queue.iter().find(|m| m.match_id == *match_id) else { continue };
-            let Some(unit) = m.matched_unit_id.as_ref().and_then(|uid| inner.units.iter().find(|u| &u.id == uid)).cloned() else {
+            let Some(m) = inner
+                .reconciliation_queue
+                .iter()
+                .find(|m| m.match_id == *match_id)
+            else {
                 continue;
             };
-            let (payer_role, payer_name) = resolve_payer(&inner, &unit, m.transaction.sender_name.as_deref());
-            let request_designation = m.matched_due_id.clone().map(|due_id| crate::models::PaymentDesignation {
-                due_ids: vec![due_id],
-                ..Default::default()
+            let Some(unit) = m
+                .matched_unit_id
+                .as_ref()
+                .and_then(|uid| inner.units.iter().find(|u| &u.id == uid))
+                .cloned()
+            else {
+                continue;
+            };
+            let (payer_role, payer_name) =
+                resolve_payer(&inner, &unit, m.transaction.sender_name.as_deref());
+            let request_designation =
+                m.matched_due_id
+                    .clone()
+                    .map(|due_id| crate::models::PaymentDesignation {
+                        due_ids: vec![due_id],
+                        ..Default::default()
+                    });
+            lines.push(Line {
+                match_id: match_id.clone(),
+                unit,
+                payer_role,
+                payer_name,
+                request_designation,
+                item: m.clone(),
             });
-            lines.push(Line { match_id: match_id.clone(), unit, payer_role, payer_name, request_designation, item: m.clone() });
         }
         lines
     };
@@ -715,7 +628,11 @@ pub async fn confirm_reconciliation(
     let mut failure: Option<(StatusCode, String)> = None;
     for line in lines {
         let txn = &line.item.transaction;
-        let key = if txn.transaction_id.trim().is_empty() { line.match_id.clone() } else { txn.transaction_id.clone() };
+        let key = if txn.transaction_id.trim().is_empty() {
+            line.match_id.clone()
+        } else {
+            txn.transaction_id.clone()
+        };
         let result = service
             .record_and_allocate_payment(crate::models::RecordManualPaymentRequest {
                 site_id: Some(line.unit.site_id.clone()),
@@ -737,7 +654,10 @@ pub async fn confirm_reconciliation(
             Ok(receipt) => confirmed.push((line, receipt)),
             Err(e) => {
                 let (code, msg) = payment_error_status(e);
-                failure = Some((code, format!("Statement line {} was not settled: {}", line.match_id, msg)));
+                failure = Some((
+                    code,
+                    format!("Statement line {} was not settled: {}", line.match_id, msg),
+                ));
                 break;
             }
         }
@@ -750,7 +670,11 @@ pub async fn confirm_reconciliation(
     let mut total_amount_cleared = Decimal::ZERO;
     let mut remembered: Vec<(String, String)> = Vec::new();
     for (line, receipt) in &confirmed {
-        if let Some(m) = inner.reconciliation_queue.iter_mut().find(|m| m.match_id == line.match_id) {
+        if let Some(m) = inner
+            .reconciliation_queue
+            .iter_mut()
+            .find(|m| m.match_id == line.match_id)
+        {
             m.status = ReconciliationStatus::Approved;
             m.status_code = ReconciliationStatus::Approved.as_str().to_string();
             m.notes = Some(format!(
@@ -773,32 +697,62 @@ pub async fn confirm_reconciliation(
         }
     }
     for (unit_id, iban) in &remembered {
-        inner.remembered_sender_ibans.insert(iban.clone(), unit_id.clone());
+        inner
+            .remembered_sender_ibans
+            .insert(iban.clone(), unit_id.clone());
     }
     let confirmed_count = confirmed_matches.len();
 
     if let Some(ref pool) = state.pool {
         for m in &confirmed_matches {
-            crate::db::update_reconciliation_status(pool, &m.match_id, ReconciliationStatus::Approved, m.notes.as_deref())
-                .await
-                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+            crate::db::update_reconciliation_status(
+                pool,
+                &m.match_id,
+                ReconciliationStatus::Approved,
+                m.notes.as_deref(),
+            )
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!("Database write failed: {}", e),
+                )
+            })?;
         }
         for (uid, iban) in &remembered {
             crate::db::save_remembered_sender_iban(pool, uid, iban, None, None)
                 .await
-                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+                .map_err(|e| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        format!("Database write failed: {}", e),
+                    )
+                })?;
         }
     }
     drop(inner);
     if let Some((code, msg)) = failure {
         // Lines before the failing one are settled and recorded; retrying the
         // whole batch is safe (each line is idempotent).
-        return Err((code, format!("{} ({} line(s) settled before the failure)", msg, confirmed_count)));
+        return Err((
+            code,
+            format!(
+                "{} ({} line(s) settled before the failure)",
+                msg, confirmed_count
+            ),
+        ));
     }
 
-    let message_sent = payload.optional_message.as_ref().map(|msg| !msg.trim().is_empty()).unwrap_or(false);
+    let message_sent = payload
+        .optional_message
+        .as_ref()
+        .map(|msg| !msg.trim().is_empty())
+        .unwrap_or(false);
     let notification_summary = if message_sent {
-        Some(format!("{} ev sahibine/kat sakinine bilgilendirme mesajı iletildi.", confirmed_count))
+        Some(format!(
+            "{} ev sahibine/kat sakinine bilgilendirme mesajı iletildi.",
+            confirmed_count
+        ))
     } else {
         None
     };
@@ -824,26 +778,50 @@ pub async fn remember_sender_iban(
     let mut inner = state.inner.write().await;
     let clean = payload.sender_iban.replace(' ', "").to_uppercase();
     if clean.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "Sender IBAN cannot be empty.".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Sender IBAN cannot be empty.".to_string(),
+        ));
     }
     if !inner.units.iter().any(|u| u.id == payload.unit_id) {
-        return Err((StatusCode::NOT_FOUND, format!("Unit '{}' not found in this site.", payload.unit_id)));
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("Unit '{}' not found in this site.", payload.unit_id),
+        ));
     }
 
-    inner.remembered_sender_ibans.insert(clean.clone(), payload.unit_id.clone());
+    inner
+        .remembered_sender_ibans
+        .insert(clean.clone(), payload.unit_id.clone());
     if let Some(ref sender_name) = payload.sender_name {
-        inner.sender_iban_metadata.insert(clean.clone(), (Some(sender_name.clone()), None));
+        inner
+            .sender_iban_metadata
+            .insert(clean.clone(), (Some(sender_name.clone()), None));
     }
 
     if let Some(ref pool) = state.pool {
-        crate::db::save_remembered_sender_iban(pool, &payload.unit_id, &clean, payload.sender_name.as_deref(), None).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+        crate::db::save_remembered_sender_iban(
+            pool,
+            &payload.unit_id,
+            &clean,
+            payload.sender_name.as_deref(),
+            None,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("Database write failed: {}", e),
+            )
+        })?;
     }
 
     Ok(Json(RememberSenderIbanResponse {
         success: true,
         unit_id: payload.unit_id,
         sender_iban: clean,
-        message: "Sender IBAN successfully mapped and remembered for automated future matching.".to_string(),
+        message: "Sender IBAN successfully mapped and remembered for automated future matching."
+            .to_string(),
     }))
 }
 
@@ -857,7 +835,12 @@ pub async fn get_unit_matching_criteria(
         .units
         .iter()
         .find(|u| u.id == unit_id)
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Unit '{}' not found", unit_id)))?;
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Unit '{}' not found", unit_id),
+            )
+        })?;
 
     let owner_name = unit
         .owner_user_id
@@ -911,21 +894,45 @@ pub async fn add_unit_sender_iban(
 ) -> Result<Json<UnitMatchingCriteriaDto>, (StatusCode, String)> {
     let clean = payload.sender_iban.replace(' ', "").to_uppercase();
     if clean.len() < 15 {
-        return Err((StatusCode::BAD_REQUEST, "Geçersiz IBAN formatı (minimum 15 karakter).".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Geçersiz IBAN formatı (minimum 15 karakter).".to_string(),
+        ));
     }
 
     {
         let mut inner = state.inner.write().await;
         if !inner.units.iter().any(|u| u.id == unit_id) {
-            return Err((StatusCode::NOT_FOUND, format!("Unit '{}' not found", unit_id)));
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!("Unit '{}' not found", unit_id),
+            ));
         }
 
-        inner.remembered_sender_ibans.insert(clean.clone(), unit_id.clone());
-        inner.sender_iban_metadata.insert(clean.clone(), (payload.label.clone(), payload.bank_name.clone()));
+        inner
+            .remembered_sender_ibans
+            .insert(clean.clone(), unit_id.clone());
+        inner.sender_iban_metadata.insert(
+            clean.clone(),
+            (payload.label.clone(), payload.bank_name.clone()),
+        );
     }
 
     if let Some(ref pool) = state.pool {
-        crate::db::save_remembered_sender_iban(pool, &unit_id, &clean, payload.label.as_deref(), payload.bank_name.as_deref()).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+        crate::db::save_remembered_sender_iban(
+            pool,
+            &unit_id,
+            &clean,
+            payload.label.as_deref(),
+            payload.bank_name.as_deref(),
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("Database write failed: {}", e),
+            )
+        })?;
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -947,7 +954,14 @@ pub async fn delete_unit_sender_iban(
     }
 
     if let Some(ref pool) = state.pool {
-        crate::db::delete_remembered_sender_iban(pool, &clean).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+        crate::db::delete_remembered_sender_iban(pool, &clean)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!("Database write failed: {}", e),
+                )
+            })?;
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -968,14 +982,26 @@ pub async fn update_unit_payer_names(
     {
         let mut inner = state.inner.write().await;
         if !inner.units.iter().any(|u| u.id == unit_id) {
-            return Err((StatusCode::NOT_FOUND, format!("Unit '{}' not found", unit_id)));
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!("Unit '{}' not found", unit_id),
+            ));
         }
 
-        inner.unit_payer_names.insert(unit_id.clone(), cleaned_names.clone());
+        inner
+            .unit_payer_names
+            .insert(unit_id.clone(), cleaned_names.clone());
     }
 
     if let Some(ref pool) = state.pool {
-        crate::db::save_unit_payer_names(pool, &unit_id, &cleaned_names).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+        crate::db::save_unit_payer_names(pool, &unit_id, &cleaned_names)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!("Database write failed: {}", e),
+                )
+            })?;
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -1023,7 +1049,12 @@ pub async fn get_or_allocate_virtual_iban(
         .units
         .iter_mut()
         .find(|u| u.id == unit_id)
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Unit '{}' not found", unit_id)))?;
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Unit '{}' not found", unit_id),
+            )
+        })?;
 
     if let Some(existing) = &unit.virtual_iban {
         return Ok(Json(json!({
@@ -1041,7 +1072,8 @@ pub async fn get_or_allocate_virtual_iban(
         &unit.site_id,
         &unit.block_id,
         unit.unit_number,
-    );
+    )
+    .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))?;
     unit.virtual_iban = Some(generated.clone());
 
     Ok(Json(json!({
@@ -1125,12 +1157,21 @@ pub async fn handle_bank_incoming_webhook(
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> Result<(StatusCode, Json<BankIncomingWebhookResponse>), (StatusCode, String)> {
-    let signature = headers.get(BANK_WEBHOOK_SIGNATURE_HEADER).and_then(|v| v.to_str().ok());
+    let signature = headers
+        .get(BANK_WEBHOOK_SIGNATURE_HEADER)
+        .and_then(|v| v.to_str().ok());
     if !crate::auth::verify_webhook_signature(&body, signature) {
-        return Err((StatusCode::UNAUTHORIZED, "Invalid or missing webhook signature".to_string()));
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "Invalid or missing webhook signature".to_string(),
+        ));
     }
-    let payload: BankIncomingWebhookRequest = serde_json::from_slice(&body)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid webhook payload: {}", e)))?;
+    let payload: BankIncomingWebhookRequest = serde_json::from_slice(&body).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("Invalid webhook payload: {}", e),
+        )
+    })?;
     validate_bank_webhook(&payload)?;
 
     // Durable idempotency (O-3): the transaction id is claimed in PostgreSQL,
@@ -1141,20 +1182,36 @@ pub async fn handle_bank_incoming_webhook(
     let mut account_scope: Option<i64> = None;
     if let Some(ref pool) = state.pool {
         let unavailable = |e: Box<dyn std::error::Error + Send + Sync>| {
-            (StatusCode::SERVICE_UNAVAILABLE, format!("Could not record webhook: {}", e))
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("Could not record webhook: {}", e),
+            )
         };
         let destination = payload.virtual_iban.replace(' ', "").to_uppercase();
-        let scope = crate::db::resolve_webhook_scope(pool, &destination).await.map_err(unavailable)?;
-        account_scope = scope.site_bank_account_id;
-        match crate::db::claim_bank_webhook_transaction(pool, &scope, &payload.transaction_id, &webhook_payload_hash(&payload))
+        let scope = crate::db::resolve_webhook_scope(pool, &destination)
             .await
-            .map_err(unavailable)?
+            .map_err(unavailable)?;
+        account_scope = scope.site_bank_account_id;
+        match crate::db::claim_bank_webhook_transaction(
+            pool,
+            &scope,
+            &payload.transaction_id,
+            &webhook_payload_hash(&payload),
+        )
+        .await
+        .map_err(unavailable)?
         {
             crate::db::WebhookClaim::Claimed(id) => claim_id = Some(id),
-            crate::db::WebhookClaim::Duplicate { same_payload: false, .. } => {
+            crate::db::WebhookClaim::Duplicate {
+                same_payload: false,
+                ..
+            } => {
                 return Err((
                     StatusCode::CONFLICT,
-                    format!("transaction_id {} was already delivered with different content", payload.transaction_id),
+                    format!(
+                        "transaction_id {} was already delivered with different content",
+                        payload.transaction_id
+                    ),
                 ));
             }
             crate::db::WebhookClaim::Duplicate { receipt_id, .. } => {
@@ -1180,11 +1237,23 @@ pub async fn handle_bank_incoming_webhook(
             Ok((_, Json(resp))) if resp.status == "CLEARED" => {
                 let receipt = {
                     let inner = state.inner.read().await;
-                    inner.payment_receipts.iter().find(|r| r.receipt_number == resp.receipt_id && r.site_id == resp_site(&inner, resp)).map(|r| r.id)
+                    inner
+                        .payment_receipts
+                        .iter()
+                        .find(|r| {
+                            r.receipt_number == resp.receipt_id
+                                && r.site_id == resp_site(&inner, resp)
+                        })
+                        .map(|r| r.id)
                 };
                 if let Some(rid) = receipt {
                     if let Err(e) = crate::db::attach_bank_webhook_receipt(pool, id, rid).await {
-                        tracing::error!("Could not link webhook claim {} to receipt {}: {}", id, rid, e);
+                        tracing::error!(
+                            "Could not link webhook claim {} to receipt {}: {}",
+                            id,
+                            rid,
+                            e
+                        );
                     }
                 }
             }
@@ -1196,24 +1265,26 @@ pub async fn handle_bank_incoming_webhook(
 
 /// Site of the unit a cleared webhook settled.
 fn resp_site(inner: &crate::state::AppStateInner, resp: &BankIncomingWebhookResponse) -> String {
-    inner.units.iter().find(|u| u.id == resp.matched_unit_id).map(|u| u.site_id.clone()).unwrap_or_default()
+    inner
+        .units
+        .iter()
+        .find(|u| u.id == resp.matched_unit_id)
+        .map(|u| u.site_id.clone())
+        .unwrap_or_default()
 }
 
 /// SHA-256 over the fields that define a bank transfer, so a redelivery can be
-/// told apart from a transaction id reused for a different transfer.
+/// told apart from a transaction id reused for a different transfer. The
+/// canonical form is the persisted contract [`crate::domain::fingerprint::transfer_canonical_v1`].
 pub fn webhook_payload_hash(payload: &BankIncomingWebhookRequest) -> String {
-    use sha2::{Digest, Sha256};
-    let clean = |s: Option<&str>| s.unwrap_or("").replace(' ', "").to_uppercase();
-    let canonical = format!(
-        "{}|{:.2}|{}|{}|{}|{}",
-        payload.transaction_id.trim(),
-        payload.amount,
-        payload.currency.as_deref().unwrap_or("TRY").trim().to_uppercase(),
-        clean(Some(&payload.virtual_iban)),
-        clean(payload.sender_iban.as_deref()),
-        payload.description.as_deref().unwrap_or("").trim(),
-    );
-    hex::encode(Sha256::digest(canonical.as_bytes()))
+    crate::domain::fingerprint::transfer_hash_v1(&crate::domain::fingerprint::TransferFields {
+        transaction_id: &payload.transaction_id,
+        amount: payload.amount,
+        currency: payload.currency.as_deref(),
+        virtual_iban: &payload.virtual_iban,
+        sender_iban: payload.sender_iban.as_deref(),
+        description: payload.description.as_deref(),
+    })
 }
 
 fn duplicate_webhook_response(transaction_id: String) -> BankIncomingWebhookResponse {
@@ -1228,21 +1299,31 @@ fn duplicate_webhook_response(transaction_id: String) -> BankIncomingWebhookResp
         remaining_debt: Decimal::ZERO,
         advance_payment: Decimal::ZERO,
         receipt_id: String::new(),
-        message: "Duplicate bank transaction notification ignored. Idempotency preserved.".to_string(),
+        message: "Duplicate bank transaction notification ignored. Idempotency preserved."
+            .to_string(),
     }
 }
 
 fn validate_bank_webhook(payload: &BankIncomingWebhookRequest) -> Result<(), (StatusCode, String)> {
     if payload.transaction_id.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "transaction_id is required".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "transaction_id is required".to_string(),
+        ));
     }
     if payload.amount <= Decimal::ZERO || payload.amount.scale() > 2 {
-        return Err((StatusCode::BAD_REQUEST, "amount must be positive with at most 2 decimals".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "amount must be positive with at most 2 decimals".to_string(),
+        ));
     }
     match payload.currency.as_deref().map(|c| c.trim().to_uppercase()) {
         None => Ok(()),
         Some(c) if c == "TRY" => Ok(()),
-        Some(c) => Err((StatusCode::UNPROCESSABLE_ENTITY, format!("Unsupported currency '{}'; only TRY is accepted", c))),
+        Some(c) => Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!("Unsupported currency '{}'; only TRY is accepted", c),
+        )),
     }
 }
 
@@ -1269,7 +1350,12 @@ async fn process_bank_incoming_webhook_scoped(
     let destination_site = inner
         .units
         .iter()
-        .find(|u| u.virtual_iban.as_ref().map(|v| v.replace(' ', "").to_uppercase() == clean_viban).unwrap_or(false))
+        .find(|u| {
+            u.virtual_iban
+                .as_ref()
+                .map(|v| v.replace(' ', "").to_uppercase() == clean_viban)
+                .unwrap_or(false)
+        })
         .map(|u| u.site_id.clone())
         .or_else(|| {
             inner
@@ -1280,7 +1366,10 @@ async fn process_bank_incoming_webhook_scoped(
         });
     let same_delivery = |m: &ReconciliationMatch| {
         m.transaction.transaction_id == payload.transaction_id
-            && destination_site.as_deref().map(|s| crate::auth::same_id(s, &m.site_id)).unwrap_or(true)
+            && destination_site
+                .as_deref()
+                .map(|s| crate::auth::same_id(s, &m.site_id))
+                .unwrap_or(true)
     };
     if inner.reconciliation_queue.iter().any(same_delivery) {
         let unit = inner
@@ -1329,10 +1418,20 @@ async fn process_bank_incoming_webhook_scoped(
         if unit_index.is_none() {
             let desc = payload.description.as_deref().unwrap_or("");
             if let Some((ref blk, unit_no)) = ReconciliationService::extract_block_and_flat(desc) {
-                let clean_blk = blk.to_uppercase().replace("BLOK", "").replace("BLOCK", "").replace(['-', '_', ' '], "");
+                let clean_blk = blk
+                    .to_uppercase()
+                    .replace("BLOK", "")
+                    .replace("BLOCK", "")
+                    .replace(['-', '_', ' '], "");
                 unit_index = inner.units.iter().position(|u| {
-                    let u_blk = u.block_id.to_uppercase().replace("BLOK", "").replace("BLOCK", "").replace(['-', '_', ' '], "");
-                    (u_blk == clean_blk || u.block_id.eq_ignore_ascii_case(blk)) && u.unit_number == unit_no
+                    let u_blk = u
+                        .block_id
+                        .to_uppercase()
+                        .replace("BLOK", "")
+                        .replace("BLOCK", "")
+                        .replace(['-', '_', ' '], "");
+                    (u_blk == clean_blk || u.block_id.eq_ignore_ascii_case(blk))
+                        && u.unit_number == unit_no
                 });
                 if unit_index.is_some() {
                     match_mechanism = "Regular IBAN & Narrative Matching (Açıklama Ayrıştırması)";
@@ -1359,10 +1458,16 @@ async fn process_bank_incoming_webhook_scoped(
 
                 if unit_index.is_none() {
                     for user in &inner.users {
-                        if user.full_name.to_lowercase().contains(&sender_lower) || sender_lower.contains(&user.full_name.to_lowercase()) {
-                            unit_index = inner.units.iter().position(|u| u.owner_user_id.as_deref() == Some(&user.id));
+                        if user.full_name.to_lowercase().contains(&sender_lower)
+                            || sender_lower.contains(&user.full_name.to_lowercase())
+                        {
+                            unit_index = inner
+                                .units
+                                .iter()
+                                .position(|u| u.owner_user_id.as_deref() == Some(&user.id));
                             if unit_index.is_some() {
-                                match_mechanism = "Regular IBAN & Sender Name Matching (Gönderen İsim Eşleşmesi)";
+                                match_mechanism =
+                                    "Regular IBAN & Sender Name Matching (Gönderen İsim Eşleşmesi)";
                                 break;
                             }
                         }
@@ -1385,7 +1490,10 @@ async fn process_bank_incoming_webhook_scoped(
                 .ok_or_else(|| {
                     (
                         StatusCode::UNPROCESSABLE_ENTITY,
-                        format!("Destination IBAN {} is not a site account or a unit's virtual IBAN", payload.virtual_iban),
+                        format!(
+                            "Destination IBAN {} is not a site account or a unit's virtual IBAN",
+                            payload.virtual_iban
+                        ),
                     )
                 })?;
 
@@ -1425,9 +1533,19 @@ async fn process_bank_incoming_webhook_scoped(
             // The transaction id is already claimed, so the unmatched transfer must be
             // durable: it waits in the reconciliation queue for manual matching.
             if let Some(ref pool) = state.pool {
-                crate::db::save_reconciliation_match_for_site(pool, &unmatched, &unmatched.site_id, bank_account_id.or(account_scope))
-                    .await
-                    .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+                crate::db::save_reconciliation_match_for_site(
+                    pool,
+                    &unmatched,
+                    &unmatched.site_id,
+                    bank_account_id.or(account_scope),
+                )
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        format!("Database write failed: {}", e),
+                    )
+                })?;
             }
             inner.reconciliation_queue.push(unmatched);
 
@@ -1474,7 +1592,11 @@ async fn process_bank_incoming_webhook_scoped(
             amount: payload.amount,
             payer_name,
             payer_role,
-            payment_channel: if is_virtual_iban { PaymentChannel::VirtualIban } else { PaymentChannel::BankTransfer },
+            payment_channel: if is_virtual_iban {
+                PaymentChannel::VirtualIban
+            } else {
+                PaymentChannel::BankTransfer
+            },
             description: Some(txn_desc.clone()),
             payment_date: None,
             idempotency_key: Some(match account_scope {
@@ -1491,7 +1613,10 @@ async fn process_bank_incoming_webhook_scoped(
 
     let mut inner = state.inner.write().await;
     let cleared_amount = receipt.allocated_principal + receipt.allocated_penalty;
-    let cleared_period = receipt.allocation_breakdown.first().map(|b| b.period.clone());
+    let cleared_period = receipt
+        .allocation_breakdown
+        .first()
+        .map(|b| b.period.clone());
     let surplus = receipt.allocated_advance;
     let total_advance = inner.advance_total(&unit.id);
     let remaining_debt: Decimal = inner
@@ -1525,7 +1650,10 @@ async fn process_bank_incoming_webhook_scoped(
     let notes = if let Some(ref period) = cleared_period {
         if surplus > Decimal::ZERO {
             let surplus_str = format!("{:.2}", surplus).replace('.', ",");
-            format!("{} aidatı ödendi • ₺{} avans bakiyenize aktarıldı", period, surplus_str)
+            format!(
+                "{} aidatı ödendi • ₺{} avans bakiyenize aktarıldı",
+                period, surplus_str
+            )
         } else {
             format!("{} aidat borcu kapatıldı", period)
         }
@@ -1552,7 +1680,10 @@ async fn process_bank_incoming_webhook_scoped(
         matched_unit_number: Some(unit.unit_number),
         matched_resident_name,
         confidence_score: 100,
-        matched_due_id: receipt.allocation_breakdown.first().and_then(|b| b.due_id.clone()),
+        matched_due_id: receipt
+            .allocation_breakdown
+            .first()
+            .and_then(|b| b.due_id.clone()),
         outstanding_balance: Some(cleared_amount),
         amount_matches_balance: surplus == Decimal::ZERO,
         status: ReconciliationStatus::Approved,
@@ -1587,11 +1718,16 @@ fn resolve_payer(
     sender_name: Option<&str>,
 ) -> (DebtorType, String) {
     let name_of = |uid: &Option<String>| {
-        uid.as_ref().and_then(|id| inner.users.iter().find(|u| &u.id == id)).map(|u| u.full_name.clone())
+        uid.as_ref()
+            .and_then(|id| inner.users.iter().find(|u| &u.id == id))
+            .map(|u| u.full_name.clone())
     };
     let sender = sender_name.map(str::trim).filter(|s| !s.is_empty());
     if let (Some(sender), Some(tenant)) = (sender, name_of(&unit.tenant_user_id)) {
-        let (a, b) = (crate::services::dues_ledger::fold_turkish(sender), crate::services::dues_ledger::fold_turkish(&tenant));
+        let (a, b) = (
+            crate::services::dues_ledger::fold_turkish(sender),
+            crate::services::dues_ledger::fold_turkish(&tenant),
+        );
         if a.contains(&b) || b.contains(&a) {
             return (DebtorType::Tenant, sender.to_string());
         }
@@ -1606,7 +1742,10 @@ fn resolve_payer(
 /// HTTP status for a canonical-ingestion failure: storage problems are 503 (the
 /// caller may retry; the payment is idempotent), anything else is a bad request.
 fn payment_error_status(e: String) -> (StatusCode, String) {
-    if e.starts_with("Database unavailable") || e.starts_with("Payment was not recorded") || e.starts_with("Reversal was not recorded") {
+    if e.starts_with("Database unavailable")
+        || e.starts_with("Payment was not recorded")
+        || e.starts_with("Reversal was not recorded")
+    {
         (StatusCode::SERVICE_UNAVAILABLE, e)
     } else {
         (StatusCode::BAD_REQUEST, e)
@@ -1628,7 +1767,10 @@ pub async fn list_dues_periods(
     let periods: Vec<DuesPeriod> = inner
         .dues_periods
         .iter()
-        .filter(|p| p.site_id == site_id || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&site_id))
+        .filter(|p| {
+            p.site_id == site_id
+                || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&site_id)
+        })
         .cloned()
         .collect();
     Ok(Json(periods))
@@ -1643,13 +1785,20 @@ pub async fn create_dues_period(
 
     // Check if period already exists
     if let Some(existing) = inner.dues_periods.iter().find(|p| {
-        (p.site_id == payload.site_id || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&payload.site_id))
+        (p.site_id == payload.site_id
+            || crate::db::parse_id_to_i64(&p.site_id)
+                == crate::db::parse_id_to_i64(&payload.site_id))
             && p.period_name.eq_ignore_ascii_case(&payload.period_name)
     }) {
         return Ok((StatusCode::OK, Json(existing.clone())));
     }
 
-    let max_p = inner.dues_periods.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
+    let max_p = inner
+        .dues_periods
+        .iter()
+        .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
+        .max()
+        .unwrap_or(0);
     let new_period = DuesPeriod {
         id: (max_p + 1).to_string(),
         site_id: payload.site_id.clone(),
@@ -1662,7 +1811,14 @@ pub async fn create_dues_period(
     inner.dues_periods.push(new_period.clone());
 
     if let Some(ref pool) = state.pool {
-        crate::db::save_dues_period(pool, &new_period).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+        crate::db::save_dues_period(pool, &new_period)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!("Database write failed: {}", e),
+                )
+            })?;
     }
 
     Ok((StatusCode::CREATED, Json(new_period)))
@@ -1684,12 +1840,20 @@ pub async fn accrue_monthly_dues(
     // 1. Decide every unit's amount and basis under a read lock.
     let (units_in_site, planned, skipped, budget_id) = {
         let inner = state.inner.read().await;
-        let units_in_site: Vec<IndependentUnit> =
-            inner.units.iter().filter(|u| crate::auth::same_id(&u.site_id, &payload.site_id)).cloned().collect();
+        let units_in_site: Vec<IndependentUnit> = inner
+            .units
+            .iter()
+            .filter(|u| crate::auth::same_id(&u.site_id, &payload.site_id))
+            .cloned()
+            .collect();
         if units_in_site.is_empty() {
-            return Err((StatusCode::NOT_FOUND, format!("No units found for site '{}'", payload.site_id)));
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!("No units found for site '{}'", payload.site_id),
+            ));
         }
-        let in_force = budgets::budget_in_force(&inner, &payload.site_id, payload.due_date).map(|b| (b.id.clone(), b.fiscal_year));
+        let in_force = budgets::budget_in_force(&inner, &payload.site_id, payload.due_date)
+            .map(|b| (b.id.clone(), b.fiscal_year));
         let required = budgets::site_requires_budget(&inner, &payload.site_id);
         if payload.amount > Decimal::ZERO {
             if let Some((id, year)) = &in_force {
@@ -1717,26 +1881,41 @@ pub async fn accrue_monthly_dues(
         let mut skipped: Vec<String> = Vec::new();
         for unit in &units_in_site {
             let already = inner.dues.iter().any(|d| {
-                d.unit_id == unit.id && d.period == payload.period && d.expense_type == ExpenseType::OperationalDues
+                d.unit_id == unit.id
+                    && d.period == payload.period
+                    && d.expense_type == ExpenseType::OperationalDues
             });
             if already {
                 continue;
             }
             let basis = if payload.amount > Decimal::ZERO {
-                Ok(budgets::DuesBasis { amount: payload.amount, operating_budget_id: None })
+                Ok(budgets::DuesBasis {
+                    amount: payload.amount,
+                    operating_budget_id: None,
+                })
             } else {
                 match budgets::operational_dues_basis(&inner, unit, payload.due_date) {
                     // Legacy sites without a tariff keep the historical default amount.
-                    Err(_) if in_force.is_none() && !required => {
-                        Ok(budgets::DuesBasis { amount: Decimal::new(1400, 0), operating_budget_id: None })
-                    }
+                    Err(_) if in_force.is_none() && !required => Ok(budgets::DuesBasis {
+                        amount: Decimal::new(1400, 0),
+                        operating_budget_id: None,
+                    }),
                     other => other,
                 }
             };
             match basis {
-                Ok(b) if b.amount > Decimal::ZERO => planned.push((unit.clone(), b.amount, b.operating_budget_id)),
-                Ok(_) => skipped.push(format!("{}: zero share", inner.unit_label(&unit.block_id, unit.unit_number))),
-                Err(reason) => skipped.push(format!("{}: {}", inner.unit_label(&unit.block_id, unit.unit_number), reason)),
+                Ok(b) if b.amount > Decimal::ZERO => {
+                    planned.push((unit.clone(), b.amount, b.operating_budget_id))
+                }
+                Ok(_) => skipped.push(format!(
+                    "{}: zero share",
+                    inner.unit_label(&unit.block_id, unit.unit_number)
+                )),
+                Err(reason) => skipped.push(format!(
+                    "{}: {}",
+                    inner.unit_label(&unit.block_id, unit.unit_number),
+                    reason
+                )),
             }
         }
         (units_in_site, planned, skipped, in_force.map(|(id, _)| id))
@@ -1748,7 +1927,12 @@ pub async fn accrue_monthly_dues(
         Some(ref pool) => Some(
             crate::db::tenanted_unit_ids(pool, &payload.site_id)
                 .await
-                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database unavailable: {}", e)))?,
+                .map_err(|e| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        format!("Database unavailable: {}", e),
+                    )
+                })?,
         ),
         None => None,
     };
@@ -1757,12 +1941,18 @@ pub async fn accrue_monthly_dues(
     let period_record = {
         let mut inner = state.inner.write().await;
         let exists = inner.dues_periods.iter().any(|p| {
-            crate::auth::same_id(&p.site_id, &payload.site_id) && p.period_name.eq_ignore_ascii_case(&payload.period)
+            crate::auth::same_id(&p.site_id, &payload.site_id)
+                && p.period_name.eq_ignore_ascii_case(&payload.period)
         });
         if exists {
             None
         } else {
-            let max_p = inner.dues_periods.iter().filter_map(|p| crate::db::parse_id_to_i64(&p.id)).max().unwrap_or(0);
+            let max_p = inner
+                .dues_periods
+                .iter()
+                .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
+                .max()
+                .unwrap_or(0);
             let record = DuesPeriod {
                 id: (max_p + 1).to_string(),
                 site_id: payload.site_id.clone(),
@@ -1778,7 +1968,12 @@ pub async fn accrue_monthly_dues(
     if let (Some(ref pool), Some(ref record)) = (&state.pool, &period_record) {
         crate::db::save_dues_period(pool, record)
             .await
-            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+            .map_err(|e| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!("Database write failed: {}", e),
+                )
+            })?;
     }
 
     // 3. Insert the liabilities. With PostgreSQL the identity column assigns the id
@@ -1798,7 +1993,11 @@ pub async fn accrue_monthly_dues(
             paid_penalty: Decimal::ZERO,
             // Operational dues are the occupant's: the tenant's when the unit is
             // let, otherwise the owner's (same rule as the scheduler).
-            debtor_type: if tenanted.as_ref().map(|t| t.contains(&unit.id)).unwrap_or(unit.tenant_user_id.is_some()) {
+            debtor_type: if tenanted
+                .as_ref()
+                .map(|t| t.contains(&unit.id))
+                .unwrap_or(unit.tenant_user_id.is_some())
+            {
                 DebtorType::Tenant
             } else {
                 DebtorType::Owner
@@ -1809,15 +2008,24 @@ pub async fn accrue_monthly_dues(
         if let Some(ref pool) = state.pool {
             match crate::db::insert_accrued_due(pool, &due)
                 .await
-                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?
-            {
+                .map_err(|e| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        format!("Database write failed: {}", e),
+                    )
+                })? {
                 Some(id) => due.id = id.to_string(),
                 None => continue, // accrued concurrently
             }
             if let Some(ref b) = basis {
                 crate::db::set_due_budget_basis(pool, &due.id, b)
                     .await
-                    .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+                    .map_err(|e| {
+                        (
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            format!("Database write failed: {}", e),
+                        )
+                    })?;
             }
         }
         accrued.push((due, basis));
@@ -1828,7 +2036,14 @@ pub async fn accrue_monthly_dues(
     let newly_accrued_units_count = accrued.len();
     for (mut due, basis) in accrued {
         if due.id.is_empty() {
-            due.id = (inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0) + 1).to_string();
+            due.id = (inner
+                .dues
+                .iter()
+                .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
+                .max()
+                .unwrap_or(0)
+                + 1)
+            .to_string();
         }
         total_amount_accrued += due.principal_amount;
         if let Some(b) = basis {
@@ -1855,7 +2070,11 @@ pub async fn accrue_monthly_dues(
                 message: if skipped.is_empty() {
                     format!("'{}' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi.", payload.period)
                 } else {
-                    format!("'{}' dönemi için tahakkuk yapılamadı: {}", payload.period, skipped.join("; "))
+                    format!(
+                        "'{}' dönemi için tahakkuk yapılamadı: {}",
+                        payload.period,
+                        skipped.join("; ")
+                    )
                 },
                 operating_budget_id: budget_id,
                 legal_basis_warning: None,
@@ -1909,11 +2128,19 @@ pub async fn record_homeowner_payment(
             .iter()
             .find(|u| u.id == payload.unit_id)
             .cloned()
-            .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Unit '{}' not found.", payload.unit_id)))?;
-        let owner_name = unit
-            .owner_user_id
-            .as_ref()
-            .and_then(|uid| inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone()));
+            .ok_or_else(|| {
+                (
+                    StatusCode::NOT_FOUND,
+                    format!("Unit '{}' not found.", payload.unit_id),
+                )
+            })?;
+        let owner_name = unit.owner_user_id.as_ref().and_then(|uid| {
+            inner
+                .users
+                .iter()
+                .find(|u| &u.id == uid)
+                .map(|u| u.full_name.clone())
+        });
         (unit, owner_name)
     };
     let payer_name = payload
@@ -1922,7 +2149,10 @@ pub async fn record_homeowner_payment(
         .filter(|n| !n.trim().is_empty())
         .or(owner_name)
         .unwrap_or_else(|| "Kat Maliki".to_string());
-    let reference = payload.reference_code.clone().filter(|r| !r.trim().is_empty());
+    let reference = payload
+        .reference_code
+        .clone()
+        .filter(|r| !r.trim().is_empty());
 
     // Canonical ingestion (SPEC-005 R1). Recorded by site staff on behalf of the owner.
     let receipt = crate::services::PaymentTrackingService::new(state.clone())
@@ -1968,7 +2198,10 @@ pub async fn record_homeowner_payment(
             cleared_debt, advance_credit, total_unit_advance, receipt.receipt_number
         )
     } else if cleared_debt > Decimal::ZERO {
-        format!("₺{} tutarındaki aidat borcu başarıyla kapatıldı. Makbuz {}.", cleared_debt, receipt.receipt_number)
+        format!(
+            "₺{} tutarındaki aidat borcu başarıyla kapatıldı. Makbuz {}.",
+            cleared_debt, receipt.receipt_number
+        )
     } else {
         format!(
             "Aktif aidat borcu bulunmuyor. ₺{} tutarındaki ödeme avans bakiyenize eklendi (Mevcut Avans: ₺{}). Makbuz {}.",
@@ -1983,7 +2216,9 @@ pub async fn record_homeowner_payment(
         match_id: format!("MATCH-{}", match_seq),
         site_id: unit.site_id.clone(),
         transaction: BankTransactionItem {
-            transaction_id: reference.clone().unwrap_or_else(|| receipt.receipt_number.clone()),
+            transaction_id: reference
+                .clone()
+                .unwrap_or_else(|| receipt.receipt_number.clone()),
             date: Utc::now().date_naive(),
             amount: payload.amount,
             currency: "TRY".to_string(),
@@ -2003,7 +2238,10 @@ pub async fn record_homeowner_payment(
         matched_unit_number: Some(unit.unit_number),
         matched_resident_name: payload.homeowner_name.clone(),
         confidence_score: 100,
-        matched_due_id: receipt.allocation_breakdown.first().and_then(|b| b.due_id.clone()),
+        matched_due_id: receipt
+            .allocation_breakdown
+            .first()
+            .and_then(|b| b.due_id.clone()),
         outstanding_balance: Some(cleared_debt),
         amount_matches_balance: cleared_debt == payload.amount,
         status: ReconciliationStatus::Approved,
@@ -2013,7 +2251,12 @@ pub async fn record_homeowner_payment(
     if let Some(ref pool) = state.pool {
         crate::db::save_reconciliation_match(pool, &r_match)
             .await
-            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+            .map_err(|e| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!("Database write failed: {}", e),
+                )
+            })?;
     }
     inner.reconciliation_queue.push(r_match);
 
@@ -2070,7 +2313,10 @@ pub async fn match_all_homeowner_payments(
                 site_id: Some(site_id),
                 unit_id: record.unit_id.clone(),
                 amount: record.amount,
-                payer_name: record.homeowner_name.clone().unwrap_or_else(|| "Kat Maliki".to_string()),
+                payer_name: record
+                    .homeowner_name
+                    .clone()
+                    .unwrap_or_else(|| "Kat Maliki".to_string()),
                 payer_role: DebtorType::Owner,
                 payment_channel: record.payment_method,
                 description: record.note.clone(),
@@ -2084,7 +2330,13 @@ pub async fn match_all_homeowner_payments(
             .await
             .map_err(|e| {
                 let (code, msg) = payment_error_status(e);
-                (code, format!("Payment {} was not matched: {} ({} matched before it)", record.id, msg, total_processed))
+                (
+                    code,
+                    format!(
+                        "Payment {} was not matched: {} ({} matched before it)",
+                        record.id, msg, total_processed
+                    ),
+                )
             })?;
         let cleared = receipt.allocated_principal + receipt.allocated_penalty;
         if cleared > Decimal::ZERO {
@@ -2115,17 +2367,13 @@ pub async fn match_all_homeowner_payments(
 }
 
 /// Returns the list of homeowner payment records
-pub async fn get_homeowner_payments(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn get_homeowner_payments(State(state): State<AppState>) -> impl IntoResponse {
     let inner = state.inner.read().await;
     (StatusCode::OK, Json(inner.homeowner_payments.clone()))
 }
 
 /// Resets all payments, advance balances, reconciliation items, and dues back to a 100% clean state (₺0.00 debt, 0 transactions)
-pub async fn reset_demo_data(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn reset_demo_data(State(state): State<AppState>) -> impl IntoResponse {
     if crate::state::AppStateInner::is_production() {
         return (
             StatusCode::FORBIDDEN,
@@ -2136,7 +2384,9 @@ pub async fn reset_demo_data(
         );
     }
     if let Some(ref pool) = state.pool {
-        if let Err(e) = crate::db::reset_db_to_seed_data(pool).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = crate::db::reset_db_to_seed_data(pool).await {
+            tracing::error!("Database write failed: {}", e);
+        }
     }
     let mut inner = state.inner.write().await;
     inner.reset_all_payments_and_balances();
@@ -2159,9 +2409,7 @@ pub async fn reset_demo_data(
 }
 
 /// Accrues a single test monthly due (Eylül 2026: ₺1.400,00) for d-14 to test payment clearing
-pub async fn accrue_test_due(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn accrue_test_due(State(state): State<AppState>) -> impl IntoResponse {
     if crate::state::AppStateInner::is_production() {
         return (
             StatusCode::FORBIDDEN,
@@ -2186,9 +2434,7 @@ pub async fn accrue_test_due(
 }
 
 /// Explicitly loads test fixtures on demand (development/testing environments only)
-pub async fn seed_test_fixtures(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn seed_test_fixtures(State(state): State<AppState>) -> impl IntoResponse {
     if crate::state::AppStateInner::is_production() {
         return (
             StatusCode::FORBIDDEN,
@@ -2199,7 +2445,9 @@ pub async fn seed_test_fixtures(
         );
     }
     if let Some(ref pool) = state.pool {
-        if let Err(e) = crate::db::seed_test_data(pool).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = crate::db::seed_test_data(pool).await {
+            tracing::error!("Database write failed: {}", e);
+        }
         let mut inner = state.inner.write().await;
         if let Err(e) = crate::db::load_all_from_db(pool, &mut inner).await {
             tracing::error!("Reloading state from PostgreSQL failed: {}", e);
@@ -2223,11 +2471,11 @@ pub async fn seed_test_fixtures(
 }
 
 /// Clears all business data (sites, users, units, dues, transactions) leaving only system lookups
-pub async fn clear_all_data(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn clear_all_data(State(state): State<AppState>) -> impl IntoResponse {
     if let Some(ref pool) = state.pool {
-        if let Err(e) = crate::db::wipe_all_db_data(pool).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = crate::db::wipe_all_db_data(pool).await {
+            tracing::error!("Database write failed: {}", e);
+        }
     }
     let mut inner = state.inner.write().await;
     inner.clear_all_data();
@@ -2250,9 +2498,7 @@ pub async fn clear_all_data(
 }
 
 /// Drops all tables, recreates schema with auto-increment BIGINT identity, and seeds fresh initial state
-pub async fn recreate_db(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn recreate_db(State(state): State<AppState>) -> impl IntoResponse {
     if crate::state::AppStateInner::is_production() {
         return (
             StatusCode::FORBIDDEN,
@@ -2296,9 +2542,7 @@ pub async fn recreate_db(
 }
 
 /// Fully restores the application and database back to pristine initial seed fixtures
-pub async fn reset_to_initial_state(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn reset_to_initial_state(State(state): State<AppState>) -> impl IntoResponse {
     if crate::state::AppStateInner::is_production() {
         return (
             StatusCode::FORBIDDEN,
@@ -2343,9 +2587,7 @@ pub async fn reset_to_initial_state(
 
 /// Completely wipes all data across the platform: all sites, units, homeowners, tenants,
 /// residents, dues, transactions, and balances — yielding a 100% fresh start (Zero-Data State).
-pub async fn wipe_all_data(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn wipe_all_data(State(state): State<AppState>) -> impl IntoResponse {
     if crate::state::AppStateInner::is_production() {
         return (
             StatusCode::FORBIDDEN,
@@ -2379,7 +2621,9 @@ pub async fn wipe_all_data(
             full_name: "SaaS Platform Admin".to_string(),
             email: "admin@sitepulse.io".to_string(),
             phone: "+90 850 555 0000".to_string(),
-            password_hash: Some(crate::auth::hash_password(&crate::state::bootstrap_admin_password())),
+            password_hash: Some(crate::auth::hash_password(
+                &crate::state::bootstrap_admin_password(),
+            )),
             role: crate::models::Role::SaasAdmin,
             must_change_password: true,
             auth_provider: AuthProvider::Local,
@@ -2402,9 +2646,7 @@ pub async fn wipe_all_data(
     )
 }
 
-pub async fn sync_db(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn sync_db(State(state): State<AppState>) -> impl IntoResponse {
     if let Some(ref pool) = state.pool {
         let inner = state.inner.read().await;
         if let Err(e) = crate::db::sync_all_in_memory_to_db(pool, &inner).await {
@@ -2441,7 +2683,10 @@ pub async fn sync_db(
 /// Deletes every row of one site in a single transaction, child tables first.
 /// The append-only ledger guard (V16) is lifted for this transaction only via
 /// `sitepulse.allow_ledger_purge`; callers must be non-production test rollbacks.
-async fn purge_site_rows(pool: &deadpool_postgres::Pool, site_id: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn purge_site_rows(
+    pool: &deadpool_postgres::Pool,
+    site_id: i64,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     const UNIT_SCOPED: &[&str] = &[
         "payment_allocations WHERE payment_entry_id IN (SELECT id FROM payment_entries WHERE site_id = $1)",
         "payment_allocations WHERE dues_liability_id IN (SELECT d.id FROM dues_liabilities d JOIN units u ON u.id = d.unit_id WHERE u.site_id = $1)",
@@ -2482,7 +2727,8 @@ async fn purge_site_rows(pool: &deadpool_postgres::Pool, site_id: i64) -> Result
     ];
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
-    tx.batch_execute("SET LOCAL sitepulse.allow_ledger_purge = 'on'").await?;
+    tx.batch_execute("SET LOCAL sitepulse.allow_ledger_purge = 'on'")
+        .await?;
     for target in UNIT_SCOPED {
         let table = target.split_whitespace().next().unwrap_or_default();
         let exists: bool = tx
@@ -2490,7 +2736,8 @@ async fn purge_site_rows(pool: &deadpool_postgres::Pool, site_id: i64) -> Result
             .await?
             .get(0);
         if exists {
-            tx.execute(&format!("DELETE FROM {}", target), &[&site_id]).await?;
+            tx.execute(&format!("DELETE FROM {}", target), &[&site_id])
+                .await?;
         }
     }
     tx.commit().await?;
@@ -2516,28 +2763,41 @@ pub async fn purge_site_cascade(
     if let Some(ref pool) = state.pool {
         let site_id_num = match site_id.parse::<i64>() {
             Ok(n) => n,
-            Err(_) => return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"status": "ERROR", "message": format!("Invalid site id '{}'", site_id)}))
-            ),
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(
+                        serde_json::json!({"status": "ERROR", "message": format!("Invalid site id '{}'", site_id)}),
+                    ),
+                )
+            }
         };
         if let Err(e) = purge_site_rows(pool, site_id_num).await {
             tracing::error!("Site purge failed: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"status": "ERROR", "message": format!("Site purge failed: {}", e)}))
+                Json(
+                    serde_json::json!({"status": "ERROR", "message": format!("Site purge failed: {}", e)}),
+                ),
             );
         }
     }
 
     let mut inner = state.inner.write().await;
-    let unit_ids: Vec<String> = inner.units.iter().filter(|u| u.site_id == site_id).map(|u| u.id.clone()).collect();
+    let unit_ids: Vec<String> = inner
+        .units
+        .iter()
+        .filter(|u| u.site_id == site_id)
+        .map(|u| u.id.clone())
+        .collect();
     inner.units.retain(|u| u.site_id != site_id);
     inner.users.retain(|u| u.site_id != site_id);
     inner.dues.retain(|d| !unit_ids.contains(&d.unit_id));
     for uid in &unit_ids {
         inner.advance_balances.remove(uid);
-        inner.reconciliation_queue.retain(|q| q.matched_unit_id.as_deref() != Some(uid.as_str()));
+        inner
+            .reconciliation_queue
+            .retain(|q| q.matched_unit_id.as_deref() != Some(uid.as_str()));
         inner.unit_members.remove(uid);
     }
     inner.sites.retain(|s| s.id != site_id);
@@ -2550,7 +2810,7 @@ pub async fn purge_site_cascade(
             "remaining_sites_count": inner.sites.len(),
             "remaining_units_count": inner.units.len(),
             "remaining_users_count": inner.users.len()
-        }))
+        })),
     )
 }
 
@@ -2570,20 +2830,38 @@ pub async fn provision_site_units(
         );
     }
 
-    let block_name = payload.block.clone().unwrap_or_else(|| "A Blok".to_string());
+    let block_name = payload
+        .block
+        .clone()
+        .unwrap_or_else(|| "A Blok".to_string());
     let units_count = payload.units_count.unwrap_or(12).clamp(1, 48);
-    let monthly_dues = payload.monthly_dues.unwrap_or_else(|| Decimal::from_str_exact("1400.00").unwrap());
+    let monthly_dues = payload
+        .monthly_dues
+        .unwrap_or_else(|| Decimal::from_str_exact("1400.00").unwrap());
     let accrue_dues = payload.accrue_initial_dues.unwrap_or(true);
-    let dues_period = payload.period.clone().unwrap_or_else(|| "Ekim 2026".to_string());
+    let dues_period = payload
+        .period
+        .clone()
+        .unwrap_or_else(|| "Ekim 2026".to_string());
 
     // 1. Resolve or register target site
-    let s_name = payload.site_name.clone().unwrap_or_else(|| "Yeni Yaşam Sitesi".to_string());
+    let s_name = payload
+        .site_name
+        .clone()
+        .unwrap_or_else(|| "Yeni Yaşam Sitesi".to_string());
     let slug = crate::services::to_slug(&s_name);
 
     let site_id = if let Some(ref s_id) = payload.site_id {
         let in_mem = {
             let inner = state.inner.read().await;
-            inner.sites.iter().find(|s| s.id == *s_id || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(s_id)).map(|s| s.id.clone())
+            inner
+                .sites
+                .iter()
+                .find(|s| {
+                    s.id == *s_id
+                        || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(s_id)
+                })
+                .map(|s| s.id.clone())
         };
         if let Some(id) = in_mem {
             id
@@ -2642,7 +2920,8 @@ pub async fn provision_site_units(
                         slug: s_slug.unwrap_or_else(|| slug.clone()),
                         status: st,
                         plan_type: plan,
-                        license_end_date: lic_end.unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
+                        license_end_date: lic_end
+                            .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
                         timezone: crate::models::default_site_timezone(),
                         tax_id: None,
                         tax_office: None,
@@ -2670,7 +2949,11 @@ pub async fn provision_site_units(
     } else {
         let in_mem = {
             let inner = state.inner.read().await;
-            inner.sites.iter().find(|s| s.slug == slug || s.name.eq_ignore_ascii_case(&s_name)).map(|s| s.id.clone())
+            inner
+                .sites
+                .iter()
+                .find(|s| s.slug == slug || s.name.eq_ignore_ascii_case(&s_name))
+                .map(|s| s.id.clone())
         };
         if let Some(id) = in_mem {
             id
@@ -2717,7 +3000,8 @@ pub async fn provision_site_units(
                         slug: s_slug.unwrap_or_else(|| slug.clone()),
                         status: st,
                         plan_type: plan,
-                        license_end_date: lic_end.unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
+                        license_end_date: lic_end
+                            .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
                         timezone: crate::models::default_site_timezone(),
                         tax_id: None,
                         tax_office: None,
@@ -2768,10 +3052,19 @@ pub async fn provision_site_units(
             }
         } else {
             let mut inner = state.inner.write().await;
-            if let Some(existing) = inner.sites.iter().find(|s| s.slug == slug || s.name.eq_ignore_ascii_case(&s_name)) {
+            if let Some(existing) = inner
+                .sites
+                .iter()
+                .find(|s| s.slug == slug || s.name.eq_ignore_ascii_case(&s_name))
+            {
                 existing.id.clone()
             } else {
-                let max_id = inner.sites.iter().filter_map(|s| crate::db::parse_id_to_i64(&s.id)).max().unwrap_or(0);
+                let max_id = inner
+                    .sites
+                    .iter()
+                    .filter_map(|s| crate::db::parse_id_to_i64(&s.id))
+                    .max()
+                    .unwrap_or(0);
                 let id_str = (max_id + 1).to_string();
                 inner.sites.push(Site {
                     id: id_str.clone(),
@@ -2791,7 +3084,12 @@ pub async fn provision_site_units(
     };
 
     let mut inner = state.inner.write().await;
-    let site_name = inner.sites.iter().find(|s| s.id == site_id).map(|s| s.name.clone()).unwrap_or_else(|| "Site".to_string());
+    let site_name = inner
+        .sites
+        .iter()
+        .find(|s| s.id == site_id)
+        .map(|s| s.name.clone())
+        .unwrap_or_else(|| "Site".to_string());
 
     // 2. Sample 12 Turkish resident names
     let sample_names = [
@@ -2820,41 +3118,62 @@ pub async fn provision_site_units(
         let email = format!("daire{}@{}.com", i, site_slug);
         let phone = format!("+90 532 555 {:04}", i + 100);
 
-        let virtual_iban = VirtualIbanService::generate_virtual_iban(
+        let virtual_iban = match VirtualIbanService::generate_virtual_iban(
             VirtualIbanService::KUVEYT_TURK_BANK_CODE,
             &site_id,
             &block_name,
             unit_number,
-        );
-
-        // Add or update resident user
-        let user_id = if let Some(existing_user) = inner.users.iter_mut().find(|u| u.email == email || (u.site_id == site_id && u.full_name == resident_name)) {
-            existing_user.full_name = resident_name.clone();
-            existing_user.phone = phone.clone();
-            existing_user.id.clone()
-        } else {
-            let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
-            let u_id = (max_u + 1).to_string();
-            inner.users.push(User {
-                id: u_id.clone(),
-                site_id: site_id.clone(),
-                full_name: resident_name.clone(),
-                email: email.clone(),
-                phone: phone.clone(),
-                password_hash: Some(crate::auth::hash_password(&crate::auth::generate_temporary_password("SP-SAKIN-"))),
-                role: Role::HomeOwner,
-                must_change_password: true,
-                auth_provider: AuthProvider::Local,
-                google_sub: None,
-                avatar_url: None,
-                created_at: Utc::now(),
-                person_id: None,
-            });
-            u_id
+        ) {
+            Ok(iban) => iban,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "status": "ERROR", "message": e.to_string() })),
+                )
+            }
         };
 
+        // Add or update resident user
+        let user_id =
+            if let Some(existing_user) = inner.users.iter_mut().find(|u| {
+                u.email == email || (u.site_id == site_id && u.full_name == resident_name)
+            }) {
+                existing_user.full_name = resident_name.clone();
+                existing_user.phone = phone.clone();
+                existing_user.id.clone()
+            } else {
+                let max_u = inner
+                    .users
+                    .iter()
+                    .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
+                    .max()
+                    .unwrap_or(0);
+                let u_id = (max_u + 1).to_string();
+                inner.users.push(User {
+                    id: u_id.clone(),
+                    site_id: site_id.clone(),
+                    full_name: resident_name.clone(),
+                    email: email.clone(),
+                    phone: phone.clone(),
+                    password_hash: Some(crate::auth::hash_password(
+                        &crate::auth::generate_temporary_password("SP-SAKIN-"),
+                    )),
+                    role: Role::HomeOwner,
+                    must_change_password: true,
+                    auth_provider: AuthProvider::Local,
+                    google_sub: None,
+                    avatar_url: None,
+                    created_at: Utc::now(),
+                    person_id: None,
+                });
+                u_id
+            };
+
         // Add or update independent flat
-        let existing_pos = inner.units.iter().position(|u| u.site_id == site_id && u.unit_number == unit_number);
+        let existing_pos = inner
+            .units
+            .iter()
+            .position(|u| u.site_id == site_id && u.unit_number == unit_number);
         let unit_id = if let Some(pos) = existing_pos {
             let u = &mut inner.units[pos];
             u.block_id = block_name.clone();
@@ -2863,7 +3182,12 @@ pub async fn provision_site_units(
             u.virtual_iban = Some(virtual_iban.clone());
             u.id.clone()
         } else {
-            let max_unit = inner.units.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            let max_unit = inner
+                .units
+                .iter()
+                .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
+                .max()
+                .unwrap_or(0);
             let new_unit_id = (max_unit + 1).to_string();
             inner.units.push(IndependentUnit {
                 id: new_unit_id.clone(),
@@ -2875,23 +3199,44 @@ pub async fn provision_site_units(
                 owner_user_id: Some(user_id.clone()),
                 tenant_user_id: None,
                 virtual_iban: Some(virtual_iban.clone()),
-                house_type: Some(if unit_number % 2 == 0 { "3+1".to_string() } else { "2+1".to_string() }),
+                house_type: Some(if unit_number % 2 == 0 {
+                    "3+1".to_string()
+                } else {
+                    "2+1".to_string()
+                }),
             });
             new_unit_id
         };
 
         // Matching criteria & sender IBAN
-        inner.unit_payer_names.insert(unit_id.clone(), vec![resident_name.clone()]);
+        inner
+            .unit_payer_names
+            .insert(unit_id.clone(), vec![resident_name.clone()]);
         let sample_sender_iban = format!("TR{:02}000620000000000000{:04}", (i % 80) + 10, i);
-        inner.remembered_sender_ibans.insert(sample_sender_iban.clone(), unit_id.clone());
+        inner
+            .remembered_sender_ibans
+            .insert(sample_sender_iban.clone(), unit_id.clone());
         inner.sender_iban_metadata.insert(
             sample_sender_iban.clone(),
-            (Some(format!("Garanti BBVA - {}", resident_name)), Some("Garanti BBVA".to_string())),
+            (
+                Some(format!("Garanti BBVA - {}", resident_name)),
+                Some("Garanti BBVA".to_string()),
+            ),
         );
 
         // Optional dues accrual
-        if accrue_dues && !inner.dues.iter().any(|d| d.unit_id == unit_id && d.period == dues_period) {
-            let max_due = inner.dues.iter().filter_map(|d| crate::db::parse_id_to_i64(&d.id)).max().unwrap_or(0);
+        if accrue_dues
+            && !inner
+                .dues
+                .iter()
+                .any(|d| d.unit_id == unit_id && d.period == dues_period)
+        {
+            let max_due = inner
+                .dues
+                .iter()
+                .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
+                .max()
+                .unwrap_or(0);
             let due_id = (max_due + 1).to_string();
             inner.dues.push(DuesLiability {
                 id: due_id,
@@ -2914,7 +3259,9 @@ pub async fn provision_site_units(
         // Auto-offset against any pre-existing advance balance for this unit
         apply_advance_payments_offset(&mut inner, Some(&unit_id));
 
-        let current_debt: Decimal = inner.dues.iter()
+        let current_debt: Decimal = inner
+            .dues
+            .iter()
             .filter(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid)
             .map(|d| d.total_amount)
             .sum();
@@ -2937,41 +3284,70 @@ pub async fn provision_site_units(
 
     if let Some(ref pool) = state.pool {
         let snapshot = inner.clone();
-        if let Err(e) = crate::db::sync_all_in_memory_to_db(pool, &snapshot).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = crate::db::sync_all_in_memory_to_db(pool, &snapshot).await {
+            tracing::error!("Database write failed: {}", e);
+        }
     }
 
     let total_volume = monthly_dues * Decimal::from(units_count);
 
     (
         StatusCode::OK,
-        Json(serde_json::to_value(ProvisionSiteUnitsResponse {
-            status: "SUCCESS".to_string(),
-            message: format!("{} için {} daire ve sakin kaydı başarıyla oluşturuldu.", site_name, units_count),
-            site_id,
-            site_name,
-            units_count,
-            total_monthly_dues_volume: total_volume,
-            units: provisioned_dtos,
-        }).unwrap()),
+        Json(
+            serde_json::to_value(ProvisionSiteUnitsResponse {
+                status: "SUCCESS".to_string(),
+                message: format!(
+                    "{} için {} daire ve sakin kaydı başarıyla oluşturuldu.",
+                    site_name, units_count
+                ),
+                site_id,
+                site_name,
+                units_count,
+                total_monthly_dues_volume: total_volume,
+                units: provisioned_dtos,
+            })
+            .unwrap(),
+        ),
     )
 }
 
 /// Returns a summary list of all units in the system for testing & simulator dropdowns
-pub async fn get_units_summary(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn get_units_summary(State(state): State<AppState>) -> impl IntoResponse {
     let inner = state.inner.read().await;
     let mut result = Vec::new();
 
     for unit in &inner.units {
-        let site_name = inner.sites.iter().find(|s| s.id == unit.site_id).map(|s| s.name.clone()).unwrap_or_else(|| "Site".to_string());
-        let resident_name = unit.owner_user_id.as_ref().and_then(|uid| {
-            inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone())
-        }).unwrap_or_else(|| format!("Daire Sakini {}", unit.unit_number));
-        let email = unit.owner_user_id.as_ref().and_then(|uid| {
-            inner.users.iter().find(|u| &u.id == uid).map(|u| u.email.clone())
-        }).unwrap_or_default();
-        let current_debt: Decimal = inner.dues.iter()
+        let site_name = inner
+            .sites
+            .iter()
+            .find(|s| s.id == unit.site_id)
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| "Site".to_string());
+        let resident_name = unit
+            .owner_user_id
+            .as_ref()
+            .and_then(|uid| {
+                inner
+                    .users
+                    .iter()
+                    .find(|u| &u.id == uid)
+                    .map(|u| u.full_name.clone())
+            })
+            .unwrap_or_else(|| format!("Daire Sakini {}", unit.unit_number));
+        let email = unit
+            .owner_user_id
+            .as_ref()
+            .and_then(|uid| {
+                inner
+                    .users
+                    .iter()
+                    .find(|u| &u.id == uid)
+                    .map(|u| u.email.clone())
+            })
+            .unwrap_or_default();
+        let current_debt: Decimal = inner
+            .dues
+            .iter()
             .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
             .map(|d| d.total_amount)
             .sum();
@@ -3010,7 +3386,12 @@ pub async fn get_site_payments(
     // 1. Resolve site
     let site = if let Some(ref s_id) = query.site_id {
         if s_id != "undefined" && !s_id.is_empty() {
-            inner.sites.iter().find(|s| &s.id == s_id).cloned().or_else(|| inner.sites.first().cloned())
+            inner
+                .sites
+                .iter()
+                .find(|s| &s.id == s_id)
+                .cloned()
+                .or_else(|| inner.sites.first().cloned())
         } else {
             inner.sites.first().cloned()
         }
@@ -3018,17 +3399,21 @@ pub async fn get_site_payments(
         inner.sites.first().cloned()
     };
 
-    let site_id = site.as_ref().map(|s| s.id.clone()).unwrap_or_else(|| query.site_id.clone().unwrap_or_default());
+    let site_id = site
+        .as_ref()
+        .map(|s| s.id.clone())
+        .unwrap_or_else(|| query.site_id.clone().unwrap_or_default());
     let site_name = site.as_ref().map(|s| s.name.clone()).unwrap_or_default();
 
     // 2. Units in this site
-    let site_units: Vec<_> = inner.units.iter().filter(|u| u.site_id == site_id).collect();
+    let site_units: Vec<_> = inner
+        .units
+        .iter()
+        .filter(|u| u.site_id == site_id)
+        .collect();
     let site_unit_ids: Vec<String> = site_units.iter().map(|u| u.id.clone()).collect();
 
-    let total_advance: Decimal = site_units
-        .iter()
-        .map(|u| inner.advance_total(&u.id))
-        .sum();
+    let total_advance: Decimal = site_units.iter().map(|u| inner.advance_total(&u.id)).sum();
 
     // 3. Collect payments from reconciliation_queue and homeowner_payments for units of this site
     let mut payments = Vec::new();
@@ -3044,7 +3429,9 @@ pub async fn get_site_payments(
 
         if is_site_item {
             total_collected += item.transaction.amount;
-            let flat_label = if let (Some(ref b), Some(u_num)) = (&item.matched_block, item.matched_unit_number) {
+            let flat_label = if let (Some(ref b), Some(u_num)) =
+                (&item.matched_block, item.matched_unit_number)
+            {
                 inner.unit_label(b, u_num)
             } else {
                 "Daire Belirlenemedi".to_string()
@@ -3055,7 +3442,11 @@ pub async fn get_site_payments(
 
             // Look up unit's virtual account number (Virtual IBAN)
             let virtual_iban = item.matched_unit_id.as_ref().and_then(|uid| {
-                inner.units.iter().find(|u| &u.id == uid).and_then(|u| u.virtual_iban.clone())
+                inner
+                    .units
+                    .iter()
+                    .find(|u| &u.id == uid)
+                    .and_then(|u| u.virtual_iban.clone())
             });
 
             // Check if there is a linked homeowner payment to detect exact method (e.g. CREDIT_CARD)
@@ -3093,13 +3484,20 @@ pub async fn get_site_payments(
                 ("BANK_TRANSFER", "Banka Havale / EFT")
             };
 
-            let resolved_resident_name = item.matched_resident_name.clone()
+            let resolved_resident_name = item
+                .matched_resident_name
+                .clone()
                 .or_else(|| item.transaction.sender_name.clone())
                 .or_else(|| {
                     item.matched_unit_id.as_ref().and_then(|uid| {
-                        inner.units.iter().find(|u| &u.id == uid)
+                        inner
+                            .units
+                            .iter()
+                            .find(|u| &u.id == uid)
                             .and_then(|u| u.owner_user_id.as_ref())
-                            .and_then(|owner_id| inner.users.iter().find(|user| &user.id == owner_id))
+                            .and_then(|owner_id| {
+                                inner.users.iter().find(|user| &user.id == owner_id)
+                            })
                             .map(|user| user.full_name.clone())
                     })
                 })
@@ -3137,7 +3535,9 @@ pub async fn get_site_payments(
         if site_unit_ids.contains(&hp.unit_id) {
             let already_included = payments.iter().any(|p| {
                 p.get("transaction_id").and_then(|t| t.as_str()) == Some(&hp.id)
-                    || (hp.reference_code.is_some() && p.get("transaction_id").and_then(|t| t.as_str()) == hp.reference_code.as_deref())
+                    || (hp.reference_code.is_some()
+                        && p.get("transaction_id").and_then(|t| t.as_str())
+                            == hp.reference_code.as_deref())
             });
 
             if !already_included {
@@ -3203,16 +3603,19 @@ pub async fn get_site_payments(
         ""
     };
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "site_id": site_id,
-        "site_name": site_name,
-        "total_units_count": site_units.len(),
-        "total_collected": total_collected.to_string(),
-        "total_advance_balance": total_advance.to_string(),
-        "payments_count": payments_count,
-        "payments": payments,
-        "guidance": guidance
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "site_id": site_id,
+            "site_name": site_name,
+            "total_units_count": site_units.len(),
+            "total_collected": total_collected.to_string(),
+            "total_advance_balance": total_advance.to_string(),
+            "payments_count": payments_count,
+            "payments": payments,
+            "guidance": guidance
+        })),
+    )
 }
 
 /// Returns the comprehensive overview for the Site Manager:
@@ -3231,11 +3634,39 @@ pub async fn get_site_overview(
 
     // 1. Resolve site
     let site = if let Some(ref s_id) = query.site_id {
-        inner.sites.iter().find(|s| &s.id == s_id || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(s_id)).cloned()
+        inner
+            .sites
+            .iter()
+            .find(|s| {
+                &s.id == s_id
+                    || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(s_id)
+            })
+            .cloned()
     } else {
-        inner.sites.iter()
-            .find(|s| inner.units.iter().filter(|u| u.site_id == s.id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&s.id)).count() >= 12)
-            .or_else(|| inner.sites.iter().find(|s| inner.units.iter().any(|u| u.site_id == s.id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&s.id))))
+        inner
+            .sites
+            .iter()
+            .find(|s| {
+                inner
+                    .units
+                    .iter()
+                    .filter(|u| {
+                        u.site_id == s.id
+                            || crate::db::parse_id_to_i64(&u.site_id)
+                                == crate::db::parse_id_to_i64(&s.id)
+                    })
+                    .count()
+                    >= 12
+            })
+            .or_else(|| {
+                inner.sites.iter().find(|s| {
+                    inner.units.iter().any(|u| {
+                        u.site_id == s.id
+                            || crate::db::parse_id_to_i64(&u.site_id)
+                                == crate::db::parse_id_to_i64(&s.id)
+                    })
+                })
+            })
             .or_else(|| inner.sites.first())
             .cloned()
     };
@@ -3245,27 +3676,46 @@ pub async fn get_site_overview(
     let address = site.as_ref().map(|s| s.address.clone()).unwrap_or_default();
 
     // 2. Resolve manager name & email
-    let (manager_name, manager_email) = inner.users.iter()
-        .find(|u| (!site_id.is_empty() && (u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&site_id))) && (u.role == Role::SiteManager || u.email.contains("yonetici") || u.email.contains("manager")))
+    let (manager_name, manager_email) = inner
+        .users
+        .iter()
+        .find(|u| {
+            (!site_id.is_empty()
+                && (u.site_id == site_id
+                    || crate::db::parse_id_to_i64(&u.site_id)
+                        == crate::db::parse_id_to_i64(&site_id)))
+                && (u.role == Role::SiteManager
+                    || u.email.contains("yonetici")
+                    || u.email.contains("manager"))
+        })
         .map(|u| (u.full_name.clone(), u.email.clone()))
         .unwrap_or_else(|| ("Site Yöneticisi".to_string(), String::new()));
 
     // 3. Collect available periods for this site from dues_periods and dues
     let mut available_periods: Vec<String> = Vec::new();
-    let site_unit_ids: Vec<String> = inner.units.iter()
-        .filter(|u| u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&site_id))
+    let site_unit_ids: Vec<String> = inner
+        .units
+        .iter()
+        .filter(|u| {
+            u.site_id == site_id
+                || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&site_id)
+        })
         .map(|u| u.id.clone())
         .collect();
 
     for p in &inner.dues_periods {
-        if (p.site_id == site_id || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&site_id))
-            && !available_periods.contains(&p.period_name) {
+        if (p.site_id == site_id
+            || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&site_id))
+            && !available_periods.contains(&p.period_name)
+        {
             available_periods.push(p.period_name.clone());
         }
     }
 
     for due in &inner.dues {
-        if (site_unit_ids.contains(&due.unit_id) || site_unit_ids.is_empty()) && !available_periods.contains(&due.period) {
+        if (site_unit_ids.contains(&due.unit_id) || site_unit_ids.is_empty())
+            && !available_periods.contains(&due.period)
+        {
             available_periods.push(due.period.clone());
         }
     }
@@ -3297,15 +3747,26 @@ pub async fn get_site_overview(
 
     available_periods.sort_by_key(|p| std::cmp::Reverse(period_sort_key(p)));
 
-    let selected_period = query.period.unwrap_or_else(|| {
-        available_periods.first().cloned().unwrap_or_default()
-    });
+    let selected_period = query
+        .period
+        .unwrap_or_else(|| available_periods.first().cloned().unwrap_or_default());
 
     // 4. Available sites list for site switcher (deduplicated by name)
     let mut available_sites: Vec<crate::models::SiteSummaryBriefDto> = Vec::new();
     for s in &inner.sites {
-        if !available_sites.iter().any(|existing| existing.name == s.name) {
-            let count = inner.units.iter().filter(|u| u.site_id == s.id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&s.id)).count();
+        if !available_sites
+            .iter()
+            .any(|existing| existing.name == s.name)
+        {
+            let count = inner
+                .units
+                .iter()
+                .filter(|u| {
+                    u.site_id == s.id
+                        || crate::db::parse_id_to_i64(&u.site_id)
+                            == crate::db::parse_id_to_i64(&s.id)
+                })
+                .count();
             available_sites.push(crate::models::SiteSummaryBriefDto {
                 id: s.id.clone(),
                 name: s.name.clone(),
@@ -3326,14 +3787,24 @@ pub async fn get_site_overview(
                 "3" | "blok-C" => "C".to_string(),
                 "4" | "blok-D" => "D".to_string(),
                 _ => {
-                    let clean = blk_id.to_uppercase().replace("BLOK", "").replace(['-', '_', ' '], "").trim().to_string();
-                    if clean.is_empty() { blk_id.to_string() } else { clean }
+                    let clean = blk_id
+                        .to_uppercase()
+                        .replace("BLOK", "")
+                        .replace(['-', '_', ' '], "")
+                        .trim()
+                        .to_string();
+                    if clean.is_empty() {
+                        blk_id.to_string()
+                    } else {
+                        clean
+                    }
                 }
             }
         };
 
         for u in &inner.units {
-            let matches_site = u.site_id == site_id || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&site_id);
+            let matches_site = u.site_id == site_id
+                || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&site_id);
             if matches_site {
                 let clean_blk = normalize_block(&u.block_id);
                 if seen_units.insert((clean_blk, u.unit_number)) {
@@ -3361,25 +3832,53 @@ pub async fn get_site_overview(
     let mut overdue_count = 0;
 
     for unit in &matching_units {
-        let resident_name = unit.tenant_user_id.as_ref().and_then(|uid| {
-            inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone())
-        }).or_else(|| {
-            unit.owner_user_id.as_ref().and_then(|uid| {
-                inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone())
+        let resident_name = unit
+            .tenant_user_id
+            .as_ref()
+            .and_then(|uid| {
+                inner
+                    .users
+                    .iter()
+                    .find(|u| &u.id == uid)
+                    .map(|u| u.full_name.clone())
             })
-        }).or_else(|| {
-            inner.unit_payer_names.get(&unit.id).and_then(|names| names.first().cloned())
-        }).unwrap_or_else(|| format!("Daire Sakini {}", unit.unit_number));
+            .or_else(|| {
+                unit.owner_user_id.as_ref().and_then(|uid| {
+                    inner
+                        .users
+                        .iter()
+                        .find(|u| &u.id == uid)
+                        .map(|u| u.full_name.clone())
+                })
+            })
+            .or_else(|| {
+                inner
+                    .unit_payer_names
+                    .get(&unit.id)
+                    .and_then(|names| names.first().cloned())
+            })
+            .unwrap_or_else(|| format!("Daire Sakini {}", unit.unit_number));
 
         // Find due for this unit in the selected period
-        let due_opt = inner.dues.iter().find(|d| d.unit_id == unit.id && d.period == selected_period);
+        let due_opt = inner
+            .dues
+            .iter()
+            .find(|d| d.unit_id == unit.id && d.period == selected_period);
         let advance = inner.advance_total(&unit.id);
         total_advance += advance;
 
         let (amount_due, is_paid, days_overdue, paid_date_str) = if let Some(due) = due_opt {
             let is_p = due.status == DebtStatus::Paid;
-            let days_o = if due.status == DebtStatus::Overdue { 15 } else { 0 };
-            let p_date = if is_p { Some("Ödendi".to_string()) } else { None };
+            let days_o = if due.status == DebtStatus::Overdue {
+                15
+            } else {
+                0
+            };
+            let p_date = if is_p {
+                Some("Ödendi".to_string())
+            } else {
+                None
+            };
             (due.total_amount, is_p, days_o, p_date)
         } else {
             (Decimal::ZERO, true, 0, None)
@@ -3402,8 +3901,18 @@ pub async fn get_site_overview(
             "3" => "C".to_string(),
             "4" => "D".to_string(),
             _ => {
-                let clean = unit.block_id.to_uppercase().replace("BLOK", "").replace(['-', '_', ' '], "").trim().to_string();
-                if clean.is_empty() { unit.block_id.clone() } else { clean }
+                let clean = unit
+                    .block_id
+                    .to_uppercase()
+                    .replace("BLOK", "")
+                    .replace(['-', '_', ' '], "")
+                    .trim()
+                    .to_string();
+                if clean.is_empty() {
+                    unit.block_id.clone()
+                } else {
+                    clean
+                }
             }
         };
 
@@ -3427,7 +3936,13 @@ pub async fn get_site_overview(
     let total_units_count = flats.len();
     let collection_percentage = if total_expected > Decimal::ZERO {
         let ratio = (total_collected / total_expected) * Decimal::from(100);
-        ratio.to_string().split('.').next().unwrap_or("0").parse::<u32>().unwrap_or(0)
+        ratio
+            .to_string()
+            .split('.')
+            .next()
+            .unwrap_or("0")
+            .parse::<u32>()
+            .unwrap_or(0)
     } else {
         100
     };
@@ -3467,7 +3982,10 @@ pub async fn get_site_overview(
         guidance,
     };
 
-    (StatusCode::OK, Json(serde_json::to_value(response).unwrap()))
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap()),
+    )
 }
 
 pub async fn get_payment_stream(
@@ -3524,22 +4042,38 @@ pub async fn reverse_payment(
     Json(mut payload): Json<crate::models::ReversePaymentRequest>,
 ) -> Result<(StatusCode, Json<crate::models::ReversePaymentResponse>), (StatusCode, String)> {
     if !claims.is_site_staff() {
-        return Err((StatusCode::FORBIDDEN, "Only site staff may reverse payments".to_string()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only site staff may reverse payments".to_string(),
+        ));
     }
-    if payload.site_id.as_deref().map(str::trim).unwrap_or("").is_empty() {
+    if payload
+        .site_id
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or("")
+        .is_empty()
+    {
         payload.site_id = Some(claims.site_id.clone());
     }
     let actor = format!("user:{} <{}>", claims.sub, claims.email);
     let site_id = payload.site_id.clone().unwrap_or_default();
     let service = crate::services::PaymentTrackingService::new(state.clone());
-    let reversal = service.reverse_payment(payload, &actor).await.map_err(payment_error_status)?;
+    let reversal = service
+        .reverse_payment(payload, &actor)
+        .await
+        .map_err(payment_error_status)?;
     // A reversed card payment is refunded at the provider (SPEC-007 R4).
     if reversal.reversal_receipt.payment_channel == PaymentChannel::CreditCard {
         if let Err(e) = crate::services::CardPaymentService::new(state)
             .refund_for_receipt(&site_id, &reversal.reversed_receipt_number)
             .await
         {
-            tracing::error!("Card refund for {} was not completed: {}", reversal.reversed_receipt_number, e);
+            tracing::error!(
+                "Card refund for {} was not completed: {}",
+                reversal.reversed_receipt_number,
+                e
+            );
         }
     }
     Ok((StatusCode::CREATED, Json(reversal)))
@@ -3555,7 +4089,9 @@ pub async fn snapshot_debt_aging(
         .snapshot_debt_aging(q.site_id.as_deref().filter(|s| !s.trim().is_empty()))
         .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
-    Ok(Json(serde_json::json!({ "status": "OK", "rows": rows, "as_of_date": Utc::now().date_naive() })))
+    Ok(Json(
+        serde_json::json!({ "status": "OK", "rows": rows, "as_of_date": Utc::now().date_naive() }),
+    ))
 }
 
 pub async fn get_payment_receipt(
@@ -3566,7 +4102,10 @@ pub async fn get_payment_receipt(
 ) -> Result<Json<crate::models::PaymentReceipt>, (StatusCode, String)> {
     let site_id = q.site_id.unwrap_or_else(|| claims.site_id.clone());
     let service = crate::services::PaymentTrackingService::new(state);
-    let receipt = service.get_receipt(&site_id, &id).await.map_err(|e| (StatusCode::NOT_FOUND, e))?;
+    let receipt = service
+        .get_receipt(&site_id, &id)
+        .await
+        .map_err(|e| (StatusCode::NOT_FOUND, e))?;
     // Residents may only read receipts issued for their own unit.
     if !claims.is_site_staff() {
         let own = claims.unit_id.as_deref().unwrap_or("");
@@ -3621,11 +4160,12 @@ pub async fn get_capital_project(
     Path(id): Path<String>,
 ) -> Result<Json<CapitalProject>, (StatusCode, String)> {
     let service = CapitalProjectService::new(state);
-    service
-        .get_project(&id)
-        .await
-        .map(Json)
-        .ok_or_else(|| (StatusCode::NOT_FOUND, "Demirbaş projesi bulunamadı.".to_string()))
+    service.get_project(&id).await.map(Json).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            "Demirbaş projesi bulunamadı.".to_string(),
+        )
+    })
 }
 
 pub async fn list_capital_installments(
@@ -3681,5 +4221,3 @@ pub async fn get_unit_capital_shares(
         .map(Json)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
-
-

@@ -3,15 +3,15 @@ use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use tracing::info;
 
-use crate::models::*;
-use crate::services::VirtualIbanService;
-use crate::state::AppStateInner;
 use super::base::{parse_id_to_i64, require_id, DbResult};
 use super::dues_repository::*;
 use super::payment_repository::*;
 use super::site_repository::*;
 use super::unit_repository::*;
 use super::user_repository::*;
+use crate::models::*;
+use crate::services::VirtualIbanService;
+use crate::state::AppStateInner;
 /// Replaces the element with the same id, or appends it. One copy per id.
 fn upsert_by_id<T>(items: &mut Vec<T>, item: T, id: impl Fn(&T) -> &String) {
     let key = id(&item).clone();
@@ -33,7 +33,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let id: i64 = row.get(0);
             let name: String = row.get(1);
             let address: String = row.get::<_, Option<String>>(2).unwrap_or_default();
-            let slug: String = row.get::<_, Option<String>>(3).unwrap_or_else(|| id.to_string());
+            let slug: String = row
+                .get::<_, Option<String>>(3)
+                .unwrap_or_else(|| id.to_string());
             let status = row
                 .get::<_, Option<SiteStatus>>(4)
                 .unwrap_or(SiteStatus::Active);
@@ -51,7 +53,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 plan_type,
                 license_end_date: license_end_date
                     .unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
-                timezone: row.get::<_, Option<String>>(7).unwrap_or_else(crate::models::default_site_timezone),
+                timezone: row
+                    .get::<_, Option<String>>(7)
+                    .unwrap_or_else(crate::models::default_site_timezone),
                 tax_id: row.get(8),
                 tax_office: row.get(9),
             };
@@ -91,7 +95,10 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 password_hash,
                 role: Role::from_str_loose(&role_str),
                 must_change_password,
-                auth_provider: auth_provider.as_deref().map(AuthProvider::from_str_loose).unwrap_or(AuthProvider::Local),
+                auth_provider: auth_provider
+                    .as_deref()
+                    .map(AuthProvider::from_str_loose)
+                    .unwrap_or(AuthProvider::Local),
                 google_sub,
                 avatar_url,
                 created_at: created_at.unwrap_or_else(Utc::now),
@@ -99,7 +106,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             };
 
             // Drop any in-memory bootstrap copy of the same account.
-            state.users.retain(|u| u.id == user.id || !u.email.eq_ignore_ascii_case(&user.email));
+            state
+                .users
+                .retain(|u| u.id == user.id || !u.email.eq_ignore_ascii_case(&user.email));
             upsert_by_id(&mut state.users, user, |x| &x.id);
         }
         info!("Loaded {} users from PostgreSQL", state.users.len());
@@ -107,8 +116,12 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 2b. Load Persons into users state for resident resolution
     {
-        let rows = client.query("SELECT id, full_name, email, phone, person_type FROM persons",
-            &[],).await?;
+        let rows = client
+            .query(
+                "SELECT id, full_name, email, phone, person_type FROM persons",
+                &[],
+            )
+            .await?;
         for row in rows {
             let p_id: i64 = row.get(0);
             let p_name: String = row.get(1);
@@ -137,7 +150,10 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
             upsert_by_id(&mut state.users, user, |x| &x.id);
         }
-        info!("Loaded {} persons into users from PostgreSQL", state.users.len());
+        info!(
+            "Loaded {} persons into users from PostgreSQL",
+            state.users.len()
+        );
     }
 
     // 3. Load Units
@@ -158,12 +174,13 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
             let block_label = if block_id == 1 { "blok-A" } else { "blok-B" };
             let resolved_viban = virtual_iban.or_else(|| {
-                Some(VirtualIbanService::generate_virtual_iban(
+                VirtualIbanService::generate_virtual_iban(
                     VirtualIbanService::KUVEYT_TURK_BANK_CODE,
                     &site_id.map(|s| s.to_string()).unwrap_or_default(),
                     block_label,
                     unit_number,
-                ))
+                )
+                .ok()
             });
 
             let unit = IndependentUnit {
@@ -187,7 +204,11 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                     let name = p.full_name.clone();
                     let entry = state.unit_payer_names.entry(unit.id.clone()).or_default();
                     if !entry.contains(&name) {
-                        if primary { entry.insert(0, name) } else { entry.push(name) }
+                        if primary {
+                            entry.insert(0, name)
+                        } else {
+                            entry.push(name)
+                        }
                     }
                 }
             }
@@ -199,8 +220,12 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 3b. Load House Types (Tariffs)
     {
-        let rows = client.query("SELECT id, site_id, type_name, dues_amount, description FROM house_types",
-            &[],).await?;
+        let rows = client
+            .query(
+                "SELECT id, site_id, type_name, dues_amount, description FROM house_types",
+                &[],
+            )
+            .await?;
         for row in rows {
             let id: i64 = row.get(0);
             let site_id: i64 = row.get(1);
@@ -217,24 +242,37 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             };
 
             let legacy_site_id = format!("site-{}", site_id);
-            if let Some(pos) = state.house_types.iter().position(|h| h.id == ht.id || (h.site_id == ht.site_id && h.type_name == ht.type_name)) {
+            if let Some(pos) = state.house_types.iter().position(|h| {
+                h.id == ht.id || (h.site_id == ht.site_id && h.type_name == ht.type_name)
+            }) {
                 state.house_types[pos] = ht.clone();
             } else {
                 state.house_types.push(ht.clone());
             }
-            if !state.house_types.iter().any(|h| h.site_id == legacy_site_id && h.type_name == ht.type_name) {
+            if !state
+                .house_types
+                .iter()
+                .any(|h| h.site_id == legacy_site_id && h.type_name == ht.type_name)
+            {
                 let mut legacy_ht = ht;
                 legacy_ht.site_id = legacy_site_id;
                 state.house_types.push(legacy_ht);
             }
         }
-        info!("Loaded {} house type tariffs from PostgreSQL", state.house_types.len());
+        info!(
+            "Loaded {} house type tariffs from PostgreSQL",
+            state.house_types.len()
+        );
     }
 
     // 3c. Load Blocks
     {
-        let rows = client.query("SELECT id, site_id, block_name, total_floors FROM blocks",
-            &[],).await?;
+        let rows = client
+            .query(
+                "SELECT id, site_id, block_name, total_floors FROM blocks",
+                &[],
+            )
+            .await?;
         for row in rows {
             let id: i64 = row.get(0);
             let site_id: i64 = row.get(1);
@@ -249,12 +287,18 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             };
 
             let legacy_site_id = format!("site-{}", site_id);
-            if let Some(pos) = state.blocks.iter().position(|b| b.id == block.id || (b.site_id == block.site_id && b.block_name == block.block_name)) {
+            if let Some(pos) = state.blocks.iter().position(|b| {
+                b.id == block.id || (b.site_id == block.site_id && b.block_name == block.block_name)
+            }) {
                 state.blocks[pos] = block.clone();
             } else {
                 state.blocks.push(block.clone());
             }
-            if !state.blocks.iter().any(|b| b.site_id == legacy_site_id && b.block_name == block.block_name) {
+            if !state
+                .blocks
+                .iter()
+                .any(|b| b.site_id == legacy_site_id && b.block_name == block.block_name)
+            {
                 let mut legacy_b = block;
                 legacy_b.site_id = legacy_site_id;
                 state.blocks.push(legacy_b);
@@ -305,7 +349,10 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             crate::services::dues_ledger::refresh(&mut due);
             upsert_by_id(&mut state.dues, due, |x| &x.id);
         }
-        info!("Loaded {} dues liabilities from PostgreSQL", state.dues.len());
+        info!(
+            "Loaded {} dues liabilities from PostgreSQL",
+            state.dues.len()
+        );
     }
 
     // 4b. Load Dues Periods
@@ -332,20 +379,28 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
             let legacy_site_id = format!("site-{}", site_id);
             if let Some(pos) = state.dues_periods.iter().position(|p| {
-                (p.site_id == site_id_str || p.site_id == legacy_site_id) && p.period_name == period_name
+                (p.site_id == site_id_str || p.site_id == legacy_site_id)
+                    && p.period_name == period_name
             }) {
                 state.dues_periods[pos] = period_item.clone();
             } else {
                 state.dues_periods.push(period_item.clone());
             }
 
-            if !state.dues_periods.iter().any(|p| p.site_id == legacy_site_id && p.period_name == period_name) {
+            if !state
+                .dues_periods
+                .iter()
+                .any(|p| p.site_id == legacy_site_id && p.period_name == period_name)
+            {
                 let mut leg_p = period_item;
                 leg_p.site_id = legacy_site_id;
                 state.dues_periods.push(leg_p);
             }
         }
-        info!("Loaded {} dues periods from PostgreSQL", state.dues_periods.len());
+        info!(
+            "Loaded {} dues periods from PostgreSQL",
+            state.dues_periods.len()
+        );
     }
 
     // 5. Load Site Bank Accounts
@@ -380,7 +435,11 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             };
 
             let legacy_id = format!("sba-{}", id);
-            if let Some(pos) = state.site_bank_accounts.iter().position(|b| b.id == sba.id || b.id == legacy_id) {
+            if let Some(pos) = state
+                .site_bank_accounts
+                .iter()
+                .position(|b| b.id == sba.id || b.id == legacy_id)
+            {
                 state.site_bank_accounts[pos] = sba.clone();
             } else {
                 state.site_bank_accounts.push(sba.clone());
@@ -451,7 +510,10 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             if is_contra {
                 continue;
             }
-            let matched_unit = state.units.iter().find(|u| parse_id_to_i64(&u.id) == Some(unit_id));
+            let matched_unit = state
+                .units
+                .iter()
+                .find(|u| parse_id_to_i64(&u.id) == Some(unit_id));
             let record = HomeownerPaymentRecord {
                 id: id.to_string(),
                 unit_id: unit_id.to_string(),
@@ -469,11 +531,19 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 } else {
                     PaymentMatchStatus::MatchedDebt
                 },
-                cleared_debt_amount: if settlement_status == SettlementStatus::Settled { amount } else { Decimal::ZERO },
+                cleared_debt_amount: if settlement_status == SettlementStatus::Settled {
+                    amount
+                } else {
+                    Decimal::ZERO
+                },
                 advance_credit_amount: Decimal::ZERO,
                 created_at: created_at.unwrap_or_else(Utc::now),
             };
-            if let Some(pos) = state.homeowner_payments.iter().position(|h| h.id == record.id) {
+            if let Some(pos) = state
+                .homeowner_payments
+                .iter()
+                .position(|h| h.id == record.id)
+            {
                 state.homeowner_payments[pos] = record;
             } else {
                 state.homeowner_payments.push(record);
@@ -521,20 +591,31 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 phone: row.get(7),
                 is_resident: row.get(8),
                 status: row.get(9),
-                submitted_at: row.get::<_, Option<DateTime<Utc>>>(10).unwrap_or_else(Utc::now),
+                submitted_at: row
+                    .get::<_, Option<DateTime<Utc>>>(10)
+                    .unwrap_or_else(Utc::now),
             };
-            if let Some(pos) = state.pending_registrations.iter().position(|r| r.request_id == req.request_id) {
+            if let Some(pos) = state
+                .pending_registrations
+                .iter()
+                .position(|r| r.request_id == req.request_id)
+            {
                 state.pending_registrations[pos] = req;
             } else {
                 state.pending_registrations.push(req);
             }
         }
-        info!("Loaded {} pending registrations from PostgreSQL", state.pending_registrations.len());
+        info!(
+            "Loaded {} pending registrations from PostgreSQL",
+            state.pending_registrations.len()
+        );
     }
 
     // 8. Load Household Members (occupancy_members — the canonical table)
     {
-        let rows = client.query(r#"
+        let rows = client
+            .query(
+                r#"
             SELECT uo.unit_id, om.id, om.full_name, om.relationship, om.phone, om.email,
                    om.occupancy_id, om.person_id, om.resident_user_id,
                    (uo.occupancy_type = 'OWNER') AS is_owner
@@ -543,7 +624,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             WHERE uo.is_active = true
             ORDER BY om.id ASC
             "#,
-            &[],).await?;
+                &[],
+            )
+            .await?;
         for row in rows {
             let unit_id: i64 = row.get(0);
             let key = unit_id.to_string();
@@ -563,12 +646,17 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 list.push(member);
             }
         }
-        info!("Loaded household members for {} units from PostgreSQL", state.unit_members.len());
+        info!(
+            "Loaded household members for {} units from PostgreSQL",
+            state.unit_members.len()
+        );
     }
 
     // 8b. Load Occupancy History
     {
-        let rows = client.query(r#"
+        let rows = client
+            .query(
+                r#"
             SELECT uo.id, uo.unit_id, uo.person_id, p.full_name, p.phone, p.email,
                    uo.occupancy_type, uo.start_date, uo.end_date, uo.is_active,
                    COALESCE(uo.exit_balance, 0.00), uo.notes, uo.created_at
@@ -576,7 +664,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             JOIN persons p ON uo.person_id = p.id
             ORDER BY uo.start_date ASC
             "#,
-            &[],).await?;
+                &[],
+            )
+            .await?;
         for row in rows {
             let id: i64 = row.get(0);
             let unit_id: i64 = row.get(1);
@@ -614,7 +704,10 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 history.push(item);
             }
         }
-        info!("Loaded occupancy history for {} units from PostgreSQL", state.unit_occupancies.len());
+        info!(
+            "Loaded occupancy history for {} units from PostgreSQL",
+            state.unit_occupancies.len()
+        );
     }
 
     // 9. Load Invitation Tokens
@@ -647,7 +740,12 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 10. Load Advance Balances
     {
-        let rows = client.query("SELECT unit_id, debtor_type, balance FROM advance_balances", &[]).await?;
+        let rows = client
+            .query(
+                "SELECT unit_id, debtor_type, balance FROM advance_balances",
+                &[],
+            )
+            .await?;
         state.advance_balances.clear();
         for row in rows {
             let unit_id: i64 = row.get(0);
@@ -655,42 +753,67 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let balance: Decimal = row.get(2);
             state.adjust_advance(&unit_id.to_string(), &debtor_type, balance);
         }
-        info!("Loaded advance balances of {} units from PostgreSQL", state.advance_balances.len());
+        info!(
+            "Loaded advance balances of {} units from PostgreSQL",
+            state.advance_balances.len()
+        );
     }
 
     // 10b. Load idempotency keys (O-4: the only home of idempotency).
     {
-        let rows = client.query("SELECT site_id, idempotency_key, receipt_id FROM payment_idempotency_keys", &[]).await?;
+        let rows = client
+            .query(
+                "SELECT site_id, idempotency_key, receipt_id FROM payment_idempotency_keys",
+                &[],
+            )
+            .await?;
         for row in rows {
             let site: i64 = row.get(0);
-            state.payment_idempotency.insert((site.to_string(), row.get(1)), row.get(2));
+            state
+                .payment_idempotency
+                .insert((site.to_string(), row.get(1)), row.get(2));
         }
     }
 
     // 11. Load Unit Sender IBANs
     {
-        let rows = client.query("SELECT sender_iban, unit_id, label, bank_name FROM unit_sender_ibans",
-            &[],).await?;
+        let rows = client
+            .query(
+                "SELECT sender_iban, unit_id, label, bank_name FROM unit_sender_ibans",
+                &[],
+            )
+            .await?;
         for row in rows {
             let sender_iban: String = row.get(0);
             let unit_id: i64 = row.get(1);
             let label: Option<String> = row.get(2);
             let bank_name: Option<String> = row.get(3);
 
-            state.remembered_sender_ibans.insert(sender_iban.clone(), unit_id.to_string());
-            state.sender_iban_metadata.insert(sender_iban, (label, bank_name));
+            state
+                .remembered_sender_ibans
+                .insert(sender_iban.clone(), unit_id.to_string());
+            state
+                .sender_iban_metadata
+                .insert(sender_iban, (label, bank_name));
         }
-        info!("Loaded {} remembered sender IBANs from PostgreSQL", state.remembered_sender_ibans.len());
+        info!(
+            "Loaded {} remembered sender IBANs from PostgreSQL",
+            state.remembered_sender_ibans.len()
+        );
     }
 
     // 12. Load Unit Payer Names
     {
-        let rows = client.query("SELECT unit_id, payer_name FROM unit_payer_names",
-            &[],).await?;
+        let rows = client
+            .query("SELECT unit_id, payer_name FROM unit_payer_names", &[])
+            .await?;
         for row in rows {
             let unit_id: i64 = row.get(0);
             let payer_name: String = row.get(1);
-            let list = state.unit_payer_names.entry(unit_id.to_string()).or_default();
+            let list = state
+                .unit_payer_names
+                .entry(unit_id.to_string())
+                .or_default();
             if !list.contains(&payer_name) {
                 list.push(payer_name);
             }
@@ -722,7 +845,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let status_str: String = row.get(17);
             let notes: Option<String> = row.get(18);
             let site_id_num: Option<i64> = row.get(19);
-            let site_id = site_id_num.map(|s| s.to_string()).unwrap_or_else(|| "1".to_string());
+            let site_id = site_id_num
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "1".to_string());
 
             let status = ReconciliationStatus::from_db_code(&status_str);
             let status_code = status.as_str().to_string();
@@ -753,13 +878,20 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 notes,
             };
 
-            if let Some(pos) = state.reconciliation_queue.iter().position(|q| q.match_id == m.match_id) {
+            if let Some(pos) = state
+                .reconciliation_queue
+                .iter()
+                .position(|q| q.match_id == m.match_id)
+            {
                 state.reconciliation_queue[pos] = m;
             } else {
                 state.reconciliation_queue.push(m);
             }
         }
-        info!("Loaded {} reconciliation queue items from PostgreSQL", state.reconciliation_queue.len());
+        info!(
+            "Loaded {} reconciliation queue items from PostgreSQL",
+            state.reconciliation_queue.len()
+        );
     }
 
     // SPEC-007: operating budgets, revaluation rates, liabilities' legal basis, card payment intents.
@@ -767,9 +899,16 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
         let labels: std::collections::HashMap<i64, String> = state
             .units
             .iter()
-            .filter_map(|u| u.id.parse::<i64>().ok().map(|id| (id, state.unit_label(&u.block_id, u.unit_number))))
+            .filter_map(|u| {
+                u.id.parse::<i64>()
+                    .ok()
+                    .map(|id| (id, state.unit_label(&u.block_id, u.unit_number)))
+            })
             .collect();
-        let snapshot = super::load_budget_snapshot(pool, |id| labels.get(&id).cloned().unwrap_or_else(|| id.to_string())).await?;
+        let snapshot = super::load_budget_snapshot(pool, |id| {
+            labels.get(&id).cloned().unwrap_or_else(|| id.to_string())
+        })
+        .await?;
         state.operating_budgets = snapshot.budgets;
         for rate in snapshot.rates {
             state.revaluation_rates.insert(rate.year, rate);
@@ -785,7 +924,6 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
     }
     Ok(())
 }
-
 
 pub async fn sync_all_in_memory_to_db(
     pool: &Pool,
@@ -812,9 +950,15 @@ pub async fn sync_all_in_memory_to_db(
                         block_name = EXCLUDED.block_name,
                         total_floors = EXCLUDED.total_floors
                     "#,
-                    &[&block_id_num, &site_id_num, &block.block_name, &block.total_floors],
+                    &[
+                        &block_id_num,
+                        &site_id_num,
+                        &block.block_name,
+                        &block.total_floors,
+                    ],
                 )
-                .await.map_err(|e| e.to_string())?;
+                .await
+                .map_err(|e| e.to_string())?;
         } else {
             client
                 .execute(
@@ -825,7 +969,8 @@ pub async fn sync_all_in_memory_to_db(
                     "#,
                     &[&site_id_num, &block.block_name, &block.total_floors],
                 )
-                .await.map_err(|e| e.to_string())?;
+                .await
+                .map_err(|e| e.to_string())?;
         }
     }
 
@@ -841,7 +986,9 @@ pub async fn sync_all_in_memory_to_db(
 
     // 5. Sync Dues Liabilities
     for due in &state.dues {
-        save_due_liability(pool, due).await.map_err(|e| e.to_string())?;
+        save_due_liability(pool, due)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     // 6. Sync Remembered Sender IBANs & Payer Names
@@ -849,21 +996,31 @@ pub async fn sync_all_in_memory_to_db(
         let meta = state.sender_iban_metadata.get(iban);
         let label = meta.and_then(|m| m.0.as_deref());
         let bank = meta.and_then(|m| m.1.as_deref());
-        save_remembered_sender_iban(pool, iban, unit_id, label, bank).await.map_err(|e| e.to_string())?;
+        save_remembered_sender_iban(pool, iban, unit_id, label, bank)
+            .await
+            .map_err(|e| e.to_string())?;
     }
     for (unit_id, names) in &state.unit_payer_names {
-        save_unit_payer_names(pool, unit_id, names).await.map_err(|e| e.to_string())?;
+        save_unit_payer_names(pool, unit_id, names)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     // 7. Sync Advance Balances
     for (unit_id, adv) in &state.advance_balances {
-        save_advance_balance(pool, unit_id, "OWNER", adv.owner).await.map_err(|e| e.to_string())?;
-        save_advance_balance(pool, unit_id, "TENANT", adv.tenant).await.map_err(|e| e.to_string())?;
+        save_advance_balance(pool, unit_id, "OWNER", adv.owner)
+            .await
+            .map_err(|e| e.to_string())?;
+        save_advance_balance(pool, unit_id, "TENANT", adv.tenant)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     // 8. Sync Payment Receipts
     for r in &state.payment_receipts {
-        save_payment_receipt(pool, r).await.map_err(|e| e.to_string())?;
+        save_payment_receipt(pool, r)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     info!("Synchronized all in-memory state to PostgreSQL database successfully.");
@@ -875,4 +1032,3 @@ pub async fn sync_all_in_memory_to_db(
 // Every helper runs on the caller's transaction; nothing is committed until the
 // caller commits, and any error rolls the whole payment back.
 // ---------------------------------------------------------------------------
-

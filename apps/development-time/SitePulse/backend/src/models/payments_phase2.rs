@@ -18,12 +18,26 @@ pub const BUDGET_SUPERSEDED: &str = "SUPERSEDED";
 
 /// Budget lines' expense categories (they match the future expense module).
 pub const BUDGET_CATEGORIES: [&str; 11] = [
-    "PERSONNEL", "CLEANING", "ENERGY", "WATER", "MAINTENANCE", "INSURANCE", "MANAGEMENT_FEE", "SECURITY", "GARDENING",
-    "RESERVE", "OTHER",
+    "PERSONNEL",
+    "CLEANING",
+    "ENERGY",
+    "WATER",
+    "MAINTENANCE",
+    "INSURANCE",
+    "MANAGEMENT_FEE",
+    "SECURITY",
+    "GARDENING",
+    "RESERVE",
+    "OTHER",
 ];
 /// `LAND_SHARE` (arsa payı, the KMK 20 default) or `EQUAL` (costs the yönetim planı shares equally).
 pub const ALLOCATION_KEYS: [&str; 2] = ["LAND_SHARE", "EQUAL"];
-pub const SERVICE_METHODS: [&str; 4] = ["IN_ASSEMBLY", "SIGNATURE", "REGISTERED_MAIL", "E_NOTIFICATION"];
+pub const SERVICE_METHODS: [&str; 4] = [
+    "IN_ASSEMBLY",
+    "SIGNATURE",
+    "REGISTERED_MAIL",
+    "E_NOTIFICATION",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OperatingBudgetLine {
@@ -105,7 +119,10 @@ pub struct OperatingBudget {
 impl OperatingBudget {
     /// A budget dues may be accrued from.
     pub fn is_in_force(&self) -> bool {
-        matches!(self.status.as_str(), BUDGET_INTERIM | BUDGET_APPROVED | BUDGET_FINAL)
+        matches!(
+            self.status.as_str(),
+            BUDGET_INTERIM | BUDGET_APPROVED | BUDGET_FINAL
+        )
     }
 
     pub fn covers(&self, date: NaiveDate) -> bool {
@@ -113,7 +130,9 @@ impl OperatingBudget {
     }
 
     pub fn share_of(&self, unit_id: &str) -> Option<&OperatingBudgetUnitShare> {
-        self.unit_shares.iter().find(|s| crate::auth::same_id(&s.unit_id, unit_id))
+        self.unit_shares
+            .iter()
+            .find(|s| crate::auth::same_id(&s.unit_id, unit_id))
     }
 }
 

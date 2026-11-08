@@ -1,63 +1,46 @@
-/// Service responsible for generating and validating Flat-Specific Virtual IBANs (Sanal IBAN)
-/// compliant with Turkish Banking Regulation (BDDK / TCMB) and ISO 13616 / ISO 7064 MOD-97-10.
+//! Flat-specific virtual IBAN generation and Turkish IBAN helpers.
+//!
+//! Validation and formatting delegate to the [`TrIban`] value object in
+//! [`crate::domain::iban`]. The generator is a SitePulse-specific identifier
+//! strategy, not a bank-issued virtual-account allocation: it has not been
+//! provisioned or certified by any bank.
+
+use crate::domain::iban::{self, IbanError, TrIban};
+
+/// Largest unit number that fits the six-digit unit suffix.
+pub const MAX_UNIT_NUMBER: i32 = 999_999;
+
+/// Service responsible for generating and validating flat-specific virtual IBANs.
 pub struct VirtualIbanService;
 
 impl VirtualIbanService {
     /// Kuveyt Türk Bank Code (Kuveyt Türk Katılım Bankası A.Ş.)
     pub const KUVEYT_TURK_BANK_CODE: &'static str = "00205";
 
-    /// Calculates ISO 7064 MOD-97-10 check digits for a given Turkish BBAN.
-    ///
-    /// BBAN structure: 5-digit Bank Code + 1-digit Reserve ("0") + 16-digit Account/Sub-Account Number.
-    /// Total BBAN length: 22 digits.
-    pub fn compute_check_digits(bban: &str) -> String {
-        // Rearrange for calculation: BBAN + "TR00" -> BBAN + "292700"
-        let rearranged = format!("{}292700", bban);
-
-        let mut remainder: u64 = 0;
-        for ch in rearranged.chars() {
-            if let Some(digit) = ch.to_digit(10) {
-                remainder = (remainder * 10 + digit as u64) % 97;
-            }
-        }
-
-        let check_num = 98 - remainder;
-        format!("{:02}", check_num)
+    /// ISO 7064 MOD-97-10 check digits for a 22-digit Turkish BBAN. Non-digit
+    /// or wrong-length input is rejected rather than silently skipped.
+    pub fn compute_check_digits(bban: &str) -> Result<String, IbanError> {
+        iban::check_digits(bban)
     }
 
-    /// Verifies if a given Turkish IBAN is valid according to ISO 7064 MOD-97-10.
-    #[allow(dead_code)]
+    /// True when `iban` is a well-formed Turkish IBAN with valid check digits.
+    /// Never panics, whatever the input.
     pub fn validate_tr_iban(iban: &str) -> bool {
-        let clean = iban.replace(' ', "").to_uppercase();
-        if clean.len() != 26 || !clean.starts_with("TR") {
-            return false;
-        }
-
-        // Move first 4 characters to end: IBAN[4..] + IBAN[0..4]
-        // "TR" -> "2927"
-        let check_digits = &clean[2..4];
-        let bban = &clean[4..];
-        let check_string = format!("{}2927{}", bban, check_digits);
-
-        let mut remainder: u64 = 0;
-        for ch in check_string.chars() {
-            if let Some(digit) = ch.to_digit(10) {
-                remainder = (remainder * 10 + digit as u64) % 97;
-            } else {
-                return false;
-            }
-        }
-
-        remainder == 1
+        TrIban::parse(iban).is_ok()
     }
 
-    /// Formats a 26-character TR IBAN with 4-character grouping for display (e.g. "TR83 0020 5000 ...").
+    /// Formats a 26-character TR IBAN for display
+    /// (e.g. "TR83 0020 5000 0986 3791 600014"). Input that is not a
+    /// 26-character ASCII IBAN is returned unchanged.
     pub fn format_for_display(iban: &str) -> String {
-        let clean = iban.replace(' ', "").to_uppercase();
-        if clean.len() != 26 {
+        let clean: String = iban
+            .chars()
+            .filter(|c| *c != ' ')
+            .collect::<String>()
+            .to_ascii_uppercase();
+        if clean.len() != iban::TR_IBAN_LEN || !clean.is_ascii() {
             return iban.to_string();
         }
-
         format!(
             "{} {} {} {} {} {}",
             &clean[0..4],
@@ -69,46 +52,48 @@ impl VirtualIbanService {
         )
     }
 
-    /// Generates a flat-specific Virtual IBAN under a parent site commercial account for Kuveyt Türk.
+    /// Generates a flat-specific virtual IBAN under a parent site account.
     ///
-    /// Rules:
-    /// - Bank code: 5 digits (e.g. "00205" for Kuveyt Türk)
-    /// - Reserve: 1 digit ("0")
-    /// - Site Account Prefix: derived from the site master account or site index (10 digits)
-    /// - Unit Suffix: zero-padded unit number (6 digits, e.g. unit 14 -> "000014")
-    /// - Calculated Check Digits: 2 digits (MOD 97)
+    /// Layout: 5-digit bank code + reserve `0` + 10-digit site/block prefix +
+    /// 6-digit unit suffix, then MOD-97 check digits.
+    ///
+    /// The output for a given input is a stored identifier and must never
+    /// change. Known limits of the prefix, kept for compatibility and covered by
+    /// tests: the block hash is a byte sum, so anagram block ids (`AB`/`BA`)
+    /// share a prefix, and different sites can collide modulo 10^10. Uniqueness
+    /// must therefore be enforced where identifiers are stored.
+    ///
+    /// Rejects bank codes that are not 1–5 digits and unit numbers outside
+    /// `1..=MAX_UNIT_NUMBER` (previously negative numbers were folded onto their
+    /// absolute value and large numbers were truncated, silently colliding).
     pub fn generate_virtual_iban(
         bank_code: &str,
         site_id: &str,
         block_id: &str,
         unit_number: i32,
-    ) -> String {
-        let clean_bank_code = format!("{:0>5}", bank_code.trim());
-        let reserve = "0";
+    ) -> Result<String, IbanError> {
+        let bank_code = iban::normalize_bank_code(bank_code)?;
+        if !(1..=MAX_UNIT_NUMBER).contains(&unit_number) {
+            return Err(IbanError::InvalidBban);
+        }
 
-        // Generate deterministic 10-digit site prefix
-        // For site-1 (Begonya Sitesi), use Kuveyt Türk account branch root "0009863791"
-        let site_hash = site_id
-            .bytes()
-            .fold(9863791u64, |acc, b| (acc.wrapping_mul(31)).wrapping_add(b as u64));
+        // Deterministic 10-digit site prefix (seed "0009863791" is the
+        // Kuveyt Türk branch root used for site-1, Begonya Sitesi).
+        let site_hash = site_id.bytes().fold(9863791u64, |acc, b| {
+            acc.wrapping_mul(31).wrapping_add(u64::from(b))
+        });
         let block_hash = block_id
             .bytes()
-            .fold(0u64, |acc, b| acc.wrapping_add(b as u64));
-        let site_prefix = format!("{:010}", (site_hash + block_hash) % 10000000000);
+            .fold(0u64, |acc, b| acc.wrapping_add(u64::from(b)));
+        // `wrapping_add` keeps the release-build result for every input while
+        // removing the debug-build overflow panic of the former plain `+`.
+        let site_prefix = format!(
+            "{:010}",
+            site_hash.wrapping_add(block_hash) % 10_000_000_000
+        );
 
-        // Unit suffix (6 digits)
-        let unit_suffix = format!("{:06}", unit_number.abs() % 1000000);
-
-        // 16-digit sub-account
-        let account_number = format!("{}{}", &site_prefix[0..10], unit_suffix);
-
-        // 22-digit BBAN
-        let bban = format!("{}{}{}", clean_bank_code, reserve, account_number);
-
-        // Check digits
-        let check_digits = Self::compute_check_digits(&bban);
-
-        format!("TR{}{}", check_digits, bban)
+        let bban = format!("{bank_code}0{site_prefix}{unit_number:06}");
+        Ok(TrIban::from_bban(&bban)?.into_string())
     }
 }
 
@@ -118,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_validates_generated_virtual_iban() {
-        let iban = VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 14);
+        let iban = VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 14).unwrap();
         assert_eq!(iban.len(), 26);
         assert!(iban.starts_with("TR"));
         assert!(iban.contains("00205"));
@@ -127,9 +112,12 @@ mod tests {
 
     #[test]
     fn test_unique_virtual_ibans_for_different_flats() {
-        let iban_14 = VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 14);
-        let iban_15 = VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 15);
-        let iban_b14 = VirtualIbanService::generate_virtual_iban("00205", "site-1", "B", 14);
+        let iban_14 =
+            VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 14).unwrap();
+        let iban_15 =
+            VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 15).unwrap();
+        let iban_b14 =
+            VirtualIbanService::generate_virtual_iban("00205", "site-1", "B", 14).unwrap();
 
         assert_ne!(iban_14, iban_15);
         assert_ne!(iban_14, iban_b14);
@@ -143,5 +131,58 @@ mod tests {
         let iban = "TR830020500009863791600014";
         let formatted = VirtualIbanService::format_for_display(iban);
         assert_eq!(formatted, "TR83 0020 5000 0986 3791 600014");
+    }
+
+    #[test]
+    fn generated_identifiers_are_stable() {
+        // Seeded unit d-14 and webhook fixtures depend on this exact value.
+        assert_eq!(
+            VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 14).unwrap(),
+            "TR410020504213991067000014"
+        );
+    }
+
+    #[test]
+    fn generator_rejects_invalid_input_and_never_overflows() {
+        assert!(VirtualIbanService::generate_virtual_iban("002050", "site-1", "A", 14).is_err());
+        assert!(VirtualIbanService::generate_virtual_iban("2O5", "site-1", "A", 14).is_err());
+        assert!(VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", -14).is_err());
+        assert!(VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 0).is_err());
+        assert!(
+            VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 1_000_000).is_err()
+        );
+        // Long ids drive the wrapping site hash near u64::MAX; adding the block
+        // hash used to overflow and panic in debug builds.
+        let long_site = "z".repeat(512);
+        for block in ["", "A", &"\u{ff}".repeat(64)] {
+            let iban =
+                VirtualIbanService::generate_virtual_iban("00205", &long_site, block, 7).unwrap();
+            assert!(VirtualIbanService::validate_tr_iban(&iban));
+        }
+    }
+
+    #[test]
+    fn documented_prefix_collisions_are_real() {
+        let ab = VirtualIbanService::generate_virtual_iban("00205", "site-1", "AB", 1).unwrap();
+        let ba = VirtualIbanService::generate_virtual_iban("00205", "site-1", "BA", 1).unwrap();
+        assert_eq!(
+            ab, ba,
+            "anagram block ids share a prefix; storage must enforce uniqueness"
+        );
+    }
+
+    #[test]
+    fn validation_never_panics_on_multibyte_input() {
+        assert!(!VirtualIbanService::validate_tr_iban(
+            "TRé0020504213991067000014"
+        ));
+        assert!(!VirtualIbanService::validate_tr_iban(
+            "TR\u{0130}020504213991067000014"
+        ));
+        assert_eq!(
+            VirtualIbanService::format_for_display("TRé0020504213991067000014"),
+            "TRé0020504213991067000014"
+        );
+        assert!(VirtualIbanService::compute_check_digits("00205042139910670000AB").is_err());
     }
 }

@@ -5,14 +5,19 @@ use rust_decimal::Decimal;
 
 use super::{require_id, DbResult};
 use crate::models::{
-    BudgetObjection, BudgetServiceRecord, OperatingBudget, OperatingBudgetLine, OperatingBudgetUnitShare, RevaluationRate,
+    BudgetObjection, BudgetServiceRecord, OperatingBudget, OperatingBudgetLine,
+    OperatingBudgetUnitShare, RevaluationRate,
 };
 
 /// Inserts a new budget with its lines and unit shares in one transaction.
 /// Fills the line ids and returns the budget id.
 pub async fn insert_operating_budget(pool: &Pool, budget: &mut OperatingBudget) -> DbResult<i64> {
     let site = require_id("site", &budget.site_id)?;
-    let previous = budget.previous_budget_id.as_deref().map(|p| require_id("operating budget", p)).transpose()?;
+    let previous = budget
+        .previous_budget_id
+        .as_deref()
+        .map(|p| require_id("operating budget", p))
+        .transpose()?;
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
     let id: i64 = tx
@@ -106,14 +111,23 @@ pub async fn update_budget_headers(pool: &Pool, budgets: &[OperatingBudget]) -> 
 pub async fn delete_draft_budget(pool: &Pool, budget_id: &str) -> DbResult<()> {
     let id = require_id("operating budget", budget_id)?;
     let client = pool.get().await?;
-    let n = client.execute("DELETE FROM operating_budgets WHERE id = $1 AND status = 'DRAFT'", &[&id]).await?;
+    let n = client
+        .execute(
+            "DELETE FROM operating_budgets WHERE id = $1 AND status = 'DRAFT'",
+            &[&id],
+        )
+        .await?;
     if n != 1 {
         return Err(format!("draft budget {} not found", budget_id).into());
     }
     Ok(())
 }
 
-pub async fn upsert_budget_service(pool: &Pool, budget_id: &str, r: &BudgetServiceRecord) -> DbResult<i64> {
+pub async fn upsert_budget_service(
+    pool: &Pool,
+    budget_id: &str,
+    r: &BudgetServiceRecord,
+) -> DbResult<i64> {
     let id = require_id("operating budget", budget_id)?;
     let unit = require_id("unit", &r.unit_id)?;
     let client = pool.get().await?;
@@ -133,7 +147,11 @@ pub async fn upsert_budget_service(pool: &Pool, budget_id: &str, r: &BudgetServi
 }
 
 /// Inserts an objection (empty id) or updates its resolution.
-pub async fn save_budget_objection(pool: &Pool, budget_id: &str, o: &BudgetObjection) -> DbResult<i64> {
+pub async fn save_budget_objection(
+    pool: &Pool,
+    budget_id: &str,
+    o: &BudgetObjection,
+) -> DbResult<i64> {
     let id = require_id("operating budget", budget_id)?;
     let client = pool.get().await?;
     if o.id.is_empty() {
@@ -172,7 +190,12 @@ pub async fn upsert_revaluation_rate(pool: &Pool, r: &RevaluationRate) -> DbResu
 pub async fn set_site_budget_policy(pool: &Pool, site_id: &str, require: bool) -> DbResult<()> {
     let site = require_id("site", site_id)?;
     let client = pool.get().await?;
-    let n = client.execute("UPDATE sites SET require_operating_budget = $2 WHERE id = $1", &[&site, &require]).await?;
+    let n = client
+        .execute(
+            "UPDATE sites SET require_operating_budget = $2 WHERE id = $1",
+            &[&site, &require],
+        )
+        .await?;
     if n != 1 {
         return Err(format!("site {} not found", site_id).into());
     }
@@ -184,7 +207,12 @@ pub async fn set_due_budget_basis(pool: &Pool, due_id: &str, budget_id: &str) ->
     let due = require_id("dues liability", due_id)?;
     let budget = require_id("operating budget", budget_id)?;
     let client = pool.get().await?;
-    client.execute("UPDATE dues_liabilities SET operating_budget_id = $2 WHERE id = $1", &[&due, &budget]).await?;
+    client
+        .execute(
+            "UPDATE dues_liabilities SET operating_budget_id = $2 WHERE id = $1",
+            &[&due, &budget],
+        )
+        .await?;
     Ok(())
 }
 
@@ -198,7 +226,10 @@ pub struct BudgetSnapshot {
     pub due_basis: Vec<(String, String)>,
 }
 
-pub async fn load_budget_snapshot(pool: &Pool, unit_label: impl Fn(i64) -> String) -> DbResult<BudgetSnapshot> {
+pub async fn load_budget_snapshot(
+    pool: &Pool,
+    unit_label: impl Fn(i64) -> String,
+) -> DbResult<BudgetSnapshot> {
     let client = pool.get().await?;
     let mut budgets: Vec<OperatingBudget> = client
         .query(
@@ -239,7 +270,9 @@ pub async fn load_budget_snapshot(pool: &Pool, unit_label: impl Fn(i64) -> Strin
             objections: Vec::new(),
         })
         .collect();
-    let index = |budgets: &Vec<OperatingBudget>, id: i64| budgets.iter().position(|b| b.id == id.to_string());
+    let index = |budgets: &Vec<OperatingBudget>, id: i64| {
+        budgets.iter().position(|b| b.id == id.to_string())
+    };
 
     for r in client
         .query("SELECT id, budget_id, category, description, annual_amount, allocation_key FROM operating_budget_lines ORDER BY id", &[])
@@ -308,10 +341,17 @@ pub async fn load_budget_snapshot(pool: &Pool, unit_label: impl Fn(i64) -> Strin
         }
     }
     let rates = client
-        .query("SELECT year, rate, source FROM revaluation_rates ORDER BY year", &[])
+        .query(
+            "SELECT year, rate, source FROM revaluation_rates ORDER BY year",
+            &[],
+        )
         .await?
         .iter()
-        .map(|r| RevaluationRate { year: r.get(0), rate: r.get::<_, Decimal>(1), source: r.get(2) })
+        .map(|r| RevaluationRate {
+            year: r.get(0),
+            rate: r.get::<_, Decimal>(1),
+            source: r.get(2),
+        })
         .collect();
     let required_sites = client
         .query("SELECT id FROM sites WHERE require_operating_budget", &[])
@@ -325,5 +365,10 @@ pub async fn load_budget_snapshot(pool: &Pool, unit_label: impl Fn(i64) -> Strin
         .iter()
         .map(|r| (r.get::<_, i64>(0).to_string(), r.get::<_, i64>(1).to_string()))
         .collect();
-    Ok(BudgetSnapshot { budgets, rates, required_sites, due_basis })
+    Ok(BudgetSnapshot {
+        budgets,
+        rates,
+        required_sites,
+        due_basis,
+    })
 }

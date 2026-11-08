@@ -44,7 +44,10 @@ pub struct SiteQuery {
 }
 
 fn site_of(q: &SiteQuery, claims: &Claims) -> String {
-    q.site_id.clone().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| claims.site_id.clone())
+    q.site_id
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| claims.site_id.clone())
 }
 
 fn actor(claims: &Claims) -> String {
@@ -60,7 +63,11 @@ pub async fn list_operating_budgets(
     axum::Extension(claims): axum::Extension<Claims>,
     Query(q): Query<SiteQuery>,
 ) -> Json<Vec<OperatingBudget>> {
-    Json(OperatingBudgetService::new(state).list(&site_of(&q, &claims)).await)
+    Json(
+        OperatingBudgetService::new(state)
+            .list(&site_of(&q, &claims))
+            .await,
+    )
 }
 
 pub async fn create_operating_budget(
@@ -69,7 +76,11 @@ pub async fn create_operating_budget(
     Query(q): Query<SiteQuery>,
     Json(req): Json<CreateOperatingBudgetRequest>,
 ) -> Result<(StatusCode, Json<OperatingBudget>), ApiError> {
-    let site = req.site_id.clone().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| site_of(&q, &claims));
+    let site = req
+        .site_id
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| site_of(&q, &claims));
     OperatingBudgetService::new(state)
         .create_draft(&site, req, &actor(&claims))
         .await
@@ -83,7 +94,11 @@ pub async fn get_operating_budget(
     Path(id): Path<String>,
     Query(q): Query<SiteQuery>,
 ) -> Result<Json<OperatingBudget>, ApiError> {
-    OperatingBudgetService::new(state).get(&site_of(&q, &claims), &id).await.map(Json).map_err(budget_status)
+    OperatingBudgetService::new(state)
+        .get(&site_of(&q, &claims), &id)
+        .await
+        .map(Json)
+        .map_err(budget_status)
 }
 
 pub async fn delete_operating_budget(
@@ -106,7 +121,11 @@ pub async fn issue_interim_budget(
     Query(q): Query<SiteQuery>,
     Json(req): Json<IssueInterimBudgetRequest>,
 ) -> Result<Json<OperatingBudget>, ApiError> {
-    OperatingBudgetService::new(state).issue_interim(&site_of(&q, &claims), &id, req).await.map(Json).map_err(budget_status)
+    OperatingBudgetService::new(state)
+        .issue_interim(&site_of(&q, &claims), &id, req)
+        .await
+        .map(Json)
+        .map_err(budget_status)
 }
 
 pub async fn approve_operating_budget(
@@ -116,7 +135,11 @@ pub async fn approve_operating_budget(
     Query(q): Query<SiteQuery>,
     Json(req): Json<ApproveBudgetRequest>,
 ) -> Result<Json<OperatingBudget>, ApiError> {
-    OperatingBudgetService::new(state).approve(&site_of(&q, &claims), &id, req).await.map(Json).map_err(budget_status)
+    OperatingBudgetService::new(state)
+        .approve(&site_of(&q, &claims), &id, req)
+        .await
+        .map(Json)
+        .map_err(budget_status)
 }
 
 pub async fn reject_operating_budget(
@@ -126,7 +149,11 @@ pub async fn reject_operating_budget(
     Query(q): Query<SiteQuery>,
     Json(req): Json<RejectBudgetRequest>,
 ) -> Result<Json<OperatingBudget>, ApiError> {
-    OperatingBudgetService::new(state).reject(&site_of(&q, &claims), &id, req).await.map(Json).map_err(budget_status)
+    OperatingBudgetService::new(state)
+        .reject(&site_of(&q, &claims), &id, req)
+        .await
+        .map(Json)
+        .map_err(budget_status)
 }
 
 pub async fn finalize_operating_budget(
@@ -149,7 +176,11 @@ pub async fn record_budget_service(
     Query(q): Query<SiteQuery>,
     Json(req): Json<RecordBudgetServiceRequest>,
 ) -> Result<Json<OperatingBudget>, ApiError> {
-    OperatingBudgetService::new(state).record_service(&site_of(&q, &claims), &id, req).await.map(Json).map_err(budget_status)
+    OperatingBudgetService::new(state)
+        .record_service(&site_of(&q, &claims), &id, req)
+        .await
+        .map(Json)
+        .map_err(budget_status)
 }
 
 pub async fn file_budget_objection(
@@ -185,7 +216,11 @@ pub async fn get_budget_compliance(
     axum::Extension(claims): axum::Extension<Claims>,
     Query(q): Query<SiteQuery>,
 ) -> Json<BudgetComplianceStatus> {
-    Json(OperatingBudgetService::new(state).compliance(&site_of(&q, &claims), Utc::now().date_naive()).await)
+    Json(
+        OperatingBudgetService::new(state)
+            .compliance(&site_of(&q, &claims), Utc::now().date_naive())
+            .await,
+    )
 }
 
 pub async fn set_budget_policy(
@@ -194,10 +229,19 @@ pub async fn set_budget_policy(
     Query(q): Query<SiteQuery>,
     Json(req): Json<BudgetPolicyRequest>,
 ) -> Result<Json<BudgetComplianceStatus>, ApiError> {
-    let site = req.site_id.clone().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| site_of(&q, &claims));
+    let site = req
+        .site_id
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| site_of(&q, &claims));
     let service = OperatingBudgetService::new(state);
-    service.set_policy(&site, req.require_operating_budget).await.map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-    Ok(Json(service.compliance(&site, Utc::now().date_naive()).await))
+    service
+        .set_policy(&site, req.require_operating_budget)
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(
+        service.compliance(&site, Utc::now().date_naive()).await,
+    ))
 }
 
 pub async fn list_revaluation_rates(State(state): State<AppState>) -> Json<Vec<RevaluationRate>> {
@@ -209,7 +253,11 @@ pub async fn set_revaluation_rate(
     State(state): State<AppState>,
     Json(req): Json<RevaluationRate>,
 ) -> Result<Json<RevaluationRate>, ApiError> {
-    OperatingBudgetService::new(state).set_revaluation_rate(req).await.map(Json).map_err(|e| (StatusCode::BAD_REQUEST, e))
+    OperatingBudgetService::new(state)
+        .set_revaluation_rate(req)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
 /// The budget in force for a resident's unit, with only that unit's share.
@@ -224,15 +272,25 @@ pub async fn get_resident_operating_budget(
         .find(|u| crate::auth::same_id(&u.id, &unit_id))
         .ok_or((StatusCode::NOT_FOUND, "Unit not found".to_string()))?;
     let today = Utc::now().date_naive();
-    let Some(budget) = crate::services::operating_budget_service::budget_in_force(&inner, &unit.site_id, today) else {
-        return Ok(Json(serde_json::json!({ "budget": null, "unit_share": null })));
+    let Some(budget) =
+        crate::services::operating_budget_service::budget_in_force(&inner, &unit.site_id, today)
+    else {
+        return Ok(Json(
+            serde_json::json!({ "budget": null, "unit_share": null }),
+        ));
     };
     let mut public = budget.clone();
     let share = budget.share_of(&unit.id).cloned();
     public.unit_shares.clear();
-    public.service_records.retain(|r| crate::auth::same_id(&r.unit_id, &unit.id));
-    public.objections.retain(|o| crate::auth::same_id(&o.unit_id, &unit.id));
-    Ok(Json(serde_json::json!({ "budget": public, "unit_share": share })))
+    public
+        .service_records
+        .retain(|r| crate::auth::same_id(&r.unit_id, &unit.id));
+    public
+        .objections
+        .retain(|o| crate::auth::same_id(&o.unit_id, &unit.id));
+    Ok(Json(
+        serde_json::json!({ "budget": public, "unit_share": share }),
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +309,12 @@ pub async fn get_resident_statement(
         .find(|u| crate::auth::same_id(&u.id, &unit_id))
         .ok_or((StatusCode::NOT_FOUND, "Unit not found".to_string()))?;
     let viewer = resident_statement::caller_debtor_role(&claims, unit);
-    Ok(Json(resident_statement::build_statement(&inner, unit, viewer, Utc::now().date_naive())))
+    Ok(Json(resident_statement::build_statement(
+        &inner,
+        unit,
+        viewer,
+        Utc::now().date_naive(),
+    )))
 }
 
 // ---------------------------------------------------------------------------
@@ -284,19 +347,40 @@ pub async fn get_payment_intent(
     State(state): State<AppState>,
     Path((unit_id, intent_id)): Path<(String, String)>,
 ) -> Result<Json<PaymentIntent>, ApiError> {
-    CardPaymentService::new(state).get_intent(&unit_id, &intent_id).await.map(Json).map_err(card_status)
+    CardPaymentService::new(state)
+        .get_intent(&unit_id, &intent_id)
+        .await
+        .map(Json)
+        .map_err(card_status)
 }
 
 /// The licensed provider's signed notification (`X-Provider-Signature`:
 /// hex HMAC-SHA256 of the raw body). Public route; the signature is the auth.
-pub async fn provider_webhook(State(state): State<AppState>, headers: HeaderMap, body: Bytes) -> Result<Json<PaymentIntent>, ApiError> {
-    let signature = headers.get(card_payment_service::SIGNATURE_HEADER).and_then(|v| v.to_str().ok());
+pub async fn provider_webhook(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<PaymentIntent>, ApiError> {
+    let signature = headers
+        .get(card_payment_service::SIGNATURE_HEADER)
+        .and_then(|v| v.to_str().ok());
     if !card_payment_service::verify_provider_signature(&body, signature) {
-        return Err((StatusCode::UNAUTHORIZED, "Invalid provider signature".to_string()));
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "Invalid provider signature".to_string(),
+        ));
     }
-    let event: ProviderWebhookEvent =
-        serde_json::from_slice(&body).map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid notification: {}", e)))?;
-    CardPaymentService::new(state).apply_provider_event(event).await.map(Json).map_err(card_status)
+    let event: ProviderWebhookEvent = serde_json::from_slice(&body).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("Invalid notification: {}", e),
+        )
+    })?;
+    CardPaymentService::new(state)
+        .apply_provider_event(event)
+        .await
+        .map(Json)
+        .map_err(card_status)
 }
 
 fn sandbox_guard() -> Result<(), ApiError> {
@@ -308,7 +392,10 @@ fn sandbox_guard() -> Result<(), ApiError> {
 }
 
 /// The sandbox provider's hosted payment page (outside production only).
-pub async fn sandbox_checkout_page(State(state): State<AppState>, Path(reference): Path<String>) -> Result<Html<String>, ApiError> {
+pub async fn sandbox_checkout_page(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Html<String>, ApiError> {
     sandbox_guard()?;
     let intent = CardPaymentService::new(state)
         .intent_by_ref(card_payment_service::SANDBOX_PROVIDER, &reference)
@@ -334,7 +421,10 @@ pub async fn sandbox_checkout_complete(
     let events = if approve {
         vec![(INTENT_AUTHORIZED, None), (INTENT_CAPTURED, None)]
     } else {
-        vec![(INTENT_FAILED, Some("3-D Secure doğrulaması reddedildi".to_string()))]
+        vec![(
+            INTENT_FAILED,
+            Some("3-D Secure doğrulaması reddedildi".to_string()),
+        )]
     };
     let mut current = intent;
     for (status, failure) in events {
@@ -343,16 +433,26 @@ pub async fn sandbox_checkout_complete(
             provider_ref: reference.clone(),
             status: status.to_string(),
             amount: current.amount,
-            fee_amount: approve.then(|| (current.amount * rust_decimal::Decimal::new(19, 3)).round_dp(2)),
+            fee_amount: approve.then(|| {
+                (current.amount * rust_decimal::Decimal::new(19, 3))
+                    .round_dp_with_strategy(2, rust_decimal::RoundingStrategy::MidpointNearestEven)
+            }),
             three_ds_status: Some(if approve { "Y" } else { "N" }.to_string()),
             failure_reason: failure,
         };
-        let body = serde_json::to_vec(&event).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let body = serde_json::to_vec(&event)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let signature = card_payment_service::sign_provider_body(&body);
         if !card_payment_service::verify_provider_signature(&body, Some(&signature)) {
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, "Sandbox signature mismatch".to_string()));
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Sandbox signature mismatch".to_string(),
+            ));
         }
-        current = service.apply_provider_event(event).await.map_err(card_status)?;
+        current = service
+            .apply_provider_event(event)
+            .await
+            .map_err(card_status)?;
     }
     Ok(Html(card_payment_service::sandbox_checkout_page(&current)))
 }
@@ -372,7 +472,9 @@ pub async fn get_payment_receipt_pdf(
         .get_receipt(&site_id, &id)
         .await
         .map_err(|e| (StatusCode::NOT_FOUND, e))?;
-    if !claims.is_site_staff() && !crate::auth::same_id(claims.unit_id.as_deref().unwrap_or(""), &receipt.unit_id) {
+    if !claims.is_site_staff()
+        && !crate::auth::same_id(claims.unit_id.as_deref().unwrap_or(""), &receipt.unit_id)
+    {
         return Err((StatusCode::NOT_FOUND, "Receipt not found".to_string()));
     }
     let unit_label = {
@@ -384,11 +486,15 @@ pub async fn get_payment_receipt_pdf(
             .map(|u| inner.unit_label(&u.block_id, u.unit_number))
             .unwrap_or_else(|| receipt.unit_id.clone())
     };
-    let pdf = receipt_document::render_receipt_pdf(&receipt, &unit_label).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let pdf = receipt_document::render_receipt_pdf(&receipt, &unit_label)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
     Ok((
         [
             (header::CONTENT_TYPE, "application/pdf".to_string()),
-            (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}.pdf\"", receipt.receipt_number)),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}.pdf\"", receipt.receipt_number),
+            ),
         ],
         pdf,
     )
@@ -402,15 +508,26 @@ pub struct VerifyReceiptQuery {
 }
 
 /// Public: confirms a receipt by number and verification code. Discloses no payer data.
-pub async fn verify_receipt(State(state): State<AppState>, Query(q): Query<VerifyReceiptQuery>) -> Json<ReceiptVerification> {
+pub async fn verify_receipt(
+    State(state): State<AppState>,
+    Query(q): Query<VerifyReceiptQuery>,
+) -> Json<ReceiptVerification> {
     let number = q.no.trim().to_string();
     let code = q.h.trim().to_lowercase();
     let mut found = {
         let inner = state.inner.read().await;
-        inner.payment_receipts.iter().find(|r| r.receipt_number == number && r.verification_hash == code).cloned().map(|r| {
-            let reversed = inner.payment_receipts.iter().any(|x| x.reverses_receipt_id == Some(r.id));
-            (r, reversed)
-        })
+        inner
+            .payment_receipts
+            .iter()
+            .find(|r| r.receipt_number == number && r.verification_hash == code)
+            .cloned()
+            .map(|r| {
+                let reversed = inner
+                    .payment_receipts
+                    .iter()
+                    .any(|x| x.reverses_receipt_id == Some(r.id));
+                (r, reversed)
+            })
     };
     if found.is_none() && code.len() == 64 {
         if let Some(ref pool) = state.pool {

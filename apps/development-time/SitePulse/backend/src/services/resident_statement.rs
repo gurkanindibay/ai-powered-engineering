@@ -8,8 +8,8 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use crate::models::{
-    DebtStatus, IndependentUnit, ResidentStatement, Role, StatementDebtor, StatementOpenItem, StatementReceipt,
-    LEDGER_KIND_COLLECTION,
+    DebtStatus, IndependentUnit, ResidentStatement, Role, StatementDebtor, StatementOpenItem,
+    StatementReceipt, LEDGER_KIND_COLLECTION,
 };
 use crate::services::dues_ledger::{self, DEBTOR_OWNER, DEBTOR_TENANT};
 use crate::state::AppStateInner;
@@ -18,14 +18,27 @@ use crate::state::AppStateInner;
 const LIMITATION_DAYS: i64 = 5 * 365;
 
 /// The debtor a signed-in resident is on `unit`, or `None` for site staff.
-pub fn caller_debtor_role(claims: &crate::auth::Claims, unit: &IndependentUnit) -> Option<&'static str> {
+pub fn caller_debtor_role(
+    claims: &crate::auth::Claims,
+    unit: &IndependentUnit,
+) -> Option<&'static str> {
     if claims.is_site_staff() {
         return None;
     }
-    if unit.tenant_user_id.as_deref().map(|t| crate::auth::same_id(t, &claims.sub)).unwrap_or(false) {
+    if unit
+        .tenant_user_id
+        .as_deref()
+        .map(|t| crate::auth::same_id(t, &claims.sub))
+        .unwrap_or(false)
+    {
         return Some(DEBTOR_TENANT);
     }
-    if unit.owner_user_id.as_deref().map(|o| crate::auth::same_id(o, &claims.sub)).unwrap_or(false) {
+    if unit
+        .owner_user_id
+        .as_deref()
+        .map(|o| crate::auth::same_id(o, &claims.sub))
+        .unwrap_or(false)
+    {
         return Some(DEBTOR_OWNER);
     }
     // A household member: the tenant household when the unit is let, else the owner's.
@@ -35,9 +48,18 @@ pub fn caller_debtor_role(claims: &crate::auth::Claims, unit: &IndependentUnit) 
     }
 }
 
-pub fn build_statement(inner: &AppStateInner, unit: &IndependentUnit, viewer: Option<&str>, today: NaiveDate) -> ResidentStatement {
+pub fn build_statement(
+    inner: &AppStateInner,
+    unit: &IndependentUnit,
+    viewer: Option<&str>,
+    today: NaiveDate,
+) -> ResidentStatement {
     let calc = crate::services::DuesCalculationService::new();
-    let name_of = |uid: &Option<String>| uid.as_ref().and_then(|id| inner.users.iter().find(|u| &u.id == id)).map(|u| u.full_name.clone());
+    let name_of = |uid: &Option<String>| {
+        uid.as_ref()
+            .and_then(|id| inner.users.iter().find(|u| &u.id == id))
+            .map(|u| u.full_name.clone())
+    };
     let mut debtors = Vec::new();
     for debtor in [DEBTOR_OWNER, DEBTOR_TENANT] {
         if viewer.map(|v| v != debtor).unwrap_or(false) {
@@ -47,7 +69,9 @@ pub fn build_statement(inner: &AppStateInner, unit: &IndependentUnit, viewer: Op
             .dues
             .iter()
             .filter(|d| {
-                crate::auth::same_id(&d.unit_id, &unit.id) && d.status != DebtStatus::Paid && d.debtor_type.as_str() == debtor
+                crate::auth::same_id(&d.unit_id, &unit.id)
+                    && d.status != DebtStatus::Paid
+                    && d.debtor_type.as_str() == debtor
             })
             .map(|stored| {
                 let d = calc.calculate_delay_penalty(stored.clone(), today);
@@ -71,13 +95,24 @@ pub fn build_statement(inner: &AppStateInner, unit: &IndependentUnit, viewer: Op
             .collect();
         items.sort_by_key(|i| i.due_date);
         let advance = inner.advance_of(&unit.id, debtor).max(Decimal::ZERO);
-        let holder = if debtor == DEBTOR_TENANT { name_of(&unit.tenant_user_id) } else { name_of(&unit.owner_user_id) };
+        let holder = if debtor == DEBTOR_TENANT {
+            name_of(&unit.tenant_user_id)
+        } else {
+            name_of(&unit.owner_user_id)
+        };
         if debtor == DEBTOR_TENANT && holder.is_none() && items.is_empty() && advance.is_zero() {
             continue;
         }
         let mut row = StatementDebtor {
             debtor_type: debtor.to_string(),
-            name: holder.unwrap_or_else(|| if debtor == DEBTOR_TENANT { "Kiracı" } else { "Kat Maliki" }.to_string()),
+            name: holder.unwrap_or_else(|| {
+                if debtor == DEBTOR_TENANT {
+                    "Kiracı"
+                } else {
+                    "Kat Maliki"
+                }
+                .to_string()
+            }),
             current_due: Decimal::ZERO,
             overdue_1_30_days: Decimal::ZERO,
             overdue_31_60_days: Decimal::ZERO,
@@ -112,7 +147,9 @@ pub fn build_statement(inner: &AppStateInner, unit: &IndependentUnit, viewer: Op
         .filter(|r| crate::auth::same_id(&r.unit_id, &unit.id))
         .filter(|r| match viewer {
             None => true,
-            Some(v) => r.payer_role.as_str() == v || r.on_behalf_of_role.map(|x| x.as_str()) == Some(v),
+            Some(v) => {
+                r.payer_role.as_str() == v || r.on_behalf_of_role.map(|x| x.as_str()) == Some(v)
+            }
         })
         .map(|r| StatementReceipt {
             receipt_number: r.receipt_number.clone(),
@@ -122,7 +159,10 @@ pub fn build_statement(inner: &AppStateInner, unit: &IndependentUnit, viewer: Op
             payment_channel: r.payment_channel.as_str().to_string(),
             total_amount: r.total_amount,
             reversed: r.receipt_type == LEDGER_KIND_COLLECTION
-                && inner.payment_receipts.iter().any(|x| x.reverses_receipt_id == Some(r.id)),
+                && inner
+                    .payment_receipts
+                    .iter()
+                    .any(|x| x.reverses_receipt_id == Some(r.id)),
         })
         .collect();
     receipts.sort_by_key(|r| std::cmp::Reverse(r.issued_at));

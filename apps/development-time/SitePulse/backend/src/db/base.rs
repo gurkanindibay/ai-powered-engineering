@@ -1,4 +1,6 @@
-use deadpool_postgres::{Config, ManagerConfig, Pool, PoolConfig, RecyclingMethod, Runtime, Timeouts};
+use deadpool_postgres::{
+    Config, ManagerConfig, Pool, PoolConfig, RecyclingMethod, Runtime, Timeouts,
+};
 use tokio_postgres::NoTls;
 use tracing::{info, warn};
 
@@ -26,7 +28,9 @@ pub type DbResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 ///   against the Mozilla root store). The default is `disable` for local
 ///   development; production requires `require`.
 pub fn create_pool() -> Option<Pool> {
-    let in_memory = std::env::var("SITEPULSE_IN_MEMORY").map(|v| v == "true").unwrap_or(false);
+    let in_memory = std::env::var("SITEPULSE_IN_MEMORY")
+        .map(|v| v == "true")
+        .unwrap_or(false);
     let production = crate::state::AppStateInner::is_production();
     let password = match std::env::var("DB_PASS") {
         Ok(p) if !p.is_empty() => p,
@@ -37,10 +41,15 @@ pub fn create_pool() -> Option<Pool> {
         _ => panic!("DB_PASS is required (set it in backend/.env); use SITEPULSE_IN_MEMORY=true for a database-less demo"),
     };
     let host = std::env::var("DB_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
-    let port = std::env::var("DB_PORT").ok().and_then(|p| p.parse::<u16>().ok()).unwrap_or(5432);
+    let port = std::env::var("DB_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+        .unwrap_or(5432);
     let user = std::env::var("DB_USER").unwrap_or_else(|_| "sitepulse_user".to_string());
     let dbname = std::env::var("DB_NAME").unwrap_or_else(|_| "sitepulse".to_string());
-    let ssl_mode = std::env::var("DB_SSLMODE").unwrap_or_else(|_| "disable".to_string()).to_lowercase();
+    let ssl_mode = std::env::var("DB_SSLMODE")
+        .unwrap_or_else(|_| "disable".to_string())
+        .to_lowercase();
     if production && ssl_mode != "require" {
         panic!("DB_SSLMODE=require is mandatory in production");
     }
@@ -51,7 +60,9 @@ pub fn create_pool() -> Option<Pool> {
     cfg.user = Some(user);
     cfg.password = Some(password);
     cfg.dbname = Some(dbname);
-    cfg.manager = Some(ManagerConfig { recycling_method: RecyclingMethod::Fast });
+    cfg.manager = Some(ManagerConfig {
+        recycling_method: RecyclingMethod::Fast,
+    });
     let pool_cfg = PoolConfig {
         timeouts: Timeouts::wait_millis(10_000),
         ..Default::default()
@@ -60,20 +71,33 @@ pub fn create_pool() -> Option<Pool> {
 
     let pool = match ssl_mode.as_str() {
         "require" => {
-            let roots = rustls::RootCertStore { roots: webpki_roots::TLS_SERVER_ROOTS.to_vec() };
-            let tls_config = rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(rustls::crypto::ring::default_provider()))
-                .with_safe_default_protocol_versions()
-                .expect("rustls protocol versions")
-                .with_root_certificates(roots)
-                .with_no_client_auth();
-            cfg.create_pool(Some(Runtime::Tokio1), tokio_postgres_rustls::MakeRustlsConnect::new(tls_config))
+            let roots = rustls::RootCertStore {
+                roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+            };
+            let tls_config = rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .expect("rustls protocol versions")
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+            cfg.create_pool(
+                Some(Runtime::Tokio1),
+                tokio_postgres_rustls::MakeRustlsConnect::new(tls_config),
+            )
         }
         "disable" => cfg.create_pool(Some(Runtime::Tokio1), NoTls),
-        other => panic!("Unsupported DB_SSLMODE '{}': use 'disable' or 'require'", other),
+        other => panic!(
+            "Unsupported DB_SSLMODE '{}': use 'disable' or 'require'",
+            other
+        ),
     };
     match pool {
         Ok(pool) => {
-            info!("PostgreSQL connection pool configured (sslmode={})", ssl_mode);
+            info!(
+                "PostgreSQL connection pool configured (sslmode={})",
+                ssl_mode
+            );
             Some(pool)
         }
         Err(e) => panic!("Failed to create PostgreSQL connection pool: {}", e),
@@ -88,8 +112,8 @@ pub fn create_pool() -> Option<Pool> {
 /// silently mapped onto some other row.
 pub fn parse_id_to_i64(s: &str) -> Option<i64> {
     const PREFIXES: [&str; 21] = [
-        "site-", "unit-", "d-", "b-", "borc-", "person-", "kisi-", "blk-", "blok-", "sba-", "txn-", "cproj-",
-        "cinst-", "cdis-", "usr-", "user-", "req-", "inv-", "match-", "ref-", "due-",
+        "site-", "unit-", "d-", "b-", "borc-", "person-", "kisi-", "blk-", "blok-", "sba-", "txn-",
+        "cproj-", "cinst-", "cdis-", "usr-", "user-", "req-", "inv-", "match-", "ref-", "due-",
     ];
     let s = s.trim();
     let positive = |n: i64| if n > 0 { Some(n) } else { None };
@@ -137,16 +161,22 @@ pub async fn init_db(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send
 
     if is_legacy {
         // Never drop data automatically: refuse to start and let an operator migrate.
-        return Err("Legacy VARCHAR-id schema detected in this database. Refusing to start: \
+        return Err(
+            "Legacy VARCHAR-id schema detected in this database. Refusing to start: \
                     migrate or restore it manually (SitePulse no longer drops tables at boot)."
-            .into());
+                .into(),
+        );
     }
 
     // Apply pending versioned migrations (backend/migrations is the only schema source).
     drop(client);
     let applied = crate::migrations::run(pool).await?;
     if !applied.is_empty() {
-        info!("Applied schema migrations {:?}; schema is at V{}", applied, crate::migrations::latest_version());
+        info!(
+            "Applied schema migrations {:?}; schema is at V{}",
+            applied,
+            crate::migrations::latest_version()
+        );
     }
     let client = pool.get().await?;
 
@@ -189,7 +219,9 @@ pub async fn seed_test_data(pool: &Pool) -> Result<(), Box<dyn std::error::Error
     Ok(())
 }
 
-pub async fn reset_db_to_seed_data(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn reset_db_to_seed_data(
+    pool: &Pool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     info!("Resetting PostgreSQL database to clean initial state (clean debts and payments)...");
     client
@@ -232,7 +264,9 @@ pub async fn reset_db_to_seed_data(pool: &Pool) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
-pub async fn recreate_db_schema_and_seed(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn recreate_db_schema_and_seed(
+    pool: &Pool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     info!("Dropping all database tables to recreate clean initial state...");
     client
@@ -254,7 +288,9 @@ pub async fn recreate_db_schema_and_seed(pool: &Pool) -> Result<(), Box<dyn std:
 
 pub async fn wipe_all_db_data(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    info!("Dropping all database tables to purge all sites, units, and residents for fresh start...");
+    info!(
+        "Dropping all database tables to purge all sites, units, and residents for fresh start..."
+    );
     client
         .batch_execute(
             r#"
@@ -270,4 +306,3 @@ pub async fn wipe_all_db_data(pool: &Pool) -> Result<(), Box<dyn std::error::Err
     info!("All database tables recreated cleanly with zero sites, zero units, zero homeowners, and zero residents.");
     Ok(())
 }
-

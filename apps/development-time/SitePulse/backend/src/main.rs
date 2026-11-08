@@ -8,7 +8,9 @@ use state::AppState;
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -18,11 +20,15 @@ async fn main() {
 
     if let Some(ref p) = pool {
         // A schema that cannot be verified is fatal: never serve on top of it.
-        db::init_db(p).await.expect("PostgreSQL schema initialization failed");
+        db::init_db(p)
+            .await
+            .expect("PostgreSQL schema initialization failed");
         db::upgrade_legacy_password_hashes(p)
             .await
             .expect("Failed to upgrade legacy password hashes");
-        db::ensure_bootstrap_admin(p).await.expect("Failed to create bootstrap administrator");
+        db::ensure_bootstrap_admin(p)
+            .await
+            .expect("Failed to create bootstrap administrator");
         let mut inner = state.inner.write().await;
         db::load_all_from_db(p, &mut inner)
             .await
@@ -32,7 +38,9 @@ async fn main() {
     let app = app::build_router(state.clone());
 
     // Spawn automated monthly dues accrual background scheduler (batch job)
-    tokio::spawn(scheduler::start_automated_dues_accrual_scheduler(state.clone()));
+    tokio::spawn(scheduler::start_automated_dues_accrual_scheduler(
+        state.clone(),
+    ));
     tokio::spawn(scheduler::start_debt_aging_snapshot_worker(state));
 
     let addr: SocketAddr = std::env::var("SITEPULSE_BIND_ADDR")

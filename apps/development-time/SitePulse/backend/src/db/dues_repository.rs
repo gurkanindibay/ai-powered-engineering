@@ -3,8 +3,8 @@ use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use tracing::info;
 
-use crate::models::{DebtStatus, DuesLiability, DuesPeriodStatus};
 use super::base::{parse_id_to_i64, require_id, DbResult};
+use crate::models::{DebtStatus, DuesLiability, DuesPeriodStatus};
 pub async fn save_dues_period(
     pool: &Pool,
     period: &crate::models::DuesPeriod,
@@ -33,7 +33,10 @@ pub async fn save_dues_period(
                     ],
                 )
                 .await?;
-            info!("Saved dues period '{}' (numeric ID: {}) for site {} to PostgreSQL", period.period_name, id_num, period.site_id);
+            info!(
+                "Saved dues period '{}' (numeric ID: {}) for site {} to PostgreSQL",
+                period.period_name, id_num, period.site_id
+            );
         }
         _ => {
             let row = client
@@ -55,7 +58,10 @@ pub async fn save_dues_period(
                 )
                 .await?;
             let new_id: i64 = row.get(0);
-            info!("Saved dues period '{}' (auto-assigned ID: {}) for site {} to PostgreSQL", period.period_name, new_id, period.site_id);
+            info!(
+                "Saved dues period '{}' (auto-assigned ID: {}) for site {} to PostgreSQL",
+                period.period_name, new_id, period.site_id
+            );
         }
     }
     Ok(())
@@ -133,7 +139,10 @@ pub async fn save_due_liability(
             ],
         )
         .await?;
-    info!("Saved due liability {} (numeric ID: {}) for unit {} to PostgreSQL", due.id, due_id_num, unit_id_num);
+    info!(
+        "Saved due liability {} (numeric ID: {}) for unit {} to PostgreSQL",
+        due.id, due_id_num, unit_id_num
+    );
     Ok(())
 }
 
@@ -166,7 +175,10 @@ pub async fn update_due_liability(
             &[&due_id_num, &status, &paid_amount],
         )
         .await?;
-    info!("Updated dues liability {} (numeric ID: {}) to status {} in PostgreSQL", due_id, due_id_num, status);
+    info!(
+        "Updated dues liability {} (numeric ID: {}) to status {} in PostgreSQL",
+        due_id, due_id_num, status
+    );
     Ok(())
 }
 
@@ -197,18 +209,30 @@ pub async fn record_due_allocation(
     Ok(())
 }
 
-
 /// Stores one debtor's advance balance of a unit (O-1: the in-memory model is per
 /// debtor, so no re-split heuristic is needed). The change is written to
 /// `advance_ledger_entries` so the balance stays tied to its ledger: payments and
 /// transfers record their own typed entries in their transaction; a fall seen here
 /// is the automatic advance offset (`OFFSET_APPLIED`), a rise is not backed by a
 /// payment and is recorded as `ADJUSTMENT_CREDIT` (V16).
-pub async fn save_advance_balance(pool: &Pool, unit_id: &str, debtor_type: &str, balance: Decimal) -> DbResult<()> {
+pub async fn save_advance_balance(
+    pool: &Pool,
+    unit_id: &str,
+    debtor_type: &str,
+    balance: Decimal,
+) -> DbResult<()> {
     let unit = require_id("unit", unit_id)?;
-    let debtor = if debtor_type.eq_ignore_ascii_case("OWNER") { "OWNER" } else { "TENANT" };
+    let debtor = if debtor_type.eq_ignore_ascii_case("OWNER") {
+        "OWNER"
+    } else {
+        "TENANT"
+    };
     if balance < Decimal::ZERO {
-        return Err(format!("advance balance of unit {} ({}) cannot be negative", unit_id, debtor).into());
+        return Err(format!(
+            "advance balance of unit {} ({}) cannot be negative",
+            unit_id, debtor
+        )
+        .into());
     }
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
@@ -228,7 +252,11 @@ pub async fn save_advance_balance(pool: &Pool, unit_id: &str, debtor_type: &str,
             &[&unit, &debtor, &balance],
         )
         .await?;
-        let entry_type = if delta > Decimal::ZERO { "ADJUSTMENT_CREDIT" } else { "OFFSET_APPLIED" };
+        let entry_type = if delta > Decimal::ZERO {
+            "ADJUSTMENT_CREDIT"
+        } else {
+            "OFFSET_APPLIED"
+        };
         tx.execute(
             "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description, created_at)
              VALUES ($1, $2, $3, $4, 'Advance balance change', CURRENT_TIMESTAMP)",
@@ -290,11 +318,17 @@ pub async fn insert_accrued_due(pool: &Pool, due: &DuesLiability) -> DbResult<Op
     Ok(row.map(|r| r.get(0)))
 }
 
-
 /// Ids of a site's units that currently have a tenant (operational dues are theirs).
 /// An empty `site_id` means every site.
-pub async fn tenanted_unit_ids(pool: &Pool, site_id: &str) -> DbResult<std::collections::HashSet<String>> {
-    let site: i64 = if site_id.is_empty() { 0 } else { require_id("site", site_id)? };
+pub async fn tenanted_unit_ids(
+    pool: &Pool,
+    site_id: &str,
+) -> DbResult<std::collections::HashSet<String>> {
+    let site: i64 = if site_id.is_empty() {
+        0
+    } else {
+        require_id("site", site_id)?
+    };
     let client = pool.get().await?;
     let rows = client
         .query(
@@ -302,5 +336,8 @@ pub async fn tenanted_unit_ids(pool: &Pool, site_id: &str) -> DbResult<std::coll
             &[&site],
         )
         .await?;
-    Ok(rows.iter().map(|r| r.get::<_, i64>(0).to_string()).collect())
+    Ok(rows
+        .iter()
+        .map(|r| r.get::<_, i64>(0).to_string())
+        .collect())
 }
