@@ -244,22 +244,20 @@ impl HomeResidentInvitationService {
                         &[&crate::db::parse_id_to_i64(unit_id).unwrap_or(0)],
                     )
                     .await, "home_resident_invitation_service") {
-                    if !rows.is_empty() {
-                        return rows
-                            .into_iter()
-                            .map(|r| UnitMemberDto {
-                                resident_id: r.get::<_, i64>(0).to_string(),
-                                full_name: r.get(1),
-                                relationship: r.get(2),
-                                phone: r.get::<_, Option<String>>(3).unwrap_or_default(),
-                                email: r.get::<_, Option<String>>(4).unwrap_or_default(),
-                                is_owner: r.get(5),
-                                occupancy_id: r.try_get(6).ok().flatten(),
-                                person_id: r.try_get(7).ok().flatten(),
-                                resident_user_id: r.try_get(8).ok().flatten(),
-                            })
-                            .collect();
-                    }
+                    return rows
+                        .into_iter()
+                        .map(|r| UnitMemberDto {
+                            resident_id: r.get::<_, i64>(0).to_string(),
+                            full_name: r.get(1),
+                            relationship: r.get(2),
+                            phone: r.get::<_, Option<String>>(3).unwrap_or_default(),
+                            email: r.get::<_, Option<String>>(4).unwrap_or_default(),
+                            is_owner: r.get(5),
+                            occupancy_id: r.try_get(6).ok().flatten(),
+                            person_id: r.try_get(7).ok().flatten(),
+                            resident_user_id: r.try_get(8).ok().flatten(),
+                        })
+                        .collect();
                 }
             }
         }

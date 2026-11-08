@@ -194,9 +194,7 @@ impl SaasTenantService {
     pub async fn get_all_sites(&self) -> Vec<SaasSiteSummaryDto> {
         if let Some(ref pool) = self.state.pool {
             if let Ok(summaries) = crate::db::fetch_all_saas_site_summaries(pool).await {
-                if !summaries.is_empty() {
-                    return summaries;
-                }
+                return summaries;
             }
         }
 
@@ -262,6 +260,12 @@ impl SaasTenantService {
     }
 
     pub async fn get_global_stats(&self) -> SaasGlobalStatsDto {
+        if let Some(p) = self.state.db_pool() {
+            if let Ok(stats) = crate::db::fetch_saas_global_stats(p).await {
+                return stats;
+            }
+        }
+
         let inner = self.state.inner.read().await;
         let total_sites = inner.sites.len();
         let active_sites = inner

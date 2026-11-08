@@ -77,52 +77,56 @@ impl PaymentTrackingService {
 
     /// Query multi-channel payment stream with rich multi-criteria filters
     pub async fn get_payment_stream(&self, filter: PaymentStreamFilter) -> PaymentStreamResponse {
-        let inner = self.state.inner.read().await;
         let target_site = filter.site_id.unwrap_or_default();
 
-        // Gather all payment entries (including synthesizing from homeowner_payments if empty)
-        let mut all_entries = inner.payment_entries.clone();
-
-        if all_entries.is_empty() {
-            // Synthesize from existing homeowner payments and mock entries
-            for hp in &inner.homeowner_payments {
-                let unit_label = inner.unit_label(&hp.block_id, hp.unit_number);
-                let settlement_status = match hp.status {
-                    PaymentMatchStatus::MatchedDebt
-                    | PaymentMatchStatus::MatchedAdvance
-                    | PaymentMatchStatus::PartiallyMatched => SettlementStatus::Settled,
-                    PaymentMatchStatus::Pending => SettlementStatus::Unmatched,
-                };
-
-                all_entries.push(PaymentEntry {
-                    id: crate::db::parse_id_to_i64(&hp.id).unwrap_or(0),
-                    site_id: target_site.clone(),
-                    unit_id: hp.unit_id.clone(),
-                    unit_label: Some(unit_label),
-                    payer_name: hp
-                        .homeowner_name
-                        .clone()
-                        .unwrap_or_else(|| "Bilinmeyen Sakin".to_string()),
-                    payer_role: DebtorType::Owner,
-                    receipt_id: None,
-                    receipt_number: hp
-                        .reference_code
-                        .clone()
-                        .or_else(|| Some(format!("REC-{}", hp.id))),
-                    amount: hp.amount,
-                    payment_channel: hp.payment_method,
-                    settlement_status,
-                    description: hp.note.clone(),
-                    external_reference: hp.reference_code.clone(),
-                    payment_date: hp.created_at,
-                    created_at: hp.created_at,
-                    entry_type: LEDGER_KIND_COLLECTION.to_string(),
-                    reverses_entry_id: None,
-                    reversal_reason: None,
-                    recorded_by: None,
-                });
+        let all_entries = if let Some(p) = self.state.db_pool() {
+            crate::db::fetch_payment_entries_from_db(p, Some(&target_site))
+                .await
+                .unwrap_or_default()
+        } else {
+            let inner = self.state.inner.read().await;
+            let mut entries = inner.payment_entries.clone();
+            if entries.is_empty() {
+                // Synthesize from existing homeowner payments and mock entries in memory mode
+                for hp in &inner.homeowner_payments {
+                    let unit_label = inner.unit_label(&hp.block_id, hp.unit_number);
+                    let settlement_status = match hp.status {
+                        PaymentMatchStatus::MatchedDebt
+                        | PaymentMatchStatus::MatchedAdvance
+                        | PaymentMatchStatus::PartiallyMatched => SettlementStatus::Settled,
+                        PaymentMatchStatus::Pending => SettlementStatus::Unmatched,
+                    };
+                    entries.push(PaymentEntry {
+                        id: crate::db::parse_id_to_i64(&hp.id).unwrap_or(0),
+                        site_id: target_site.clone(),
+                        unit_id: hp.unit_id.clone(),
+                        unit_label: Some(unit_label),
+                        payer_name: hp
+                            .homeowner_name
+                            .clone()
+                            .unwrap_or_else(|| "Bilinmeyen Sakin".to_string()),
+                        payer_role: DebtorType::Owner,
+                        receipt_id: None,
+                        receipt_number: hp
+                            .reference_code
+                            .clone()
+                            .or_else(|| Some(format!("REC-{}", hp.id))),
+                        amount: hp.amount,
+                        payment_channel: hp.payment_method,
+                        settlement_status,
+                        description: hp.note.clone(),
+                        external_reference: hp.reference_code.clone(),
+                        payment_date: hp.created_at,
+                        created_at: hp.created_at,
+                        entry_type: LEDGER_KIND_COLLECTION.to_string(),
+                        reverses_entry_id: None,
+                        reversal_reason: None,
+                        recorded_by: None,
+                    });
+                }
             }
-        }
+            entries
+        };
 
         // Apply filters
         let search_term = filter.search.as_ref().map(|s| s.to_lowercase());
@@ -232,6 +236,13 @@ impl PaymentTrackingService {
 
     /// Calculate debt aging report grouped by brackets: current, 1-30, 31-60, 60+ days
     pub async fn get_debt_aging_report(&self, site_id: &str) -> DebtAgingReport {
+        if let Some(p) = self.state.db_pool() {
+            if let Ok(report) =
+                crate::db::dues_repository::fetch_debt_aging_report_from_db(p, site_id).await
+            {
+                return report;
+            }
+        }
         let inner = self.state.inner.read().await;
         let today = Utc::now().date_naive();
 

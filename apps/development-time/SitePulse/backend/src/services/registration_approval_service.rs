@@ -126,24 +126,22 @@ impl RegistrationApprovalService {
                         &[&crate::db::parse_id_to_i64(site_id).unwrap_or(0)],
                     )
                     .await, "registration_approval_service") {
-                    if !rows.is_empty() {
-                        return rows
-                            .into_iter()
-                            .map(|row| PendingRegistrationResponse {
-                                request_id: row.get(0),
-                                site_id: row.get::<_, i64>(1).to_string(),
-                                block: row.get(2),
-                                unit_no: row.get(3),
-                                floor: row.get(4),
-                                full_name: row.get(5),
-                                email: row.get(6),
-                                phone: row.get(7),
-                                is_resident: row.get(8),
-                                status: row.get(9),
-                                submitted_at: row.get::<_, Option<chrono::DateTime<chrono::Utc>>>(10).unwrap_or_else(chrono::Utc::now),
-                            })
-                            .collect();
-                    }
+                    return rows
+                        .into_iter()
+                        .map(|row| PendingRegistrationResponse {
+                            request_id: row.get(0),
+                            site_id: row.get::<_, i64>(1).to_string(),
+                            block: row.get(2),
+                            unit_no: row.get(3),
+                            floor: row.get(4),
+                            full_name: row.get(5),
+                            email: row.get(6),
+                            phone: row.get(7),
+                            is_resident: row.get(8),
+                            status: row.get(9),
+                            submitted_at: row.get::<_, Option<chrono::DateTime<chrono::Utc>>>(10).unwrap_or_else(chrono::Utc::now),
+                        })
+                        .collect();
                 }
             }
         }
