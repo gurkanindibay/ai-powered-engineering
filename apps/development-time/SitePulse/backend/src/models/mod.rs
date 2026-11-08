@@ -2,6 +2,40 @@ use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+macro_rules! impl_sql_for_enum {
+    ($t:ty) => {
+        impl<'a> tokio_postgres::types::FromSql<'a> for $t {
+            fn from_sql(
+                ty: &tokio_postgres::types::Type,
+                raw: &'a [u8],
+            ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+                let s = <&str as tokio_postgres::types::FromSql>::from_sql(ty, raw)?;
+                Ok(Self::from_str_loose(s))
+            }
+
+            fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+                <&str as tokio_postgres::types::FromSql>::accepts(ty)
+            }
+        }
+
+        impl tokio_postgres::types::ToSql for $t {
+            fn to_sql(
+                &self,
+                ty: &tokio_postgres::types::Type,
+                out: &mut tokio_postgres::types::private::BytesMut,
+            ) -> Result<tokio_postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+                self.as_str().to_sql(ty, out)
+            }
+
+            fn accepts(ty: &tokio_postgres::types::Type) -> bool {
+                <&str as tokio_postgres::types::ToSql>::accepts(ty)
+            }
+
+            tokio_postgres::types::to_sql_checked!();
+        }
+    };
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Role {
@@ -102,6 +136,454 @@ pub enum DebtStatus {
     Paid,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DebtorType {
+    #[default]
+    Tenant,
+    Owner,
+}
+
+impl DebtorType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DebtorType::Tenant => "TENANT",
+            DebtorType::Owner => "OWNER",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "OWNER" | "KAT_MALIKI" => DebtorType::Owner,
+            _ => DebtorType::Tenant,
+        }
+    }
+}
+
+impl std::fmt::Display for DebtorType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(DebtorType);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ExpenseType {
+    #[default]
+    OperationalDues,
+    CapitalDues,
+}
+
+impl ExpenseType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ExpenseType::OperationalDues => "OPERATIONAL_DUES",
+            ExpenseType::CapitalDues => "CAPITAL_DUES",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "CAPITAL_DUES" | "CAPITAL" | "DEMIRBAS" => ExpenseType::CapitalDues,
+            _ => ExpenseType::OperationalDues,
+        }
+    }
+}
+
+impl std::fmt::Display for ExpenseType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(ExpenseType);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum OccupancyStatus {
+    #[default]
+    OwnerOccupied,
+    TenantOccupied,
+    Vacant,
+}
+
+impl OccupancyStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            OccupancyStatus::OwnerOccupied => "OWNER_OCCUPIED",
+            OccupancyStatus::TenantOccupied => "TENANT_OCCUPIED",
+            OccupancyStatus::Vacant => "VACANT",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "TENANT_OCCUPIED" | "TENANT" => OccupancyStatus::TenantOccupied,
+            "VACANT" => OccupancyStatus::Vacant,
+            _ => OccupancyStatus::OwnerOccupied,
+        }
+    }
+}
+
+impl std::fmt::Display for OccupancyStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(OccupancyStatus);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DuesPeriodStatus {
+    #[default]
+    Active,
+    Closed,
+    Draft,
+}
+
+impl DuesPeriodStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DuesPeriodStatus::Active => "ACTIVE",
+            DuesPeriodStatus::Closed => "CLOSED",
+            DuesPeriodStatus::Draft => "DRAFT",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "CLOSED" => DuesPeriodStatus::Closed,
+            "DRAFT" => DuesPeriodStatus::Draft,
+            _ => DuesPeriodStatus::Active,
+        }
+    }
+}
+
+impl std::fmt::Display for DuesPeriodStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(DuesPeriodStatus);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SiteStatus {
+    #[default]
+    Active,
+    Suspended,
+    Deleted,
+}
+
+impl SiteStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SiteStatus::Active => "ACTIVE",
+            SiteStatus::Suspended => "SUSPENDED",
+            SiteStatus::Deleted => "DELETED",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "SUSPENDED" => SiteStatus::Suspended,
+            "DELETED" => SiteStatus::Deleted,
+            _ => SiteStatus::Active,
+        }
+    }
+}
+
+impl std::fmt::Display for SiteStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(SiteStatus);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PlanType {
+    #[default]
+    Standard,
+    Premium,
+    Enterprise,
+    Community,
+}
+
+impl PlanType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PlanType::Standard => "STANDARD",
+            PlanType::Premium => "PREMIUM",
+            PlanType::Enterprise => "ENTERPRISE",
+            PlanType::Community => "COMMUNITY",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "PREMIUM" => PlanType::Premium,
+            "ENTERPRISE" | "PRO" => PlanType::Enterprise,
+            "COMMUNITY" => PlanType::Community,
+            _ => PlanType::Standard,
+        }
+    }
+}
+
+impl std::fmt::Display for PlanType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(PlanType);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AuthProvider {
+    #[default]
+    Local,
+    Google,
+    Hybrid,
+}
+
+impl AuthProvider {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AuthProvider::Local => "LOCAL",
+            AuthProvider::Google => "GOOGLE",
+            AuthProvider::Hybrid => "HYBRID",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "GOOGLE" => AuthProvider::Google,
+            "HYBRID" => AuthProvider::Hybrid,
+            _ => AuthProvider::Local,
+        }
+    }
+}
+
+impl std::fmt::Display for AuthProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(AuthProvider);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PaymentChannel {
+    CreditCard,
+    BankTransfer,
+    Fast,
+    Cash,
+    #[default]
+    ManualCash,
+    VirtualIban,
+    InterLedger,
+    Other,
+}
+
+impl PaymentChannel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PaymentChannel::CreditCard => "CREDIT_CARD",
+            PaymentChannel::BankTransfer => "BANK_TRANSFER",
+            PaymentChannel::Fast => "FAST",
+            PaymentChannel::Cash => "CASH",
+            PaymentChannel::ManualCash => "MANUAL_CASH",
+            PaymentChannel::VirtualIban => "VIRTUAL_IBAN",
+            PaymentChannel::InterLedger => "INTER_LEDGER",
+            PaymentChannel::Other => "OTHER",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        let u = s.to_uppercase();
+        if u.contains("CARD") || u.contains("KART") {
+            PaymentChannel::CreditCard
+        } else if u.contains("VIBAN") || u.contains("VIRTUAL") {
+            PaymentChannel::VirtualIban
+        } else if u.contains("FAST") {
+            PaymentChannel::Fast
+        } else if u.contains("INTER_LEDGER") {
+            PaymentChannel::InterLedger
+        } else if u.contains("BANK") || u.contains("HAVALE") || u.contains("EFT") {
+            PaymentChannel::BankTransfer
+        } else if u.contains("MANUAL") {
+            PaymentChannel::ManualCash
+        } else if u.contains("CASH") || u.contains("NAKIT") {
+            PaymentChannel::Cash
+        } else {
+            PaymentChannel::Other
+        }
+    }
+}
+
+impl std::fmt::Display for PaymentChannel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(PaymentChannel);
+
+pub type PaymentMethod = PaymentChannel;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SettlementStatus {
+    #[default]
+    Settled,
+    Pending,
+    Unmatched,
+}
+
+impl SettlementStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SettlementStatus::Settled => "SETTLED",
+            SettlementStatus::Pending => "PENDING",
+            SettlementStatus::Unmatched => "UNMATCHED",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "PENDING" => SettlementStatus::Pending,
+            "UNMATCHED" => SettlementStatus::Unmatched,
+            _ => SettlementStatus::Settled,
+        }
+    }
+}
+
+impl std::fmt::Display for SettlementStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(SettlementStatus);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum RegistrationStatus {
+    #[default]
+    Pending,
+    Approved,
+    Rejected,
+}
+
+impl RegistrationStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RegistrationStatus::Pending => "PENDING",
+            RegistrationStatus::Approved => "APPROVED",
+            RegistrationStatus::Rejected => "REJECTED",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "APPROVED" => RegistrationStatus::Approved,
+            "REJECTED" => RegistrationStatus::Rejected,
+            _ => RegistrationStatus::Pending,
+        }
+    }
+}
+
+impl std::fmt::Display for RegistrationStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(RegistrationStatus);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CapitalProjectStatus {
+    #[default]
+    Active,
+    Completed,
+    Cancelled,
+    Draft,
+}
+
+impl CapitalProjectStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CapitalProjectStatus::Active => "ACTIVE",
+            CapitalProjectStatus::Completed => "COMPLETED",
+            CapitalProjectStatus::Cancelled => "CANCELLED",
+            CapitalProjectStatus::Draft => "DRAFT",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "COMPLETED" => CapitalProjectStatus::Completed,
+            "CANCELLED" => CapitalProjectStatus::Cancelled,
+            "DRAFT" => CapitalProjectStatus::Draft,
+            _ => CapitalProjectStatus::Active,
+        }
+    }
+}
+
+impl std::fmt::Display for CapitalProjectStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(CapitalProjectStatus);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DisbursementMethod {
+    #[default]
+    BankTransfer,
+    Fast,
+    Cash,
+    Check,
+}
+
+impl DisbursementMethod {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DisbursementMethod::BankTransfer => "BANK_TRANSFER",
+            DisbursementMethod::Fast => "FAST",
+            DisbursementMethod::Cash => "CASH",
+            DisbursementMethod::Check => "CHECK",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "FAST" => DisbursementMethod::Fast,
+            "CASH" => DisbursementMethod::Cash,
+            "CHECK" => DisbursementMethod::Check,
+            _ => DisbursementMethod::BankTransfer,
+        }
+    }
+}
+
+impl std::fmt::Display for DisbursementMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(DisbursementMethod);
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DuesLiability {
     pub id: String,
@@ -120,19 +602,11 @@ pub struct DuesLiability {
     #[serde(default)]
     pub paid_penalty: Decimal,
     /// `OWNER` or `TENANT`: who is liable.
-    #[serde(default = "default_debtor_type")]
-    pub debtor_type: String,
+    #[serde(default)]
+    pub debtor_type: DebtorType,
     /// `OPERATIONAL_DUES` or `CAPITAL_DUES`.
-    #[serde(default = "default_expense_type")]
-    pub expense_type: String,
-}
-
-fn default_debtor_type() -> String {
-    "TENANT".to_string()
-}
-
-fn default_expense_type() -> String {
-    "OPERATIONAL_DUES".to_string()
+    #[serde(default)]
+    pub expense_type: ExpenseType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,7 +636,7 @@ pub struct DuesPeriod {
     pub site_id: String,
     pub period_name: String,
     pub due_date: NaiveDate,
-    pub status: String, // "ACTIVE", "CLOSED", "DRAFT"
+    pub status: DuesPeriodStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -214,7 +688,7 @@ pub struct User {
     pub password_hash: Option<String>,
     pub role: Role,
     pub must_change_password: bool,
-    pub auth_provider: String,
+    pub auth_provider: AuthProvider,
     pub google_sub: Option<String>,
     pub avatar_url: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -228,8 +702,8 @@ pub struct Site {
     pub name: String,
     pub address: String,
     pub slug: String,
-    pub status: String,
-    pub plan_type: String,
+    pub status: SiteStatus,
+    pub plan_type: PlanType,
     pub license_end_date: NaiveDate,
     /// IANA time zone used for accrual dates (e.g. `Europe/Istanbul`).
     #[serde(default = "default_site_timezone")]
@@ -326,7 +800,7 @@ pub struct UserSummary {
     pub site_id: String,
     pub unit_id: String,
     pub avatar_url: Option<String>,
-    pub auth_provider: String,
+    pub auth_provider: AuthProvider,
     pub must_change_password: bool,
     pub permissions: Vec<Permission>,
 }
@@ -341,7 +815,7 @@ pub struct UserProfileResponse {
     pub site_id: String,
     pub unit_id: String,
     pub avatar_url: Option<String>,
-    pub auth_provider: String,
+    pub auth_provider: AuthProvider,
     pub must_change_password: bool,
     pub permissions: Vec<Permission>,
     pub permission_descriptions: Vec<String>,
@@ -378,8 +852,8 @@ pub struct SiteRegistrationResponse {
     pub site_id: String,
     pub site_name: String,
     pub slug: String,
-    pub status: String,
-    pub plan_type: String,
+    pub status: SiteStatus,
+    pub plan_type: PlanType,
     pub admin_user_id: String,
     pub admin_full_name: String,
     pub admin_email: String,
@@ -408,8 +882,8 @@ pub struct SaasSiteSummaryDto {
     pub site_name: String,
     pub slug: String,
     pub address: String,
-    pub status: String,
-    pub plan_type: String,
+    pub status: SiteStatus,
+    pub plan_type: PlanType,
     pub license_end_date: NaiveDate,
     pub total_units: i32,
     pub monthly_dues_volume: Decimal,
@@ -500,60 +974,6 @@ pub struct UpdateHomeOwnerRequest {
     pub is_resident: Option<bool>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[allow(dead_code)]
-#[derive(Default)]
-pub enum OccupancyStatus {
-    #[default]
-    OwnerOccupied,
-    TenantOccupied,
-    Vacant,
-}
-
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[allow(dead_code)]
-#[derive(Default)]
-pub enum ExpenseType {
-    #[default]
-    OperationalDues,
-    CapitalDues,
-}
-
-
-impl ExpenseType {
-    #[allow(dead_code)]
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            ExpenseType::OperationalDues => "OPERATIONAL_DUES",
-            ExpenseType::CapitalDues => "CAPITAL_DUES",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[allow(dead_code)]
-#[derive(Default)]
-pub enum DebtorType {
-    #[default]
-    Tenant,
-    Owner,
-}
-
-
-impl DebtorType {
-    #[allow(dead_code)]
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            DebtorType::Tenant => "TENANT",
-            DebtorType::Owner => "OWNER",
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoveOutResidentRequest {
     pub end_date: Option<String>,
@@ -566,7 +986,7 @@ pub struct MoveInResidentRequest {
     pub full_name: Option<String>,
     pub phone: Option<String>,
     pub email: Option<String>,
-    pub role: String, // "TENANT" or "OWNER"
+    pub role: DebtorType,
     pub start_date: Option<String>,
     pub notes: Option<String>,
 }
@@ -579,7 +999,7 @@ pub struct OccupancyHistoryItem {
     pub person_name: String,
     pub person_phone: Option<String>,
     pub person_email: Option<String>,
-    pub role: String,
+    pub role: DebtorType,
     pub start_date: String,
     pub end_date: Option<String>,
     pub is_active: bool,
@@ -607,7 +1027,7 @@ pub struct HomeOwnerResponse {
     pub must_change_password: bool,
     pub created_at: DateTime<Utc>,
     #[serde(default)]
-    pub occupancy_status: Option<String>,
+    pub occupancy_status: Option<OccupancyStatus>,
     #[serde(default)]
     pub tenant_full_name: Option<String>,
     #[serde(default)]
@@ -655,7 +1075,7 @@ pub struct PendingRegistrationResponse {
     pub email: String,
     pub phone: String,
     pub is_resident: bool,
-    pub status: String,
+    pub status: RegistrationStatus,
     pub submitted_at: DateTime<Utc>,
 }
 
@@ -663,7 +1083,7 @@ pub struct PendingRegistrationResponse {
 pub struct ApprovalResultResponse {
     pub request_id: String,
     pub site_id: String,
-    pub status: String,
+    pub status: RegistrationStatus,
     pub unit_id: String,
     pub email: String,
     pub temporary_password: String,
@@ -837,7 +1257,7 @@ pub struct SiteBankAccount {
     pub iban: String,
     pub account_holder: String,
     /// Automatically derived from bank_code; stored as canonical string.
-    pub statement_format: String,
+    pub statement_format: BankStatementFormat,
     pub is_active: bool,
     pub configured_by: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -869,7 +1289,7 @@ pub struct BankAccountConfigResponse {
     pub iban: String,
     pub account_holder: String,
     /// The statement file format required for this bank (EXCEL / CSV / MT940).
-    pub statement_format: String,
+    pub statement_format: BankStatementFormat,
     pub is_active: bool,
     pub configured_by: Option<String>,
     pub updated_at: DateTime<Utc>,
@@ -881,17 +1301,46 @@ pub struct SupportedBankEntry {
     pub code: String,
     pub display_name: String,
     /// Statement format automatically applied when this bank is selected.
-    pub statement_format: String,
+    pub statement_format: BankStatementFormat,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum BankStatementFormat {
+    #[default]
     Excel,
     Csv,
     Mt940,
     Auto,
 }
+
+impl BankStatementFormat {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BankStatementFormat::Excel => "EXCEL",
+            BankStatementFormat::Csv => "CSV",
+            BankStatementFormat::Mt940 => "MT940",
+            BankStatementFormat::Auto => "AUTO",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "CSV" => BankStatementFormat::Csv,
+            "MT940" => BankStatementFormat::Mt940,
+            "AUTO" => BankStatementFormat::Auto,
+            _ => BankStatementFormat::Excel,
+        }
+    }
+}
+
+impl std::fmt::Display for BankStatementFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(BankStatementFormat);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -1067,7 +1516,7 @@ pub struct HomeownerPaymentRecord {
     pub unit_number: i32,
     pub homeowner_name: Option<String>,
     pub amount: Decimal,
-    pub payment_method: String, // 'CREDIT_CARD', 'BANK_TRANSFER', 'FAST', 'CASH'
+    pub payment_method: PaymentChannel,
     pub reference_code: Option<String>,
     pub note: Option<String>,
     pub status: PaymentMatchStatus,
@@ -1080,7 +1529,7 @@ pub struct HomeownerPaymentRecord {
 pub struct RecordHomeownerPaymentRequest {
     pub unit_id: String,
     pub amount: Decimal,
-    pub payment_method: String,
+    pub payment_method: PaymentChannel,
     #[serde(default)]
     pub reference_code: Option<String>,
     #[serde(default)]
@@ -1254,7 +1703,7 @@ pub struct AllocationBreakdownItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due_id: Option<String>,
     pub period: String,
-    pub expense_type: String,
+    pub expense_type: ExpenseType,
     pub principal_paid: Decimal,
     pub penalty_paid: Decimal,
 }
@@ -1267,13 +1716,13 @@ pub struct PaymentReceipt {
     pub receipt_number: String,
     pub sequence_number: i64,
     pub payer_name: String,
-    pub payer_role: String,
+    pub payer_role: DebtorType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_behalf_of_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub on_behalf_of_role: Option<String>,
+    pub on_behalf_of_role: Option<DebtorType>,
     pub total_amount: Decimal,
-    pub payment_channel: String,
+    pub payment_channel: PaymentChannel,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel_reference: Option<String>,
     pub allocated_principal: Decimal,
@@ -1296,14 +1745,14 @@ pub struct PaymentEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unit_label: Option<String>,
     pub payer_name: String,
-    pub payer_role: String,
+    pub payer_role: DebtorType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receipt_id: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receipt_number: Option<String>,
     pub amount: Decimal,
-    pub payment_channel: String,
-    pub settlement_status: String,
+    pub payment_channel: PaymentChannel,
+    pub settlement_status: SettlementStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1317,11 +1766,11 @@ pub struct PaymentStreamFilter {
     #[serde(default)]
     pub site_id: Option<String>,
     #[serde(default)]
-    pub channel: Option<String>,
+    pub channel: Option<PaymentChannel>,
     #[serde(default)]
-    pub payer_role: Option<String>,
+    pub payer_role: Option<DebtorType>,
     #[serde(default)]
-    pub settlement_status: Option<String>,
+    pub settlement_status: Option<SettlementStatus>,
     #[serde(default)]
     pub unit_id: Option<String>,
     #[serde(default)]
@@ -1354,7 +1803,7 @@ pub struct DebtAgingBracket {
     pub unit_id: String,
     pub unit_label: String,
     pub resident_name: String,
-    pub debtor_type: String,
+    pub debtor_type: DebtorType,
     pub current_due: Decimal,
     pub overdue_1_30_days: Decimal,
     pub overdue_31_60_days: Decimal,
@@ -1405,10 +1854,10 @@ pub struct RecordManualPaymentRequest {
     pub unit_id: String,
     pub amount: Decimal,
     pub payer_name: String,
-    #[serde(default = "default_payer_role")]
-    pub payer_role: String,
-    #[serde(default = "default_payment_channel")]
-    pub payment_channel: String,
+    #[serde(default)]
+    pub payer_role: DebtorType,
+    #[serde(default)]
+    pub payment_channel: PaymentChannel,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
@@ -1416,14 +1865,6 @@ pub struct RecordManualPaymentRequest {
     /// Client-generated key; retrying with the same key returns the first receipt.
     #[serde(default)]
     pub idempotency_key: Option<String>,
-}
-
-fn default_payer_role() -> String {
-    "TENANT".to_string()
-}
-
-fn default_payment_channel() -> String {
-    "MANUAL_CASH".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1459,7 +1900,7 @@ pub struct TransferOwnershipResponse {
 // EPIC-10: Capital Projects & Fixture Dues Models
 // ==========================================
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum CapitalProjectCategory {
     Elevator,
@@ -1468,26 +1909,86 @@ pub enum CapitalProjectCategory {
     Generator,
     SecuritySystem,
     FireSafety,
+    #[default]
     Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+impl CapitalProjectCategory {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CapitalProjectCategory::Elevator => "ELEVATOR",
+            CapitalProjectCategory::FacadeInsulation => "FACADE_INSULATION",
+            CapitalProjectCategory::RoofWaterproofing => "ROOF_WATERPROOFING",
+            CapitalProjectCategory::Generator => "GENERATOR",
+            CapitalProjectCategory::SecuritySystem => "SECURITY_SYSTEM",
+            CapitalProjectCategory::FireSafety => "FIRE_SAFETY",
+            CapitalProjectCategory::Other => "OTHER",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "ELEVATOR" | "ASANSOR" => CapitalProjectCategory::Elevator,
+            "FACADE_INSULATION" | "MANTOLAMA" => CapitalProjectCategory::FacadeInsulation,
+            "ROOF_WATERPROOFING" | "ROOF_FACADE" | "CATI" => CapitalProjectCategory::RoofWaterproofing,
+            "GENERATOR" | "JENERATOR" => CapitalProjectCategory::Generator,
+            "SECURITY_SYSTEM" | "GUVENLIK" => CapitalProjectCategory::SecuritySystem,
+            "FIRE_SAFETY" | "YANGIN" => CapitalProjectCategory::FireSafety,
+            _ => CapitalProjectCategory::Other,
+        }
+    }
+}
+
+impl std::fmt::Display for CapitalProjectCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(CapitalProjectCategory);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AllocationBasis {
+    #[default]
     ByLandShare,
     EqualPerUnit,
 }
+
+impl AllocationBasis {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AllocationBasis::ByLandShare => "BY_LAND_SHARE",
+            AllocationBasis::EqualPerUnit => "EQUAL_PER_UNIT",
+        }
+    }
+
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "EQUAL_PER_UNIT" => AllocationBasis::EqualPerUnit,
+            _ => AllocationBasis::ByLandShare,
+        }
+    }
+}
+
+impl std::fmt::Display for AllocationBasis {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl_sql_for_enum!(AllocationBasis);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapitalProject {
     pub id: String,
     pub site_id: String,
     pub title: String,
-    pub category: String,
+    pub category: CapitalProjectCategory,
     #[serde(default)]
     pub description: Option<String>,
     pub total_budget: Decimal,
-    pub allocation_basis: String,
+    pub allocation_basis: AllocationBasis,
     pub target_start_date: NaiveDate,
     #[serde(default)]
     pub target_completion_date: Option<NaiveDate>,
@@ -1499,7 +2000,7 @@ pub struct CapitalProject {
     pub contractor_iban: Option<String>,
     #[serde(default)]
     pub contract_amount: Option<Decimal>,
-    pub status: String,
+    pub status: CapitalProjectStatus,
     pub collected_amount: Decimal,
     pub disbursed_amount: Decimal,
     pub remaining_fund_balance: Decimal,
@@ -1539,7 +2040,7 @@ pub struct CapitalContractorDisbursement {
     #[serde(default)]
     pub payment_reference: Option<String>,
     #[serde(default)]
-    pub disbursement_method: String,
+    pub disbursement_method: DisbursementMethod,
     #[serde(default)]
     pub notes: Option<String>,
     #[serde(default)]
@@ -1568,12 +2069,12 @@ pub struct CreateCapitalProjectRequest {
     pub site_id: Option<String>,
     pub title: String,
     #[serde(default)]
-    pub category: Option<String>,
+    pub category: Option<CapitalProjectCategory>,
     #[serde(default)]
     pub description: Option<String>,
     pub total_budget: Decimal,
     #[serde(default)]
-    pub allocation_basis: Option<String>,
+    pub allocation_basis: Option<AllocationBasis>,
     #[serde(default)]
     pub target_start_date: Option<NaiveDate>,
     #[serde(default)]
@@ -1629,7 +2130,7 @@ pub struct RecordDisbursementRequest {
     #[serde(default)]
     pub payment_reference: Option<String>,
     #[serde(default)]
-    pub disbursement_method: Option<String>,
+    pub disbursement_method: Option<DisbursementMethod>,
     #[serde(default)]
     pub notes: Option<String>,
 }

@@ -2074,7 +2074,7 @@ pub async fn create_dues_period(
         site_id: payload.site_id.clone(),
         period_name: payload.period_name.clone(),
         due_date: payload.due_date,
-        status: "ACTIVE".to_string(),
+        status: DuesPeriodStatus::Active,
         created_at: Some(chrono::Utc::now()),
     };
 
@@ -2122,7 +2122,7 @@ pub async fn accrue_monthly_dues(
             site_id: payload.site_id.clone(),
             period_name: payload.period.clone(),
             due_date: payload.due_date,
-            status: "ACTIVE".to_string(),
+            status: DuesPeriodStatus::Active,
             created_at: Some(chrono::Utc::now()),
         };
         inner.dues_periods.push(period_record.clone());
@@ -2169,8 +2169,8 @@ pub async fn accrue_monthly_dues(
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: "TENANT".to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
+                debtor_type: DebtorType::Tenant,
+                expense_type: ExpenseType::OperationalDues,
             });
             total_amount_accrued += effective_amount;
             newly_accrued_units_count += 1;
@@ -2338,7 +2338,7 @@ pub async fn record_homeowner_payment(
             })
         }),
         amount: payload.amount,
-        payment_method: payload.payment_method.clone(),
+        payment_method: payload.payment_method,
         reference_code: payload.reference_code.clone(),
         note: payload.note.clone(),
         status: match_status,
@@ -2370,8 +2370,8 @@ pub async fn record_homeowner_payment(
         let receipt_id_clone = receipt_id.clone();
         let res_name_clone = resident_name.clone();
         let msg_clone = message.clone();
-        let p_method = payload.payment_method.clone();
-        let is_card = p_method.to_uppercase().contains("CARD") || p_method.to_uppercase().contains("KART");
+        let p_method = payload.payment_method;
+        let is_card = matches!(p_method, PaymentChannel::CreditCard);
 
         crate::db::save_homeowner_payment(&pool, &rec).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
 
@@ -2435,7 +2435,7 @@ pub async fn record_homeowner_payment(
             amount: payload.amount,
             currency: "TRY".to_string(),
             description: payload.note.unwrap_or_else(|| {
-                if payload.payment_method.to_uppercase().contains("CARD") || payload.payment_method.to_uppercase().contains("KART") {
+                if matches!(payload.payment_method, PaymentChannel::CreditCard) {
                     "Kredi Kartı ile Aidat Ödemesi".to_string()
                 } else {
                     format!("{} ile Aidat Ödemesi", payload.payment_method)
@@ -2858,7 +2858,7 @@ pub async fn wipe_all_data(
             password_hash: Some(crate::auth::hash_password(&crate::state::bootstrap_admin_password())),
             role: crate::models::Role::SaasAdmin,
             must_change_password: true,
-            auth_provider: "LOCAL".to_string(),
+            auth_provider: AuthProvider::Local,
             google_sub: None,
             avatar_url: None,
             created_at: chrono::Utc::now(),
@@ -3073,8 +3073,8 @@ pub async fn provision_site_units(
                 let name: String = r.get(1);
                 let s_slug: Option<String> = r.get(2);
                 let addr: Option<String> = r.get(3);
-                let st: String = r.get(4);
-                let plan: String = r.get(5);
+                let st: SiteStatus = r.get(4);
+                let plan: PlanType = r.get(5);
                 let lic_end: Option<chrono::NaiveDate> = r.get(6);
                 let mut inner = state.inner.write().await;
                 if !inner.sites.iter().any(|s| s.id == id_str) {
@@ -3146,8 +3146,8 @@ pub async fn provision_site_units(
                 let name: String = r.get(1);
                 let s_slug: Option<String> = r.get(2);
                 let addr: Option<String> = r.get(3);
-                let st: String = r.get(4);
-                let plan: String = r.get(5);
+                let st: SiteStatus = r.get(4);
+                let plan: PlanType = r.get(5);
                 let lic_end: Option<chrono::NaiveDate> = r.get(6);
                 let mut inner = state.inner.write().await;
                 if !inner.sites.iter().any(|s| s.id == id_str) {
@@ -3196,8 +3196,8 @@ pub async fn provision_site_units(
                     name: s_name,
                     address: "Kadıköy, İstanbul".to_string(),
                     slug,
-                    status: "ACTIVE".to_string(),
-                    plan_type: "PREMIUM".to_string(),
+                    status: SiteStatus::Active,
+                    plan_type: PlanType::Premium,
                     license_end_date: license_end,
                     timezone: crate::models::default_site_timezone(),
                 });
@@ -3215,8 +3215,8 @@ pub async fn provision_site_units(
                     name: s_name,
                     address: "Kadıköy, İstanbul".to_string(),
                     slug,
-                    status: "ACTIVE".to_string(),
-                    plan_type: "PREMIUM".to_string(),
+                    status: SiteStatus::Active,
+                    plan_type: PlanType::Premium,
                     license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
                     timezone: crate::models::default_site_timezone(),
                 });
@@ -3279,7 +3279,7 @@ pub async fn provision_site_units(
                 password_hash: Some(crate::auth::hash_password(&crate::auth::generate_temporary_password("SP-SAKIN-"))),
                 role: Role::HomeOwner,
                 must_change_password: true,
-                auth_provider: "LOCAL".to_string(),
+                auth_provider: AuthProvider::Local,
                 google_sub: None,
                 avatar_url: None,
                 created_at: Utc::now(),
@@ -3339,8 +3339,8 @@ pub async fn provision_site_units(
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: "TENANT".to_string(),
-                expense_type: "OPERATIONAL_DUES".to_string(),
+                debtor_type: DebtorType::Tenant,
+                expense_type: ExpenseType::OperationalDues,
             });
         }
 
@@ -3505,15 +3505,11 @@ pub async fn get_site_payments(
             let txn_upper = item.transaction.transaction_id.to_uppercase();
 
             let (payment_channel, payment_channel_label) = if let Some(hp) = linked_hp {
-                let m = hp.payment_method.to_uppercase();
-                if m.contains("CARD") || m.contains("KART") {
-                    ("CREDIT_CARD", "Kredi Kartı (Online)")
-                } else if m.contains("VIBAN") || m.contains("VIRTUAL") {
-                    ("VIRTUAL_IBAN", "Sanal IBAN (Virtual Account)")
-                } else if m.contains("FAST") {
-                    ("FAST", "FAST 7/24 Anlık Takas")
-                } else {
-                    ("BANK_TRANSFER", "Banka Havale / EFT")
+                match hp.payment_method {
+                    PaymentChannel::CreditCard => ("CREDIT_CARD", "Kredi Kartı (Online)"),
+                    PaymentChannel::VirtualIban => ("VIRTUAL_IBAN", "Sanal IBAN (Virtual Account)"),
+                    PaymentChannel::Fast => ("FAST", "FAST 7/24 Anlık Takas"),
+                    _ => ("BANK_TRANSFER", "Banka Havale / EFT"),
                 }
             } else if desc_upper.contains("KART")
                 || desc_upper.contains("CARD")
@@ -3600,15 +3596,12 @@ pub async fn get_site_payments(
                 let virtual_iban = unit.and_then(|u| u.virtual_iban.clone());
                 let is_advance = hp.advance_credit_amount > Decimal::ZERO;
 
-                let payment_channel = hp.payment_method.clone();
-                let payment_channel_label = if payment_channel.to_uppercase().contains("CARD") || payment_channel.to_uppercase().contains("KART") {
-                    "Kredi Kartı (Online)".to_string()
-                } else if payment_channel.to_uppercase().contains("VIBAN") || payment_channel.to_uppercase().contains("VIRTUAL") {
-                    "Sanal IBAN (Virtual Account)".to_string()
-                } else if payment_channel.to_uppercase().contains("FAST") {
-                    "FAST 7/24 Anlık Takas".to_string()
-                } else {
-                    "Banka Havale / EFT".to_string()
+                let payment_channel = hp.payment_method.as_str();
+                let payment_channel_label = match hp.payment_method {
+                    PaymentChannel::CreditCard => "Kredi Kartı (Online)".to_string(),
+                    PaymentChannel::VirtualIban => "Sanal IBAN (Virtual Account)".to_string(),
+                    PaymentChannel::Fast => "FAST 7/24 Anlık Takas".to_string(),
+                    _ => "Banka Havale / EFT".to_string(),
                 };
 
                 payments.push(serde_json::json!({

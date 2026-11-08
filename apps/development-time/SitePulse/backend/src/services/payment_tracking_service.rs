@@ -3,10 +3,10 @@ use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
 
 use crate::models::{
-    AllocationBreakdownItem, DebtAgingBracket, DebtAgingReport, DebtStatus,
-    InterLedgerTransferRequest, InterLedgerTransferResponse, OccupancyHistoryItem,
-    DuesLiability, PaymentEntry, PaymentMatchStatus, PaymentReceipt, PaymentStreamFilter, PaymentStreamResponse,
-    RecordManualPaymentRequest, Role, TransferOwnershipRequest, TransferOwnershipResponse, User,
+    AllocationBreakdownItem, AuthProvider, DebtAgingBracket, DebtAgingReport, DebtStatus, DebtorType,
+    DuesLiability, ExpenseType, InterLedgerTransferRequest, InterLedgerTransferResponse, OccupancyHistoryItem,
+    PaymentChannel, PaymentEntry, PaymentMatchStatus, PaymentReceipt, PaymentStreamFilter, PaymentStreamResponse,
+    RecordManualPaymentRequest, Role, SettlementStatus, TransferOwnershipRequest, TransferOwnershipResponse, User,
 };
 use crate::services::dues_ledger;
 use crate::state::AppState;
@@ -91,8 +91,8 @@ impl PaymentTrackingService {
                 let settlement_status = match hp.status {
                     PaymentMatchStatus::MatchedDebt
                     | PaymentMatchStatus::MatchedAdvance
-                    | PaymentMatchStatus::PartiallyMatched => "SETTLED".to_string(),
-                    PaymentMatchStatus::Pending => "UNMATCHED".to_string(),
+                    | PaymentMatchStatus::PartiallyMatched => SettlementStatus::Settled,
+                    PaymentMatchStatus::Pending => SettlementStatus::Unmatched,
                 };
 
                 all_entries.push(PaymentEntry {
@@ -101,11 +101,11 @@ impl PaymentTrackingService {
                     unit_id: hp.unit_id.clone(),
                     unit_label: Some(unit_label),
                     payer_name: hp.homeowner_name.clone().unwrap_or_else(|| "Bilinmeyen Sakin".to_string()),
-                    payer_role: "OWNER".to_string(),
+                    payer_role: DebtorType::Owner,
                     receipt_id: None,
                     receipt_number: hp.reference_code.clone().or_else(|| Some(format!("REC-{}", hp.id))),
                     amount: hp.amount,
-                    payment_channel: hp.payment_method.clone(),
+                    payment_channel: hp.payment_method,
                     settlement_status,
                     description: hp.note.clone(),
                     external_reference: hp.reference_code.clone(),
@@ -123,18 +123,18 @@ impl PaymentTrackingService {
                 if !target_site.is_empty() && e.site_id != target_site && target_site != "all" {
                     return false;
                 }
-                if let Some(ref ch) = filter.channel {
-                    if !ch.is_empty() && &e.payment_channel != ch {
+                if let Some(ch) = filter.channel {
+                    if e.payment_channel != ch {
                         return false;
                     }
                 }
-                if let Some(ref role) = filter.payer_role {
-                    if !role.is_empty() && &e.payer_role != role {
+                if let Some(role) = filter.payer_role {
+                    if e.payer_role != role {
                         return false;
                     }
                 }
-                if let Some(ref status) = filter.settlement_status {
-                    if !status.is_empty() && &e.settlement_status != status {
+                if let Some(status) = filter.settlement_status {
+                    if e.settlement_status != status {
                         return false;
                     }
                 }
@@ -171,12 +171,12 @@ impl PaymentTrackingService {
         let total_volume: Decimal = filtered.iter().map(|e| e.amount).sum();
         let settled_volume: Decimal = filtered
             .iter()
-            .filter(|e| e.settlement_status == "SETTLED")
+            .filter(|e| e.settlement_status == SettlementStatus::Settled)
             .map(|e| e.amount)
             .sum();
         let unmatched_volume: Decimal = filtered
             .iter()
-            .filter(|e| e.settlement_status == "UNMATCHED")
+            .filter(|e| e.settlement_status == SettlementStatus::Unmatched)
             .map(|e| e.amount)
             .sum();
 
@@ -204,7 +204,7 @@ impl PaymentTrackingService {
         let inner = self.state.inner.read().await;
         let today = Utc::now().date_naive();
 
-        let mut brackets_map: std::collections::HashMap<(String, String), DebtAgingBracket> =
+        let mut brackets_map: std::collections::HashMap<(String, DebtorType), DebtAgingBracket> =
             std::collections::HashMap::new();
 
         for due in &inner.dues {
@@ -223,9 +223,9 @@ impl PaymentTrackingService {
             }
 
             let debtor_type = if unit.tenant_user_id.is_some() {
-                "TENANT".to_string()
+                DebtorType::Tenant
             } else {
-                "OWNER".to_string()
+                DebtorType::Owner
             };
 
             let resident_name = if let Some(ref tid) = unit.tenant_user_id {
@@ -237,7 +237,7 @@ impl PaymentTrackingService {
             };
 
             let unit_label = format!("{} Blok D:{}", unit.block_id, unit.unit_number);
-            let key = (unit.id.clone(), debtor_type.clone());
+            let key = (unit.id.clone(), debtor_type);
 
             let bracket = brackets_map.entry(key).or_insert_with(|| DebtAgingBracket {
                 unit_id: unit.id.clone(),
@@ -320,18 +320,15 @@ impl PaymentTrackingService {
         if payment_amount.scale() > 2 {
             return Err("Payment amount must have at most 2 decimal places".to_string());
         }
-        let payer_role = req.payer_role.trim().to_uppercase();
-        if payer_role != dues_ledger::DEBTOR_OWNER && payer_role != dues_ledger::DEBTOR_TENANT {
-            return Err(format!("payer_role must be OWNER or TENANT, got '{}'", req.payer_role));
-        }
+        let payer_role = req.payer_role;
         let idempotency_key = req.idempotency_key.as_deref().map(str::trim).filter(|k| !k.is_empty()).map(str::to_string);
 
         let desc = req.description.clone().unwrap_or_default();
         // A tenant paying capital dues explicitly does so on behalf of the owner
         // (TBK 314 rent offset); otherwise a tenant only settles tenant liabilities.
-        let on_behalf_of_owner = payer_role == dues_ledger::DEBTOR_TENANT && Self::is_capital_expenditure_intent(&desc);
-        let settling_role = if on_behalf_of_owner { dues_ledger::DEBTOR_OWNER } else { payer_role.as_str() };
-        let credit_debtor = settling_role.to_string();
+        let on_behalf_of_owner = payer_role == DebtorType::Tenant && Self::is_capital_expenditure_intent(&desc);
+        let settling_role = if on_behalf_of_owner { DebtorType::Owner } else { payer_role };
+        let credit_debtor = settling_role.as_str().to_string();
 
         let (unit, owner_name) = {
             let inner = self.state.inner.read().await;
@@ -361,8 +358,8 @@ impl PaymentTrackingService {
             site_id: site_id.clone(),
             unit_id: unit.id.clone(),
             payer_name: req.payer_name.clone(),
-            payer_role: payer_role.clone(),
-            payment_channel: req.payment_channel.clone(),
+            payer_role,
+            payment_channel: req.payment_channel,
             amount: payment_amount,
             issued_at,
             on_behalf_of_owner,
@@ -395,7 +392,7 @@ impl PaymentTrackingService {
                 .into_iter()
                 .map(|d| calc.calculate_delay_penalty(d, today))
                 .collect();
-            let candidates = dues_ledger::open_dues_for(&dues, |_| true, settling_role);
+            let candidates = dues_ledger::open_dues_for(&dues, |_| true, settling_role.as_str());
             let (lines, surplus) = dues_ledger::allocate_waterfall(&mut dues, &candidates, payment_amount);
 
             let sequence = crate::db::tx_next_receipt_sequence(&tx, site_num).await.map_err(db_err)?;
@@ -442,7 +439,7 @@ impl PaymentTrackingService {
             let next_receipt_id = inner.payment_receipts.iter().map(|r| r.id).max().unwrap_or(0) + 1;
             let next_entry_id = inner.payment_entries.iter().map(|e| e.id).max().unwrap_or(0) + 1;
             drop(inner);
-            let candidates = dues_ledger::open_dues_for(&dues, |_| true, settling_role);
+            let candidates = dues_ledger::open_dues_for(&dues, |_| true, settling_role.as_str());
             let (lines, surplus) = dues_ledger::allocate_waterfall(&mut dues, &candidates, payment_amount);
             let mut receipt = build_receipt(&ctx, &dues, &lines, surplus, next_seq);
             receipt.id = next_receipt_id;
@@ -473,7 +470,7 @@ impl PaymentTrackingService {
             unit_number: unit.unit_number,
             homeowner_name: Some(req.payer_name.clone()),
             amount: payment_amount,
-            payment_method: req.payment_channel.clone(),
+            payment_method: req.payment_channel,
             reference_code: Some(receipt.receipt_number.clone()),
             note: req.description.clone(),
             status: PaymentMatchStatus::MatchedDebt,
@@ -517,8 +514,8 @@ impl PaymentTrackingService {
             site_id: site_id.clone(),
             unit_id: unit.id.clone(),
             payer_name: owner_name.clone(),
-            payer_role: dues_ledger::DEBTOR_OWNER.to_string(),
-            payment_channel: "INTER_LEDGER".to_string(),
+            payer_role: DebtorType::Owner,
+            payment_channel: PaymentChannel::InterLedger,
             amount: Decimal::ZERO,
             issued_at: now,
             on_behalf_of_owner: false,
@@ -690,11 +687,11 @@ impl PaymentTrackingService {
                         receipt_number: row.get(3),
                         sequence_number: row.get(4),
                         payer_name: row.get(5),
-                        payer_role: row.get(6),
+                        payer_role: DebtorType::from_str_loose(row.get(6)),
                         on_behalf_of_name: row.get(7),
-                        on_behalf_of_role: row.get(8),
+                        on_behalf_of_role: row.get::<_, Option<String>>(8).map(|s| DebtorType::from_str_loose(&s)),
                         total_amount: row.get(9),
-                        payment_channel: row.get(10),
+                        payment_channel: PaymentChannel::from_str_loose(row.get(10)),
                         channel_reference: row.get(11),
                         allocated_principal: row.get(12),
                         allocated_penalty: row.get(13),
@@ -761,7 +758,7 @@ impl PaymentTrackingService {
             password_hash: Some("ARGON2_TEMP_HASH".to_string()),
             role: Role::HomeOwner,
             must_change_password: true,
-            auth_provider: "LOCAL".to_string(),
+            auth_provider: AuthProvider::Local,
             google_sub: None,
             avatar_url: None,
             created_at: now,
@@ -801,7 +798,7 @@ impl PaymentTrackingService {
             person_name: old_owner_name.clone(),
             person_phone: None,
             person_email: None,
-            role: "OWNER".to_string(),
+            role: DebtorType::Owner,
             start_date: "2020-01-01".to_string(),
             end_date: Some(transfer_date.to_string()),
             is_active: false,
@@ -853,8 +850,8 @@ struct ReceiptContext {
     site_id: String,
     unit_id: String,
     payer_name: String,
-    payer_role: String,
-    payment_channel: String,
+    payer_role: DebtorType,
+    payment_channel: PaymentChannel,
     amount: Decimal,
     issued_at: DateTime<Utc>,
     on_behalf_of_owner: bool,
@@ -880,7 +877,7 @@ fn build_receipt(
                 due_id: Some(d.id.clone()),
                 period: d.period.clone(),
                 // Taken from the liability itself, never guessed from the description.
-                expense_type: d.expense_type.clone(),
+                expense_type: d.expense_type,
                 principal_paid: l.settlement.principal,
                 penalty_paid: l.settlement.penalty,
             }
@@ -888,7 +885,7 @@ fn build_receipt(
         .collect();
     let allocated_principal: Decimal = lines.iter().map(|l| l.settlement.principal).sum();
     let allocated_penalty: Decimal = lines.iter().map(|l| l.settlement.penalty).sum();
-    let paid_capital = allocation_breakdown.iter().any(|b| b.expense_type == dues_ledger::EXPENSE_CAPITAL);
+    let paid_capital = allocation_breakdown.iter().any(|b| b.expense_type == ExpenseType::CapitalDues);
     let is_rent_offset_eligible = ctx.on_behalf_of_owner && paid_capital;
     PaymentReceipt {
         id: 0,
@@ -898,11 +895,11 @@ fn build_receipt(
         receipt_number,
         sequence_number,
         payer_name: ctx.payer_name.clone(),
-        payer_role: ctx.payer_role.clone(),
+        payer_role: ctx.payer_role,
         on_behalf_of_name: if is_rent_offset_eligible { ctx.owner_name.clone() } else { None },
-        on_behalf_of_role: if is_rent_offset_eligible { Some("OWNER".to_string()) } else { None },
+        on_behalf_of_role: if is_rent_offset_eligible { Some(DebtorType::Owner) } else { None },
         total_amount: ctx.amount,
-        payment_channel: ctx.payment_channel.clone(),
+        payment_channel: ctx.payment_channel,
         channel_reference: ctx.channel_reference.clone().or_else(|| Some(format!("REF-{}", sequence_number))),
         allocated_principal,
         allocated_penalty,
@@ -921,12 +918,12 @@ fn build_entry(ctx: &ReceiptContext, unit: &crate::models::IndependentUnit, rece
         unit_id: ctx.unit_id.clone(),
         unit_label: Some(format!("{} Blok D:{}", unit.block_id, unit.unit_number)),
         payer_name: ctx.payer_name.clone(),
-        payer_role: ctx.payer_role.clone(),
+        payer_role: ctx.payer_role,
         receipt_id: if receipt.id > 0 { Some(receipt.id) } else { None },
         receipt_number: Some(receipt.receipt_number.clone()),
         amount: ctx.amount,
-        payment_channel: ctx.payment_channel.clone(),
-        settlement_status: "SETTLED".to_string(),
+        payment_channel: ctx.payment_channel,
+        settlement_status: SettlementStatus::Settled,
         description: None,
         external_reference: receipt.channel_reference.clone(),
         payment_date: ctx.issued_at,

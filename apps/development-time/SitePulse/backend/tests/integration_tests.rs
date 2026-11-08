@@ -19,8 +19,8 @@ fn when_overdue_by_10_days_then_calculates_exact_5_percent_pro_rated_penalty() {
         status: DebtStatus::Pending,
         paid_principal: Decimal::ZERO,
         paid_penalty: Decimal::ZERO,
-        debtor_type: "TENANT".to_string(),
-        expense_type: "OPERATIONAL_DUES".to_string(),
+        debtor_type: DebtorType::Tenant,
+        expense_type: ExpenseType::OperationalDues,
     };
 
     let evaluation_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
@@ -45,8 +45,8 @@ fn when_not_overdue_then_penalty_remains_zero() {
         status: DebtStatus::Pending,
         paid_principal: Decimal::ZERO,
         paid_penalty: Decimal::ZERO,
-        debtor_type: "TENANT".to_string(),
-        expense_type: "OPERATIONAL_DUES".to_string(),
+        debtor_type: DebtorType::Tenant,
+        expense_type: ExpenseType::OperationalDues,
     };
 
     let evaluation_date = NaiveDate::from_ymd_opt(2026, 9, 10).unwrap();
@@ -111,7 +111,7 @@ async fn when_updating_site_then_site_details_and_admin_info_are_updated() {
     let updated = service.update_site(&reg_res.site_id, update_req).await.expect("Update failed");
     assert_eq!(updated.site_name, "Nilüfer Lüks Rezidans");
     assert_eq!(updated.address, "Bursa, Nilüfer, Çamlık Cad. No:12");
-    assert_eq!(updated.plan_type, "PREMIUM");
+    assert_eq!(updated.plan_type, PlanType::Premium);
     assert_eq!(updated.primary_manager_name, "Ali Veli Kaya");
     assert_eq!(updated.primary_manager_email, "ali.kaya@nilufer.com");
     assert_eq!(updated.primary_manager_phone, "+90 532 999 8877");
@@ -221,7 +221,7 @@ async fn when_submitting_self_registration_then_creates_pending_request() {
     };
 
     let res = service.submit_self_registration("begonya-sitesi", req).await.expect("Submit failed");
-    assert_eq!(res.status, "PENDING");
+    assert_eq!(res.status, RegistrationStatus::Pending);
     assert_eq!(res.full_name, "Murat Güven");
 }
 
@@ -231,7 +231,7 @@ async fn when_approving_pending_registration_then_provisions_user_and_returns_cr
     let service = RegistrationApprovalService::new(state);
 
     let res = service.approve_registration("req-seed-01").await.expect("Approval failed");
-    assert_eq!(res.status, "APPROVED");
+    assert_eq!(res.status, RegistrationStatus::Approved);
     assert!(res.temporary_password.starts_with("SP-SAKIN-"));
     assert_eq!(res.email, "kerem.yilmaz@gmail.com");
 }
@@ -366,7 +366,7 @@ async fn when_valid_google_id_token_then_authenticates_and_links_account() {
 
     let res = service.authenticate_with_google(req).await.expect("Google auth failed");
     assert_eq!(res.user.email, "google.ahmet@gmail.com");
-    assert_eq!(res.user.auth_provider, "GOOGLE");
+    assert_eq!(res.user.auth_provider, AuthProvider::Google);
 }
 
 #[test]
@@ -664,14 +664,14 @@ async fn when_site_manager_configures_bank_account_then_format_is_automatically_
         .expect("Configuration failed");
 
     assert_eq!(res.bank_code, "KUVEYT_TURK");
-    assert_eq!(res.statement_format, "EXCEL");
+    assert_eq!(res.statement_format, BankStatementFormat::Excel);
     assert_eq!(res.bank_name, "Kuveyt Türk Katılım Bankası");
     assert!(res.is_active);
 
     // Verify retrieval
     let active = service.get_active_account("site-1").await.expect("Account not found");
     assert_eq!(active.id, res.id);
-    assert_eq!(active.statement_format, "EXCEL");
+    assert_eq!(active.statement_format, BankStatementFormat::Excel);
 }
 
 #[tokio::test]
@@ -681,7 +681,7 @@ async fn when_site_manager_changes_bank_account_then_previous_account_deactivate
 
     // Initially site-1 has Kuveyt Turk (EXCEL)
     let initial = service.get_active_account("site-1").await.unwrap();
-    assert_eq!(initial.statement_format, "EXCEL");
+    assert_eq!(initial.statement_format, BankStatementFormat::Excel);
 
     // Site manager switches bank to Türkiye İş Bankası (CSV)
     let req1 = ConfigureBankAccountRequest {
@@ -692,7 +692,7 @@ async fn when_site_manager_changes_bank_account_then_previous_account_deactivate
     };
     let updated1 = service.configure_account("site-1", req1).await.unwrap();
     assert_eq!(updated1.bank_code, "IS_BANKASI");
-    assert_eq!(updated1.statement_format, "CSV");
+    assert_eq!(updated1.statement_format, BankStatementFormat::Csv);
 
     // Verify only ONE active account exists for site-1
     let inner = state.inner.read().await;
@@ -822,7 +822,7 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
     .expect("Failed to switch bank account");
     assert_eq!(cfg_status, axum::http::StatusCode::OK);
     assert_eq!(cfg_res.bank_code, "VAKIFBANK");
-    assert_eq!(cfg_res.statement_format, "MT940");
+    assert_eq!(cfg_res.statement_format, BankStatementFormat::Mt940);
 
     // 3. VERIFY: The new bank format (MT940) is now PERMISSIBLE and succeeds!
     let (status2, res2) = sitepulse_backend::handlers::parse_bank_statement(
@@ -925,8 +925,8 @@ async fn when_statement_contains_virtual_iban_then_matches_flat_with_100_percent
         status: DebtStatus::Pending,
         paid_principal: Decimal::ZERO,
         paid_penalty: Decimal::ZERO,
-        debtor_type: "TENANT".to_string(),
-        expense_type: "OPERATIONAL_DUES".to_string(),
+        debtor_type: DebtorType::Tenant,
+        expense_type: ExpenseType::OperationalDues,
     }];
 
     // Narrative contains NO block name and NO resident name, only the Virtual IBAN!
@@ -1220,7 +1220,7 @@ async fn when_scheduler_batch_runs_then_accrues_and_prevents_duplicate_accrual()
         let inner = state.inner.read().await;
         let accrued = inner.dues.iter().find(|d| d.unit_id == "d-14" && d.period == "Aralık 2026").unwrap();
         assert_eq!(accrued.principal_amount, Decimal::from_str_exact("1800.00").unwrap());
-        assert_eq!(accrued.debtor_type, "OWNER");
+        assert_eq!(accrued.debtor_type, DebtorType::Owner);
     }
 
     // Second batch run for the same date/period: must be completely idempotent (0 newly accrued)
@@ -1239,7 +1239,7 @@ async fn when_homeowner_records_payment_with_existing_debt_then_clears_debt() {
     let payload = sitepulse_backend::models::RecordHomeownerPaymentRequest {
         unit_id: "d-14".to_string(),
         amount: Decimal::from_str_exact("1400.00").unwrap(),
-        payment_method: "CREDIT_CARD".to_string(),
+        payment_method: PaymentMethod::CreditCard,
         reference_code: Some("CC-TEST-001".to_string()),
         note: Some("Eylül aidat kart ödemesi".to_string()),
         homeowner_name: Some("Ahmet Yılmaz".to_string()),
@@ -1288,7 +1288,7 @@ async fn when_homeowner_records_payment_with_no_debt_then_matches_as_advance_pay
     let payload = sitepulse_backend::models::RecordHomeownerPaymentRequest {
         unit_id: "d-1".to_string(),
         amount: Decimal::from_str_exact("2000.00").unwrap(),
-        payment_method: "FAST".to_string(),
+        payment_method: PaymentMethod::Fast,
         reference_code: Some("FAST-ADV-101".to_string()),
         note: Some("Gelecek aylar için avans".to_string()),
         homeowner_name: Some("Selim Ak".to_string()),
@@ -1320,7 +1320,7 @@ async fn when_homeowner_records_payment_exceeding_debt_then_clears_debt_and_cred
     let payload = sitepulse_backend::models::RecordHomeownerPaymentRequest {
         unit_id: "d-14".to_string(),
         amount: Decimal::from_str_exact("2500.00").unwrap(),
-        payment_method: "CREDIT_CARD".to_string(),
+        payment_method: PaymentMethod::CreditCard,
         reference_code: Some("CC-SURPLUS-001".to_string()),
         note: Some("Aidat + avans ödemesi".to_string()),
         homeowner_name: Some("Ahmet Yılmaz".to_string()),
@@ -1373,7 +1373,7 @@ async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_
             unit_number: 14,
             homeowner_name: Some("Ahmet Yılmaz".to_string()),
             amount: Decimal::from_str_exact("1400.00").unwrap(),
-            payment_method: "BANK_TRANSFER".to_string(),
+            payment_method: PaymentMethod::BankTransfer,
             reference_code: Some("REF-1".to_string()),
             note: Some("Aidat".to_string()),
             status: sitepulse_backend::models::PaymentMatchStatus::Pending,
@@ -1390,7 +1390,7 @@ async fn when_match_all_homeowner_payments_called_then_collects_and_matches_all_
             unit_number: 1,
             homeowner_name: Some("Selim Ak".to_string()),
             amount: Decimal::from_str_exact("1500.00").unwrap(),
-            payment_method: "BANK_TRANSFER".to_string(),
+            payment_method: PaymentMethod::BankTransfer,
             reference_code: Some("REF-2".to_string()),
             note: Some("Avans".to_string()),
             status: sitepulse_backend::models::PaymentMatchStatus::Pending,
@@ -1762,7 +1762,7 @@ async fn when_provisioning_12_units_for_site_then_creates_residents_and_virtual_
     {
         let inner = state.inner.read().await;
         let site = inner.sites.iter().find(|s| s.name == "Kardelen Sitesi").expect("Site should be created");
-        assert_eq!(site.status, "ACTIVE");
+        assert_eq!(site.status, SiteStatus::Active);
 
         // Verify 12 units were created
         let site_units: Vec<_> = inner.units.iter().filter(|u| u.site_id == site.id).collect();
@@ -1844,8 +1844,8 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
             name: "Lale Konutları".to_string(),
             address: "Kadıköy, İstanbul".to_string(),
             slug: "lale-konutlari".to_string(),
-            status: "ACTIVE".to_string(),
-            plan_type: "STANDARD".to_string(),
+            status: SiteStatus::Active,
+            plan_type: PlanType::Standard,
             license_end_date: chrono::NaiveDate::from_ymd_opt(2027, 12, 31).unwrap(),
             timezone: "Europe/Istanbul".to_string(),
         });
@@ -2085,7 +2085,7 @@ async fn when_managing_dues_periods_then_can_list_and_create_period_in_separate_
 
     assert_eq!(status, axum::http::StatusCode::CREATED);
     assert_eq!(created_period.period_name, "Kasım 2026");
-    assert_eq!(created_period.status, "ACTIVE");
+    assert_eq!(created_period.status, DuesPeriodStatus::Active);
 
     // 3. Verify it is listed in list_dues_periods
     let query2 = sitepulse_backend::handlers::DuesPeriodsQuery {
@@ -2176,14 +2176,14 @@ async fn when_managing_occupancy_lifecycle_then_can_move_out_and_move_in_without
         full_name: Some("Şener Şen".to_string()),
         phone: Some("0533 111 22 33".to_string()),
         email: Some("sener.sen@sitepulse.io".to_string()),
-        role: "TENANT".to_string(),
+        role: DebtorType::Tenant,
         start_date: Some("2026-10-01".to_string()),
         notes: Some("1 yıllık kira sözleşmesi".to_string()),
     };
 
     let move_in_res = service.move_in_resident("site-1", &created.unit_id, move_in_req).await;
     if let Ok(item) = move_in_res {
-        assert_eq!(item.role, "TENANT");
+        assert_eq!(item.role, DebtorType::Tenant);
         assert_eq!(item.person_name, "Şener Şen");
         assert!(item.is_active);
 
@@ -2262,7 +2262,7 @@ async fn when_registering_new_owner_or_tenant_to_existing_unit_then_archives_pre
 
     let current = hist2.iter().find(|h| h.person_name == "Halit Akçatepe").unwrap();
     assert!(current.is_active);
-    assert_eq!(current.role, "TENANT");
+    assert_eq!(current.role, DebtorType::Tenant);
 }
 
 #[tokio::test]
@@ -2442,8 +2442,8 @@ async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_k
         unit_id: "d-14".to_string(),
         amount: Decimal::from_str_exact("1500.00").unwrap(),
         payer_name: "Ayşe Yılmaz".to_string(),
-        payer_role: "TENANT".to_string(),
-        payment_channel: "MANUAL_CASH".to_string(),
+        payer_role: DebtorType::Tenant,
+        payment_channel: PaymentChannel::ManualCash,
         description: Some("Eylül ayı aidat nakit elden".to_string()),
         payment_date: Some(Utc::now()),
         idempotency_key: None,
@@ -2455,8 +2455,8 @@ async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_k
         unit_id: "d-14".to_string(),
         amount: Decimal::from_str_exact("3000.00").unwrap(),
         payer_name: "Ahmet Yılmaz".to_string(),
-        payer_role: "OWNER".to_string(),
-        payment_channel: "VIRTUAL_IBAN".to_string(),
+        payer_role: DebtorType::Owner,
+        payment_channel: PaymentChannel::VirtualIban,
         description: Some("Banka transferi".to_string()),
         payment_date: Some(Utc::now()),
         idempotency_key: None,
@@ -2474,7 +2474,7 @@ async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_k
     // 2. Query filtered by channel
     let cash_only = service.get_payment_stream(PaymentStreamFilter {
         site_id: Some("site-1".to_string()),
-        channel: Some("MANUAL_CASH".to_string()),
+        channel: Some(PaymentChannel::ManualCash),
         ..Default::default()
     }).await;
     assert_eq!(cash_only.total_count, 1);
@@ -2483,10 +2483,10 @@ async fn when_querying_payment_stream_then_returns_filtered_entries_and_volume_k
     // 3. Query filtered by payer role
     let tenant_only = service.get_payment_stream(PaymentStreamFilter {
         site_id: Some("site-1".to_string()),
-        payer_role: Some("TENANT".to_string()),
+        payer_role: Some(DebtorType::Tenant),
         ..Default::default()
     }).await;
-    assert!(tenant_only.entries.iter().all(|e| e.payer_role == "TENANT"));
+    assert!(tenant_only.entries.iter().all(|e| e.payer_role == DebtorType::Tenant));
 }
 
 #[tokio::test]
@@ -2511,8 +2511,8 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             status: DebtStatus::Pending,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: "TENANT".to_string(),
-            expense_type: "OPERATIONAL_DUES".to_string(),
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
         });
 
         // 1-30 days overdue (due 20 days ago)
@@ -2527,8 +2527,8 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             status: DebtStatus::Overdue,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: "TENANT".to_string(),
-            expense_type: "OPERATIONAL_DUES".to_string(),
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
         });
 
         // 31-60 days overdue (due 45 days ago)
@@ -2543,8 +2543,8 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             status: DebtStatus::Overdue,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: "TENANT".to_string(),
-            expense_type: "OPERATIONAL_DUES".to_string(),
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
         });
 
         // 60+ days overdue (due 80 days ago)
@@ -2559,8 +2559,8 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
             status: DebtStatus::Overdue,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: "TENANT".to_string(),
-            expense_type: "OPERATIONAL_DUES".to_string(),
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
         });
     }
 
@@ -2586,8 +2586,8 @@ async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_m
         unit_id: "d-14".to_string(),
         amount: Decimal::from_str_exact("2500.00").unwrap(),
         payer_name: "Ali Kiracı".to_string(),
-        payer_role: "TENANT".to_string(),
-        payment_channel: "BANK_TRANSFER".to_string(),
+        payer_role: DebtorType::Tenant,
+        payment_channel: PaymentChannel::BankTransfer,
         description: Some("Daire 14 Asansör ve Demirbaş Harcaması Payı".to_string()),
         payment_date: Some(Utc::now()),
         idempotency_key: None,
@@ -2598,12 +2598,12 @@ async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_m
     assert!(receipt.receipt_number.starts_with("TAH-2026-"));
     assert_eq!(receipt.total_amount, Decimal::from_str_exact("2500.00").unwrap());
     assert!(receipt.is_rent_offset_eligible);
-    assert_eq!(receipt.on_behalf_of_role, Some("OWNER".to_string()));
+    assert_eq!(receipt.on_behalf_of_role, Some(DebtorType::Owner));
     assert!(receipt.legal_statutory_note.is_some());
     assert!(receipt.legal_statutory_note.unwrap().contains("TBK Madde 314"));
     assert_eq!(receipt.verification_hash.len(), 64);
     let capital_line = receipt.allocation_breakdown.iter().find(|b| b.due_id.as_deref() == Some("cap-1")).unwrap();
-    assert_eq!(capital_line.expense_type, "CAPITAL_DUES", "label comes from the liability");
+    assert_eq!(capital_line.expense_type, ExpenseType::CapitalDues, "label comes from the liability");
 }
 
 fn owner_capital_due(id: &str, amount: &str) -> DuesLiability {
@@ -2618,8 +2618,8 @@ fn owner_capital_due(id: &str, amount: &str) -> DuesLiability {
         status: DebtStatus::Pending,
         paid_principal: Decimal::ZERO,
         paid_penalty: Decimal::ZERO,
-        debtor_type: "OWNER".to_string(),
-        expense_type: "CAPITAL_DUES".to_string(),
+        debtor_type: DebtorType::Owner,
+        expense_type: ExpenseType::CapitalDues,
     }
 }
 
@@ -2633,8 +2633,8 @@ async fn when_tenant_pays_without_capital_intent_then_owner_capital_dues_are_unt
             unit_id: "d-14".to_string(),
             amount: Decimal::from_str_exact("5000.00").unwrap(),
             payer_name: "Ali Kiracı".to_string(),
-            payer_role: "TENANT".to_string(),
-            payment_channel: "BANK_TRANSFER".to_string(),
+            payer_role: DebtorType::Tenant,
+            payment_channel: PaymentChannel::BankTransfer,
             description: Some("Aidat".to_string()),
             payment_date: None,
             idempotency_key: None,
@@ -2656,8 +2656,8 @@ async fn when_payment_is_allocated_then_amount_owed_is_preserved_and_penalty_is_
         let mut inner = state.inner.write().await;
         inner.dues.clear();
         let mut d = owner_capital_due("op-1", "1000.00");
-        d.debtor_type = "TENANT".to_string();
-        d.expense_type = "OPERATIONAL_DUES".to_string();
+        d.debtor_type = DebtorType::Tenant;
+        d.expense_type = ExpenseType::OperationalDues;
         d.delay_penalty = Decimal::from_str_exact("50.00").unwrap();
         d.total_amount = Decimal::from_str_exact("1050.00").unwrap();
         inner.dues.push(d);
@@ -2668,8 +2668,8 @@ async fn when_payment_is_allocated_then_amount_owed_is_preserved_and_penalty_is_
             unit_id: "d-14".to_string(),
             amount: Decimal::from_str_exact("300.00").unwrap(),
             payer_name: "Ali".to_string(),
-            payer_role: "TENANT".to_string(),
-            payment_channel: "CASH".to_string(),
+            payer_role: DebtorType::Tenant,
+            payment_channel: PaymentChannel::Cash,
             description: None,
             payment_date: None,
             idempotency_key: None,
@@ -2707,8 +2707,8 @@ async fn when_inter_ledger_transfer_executed_then_deducts_advance_credits_capita
             status: DebtStatus::Pending,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: "TENANT".to_string(),
-            expense_type: "OPERATIONAL_DUES".to_string(),
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
         });
     }
 
@@ -2756,8 +2756,8 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
             status: DebtStatus::Pending,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: "TENANT".to_string(),
-            expense_type: "OPERATIONAL_DUES".to_string(),
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
         });
     }
 
@@ -2802,10 +2802,10 @@ async fn when_creating_capital_project_with_installments_then_calculates_plan_co
     let req = CreateCapitalProjectRequest {
         site_id: Some("site-1".to_string()),
         title: "Çatı İzolasyon ve Mantolama".to_string(),
-        category: Some("ROOF_FACADE".to_string()),
+        category: Some(CapitalProjectCategory::RoofWaterproofing),
         description: Some("Dış cephe ısı yalıtımı ve çatı su izolasyonu".to_string()),
         total_budget: Decimal::from_str_exact("300000.00").unwrap(),
-        allocation_basis: Some("BY_LAND_SHARE".to_string()),
+        allocation_basis: Some(AllocationBasis::ByLandShare),
         target_start_date: Some(Utc::now().date_naive()),
         target_completion_date: None,
         contractor_name: Some("İzotürk Yapı Ltd.".to_string()),
@@ -2856,10 +2856,10 @@ async fn when_accruing_capital_installment_then_reconciles_penny_drift_exactly()
     let req = CreateCapitalProjectRequest {
         site_id: Some("site-1".to_string()),
         title: "Güvenlik Kamera Sistemi".to_string(),
-        category: Some("SECURITY_SYSTEM".to_string()),
+        category: Some(CapitalProjectCategory::SecuritySystem),
         description: None,
         total_budget: Decimal::from_str_exact("10000.00").unwrap(),
-        allocation_basis: Some("BY_LAND_SHARE".to_string()),
+        allocation_basis: Some(AllocationBasis::ByLandShare),
         target_start_date: Some(Utc::now().date_naive()),
         target_completion_date: None,
         contractor_name: None,
@@ -2901,10 +2901,10 @@ async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
     let req = CreateCapitalProjectRequest {
         site_id: Some("site-1".to_string()),
         title: "Kazan Dairesi Yenileme".to_string(),
-        category: Some("BOILER_HEATING".to_string()),
+        category: Some(CapitalProjectCategory::Other),
         description: None,
         total_budget: Decimal::from_str_exact("80000.00").unwrap(),
-        allocation_basis: Some("BY_LAND_SHARE".to_string()),
+        allocation_basis: Some(AllocationBasis::ByLandShare),
         target_start_date: Some(Utc::now().date_naive()),
         target_completion_date: None,
         contractor_name: Some("Termik Mühendislik".to_string()),
@@ -2924,7 +2924,7 @@ async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
         recipient_name: "Termik Mühendislik".to_string(),
         recipient_iban: "TR330006200000000098765432".to_string(),
         payment_reference: Some("PROJ-KAZAN-HK1".to_string()),
-        disbursement_method: Some("BANK_TRANSFER".to_string()),
+        disbursement_method: Some(DisbursementMethod::BankTransfer),
         notes: Some("Söküm tutanağı imzalandı".to_string()),
     };
 
@@ -2959,8 +2959,8 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
             status: DebtStatus::Overdue,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: "TENANT".to_string(),
-            expense_type: "OPERATIONAL_DUES".to_string(),
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
         });
     }
 
@@ -2969,8 +2969,8 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
         unit_id: "d-14".to_string(),
         amount: Decimal::from_str_exact("1200.00").unwrap(),
         payer_name: "Ali Veli".to_string(),
-        payer_role: "OWNER".to_string(),
-        payment_channel: "BANK_TRANSFER".to_string(),
+        payer_role: DebtorType::Owner,
+        payment_channel: PaymentChannel::BankTransfer,
         payment_date: None,
         idempotency_key: None,
         description: Some("Ekim Aidat ve Avans".to_string()),
@@ -3013,8 +3013,8 @@ async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_
             status: DebtStatus::Overdue,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: "TENANT".to_string(),
-            expense_type: "OPERATIONAL_DUES".to_string(),
+            debtor_type: DebtorType::Tenant,
+            expense_type: ExpenseType::OperationalDues,
         });
     }
 
@@ -3039,7 +3039,7 @@ async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_
     let occupancies = inner.unit_occupancies.get("d-14").unwrap();
     assert!(!occupancies.is_empty());
     let last = occupancies.last().unwrap();
-    assert_eq!(last.role, "OWNER");
+    assert_eq!(last.role, DebtorType::Owner);
     assert!(!last.is_active);
     assert_eq!(last.exit_balance, Decimal::from_str_exact("800.00").unwrap());
 }
