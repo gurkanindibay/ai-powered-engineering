@@ -160,6 +160,46 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/payments/reverse", post(handlers::reverse_payment))
         .route("/api/v1/payments/debt-aging/snapshot", post(handlers::snapshot_debt_aging))
         .route("/api/v1/payments/receipts/:id", get(handlers::get_payment_receipt))
+        // SPEC-007: receipt PDF, public verification, card payments, statement, işletme projesi
+        .route("/api/v1/payments/receipts/:id/pdf", get(handlers::get_payment_receipt_pdf))
+        .route("/api/v1/public/receipts/verify", get(handlers::verify_receipt))
+        .route("/api/v1/payments/provider/webhook", post(handlers::provider_webhook))
+        .route("/api/v1/payment-provider/sandbox/checkout/:reference", get(handlers::sandbox_checkout_page))
+        .route(
+            "/api/v1/payment-provider/sandbox/checkout/:reference/complete",
+            post(handlers::sandbox_checkout_complete),
+        )
+        .route("/api/v1/residents/:unit_id/statement", get(handlers::get_resident_statement))
+        .route("/api/v1/residents/:unit_id/operating-budget", get(handlers::get_resident_operating_budget))
+        .route("/api/v1/residents/:unit_id/payment-intents", post(handlers::create_payment_intent))
+        .route(
+            "/api/v1/residents/:unit_id/payment-intents/:intent_id",
+            get(handlers::get_payment_intent),
+        )
+        .route(
+            "/api/v1/operating-budgets",
+            get(handlers::list_operating_budgets).post(handlers::create_operating_budget),
+        )
+        .route("/api/v1/operating-budgets/compliance", get(handlers::get_budget_compliance))
+        .route("/api/v1/operating-budgets/policy", put(handlers::set_budget_policy))
+        .route(
+            "/api/v1/operating-budgets/:id",
+            get(handlers::get_operating_budget).delete(handlers::delete_operating_budget),
+        )
+        .route("/api/v1/operating-budgets/:id/issue-interim", post(handlers::issue_interim_budget))
+        .route("/api/v1/operating-budgets/:id/approve", post(handlers::approve_operating_budget))
+        .route("/api/v1/operating-budgets/:id/reject", post(handlers::reject_operating_budget))
+        .route("/api/v1/operating-budgets/:id/finalize", post(handlers::finalize_operating_budget))
+        .route("/api/v1/operating-budgets/:id/service", post(handlers::record_budget_service))
+        .route("/api/v1/operating-budgets/:id/objections", post(handlers::file_budget_objection))
+        .route(
+            "/api/v1/operating-budgets/:id/objections/:objection_id/resolve",
+            post(handlers::resolve_budget_objection),
+        )
+        .route(
+            "/api/v1/revaluation-rates",
+            get(handlers::list_revaluation_rates).put(handlers::set_revaluation_rate),
+        )
         .route("/api/v1/site-admin/units/:id/transfer-ownership", post(handlers::transfer_unit_ownership))
         // Capital Projects & Fixtures Management (Demirbaş Yönetimi - EPIC-10)
         .route(

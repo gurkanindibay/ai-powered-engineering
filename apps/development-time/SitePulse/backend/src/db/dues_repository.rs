@@ -290,3 +290,17 @@ pub async fn insert_accrued_due(pool: &Pool, due: &DuesLiability) -> DbResult<Op
     Ok(row.map(|r| r.get(0)))
 }
 
+
+/// Ids of a site's units that currently have a tenant (operational dues are theirs).
+/// An empty `site_id` means every site.
+pub async fn tenanted_unit_ids(pool: &Pool, site_id: &str) -> DbResult<std::collections::HashSet<String>> {
+    let site: i64 = if site_id.is_empty() { 0 } else { require_id("site", site_id)? };
+    let client = pool.get().await?;
+    let rows = client
+        .query(
+            "SELECT id FROM units WHERE ($1::bigint = 0 OR site_id = $1) AND tenant_person_id IS NOT NULL AND deleted_at IS NULL",
+            &[&site],
+        )
+        .await?;
+    Ok(rows.iter().map(|r| r.get::<_, i64>(0).to_string()).collect())
+}

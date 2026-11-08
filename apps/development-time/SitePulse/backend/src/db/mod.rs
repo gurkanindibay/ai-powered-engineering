@@ -1,5 +1,7 @@
 pub mod bank_account_repository;
 pub mod base;
+pub mod budget_repository;
+pub mod payment_intent_repository;
 pub mod dues_repository;
 pub mod payment_repository;
 pub mod reconciliation_repository;
@@ -11,6 +13,8 @@ pub mod user_repository;
 
 pub use bank_account_repository::*;
 pub use base::*;
+pub use budget_repository::*;
+pub use payment_intent_repository::*;
 pub use dues_repository::*;
 pub use payment_repository::*;
 pub use reconciliation_repository::*;

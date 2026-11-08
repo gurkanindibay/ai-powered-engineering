@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from pages import ManagerCockpit, PaymentStream, ResidentHome
+from pages import ManagerCockpit, PaymentStream, ResidentHome, ResidentsTab
 from support.flutter import by_id, by_id_prefix, text_of
 from support.money import last_amount
 
@@ -51,8 +51,6 @@ def test_receipt_shows_number_and_penalty_principal_advance_split(login_as, page
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-09-04")
-@pytest.mark.xfail(strict=True, reason="BUG: the homeowner's receipt shows the bank transaction id (e.g. 'E2E-FAST-…') "
-                   "as 'Makbuz No' instead of the receipt number the backend issued (DKN-…/TAH-…)")
 def test_homeowner_receipt_shows_the_issued_receipt_number(login_as, page, api):
     issued = api.webhook_transfer("TR620020500009863791600001", Decimal("500.00"), "E2E-FAST-RCPT", "AHMET YILMAZ")
     login_as("homeowner")
@@ -65,10 +63,23 @@ def test_homeowner_receipt_shows_the_issued_receipt_number(login_as, page, api):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-09-03")
-@pytest.mark.xfail(strict=True, reason="GAP (STORY-09-03): there is no tenant statement (ekstre) in the UI and no "
-                   "backend route for one")
-def test_tenant_statement_lists_operational_items_only(login_as, page):
+def test_tenant_statement_lists_operational_items_only(login_as, page, api, actors, builders, stack):
+    """STORY-09-03: the unit's statement shows each debtor's own items; the tenant's are operational only."""
+    b3 = stack.sql("SELECT u.id FROM units u JOIN blocks b ON b.id = u.block_id "
+                   "WHERE b.block_name = 'B Blok' AND u.unit_number = 3;")
+    manager = api.login(**actors["manager"])
+    api.move_in(manager, b3, "Selin Demir", "selin.demir@e2e.test")
+    builders.tenant_debt(b3, Decimal("1500.00"))
+    stack.sql(f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, expense_type) "
+              f"VALUES ({int(b3)}, 'Asansör Taksit 1', 700.00, CURRENT_DATE + 10, 'PENDING', 'OWNER', 'CAPITAL_DUES');")
+    stack.restart_backend()
     login_as("manager")
     ManagerCockpit(page).wait()
-    page.wait_for_timeout(1_500)
-    assert by_id_prefix(page, "btn_statement_").count() > 0
+    ResidentsTab(page).open()
+    by_id(page, f"btn_statement_{b3}").click()
+    tenant = by_id(page, "statement_debtor_tenant")
+    tenant.wait_for(timeout=15_000)
+    tenant_text = text_of(tenant)
+    owner_text = text_of(by_id(page, "statement_debtor_owner"))
+    assert "Ekim 2026" in tenant_text and "Demirbaş" not in tenant_text, tenant_text
+    assert "Asansör Taksit 1" in owner_text and "Ekim 2026" not in owner_text, owner_text

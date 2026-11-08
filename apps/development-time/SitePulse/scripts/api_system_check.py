@@ -20,6 +20,11 @@ local port (the backend applies the migrations), seeds it, and checks over HTTP:
   webhook_claim_scoped             webhook claims record account, receipt and payload hash; a reused id with other content is 409 (O-3)
   issuer_snapshot_on_receipt       the site tax id is validated and snapshotted on new receipts (O-5)
   debt_aging_snapshot_persisted    the aging snapshot writes one row per unit/debtor per day, idempotently (O-8)
+  virman_reversal_restores_advance a reversed virman reopens its dues and credits VIRMAN_REVERSAL to the source (SPEC-007 R1)
+  resident_statement_scoped        the statement ages open items; another site's manager gets 403 (R2)
+  receipt_pdf_and_verification     a receipt downloads as a PDF; the public QR check confirms it without payer data (R3)
+  card_payment_via_provider        a sandbox card payment is captured through the signed webhook exactly once (R4)
+  budget_accrual_legal_basis       accrual from an approved işletme projesi records the budget on each liability (R5)
   ledger_integrity_clean           v_integrity_violations is empty after all checks
 
 PostgreSQL access: set DB_HOST/DB_PORT/DB_USER/DB_PASS. SQL is run with `psql`
@@ -57,21 +62,26 @@ TEST_SEED = BACKEND / "db" / "seed" / "02-test-seed.sql"
 WEBHOOK_SECRET = "api-system-check-webhook-secret"
 JWT_SECRET = "api-system-check-jwt-secret-0123456789abcdef"
 ADMIN_PASSWORD = "SystemCheck-Admin-1"
+PAYMENT_WEBHOOK_SECRET = "api-system-check-payment-secret"
 
 # Must mirror auth::route_access: routes reachable without a bearer token.
 PUBLIC_ROUTES = {
     "/health", "/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/register",
     "/api/v1/home-residents/register", "/api/v1/bank/webhook/incoming-transfer", "/api/v1/site-admin/banks",
     "/api/v1/registration/submit/:slug",
+    "/api/v1/public/receipts/verify", "/api/v1/payments/provider/webhook",
+    "/api/v1/payment-provider/sandbox/checkout/:reference", "/api/v1/payment-provider/sandbox/checkout/:reference/complete",
 }
-SAMPLE_PARAMS = {"unit_id": "14", "id": "14", "site_id": "1", "resident_id": "1", "sender_iban": "TR1", "slug": "x"}
+SAMPLE_PARAMS = {"unit_id": "14", "id": "14", "site_id": "1", "resident_id": "1", "sender_iban": "TR1", "slug": "x",
+                 "reference": "SBX-x", "intent_id": "1", "objection_id": "1"}
 
 CHECKS = [
     "unauthenticated_routes_rejected", "forged_token_rejected", "cross_site_forbidden", "webhook_signature_enforced",
     "concurrent_receipts_unique", "idempotent_payment_retry", "restart_persistence", "sequences_survive_restart",
     "match_all_settles_in_place", "payer_identity_recorded", "site_purge_is_atomic",
     "tenant_surplus_virman", "reversal_restores_ledger", "webhook_claim_scoped", "issuer_snapshot_on_receipt",
-    "debt_aging_snapshot_persisted", "ledger_integrity_clean",
+    "debt_aging_snapshot_persisted", "virman_reversal_restores_advance", "resident_statement_scoped",
+    "receipt_pdf_and_verification", "card_payment_via_provider", "budget_accrual_legal_basis", "ledger_integrity_clean",
 ]
 
 
@@ -163,6 +173,8 @@ class Backend:
             "SITEPULSE_JWT_SECRET": JWT_SECRET,
             "SITEPULSE_BANK_WEBHOOK_SECRET": WEBHOOK_SECRET,
             "SITEPULSE_BOOTSTRAP_ADMIN_PASSWORD": ADMIN_PASSWORD,
+            "SITEPULSE_PAYMENT_WEBHOOK_SECRET": PAYMENT_WEBHOOK_SECRET,
+            "SITEPULSE_PUBLIC_BASE_URL": self.base,
             "SITEPULSE_ENABLE_DEV_ROUTES": "false",
             "APP_ENV": "development",
             "RUST_LOG": "warn",
@@ -547,6 +559,149 @@ def check_aging_snapshot(ctx: Context) -> Tuple[bool, str]:
     return ok, f"status {first[0]}/{second[0]}, rows {rows}, table {count1} -> {count2}"
 
 
+def http_bytes(url: str, token: Optional[str] = None) -> Tuple[int, bytes, str]:
+    req = urllib.request.Request(url, method="GET")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status, resp.read(), resp.headers.get("Content-Type", "")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(), e.headers.get("Content-Type", "")
+
+
+def check_virman_reversal(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-007 R1: reversing a virman reopens its dues and credits the source advance back."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    status, body = http("POST", b + "/api/v1/payments/record-manual", token=ctx.manager, body={
+        "unit_id": ctx.unit_id, "amount": "100000.00", "payer_name": "Owner Payer", "payer_role": "OWNER",
+        "payment_channel": "BANK_TRANSFER", "external_reference": f"SYS-VR-{time.time_ns()}"})
+    if status != 201:
+        return False, f"surplus payment failed: {status} {body[:200]}"
+    period = f"SYS-VR-CAP-{time.time_ns()}"
+    ctx.psql.run(db, f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, expense_type)"
+                     f" VALUES ({ctx.unit_id}, '{period}', 9.00, CURRENT_DATE + 10, 'PENDING', 'OWNER', 'CAPITAL_DUES');")
+    relogin(ctx)
+    before = ctx.psql.run(db, f"SELECT balance FROM advance_balances WHERE unit_id = {ctx.unit_id} AND debtor_type = 'OWNER';")
+    v_status, v_body = http("POST", b + "/api/v1/payments/inter-ledger-transfer", token=ctx.manager, body={
+        "unit_id": ctx.unit_id, "amount": "9.00"})
+    if v_status != 200:
+        return False, f"virman failed: {v_status} {v_body[:200]}"
+    virman_no = json.loads(v_body)["receipt_number"]
+    r_status, r_body = http("POST", b + "/api/v1/payments/reverse", token=ctx.manager,
+                            body={"receipt": virman_no, "reason": "System check: wrong virman"})
+    if r_status != 201:
+        return False, f"virman reversal failed: {r_status} {r_body[:200]}"
+    rev = json.loads(r_body)
+    row = ctx.psql.run(db, (
+        f"SELECT d.status || '|' || d.paid_principal || '|' || (SELECT balance FROM advance_balances WHERE unit_id = {ctx.unit_id}"
+        f" AND debtor_type = 'OWNER') || '|' || (SELECT count(*) FROM advance_ledger_entries WHERE entry_type = 'VIRMAN_REVERSAL'"
+        f" AND reference_id = '{rev['reversal_receipt']['receipt_number']}' AND amount = 9.00)"
+        f" FROM dues_liabilities d WHERE d.period = '{period}';"))
+    expected = f"PENDING|0.00|{float(before):.2f}|1"
+    ok = row == expected and float(rev.get("restored_advance", 0)) == 9.0
+    return ok, f"{virman_no} -> {rev['reversal_receipt']['receipt_number']}, due|paid|advance|ledger {row} (want {expected})"
+
+
+def check_resident_statement(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-007 R2: the statement is served for the unit and scoped to its site."""
+    b = ctx.backend.base
+    status, body = http("GET", f"{b}/api/v1/residents/{ctx.unit_id}/statement", token=ctx.manager)
+    other = http("GET", f"{b}/api/v1/residents/{ctx.unit_id}/statement", token=ctx.other_manager)[0]
+    if status != 200:
+        return False, f"statement {status} {body[:200]}"
+    st = json.loads(body)
+    owner = next((d for d in st["debtors"] if d["debtor_type"] == "OWNER"), None)
+    buckets = owner and sum(float(owner[k]) for k in ("current_due", "overdue_1_30_days", "overdue_31_60_days",
+                                                      "overdue_61_90_days", "overdue_90_plus_days"))
+    ok = owner is not None and abs(buckets - float(owner["principal_outstanding"])) < 0.001 and other == 403
+    return ok, f"owner principal {owner and owner['principal_outstanding']} = buckets {buckets}, receipts {len(st['receipts'])}, other site {other}"
+
+
+def check_receipt_pdf(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-007 R3: PDF download and public verification without payer data."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    status, body = pay(ctx, "2.25")
+    if status != 201:
+        return False, f"payment failed: {status} {body[:200]}"
+    receipt = json.loads(body)
+    p_status, pdf, ctype = http_bytes(f"{b}/api/v1/payments/receipts/{receipt['receipt_number']}/pdf", token=ctx.manager)
+    h = ctx.psql.run(db, f"SELECT verification_hash FROM payment_receipts WHERE id = {receipt['id']};")
+    v_status, v_body = http("GET", f"{b}/api/v1/public/receipts/verify?no={receipt['receipt_number']}&h={h}")
+    bad = json.loads(http("GET", f"{b}/api/v1/public/receipts/verify?no={receipt['receipt_number']}&h={'0' * 64}")[1])
+    verified = json.loads(v_body) if v_status == 200 else {}
+    ok = (p_status == 200 and pdf.startswith(b"%PDF") and "application/pdf" in ctype and verified.get("valid") is True
+          and receipt["payer_name"] not in v_body and bad.get("valid") is False)
+    return ok, f"pdf {p_status} {len(pdf)} bytes {ctype}, verify {v_status} valid={verified.get('valid')}, wrong code valid={bad.get('valid')}"
+
+
+def check_card_payment(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-007 R4: sandbox hosted page -> signed notifications -> one receipt; forged notifications rejected."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    status, body = http("POST", f"{b}/api/v1/residents/{ctx.unit_id}/payment-intents", token=ctx.manager,
+                        body={"amount": "9.50", "debtor_type": "OWNER"})
+    if status != 201:
+        return False, f"intent {status} {body[:200]}"
+    intent = json.loads(body)
+    page_status, page = http("GET", intent["checkout_url"])
+    no_card_fields = "<input" not in page.lower()
+    done_status, _ = http("POST", intent["checkout_url"] + "/complete", raw=b"outcome=APPROVE",
+                          headers={"Content-Type": "application/x-www-form-urlencoded"})
+    event = {"provider": intent["provider"], "provider_ref": intent["provider_ref"], "status": "CAPTURED", "amount": "9.50"}
+    raw = json.dumps(event).encode()
+    forged = http("POST", b + "/api/v1/payments/provider/webhook", raw=raw, headers={"X-Provider-Signature": "00" * 32})[0]
+    sig = hmac.new(PAYMENT_WEBHOOK_SECRET.encode(), raw, hashlib.sha256).hexdigest()
+    replay_status, replay = http("POST", b + "/api/v1/payments/provider/webhook", raw=raw, headers={"X-Provider-Signature": sig})
+    row = ctx.psql.run(db, (
+        "SELECT pi.status || '|' || r.payment_channel || '|' || r.total_amount || '|' ||"
+        " (SELECT count(*) FROM payment_entries e WHERE e.site_id = pi.site_id AND e.external_reference = pi.provider_ref)"
+        f" FROM payment_intents pi JOIN payment_receipts r ON r.site_id = pi.site_id AND r.receipt_number = pi.receipt_number"
+        f" WHERE pi.id = {intent['id']};"))
+    same = replay_status == 200 and json.loads(replay).get("receipt_number") is not None
+    ok = (page_status == 200 and no_card_fields and done_status == 200 and forged == 401 and same
+          and row == "CAPTURED|CREDIT_CARD|9.50|1")
+    return ok, (f"page {page_status} (no card inputs {no_card_fields}), complete {done_status}, forged {forged}, "
+                f"signed replay {replay_status}, intent|channel|amount|receipts {row}")
+
+
+def check_budget_accrual(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-007 R5: approved budget -> accrual from unit shares, legal basis recorded, survives a restart."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    site = ctx.psql.run(db, f"SELECT site_id FROM units WHERE id = {ctx.unit_id};")
+    year = int(ctx.psql.run(db, "SELECT extract(year FROM CURRENT_DATE)::int;"))
+    status, body = http("POST", f"{b}/api/v1/operating-budgets", token=ctx.manager, body={
+        "fiscal_year": year, "lines": [{"category": "CLEANING", "annual_amount": "120000.00", "allocation_key": "LAND_SHARE"},
+                                       {"category": "MANAGEMENT_FEE", "annual_amount": "6000.00", "allocation_key": "EQUAL"}]})
+    if status != 201:
+        return False, f"create {status} {body[:200]}"
+    budget = json.loads(body)
+    a_status, a_body = http("POST", f"{b}/api/v1/operating-budgets/{budget['id']}/approve", token=ctx.manager, body={
+        "assembly_decision_ref": "Karar 2026/SYS", "assembly_decision_date": time.strftime("%Y-%m-%d")})
+    if a_status != 200:
+        return False, f"approve {a_status} {a_body[:200]}"
+    relogin(ctx)  # the budget is reloaded from PostgreSQL
+    g_status, g_body = http("GET", f"{b}/api/v1/operating-budgets/{budget['id']}", token=ctx.manager)
+    reloaded = json.loads(g_body) if g_status == 200 else {}
+    share = next((s for s in reloaded.get("unit_shares", []) if s["unit_id"] == ctx.unit_id), None)
+    period = f"SYS-BUDGET-{time.time_ns()}"
+    due = ctx.psql.run(db, "SELECT (CURRENT_DATE + 10)::text;")
+    acc_status, acc_body = http("POST", f"{b}/api/v1/dues/accrue-period", token=ctx.manager, body={
+        "site_id": site, "period": period, "amount": "0", "due_date": due})
+    typed = http("POST", f"{b}/api/v1/dues/accrue-period", token=ctx.manager, body={
+        "site_id": site, "period": period + "-X", "amount": "5.00", "due_date": due})[0]
+    row = ctx.psql.run(db, (
+        f"SELECT count(*) || '|' || count(*) FILTER (WHERE operating_budget_id = {budget['id']}) || '|' ||"
+        f" coalesce(max(principal_amount) FILTER (WHERE unit_id = {ctx.unit_id}), 0) || '|' ||"
+        f" count(*) FILTER (WHERE debtor_type = 'OWNER' AND unit_id IN (SELECT id FROM units WHERE tenant_person_id IS NULL))"
+        f" FROM dues_liabilities WHERE period = '{period}';"))
+    count, linked, amount, owner_rows = (row.split("|") + ["", "", "", ""])[:4]
+    ok = (reloaded.get("status") == "APPROVED" and share is not None and acc_status == 200 and typed == 409
+          and count == linked and int(count or 0) > 0 and float(amount) == float(share["monthly_amount"])
+          and int(owner_rows or 0) > 0)
+    return ok, (f"budget {budget['id']} reloaded {reloaded.get('status')}, accrue {acc_status}, typed amount {typed}, "
+                f"rows|linked|unit amount|owner rows {row} (share {share and share['monthly_amount']})")
+
+
 def check_ledger_integrity(ctx: Context) -> Tuple[bool, str]:
     """After every other check: no drift reported by v_integrity_violations."""
     rows = ctx.psql.run(ctx.backend.db_name, "SELECT check_name || ':' || subject FROM v_integrity_violations;")
@@ -570,6 +725,11 @@ CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
     "webhook_claim_scoped": check_webhook_claim,
     "issuer_snapshot_on_receipt": check_issuer_snapshot,
     "debt_aging_snapshot_persisted": check_aging_snapshot,
+    "virman_reversal_restores_advance": check_virman_reversal,
+    "resident_statement_scoped": check_resident_statement,
+    "receipt_pdf_and_verification": check_receipt_pdf,
+    "card_payment_via_provider": check_card_payment,
+    "budget_accrual_legal_basis": check_budget_accrual,
     "ledger_integrity_clean": check_ledger_integrity,
 }
 

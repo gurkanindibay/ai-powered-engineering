@@ -67,6 +67,16 @@ pub struct AppStateInner {
     pub capital_projects: Vec<crate::models::CapitalProject>,
     pub capital_installments: Vec<crate::models::CapitalProjectInstallment>,
     pub capital_disbursements: Vec<crate::models::CapitalContractorDisbursement>,
+    /// İşletme projesi per site and fiscal year (SPEC-007 R5), with lines and shares.
+    pub operating_budgets: Vec<crate::models::OperatingBudget>,
+    /// Yeniden değerleme oranı per year, the interim budget cap.
+    pub revaluation_rates: HashMap<i32, crate::models::RevaluationRate>,
+    /// Sites that never accrue operational dues without a budget in force.
+    pub budget_required_sites: Vec<String>,
+    /// Dues liability id -> operating budget id (its legal basis).
+    pub dues_budget_basis: HashMap<String, String>,
+    /// Card payment intents through the licensed provider (SPEC-007 R4).
+    pub payment_intents: Vec<crate::models::PaymentIntent>,
 }
 
 impl Default for AppStateInner {
@@ -106,6 +116,11 @@ impl AppStateInner {
             capital_projects: Vec::new(),
             capital_installments: Vec::new(),
             capital_disbursements: Vec::new(),
+            operating_budgets: Vec::new(),
+            revaluation_rates: HashMap::new(),
+            budget_required_sites: Vec::new(),
+            dues_budget_basis: HashMap::new(),
+            payment_intents: Vec::new(),
         };
         inner.seed_system_lookups();
         if Self::should_seed_test_fixtures() {
@@ -151,6 +166,12 @@ impl AppStateInner {
     /// Essential system lookups and root administrator identity required for platform operation.
     /// Production-safe: contains ZERO mock sites, ZERO flats, and ZERO debts.
     pub fn seed_system_lookups(&mut self) {
+        // Mirrors the V18 seed (the figure must be verified before production use).
+        self.revaluation_rates.entry(2026).or_insert_with(|| crate::models::RevaluationRate {
+            year: 2026,
+            rate: rust_decimal::Decimal::new(254900, 4),
+            source: Some("VUK mükerrer 298: yeniden değerleme oranı (verify against the published communiqué)".to_string()),
+        });
         if !self.users.iter().any(|u| u.id == "usr-saas-root" || u.id == "usr-saas-admin-1") {
             self.users.push(User {
                 id: "usr-saas-admin-1".to_string(),
@@ -499,6 +520,9 @@ impl AppStateInner {
         self.blocks.clear();
         self.payment_receipts.clear();
         self.payment_entries.clear();
+        self.operating_budgets.clear();
+        self.dues_budget_basis.clear();
+        self.payment_intents.clear();
         self.auto_scheduler_enabled = false;
         self.seed_system_lookups();
     }
@@ -511,6 +535,9 @@ impl AppStateInner {
         self.reconciliation_queue.clear();
         self.payment_receipts.clear();
         self.payment_entries.clear();
+        self.operating_budgets.clear();
+        self.dues_budget_basis.clear();
+        self.payment_intents.clear();
 
         // 100% clean slate: ₺0.00 debt
         self.dues.clear();

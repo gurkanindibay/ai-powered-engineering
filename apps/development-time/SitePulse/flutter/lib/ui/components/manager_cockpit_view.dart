@@ -6,6 +6,9 @@ import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
 
 import '../design_system/money_formatter.dart';
+import '../payments/operating_budget_page.dart';
+import '../design_system/sp_typography.dart';
+import 'app_fullscreen_page.dart';
 class ManagerCockpitView extends StatelessWidget {
   final DashboardController controller;
   final VoidCallback onAddResidentTap;
@@ -417,6 +420,45 @@ class ManagerCockpitView extends StatelessWidget {
             ),
           )),
         ],
+
+        // İşletme projesi (KMK 37 as amended by Law 7579), SPEC-007 R5.
+        const SizedBox(height: 14),
+        testId('cockpit_operating_budget', InkWell(
+          onTap: () => AppFullscreenPage.push(
+            context: context,
+            builder: (ctx) => OperatingBudgetPage(
+              siteId: controller.currentManagedSite?.id,
+              siteName: controller.currentManagedSite?.name ?? '',
+            ),
+          ),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.surface(context),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border(context)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.account_tree_outlined, color: AppColors.accentCyan),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('İşletme Projesi', style: TextStyle(color: AppColors.textPrimary(context), fontSize: SpFontSize.body, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text('Yıllık bütçe, genel kurul onayı, tebliğ ve itirazlar; aidat payları buradan gelir.',
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: SpFontSize.caption)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textSecondary(context)),
+              ],
+            ),
+          ),
+        )),
 
         const SizedBox(height: 20),
 
