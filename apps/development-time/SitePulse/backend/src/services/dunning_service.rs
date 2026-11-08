@@ -328,6 +328,7 @@ impl DunningService {
                             paragraphs: vec![
                                 "Yukarıda dökümü verilen ortak gider ve avans borcunuzu bu ihtarnamenin tebliğinden itibaren 7 gün içinde site yönetiminin hesabına ödemenizi; aksi halde 634 sayılı Kat Mülkiyeti Kanunu'nun 20. maddesi uyarınca aylık %5 gecikme tazminatı ile birlikte icra takibi ve dava yoluna başvurulacağını, doğacak tüm masrafların tarafınıza ait olacağını ihtar ederiz. (Arabuluculuk ön şartı ve süreler avukat tarafından teyit edilmelidir.)".to_string()
                             ],
+
                             ..DocSection::default()
                         },
                     ],

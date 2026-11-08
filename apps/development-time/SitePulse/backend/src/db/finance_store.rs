@@ -95,11 +95,14 @@ impl FinanceStore {
                 let mut inner = self.state.inner.write().await;
                 let book = &mut inner.finance;
                 let id = next_memory_id(parents(book));
-                let start_id = next_memory_id(kids(book));
-                for (i, child) in children.iter_mut().enumerate() {
+                parent.set_id(id);
+                parents(book).push(parent.clone());
+                let base_id = next_memory_id(kids(book));
+                for (offset, child) in children.iter_mut().enumerate() {
                     link(child, id);
-                    child.set_id(start_id + i as i64);
+                    child.set_id(base_id + offset as i64);
                 }
+
                 kids(book).extend(children.iter().cloned());
             }
         }

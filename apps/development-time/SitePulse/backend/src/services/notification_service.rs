@@ -330,6 +330,7 @@ impl NotificationService {
                     .cloned()
                     .collect();
                 rows.sort_by_key(|a| std::cmp::Reverse(a.created_at));
+
                 rows.truncate(limit.clamp(1, 500));
                 rows
             })

@@ -3167,7 +3167,8 @@ async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_m
     assert!(receipt
         .legal_statutory_note
         .unwrap()
-        .contains("TBK Madde 314"));
+        .contains("TBK md. 314"));
+
     assert_eq!(receipt.verification_hash.len(), 64);
     let capital_line = receipt
         .allocation_breakdown
