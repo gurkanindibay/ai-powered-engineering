@@ -68,6 +68,22 @@ pub fn settle(d: &mut DuesLiability, amount: Decimal) -> Settlement {
     Settlement { principal, penalty }
 }
 
+/// Reverses one allocation line on a liability (payment reversal, SPEC-006 R2):
+/// the paid amounts go back down and the status is recomputed from them and
+/// the date (OVERDUE once past due). The accrued penalty is left as accrued.
+pub fn unsettle(d: &mut DuesLiability, principal: Decimal, penalty: Decimal, today: chrono::NaiveDate) {
+    d.paid_principal = (d.paid_principal - principal).max(Decimal::ZERO);
+    d.paid_penalty = (d.paid_penalty - penalty).max(Decimal::ZERO);
+    d.total_amount = outstanding(d);
+    d.status = if d.total_amount <= Decimal::ZERO {
+        DebtStatus::Paid
+    } else if d.due_date < today {
+        DebtStatus::Overdue
+    } else {
+        DebtStatus::Pending
+    };
+}
+
 /// One line of a waterfall allocation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AllocationLine {

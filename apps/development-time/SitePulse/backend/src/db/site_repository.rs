@@ -13,15 +13,17 @@ pub async fn save_site(pool: &Pool, site: &Site) -> Result<(), Box<dyn std::erro
             client
                 .execute(
                     r#"
-                    INSERT INTO sites (id, name, address, slug, status, plan_type, license_end_date)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    INSERT INTO sites (id, name, address, slug, status, plan_type, license_end_date, tax_id, tax_office)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                     ON CONFLICT (id) DO UPDATE SET
                         name = EXCLUDED.name,
                         address = EXCLUDED.address,
                         slug = EXCLUDED.slug,
                         status = EXCLUDED.status,
                         plan_type = EXCLUDED.plan_type,
-                        license_end_date = EXCLUDED.license_end_date
+                        license_end_date = EXCLUDED.license_end_date,
+                        tax_id = EXCLUDED.tax_id,
+                        tax_office = EXCLUDED.tax_office
                     "#,
                     &[
                         &id,
@@ -31,6 +33,8 @@ pub async fn save_site(pool: &Pool, site: &Site) -> Result<(), Box<dyn std::erro
                         &site.status,
                         &site.plan_type,
                         &site.license_end_date,
+                        &site.tax_id,
+                        &site.tax_office,
                     ],
                 )
                 .await?;
@@ -40,14 +44,16 @@ pub async fn save_site(pool: &Pool, site: &Site) -> Result<(), Box<dyn std::erro
             let row = client
                 .query_one(
                     r#"
-                    INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO sites (name, address, slug, status, plan_type, license_end_date, tax_id, tax_office)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT (slug) DO UPDATE SET
                         name = EXCLUDED.name,
                         address = EXCLUDED.address,
                         status = EXCLUDED.status,
                         plan_type = EXCLUDED.plan_type,
-                        license_end_date = EXCLUDED.license_end_date
+                        license_end_date = EXCLUDED.license_end_date,
+                        tax_id = EXCLUDED.tax_id,
+                        tax_office = EXCLUDED.tax_office
                     RETURNING id
                     "#,
                     &[
@@ -57,6 +63,8 @@ pub async fn save_site(pool: &Pool, site: &Site) -> Result<(), Box<dyn std::erro
                         &site.status,
                         &site.plan_type,
                         &site.license_end_date,
+                        &site.tax_id,
+                        &site.tax_office,
                     ],
                 )
                 .await?;

@@ -7,21 +7,21 @@
 
 ---
 
-## 0. Remediation status (SPEC-005 / V16, 2026-11-08)
+## 0. Remediation status (SPEC-005 / V16 and SPEC-006 / V17, 2026-11-08)
 
 | Finding | Status |
 |---|---|
 | §3.1 Four allocation engines | ✅ **Fixed.** Webhook, statement confirmation, `/payments/record` and match-all all call `record_and_allocate_payment` (TAH receipt, allocation rows, idempotency). Legacy writers deleted |
 | §3.2 No payer identity | ✅ **Fixed** in the schema and on new rows (`payer_person_id`, `occupancy_id`, `on_behalf_of_person_id`). The statement itself (§3.7) is still open |
-| §3.3 No reversal; `REFUNDED` vocabulary bug | ⚠️ **Partly fixed.** The bad writer is removed and the ledger is append-only with a `SETTLED → REVERSED` transition. The reversal flow is still open |
-| §3.4 Advance per debtor / virman | ❌ Open (DB review O-1) |
+| §3.3 No reversal; `REFUNDED` vocabulary bug | ✅ **Fixed (SPEC-006 / V17).** `POST /payments/reverse`: `IAD-` reversal receipt, contra entry with reason and operator, un-allocation, advance `REFUND`. Virman reversal deferred |
+| §3.4 Advance per debtor / virman | ✅ **Fixed (SPEC-006 / V17).** Per-debtor advance in memory; `source_debtor` / `target_debtor` on the virman (TENANT → OWNER works with PostgreSQL) |
 | §3.5 Card payments (payment provider) | ❌ Open |
 | §3.6 Debt aging figures | ✅ **Fixed.** Outstanding amounts, penalty as of today, the liability's own debtor |
 | §3.7 Cari Hesap Ekstresi | ❌ Open (now buildable on payer identity) |
 | §3.8 Ownership transfer atomicity | ❌ Open |
 | §3.9 Waterfall / intent | ⚠️ **TBK 101 designation added.** Operational-before-capital tiering and the `MALİK ADINA` keyword are still open |
 | §3.10 Stream KPIs / description | ⚠️ The description is now kept. Collection rate and channel KPIs are still open |
-| §3.11 Receipt VKN / PDF / QR | ❌ Open (DB review O-5) |
+| §3.11 Receipt VKN / PDF / QR | ⚠️ **VKN fixed (V17):** `sites.tax_id` plus an issuer snapshot on each receipt. Hash coverage, PDF and QR are still open |
 | §3.12 Resident authorization | ❌ Open. Kept staff-only on purpose: a resident must not self-record a settled payment without a real payment provider |
 
 Database design findings and their fixes: [PAYMENTS_DATABASE_DESIGN_REVIEW.md](PAYMENTS_DATABASE_DESIGN_REVIEW.md).
