@@ -6,6 +6,10 @@ import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
 
 import '../design_system/money_formatter.dart';
+import '../design_system/sp_metric.dart';
+import '../design_system/sp_tone.dart';
+import '../../l10n/app_strings.dart';
+import '../design_system/sp_guidance_card.dart';
 class ManagerCockpitView extends StatelessWidget {
   final DashboardController controller;
   final VoidCallback onAddResidentTap;
@@ -321,12 +325,12 @@ class ManagerCockpitView extends StatelessWidget {
                 runSpacing: 8,
                 alignment: WrapAlignment.spaceBetween,
                 children: [
-                  _buildMetricTile(context, 'Toplam Daire', '${summary.totalUnitsCount}'),
-                  _buildMetricTile(context, 'Ödeyen', '${summary.paidUnitsCount}', color: AppColors.accentGreen),
-                  _buildMetricTile(context, 'Geciken', '${summary.overdueUnitsCount}', color: AppColors.accentRed),
-                  _buildMetricTile(context, 'Kalan Borç', formatTry(summary.totalOverdueAmount), color: AppColors.accentOrange),
+                  SpMetricValue(label: AppStrings.totalUnits, value: '${summary.totalUnitsCount}'),
+                  SpMetricValue(label: 'Ödeyen', value: '${summary.paidUnitsCount}', tone: SpTone.success),
+                  SpMetricValue(label: 'Geciken', value: '${summary.overdueUnitsCount}', tone: SpTone.danger),
+                  SpMetricValue(label: AppStrings.remainingDebt, value: formatTry(summary.totalOverdueAmount), tone: SpTone.warning),
                   if (summary.totalAdvanceBalance > Decimal.zero)
-                    _buildMetricTile(context, 'Toplam Avans', formatTry(summary.totalAdvanceBalance), color: AppColors.accentCyan),
+                    SpMetricValue(label: 'Toplam Avans', value: formatTry(summary.totalAdvanceBalance), tone: SpTone.info),
                 ]),
               if (onNavigateToDuesTab != null) ...[
                 const SizedBox(height: 14),
@@ -537,77 +541,21 @@ class ManagerCockpitView extends StatelessWidget {
   }
 
   Widget _buildNoSiteGuidance(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surface(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border(context)),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.apartment_outlined, size: 36, color: AppColors.accentOrange),
-          const SizedBox(height: 8),
-          Text(
-            'Yönetilen Site Bulunmuyor',
-            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Sistemde henüz kayıtlı bir site bulunmuyor. Yönetici kokpitini kullanmak için lütfen yeni bir site tanımlayınız.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-          ),
-        ],
-      ),
+    return const SpGuidanceCard(
+      icon: Icons.apartment_outlined,
+      tone: SpTone.warning,
+      title: AppStrings.noManagedSiteTitle,
+      message: 'Sistemde henüz kayıtlı bir site bulunmuyor. Yönetici kokpitini kullanmak için lütfen yeni bir site tanımlayınız.',
     );
   }
 
   Widget _buildNoPeriodGuidance(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surface(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.accentCyan.withOpacity(0.3)),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.event_busy_outlined, size: 36, color: AppColors.accentCyan),
-          const SizedBox(height: 8),
-          Text(
-            'Aidat Takibi İçin Dönem Bulunmuyor',
-            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Sitenizde daire bazlı aidat borçlarını ve ödeme durumlarını takip edebilmek için öncelikle "Aidat Yönetimi" sekmesinden bir aidat dönemi oluşturmanız gerekmektedir.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMetricTile(BuildContext context, String label, String value, {Color? color}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            color: color ?? AppColors.textPrimary(context),
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
+    return const SpGuidanceCard(
+      icon: Icons.event_busy_outlined,
+      tone: SpTone.info,
+      tonedBorder: true,
+      title: 'Aidat Takibi İçin Dönem Bulunmuyor',
+      message: 'Sitenizde daire bazlı aidat borçlarını ve ödeme durumlarını takip edebilmek için öncelikle "Aidat Yönetimi" sekmesinden bir aidat dönemi oluşturmanız gerekmektedir.',
     );
   }
 
