@@ -1431,7 +1431,7 @@ impl SiteAdminService {
                 let has_history = target_unit_ids.iter().any(|uid| {
                     inner.payment_receipts.iter().any(|r| &r.unit_id == uid)
                         || inner.payment_entries.iter().any(|e| &e.unit_id == uid)
-                        || inner.advance_payments.get(uid).is_some_and(|a| *a > rust_decimal::Decimal::ZERO)
+                        || inner.advance_total(uid) > rust_decimal::Decimal::ZERO
                         || inner.dues.iter().any(|d| {
                             &d.unit_id == uid
                                 && (d.paid_principal + d.paid_penalty > rust_decimal::Decimal::ZERO
