@@ -239,6 +239,12 @@ def build_iteration_pipeline(
         target = ROLE_MODEL_MATRIX[role_key][resolved_complexity]
         
         # Build delegate_task payload compliant with T3 orchestration
+        role_instruction_suffix = ""
+        if role_key == "architect":
+            role_instruction_suffix = " Adhere strictly to docs/RUST_STANDARDS.md and .agents/skills/rust-skills/SKILL.md: enforce Clean Architecture, immutable DTO contracts, rust_decimal precision, and append-only database migrations."
+        elif role_key == "developer":
+            role_instruction_suffix = " Adhere strictly to docs/RUST_STANDARDS.md and .agents/skills/rust-skills/SKILL.md: ensure zero clippy warnings, zero unwrap in production, rust_decimal precision, and database persistence safety."
+
         delegate_payload = {
             "title": f"[{resolved_complexity.upper()}] {role_title}: {task[:60]}",
             "role": target.role,
@@ -249,7 +255,7 @@ def build_iteration_pipeline(
                 "model": target.model,
                 "options": target.options,
             },
-            "task": f"Act as {role_title} for the task: '{task}'. Deliverable: {default_stage_name} matching {resolved_complexity.upper()} complexity requirements.",
+            "task": f"Act as {role_title} for the task: '{task}'. Deliverable: {default_stage_name} matching {resolved_complexity.upper()} complexity requirements.{role_instruction_suffix}",
         }
         
         stages.append({

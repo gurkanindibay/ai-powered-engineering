@@ -42,6 +42,11 @@
    - **Concurrency Control:** Use optimistic locking (`version` integer column) on unit balance records to prevent double-spending or race conditions during payment gateway webhooks.
    - **Referential Integrity:** Enforce foreign keys between `siteler` -> `bloklar` -> `bagimsiz_bolumler` -> `kat_malikleri` and `aidat_tahakkuklari`.
 
+3. **Rust Standards & Agent Governance:**
+   - All backend code must strictly adhere to [docs/RUST_STANDARDS.md](../../../../docs/RUST_STANDARDS.md) and [rust-skills](../../../../.agents/skills/rust-skills/SKILL.md) (265 rules across 26 categories).
+   - The **Architect Agent** governs API contracts, DTO schemas, and database migrations.
+   - The **Developer Agent** guarantees zero Clippy warnings (`-D warnings`), zero unwrap in production, strict borrowing, and persistence safety (`memory_persistence_lint.py`).
+
 ---
 
 ## 3. Flutter Client Development Conventions

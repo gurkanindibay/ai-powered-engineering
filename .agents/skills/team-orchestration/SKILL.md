@@ -7,8 +7,8 @@ description: Multi-agent software engineering team orchestration with dynamic mo
 
 Use this skill to orchestrate an iteration using a 4-role software engineering team:
 1. **Product Owner (PO)**: Analyzes requirements, refines user stories, defines acceptance criteria, enforces scope boundaries.
-2. **Architect**: Designs system architecture, verifies interfaces and contracts, enforces invariants, assesses security and failure modes.
-3. **Developer**: Implements code, refactors, manages dependencies, commits to isolated worktree branches.
+2. **Architect**: Designs system architecture, verifies interfaces and contracts, enforces invariants (including [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md) and [rust-skills](file:///.agents/skills/rust-skills/SKILL.md) for Rust/backend components), designs migrations, assesses security and failure modes.
+3. **Developer**: Implements code, refactors, manages dependencies, commits to isolated worktree branches, adhering strictly to [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md) and [rust-skills](file:///.agents/skills/rust-skills/SKILL.md) (zero clippy warnings, zero unwrap in production, decimal precision, persistence safety).
 4. **Tester**: Generates test fixtures, executes automated test suites, analyzes code coverage, performs adversarial boundary checking.
 
 ---
