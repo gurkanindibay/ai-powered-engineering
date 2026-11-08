@@ -767,6 +767,7 @@ impl SiteAdminService {
                 paid_penalty: Decimal::ZERO,
                 debtor_type: "TENANT".to_string(),
                 expense_type: "OPERATIONAL_DUES".to_string(),
+                penalty_accrued_through: None,
             });
         }
 

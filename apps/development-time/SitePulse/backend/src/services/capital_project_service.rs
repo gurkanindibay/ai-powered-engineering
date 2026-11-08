@@ -510,6 +510,7 @@ impl CapitalProjectService {
                     paid_penalty: Decimal::ZERO,
                     debtor_type: "OWNER".to_string(),
                     expense_type: "CAPITAL_DUES".to_string(),
+                    penalty_accrued_through: None,
                 });
             }
 

@@ -117,6 +117,9 @@ pub fn apply_advance_payments_offset(
             }
 
             let due = &mut inner.dues[idx];
+            // KMK 20 segmented accrual: bring the penalty up to today before the
+            // offset changes the principal it accrues on.
+            *due = crate::services::DuesCalculationService::new().calculate_delay_penalty(due.clone(), Utc::now().date_naive());
             let due_amount = due.total_amount;
             let period = due.period.clone();
             let due_id = due.id.clone();
@@ -1101,197 +1104,137 @@ pub async fn confirm_reconciliation(
     State(state): State<AppState>,
     Json(payload): Json<ConfirmReconciliationRequest>,
 ) -> Result<(StatusCode, Json<ConfirmReconciliationResponse>), (StatusCode, String)> {
-    let mut inner = state.inner.write().await;
-    let ledger_before = ledger_snapshot(&inner);
+    // Phase 1 (state lock): tenant boundary and the lines to settle.
+    struct Line {
+        match_id: String,
+        unit: crate::models::IndependentUnit,
+        payer_role: String,
+        payer_name: String,
+        request_designation: Option<crate::models::PaymentDesignation>,
+        item: ReconciliationMatch,
+    }
+    let lines: Vec<Line> = {
+        let inner = state.inner.read().await;
+        for match_id in &payload.match_ids {
+            if let Some(m) = inner.reconciliation_queue.iter().find(|m| m.match_id == *match_id) {
+                if !crate::auth::same_id(&m.site_id, &payload.site_id) {
+                    return Err((
+                        StatusCode::FORBIDDEN,
+                        format!("Match {} belongs to site {}, not {}", match_id, m.site_id, payload.site_id),
+                    ));
+                }
+            }
+        }
+        let mut lines = Vec::new();
+        for match_id in &payload.match_ids {
+            let Some(m) = inner.reconciliation_queue.iter().find(|m| m.match_id == *match_id) else { continue };
+            let Some(unit) = m.matched_unit_id.as_ref().and_then(|uid| inner.units.iter().find(|u| &u.id == uid)).cloned() else {
+                continue;
+            };
+            let (payer_role, payer_name) = resolve_payer(&inner, &unit, m.transaction.sender_name.as_deref());
+            let request_designation = m.matched_due_id.clone().map(|due_id| crate::models::PaymentDesignation {
+                due_ids: vec![due_id],
+                ..Default::default()
+            });
+            lines.push(Line { match_id: match_id.clone(), unit, payer_role, payer_name, request_designation, item: m.clone() });
+        }
+        lines
+    };
 
-    // Enforce tenant boundary: verify all match_ids belong to caller's payload.site_id
-    for match_id in &payload.match_ids {
-        if let Some(m) = inner.reconciliation_queue.iter().find(|m| m.match_id == *match_id) {
-            if !crate::auth::same_id(&m.site_id, &payload.site_id) {
-                return Err((
-                    StatusCode::FORBIDDEN,
-                    format!("Match {} belongs to site {}, not {}", match_id, m.site_id, payload.site_id),
-                ));
+    // Phase 2: each line through the canonical ingestion path (SPEC-005 R1),
+    // idempotent on the statement transaction, so a re-confirmation is harmless.
+    let service = crate::services::PaymentTrackingService::new(state.clone());
+    let mut confirmed: Vec<(Line, crate::models::PaymentReceipt)> = Vec::new();
+    let mut failure: Option<(StatusCode, String)> = None;
+    for line in lines {
+        let txn = &line.item.transaction;
+        let key = if txn.transaction_id.trim().is_empty() { line.match_id.clone() } else { txn.transaction_id.clone() };
+        let result = service
+            .record_and_allocate_payment(crate::models::RecordManualPaymentRequest {
+                site_id: Some(line.unit.site_id.clone()),
+                unit_id: line.unit.id.clone(),
+                amount: txn.amount,
+                payer_name: line.payer_name.clone(),
+                payer_role: line.payer_role.clone(),
+                payment_channel: "BANK_STATEMENT".to_string(),
+                description: Some(txn.description.clone()),
+                payment_date: None,
+                idempotency_key: Some(format!("STMT:{}", key)),
+                designation: line.request_designation.clone(),
+                external_reference: txn.reference_no.clone().or_else(|| Some(key.clone())),
+                designate_from_description: true,
+                settles_unmatched_entry_id: None,
+            })
+            .await;
+        match result {
+            Ok(receipt) => confirmed.push((line, receipt)),
+            Err(e) => {
+                let (code, msg) = payment_error_status(e);
+                failure = Some((code, format!("Statement line {} was not settled: {}", line.match_id, msg)));
+                break;
             }
         }
     }
 
-    let mut confirmed_count = 0;
-    let mut total_amount_cleared = Decimal::ZERO;
-    let mut updated_unit_ids = Vec::new();
+    // Phase 3 (state lock): queue status and remembered sender IBANs for what settled.
+    let mut inner = state.inner.write().await;
     let mut confirmed_matches = Vec::new();
-
-    let mut cleared_dues: Vec<String> = Vec::new();
-    let mut advance_credits: Vec<(String, Decimal)> = Vec::new();
-
-    // Step 1: Update queue items and collect details to process
-    let mut to_process = Vec::new();
-    for match_id in &payload.match_ids {
-        if let Some(m) = inner.reconciliation_queue.iter_mut().find(|m| m.match_id == *match_id) {
+    let mut updated_unit_ids = Vec::new();
+    let mut total_amount_cleared = Decimal::ZERO;
+    let mut remembered: Vec<(String, String)> = Vec::new();
+    for (line, receipt) in &confirmed {
+        if let Some(m) = inner.reconciliation_queue.iter_mut().find(|m| m.match_id == line.match_id) {
             m.status = ReconciliationStatus::Approved;
             m.status_code = ReconciliationStatus::Approved.as_str().to_string();
-
-            if let Some(ref unit_id) = m.matched_unit_id {
-                to_process.push((
-                    unit_id.clone(),
-                    m.transaction.amount,
-                    m.matched_due_id.clone(),
-                    m.outstanding_balance,
-                    m.transaction.description.clone(),
-                    m.clone(),
-                ));
-            }
+            m.notes = Some(format!(
+                "Makbuz {}: ₺{:.2} borca, ₺{:.2} avansa işlendi",
+                receipt.receipt_number,
+                receipt.allocated_principal + receipt.allocated_penalty,
+                receipt.allocated_advance
+            ));
+            confirmed_matches.push(m.clone());
         }
-    }
-
-    // Step 2: Now resolve dues and advance credits without holding borrow on queue
-    for (unit_id, txn_amount, matched_due_id, outstanding_bal, desc, m_clone) in to_process {
-        updated_unit_ids.push(unit_id.clone());
-
-        if let Some(ref due_id) = matched_due_id {
-            cleared_dues.push(due_id.clone());
-            let due_balance = outstanding_bal.unwrap_or(txn_amount);
-            if txn_amount > due_balance {
-                let surplus = txn_amount - due_balance;
-                advance_credits.push((unit_id.clone(), surplus));
-            }
-        } else {
-            let desc_lower = desc.to_lowercase();
-            let matching_unpaid_due = inner.dues.iter()
-                .find(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid && desc_lower.contains(&d.period.to_lowercase()))
-                .or_else(|| inner.dues.iter().find(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid))
-                .map(|d| (d.id.clone(), d.total_amount));
-
-            if let Some((due_id, due_balance)) = matching_unpaid_due {
-                cleared_dues.push(due_id);
-                if txn_amount > due_balance {
-                    let surplus = txn_amount - due_balance;
-                    advance_credits.push((unit_id.clone(), surplus));
-                }
-            } else {
-                advance_credits.push((unit_id.clone(), txn_amount));
-            }
-        }
-
-        total_amount_cleared += txn_amount;
-        confirmed_count += 1;
-        confirmed_matches.push(m_clone);
-    }
-
-    // Now update dues liabilities without overlapping borrow
-    for due_id in &cleared_dues {
-        if let Some(due) = inner.dues.iter_mut().find(|d| d.id == *due_id) {
-            due.status = DebtStatus::Paid;
-        }
-    }
-
-    // Credit any surplus or zero-debt payments to advance_payments ledger
-    for (unit_id, amount) in advance_credits {
-        let entry = inner.advance_payments.entry(unit_id).or_insert(Decimal::ZERO);
-        *entry += amount;
-    }
-
-    // Auto-offset any available advance against pending debts
-    apply_advance_payments_offset(&mut inner, None);
-
-    // Process site manager's preference to remember sender IBANs for future payments
-    let mut remembered_ibans_count = 0;
-    if payload.remember_sender_iban == Some(true) {
-        for m in &confirmed_matches {
-            if let (Some(sender_iban), Some(unit_id)) = (&m.transaction.sender_iban, &m.matched_unit_id) {
+        updated_unit_ids.push(line.unit.id.clone());
+        total_amount_cleared += line.item.transaction.amount;
+        if payload.remember_sender_iban == Some(true) {
+            if let Some(sender_iban) = &line.item.transaction.sender_iban {
                 let clean = sender_iban.replace(' ', "").to_uppercase();
                 if !clean.is_empty() {
-                    inner.remembered_sender_ibans.insert(clean, unit_id.clone());
-                    remembered_ibans_count += 1;
+                    remembered.push((line.unit.id.clone(), clean));
                 }
             }
         }
     }
+    for (unit_id, iban) in &remembered {
+        inner.remembered_sender_ibans.insert(iban.clone(), unit_id.clone());
+    }
+    let confirmed_count = confirmed_matches.len();
 
-    let message_sent = payload
-        .optional_message
-        .as_ref()
-        .map(|msg| !msg.trim().is_empty())
-        .unwrap_or(false);
+    if let Some(ref pool) = state.pool {
+        for m in &confirmed_matches {
+            crate::db::update_reconciliation_status(pool, &m.match_id, "Approved", &m.status_code, m.notes.as_deref())
+                .await
+                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+        }
+        for (uid, iban) in &remembered {
+            crate::db::save_remembered_sender_iban(pool, uid, iban, None, None)
+                .await
+                .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+        }
+    }
+    drop(inner);
+    if let Some((code, msg)) = failure {
+        // Lines before the failing one are settled and recorded; retrying the
+        // whole batch is safe (each line is idempotent).
+        return Err((code, format!("{} ({} line(s) settled before the failure)", msg, confirmed_count)));
+    }
+
+    let message_sent = payload.optional_message.as_ref().map(|msg| !msg.trim().is_empty()).unwrap_or(false);
     let notification_summary = if message_sent {
-        Some(format!(
-            "{} ev sahibine/kat sakinine bilgilendirme mesajı iletildi.",
-            confirmed_count
-        ))
+        Some(format!("{} ev sahibine/kat sakinine bilgilendirme mesajı iletildi.", confirmed_count))
     } else {
         None
     };
-
-    if let Some(ref pool) = state.pool {
-        let pool = pool.clone();
-        type PendingCollection = (String, Option<String>, Option<String>, Decimal, Option<String>, String);
-        let matches_to_save: Vec<PendingCollection> = confirmed_matches
-            .iter()
-            .enumerate()
-            .map(|(idx, m)| {
-                (
-                    if !m.transaction.transaction_id.is_empty() {
-                        m.transaction.transaction_id.clone()
-                    } else {
-                        format!("txn-{}", idx + 1)
-                    },
-                    m.matched_due_id.clone(),
-                    m.matched_unit_id.clone(),
-                    m.transaction.amount,
-                    m.transaction.reference_no.clone(),
-                    m.transaction.description.clone(),
-                )
-            })
-            .collect();
-        let confirmed_status_updates: Vec<(String, String, Option<String>)> = confirmed_matches
-            .iter()
-            .map(|m| (m.match_id.clone(), m.status_code.clone(), m.notes.clone()))
-            .collect();
-        let remembered_to_save: Vec<(String, String)> = if payload.remember_sender_iban == Some(true) {
-            confirmed_matches
-                .iter()
-                .filter_map(|m| {
-                    if let (Some(sender_iban), Some(unit_id)) = (&m.transaction.sender_iban, &m.matched_unit_id) {
-                        let clean = sender_iban.replace(' ', "").to_uppercase();
-                        if !clean.is_empty() {
-                            return Some((unit_id.clone(), clean));
-                        }
-                    }
-                    None
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
-
-        for (txn_id, due_id, unit_id, amt, ref_no, desc) in matches_to_save {
-            crate::db::save_collection_transaction(
-                &pool,
-                &txn_id,
-                due_id.as_deref(),
-                unit_id.as_deref(),
-                "BANK_STATEMENT",
-                amt,
-                ref_no.as_deref(),
-                Some(&desc),
-            ).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
-        }
-        for (match_id, status_code, notes) in confirmed_status_updates {
-            crate::db::update_reconciliation_status(
-                &pool,
-                &match_id,
-                "Approved",
-                &status_code,
-                notes.as_deref(),
-            ).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
-        }
-        persist_ledger_changes(&pool, &ledger_before, &inner)
-            .await
-            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
-        for (uid, iban) in remembered_to_save {
-            crate::db::save_remembered_sender_iban(&pool, &uid, &iban, None, None).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
-        }
-    }
 
     Ok((
         StatusCode::OK,
@@ -1302,7 +1245,7 @@ pub async fn confirm_reconciliation(
             confirmed_matches,
             message_sent,
             notification_summary,
-            remembered_ibans_count,
+            remembered_ibans_count: remembered.len(),
         }),
     ))
 }
@@ -1636,7 +1579,16 @@ pub async fn handle_bank_incoming_webhook(
             ));
         }
     }
-    process_bank_incoming_webhook(state, payload).await
+    let transaction_id = payload.transaction_id.clone();
+    let result = process_bank_incoming_webhook(state.clone(), payload).await;
+    if result.is_err() {
+        if let Some(ref pool) = state.pool {
+            if let Err(e) = crate::db::release_bank_webhook_transaction(pool, &transaction_id).await {
+                tracing::error!("Could not release webhook claim {}: {}", transaction_id, e);
+            }
+        }
+    }
+    result
 }
 
 fn duplicate_webhook_response(transaction_id: String) -> BankIncomingWebhookResponse {
@@ -1675,7 +1627,6 @@ pub async fn process_bank_incoming_webhook(
 ) -> Result<(StatusCode, Json<BankIncomingWebhookResponse>), (StatusCode, String)> {
     let clean_viban = payload.virtual_iban.replace(' ', "").to_uppercase();
     let mut inner = state.inner.write().await;
-    let ledger_before = ledger_snapshot(&inner);
 
     // Any earlier delivery of this transaction id (matched or not) is a duplicate.
     if inner.reconciliation_queue.iter().any(|m| m.transaction.transaction_id == payload.transaction_id) {
@@ -1786,7 +1737,7 @@ pub async fn process_bank_incoming_webhook(
             let match_id = format!("MATCH-{}", match_seq);
             let receipt_id = format!("DKN-UNM-{}", receipt_seq);
 
-            inner.reconciliation_queue.push(ReconciliationMatch {
+            let unmatched = ReconciliationMatch {
                 match_id: match_id.clone(),
                 site_id: bank_site_id,
                 transaction: BankTransactionItem {
@@ -1810,7 +1761,15 @@ pub async fn process_bank_incoming_webhook(
                 status: ReconciliationStatus::Unmatched,
                 status_code: ReconciliationStatus::Unmatched.as_str().to_string(),
                 notes: Some("Açıklama boş veya daire tespit edilemedi. Yönetici manuel eşleştirmesi bekliyor.".to_string()),
-            });
+            };
+            // The transaction id is already claimed, so the unmatched transfer must be
+            // durable: it waits in the reconciliation queue for manual matching.
+            if let Some(ref pool) = state.pool {
+                crate::db::save_reconciliation_match(pool, &unmatched)
+                    .await
+                    .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+            }
+            inner.reconciliation_queue.push(unmatched);
 
             return Ok((
                 StatusCode::OK,
@@ -1831,104 +1790,53 @@ pub async fn process_bank_incoming_webhook(
         }
     };
 
-    // 2. Check for duplicate transaction id (Idempotency Gate)
-    let already_processed = inner
-        .reconciliation_queue
-        .iter()
-        .any(|m| m.transaction.transaction_id == payload.transaction_id && m.status == ReconciliationStatus::Approved);
+    // 2. Settle through the canonical ingestion path (SPEC-005 R1): TAH- receipt,
+    // allocation rows, penalty-first waterfall, idempotent on the bank transaction.
+    let (payer_role, payer_name) = resolve_payer(&inner, &unit, payload.sender_name.as_deref());
+    let matched_resident_name = unit
+        .owner_user_id
+        .as_ref()
+        .and_then(|uid| inner.users.iter().find(|u| &u.id == uid))
+        .map(|u| u.full_name.clone());
+    drop(inner);
 
-    if already_processed {
-        let current_advance = inner
-            .advance_payments
-            .get(&unit.id)
-            .copied()
-            .unwrap_or(Decimal::ZERO);
-
-        return Ok((
-            StatusCode::OK,
-            Json(BankIncomingWebhookResponse {
-                status: "DUPLICATE_IGNORED".to_string(),
-                transaction_id: payload.transaction_id,
-                matched_unit_id: unit.id,
-                matched_block: unit.block_id,
-                matched_unit_number: unit.unit_number,
-                cleared_due_period: None,
-                cleared_amount: Decimal::ZERO,
-                remaining_debt: Decimal::ZERO,
-                advance_payment: current_advance,
-                receipt_id: format!("DUP-{}", inner.reconciliation_queue.len() + 1),
-                message: "Duplicate bank transaction notification ignored. Idempotency preserved.".to_string(),
-            }),
-        ));
-    }
-
-    // 3. Clear pending/overdue dues and credit surplus/advance payment
-    let mut cleared_period: Option<String> = None;
-    let mut cleared_amount = Decimal::ZERO;
-    let mut remaining_payment = payload.amount;
-
-    // Check if narrative mentions a specific period
-    let desc_str = payload.description.as_deref().unwrap_or("").to_lowercase();
-    let target_due_idx = inner.dues.iter().position(|d| {
-        d.unit_id == unit.id && d.status != DebtStatus::Paid && desc_str.contains(&d.period.to_lowercase())
-    }).or_else(|| {
-        inner.dues.iter().position(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
-    });
-    let target_due_id = target_due_idx.map(|idx| inner.dues[idx].id.clone());
-
-    if let Some(idx) = target_due_idx {
-        let due = &mut inner.dues[idx];
-        let settled = crate::services::dues_ledger::settle(due, remaining_payment);
-        cleared_period = Some(due.period.clone());
-        cleared_amount = settled.total();
-        remaining_payment -= settled.total();
-    }
-
-    // Any surplus or subsequent payment is credited to unit's advance payment ledger (Avans Bakiye)
-    let unit_advance = inner.advance_payments.entry(unit.id.clone()).or_insert(Decimal::ZERO);
-    if remaining_payment > Decimal::ZERO {
-        *unit_advance += remaining_payment;
-    }
-
-    // Also auto-offset any advance against remaining unpaid dues
-    apply_advance_payments_offset(&mut inner, Some(&unit.id));
-    let total_advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
-
-    // Persist to PostgreSQL database (STORY-05-01 / Financial Ledger)
-    if let Some(ref pool) = state.pool {
-        let txn_id = if !payload.transaction_id.is_empty() {
-            payload.transaction_id.clone()
+    let txn_desc = payload.description.clone().unwrap_or_else(|| {
+        if is_virtual_iban {
+            format!("Sanal IBAN FAST Transferi: {}", payload.virtual_iban)
         } else {
-            format!("txn-{}", inner.reconciliation_queue.len() + 1)
-        };
-        let ref_code = payload.transaction_id.clone();
-        let desc = payload.description.clone().unwrap_or_else(|| format!("FAST Bank Transfer: {}", unit.id));
-        crate::db::save_collection_transaction(
-            pool,
-            &txn_id,
-            target_due_id.as_deref(),
-            Some(&unit.id),
-            "BANK_TRANSFER",
-            payload.amount,
-            Some(&ref_code),
-            Some(&desc),
-        ).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
-        persist_ledger_changes(pool, &ledger_before, &inner)
-            .await
-            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
-    }
+            format!("Site Ana Hesabı FAST Transferi: {}", payload.virtual_iban)
+        }
+    });
+    let receipt = crate::services::PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(crate::models::RecordManualPaymentRequest {
+            site_id: Some(unit.site_id.clone()),
+            unit_id: unit.id.clone(),
+            amount: payload.amount,
+            payer_name,
+            payer_role,
+            payment_channel: if is_virtual_iban { "VIRTUAL_IBAN" } else { "BANK_TRANSFER" }.to_string(),
+            description: Some(txn_desc.clone()),
+            payment_date: None,
+            idempotency_key: Some(format!("BANK:{}", payload.transaction_id)),
+            designation: None,
+            external_reference: Some(payload.transaction_id.clone()),
+            designate_from_description: true,
+            settles_unmatched_entry_id: None,
+        })
+        .await
+        .map_err(payment_error_status)?;
 
-    // 4. Calculate remaining debt
+    let mut inner = state.inner.write().await;
+    let cleared_amount = receipt.allocated_principal + receipt.allocated_penalty;
+    let cleared_period = receipt.allocation_breakdown.first().map(|b| b.period.clone());
+    let surplus = receipt.allocated_advance;
+    let total_advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
     let remaining_debt: Decimal = inner
         .dues
         .iter()
         .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
         .map(|d| d.total_amount)
         .sum();
-
-    // 5. Generate immutable receipt and append to reconciliation queue
-    let receipt_seq = inner.reconciliation_queue.len() + 1;
-    let receipt_id = format!("DKN-2026-{}", receipt_seq);
 
     let unit_block_desc = if unit.block_id.contains("Blok") {
         unit.block_id.clone()
@@ -1937,34 +1845,27 @@ pub async fn process_bank_incoming_webhook(
     };
 
     let message = if let Some(ref period) = cleared_period {
-        if remaining_payment > Decimal::ZERO {
+        if surplus > Decimal::ZERO {
             format!(
-                "₺{} dues settlement cleared for {} (Unit {} D:{}). Surplus of ₺{} credited as advance payment (Avans Bakiye: ₺{}).",
-                cleared_amount, period, unit_block_desc, unit.unit_number, remaining_payment, total_advance
+                "₺{} dues settlement cleared for {} (Unit {} D:{}). Surplus of ₺{} credited as advance payment (Avans Bakiye: ₺{}). Receipt {}.",
+                cleared_amount, period, unit_block_desc, unit.unit_number, surplus, total_advance, receipt.receipt_number
             )
         } else {
             format!(
-                "₺{} dues settlement successfully cleared and matched to unit {} D:{} via {}.",
-                cleared_amount,
-                unit_block_desc,
-                unit.unit_number,
-                match_mechanism
+                "₺{} dues settlement successfully cleared and matched to unit {} D:{} via {}. Receipt {}.",
+                cleared_amount, unit_block_desc, unit.unit_number, match_mechanism, receipt.receipt_number
             )
         }
     } else {
         format!(
-            "No outstanding dues for unit {} D:{}. Full payment of ₺{} credited as advance payment (Avans Bakiye: ₺{}) via {}.",
-            unit_block_desc,
-            unit.unit_number,
-            payload.amount,
-            total_advance,
-            match_mechanism
+            "No outstanding dues for unit {} D:{}. Full payment of ₺{} credited as advance payment (Avans Bakiye: ₺{}) via {}. Receipt {}.",
+            unit_block_desc, unit.unit_number, payload.amount, total_advance, match_mechanism, receipt.receipt_number
         )
     };
 
     let notes = if let Some(ref period) = cleared_period {
-        if remaining_payment > Decimal::ZERO {
-            let surplus_str = format!("{:.2}", remaining_payment).replace('.', ",");
+        if surplus > Decimal::ZERO {
+            let surplus_str = format!("{:.2}", surplus).replace('.', ",");
             format!("{} aidatı ödendi • ₺{} avans bakiyenize aktarıldı", period, surplus_str)
         } else {
             format!("{} aidat borcu kapatıldı", period)
@@ -1972,20 +1873,6 @@ pub async fn process_bank_incoming_webhook(
     } else {
         "Aktif borç bulunmuyor • Avans bakiyenize aktarıldı".to_string()
     };
-
-    let txn_desc = payload.description.unwrap_or_else(|| {
-        if is_virtual_iban {
-            format!("Sanal IBAN FAST Transferi: {}", payload.virtual_iban)
-        } else {
-            format!("Site Ana Hesabı FAST Transferi: {}", payload.virtual_iban)
-        }
-    });
-
-    let matched_resident_name = unit
-        .owner_user_id
-        .as_ref()
-        .and_then(|uid| inner.users.iter().find(|u| &u.id == uid))
-        .map(|u| u.full_name.clone());
 
     let match_seq = inner.reconciliation_queue.len() + 1;
     inner.reconciliation_queue.push(ReconciliationMatch {
@@ -1999,16 +1886,16 @@ pub async fn process_bank_incoming_webhook(
             description: txn_desc,
             sender_name: payload.sender_name,
             sender_iban: payload.sender_iban,
-            reference_no: Some(payload.transaction_id.clone()),
+            reference_no: Some(receipt.receipt_number.clone()),
         },
         matched_unit_id: Some(unit.id.clone()),
         matched_block: Some(unit.block_id.clone()),
         matched_unit_number: Some(unit.unit_number),
         matched_resident_name,
         confidence_score: 100,
-        matched_due_id: None,
+        matched_due_id: receipt.allocation_breakdown.first().and_then(|b| b.due_id.clone()),
         outstanding_balance: Some(cleared_amount),
-        amount_matches_balance: true,
+        amount_matches_balance: surplus == Decimal::ZERO,
         status: ReconciliationStatus::Approved,
         status_code: ReconciliationStatus::Approved.as_str().to_string(),
         notes: Some(notes),
@@ -2026,10 +1913,45 @@ pub async fn process_bank_incoming_webhook(
             cleared_amount,
             remaining_debt,
             advance_payment: total_advance,
-            receipt_id,
+            receipt_id: receipt.receipt_number,
             message,
         }),
     ))
+}
+
+/// Who paid, for an incoming transfer: the unit's tenant when the sender name
+/// matches the tenant account, otherwise the owner (who may settle any of the
+/// unit's liabilities). Returns `(payer_role, payer_name)`.
+fn resolve_payer(
+    inner: &crate::state::AppStateInner,
+    unit: &crate::models::IndependentUnit,
+    sender_name: Option<&str>,
+) -> (String, String) {
+    let name_of = |uid: &Option<String>| {
+        uid.as_ref().and_then(|id| inner.users.iter().find(|u| &u.id == id)).map(|u| u.full_name.clone())
+    };
+    let sender = sender_name.map(str::trim).filter(|s| !s.is_empty());
+    if let (Some(sender), Some(tenant)) = (sender, name_of(&unit.tenant_user_id)) {
+        let (a, b) = (crate::services::dues_ledger::fold_turkish(sender), crate::services::dues_ledger::fold_turkish(&tenant));
+        if a.contains(&b) || b.contains(&a) {
+            return ("TENANT".to_string(), sender.to_string());
+        }
+    }
+    let name = sender
+        .map(str::to_string)
+        .or_else(|| name_of(&unit.owner_user_id))
+        .unwrap_or_else(|| "Bilinmeyen Gönderen".to_string());
+    ("OWNER".to_string(), name)
+}
+
+/// HTTP status for a canonical-ingestion failure: storage problems are 503 (the
+/// caller may retry; the payment is idempotent), anything else is a bad request.
+fn payment_error_status(e: String) -> (StatusCode, String) {
+    if e.starts_with("Database unavailable") || e.starts_with("Payment was not recorded") {
+        (StatusCode::SERVICE_UNAVAILABLE, e)
+    } else {
+        (StatusCode::BAD_REQUEST, e)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -2171,6 +2093,7 @@ pub async fn accrue_monthly_dues(
                 paid_penalty: Decimal::ZERO,
                 debtor_type: "TENANT".to_string(),
                 expense_type: "OPERATIONAL_DUES".to_string(),
+                penalty_accrued_through: None,
             });
             total_amount_accrued += effective_amount;
             newly_accrued_units_count += 1;
@@ -2243,67 +2166,50 @@ pub async fn record_homeowner_payment(
     State(state): State<AppState>,
     Json(payload): Json<RecordHomeownerPaymentRequest>,
 ) -> Result<(StatusCode, Json<RecordHomeownerPaymentResponse>), (StatusCode, String)> {
-    let mut inner = state.inner.write().await;
-    let ledger_before = ledger_snapshot(&inner);
-
-    let unit = inner
-        .units
-        .iter()
-        .find(|u| u.id == payload.unit_id)
-        .cloned();
-
-    let unit = match unit {
-        Some(u) => u,
-        None => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                format!("Unit '{}' not found.", payload.unit_id),
-            ));
-        }
+    let (unit, owner_name) = {
+        let inner = state.inner.read().await;
+        let unit = inner
+            .units
+            .iter()
+            .find(|u| u.id == payload.unit_id)
+            .cloned()
+            .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Unit '{}' not found.", payload.unit_id)))?;
+        let owner_name = unit
+            .owner_user_id
+            .as_ref()
+            .and_then(|uid| inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone()));
+        (unit, owner_name)
     };
+    let payer_name = payload
+        .homeowner_name
+        .clone()
+        .filter(|n| !n.trim().is_empty())
+        .or(owner_name)
+        .unwrap_or_else(|| "Kat Maliki".to_string());
+    let reference = payload.reference_code.clone().filter(|r| !r.trim().is_empty());
 
-    let payment_num = inner.homeowner_payments.len() + 1;
-    let payment_id = format!("PAY-{}", payment_num);
-    let mut remaining_payment = payload.amount;
-    let mut cleared_debt = Decimal::ZERO;
+    // Canonical ingestion (SPEC-005 R1). Recorded by site staff on behalf of the owner.
+    let receipt = crate::services::PaymentTrackingService::new(state.clone())
+        .record_and_allocate_payment(crate::models::RecordManualPaymentRequest {
+            site_id: Some(unit.site_id.clone()),
+            unit_id: unit.id.clone(),
+            amount: payload.amount,
+            payer_name: payer_name.clone(),
+            payer_role: "OWNER".to_string(),
+            payment_channel: payload.payment_method.clone(),
+            description: payload.note.clone(),
+            payment_date: None,
+            idempotency_key: reference.as_ref().map(|r| format!("HOP:{}", r)),
+            designation: None,
+            external_reference: reference.clone(),
+            designate_from_description: true,
+            settles_unmatched_entry_id: None,
+        })
+        .await
+        .map_err(payment_error_status)?;
 
-    // 1. Match against unpaid dues in FIFO order by due_date
-    let mut unpaid_dues_indices: Vec<usize> = inner
-        .dues
-        .iter()
-        .enumerate()
-        .filter(|(_, d)| d.unit_id == unit.id && d.status != DebtStatus::Paid)
-        .map(|(i, _)| i)
-        .collect();
-
-    unpaid_dues_indices.sort_by_key(|&i| inner.dues[i].due_date);
-
-    for idx in unpaid_dues_indices {
-        if remaining_payment <= Decimal::ZERO {
-            break;
-        }
-        let due = &mut inner.dues[idx];
-        let settled = crate::services::dues_ledger::settle(due, remaining_payment);
-        cleared_debt += settled.total();
-        remaining_payment -= settled.total();
-    }
-
-    // 2. If there is remaining payment (or if unit had no debt), credit to advance_payments!
-    let advance_credit = remaining_payment;
-    if advance_credit > Decimal::ZERO {
-        let entry = inner.advance_payments.entry(unit.id.clone()).or_insert(Decimal::ZERO);
-        *entry += advance_credit;
-    }
-
-    let total_unit_advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
-
-    let remaining_debt: Decimal = inner
-        .dues
-        .iter()
-        .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
-        .map(|d| d.total_amount)
-        .sum();
-
+    let cleared_debt = receipt.allocated_principal + receipt.allocated_penalty;
+    let advance_credit = receipt.allocated_advance;
     let match_status = if cleared_debt > Decimal::ZERO && advance_credit > Decimal::ZERO {
         PaymentMatchStatus::PartiallyMatched
     } else if cleared_debt > Decimal::ZERO {
@@ -2312,156 +2218,73 @@ pub async fn record_homeowner_payment(
         PaymentMatchStatus::MatchedAdvance
     };
 
+    let mut inner = state.inner.write().await;
+    let total_unit_advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
+    let remaining_debt: Decimal = inner
+        .dues
+        .iter()
+        .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+        .map(|d| d.total_amount)
+        .sum();
     let message = if cleared_debt > Decimal::ZERO && advance_credit > Decimal::ZERO {
         format!(
-            "₺{} aidat borcu ödendi, kalan ₺{} avans bakiyesine aktarıldı (Mevcut Avans: ₺{}).",
-            cleared_debt, advance_credit, total_unit_advance
+            "₺{} aidat borcu ödendi, kalan ₺{} avans bakiyesine aktarıldı (Mevcut Avans: ₺{}). Makbuz {}.",
+            cleared_debt, advance_credit, total_unit_advance, receipt.receipt_number
         )
     } else if cleared_debt > Decimal::ZERO {
-        format!("₺{} tutarındaki aidat borcu başarıyla kapatıldı.", cleared_debt)
+        format!("₺{} tutarındaki aidat borcu başarıyla kapatıldı. Makbuz {}.", cleared_debt, receipt.receipt_number)
     } else {
         format!(
-            "Aktif aidat borcu bulunmuyor. ₺{} tutarındaki ödeme avans bakiyenize eklendi (Mevcut Avans: ₺{}).",
-            advance_credit, total_unit_advance
+            "Aktif aidat borcu bulunmuyor. ₺{} tutarındaki ödeme avans bakiyenize eklendi (Mevcut Avans: ₺{}). Makbuz {}.",
+            advance_credit, total_unit_advance, receipt.receipt_number
         )
     };
 
-    // Store in homeowner_payments ledger
-    let record = HomeownerPaymentRecord {
-        id: payment_id.clone(),
-        unit_id: unit.id.clone(),
-        block_id: unit.block_id.clone(),
-        unit_number: unit.unit_number,
-        homeowner_name: payload.homeowner_name.or_else(|| {
-            unit.owner_user_id.as_ref().and_then(|uid| {
-                inner.users.iter().find(|u| &u.id == uid).map(|u| u.full_name.clone())
-            })
-        }),
-        amount: payload.amount,
-        payment_method: payload.payment_method.clone(),
-        reference_code: payload.reference_code.clone(),
-        note: payload.note.clone(),
-        status: match_status,
-        cleared_debt_amount: cleared_debt,
-        advance_credit_amount: advance_credit,
-        created_at: Utc::now(),
-    };
-
-    let resident_name = record.homeowner_name.clone();
-
-    inner.homeowner_payments.push(record.clone());
-
-    let receipt_seq = inner.homeowner_payments.len();
-    let receipt_id = format!("RCP-{}", receipt_seq);
-
-    if let Some(ref pool) = state.pool {
-        let pool = pool.clone();
-        let txn_id = format!("txn-{}", receipt_seq);
-        let unit_id = unit.id.clone();
-        let amount = payload.amount;
-        let ref_code = payload.reference_code.clone();
-        let note = payload.note.clone();
-        let matched_due_id = inner
-            .dues
-            .iter()
-            .find(|d| d.unit_id == unit_id && d.status == DebtStatus::Paid)
-            .map(|d| d.id.clone());
-        let rec = record.clone();
-        let receipt_id_clone = receipt_id.clone();
-        let res_name_clone = resident_name.clone();
-        let msg_clone = message.clone();
-        let p_method = payload.payment_method.clone();
-        let is_card = p_method.to_uppercase().contains("CARD") || p_method.to_uppercase().contains("KART");
-
-        crate::db::save_homeowner_payment(&pool, &rec).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
-
-        let match_seq = inner.reconciliation_queue.len() + 1;
-        let r_match = ReconciliationMatch {
-            match_id: format!("MATCH-{}", match_seq),
-            site_id: unit.site_id.clone(),
-            transaction: BankTransactionItem {
-                transaction_id: ref_code.clone().unwrap_or_else(|| rec.id.clone()),
-                date: Utc::now().date_naive(),
-                amount,
-                currency: "TRY".to_string(),
-                description: note.clone().unwrap_or_else(|| {
-                    if is_card {
-                        "Kredi Kartı ile Aidat Ödemesi".to_string()
-                    } else {
-                        format!("{} ile Aidat Ödemesi", p_method)
-                    }
-                }),
-                sender_name: res_name_clone.clone(),
-                sender_iban: None,
-                reference_no: Some(receipt_id_clone),
-            },
-            matched_unit_id: Some(rec.unit_id.clone()),
-            matched_block: Some(rec.block_id.clone()),
-            matched_unit_number: Some(rec.unit_number),
-            matched_resident_name: res_name_clone,
-            confidence_score: 100,
-            matched_due_id: None,
-            outstanding_balance: Some(cleared_debt),
-            amount_matches_balance: cleared_debt == amount,
-            status: ReconciliationStatus::Approved,
-            status_code: ReconciliationStatus::Approved.as_str().to_string(),
-            notes: Some(msg_clone),
-        };
-        crate::db::save_reconciliation_match(&pool, &r_match).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
-
-        crate::db::save_collection_transaction(
-            &pool,
-            &txn_id,
-            matched_due_id.as_deref(),
-            Some(&unit_id),
-            "ONLINE_PAYMENT",
-            amount,
-            ref_code.as_deref(),
-            note.as_deref(),
-        ).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
-        persist_ledger_changes(&pool, &ledger_before, &inner)
-            .await
-            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
-    }
-
-    // Also record in reconciliation_queue as an approved digital receipt
+    // Approved digital receipt line for the site payment views.
+    let is_card = receipt.payment_channel == "CREDIT_CARD";
     let match_seq = inner.reconciliation_queue.len() + 1;
-    inner.reconciliation_queue.push(ReconciliationMatch {
+    let r_match = ReconciliationMatch {
         match_id: format!("MATCH-{}", match_seq),
         site_id: unit.site_id.clone(),
         transaction: BankTransactionItem {
-            transaction_id: payload.reference_code.unwrap_or_else(|| payment_id.clone()),
+            transaction_id: reference.clone().unwrap_or_else(|| receipt.receipt_number.clone()),
             date: Utc::now().date_naive(),
             amount: payload.amount,
             currency: "TRY".to_string(),
-            description: payload.note.unwrap_or_else(|| {
-                if payload.payment_method.to_uppercase().contains("CARD") || payload.payment_method.to_uppercase().contains("KART") {
+            description: payload.note.clone().unwrap_or_else(|| {
+                if is_card {
                     "Kredi Kartı ile Aidat Ödemesi".to_string()
                 } else {
-                    format!("{} ile Aidat Ödemesi", payload.payment_method)
+                    format!("{} ile Aidat Ödemesi", receipt.payment_channel)
                 }
             }),
-            sender_name: resident_name.clone(),
+            sender_name: Some(payer_name),
             sender_iban: None,
-            reference_no: Some(receipt_id),
+            reference_no: Some(receipt.receipt_number.clone()),
         },
         matched_unit_id: Some(unit.id.clone()),
         matched_block: Some(unit.block_id.clone()),
         matched_unit_number: Some(unit.unit_number),
-        matched_resident_name: resident_name,
+        matched_resident_name: payload.homeowner_name.clone(),
         confidence_score: 100,
-        matched_due_id: None,
+        matched_due_id: receipt.allocation_breakdown.first().and_then(|b| b.due_id.clone()),
         outstanding_balance: Some(cleared_debt),
         amount_matches_balance: cleared_debt == payload.amount,
         status: ReconciliationStatus::Approved,
         status_code: ReconciliationStatus::Approved.as_str().to_string(),
         notes: Some(message.clone()),
-    });
+    };
+    if let Some(ref pool) = state.pool {
+        crate::db::save_reconciliation_match(pool, &r_match)
+            .await
+            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+    }
+    inner.reconciliation_queue.push(r_match);
 
     Ok((
         StatusCode::OK,
         Json(RecordHomeownerPaymentResponse {
-            payment_id,
+            payment_id: receipt.receipt_number.clone(),
             unit_id: unit.id,
             amount: payload.amount,
             cleared_debt_amount: cleared_debt,
@@ -2481,97 +2304,62 @@ pub async fn match_all_homeowner_payments(
     State(state): State<AppState>,
     Json(payload): Json<MatchAllPaymentsRequest>,
 ) -> Result<(StatusCode, Json<MatchAllPaymentsResponse>), (StatusCode, String)> {
-    let mut inner = state.inner.write().await;
-    let ledger_before = ledger_snapshot(&inner);
-
     let target_site_id = payload.site_id.unwrap_or_default();
+    let pending: Vec<(crate::models::HomeownerPaymentRecord, String)> = {
+        let inner = state.inner.read().await;
+        inner
+            .homeowner_payments
+            .iter()
+            .filter(|p| p.status == PaymentMatchStatus::Pending)
+            .filter_map(|p| {
+                inner
+                    .units
+                    .iter()
+                    .find(|u| u.id == p.unit_id && u.site_id == target_site_id)
+                    .map(|u| (p.clone(), u.site_id.clone()))
+            })
+            .collect()
+    };
+
+    let service = crate::services::PaymentTrackingService::new(state.clone());
     let mut total_processed = 0;
     let mut total_cleared = Decimal::ZERO;
     let mut total_advance = Decimal::ZERO;
     let mut matched_debts_count = 0;
     let mut matched_advance_count = 0;
-
-    let site_unit_ids: Vec<String> = inner
-        .units
-        .iter()
-        .filter(|u| u.site_id == target_site_id)
-        .map(|u| u.id.clone())
-        .collect();
-
-    for i in 0..inner.homeowner_payments.len() {
-        if !site_unit_ids.contains(&inner.homeowner_payments[i].unit_id) {
-            continue;
-        }
-
-        if inner.homeowner_payments[i].status != PaymentMatchStatus::Pending {
-            continue;
-        }
-
-        let unit_id = inner.homeowner_payments[i].unit_id.clone();
-        let mut remaining = inner.homeowner_payments[i].amount;
-        let mut cleared = Decimal::ZERO;
-
-        // Match against unpaid debts (FIFO by due date)
-        let mut unpaid_dues_indices: Vec<usize> = inner
-            .dues
-            .iter()
-            .enumerate()
-            .filter(|(_, d)| d.unit_id == unit_id && d.status != DebtStatus::Paid)
-            .map(|(idx, _)| idx)
-            .collect();
-        unpaid_dues_indices.sort_by_key(|&idx| inner.dues[idx].due_date);
-
-        for idx in unpaid_dues_indices {
-            if remaining <= Decimal::ZERO {
-                break;
-            }
-            let due = &mut inner.dues[idx];
-            let settled = crate::services::dues_ledger::settle(due, remaining);
-            cleared += settled.total();
-            remaining -= settled.total();
-        }
-
-        let advance = remaining;
-        if advance > Decimal::ZERO {
-            let entry = inner.advance_payments.entry(unit_id.clone()).or_insert(Decimal::ZERO);
-            *entry += advance;
-            total_advance += advance;
-            matched_advance_count += 1;
-        }
-
+    for (record, site_id) in pending {
+        // The pending row becomes the settled entry (SPEC-005 R2): no duplicate.
+        let receipt = service
+            .record_and_allocate_payment(crate::models::RecordManualPaymentRequest {
+                site_id: Some(site_id),
+                unit_id: record.unit_id.clone(),
+                amount: record.amount,
+                payer_name: record.homeowner_name.clone().unwrap_or_else(|| "Kat Maliki".to_string()),
+                payer_role: "OWNER".to_string(),
+                payment_channel: record.payment_method.clone(),
+                description: record.note.clone(),
+                payment_date: None,
+                idempotency_key: Some(format!("HOP:{}", record.id)),
+                designation: None,
+                external_reference: record.reference_code.clone(),
+                designate_from_description: true,
+                settles_unmatched_entry_id: Some(record.id.clone()),
+            })
+            .await
+            .map_err(|e| {
+                let (code, msg) = payment_error_status(e);
+                (code, format!("Payment {} was not matched: {} ({} matched before it)", record.id, msg, total_processed))
+            })?;
+        let cleared = receipt.allocated_principal + receipt.allocated_penalty;
         if cleared > Decimal::ZERO {
             total_cleared += cleared;
             matched_debts_count += 1;
         }
-
-        let new_status = if cleared > Decimal::ZERO && advance > Decimal::ZERO {
-            PaymentMatchStatus::PartiallyMatched
-        } else if cleared > Decimal::ZERO {
-            PaymentMatchStatus::MatchedDebt
-        } else {
-            PaymentMatchStatus::MatchedAdvance
-        };
-
-        inner.homeowner_payments[i].status = new_status;
-        inner.homeowner_payments[i].cleared_debt_amount = cleared;
-        inner.homeowner_payments[i].advance_credit_amount = advance;
-        total_processed += 1;
-    }
-
-    if let Some(ref pool) = state.pool {
-        let pool = pool.clone();
-        let updated_records: Vec<(String, String, Decimal, Decimal)> = inner
-            .homeowner_payments
-            .iter()
-            .filter(|p| site_unit_ids.contains(&p.unit_id))
-            .map(|p| (p.id.clone(), format!("{:?}", p.status), p.cleared_debt_amount, p.advance_credit_amount))
-            .collect();
-        for (pid, st, clr, adv) in updated_records {
-            crate::db::update_homeowner_payment_match(&pool, &pid, &st, clr, adv).await.map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
+        if receipt.allocated_advance > Decimal::ZERO {
+            total_advance += receipt.allocated_advance;
+            matched_advance_count += 1;
         }
-        persist_ledger_changes(&pool, &ledger_before, &inner)
-            .await
-            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
+        total_processed += 1;
     }
 
     Ok((
@@ -2914,6 +2702,58 @@ pub async fn sync_db(
     }
 }
 
+/// Deletes every row of one site in a single transaction, child tables first.
+/// The append-only ledger guard (V16) is lifted for this transaction only via
+/// `sitepulse.allow_ledger_purge`; callers must be non-production test rollbacks.
+async fn purge_site_rows(pool: &deadpool_postgres::Pool, site_id: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    const UNIT_SCOPED: &[&str] = &[
+        "payment_allocations WHERE payment_entry_id IN (SELECT id FROM payment_entries WHERE site_id = $1)",
+        "payment_allocations WHERE dues_liability_id IN (SELECT d.id FROM dues_liabilities d JOIN units u ON u.id = d.unit_id WHERE u.site_id = $1)",
+        "payment_entries WHERE site_id = $1",
+        "payment_idempotency_keys WHERE site_id = $1",
+        "payment_receipts WHERE site_id = $1",
+        "receipt_counters WHERE site_id = $1",
+        "advance_ledger_entries WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
+        "advance_balances WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
+        "debt_aging_snapshots WHERE site_id = $1",
+        "reconciliation_queue WHERE site_id = $1",
+        "unit_sender_ibans WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
+        "unit_payer_names WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
+        "dues_liabilities WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
+        "occupancy_members WHERE occupancy_id IN (SELECT o.id FROM unit_occupancies o JOIN units u ON u.id = o.unit_id WHERE u.site_id = $1)",
+        "unit_occupancies WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
+        "unit_ownerships WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
+        "invitation_tokens WHERE site_id = $1",
+        "pending_registrations WHERE site_id = $1",
+        "capital_contractor_disbursements WHERE project_id IN (SELECT id FROM capital_projects WHERE site_id = $1)",
+        "capital_project_installments WHERE project_id IN (SELECT id FROM capital_projects WHERE site_id = $1)",
+        "capital_projects WHERE site_id = $1",
+        "dues_periods WHERE site_id = $1",
+        "user_site_roles WHERE site_id = $1",
+        "users WHERE site_id = $1",
+        "units WHERE site_id = $1",
+        "blocks WHERE site_id = $1",
+        "house_types WHERE site_id = $1",
+        "site_bank_accounts WHERE site_id = $1",
+        "sites WHERE id = $1",
+    ];
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    tx.batch_execute("SET LOCAL sitepulse.allow_ledger_purge = 'on'").await?;
+    for target in UNIT_SCOPED {
+        let table = target.split_whitespace().next().unwrap_or_default();
+        let exists: bool = tx
+            .query_one("SELECT to_regclass($1) IS NOT NULL", &[&table])
+            .await?
+            .get(0);
+        if exists {
+            tx.execute(&format!("DELETE FROM {}", target), &[&site_id]).await?;
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Permanently purges a specific residential site and all associated units, residents,
 /// homeowners, tenants, and dues records — useful for fine-grained test rollbacks.
 pub async fn purge_site_cascade(
@@ -2931,46 +2771,20 @@ pub async fn purge_site_cascade(
     }
 
     if let Some(ref pool) = state.pool {
-        let client = match pool.get().await {
-            Ok(c) => c,
-            Err(e) => return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"status": "ERROR", "message": format!("DB connection error: {}", e)}))
+        let site_id_num = match site_id.parse::<i64>() {
+            Ok(n) => n,
+            Err(_) => return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"status": "ERROR", "message": format!("Invalid site id '{}'", site_id)}))
             ),
         };
-        let site_id_num = site_id.parse::<i64>().unwrap_or(-1);
-        if let Err(e) = client.execute(
-            "DELETE FROM payment_entries WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1 OR site_id = $2)",
-            &[&site_id_num, &site_id],
-        ).await { tracing::error!("Database write failed: {}", e); }
-        if let Err(e) = client.execute(
-            "DELETE FROM dues_liabilities WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1 OR site_id = $2)",
-            &[&site_id_num, &site_id],
-        ).await { tracing::error!("Database write failed: {}", e); }
-        if let Err(e) = client.execute(
-            "DELETE FROM unit_occupancies WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1 OR site_id = $2)",
-            &[&site_id_num, &site_id],
-        ).await { tracing::error!("Database write failed: {}", e); }
-        if let Err(e) = client.execute(
-            "DELETE FROM users WHERE site_id = $1 OR site_id = $2",
-            &[&site_id_num, &site_id],
-        ).await { tracing::error!("Database write failed: {}", e); }
-        if let Err(e) = client.execute(
-            "DELETE FROM units WHERE site_id = $1 OR site_id = $2",
-            &[&site_id_num, &site_id],
-        ).await { tracing::error!("Database write failed: {}", e); }
-        if let Err(e) = client.execute(
-            "DELETE FROM blocks WHERE site_id = $1 OR site_id = $2",
-            &[&site_id_num, &site_id],
-        ).await { tracing::error!("Database write failed: {}", e); }
-        if let Err(e) = client.execute(
-            "DELETE FROM site_bank_accounts WHERE site_id = $1 OR site_id = $2",
-            &[&site_id_num, &site_id],
-        ).await { tracing::error!("Database write failed: {}", e); }
-        if let Err(e) = client.execute(
-            "DELETE FROM sites WHERE id = $1 OR id::text = $2",
-            &[&site_id_num, &site_id],
-        ).await { tracing::error!("Database write failed: {}", e); }
+        if let Err(e) = purge_site_rows(pool, site_id_num).await {
+            tracing::error!("Site purge failed: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"status": "ERROR", "message": format!("Site purge failed: {}", e)}))
+            );
+        }
     }
 
     let mut inner = state.inner.write().await;
@@ -3341,6 +3155,7 @@ pub async fn provision_site_units(
                 paid_penalty: Decimal::ZERO,
                 debtor_type: "TENANT".to_string(),
                 expense_type: "OPERATIONAL_DUES".to_string(),
+                penalty_accrued_through: None,
             });
         }
 

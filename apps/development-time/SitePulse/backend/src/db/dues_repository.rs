@@ -110,15 +110,16 @@ pub async fn save_due_liability(
     client
         .execute(
             r#"
-            INSERT INTO dues_liabilities (id, unit_id, period, principal_amount, due_date, status, delay_penalty)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO dues_liabilities (id, unit_id, period, principal_amount, due_date, status, delay_penalty, penalty_accrued_through)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (id) DO UPDATE SET
                 unit_id = EXCLUDED.unit_id,
                 period = EXCLUDED.period,
                 principal_amount = EXCLUDED.principal_amount,
                 due_date = EXCLUDED.due_date,
                 status = EXCLUDED.status,
-                delay_penalty = EXCLUDED.delay_penalty
+                delay_penalty = EXCLUDED.delay_penalty,
+                penalty_accrued_through = EXCLUDED.penalty_accrued_through
             "#,
             &[
                 &due_id_num,
@@ -128,6 +129,7 @@ pub async fn save_due_liability(
                 &due.due_date,
                 &status_str,
                 &due.delay_penalty,
+                &due.penalty_accrued_through,
             ],
         )
         .await?;
@@ -201,7 +203,10 @@ pub async fn record_due_allocation(
 /// `advance_balances` is per (unit, debtor_type) while the in-memory view keeps one
 /// total per unit. The TENANT bucket is set so that all buckets add up to `total`
 /// (owner credit is never overwritten), and every change is written to
-/// `advance_ledger_entries` so the balance stays tied to its ledger.
+/// `advance_ledger_entries` so the balance stays tied to its ledger. Payments
+/// credit the ledger in their own transaction (`PAYMENT_SURPLUS`); a rise seen
+/// here is not backed by a payment and is recorded as `ADJUSTMENT_CREDIT` (V16),
+/// a fall as the automatic `OFFSET_APPLIED`.
 pub async fn save_advance_balance(pool: &Pool, unit_id: &str, total: Decimal) -> DbResult<()> {
     let unit = require_id("unit", unit_id)?;
     let mut client = pool.get().await?;
@@ -226,7 +231,7 @@ pub async fn save_advance_balance(pool: &Pool, unit_id: &str, total: Decimal) ->
                 &[&unit, &new_tenant],
             )
             .await?;
-            let entry_type = if delta > Decimal::ZERO { "PAYMENT_SURPLUS" } else { "OFFSET_APPLIED" };
+            let entry_type = if delta > Decimal::ZERO { "ADJUSTMENT_CREDIT" } else { "OFFSET_APPLIED" };
             tx.execute(
                 "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description, created_at)
                  VALUES ($1, 'TENANT', $2, $3, 'Advance balance change', CURRENT_TIMESTAMP)",
@@ -257,7 +262,7 @@ pub async fn save_advance_balance(pool: &Pool, unit_id: &str, total: Decimal) ->
             &[&unit, &total],
         )
         .await?;
-        let entry_type = if delta_owner > Decimal::ZERO { "PAYMENT_SURPLUS" } else { "OFFSET_APPLIED" };
+        let entry_type = if delta_owner > Decimal::ZERO { "ADJUSTMENT_CREDIT" } else { "OFFSET_APPLIED" };
         tx.execute(
             "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount, description, created_at)
              VALUES ($1, 'OWNER', $2, $3, 'Advance balance change', CURRENT_TIMESTAMP)",
@@ -284,6 +289,8 @@ pub async fn sync_due_payment_state(pool: &Pool, due: &DuesLiability) -> DbResul
             r#"
             UPDATE dues_liabilities
             SET delay_penalty  = GREATEST(delay_penalty, $2, $4),
+                penalty_accrued_through = CASE WHEN $6::date IS NULL THEN penalty_accrued_through
+                                               ELSE GREATEST(COALESCE(penalty_accrued_through, $6::date), $6::date) END,
                 paid_principal = $3,
                 paid_penalty   = $4,
                 paid_amount    = $3 + $4,
@@ -292,7 +299,7 @@ pub async fn sync_due_payment_state(pool: &Pool, due: &DuesLiability) -> DbResul
                 version        = version + 1
             WHERE id = $1
             "#,
-            &[&id, &due.delay_penalty, &due.paid_principal, &due.paid_penalty, &status],
+            &[&id, &due.delay_penalty, &due.paid_principal, &due.paid_penalty, &status, &due.penalty_accrued_through],
         )
         .await?;
     Ok(())

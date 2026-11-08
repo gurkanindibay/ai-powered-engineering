@@ -263,7 +263,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
 
     // 4. Load Dues Liabilities
     {
-        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type FROM dues_liabilities",
+        let rows = client.query("SELECT id, unit_id, period, principal_amount, due_date, status, delay_penalty, paid_principal, paid_penalty, debtor_type, expense_type, penalty_accrued_through FROM dues_liabilities",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
@@ -277,6 +277,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let paid_penalty: Decimal = row.get(8);
             let debtor_type: String = row.get(9);
             let expense_type: String = row.get(10);
+            let penalty_accrued_through: Option<NaiveDate> = row.get(11);
 
             let status = match status_str.to_uppercase().as_str() {
                 "PAID" => DebtStatus::Paid,
@@ -297,6 +298,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
                 paid_penalty,
                 debtor_type,
                 expense_type,
+                penalty_accrued_through,
             };
             crate::services::dues_ledger::refresh(&mut due);
             upsert_by_id(&mut state.dues, due, |x| &x.id);
@@ -396,23 +398,22 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
     // 6. Load the unified payment ledger (payment_entries) and derive the legacy
     // homeowner-payment view from it so existing endpoints keep working.
     {
-        let rows = client.query("SELECT id, site_id, unit_id, dues_liability_id, payer_name, payer_role, receipt_id, amount, payment_channel, settlement_status, description, external_reference, payment_date, created_at FROM payment_entries ORDER BY payment_date ASC",
+        let rows = client.query("SELECT id, site_id, unit_id, payer_name, payer_role, receipt_id, amount, payment_channel, settlement_status, description, external_reference, payment_date, created_at FROM payment_entries ORDER BY payment_date ASC",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
             let site_id: i64 = row.get(1);
             let unit_id: i64 = row.get(2);
-            let _dues_liability_id: Option<i64> = row.get(3);
-            let payer_name: String = row.get(4);
-            let payer_role: String = row.get(5);
-            let receipt_id: Option<i64> = row.get(6);
-            let amount: Decimal = row.get(7);
-            let payment_channel: String = row.get(8);
-            let settlement_status: String = row.get(9);
-            let description: Option<String> = row.get(10);
-            let external_reference: Option<String> = row.get(11);
-            let payment_date: Option<DateTime<Utc>> = row.get(12);
-            let created_at: Option<DateTime<Utc>> = row.get(13);
+            let payer_name: String = row.get(3);
+            let payer_role: String = row.get(4);
+            let receipt_id: Option<i64> = row.get(5);
+            let amount: Decimal = row.get(6);
+            let payment_channel: String = row.get(7);
+            let settlement_status: String = row.get(8);
+            let description: Option<String> = row.get(9);
+            let external_reference: Option<String> = row.get(10);
+            let payment_date: Option<DateTime<Utc>> = row.get(11);
+            let created_at: Option<DateTime<Utc>> = row.get(12);
 
             let entry = PaymentEntry {
                 id,

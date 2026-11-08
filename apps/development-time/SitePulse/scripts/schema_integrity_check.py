@@ -121,7 +121,7 @@ NEGATIVE_CASES = [
     ),
     (
         "payment_entries rejects phantom unit",
-        "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel) VALUES (1, 999999, 'X', 10, 'CASH')",
+        "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel, settlement_status) VALUES (1, 999999, 'X', 10, 'CASH', 'UNMATCHED')",
     ),
     (
         "advance_balances rejects phantom unit",
@@ -155,7 +155,7 @@ NEGATIVE_CASES += [
      " DELETE FROM units WHERE id = (SELECT unit_id FROM advance_ledger_entries LIMIT 1)"),
     ("sites.status vocabulary (M3)", "UPDATE sites SET status = 'WHATEVER'"),
     ("payment channel vocabulary (M3)",
-     "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel) SELECT site_id, id, 'X', 10, 'TELEPATHY' FROM units LIMIT 1"),
+     "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel, settlement_status) SELECT site_id, id, 'X', 10, 'TELEPATHY', 'UNMATCHED' FROM units LIMIT 1"),
     ("paid_amount must equal paid_principal + paid_penalty (M4)",
      "INSERT INTO dues_liabilities (unit_id, period, principal_amount, paid_amount, due_date) SELECT id, 'P-M4', 100, 10, CURRENT_DATE FROM units LIMIT 1"),
     ("advance balance cannot be negative (M4)",
@@ -164,6 +164,40 @@ NEGATIVE_CASES += [
      "INSERT INTO users (email, role) SELECT UPPER(email), role FROM users WHERE email IS NOT NULL LIMIT 1"),
     ("receipt counter cannot go negative (H3)",
      "INSERT INTO receipt_counters (site_id, last_sequence) SELECT id, -1 FROM sites LIMIT 1"),
+]
+
+# V16 / SPEC-005: append-only payment ledger and its documented transitions.
+V16_RECEIPT = ("INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role,"
+               " total_amount, allocated_principal, payment_channel, verification_hash)"
+               " SELECT site_id, id, '{number}', {seq}, 'P', 'OWNER', 10, 10, 'MANUAL_CASH', 'h' FROM units ORDER BY id LIMIT 1")
+V16_UNMATCHED = ("INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel, settlement_status,"
+                 " external_reference) SELECT site_id, id, 'P', 'OWNER', 10, 'BANK_TRANSFER', 'UNMATCHED', '{ref}'"
+                 " FROM units ORDER BY id LIMIT 1")
+NEGATIVE_CASES += [
+    ("receipts are append-only: UPDATE (V16 P-06)",
+     V16_RECEIPT.format(number="V16-N1", seq=9001) + "; UPDATE payment_receipts SET payer_name = 'X' WHERE receipt_number = 'V16-N1'"),
+    ("receipts are append-only: DELETE (V16 P-06)",
+     V16_RECEIPT.format(number="V16-N2", seq=9002) + "; DELETE FROM payment_receipts WHERE receipt_number = 'V16-N2'"),
+    ("advance ledger is append-only (V16 P-06)",
+     "INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount) SELECT id, 'OWNER', 'PAYMENT_SURPLUS', 5 FROM units LIMIT 1;"
+     " DELETE FROM advance_ledger_entries"),
+    ("a SETTLED entry needs a receipt (V16 P-03)",
+     "INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel)"
+     " SELECT site_id, id, 'P', 'OWNER', 10, 'MANUAL_CASH' FROM units LIMIT 1"),
+    ("entry amount is immutable (V16 P-06)",
+     V16_UNMATCHED.format(ref="V16-N3") + "; UPDATE payment_entries SET amount = 11 WHERE external_reference = 'V16-N3'"),
+    ("UNMATCHED cannot become SETTLED without a receipt (V16 P-06)",
+     V16_UNMATCHED.format(ref="V16-N4") + "; UPDATE payment_entries SET settlement_status = 'SETTLED' WHERE external_reference = 'V16-N4'"),
+    ("entries are append-only: DELETE (V16 P-06)",
+     V16_UNMATCHED.format(ref="V16-N5") + "; DELETE FROM payment_entries WHERE external_reference = 'V16-N5'"),
+    ("one entry per receipt (V16 P-04)",
+     V16_RECEIPT.format(number="V16-N6", seq=9006) + ";"
+     " INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel, receipt_id)"
+     " SELECT r.site_id, r.unit_id, 'P', 'OWNER', 10, 'MANUAL_CASH', r.id FROM payment_receipts r, generate_series(1, 2)"
+     " WHERE r.receipt_number = 'V16-N6'"),
+    ("penalty accrual date cannot precede the due date (V16 P-01)",
+     "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, penalty_accrued_through)"
+     " SELECT id, 'P-V16', 10, DATE '2026-09-01', DATE '2026-08-01' FROM units LIMIT 1"),
 ]
 
 # (name, statement, assertion query that must return 't')
@@ -175,6 +209,21 @@ POSITIVE_CASES = [
      "INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, is_active)"
      " SELECT (SELECT min(id) FROM units), id, 100, CURRENT_DATE, TRUE FROM persons WHERE full_name = 'PII Check'",
      "SELECT owner_person_id = (SELECT id FROM persons WHERE full_name = 'PII Check') FROM units WHERE id = (SELECT min(id) FROM units)"),
+    ("an UNMATCHED entry settles in place with its receipt (V16 P-06)",
+     V16_RECEIPT.format(number="V16-P1", seq=9101) + "; " + V16_UNMATCHED.format(ref="V16-P1") + ";"
+     " UPDATE payment_entries e SET settlement_status = 'SETTLED', receipt_id = r.id FROM payment_receipts r"
+     " WHERE r.receipt_number = 'V16-P1' AND e.external_reference = 'V16-P1'",
+     "SELECT settlement_status = 'SETTLED' AND receipt_id IS NOT NULL FROM payment_entries WHERE external_reference = 'V16-P1'"),
+    ("payer identity is resolved from the ownership history (V16 P-02)",
+     "SELECT 1",
+     "SELECT (SELECT owner_person_id FROM units WHERE id = (SELECT min(id) FROM units)) IS NOT NULL"
+     " AND (SELECT p.person_id FROM sp_unit_party_at((SELECT min(id) FROM units), 'OWNER', CURRENT_DATE) p)"
+     "     = (SELECT owner_person_id FROM units WHERE id = (SELECT min(id) FROM units))"),
+    ("the purge switch lifts the ledger guard for one transaction only (V16 P-06)",
+     V16_RECEIPT.format(number="V16-P2", seq=9102) + ";"
+     " BEGIN; SET LOCAL sitepulse.allow_ledger_purge = 'on'; DELETE FROM payment_receipts WHERE receipt_number = 'V16-P2'; COMMIT;",
+     "SELECT NOT EXISTS (SELECT 1 FROM payment_receipts WHERE receipt_number = 'V16-P2')"
+     " AND coalesce(current_setting('sitepulse.allow_ledger_purge', true), '') <> 'on'"),
     ("no integrity violations on seeded data (M4)", "SELECT 1", "SELECT count(*) = 0 FROM v_integrity_violations"),
 ]
 
@@ -201,6 +250,11 @@ UPGRADE_ASSERTIONS = [
      "SELECT count(*) = 0 FROM information_schema.columns c JOIN information_schema.tables t USING (table_schema, table_name)"
      " WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE' AND c.column_name = 'created_at' AND c.is_nullable = 'YES'"),
     ("every constraint is validated", "SELECT count(*) = 0 FROM pg_constraint WHERE connamespace = 'public'::regnamespace AND NOT convalidated"),
+    ("open overdue penalties carry their accrual date (V16 P-01)",
+     "SELECT bool_and(penalty_accrued_through IS NOT NULL) FROM dues_liabilities WHERE delay_penalty > 0 AND status NOT IN ('PAID', 'CANCELLED')"),
+    ("ledger triggers installed (V16 P-06)",
+     "SELECT count(*) = 5 FROM pg_trigger WHERE tgname IN ('trg_payment_receipts_append_only', 'trg_payment_allocations_append_only',"
+     " 'trg_advance_ledger_append_only', 'trg_idempotency_keys_append_only', 'trg_payment_entries_guard')"),
 ]
 
 

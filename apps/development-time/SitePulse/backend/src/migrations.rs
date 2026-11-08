@@ -40,6 +40,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(13, "V13__security_hardening.sql"),
     migration!(14, "V14__referential_ledger_and_vocabulary_integrity.sql"),
     migration!(15, "V15__duplicated_facts_sync_and_pii.sql"),
+    migration!(16, "V16__payment_ledger_integrity.sql"),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.
