@@ -106,8 +106,7 @@ def test_resident_without_history_can_be_deleted(login_as, page, stack):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-05")
-@pytest.mark.xfail(strict=True, reason="BUG: deleting a unit with ledger history is refused by the backend (400) "
-                   "but the card is removed from the list anyway, so the screen no longer matches the data")
+# Zero data loss: a unit with ledger history is refused (409) and its card stays.
 def test_refused_delete_keeps_the_resident_card(login_as, page, october_dues_b3_paid, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
