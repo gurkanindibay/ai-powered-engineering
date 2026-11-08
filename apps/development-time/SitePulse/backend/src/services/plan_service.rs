@@ -23,7 +23,12 @@ use crate::state::{AppState, AppStateInner};
 
 /// Principal and penalty paid on `due_ids` by receipts issued on or after `since`
 /// (reversals subtract what they reversed).
-pub fn paid_since(inner: &AppStateInner, site_id: &str, due_ids: &[String], since: NaiveDate) -> Decimal {
+pub fn paid_since(
+    inner: &AppStateInner,
+    site_id: &str,
+    due_ids: &[String],
+    since: NaiveDate,
+) -> Decimal {
     inner
         .payment_receipts
         .iter()
@@ -183,13 +188,18 @@ impl PlanService {
                     .finance
                     .adjustments
                     .iter()
-                    .find(|a| a.id == adjustment_id && crate::auth::same_id(&a.site_id, &caller.site_id))
+                    .find(|a| {
+                        a.id == adjustment_id && crate::auth::same_id(&a.site_id, &caller.site_id)
+                    })
                     .cloned()
             })
             .await
             .ok_or_else(|| not_found(format!("Adjustment {} not found", adjustment_id)))?;
         if adj.status != REQUEST_PENDING {
-            return Err(conflict(format!("Adjustment {} is already {}", adj.id, adj.status)));
+            return Err(conflict(format!(
+                "Adjustment {} is already {}",
+                adj.id, adj.status
+            )));
         }
         if same_actor(&adj.requested_by, &caller.actor()) {
             return Err(FinanceError::Forbidden(
@@ -216,12 +226,16 @@ impl PlanService {
         let (mut principal, mut penalty) = (due.principal_amount, due.delay_penalty);
         if adj.kind == ADJUSTMENT_PENALTY_WAIVER {
             if adj.amount > dues_ledger::outstanding_penalty(&due) {
-                return Err(conflict("The penalty was paid in the meantime; nothing left to waive"));
+                return Err(conflict(
+                    "The penalty was paid in the meantime; nothing left to waive",
+                ));
             }
             penalty -= adj.amount;
         } else {
             if adj.amount > dues_ledger::outstanding_principal(&due) {
-                return Err(conflict("The principal was paid in the meantime; nothing left to write off"));
+                return Err(conflict(
+                    "The principal was paid in the meantime; nothing left to write off",
+                ));
             }
             principal -= adj.amount;
         }
@@ -262,7 +276,9 @@ impl PlanService {
                             && matches!(u.role, Role::SiteManager | Role::Auditor)
                     })
                     .ok_or_else(|| {
-                        invalid("approved_by must be another site manager or the auditor of this site")
+                        invalid(
+                            "approved_by must be another site manager or the auditor of this site",
+                        )
                     })?;
                 if crate::auth::same_id(&approver.id, &caller.user_id) {
                     return Err(FinanceError::Forbidden(
@@ -289,7 +305,10 @@ impl PlanService {
                                 .find(|d| d.id == *id || crate::auth::same_id(&d.id, id))
                                 .copied()
                                 .ok_or_else(|| {
-                                    invalid(format!("Liability {} is not an open {} item of this unit", id, debtor))
+                                    invalid(format!(
+                                        "Liability {} is not an open {} item of this unit",
+                                        id, debtor
+                                    ))
                                 })
                         })
                         .collect::<FinanceResult<_>>()?
@@ -304,17 +323,28 @@ impl PlanService {
                         .iter()
                         .any(|p| p.status == PLAN_ACTIVE && p.due_ids.contains(&d.id))
                     {
-                        return Err(conflict(format!("Liability {} is already in an active plan", d.id)));
+                        return Err(conflict(format!(
+                            "Liability {} is already in an active plan",
+                            d.id
+                        )));
                     }
                 }
                 let total: Decimal = chosen.iter().map(|d| dues_ledger::outstanding(d)).sum();
                 let ids: Vec<String> = chosen.iter().map(|d| d.id.clone()).collect();
-                Ok((unit, ids, total, format!("user:{} <{}>", approver.id, approver.email)))
+                Ok((
+                    unit,
+                    ids,
+                    total,
+                    format!("user:{} <{}>", approver.id, approver.email),
+                ))
             })
             .await?;
         let schedule = installments::schedule(total, count, req.first_due_date)
             .map_err(|e| invalid(e.to_string()))?;
-        let today = self.store.read(|inner| site_today(inner, &caller.site_id)).await;
+        let today = self
+            .store
+            .read(|inner| site_today(inner, &caller.site_id))
+            .await;
         let plan = PaymentPlan {
             id: 0,
             site_id: caller.site_id.clone(),
@@ -396,7 +426,11 @@ impl PlanService {
     }
 
     /// Completes kept plans and breaks the late ones (daily job).
-    pub async fn run(&self, site_id: &str, as_of: Option<NaiveDate>) -> FinanceResult<PlanRunReport> {
+    pub async fn run(
+        &self,
+        site_id: &str,
+        as_of: Option<NaiveDate>,
+    ) -> FinanceResult<PlanRunReport> {
         let as_of = match as_of {
             Some(d) => d,
             None => self.store.read(|inner| site_today(inner, site_id)).await,
@@ -408,7 +442,9 @@ impl PlanService {
                     .finance
                     .plans
                     .iter()
-                    .filter(|p| p.status == PLAN_ACTIVE && crate::auth::same_id(&p.site_id, site_id))
+                    .filter(|p| {
+                        p.status == PLAN_ACTIVE && crate::auth::same_id(&p.site_id, site_id)
+                    })
                     .map(|p| {
                         let schedule = schedule_of(inner, p.id);
                         let paid = paid_since(inner, site_id, &p.due_ids, p.opened_on);
@@ -419,9 +455,17 @@ impl PlanService {
                             u32::try_from(p.grace_days).unwrap_or(0),
                         );
                         let all_settled = p.due_ids.iter().all(|id| {
-                            inner.dues.iter().find(|d| d.id == *id).is_none_or(|d| !is_open(d))
+                            inner
+                                .dues
+                                .iter()
+                                .find(|d| d.id == *id)
+                                .is_none_or(|d| !is_open(d))
                         });
-                        (p.clone(), progress.completed || all_settled, progress.broken)
+                        (
+                            p.clone(),
+                            progress.completed || all_settled,
+                            progress.broken,
+                        )
                     })
                     .collect()
             })
@@ -460,7 +504,10 @@ impl PlanService {
                 inner
                     .dues
                     .iter()
-                    .filter(|d| plan.due_ids.contains(&d.id) && dues_ledger::outstanding_penalty(d) > Decimal::ZERO)
+                    .filter(|d| {
+                        plan.due_ids.contains(&d.id)
+                            && dues_ledger::outstanding_penalty(d) > Decimal::ZERO
+                    })
                     .cloned()
                     .collect()
             })
@@ -473,7 +520,10 @@ impl PlanService {
                 due_id: due.id.clone(),
                 kind: ADJUSTMENT_PENALTY_WAIVER.to_string(),
                 amount: dues_ledger::outstanding_penalty(&due),
-                reason: format!("Ödeme planı #{} tamamlandı: gecikme tazminatından vazgeçildi", plan.id),
+                reason: format!(
+                    "Ödeme planı #{} tamamlandı: gecikme tazminatından vazgeçildi",
+                    plan.id
+                ),
                 source: "PAYMENT_PLAN".to_string(),
                 requested_by: plan.created_by.clone(),
                 requested_at: Utc::now(),

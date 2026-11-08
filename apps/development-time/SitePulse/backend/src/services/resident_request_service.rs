@@ -82,7 +82,11 @@ impl ResidentRequestService {
         Ok(self.store.insert(request, col::virman_requests).await?)
     }
 
-    pub async fn virman_requests(&self, caller: &Caller, unit_id: Option<&str>) -> Vec<VirmanRequest> {
+    pub async fn virman_requests(
+        &self,
+        caller: &Caller,
+        unit_id: Option<&str>,
+    ) -> Vec<VirmanRequest> {
         self.store
             .read(|inner| {
                 inner
@@ -111,7 +115,9 @@ impl ResidentRequestService {
                     .finance
                     .virman_requests
                     .iter()
-                    .find(|r| r.id == request_id && crate::auth::same_id(&r.site_id, &caller.site_id))
+                    .find(|r| {
+                        r.id == request_id && crate::auth::same_id(&r.site_id, &caller.site_id)
+                    })
                     .cloned()
             })
             .await
@@ -172,7 +178,10 @@ impl ResidentRequestService {
                 let unit = find_unit(inner, &caller.site_id, unit_id)?;
                 let due = find_due(inner, &caller.site_id, &req.due_id)?.clone();
                 if !crate::auth::same_id(&due.unit_id, &unit.id) {
-                    return Err(not_found(format!("Liability {} is not on this unit", req.due_id)));
+                    return Err(not_found(format!(
+                        "Liability {} is not on this unit",
+                        req.due_id
+                    )));
                 }
                 if let Some(own) = resident_debtor(caller, &unit) {
                     if due.debtor_type.as_str() != own {
@@ -238,13 +247,18 @@ impl ResidentRequestService {
                     .finance
                     .disputes
                     .iter()
-                    .find(|d| d.id == dispute_id && crate::auth::same_id(&d.site_id, &caller.site_id))
+                    .find(|d| {
+                        d.id == dispute_id && crate::auth::same_id(&d.site_id, &caller.site_id)
+                    })
                     .cloned()
             })
             .await
             .ok_or_else(|| not_found(format!("Dispute {} not found", dispute_id)))?;
         if dispute.status != DISPUTE_OPEN {
-            return Err(conflict(format!("Dispute {} is already {}", dispute.id, dispute.status)));
+            return Err(conflict(format!(
+                "Dispute {} is already {}",
+                dispute.id, dispute.status
+            )));
         }
         dispute.status = if req.accept {
             DISPUTE_ACCEPTED

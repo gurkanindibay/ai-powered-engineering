@@ -97,12 +97,12 @@ impl FinanceStore {
                 let id = next_memory_id(parents(book));
                 parent.set_id(id);
                 parents(book).push(parent.clone());
-                let mut next = next_memory_id(kids(book));
-                for child in children.iter_mut() {
+                let base_id = next_memory_id(kids(book));
+                for (offset, child) in children.iter_mut().enumerate() {
                     link(child, id);
-                    child.set_id(next);
-                    next += 1;
+                    child.set_id(base_id + offset as i64);
                 }
+
                 kids(book).extend(children.iter().cloned());
             }
         }
@@ -204,7 +204,11 @@ impl FinanceStore {
 
     /// Units whose owner or tenant has this national id (none without a database:
     /// national ids are never held in memory).
-    pub async fn units_by_national_id(&self, site_id: &str, national_id: &str) -> DbResult<Vec<String>> {
+    pub async fn units_by_national_id(
+        &self,
+        site_id: &str,
+        national_id: &str,
+    ) -> DbResult<Vec<String>> {
         match self.pool() {
             Some(pool) => {
                 let client = pool.get().await?;
@@ -242,7 +246,10 @@ impl FinanceStore {
     }
 
     /// Units of a site that have a tenant (the occupant pays operational costs).
-    pub async fn tenanted_units(&self, site_id: &str) -> DbResult<std::collections::HashSet<String>> {
+    pub async fn tenanted_units(
+        &self,
+        site_id: &str,
+    ) -> DbResult<std::collections::HashSet<String>> {
         match self.pool() {
             Some(pool) => super::tenanted_unit_ids(pool, site_id).await,
             None => Ok(self

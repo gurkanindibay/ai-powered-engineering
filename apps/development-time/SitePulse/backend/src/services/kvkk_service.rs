@@ -71,7 +71,8 @@ impl KvkkService {
                     })
                     .cloned()
                     .collect();
-                rows.sort_by(|a, b| b.occurred_at.cmp(&a.occurred_at));
+                rows.sort_by_key(|a| std::cmp::Reverse(a.occurred_at));
+
                 rows.truncate(limit.clamp(1, 1000));
                 rows
             })
@@ -183,7 +184,9 @@ impl KvkkService {
                 user_ref: caller.user_id.clone(),
                 acknowledged_at: Utc::now(),
             };
-            self.store.insert(ack, col::privacy_acknowledgements).await?;
+            self.store
+                .insert(ack, col::privacy_acknowledgements)
+                .await?;
         }
         Ok(self.status(caller).await)
     }
@@ -359,8 +362,10 @@ impl KvkkService {
                     let months = u32::try_from(months_of(category)).unwrap_or(24);
                     now.checked_sub_months(Months::new(months)).unwrap_or(now)
                 };
-                let in_site =
-                    |s: &Option<String>| s.as_deref().is_some_and(|s| crate::auth::same_id(s, &caller.site_id));
+                let in_site = |s: &Option<String>| {
+                    s.as_deref()
+                        .is_some_and(|s| crate::auth::same_id(s, &caller.site_id))
+                };
                 let stale_logs: Vec<i64> = inner
                     .finance
                     .access_log

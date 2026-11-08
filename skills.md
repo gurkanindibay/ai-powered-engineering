@@ -203,16 +203,25 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ./scripts/gui_traceability.py --json
 ```
 
-## 5c. Full Verification Run (`run_tests.py`)
+## 5c. Test Execution & Verification Run (`run_tests.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)
-- **Purpose:** Runs every harness gate with the real tools: harness self-tests, `cargo build`, `clippy -D warnings`, `cargo test`, the shared money fixtures (Rust + Dart), `flutter analyze`, `flutter test`, the persistence lint, the testId lint, the schema gate, the API system check and the browser suite (`gui-e2e`, about 15 minutes; an unexpected XPASS fails it). A missing toolchain fails; nothing is printed as passed unless the tool passed; nothing in the repo is modified.
+- **Test Plan & Matrix:** [docs/TEST_PLAN_AND_EXECUTION_MATRIX.md](file:///docs/TEST_PLAN_AND_EXECUTION_MATRIX.md)
+- **Purpose:** Runs platform verification across 6 execution cases: full platform run, area-specific verification (`finance`, `auth`, `residents`, `ui`, `db`, `core`), or change-driven selective testing (`--changed`) using real compilers, linters, test targets, and database tools.
 
 ```bash
-DB_PASS=... ./scripts/run_tests.py            # everything
+# Area-specific verification & change-driven testing
+./scripts/run_tests.py --list-areas               # list all 6 functional areas and their test assets
+./scripts/run_tests.py --area ui                  # run UI design system & widget test battery
+./scripts/run_tests.py --area finance --skip-db   # run finance invariants & ledger tests without DB
+./scripts/run_tests.py --changed --skip-db        # auto-detect git diff/status and run tests covering changes
+./scripts/run_tests.py --area finance --plan      # dry-run print execution plan without running tests
+
+# Global & CI verification gates
+DB_PASS=... ./scripts/run_tests.py            # everything including GUI Playwright suite
 ./scripts/run_tests.py --from-dev-container  # load local container credentials without printing them
 ./scripts/run_tests.py --skip-db              # DB gates (incl. gui-e2e) reported as SKIPPED, not passed
-DB_PASS=... ./scripts/run_tests.py --skip-gui # everything except the browser suite
+DB_PASS=... ./scripts/run_tests.py --skip-gui # everything except the browser suite (CI gate)
 ./scripts/run_tests.py --only rust-test,money-fixtures --json
 ```
 
