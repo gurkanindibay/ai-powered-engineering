@@ -12,6 +12,15 @@ local port (the backend applies the migrations), seeds it, and checks over HTTP:
   idempotent_payment_retry         a retried payment with the same Idempotency-Key returns the first receipt
   restart_persistence              a receipt issued before a backend restart is still served after it
   sequences_survive_restart        payments and new dues still insert after a restart (no id collisions)
+  match_all_settles_in_place       match-all settles an UNMATCHED row in place, with receipt and allocations (SPEC-005)
+  payer_identity_recorded          a payment records the payer person on its entry and receipt (V16)
+  site_purge_is_atomic             the non-production purge removes a site with ledger history (V16 guard)
+  tenant_surplus_virman            a tenant surplus is TENANT credit; a TENANT -> OWNER virman pays owner capital dues (SPEC-006 O-1)
+  reversal_restores_ledger         a reversal issues an IAD receipt, a contra entry, un-allocates and refunds advance (O-2)
+  webhook_claim_scoped             webhook claims record account, receipt and payload hash; a reused id with other content is 409 (O-3)
+  issuer_snapshot_on_receipt       the site tax id is validated and snapshotted on new receipts (O-5)
+  debt_aging_snapshot_persisted    the aging snapshot writes one row per unit/debtor per day, idempotently (O-8)
+  ledger_integrity_clean           v_integrity_violations is empty after all checks
 
 PostgreSQL access: set DB_HOST/DB_PORT/DB_USER/DB_PASS. SQL is run with `psql`
 when it is on PATH, otherwise through `docker exec <container> psql`
@@ -60,6 +69,9 @@ SAMPLE_PARAMS = {"unit_id": "14", "id": "14", "site_id": "1", "resident_id": "1"
 CHECKS = [
     "unauthenticated_routes_rejected", "forged_token_rejected", "cross_site_forbidden", "webhook_signature_enforced",
     "concurrent_receipts_unique", "idempotent_payment_retry", "restart_persistence", "sequences_survive_restart",
+    "match_all_settles_in_place", "payer_identity_recorded", "site_purge_is_atomic",
+    "tenant_surplus_virman", "reversal_restores_ledger", "webhook_claim_scoped", "issuer_snapshot_on_receipt",
+    "debt_aging_snapshot_persisted", "ledger_integrity_clean",
 ]
 
 
@@ -337,6 +349,210 @@ def check_sequences(ctx: Context) -> Tuple[bool, str]:
     return status == 201 and inserted.isdigit(), f"payment after restart {status}, new dues id {inserted}"
 
 
+def check_match_all_in_place(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-005 R2: match-all turns the UNMATCHED row into the settled entry (no duplicate)."""
+    db = ctx.backend.db_name
+    site = ctx.psql.run(db, f"SELECT site_id FROM units WHERE id = {ctx.unit_id};")
+    ref = f"SYS-UNM-{time.time_ns()}"
+    entry_id = ctx.psql.run(db, (
+        "INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel,"
+        f" settlement_status, external_reference) VALUES ({site}, {ctx.unit_id}, 'Bank Sender', 'OWNER', 4.00,"
+        f" 'BANK_TRANSFER', 'UNMATCHED', '{ref}') RETURNING id;"))
+    before = ctx.psql.run(db, "SELECT count(*) FROM payment_entries;")
+    ctx.backend.restart()  # the pending row is loaded from PostgreSQL
+    ctx.manager = login(ctx.backend, "mehmet.demir@begonya.com", "mehmet123")
+    status, body = http("POST", ctx.backend.base + "/api/v1/payments/match-all", token=ctx.manager, body={"site_id": site})
+    after = ctx.psql.run(db, "SELECT count(*) FROM payment_entries;")
+    row = ctx.psql.run(db, f"SELECT settlement_status || '|' || (receipt_id IS NOT NULL) FROM payment_entries WHERE id = {entry_id};")
+    allocations = ctx.psql.run(db, f"SELECT count(*) FROM payment_allocations WHERE payment_entry_id = {entry_id};")
+    ok = status == 200 and after == before and row == "SETTLED|true" and int(allocations or 0) >= 1
+    return ok, f"status {status}, entries {before}->{after}, entry {entry_id} {row}, allocations {allocations}"
+
+
+def check_payer_identity(ctx: Context) -> Tuple[bool, str]:
+    """V16 P-02: canonical payments record the payer person on entry and receipt."""
+    status, body = pay(ctx, "1.00")
+    if status != 201:
+        return False, f"payment failed: {status} {body[:200]}"
+    receipt_id = json.loads(body)["id"]
+    row = ctx.psql.run(ctx.backend.db_name, (
+        "SELECT (e.payer_person_id IS NOT NULL) || '|' || (r.payer_person_id IS NOT NULL) || '|' ||"
+        " (e.payer_person_id = u.owner_person_id) FROM payment_entries e JOIN payment_receipts r ON r.id = e.receipt_id"
+        f" JOIN units u ON u.id = e.unit_id WHERE r.id = {receipt_id};"))
+    return row == "true|true|true", f"receipt {receipt_id}: entry/receipt payer set, matches owner -> {row}"
+
+
+def check_site_purge(ctx: Context) -> Tuple[bool, str]:
+    """V16 P-06: the non-production purge removes a site with ledger history in one transaction."""
+    db = ctx.backend.db_name
+    site = ctx.psql.run(db, "SELECT id FROM sites WHERE slug = 'syscheck-2';")
+    ctx.psql.run(db, f"""
+        INSERT INTO blocks (site_id, block_name, total_floors) VALUES ({site}, 'P', 1);
+        INSERT INTO units (block_id, site_id, unit_number, floor, land_share)
+            SELECT id, {site}, 1, 1, 10 FROM blocks WHERE site_id = {site};
+        INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role,
+                                      total_amount, allocated_advance, advance_debtor_type, payment_channel, verification_hash)
+            SELECT {site}, id, 'PURGE-1', 1, 'P', 'OWNER', 5, 5, 'OWNER', 'MANUAL_CASH', 'h' FROM units WHERE site_id = {site};
+        INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel, receipt_id)
+            SELECT {site}, unit_id, 'P', 'OWNER', 5, 'MANUAL_CASH', id FROM payment_receipts WHERE receipt_number = 'PURGE-1';
+        INSERT INTO advance_ledger_entries (unit_id, debtor_type, entry_type, amount)
+            SELECT id, 'OWNER', 'PAYMENT_SURPLUS', 5 FROM units WHERE site_id = {site};
+    """)
+    # The purge is a dev route: enabled for this check only, then switched off again.
+    ctx.backend.extra_env["SITEPULSE_ENABLE_DEV_ROUTES"] = "true"
+    ctx.backend.restart()
+    try:
+        admin = login(ctx.backend, "admin@sitepulse.io", ADMIN_PASSWORD)
+        status, body = http("POST", f"{ctx.backend.base}/api/v1/system/purge-site/{site}", token=admin)
+    finally:
+        ctx.backend.extra_env.pop("SITEPULSE_ENABLE_DEV_ROUTES", None)
+        ctx.backend.restart()
+        ctx.manager = login(ctx.backend, "mehmet.demir@begonya.com", "mehmet123")
+    left = ctx.psql.run(db, (
+        f"SELECT (SELECT count(*) FROM sites WHERE id = {site}) + (SELECT count(*) FROM payment_receipts WHERE site_id = {site})"
+        f" + (SELECT count(*) FROM payment_entries WHERE site_id = {site});"))
+    guard = ctx.psql.run(db, "SELECT coalesce(current_setting('sitepulse.allow_ledger_purge', true), '');")
+    return status == 200 and left == "0" and guard != "on", f"status {status}, rows left {left}, guard after '{guard}'"
+
+
+def relogin(ctx: Context) -> None:
+    ctx.backend.restart()
+    ctx.manager = login(ctx.backend, "mehmet.demir@begonya.com", "mehmet123")
+
+
+def check_tenant_surplus_virman(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-006 O-1: per-debtor advance in PostgreSQL, and the TENANT -> OWNER virman."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    status, body = http("POST", b + "/api/v1/payments/record-manual", token=ctx.manager, body={
+        "unit_id": ctx.unit_id, "amount": "500.00", "payer_name": "Tenant Payer", "payer_role": "TENANT",
+        "payment_channel": "MANUAL_CASH"})
+    if status != 201:
+        return False, f"tenant payment failed: {status} {body[:200]}"
+    receipt = json.loads(body)
+    surplus = receipt["allocated_advance"]
+    tenant_before = ctx.psql.run(db, f"SELECT balance FROM advance_balances WHERE unit_id = {ctx.unit_id} AND debtor_type = 'TENANT';")
+    period = f"SYS-CAP-{time.time_ns()}"
+    ctx.psql.run(db, f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, expense_type)"
+                     f" VALUES ({ctx.unit_id}, '{period}', 6.00, CURRENT_DATE + 10, 'PENDING', 'OWNER', 'CAPITAL_DUES');")
+    relogin(ctx)  # the new capital due and the per-debtor balances are loaded from PostgreSQL
+    v_status, v_body = http("POST", b + "/api/v1/payments/inter-ledger-transfer", token=ctx.manager, body={
+        "unit_id": ctx.unit_id, "amount": "6.00", "source_debtor": "TENANT", "target_debtor": "OWNER"})
+    row = ctx.psql.run(db, (
+        f"SELECT d.status || '|' || (SELECT balance FROM advance_balances WHERE unit_id = {ctx.unit_id} AND debtor_type = 'TENANT')"
+        f" || '|' || (SELECT count(*) FROM advance_ledger_entries WHERE unit_id = {ctx.unit_id} AND debtor_type = 'TENANT'"
+        f"            AND entry_type = 'VIRMAN_DEBIT' AND amount = 6.00)"
+        f" FROM dues_liabilities d WHERE d.period = '{period}';"))
+    debtor = ctx.psql.run(db, f"SELECT advance_debtor_type FROM payment_receipts WHERE id = {receipt['id']};")
+    expected = f"PAID|{float(tenant_before) - 6:.2f}|1"
+    ok = (float(surplus) > 0 and debtor == "TENANT" and v_status == 200 and row == expected)
+    return ok, f"surplus {surplus} -> {debtor}, virman {v_status} {v_body[:120] if v_status != 200 else ''}, due|tenant advance|debits {row} (want {expected})"
+
+
+def check_reversal(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-006 O-2: reversal in PostgreSQL, surviving a restart, idempotent."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    ctx.psql.run(db, f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type)"
+                     f" VALUES ({ctx.unit_id}, 'SYS-REV-{time.time_ns()}', 8.00, CURRENT_DATE + 10, 'PENDING', 'OWNER');")
+    relogin(ctx)
+    status, body = http("POST", b + "/api/v1/payments/record-manual", token=ctx.manager, body={
+        "unit_id": ctx.unit_id, "amount": "100000.00", "payer_name": "Owner Payer", "payer_role": "OWNER",
+        "payment_channel": "BANK_TRANSFER", "external_reference": f"SYS-REV-{time.time_ns()}"})
+    if status != 201:
+        return False, f"payment failed: {status} {body[:200]}"
+    original = json.loads(body)
+    paid_before = ctx.psql.run(db, "SELECT sum(paid_principal + paid_penalty) FROM dues_liabilities;")
+    no_reason = http("POST", b + "/api/v1/payments/reverse", token=ctx.manager, body={"receipt": original["receipt_number"], "reason": ""})[0]
+    r_status, r_body = http("POST", b + "/api/v1/payments/reverse", token=ctx.manager,
+                            body={"receipt": original["receipt_number"], "reason": "System check: bounced transfer"})
+    if r_status != 201:
+        return False, f"reversal failed: {r_status} {r_body[:200]}"
+    rev = json.loads(r_body)["reversal_receipt"]
+    paid_after = ctx.psql.run(db, "SELECT sum(paid_principal + paid_penalty) FROM dues_liabilities;")
+    unallocated = float(original["allocated_principal"]) + float(original["allocated_penalty"])
+    row = ctx.psql.run(db, (
+        "SELECT o.settlement_status || '|' || c.settlement_status || '|' || c.entry_type || '|' || (c.recorded_by LIKE '%mehmet.demir%')"
+        " || '|' || (SELECT count(*) FROM advance_ledger_entries WHERE entry_type = 'REFUND' AND reference_id = rr.receipt_number"
+        f"            AND amount = {original['allocated_advance']})"
+        " FROM payment_entries o JOIN payment_entries c ON c.reverses_entry_id = o.id JOIN payment_receipts rr ON rr.id = c.receipt_id"
+        f" WHERE o.receipt_id = {original['id']};"))
+    relogin(ctx)
+    again = http("POST", b + "/api/v1/payments/reverse", token=ctx.manager,
+                 body={"receipt": original["receipt_number"], "reason": "System check: bounced transfer"})
+    same = again[0] == 201 and json.loads(again[1])["reversal_receipt"]["receipt_number"] == rev["receipt_number"]
+    served = http("GET", f"{b}/api/v1/payments/receipts/{rev['receipt_number']}", token=ctx.manager)[0]
+    ok = (no_reason == 400 and rev["receipt_number"].startswith("IAD-") and row == "REVERSED|REVERSED|REVERSAL|true|1"
+          and abs(float(paid_before) - float(paid_after) - unallocated) < 0.001 and same and served == 200)
+    return ok, (f"no-reason {no_reason}, {rev['receipt_number']}, entries {row}, paid {paid_before}->{paid_after}"
+                f" (unallocated {unallocated:.2f}), retry same {same}, served after restart {served}")
+
+
+def signed_webhook(ctx: Context, payload: Dict[str, str]) -> Tuple[int, str]:
+    body = json.dumps(payload).encode()
+    return http("POST", ctx.backend.base + "/api/v1/bank/webhook/incoming-transfer", raw=body,
+                headers={"X-SitePulse-Signature": hmac.new(WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()})
+
+
+def check_webhook_claim(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-006 O-3: scoped webhook claims with receipt link and payload hash."""
+    db = ctx.backend.db_name
+    iban = ctx.psql.run(db, f"SELECT virtual_iban FROM units WHERE id = {ctx.unit_id};") or "TR620020500009863791600001"
+    txn = f"SYS-CLAIM-{time.time_ns()}"
+    payload = {"transaction_id": txn, "virtual_iban": iban, "amount": "7.00", "currency": "TRY", "description": "claim check"}
+    first = signed_webhook(ctx, payload)
+    row = ctx.psql.run(db, (
+        "SELECT (w.site_id IS NOT NULL) || '|' || (w.site_bank_account_id IS NOT NULL) || '|' || coalesce(r.receipt_number, '-')"
+        f" || '|' || length(w.payload_hash) FROM processed_bank_webhooks w LEFT JOIN payment_receipts r ON r.id = w.receipt_id"
+        f" WHERE w.transaction_id = '{txn}';"))
+    receipt_no = json.loads(first[1]).get("receipt_id") if first[0] == 200 else None
+    replay = signed_webhook(ctx, payload)
+    conflict = signed_webhook(ctx, {**payload, "amount": "8.00"})[0]
+    replay_receipt = json.loads(replay[1]).get("receipt_id") if replay[0] == 200 else None
+    ok = (first[0] == 200 and row == f"true|true|{receipt_no}|64" and replay_receipt == receipt_no
+          and "DUPLICATE" in replay[1] and conflict == 409)
+    return ok, f"first {first[0]} {receipt_no}, claim {row}, replay -> {replay_receipt}, reused id with other amount -> {conflict}"
+
+
+def check_issuer_snapshot(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-006 O-5: sites.tax_id is validated and copied onto new receipts."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    site = ctx.psql.run(db, f"SELECT site_id FROM units WHERE id = {ctx.unit_id};")
+    admin = login(ctx.backend, "admin@sitepulse.io", ADMIN_PASSWORD)
+    bad = http("PUT", f"{b}/api/v1/saas/sites/{site}", token=admin, body={"tax_id": "12AB"})[0]
+    good = http("PUT", f"{b}/api/v1/saas/sites/{site}", token=admin, body={"tax_id": "1234567890", "tax_office": "Atasehir"})[0]
+    status, body = pay(ctx, "1.50")
+    if status != 201:
+        return False, f"payment failed: {status} {body[:200]}"
+    rid = json.loads(body)["id"]
+    row = ctx.psql.run(db, (
+        "SELECT coalesce(r.issuer_tax_id, '-') || '|' || coalesce(r.issuer_tax_office, '-') || '|' || (r.issuer_name = s.name)"
+        f" FROM payment_receipts r JOIN sites s ON s.id = r.site_id WHERE r.id = {rid};"))
+    return bad == 400 and good == 200 and row == "1234567890|Atasehir|true", f"bad {bad}, good {good}, receipt {rid}: {row}"
+
+
+def check_aging_snapshot(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-006 O-8: debt_aging_snapshots is written (once per unit/debtor/day)."""
+    db, url = ctx.backend.db_name, ctx.backend.base + "/api/v1/payments/debt-aging/snapshot"
+    site = ctx.psql.run(db, f"SELECT site_id FROM units WHERE id = {ctx.unit_id};")
+    # An open liability so the unit appears in today's report.
+    ctx.psql.run(db, f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type)"
+                     f" VALUES ({ctx.unit_id}, 'SYS-AGING-{time.time_ns()}', 12.00, CURRENT_DATE - 45, 'PENDING', 'OWNER');")
+    relogin(ctx)
+    count_sql = f"SELECT count(*) FROM debt_aging_snapshots WHERE as_of_date = CURRENT_DATE AND site_id = {site};"
+    first = http("POST", url, token=ctx.manager)
+    count1 = ctx.psql.run(db, count_sql)
+    second = http("POST", url, token=ctx.manager)
+    count2 = ctx.psql.run(db, count_sql)
+    rows = json.loads(first[1]).get("rows") if first[0] == 200 else None
+    ok = first[0] == 200 and second[0] == 200 and int(count1 or 0) > 0 and count1 == count2 and rows == int(count1)
+    return ok, f"status {first[0]}/{second[0]}, rows {rows}, table {count1} -> {count2}"
+
+
+def check_ledger_integrity(ctx: Context) -> Tuple[bool, str]:
+    """After every other check: no drift reported by v_integrity_violations."""
+    rows = ctx.psql.run(ctx.backend.db_name, "SELECT check_name || ':' || subject FROM v_integrity_violations;")
+    return rows == "", f"violations: {rows.replace(chr(10), ', ') or 'none'}"
+
+
 CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
     "unauthenticated_routes_rejected": check_unauthenticated,
     "forged_token_rejected": check_forged,
@@ -346,6 +562,15 @@ CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
     "idempotent_payment_retry": check_idempotent,
     "restart_persistence": check_restart,
     "sequences_survive_restart": check_sequences,
+    "match_all_settles_in_place": check_match_all_in_place,
+    "payer_identity_recorded": check_payer_identity,
+    "site_purge_is_atomic": check_site_purge,
+    "tenant_surplus_virman": check_tenant_surplus_virman,
+    "reversal_restores_ledger": check_reversal,
+    "webhook_claim_scoped": check_webhook_claim,
+    "issuer_snapshot_on_receipt": check_issuer_snapshot,
+    "debt_aging_snapshot_persisted": check_aging_snapshot,
+    "ledger_integrity_clean": check_ledger_integrity,
 }
 
 

@@ -32,7 +32,8 @@ async fn main() {
     let app = app::build_router(state.clone());
 
     // Spawn automated monthly dues accrual background scheduler (batch job)
-    tokio::spawn(scheduler::start_automated_dues_accrual_scheduler(state));
+    tokio::spawn(scheduler::start_automated_dues_accrual_scheduler(state.clone()));
+    tokio::spawn(scheduler::start_debt_aging_snapshot_worker(state));
 
     let addr: SocketAddr = std::env::var("SITEPULSE_BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:8080".to_string())

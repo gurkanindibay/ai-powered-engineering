@@ -113,6 +113,8 @@ impl SaasTenantService {
             plan_type: plan,
             license_end_date: license_end,
             timezone: crate::models::default_site_timezone(),
+            tax_id: None,
+            tax_office: None,
         };
         inner.sites.push(new_site);
 
@@ -302,6 +304,19 @@ impl SaasTenantService {
         site_id: &str,
         req: UpdateSiteRequest,
     ) -> Result<SaasSiteSummaryDto, String> {
+        // Issuer tax id printed on receipts (O-5): validated before anything changes.
+        let tax_id: Option<Option<String>> = match req.tax_id.as_deref() {
+            None => None,
+            Some(raw) => {
+                let clean: String = raw.chars().filter(|c| !c.is_whitespace()).collect();
+                let valid = clean.is_empty()
+                    || ((clean.len() == 10 || clean.len() == 11) && clean.chars().all(|c| c.is_ascii_digit()));
+                if !valid {
+                    return Err("tax_id must be 10 (VKN) or 11 (TCKN) digits".to_string());
+                }
+                Some(if clean.is_empty() { None } else { Some(clean) })
+            }
+        };
         let mut inner = self.state.inner.write().await;
         let site_idx = inner
             .sites
@@ -324,6 +339,13 @@ impl SaasTenantService {
         }
         if let Some(ref plan) = req.plan_type {
             inner.sites[site_idx].plan_type = PlanType::from_str_loose(plan);
+        }
+        if let Some(tax_id) = tax_id.clone() {
+            inner.sites[site_idx].tax_id = tax_id;
+        }
+        if let Some(ref office) = req.tax_office {
+            let office = office.trim();
+            inner.sites[site_idx].tax_office = if office.is_empty() { None } else { Some(office.to_string()) };
         }
 
         let actual_site_id = inner.sites[site_idx].id.clone();
@@ -431,7 +453,11 @@ impl SaasTenantService {
             if let Some(ref u) = admin_user_to_save {
                 crate::db::save_user(pool, u).await.map_err(|e| e.to_string())?;
             }
-            crate::db::replace_site_blocks(pool, &actual_site_id, &updated_blocks).await.map_err(|e| e.to_string())?;
+            // Blocks are rewritten only when the request names them: re-inserting an
+            // unchanged list would delete blocks that units still reference.
+            if req.blocks.is_some() {
+                crate::db::replace_site_blocks(pool, &actual_site_id, &updated_blocks).await.map_err(|e| e.to_string())?;
+            }
         }
 
         Ok(SaasSiteSummaryDto {

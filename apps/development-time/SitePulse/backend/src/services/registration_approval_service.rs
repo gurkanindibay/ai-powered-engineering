@@ -283,6 +283,7 @@ impl RegistrationApprovalService {
                         INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, virtual_iban)
                         VALUES ($1, $2, $3, $4, 1, $5, $6)
                         ON CONFLICT (block_id, unit_number) DO UPDATE SET
+                            deleted_at = NULL,
                             site_id = EXCLUDED.site_id,
                             floor = EXCLUDED.floor,
                             owner_person_id = EXCLUDED.owner_person_id,

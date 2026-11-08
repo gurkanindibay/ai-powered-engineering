@@ -3020,10 +3020,15 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
       confirmLabel: 'Evet, Sil',
     );
     if (confirmed == true) {
-      await widget.controller.deleteHomeOwner(unitId: ho.unitId);
+      final success = await widget.controller.deleteHomeOwner(unitId: ho.unitId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          appSnackBar(content: Text('Kat maliki başarıyla silindi.')),
+          appSnackBar(
+            content: Text(success
+                ? 'Kat maliki başarıyla silindi.'
+                : (widget.controller.lastDeleteHomeOwnerError ?? 'Kat maliki silinirken bir hata oluştu.')),
+            backgroundColor: success ? AppColors.successFill : AppColors.dangerFill,
+          ),
         );
       }
     }

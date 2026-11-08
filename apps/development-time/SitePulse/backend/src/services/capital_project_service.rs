@@ -511,6 +511,7 @@ impl CapitalProjectService {
                     paid_penalty: Decimal::ZERO,
                     debtor_type: DebtorType::Owner,
                     expense_type: ExpenseType::CapitalDues,
+                    penalty_accrued_through: None,
                 });
             }
 

@@ -18,15 +18,23 @@ impl DuesCalculationService {
         Self
     }
 
-    /// KMK Article 20 statutory delay fee, pro-rated daily:
-    /// `penalty = principal_owed * 0.05 * days_overdue / 30`, rounded half away from zero.
+    /// KMK Article 20 statutory delay fee: 5% per month, pro-rated daily, on the
+    /// principal that is still **unpaid** (SPEC-005 R3).
     ///
-    /// The result is deterministic and independent of earlier recalculations:
-    /// * the base is the principal *owed* (payments are tracked separately in
-    ///   `paid_principal`), so recalculation never shrinks the penalty;
-    /// * the penalty never decreases: it is at least the stored accrual and at
-    ///   least what has already been paid (`paid_penalty`);
-    /// * once the principal is fully paid the penalty stops accruing;
+    /// The penalty accrues in segments. `delay_penalty` is the amount accrued up
+    /// to `penalty_accrued_through`; an evaluation adds only the segment from
+    /// `max(due_date, penalty_accrued_through)` to `evaluation_date`:
+    /// `outstanding_principal * 0.05 * days / 30`, rounded to 2 decimals half away
+    /// from zero, then moves `penalty_accrued_through` to `evaluation_date`.
+    /// Payments run this first, so each segment uses the principal outstanding
+    /// during that segment.
+    ///
+    /// * Re-evaluating on the same (or an earlier) date adds nothing.
+    /// * The penalty never decreases and is never below what was already paid.
+    /// * Once the principal is fully paid the penalty stops accruing.
+    /// * A liability that never accrued a segment (`penalty_accrued_through`
+    ///   is `None`) is evaluated as one segment from the due date, and never
+    ///   ends up below its stored penalty.
     /// * `total_amount` is always the outstanding balance.
     pub fn calculate_delay_penalty(&self, mut dues: DuesLiability, evaluation_date: NaiveDate) -> DuesLiability {
         if dues.status == DebtStatus::Paid {
@@ -34,20 +42,37 @@ impl DuesCalculationService {
             return dues;
         }
 
-        let days_overdue = (evaluation_date - dues.due_date).num_days();
-        if days_overdue > 0 && dues_ledger::outstanding_principal(&dues) > Decimal::ZERO {
-            let monthly_rate = Decimal::from_str_exact("0.05").unwrap();
-            let penalty = (dues.principal_amount * monthly_rate * Decimal::from(days_overdue) / Decimal::from(30))
-                .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
-            // Monotonic: never below the stored accrual or what was already paid.
-            dues.delay_penalty = penalty.max(dues.delay_penalty).max(dues.paid_penalty);
+        let outstanding_principal = dues_ledger::outstanding_principal(&dues);
+        let accrued = dues.delay_penalty.max(dues.paid_penalty);
+        let segment_start = match dues.penalty_accrued_through {
+            Some(through) => through.max(dues.due_date),
+            None => dues.due_date,
+        };
+        let segment_days = (evaluation_date - segment_start).num_days();
+        let segment = if segment_days > 0 && outstanding_principal > Decimal::ZERO {
+            (outstanding_principal * Self::monthly_rate() * Decimal::from(segment_days) / Decimal::from(30))
+                .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
         } else {
-            dues.delay_penalty = dues.delay_penalty.max(dues.paid_penalty);
+            Decimal::ZERO
+        };
+        dues.delay_penalty = match dues.penalty_accrued_through {
+            Some(_) => accrued + segment,
+            // Legacy single segment: the stored figure already covers part of it.
+            None => accrued.max(segment),
+        };
+        if evaluation_date > dues.due_date {
+            let through = dues.penalty_accrued_through.map_or(evaluation_date, |t| t.max(evaluation_date));
+            dues.penalty_accrued_through = Some(through);
         }
 
+        let days_overdue = (evaluation_date - dues.due_date).num_days();
         dues.status = if days_overdue > 0 { DebtStatus::Overdue } else { DebtStatus::Pending };
         dues_ledger::refresh(&mut dues);
         dues
+    }
+
+    fn monthly_rate() -> Decimal {
+        Decimal::new(5, 2)
     }
 }
 
@@ -70,6 +95,7 @@ mod tests {
             paid_penalty: Decimal::from_str_exact(paid_penalty).unwrap(),
             debtor_type: DebtorType::Tenant,
             expense_type: ExpenseType::OperationalDues,
+            penalty_accrued_through: None,
         }
     }
 
@@ -96,5 +122,45 @@ mod tests {
         let r = svc.calculate_delay_penalty(settled, late);
         assert_eq!(r.delay_penalty, Decimal::from_str_exact("23.33").unwrap());
         assert_eq!(r.status, DebtStatus::Paid);
+    }
+
+    fn d(s: &str) -> Decimal {
+        Decimal::from_str_exact(s).unwrap()
+    }
+
+    fn date(m: u32, day: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, m, day).unwrap()
+    }
+
+    /// SPEC-005 scenario: ₺1,000 due 09-01, ₺600 principal paid 09-16, evaluated 10-01.
+    #[test]
+    fn penalty_accrues_only_on_unpaid_principal_after_partial_payment() {
+        let svc = DuesCalculationService::new();
+        let mut liability = due("0.00", "0.00");
+        liability.principal_amount = d("1000.00");
+        liability.due_date = date(9, 1);
+
+        // Payment day: accrue the first segment, then pay ₺600 principal.
+        let mut at_payment = svc.calculate_delay_penalty(liability, date(9, 16));
+        assert_eq!(at_payment.delay_penalty, d("25.00"));
+        assert_eq!(at_payment.penalty_accrued_through, Some(date(9, 16)));
+        at_payment.paid_principal = d("600.00");
+
+        let later = svc.calculate_delay_penalty(at_payment, date(10, 1));
+        assert_eq!(later.delay_penalty, d("35.00"), "₺25.00 + ₺400.00 × 5% × 15 / 30");
+        let again = svc.calculate_delay_penalty(later.clone(), date(10, 1));
+        assert_eq!(again.delay_penalty, d("35.00"), "same-day re-evaluation adds nothing");
+        let earlier = svc.calculate_delay_penalty(later, date(9, 20));
+        assert_eq!(earlier.delay_penalty, d("35.00"), "an earlier evaluation date never removes accrual");
+        assert_eq!(earlier.penalty_accrued_through, Some(date(10, 1)));
+    }
+
+    #[test]
+    fn no_penalty_and_no_accrual_date_before_the_due_date() {
+        let svc = DuesCalculationService::new();
+        let r = svc.calculate_delay_penalty(due("0.00", "0.00"), date(9, 10));
+        assert_eq!(r.delay_penalty, Decimal::ZERO);
+        assert_eq!(r.penalty_accrued_through, None);
+        assert_eq!(r.status, DebtStatus::Pending);
     }
 }

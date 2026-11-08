@@ -3439,9 +3439,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               appSnackBar(
-                content: Text('Kat maliki silinirken bir hata oluştu.'),
+                content: Text(widget.controller.lastDeleteHomeOwnerError ?? 'Kat maliki silinirken bir hata oluştu.'),
                 backgroundColor: AppColors.dangerFill,
-                duration: Duration(seconds: 3),
+                duration: const Duration(seconds: 5),
               ),
             );
           }

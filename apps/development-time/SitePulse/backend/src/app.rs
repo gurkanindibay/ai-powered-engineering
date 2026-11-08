@@ -157,6 +157,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/payments/debt-aging", get(handlers::get_debt_aging_report))
         .route("/api/v1/payments/record-manual", post(handlers::record_manual_payment))
         .route("/api/v1/payments/inter-ledger-transfer", post(handlers::inter_ledger_transfer))
+        .route("/api/v1/payments/reverse", post(handlers::reverse_payment))
+        .route("/api/v1/payments/debt-aging/snapshot", post(handlers::snapshot_debt_aging))
         .route("/api/v1/payments/receipts/:id", get(handlers::get_payment_receipt))
         .route("/api/v1/site-admin/units/:id/transfer-ownership", post(handlers::transfer_unit_ownership))
         // Capital Projects & Fixtures Management (Demirbaş Yönetimi - EPIC-10)
