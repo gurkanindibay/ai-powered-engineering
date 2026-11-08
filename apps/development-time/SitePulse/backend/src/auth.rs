@@ -31,14 +31,19 @@ use sha2::Sha256;
 use crate::models::Role;
 use crate::state::AppState;
 
-/// Access tokens live for 12 hours.
-pub const TOKEN_TTL_SECONDS: i64 = 12 * 3600;
+/// Access tokens live for ten minutes; server-side sessions can revoke them immediately.
+pub const TOKEN_TTL_SECONDS: i64 = 600;
 /// Minimum password length, applied to registration, change and reset alike.
 pub const MIN_PASSWORD_LENGTH: usize = 10;
 const MAX_INSPECTED_BODY_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Claims {
+    pub sid: String,
+    pub ver: i64,
+    pub iss: String,
+    pub aud: String,
+    pub jti: String,
     pub sub: String,
     pub email: String,
     pub role: Role,
@@ -54,7 +59,7 @@ impl Claims {
         self.role == Role::SaasAdmin
     }
     pub fn is_site_staff(&self) -> bool {
-        matches!(self.role, Role::SiteManager | Role::SaasAdmin)
+        self.role == Role::SiteManager
     }
 }
 
@@ -62,83 +67,179 @@ impl Claims {
 // Secrets
 // ---------------------------------------------------------------------------
 
-fn jwt_secret() -> &'static [u8] {
-    static SECRET: OnceLock<Vec<u8>> = OnceLock::new();
-    SECRET.get_or_init(|| match std::env::var("SITEPULSE_JWT_SECRET") {
-        Ok(s) if s.len() >= 32 => s.into_bytes(),
-        Ok(_) => panic!("SITEPULSE_JWT_SECRET must be at least 32 characters long"),
-        Err(_) => {
-            if crate::state::AppStateInner::is_production() {
-                panic!("SITEPULSE_JWT_SECRET is required in production");
+fn jwt_secret() -> Result<&'static [u8], String> {
+    static SECRET: OnceLock<Result<Vec<u8>, String>> = OnceLock::new();
+    SECRET
+        .get_or_init(|| match std::env::var("SITEPULSE_JWT_SECRET") {
+            Ok(s) if s.len() >= 32 => Ok(s.into_bytes()),
+            Ok(_) => Err("SITEPULSE_JWT_SECRET must be at least 32 bytes".to_string()),
+            Err(_) if crate::state::AppStateInner::is_production() => {
+                Err("SITEPULSE_JWT_SECRET is required".to_string())
             }
-            tracing::warn!(
-                "SITEPULSE_JWT_SECRET is not set; using a random per-process secret (tokens will not survive a restart)"
-            );
-            use rand::RngCore;
-            let mut buf = vec![0u8; 48];
-            rand::thread_rng().fill_bytes(&mut buf);
-            buf
-        }
-    })
+            Err(_) => {
+                use rand::RngCore;
+                let mut bytes = vec![0u8; 48];
+                rand::thread_rng().fill_bytes(&mut bytes);
+                Ok(bytes)
+            }
+        })
+        .as_deref()
+        .map_err(Clone::clone)
 }
 
-/// Fails fast at startup when required secrets are missing in production.
-pub fn validate_configuration() {
-    let _ = jwt_secret();
+/// Validate secrets before accepting requests.
+///
+/// # Errors
+/// Rejects missing production secrets or invalid configuration.
+pub fn validate_configuration() -> Result<(), String> {
+    jwt_secret()?;
     if crate::state::AppStateInner::is_production()
-        && std::env::var("SITEPULSE_BANK_WEBHOOK_SECRET").is_err()
+        && std::env::var("SITEPULSE_BANK_WEBHOOK_SECRET")
+            .map(|s| s.is_empty())
+            .unwrap_or(true)
     {
-        panic!("SITEPULSE_BANK_WEBHOOK_SECRET is required in production");
+        return Err("SITEPULSE_BANK_WEBHOOK_SECRET is required in production".to_string());
     }
+    Ok(())
+}
+fn issuer() -> String {
+    std::env::var("SITEPULSE_JWT_ISSUER").unwrap_or_else(|_| "sitepulse".to_string())
+}
+fn audience() -> String {
+    std::env::var("SITEPULSE_JWT_AUDIENCE").unwrap_or_else(|_| "sitepulse-api".to_string())
 }
 
-// ---------------------------------------------------------------------------
-// Tokens
-// ---------------------------------------------------------------------------
-
+/// Sign an access credential. A stored session is still required to authorize it.
+///
+/// # Errors
+/// Returns a signing/configuration error.
 pub fn issue_token(
     user_id: &str,
     email: &str,
     role: Role,
     site_id: &str,
     unit_id: Option<&str>,
-) -> String {
-    let now = Utc::now().timestamp();
-    let claims = Claims {
-        sub: user_id.to_string(),
-        email: email.to_string(),
+) -> Result<String, String> {
+    issue_token_for_session(
+        user_id,
+        email,
         role,
-        site_id: site_id.to_string(),
-        unit_id: unit_id.filter(|u| !u.is_empty()).map(str::to_string),
+        site_id,
+        unit_id,
+        &uuid::Uuid::new_v4().to_string(),
+        1,
+    )
+}
+/// Sign credentials for an existing session.
+///
+/// # Errors
+/// Returns a signing/configuration error.
+pub fn issue_session_token(
+    user: &crate::models::User,
+    sid: &str,
+    version: i64,
+    unit_id: Option<&str>,
+) -> Result<String, String> {
+    issue_token_for_session(
+        &user.id,
+        &user.email,
+        user.role,
+        &user.site_id,
+        unit_id,
+        sid,
+        version,
+    )
+}
+#[derive(Serialize, Deserialize)]
+struct AccessToken {
+    sub: String,
+    sid: String,
+    ver: i64,
+    iss: String,
+    aud: String,
+    iat: i64,
+    exp: i64,
+    jti: String,
+}
+/// Sign credentials containing identity/session references only.
+///
+/// # Errors
+/// Returns a signing/configuration error.
+pub fn issue_token_for_session(
+    user_id: &str,
+    _email: &str,
+    _role: Role,
+    _site_id: &str,
+    _unit_id: Option<&str>,
+    sid: &str,
+    version: i64,
+) -> Result<String, String> {
+    let now = Utc::now().timestamp();
+    let token = AccessToken {
+        sub: user_id.to_string(),
+        sid: sid.to_string(),
+        ver: version,
+        iss: issuer(),
+        aud: audience(),
         iat: now,
         exp: now + TOKEN_TTL_SECONDS,
+        jti: uuid::Uuid::new_v4().to_string(),
     };
     encode(
         &Header::new(Algorithm::HS256),
-        &claims,
-        &EncodingKey::from_secret(jwt_secret()),
+        &token,
+        &EncodingKey::from_secret(jwt_secret()?),
     )
-    .expect("HS256 encoding of typed claims cannot fail")
+    .map_err(|_| "Token signing failed".to_string())
 }
-
+/// Validate the credential, then resolve authority from server-side storage.
+///
+/// # Errors
+/// Returns a generic error for invalid or expired credentials.
 pub fn verify_token(token: &str) -> Result<Claims, String> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.leeway = 30;
-    decode::<Claims>(token, &DecodingKey::from_secret(jwt_secret()), &validation)
-        .map(|d| d.claims)
-        .map_err(|e| format!("Invalid access token: {}", e))
+    validation.set_issuer(&[issuer()]);
+    validation.set_audience(&[audience()]);
+    validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
+    let token = decode::<AccessToken>(token, &DecodingKey::from_secret(jwt_secret()?), &validation)
+        .map_err(|_| "Invalid access token".to_string())?
+        .claims;
+    if token.sid.is_empty()
+        || token.sub.is_empty()
+        || token.jti.is_empty()
+        || token.ver < 1
+        || token.iat > Utc::now().timestamp() + 30
+        || !matches!(token.exp.checked_sub(token.iat),Some(ttl) if (1..=TOKEN_TTL_SECONDS).contains(&ttl))
+    {
+        return Err("Invalid access token".to_string());
+    }
+    Ok(Claims {
+        sub: token.sub,
+        sid: token.sid,
+        ver: token.ver,
+        iss: token.iss,
+        aud: token.aud,
+        iat: token.iat,
+        exp: token.exp,
+        jti: token.jti,
+        email: String::new(),
+        site_id: String::new(),
+        role: Role::HomeResident,
+        unit_id: None,
+    })
 }
 
 // ---------------------------------------------------------------------------
 // Passwords
 // ---------------------------------------------------------------------------
 
-pub fn hash_password(password: &str) -> String {
+pub fn hash_password(password: &str) -> Result<String, String> {
     let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
         .hash_password(password.as_bytes(), &salt)
-        .expect("argon2id hashing with a generated salt cannot fail")
-        .to_string()
+        .map(|hash| hash.to_string())
+        .map_err(|_| "Password hashing failed".to_string())
 }
 
 /// Verifies a password against a stored PHC-format argon2 hash. Any other stored
@@ -175,6 +276,9 @@ pub fn legacy_plaintext(stored: &str) -> Option<String> {
 }
 
 pub fn validate_new_password(password: &str) -> Result<(), String> {
+    if password.len() > 1024 {
+        return Err("Password is too long".to_string());
+    }
     if password.chars().count() < MIN_PASSWORD_LENGTH {
         return Err(format!(
             "Password must be at least {} characters.",
@@ -236,128 +340,28 @@ pub fn sign_webhook_body(secret: &str, raw_body: &[u8]) -> String {
 // Route policy
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Access {
-    Public,
-    Authenticated,
-    SiteStaff,
-    SaasAdmin,
-}
-
-fn route_access(method: &Method, path: &str) -> Access {
-    let p = path.trim_end_matches('/');
-    match p {
-        "/health" | "/api/v1/health" => return Access::Public,
-        "/api/v1/auth/login" | "/api/v1/auth/google" | "/api/v1/auth/register" => {
-            return Access::Public
-        }
-        "/api/v1/home-residents/register" => return Access::Public,
-        // Authenticated by HMAC signature inside the handler, not by a user token.
-        "/api/v1/bank/webhook/incoming-transfer" => return Access::Public,
-        "/api/v1/site-admin/banks" => return Access::Public,
-        // The licensed provider's notification: authenticated by its HMAC signature.
-        "/api/v1/payments/provider/webhook" => return Access::Public,
-        // Receipt verification behind the QR code; discloses no payer data.
-        "/api/v1/public/receipts/verify" => return Access::Public,
-        _ => {}
-    }
-    // The sandbox provider's hosted page (the handler refuses it in production).
-    if p.starts_with("/api/v1/payment-provider/sandbox/") {
-        return Access::Public;
-    }
-    if p == "/api/v1/revaluation-rates" && *method == Method::PUT {
-        return Access::SaasAdmin;
-    }
-    if p.starts_with("/api/v1/registration/submit/") {
-        return Access::Public;
-    }
-    if p.starts_with("/api/v1/saas/") || p == "/api/v1/saas" || p.starts_with("/api/v1/system/") {
-        return Access::SaasAdmin;
-    }
-    if p == "/api/v1/bank/kuveyt-turk/configure" {
-        return Access::SaasAdmin;
-    }
-    if p.starts_with("/api/v1/auth/") {
-        return Access::Authenticated;
-    }
-    // Unit-scoped resident routes: residents reach only their own unit (checked below).
-    if p.starts_with("/api/v1/residents/")
-        || p.starts_with("/api/v1/units/")
-        || p.starts_with("/api/v1/payments/receipts/")
-    {
-        return Access::Authenticated;
-    }
-    if p.starts_with("/api/v1/home-residents/") {
-        return Access::Authenticated;
-    }
-    if p.starts_with("/api/v1/capital-projects") && *method == Method::GET {
-        return Access::Authenticated;
-    }
-    Access::SiteStaff
-}
-
-/// Extracts the unit id a path refers to, for the unit-scoped route families.
-fn path_unit_id(path: &str) -> Option<String> {
-    let segs: Vec<&str> = path.trim_matches('/').split('/').collect();
-    // ["api","v1",family,...]
-    if segs.len() < 4 {
-        return None;
-    }
-    match (segs[2], segs.get(3).copied()) {
-        ("residents", Some(u)) => Some(u.to_string()),
-        ("units", Some(u)) => Some(u.to_string()),
-        ("home-residents", Some("invite-link")) | ("home-residents", Some("members")) => {
-            segs.get(4).map(|s| s.to_string())
-        }
-        ("site-admin", Some("units")) | ("site-admin", Some("home-owners")) => {
-            segs.get(4).map(|s| s.to_string())
-        }
-        _ => None,
-    }
-}
-
-fn path_site_id(path: &str) -> Option<String> {
-    let segs: Vec<&str> = path.trim_matches('/').split('/').collect();
-    if segs.len() >= 5 && segs[2] == "site-admin" && segs[3] == "bank-account" {
-        return Some(segs[4].to_string());
-    }
-    None
-}
-
-/// Two ids refer to the same entity. In-memory ids carry prefixes (`site-1`,
-/// `d-14`) while PostgreSQL ids are bare integers (`1`), so their numeric forms
-/// are compared too, but only within one entity kind: `d-5` (a unit) never
-/// equals `site-5` (a site). A bare integer matches either kind, because the
-/// caller already knows which kind it is comparing.
+/// Two ids refer to the same entity. In-memory ids carry prefixes (`site-1`) while
+/// PostgreSQL ids are bare integers (`1`), so compare their numeric forms too.
 pub fn same_id(a: &str, b: &str) -> bool {
+    let kind = |id: &str| {
+        if id.starts_with("site-") {
+            1
+        } else if id.starts_with("unit-") || id.starts_with("d-") {
+            2
+        } else {
+            0
+        }
+    };
+    if kind(a) != 0 && kind(b) != 0 && kind(a) != kind(b) {
+        return false;
+    }
     if a == b {
         return true;
     }
-    match (typed_id(a), typed_id(b)) {
-        (Some((ka, x)), Some((kb, y))) => {
-            x == y && (ka == IdKind::Bare || kb == IdKind::Bare || ka == kb)
-        }
+    match (crate::db::parse_id_to_i64(a), crate::db::parse_id_to_i64(b)) {
+        (Some(x), Some(y)) => x == y,
         _ => false,
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum IdKind {
-    Bare,
-    Site,
-    Unit,
-}
-
-fn typed_id(s: &str) -> Option<(IdKind, i64)> {
-    let s = s.trim();
-    let (kind, rest) = if let Some(r) = s.strip_prefix("site-") {
-        (IdKind::Site, r)
-    } else if let Some(r) = s.strip_prefix("unit-").or_else(|| s.strip_prefix("d-")) {
-        (IdKind::Unit, r)
-    } else {
-        (IdKind::Bare, s)
-    };
-    rest.parse::<i64>().ok().map(|n| (kind, n))
 }
 
 fn error(status: StatusCode, message: &str) -> Response {
@@ -368,55 +372,17 @@ fn error(status: StatusCode, message: &str) -> Response {
         .into_response()
 }
 
-async fn unit_site_id(state: &AppState, unit_id: &str) -> Option<String> {
-    {
-        let inner = state.inner.read().await;
-        if let Some(u) = inner.units.iter().find(|u| same_id(&u.id, unit_id)) {
-            return Some(u.site_id.clone());
-        }
-    }
-    let pool = state.pool.as_ref()?;
-    let id: i64 = unit_id.trim_start_matches("d-").parse().ok()?;
-    let client = pool.get().await.ok()?;
-    let row = client
-        .query_opt("SELECT site_id FROM units WHERE id = $1", &[&id])
+async fn check_unit_access(state: &AppState, claims: &Claims, id: &str) -> Result<(), Response> {
+    crate::authorization::unit(state, claims, id)
         .await
-        .ok()??;
-    row.get::<_, Option<i64>>(0).map(|s| s.to_string())
+        .map_err(IntoResponse::into_response)
 }
-
-async fn check_unit_access(
-    state: &AppState,
-    claims: &Claims,
-    unit_id: &str,
-) -> Result<(), Response> {
-    if claims.is_saas_admin() {
-        return Ok(());
-    }
-    if claims.role == Role::SiteManager {
-        return match unit_site_id(state, unit_id).await {
-            Some(site) if same_id(&site, &claims.site_id) => Ok(()),
-            Some(_) => Err(error(StatusCode::FORBIDDEN, "Unit belongs to another site")),
-            None => Err(error(StatusCode::NOT_FOUND, "Unit not found")),
-        };
-    }
-    match &claims.unit_id {
-        Some(own) if same_id(own, unit_id) => Ok(()),
-        _ => Err(error(
-            StatusCode::FORBIDDEN,
-            "You may only access your own unit",
-        )),
-    }
-}
-
-fn check_site_access(claims: &Claims, site_id: &str) -> Result<(), Response> {
-    if claims.is_saas_admin() || same_id(site_id, &claims.site_id) {
+fn check_site_access(claims: &Claims, site: &str) -> Result<(), Response> {
+    crate::authorization::SiteId::parse(site).map_err(IntoResponse::into_response)?;
+    if crate::authorization::same_site(&claims.site_id, site) {
         Ok(())
     } else {
-        Err(error(
-            StatusCode::FORBIDDEN,
-            "Site belongs to another tenant",
-        ))
+        Err(crate::authorization::SecurityError::NotFound.into_response())
     }
 }
 
@@ -433,7 +399,7 @@ fn pin_query_site(uri: &Uri, claims: &Claims) -> Result<Uri, Response> {
             check_site_access(claims, v)?;
         }
     }
-    if has_site || claims.is_saas_admin() || claims.site_id.is_empty() {
+    if has_site || claims.site_id.is_empty() {
         return Ok(uri.clone());
     }
     // An empty `site_id=` counts as missing and is replaced by the caller's site.
@@ -551,108 +517,397 @@ fn json_id(v: &serde_json::Value) -> String {
 }
 
 pub fn bearer_token(req: &Request) -> Option<String> {
-    let value = req.headers().get(header::AUTHORIZATION)?.to_str().ok()?;
-    let token = value
-        .strip_prefix("Bearer ")
-        .or_else(|| value.strip_prefix("bearer "))?;
-    Some(token.trim().to_string())
+    let mut values = req.headers().get_all(header::AUTHORIZATION).iter();
+    let value = values.next()?.to_str().ok()?;
+    if values.next().is_some() {
+        return None;
+    }
+    let mut words = value.split_ascii_whitespace();
+    if !words.next()?.eq_ignore_ascii_case("Bearer") {
+        return None;
+    }
+    let token = words.next()?;
+    if words.next().is_some() || token.is_empty() {
+        return None;
+    }
+    Some(token.to_string())
 }
 
-/// Axum middleware applied to the whole router.
-pub async fn require_auth(State(state): State<AppState>, req: Request, next: Next) -> Response {
-    let method = req.method().clone();
-    let path = req.uri().path().to_string();
-    let access = route_access(&method, &path);
-    if access == Access::Public || method == Method::OPTIONS {
-        return next.run(req).await;
+/// Limit expensive password operations independently of request concurrency.
+///
+/// # Errors
+/// Returns an error if the worker semaphore is unavailable.
+pub async fn password_permit() -> Result<tokio::sync::OwnedSemaphorePermit, String> {
+    static LIMIT: OnceLock<std::sync::Arc<tokio::sync::Semaphore>> = OnceLock::new();
+    LIMIT
+        .get_or_init(|| std::sync::Arc::new(tokio::sync::Semaphore::new(4)))
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|_| "Password workers unavailable".to_string())
+}
+/// Hash a password outside asynchronous reactor threads.
+///
+/// # Errors
+/// Propagates hashing and worker errors.
+pub async fn hash_password_async(password: String) -> Result<String, String> {
+    let permit = password_permit().await?;
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        hash_password(&password)
+    })
+    .await
+    .map_err(|_| "Password worker unavailable".to_string())?
+}
+/// Verify a password outside asynchronous reactor threads.
+///
+/// # Errors
+/// Propagates worker errors.
+pub async fn verify_password_async(password: String, hash: String) -> Result<bool, String> {
+    if password.len() > 1024 {
+        return Ok(false);
     }
+    let permit = password_permit().await?;
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        verify_password(&password, &hash)
+    })
+    .await
+    .map_err(|_| "Password worker unavailable".to_string())
+}
 
+/// Authentication, explicit route policy, current resource scope and audit identity.
+pub async fn require_auth(State(state): State<AppState>, mut req: Request, next: Next) -> Response {
+    use crate::authorization::{AuthzContext, RoutePolicy, SecurityError};
+    let template = req
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map(|p| p.as_str())
+        .unwrap_or("")
+        .to_string();
+    let policy = crate::app::ROUTES
+        .iter()
+        .find(|r| {
+            r.path == template
+                && (r.method.eq_ignore_ascii_case(req.method().as_str())
+                    || req.method() == Method::HEAD && r.method == "get")
+        })
+        .map(|r| r.policy);
+    let Some(policy) = policy else {
+        return SecurityError::NotFound.into_response();
+    };
+    let mut audit = req
+        .extensions()
+        .get::<crate::audit::AuditContext>()
+        .cloned()
+        .unwrap_or(crate::audit::AuditContext {
+            source_ip: None,
+            user_agent: None,
+            permissions: Vec::new(),
+            support_grant_id: None,
+            site_id: None,
+            platform: false,
+            development: false,
+            request_id: uuid::Uuid::new_v4().to_string(),
+            actor_kind: "ANONYMOUS".to_string(),
+            actor_id: None,
+            actor_role: None,
+            session_id: None,
+        });
+    if matches!(policy, RoutePolicy::Public) {
+        if template.starts_with("/api/v1/auth/")
+            || template.contains("/register")
+            || template.contains("/registration/submit/")
+        {
+            let (parts, body) = req.into_parts();
+            let bytes = match to_bytes(body, 16384).await {
+                Ok(b) => b,
+                Err(_) => return SecurityError::BadRequest.into_response(),
+            };
+            let account = serde_json::from_slice::<serde_json::Value>(&bytes)
+                .ok()
+                .and_then(|v| {
+                    v.get("email")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.trim().to_lowercase())
+                        .or_else(|| {
+                            v.get("refresh_token")
+                                .and_then(|t| t.as_str())
+                                .map(token_digest)
+                        })
+                })
+                .unwrap_or_else(|| template.to_string());
+            let mut store = state.security.lock().await;
+            store
+                .login_attempts
+                .retain(|_, (at, _)| at.elapsed().as_secs() < 60);
+            if store.login_attempts.len() > 10000 {
+                return SecurityError::RateLimited.into_response();
+            }
+            for (key, max) in [
+                ("global".to_string(), 300),
+                (format!("account:{}", account), 10),
+            ] {
+                let attempt = store
+                    .login_attempts
+                    .entry(key)
+                    .or_insert((std::time::Instant::now(), 0));
+                attempt.1 += 1;
+                if attempt.1 > max {
+                    return SecurityError::RateLimited.into_response();
+                }
+            }
+            drop(store);
+            req = Request::from_parts(parts, Body::from(bytes));
+        }
+        return crate::audit::CONTEXT.scope(audit, next.run(req)).await;
+    }
     let Some(token) = bearer_token(&req) else {
-        return error(StatusCode::UNAUTHORIZED, "Missing bearer token");
+        return SecurityError::Unauthenticated.into_response();
     };
     let claims = match verify_token(&token) {
         Ok(c) => c,
-        Err(e) => return error(StatusCode::UNAUTHORIZED, &e),
+        Err(_) => return SecurityError::Unauthenticated.into_response(),
     };
-
-    let allowed = match access {
-        Access::Public | Access::Authenticated => true,
-        Access::SiteStaff => claims.is_site_staff(),
-        Access::SaasAdmin => claims.is_saas_admin(),
-    };
-    if !allowed {
-        return error(
-            StatusCode::FORBIDDEN,
-            "Your role is not allowed to use this endpoint",
-        );
-    }
-
-    if let Some(unit) = path_unit_id(&path) {
-        if let Err(resp) = check_unit_access(&state, &claims, &unit).await {
-            return resp;
-        }
-    }
-    if let Some(site) = path_site_id(&path) {
-        if let Err(resp) = check_site_access(&claims, &site) {
-            return resp;
-        }
-    }
-
-    let (mut parts, body) = req.into_parts();
-    match pin_query_site(&parts.uri, &claims) {
-        Ok(uri) => parts.uri = uri,
-        Err(resp) => return resp,
-    }
-
-    let body = if matches!(method, Method::POST | Method::PUT | Method::PATCH)
-        && !claims.is_saas_admin()
-    {
-        let bytes = match to_bytes(body, MAX_INSPECTED_BODY_BYTES).await {
-            Ok(b) => b,
-            Err(_) => return error(StatusCode::PAYLOAD_TOO_LARGE, "Request body too large"),
+    let (mut claims, must_change, stepped_up) =
+        match crate::security::validate(&state, claims).await {
+            Ok(c) => c,
+            Err(e) => return e.into_response(),
         };
-        match serde_json::from_slice::<serde_json::Value>(&bytes) {
-            Ok(mut value) => {
-                if let Err(resp) = check_body_scope(&state, &claims, &value).await {
-                    return resp;
-                }
-                // Pin a missing site to the caller's own site, as for the query string.
+    crate::audit::identify(
+        &claims.sub,
+        claims.role.as_str(),
+        &claims.sid,
+        &claims.site_id,
+    );
+    if must_change
+        && !matches!(
+            template.as_str(),
+            "/api/v1/auth/change-password"
+                | "/api/v1/auth/me"
+                | "/api/v1/auth/logout"
+                | "/api/v1/auth/logout-all"
+        )
+    {
+        return SecurityError::PasswordChange.into_response();
+    }
+    if template == "/api/v1/auth/link-google" && !stepped_up {
+        return SecurityError::StepUp.into_response();
+    }
+    let mut permissions = crate::models::Permission::permissions_for_role(claims.role);
+    if let Some(grant) = req.headers().get("x-sitepulse-support-grant") {
+        if !claims.is_saas_admin() {
+            return SecurityError::Forbidden.into_response();
+        }
+        let Ok(grant) = grant.to_str() else {
+            return SecurityError::Forbidden.into_response();
+        };
+        let Some(pool) = &state.pool else {
+            return SecurityError::Unavailable.into_response();
+        };
+        let client = match pool.get().await {
+            Ok(c) => c,
+            Err(_) => return SecurityError::Unavailable.into_response(),
+        };
+        let user = match crate::db::require_id("user", &claims.sub) {
+            Ok(id) => id,
+            Err(_) => return SecurityError::Unauthenticated.into_response(),
+        };
+        let row=match client.query_opt("SELECT g.site_id,g.permissions FROM support_grants g JOIN users approver ON approver.id=g.approved_by JOIN sites site ON site.id=g.site_id WHERE g.id=$1 AND g.operator_user_id=$2 AND g.approved_by<>g.operator_user_id AND approver.role='SAAS_ADMIN' AND approver.is_active AND g.revoked_at IS NULL AND g.expires_at>now() AND site.status IN ('ACTIVE','TRIAL') AND site.deleted_at IS NULL",&[&grant,&user]).await{Ok(Some(row))=>row,Ok(None)=>return SecurityError::Forbidden.into_response(),Err(_)=>return SecurityError::Unavailable.into_response()};
+        claims.site_id = row.get::<_, i64>(0).to_string();
+        audit.support_grant_id = Some(grant.to_string());
+        permissions = row
+            .get::<_, Vec<String>>(1)
+            .into_iter()
+            .filter_map(|s| {
+                serde_json::from_value::<crate::models::Permission>(serde_json::Value::String(s))
+                    .ok()
+            })
+            .collect();
+    }
+    let required = match policy {
+        RoutePolicy::Require(permission) => Some(permission),
+        RoutePolicy::RequireAny(options) => {
+            let Some(permission) = options.iter().find(|p| permissions.contains(p)).copied() else {
+                return SecurityError::Forbidden.into_response();
+            };
+            Some(permission)
+        }
+        _ => None,
+    };
+    if let Some(permission) = required {
+        if !permissions.contains(&permission) {
+            return SecurityError::Forbidden.into_response();
+        }
+        let sensitive = matches!(
+            permission,
+            crate::models::Permission::PaymentReverse
+                | crate::models::Permission::SupportAccess
+                | crate::models::Permission::RoleGrant
+        ) || matches!(
+            permission,
+            crate::models::Permission::BankAccountManage
+                | crate::models::Permission::PlatformIntegrationConfigure
+        ) && req.method() != Method::GET
+            || template.ends_with("/transfer-ownership")
+            || template.ends_with("/reset-admin-password")
+            || template.ends_with("/platform-roles");
+        if sensitive && !stepped_up {
+            return SecurityError::StepUp.into_response();
+        }
+    }
+    if matches!(policy, RoutePolicy::Development) && !claims.is_saas_admin() {
+        return SecurityError::Forbidden.into_response();
+    }
+    audit.site_id = crate::authorization::SiteId::parse(&claims.site_id)
+        .ok()
+        .and_then(|_| crate::db::parse_id_to_i64(&claims.site_id).map(|s| s.to_string()));
+    audit.permissions = permissions.clone();
+    audit.platform = matches!(
+        policy,
+        RoutePolicy::Require(
+            crate::models::Permission::TenantManage
+                | crate::models::Permission::SupportAccess
+                | crate::models::Permission::PlatformIntegrationConfigure
+        )
+    );
+    audit.development = matches!(policy, RoutePolicy::Development);
+    audit.actor_kind = "USER".to_string();
+    audit.actor_id = Some(claims.sub.clone());
+    audit.actor_role = Some(claims.role.as_str().to_string());
+    audit.session_id = Some(claims.sid.clone());
+    crate::audit::record_context(&audit);
+    let context = AuthzContext {
+        claims: claims.clone(),
+        permissions,
+        request_id: audit.request_id.clone(),
+    };
+    crate::audit::CONTEXT
+        .scope(audit, async move {
+            let result = scope_request(&state, &claims, &mut req, policy).await;
+            if let Err(response) = result {
+                return response;
+            }
+            req.extensions_mut().insert(claims);
+            req.extensions_mut().insert(context);
+            next.run(req).await
+        })
+        .await
+}
+
+async fn scope_request(
+    state: &AppState,
+    claims: &Claims,
+    req: &mut Request,
+    policy: crate::authorization::RoutePolicy,
+) -> Result<(), Response> {
+    use crate::authorization::{self, RoutePolicy};
+    use crate::models::Permission;
+    if matches!(
+        policy,
+        RoutePolicy::SelfOnly
+            | RoutePolicy::Development
+            | RoutePolicy::Require(
+                Permission::TenantManage
+                    | Permission::SupportAccess
+                    | Permission::PlatformIntegrationConfigure
+            )
+    ) {
+        return Ok(());
+    }
+    // Platform audit access is deliberately restricted to NULL-site events.
+    if claims.is_saas_admin() && claims.site_id.is_empty() {
+        if matches!(policy, RoutePolicy::Require(Permission::AuditLogRead)) {
+            return Ok(());
+        }
+        return Err(authorization::SecurityError::Forbidden.into_response());
+    }
+    let path = req.uri().path().to_string();
+    let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
+    let template = req
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map(|p| p.as_str())
+        .unwrap_or("");
+    if template.contains(":unit_id")
+        || template.starts_with("/api/v1/units/:id")
+        || template.starts_with("/api/v1/site-admin/units/:id")
+        || template.starts_with("/api/v1/site-admin/home-owners/:id")
+    {
+        let idx = if matches!(parts.get(2), Some(&"site-admin" | &"home-residents")) {
+            4
+        } else {
+            3
+        };
+        if let Some(id) = parts.get(idx) {
+            if matches!(
+                policy,
+                RoutePolicy::Require(
+                    Permission::UnitInviteCoResident | Permission::UnitManageHousehold
+                )
+            ) || matches!(policy, RoutePolicy::RequireAny(_))
+                && matches!(claims.role, Role::HomeOwner | Role::HomeResident)
+            {
+                authorization::owned_unit(state, claims, id)
+                    .await
+                    .map_err(IntoResponse::into_response)?;
+            } else {
+                check_unit_access(state, claims, id).await?;
+            }
+        }
+    }
+    for (prefix, kind) in [
+        ("/api/v1/registration/approve/", "registration"),
+        ("/api/v1/registration/reject/", "registration"),
+        ("/api/v1/capital-projects/", "project"),
+        ("/api/v1/payments/receipts/", "receipt"),
+        ("/api/v1/site-admin/house-types/", "house_type"),
+    ] {
+        if let Some(id) = path.strip_prefix(prefix).and_then(|p| p.split('/').next()) {
+            authorization::resource(state, claims, kind, id)
+                .await
+                .map_err(IntoResponse::into_response)?;
+        }
+    }
+    if let Some(site) = path.strip_prefix("/api/v1/site-admin/bank-account/") {
+        check_site_access(claims, site)?;
+    }
+    for (key, value) in url_pairs(req.uri().query().unwrap_or("")) {
+        if matches!(key.as_str(), "unit_id" | "unitId") && !value.is_empty() {
+            check_unit_access(state, claims, &value).await?;
+        }
+    }
+    *req.uri_mut() = pin_query_site(req.uri(), claims)?;
+    if matches!(
+        *req.method(),
+        Method::POST | Method::PUT | Method::PATCH | Method::DELETE
+    ) {
+        let body = std::mem::replace(req.body_mut(), Body::empty());
+        let bytes = to_bytes(body, MAX_INSPECTED_BODY_BYTES)
+            .await
+            .map_err(|_| error(StatusCode::PAYLOAD_TOO_LARGE, "Request body too large"))?;
+        if !bytes.is_empty() {
+            let mut value: serde_json::Value = serde_json::from_slice(&bytes)
+                .map_err(|_| error(StatusCode::BAD_REQUEST, "Invalid JSON body"))?;
+            check_body_scope(state, claims, &value).await?;
+            if let Some(id) = value.get("receipt").and_then(|v| v.as_str()) {
+                authorization::resource(state, claims, "receipt", id)
+                    .await
+                    .map_err(IntoResponse::into_response)?;
+            }
+            if !matches!(policy, RoutePolicy::Require(Permission::RoleGrant)) {
                 if let Some(obj) = value.as_object_mut() {
-                    let has_site = obj
-                        .get("site_id")
-                        .map(|v| !json_id(v).is_empty())
-                        .unwrap_or(false)
-                        || obj
-                            .get("siteId")
-                            .map(|v| !json_id(v).is_empty())
-                            .unwrap_or(false);
-                    if !has_site && !claims.site_id.is_empty() {
-                        obj.insert(
-                            "site_id".to_string(),
-                            serde_json::Value::String(claims.site_id.clone()),
-                        );
-                        match serde_json::to_vec(&value) {
-                            Ok(v) => {
-                                parts.headers.remove(header::CONTENT_LENGTH);
-                                Body::from(v)
-                            }
-                            Err(_) => Body::from(bytes),
-                        }
-                    } else {
-                        Body::from(bytes)
-                    }
-                } else {
-                    Body::from(bytes)
+                    obj.entry("site_id")
+                        .or_insert_with(|| serde_json::Value::String(claims.site_id.clone()));
                 }
             }
-            Err(_) => Body::from(bytes),
+            let bytes = serde_json::to_vec(&value)
+                .map_err(|_| error(StatusCode::BAD_REQUEST, "Invalid body"))?;
+            req.headers_mut().remove(header::CONTENT_LENGTH);
+            *req.body_mut() = Body::from(bytes);
         }
-    } else {
-        body
-    };
-
-    parts.extensions.insert(claims);
-    next.run(Request::from_parts(parts, body)).await
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -667,10 +922,11 @@ mod tests {
             Role::HomeOwner,
             "site-1",
             Some("d-14"),
-        );
+        )
+        .expect("signed");
         let c = verify_token(&t).expect("valid");
-        assert_eq!(c.email, "a\"b@x.io");
-        assert_eq!(c.role, Role::HomeOwner);
+        assert_eq!(c.sub, "usr-1");
+        assert!(!c.sid.is_empty());
         let mut parts: Vec<&str> = t.split('.').collect();
         let forged = base64::Engine::encode(
             &base64::engine::general_purpose::URL_SAFE_NO_PAD,
@@ -682,7 +938,7 @@ mod tests {
 
     #[test]
     fn passwords_only_verify_against_argon2() {
-        let h = hash_password("correct horse battery");
+        let h = hash_password("correct horse battery").expect("hashed");
         assert!(verify_password("correct horse battery", &h));
         assert!(!verify_password("wrong", &h));
         assert!(!verify_password("admin123", "ARGON2_HASH_admin123"));

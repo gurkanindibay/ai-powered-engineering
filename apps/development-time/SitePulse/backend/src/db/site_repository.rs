@@ -96,17 +96,25 @@ pub async fn soft_delete_site(pool: &Pool, site_id: &str) -> DbResult<()> {
 
 /// Whether a site may be used (exists, not deleted, not suspended).
 pub async fn site_is_active(pool: &Pool, site_id: &str) -> DbResult<bool> {
+    let client = pool.get().await?;
+    site_is_active_from_client(&client, site_id).await
+}
+
+/// Check site availability on an existing attributed connection.
+///
+/// # Errors
+/// Propagates database failures.
+pub async fn site_is_active_from_client(
+    client: &tokio_postgres::Client,
+    site_id: &str,
+) -> DbResult<bool> {
     let Some(id) = parse_id_to_i64(site_id) else {
         return Ok(false);
     };
-    let client = pool.get().await?;
-    Ok(client
-        .query_opt(
-            "SELECT 1 FROM sites WHERE id = $1 AND deleted_at IS NULL AND status <> 'SUSPENDED'",
-            &[&id],
-        )
-        .await?
-        .is_some())
+    Ok(client.query_opt(
+        "SELECT 1 FROM sites WHERE id=$1 AND deleted_at IS NULL AND status IN ('ACTIVE','TRIAL')",
+        &[&id],
+    ).await?.is_some())
 }
 
 /// Hard delete, used only by the development purge tooling.

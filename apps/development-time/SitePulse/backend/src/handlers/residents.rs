@@ -25,9 +25,12 @@ pub struct UpdateUnitMemberRequest {
 pub async fn generate_unit_invite_link(
     Path(unit_id): Path<String>,
     State(state): State<AppState>,
-) -> Json<UnitInviteLinkResponse> {
-    let service = HomeResidentInvitationService::new(state);
-    Json(service.generate_unit_invite_link(&unit_id, None).await)
+) -> Result<Json<UnitInviteLinkResponse>, crate::authorization::SecurityError> {
+    HomeResidentInvitationService::new(state)
+        .generate_unit_invite_link(&unit_id, None)
+        .await
+        .map(Json)
+        .map_err(|_| crate::authorization::SecurityError::Unavailable)
 }
 
 pub async fn register_home_resident(
@@ -73,7 +76,16 @@ pub async fn add_unit_member(
         )
         .await
         .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(|e| {
+            (
+                if e == "Household storage unavailable" {
+                    StatusCode::SERVICE_UNAVAILABLE
+                } else {
+                    StatusCode::BAD_REQUEST
+                },
+                e,
+            )
+        })
 }
 
 pub async fn delete_unit_member(

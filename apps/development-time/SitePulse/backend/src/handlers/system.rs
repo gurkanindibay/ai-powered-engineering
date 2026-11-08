@@ -279,9 +279,9 @@ pub async fn wipe_all_data(State(state): State<AppState>) -> impl IntoResponse {
             full_name: "SaaS Platform Admin".to_string(),
             email: "admin@sitepulse.io".to_string(),
             phone: "+90 850 555 0000".to_string(),
-            password_hash: Some(crate::auth::hash_password(
+            password_hash: crate::state::seed_password_hash(
                 &crate::state::bootstrap_admin_password(),
-            )),
+            ),
             role: crate::models::Role::SaasAdmin,
             must_change_password: true,
             auth_provider: AuthProvider::Local,
@@ -803,9 +803,9 @@ pub async fn provision_site_units(
                     full_name: resident_name.clone(),
                     email: email.clone(),
                     phone: phone.clone(),
-                    password_hash: Some(crate::auth::hash_password(
+                    password_hash: crate::state::seed_password_hash(
                         &crate::auth::generate_temporary_password("SP-SAKIN-"),
-                    )),
+                    ),
                     role: Role::HomeOwner,
                     must_change_password: true,
                     auth_provider: AuthProvider::Local,

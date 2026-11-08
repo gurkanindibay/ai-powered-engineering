@@ -159,7 +159,7 @@ pub async fn update_due_liability(
             r#"
             UPDATE dues_liabilities
             SET status = $2,
-                paid_amount = CASE 
+                paid_amount = CASE
                     WHEN $3 > 0::numeric THEN LEAST(paid_amount + $3, principal_amount + delay_penalty)
                     WHEN $2 = 'PAID' THEN principal_amount + delay_penalty
                     ELSE paid_amount
@@ -264,7 +264,7 @@ pub async fn fetch_debt_aging_report_from_db(
         client
             .query(
                 r#"
-                SELECT 
+                SELECT
                     dl.id::text,
                     dl.unit_id::text,
                     dl.period,
@@ -298,7 +298,7 @@ pub async fn fetch_debt_aging_report_from_db(
         client
             .query(
                 r#"
-                SELECT 
+                SELECT
                     dl.id::text,
                     dl.unit_id::text,
                     dl.period,

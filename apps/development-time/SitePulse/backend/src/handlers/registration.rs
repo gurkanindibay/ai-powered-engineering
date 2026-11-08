@@ -50,59 +50,21 @@ pub async fn get_pending_registrations(
 pub async fn approve_registration(
     Path(request_id): Path<String>,
     State(state): State<AppState>,
-    claims: Option<axum::Extension<crate::auth::Claims>>,
-) -> Result<Json<ApprovalResultResponse>, (StatusCode, String)> {
-    if let Some(axum::Extension(ref c)) = claims {
-        if !c.is_saas_admin() {
-            let inner = state.inner.read().await;
-            if let Some(r) = inner
-                .pending_registrations
-                .iter()
-                .find(|r| r.request_id == request_id)
-            {
-                if !crate::auth::same_id(&r.site_id, &c.site_id) {
-                    return Err((
-                        StatusCode::FORBIDDEN,
-                        "Registration application belongs to another site".to_string(),
-                    ));
-                }
-            }
-        }
-    }
-    let service = RegistrationApprovalService::new(state);
-    service
-        .approve_registration(&request_id)
+    ctx: crate::authorization::AuthzContext,
+) -> Result<Json<ApprovalResultResponse>, crate::authorization::SecurityError> {
+    RegistrationApprovalService::new(state)
+        .approve_registration(&ctx, &request_id)
         .await
         .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
 pub async fn reject_registration(
     Path(request_id): Path<String>,
     State(state): State<AppState>,
-    claims: Option<axum::Extension<crate::auth::Claims>>,
-) -> Result<Json<PendingRegistrationResponse>, (StatusCode, String)> {
-    if let Some(axum::Extension(ref c)) = claims {
-        if !c.is_saas_admin() {
-            let inner = state.inner.read().await;
-            if let Some(r) = inner
-                .pending_registrations
-                .iter()
-                .find(|r| r.request_id == request_id)
-            {
-                if !crate::auth::same_id(&r.site_id, &c.site_id) {
-                    return Err((
-                        StatusCode::FORBIDDEN,
-                        "Registration application belongs to another site".to_string(),
-                    ));
-                }
-            }
-        }
-    }
-    let service = RegistrationApprovalService::new(state);
-    service
-        .reject_registration(&request_id)
+    ctx: crate::authorization::AuthzContext,
+) -> Result<Json<PendingRegistrationResponse>, crate::authorization::SecurityError> {
+    RegistrationApprovalService::new(state)
+        .reject_registration(&ctx, &request_id)
         .await
         .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }

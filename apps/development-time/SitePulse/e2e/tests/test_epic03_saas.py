@@ -19,8 +19,6 @@ def test_portfolio_lists_every_site(login_as, page, api, actors):
 @pytest.mark.smoke
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-03-01")
-@pytest.mark.xfail(strict=True, reason="BUG: SaasTenantService::get_global_stats returns placeholders "
-                   "(total_units = sites * 20, volume = 80000 * sites), backend/src/services/saas_tenant_service.rs:377")
 def test_portfolio_stats_agree_with_site_list(api, actors):
     """The dashboard totals (from /saas/stats) must add up from the site list."""
     session = api.login(**actors["saas"])
@@ -161,6 +159,8 @@ def test_site_with_units_cannot_be_deleted(saas_ui):
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-03-08")
 def test_admin_password_reset_issues_a_new_password_and_retires_the_old(saas_ui, api, actors):
+    from pages.shell import Shell
+    Shell(saas_ui.page).verify_sensitive(SAAS_PASSWORD)
     manager = actors["manager"]
     new_password = saas_ui.reset_admin_password("1").password()
 

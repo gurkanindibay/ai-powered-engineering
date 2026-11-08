@@ -641,15 +641,9 @@ pub async fn inter_ledger_transfer(
 /// (SPEC-006 R2). The operator is taken from the token, never from the body.
 pub async fn reverse_payment(
     State(state): State<AppState>,
-    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
+    ctx: crate::authorization::AuthzContext,
     Json(mut payload): Json<crate::models::ReversePaymentRequest>,
 ) -> Result<(StatusCode, Json<crate::models::ReversePaymentResponse>), (StatusCode, String)> {
-    if !claims.is_site_staff() {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Only site staff may reverse payments".to_string(),
-        ));
-    }
     if payload
         .site_id
         .as_deref()
@@ -657,13 +651,12 @@ pub async fn reverse_payment(
         .unwrap_or("")
         .is_empty()
     {
-        payload.site_id = Some(claims.site_id.clone());
+        payload.site_id = Some(ctx.claims.site_id.clone());
     }
-    let actor = format!("user:{} <{}>", claims.sub, claims.email);
     let site_id = payload.site_id.clone().unwrap_or_default();
     let service = crate::services::PaymentTrackingService::new(state.clone());
     let reversal = service
-        .reverse_payment(payload, &actor)
+        .reverse_payment(payload, &ctx)
         .await
         .map_err(payment_error_status)?;
     // A reversed card payment is refunded at the provider (SPEC-007 R4).
@@ -701,23 +694,18 @@ pub async fn snapshot_debt_aging(
 
 pub async fn get_payment_receipt(
     State(state): State<AppState>,
-    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
+    ctx: crate::authorization::AuthzContext,
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
-) -> Result<Json<crate::models::PaymentReceipt>, (StatusCode, String)> {
-    let site_id = q.site_id.unwrap_or_else(|| claims.site_id.clone());
-    let service = crate::services::PaymentTrackingService::new(state);
-    let receipt = service
-        .get_receipt(&site_id, &id)
+) -> Result<Json<crate::models::PaymentReceipt>, crate::authorization::SecurityError> {
+    let site = q.site_id.unwrap_or_else(|| ctx.claims.site_id.clone());
+    ctx.require(crate::models::Permission::UnitRead, &site)?;
+    crate::authorization::resource(&state, &ctx.claims, "receipt", &id).await?;
+    let receipt = crate::services::PaymentTrackingService::new(state.clone())
+        .get_receipt(&site, &id)
         .await
-        .map_err(|e| (StatusCode::NOT_FOUND, e))?;
-    // Residents may only read receipts issued for their own unit.
-    if !claims.is_site_staff() {
-        let own = claims.unit_id.as_deref().unwrap_or("");
-        if !crate::auth::same_id(own, &receipt.unit_id) {
-            return Err((StatusCode::NOT_FOUND, "Receipt not found".to_string()));
-        }
-    }
+        .map_err(|_| crate::authorization::SecurityError::NotFound)?;
+    crate::authorization::unit(&state, &ctx.claims, &receipt.unit_id).await?;
     Ok(Json(receipt))
 }
 

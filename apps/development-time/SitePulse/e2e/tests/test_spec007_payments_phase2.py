@@ -68,6 +68,8 @@ def test_manager_downloads_the_receipt_pdf_and_reverses_the_receipt(login_as, pa
     receipt = api.record_manual_payment(manager, _a14(stack), Decimal("750.00"), "Ahmet Yılmaz")
     login_as("manager")
     ManagerCockpit(page).wait()
+    from pages.shell import Shell
+    Shell(page).verify_sensitive(actors["manager"]["password"])
     PaymentStream(page).open()
     by_id_prefix(page, "payment_entry_").first.click()
     by_id(page, "receipt_number").wait_for(timeout=10_000)

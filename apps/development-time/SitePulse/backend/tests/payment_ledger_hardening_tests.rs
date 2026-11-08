@@ -14,7 +14,19 @@ use sitepulse_backend::state::AppState;
 const UNIT: &str = "d-14";
 const SITE: &str = "site-1";
 const TENANT_USER: &str = "usr-tenant-spec6";
-const OPERATOR: &str = "user:usr-site-manager-1 <mehmet.demir@begonya.com>";
+const OPERATOR: &str = "usr-site-manager-1";
+fn operator(id: &str) -> sitepulse_backend::authorization::AuthzContext {
+    let token =
+        sitepulse_backend::auth::issue_token(id, "", Role::SiteManager, SITE, None).unwrap();
+    let mut claims = sitepulse_backend::auth::verify_token(&token).unwrap();
+    claims.role = Role::SiteManager;
+    claims.site_id = SITE.to_string();
+    sitepulse_backend::authorization::AuthzContext {
+        claims,
+        permissions: Permission::permissions_for_role(Role::SiteManager),
+        request_id: "spec-006".to_string(),
+    }
+}
 
 fn d(s: &str) -> Decimal {
     Decimal::from_str_exact(s).unwrap()
@@ -298,7 +310,7 @@ async fn when_a_settled_payment_is_reversed_then_dues_reopen_the_advance_is_refu
     let resp = service
         .reverse_payment(
             reverse(&original.receipt_number, "Karşılıksız havale (bounced)"),
-            OPERATOR,
+            &operator(OPERATOR),
         )
         .await
         .unwrap();
@@ -368,11 +380,17 @@ async fn when_a_payment_is_reversed_twice_then_the_first_reversal_is_returned() 
         .await
         .unwrap();
     let first = service
-        .reverse_payment(reverse(&original.receipt_number, "Yanlış daire"), OPERATOR)
+        .reverse_payment(
+            reverse(&original.receipt_number, "Yanlış daire"),
+            &operator(OPERATOR),
+        )
         .await
         .unwrap();
     let second = service
-        .reverse_payment(reverse(&original.receipt_number, "Yanlış daire"), OPERATOR)
+        .reverse_payment(
+            reverse(&original.receipt_number, "Yanlış daire"),
+            &operator(OPERATOR),
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -412,22 +430,28 @@ async fn when_a_reversal_has_no_reason_or_targets_a_reversal_then_it_is_rejected
         .await
         .unwrap();
     assert!(service
-        .reverse_payment(reverse(&original.receipt_number, " "), OPERATOR)
+        .reverse_payment(reverse(&original.receipt_number, " "), &operator(OPERATOR))
         .await
         .unwrap_err()
         .contains("reason"));
     assert!(service
-        .reverse_payment(reverse(&original.receipt_number, "valid reason"), "  ")
+        .reverse_payment(
+            reverse(&original.receipt_number, "valid reason"),
+            &operator("  ")
+        )
         .await
         .is_err());
     let rev = service
-        .reverse_payment(reverse(&original.receipt_number, "valid reason"), OPERATOR)
+        .reverse_payment(
+            reverse(&original.receipt_number, "valid reason"),
+            &operator(OPERATOR),
+        )
         .await
         .unwrap();
     let err = service
         .reverse_payment(
             reverse(&rev.reversal_receipt.receipt_number, "again"),
-            OPERATOR,
+            &operator(OPERATOR),
         )
         .await
         .unwrap_err();
@@ -464,7 +488,10 @@ async fn when_the_credited_advance_was_already_used_then_the_reversal_is_rejecte
         .await
         .unwrap();
     let err = service
-        .reverse_payment(reverse(&original.receipt_number, "Kiracıya iade"), OPERATOR)
+        .reverse_payment(
+            reverse(&original.receipt_number, "Kiracıya iade"),
+            &operator(OPERATOR),
+        )
         .await
         .unwrap_err();
     assert!(err.contains("already been used"), "{}", err);
@@ -515,7 +542,10 @@ async fn when_a_virman_receipt_is_reversed_then_the_dues_reopen_and_the_source_a
     );
 
     let resp = service
-        .reverse_payment(reverse(&virman.receipt_number, "Hatalı virman"), OPERATOR)
+        .reverse_payment(
+            reverse(&virman.receipt_number, "Hatalı virman"),
+            &operator(OPERATOR),
+        )
         .await
         .unwrap();
     assert!(resp.reversal_receipt.receipt_number.starts_with("IAD-"));
@@ -539,7 +569,10 @@ async fn when_a_virman_receipt_is_reversed_then_the_dues_reopen_and_the_source_a
 
     // Asking again returns the same reversal and changes nothing.
     let again = service
-        .reverse_payment(reverse(&virman.receipt_number, "Hatalı virman"), OPERATOR)
+        .reverse_payment(
+            reverse(&virman.receipt_number, "Hatalı virman"),
+            &operator(OPERATOR),
+        )
         .await
         .unwrap();
     assert_eq!(

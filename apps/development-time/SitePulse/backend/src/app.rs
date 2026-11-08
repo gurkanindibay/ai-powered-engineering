@@ -1,5 +1,10 @@
-//! HTTP router: every route, the authentication middleware and CORS policy.
-
+//! The single source of truth for registered method/template policies.
+use crate::models::Permission::*;
+use crate::{
+    audit, auth, authorization, handlers, security,
+    state::{self, AppState},
+};
+use authorization::RoutePolicy::{self, Development, Public, Require, RequireAny, SelfOnly};
 use axum::{
     http::{header, HeaderName, HeaderValue, Method},
     middleware,
@@ -8,8 +13,152 @@ use axum::{
 };
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-use crate::{auth, handlers, state, state::AppState};
-
+pub struct RouteSpec {
+    pub method: &'static str,
+    pub path: &'static str,
+    pub policy: RoutePolicy,
+}
+macro_rules! routes {
+    ($( $method:ident $path:literal => $handler:path, $policy:expr; )*) => {
+        pub const ROUTES:&[RouteSpec]=&[$(RouteSpec{method:stringify!($method),path:$path,policy:$policy}),*];
+        fn registered_routes()->Router<AppState>{
+            let mut app=Router::new();
+            $(if !matches!($policy,Development)||dev_routes_enabled(){app=app.route($path,$method($handler));})*
+            app
+        }
+    }
+}
+routes! {
+    post "/api/v1/saas/platform-roles" => authorization::assign_platform_role, Require(TenantManage);
+    post "/api/v1/auth/link-google" => security::link_google, SelfOnly;
+    post "/api/v1/site-admin/roles" => authorization::assign_role, Require(RoleGrant);
+    get "/health" => handlers::health_check, Public;
+    get "/api/v1/health" => handlers::health_check, Public;
+    get "/api/v1/residents/:unit_id/dashboard" => handlers::get_resident_dashboard, Require(UnitRead);
+    post "/api/v1/auth/login" => handlers::login_password, Public;
+    post "/api/v1/auth/google" => handlers::login_google, Public;
+    post "/api/v1/auth/register" => handlers::register_password, Public;
+    post "/api/v1/auth/change-password" => handlers::change_password, SelfOnly;
+    get "/api/v1/auth/me" => handlers::get_profile, SelfOnly;
+    get "/api/v1/saas/sites" => handlers::get_all_sites, Require(TenantManage);
+    post "/api/v1/saas/sites" => handlers::register_site, Require(TenantManage);
+    put "/api/v1/saas/sites/:id" => handlers::update_site, Require(TenantManage);
+    delete "/api/v1/saas/sites/:id" => handlers::delete_site, Require(TenantManage);
+    post "/api/v1/saas/sites/:id/reset-admin-password" => handlers::reset_site_admin_password, Require(TenantManage);
+    get "/api/v1/saas/stats" => handlers::get_saas_stats, Require(TenantManage);
+    get "/api/v1/site-admin/home-owners" => handlers::get_home_owners, Require(SiteManage);
+    post "/api/v1/site-admin/home-owners" => handlers::register_home_owner, Require(SiteManage);
+    put "/api/v1/site-admin/home-owners/:id" => handlers::update_home_owner, Require(SiteManage);
+    delete "/api/v1/site-admin/home-owners/:id" => handlers::delete_home_owner, Require(SiteManage);
+    post "/api/v1/site-admin/units/:id/move-out" => handlers::move_out_resident, Require(SiteManage);
+    post "/api/v1/site-admin/units/:id/move-in" => handlers::move_in_resident, Require(SiteManage);
+    get "/api/v1/site-admin/units/:id/occupancy-history" => handlers::get_unit_occupancy_history, Require(SiteManage);
+    get "/api/v1/site-admin/house-types" => handlers::get_house_types, Require(SiteManage);
+    post "/api/v1/site-admin/house-types" => handlers::create_house_type, Require(SiteManage);
+    delete "/api/v1/site-admin/house-types/:id" => handlers::delete_house_type, Require(SiteManage);
+    get "/api/v1/site-admin/blocks" => handlers::get_blocks, Require(SiteManage);
+    post "/api/v1/site-admin/blocks" => handlers::create_block, Require(SiteManage);
+    get "/api/v1/registration/invite-link" => handlers::generate_registration_link, Require(ResidentInviteSite);
+    post "/api/v1/registration/submit/:slug" => handlers::submit_self_registration, Public;
+    get "/api/v1/registration/pending" => handlers::get_pending_registrations, Require(ResidentApprove);
+    post "/api/v1/registration/approve/:id" => handlers::approve_registration, Require(ResidentApprove);
+    post "/api/v1/registration/reject/:id" => handlers::reject_registration, Require(ResidentApprove);
+    get "/api/v1/home-residents/invite-link/:unit_id" => handlers::generate_unit_invite_link, Require(UnitInviteCoResident);
+    post "/api/v1/home-residents/register" => handlers::register_home_resident, Public;
+    get "/api/v1/home-residents/members/:unit_id" => handlers::get_unit_members, RequireAny(&[UnitManageHousehold, SiteManage]);
+    post "/api/v1/home-residents/members/:unit_id" => handlers::add_unit_member, RequireAny(&[UnitManageHousehold, SiteManage]);
+    delete "/api/v1/home-residents/members/:unit_id/:resident_id" => handlers::delete_unit_member, RequireAny(&[UnitManageHousehold, SiteManage]);
+    put "/api/v1/home-residents/members/:unit_id/:resident_id" => handlers::update_unit_member, RequireAny(&[UnitManageHousehold, SiteManage]);
+    post "/api/v1/bank/statements/parse" => handlers::parse_bank_statement, Require(ReconciliationConfirm);
+    get "/api/v1/bank/statements/reconciliation-queue" => handlers::get_reconciliation_queue, Require(ReconciliationConfirm);
+    post "/api/v1/bank/statements/confirm-reconciliation" => handlers::confirm_reconciliation, Require(ReconciliationConfirm);
+    get "/api/v1/site-admin/banks" => handlers::list_supported_banks, Public;
+    get "/api/v1/site-admin/bank-account/:site_id" => handlers::get_site_bank_account, Require(BankAccountManage);
+    post "/api/v1/site-admin/bank-account/:site_id" => handlers::configure_site_bank_account, Require(BankAccountManage);
+    get "/api/v1/units/:id/virtual-iban" => handlers::get_or_allocate_virtual_iban, Require(UnitRead);
+    post "/api/v1/units/:id/virtual-iban" => handlers::get_or_allocate_virtual_iban, Require(UnitRead);
+    get "/api/v1/bank/kuveyt-turk/status" => handlers::get_kuveyt_turk_status, Require(BankAccountManage);
+    post "/api/v1/bank/kuveyt-turk/configure" => handlers::configure_kuveyt_turk, Require(PlatformIntegrationConfigure);
+    post "/api/v1/bank/kuveyt-turk/test-connection" => handlers::test_kuveyt_turk_connection, Require(PlatformIntegrationConfigure);
+    post "/api/v1/bank/webhook/incoming-transfer" => handlers::handle_bank_incoming_webhook, Public;
+    post "/api/v1/bank/remembered-ibans" => handlers::remember_sender_iban, Require(ReconciliationConfirm);
+    get "/api/v1/residents/:unit_id/matching-criteria" => handlers::get_unit_matching_criteria, Require(UnitRead);
+    post "/api/v1/residents/:unit_id/matching-criteria/ibans" => handlers::add_unit_sender_iban, Require(UnitPay);
+    delete "/api/v1/residents/:unit_id/matching-criteria/ibans/:sender_iban" => handlers::delete_unit_sender_iban, Require(UnitPay);
+    put "/api/v1/residents/:unit_id/matching-criteria/payer-names" => handlers::update_unit_payer_names, Require(UnitPay);
+    get "/api/v1/dues/periods" => handlers::list_dues_periods, Require(LedgerManageAll);
+    post "/api/v1/dues/periods" => handlers::create_dues_period, Require(LedgerManageAll);
+    post "/api/v1/dues/accrue-period" => handlers::accrue_monthly_dues, Require(LedgerManageAll);
+    post "/api/v1/payments/record" => handlers::record_homeowner_payment, Require(PaymentRecordManual);
+    post "/api/v1/payments/match-all" => handlers::match_all_homeowner_payments, Require(PaymentRecordManual);
+    get "/api/v1/payments/homeowner-records" => handlers::get_homeowner_payments, Require(LedgerManageAll);
+    get "/api/v1/payments/stream" => handlers::get_payment_stream, Require(LedgerManageAll);
+    get "/api/v1/payments/debt-aging" => handlers::get_debt_aging_report, Require(LedgerManageAll);
+    post "/api/v1/payments/record-manual" => handlers::record_manual_payment, Require(PaymentRecordManual);
+    post "/api/v1/payments/inter-ledger-transfer" => handlers::inter_ledger_transfer, Require(LedgerManageAll);
+    post "/api/v1/payments/reverse" => handlers::reverse_payment, Require(PaymentReverse);
+    post "/api/v1/payments/debt-aging/snapshot" => handlers::snapshot_debt_aging, Require(LedgerManageAll);
+    get "/api/v1/payments/receipts/:id" => handlers::get_payment_receipt, Require(UnitRead);
+    post "/api/v1/site-admin/units/:id/transfer-ownership" => handlers::transfer_unit_ownership, Require(SiteManage);
+    get "/api/v1/capital-projects" => handlers::list_capital_projects, Require(UnitRead);
+    post "/api/v1/capital-projects" => handlers::create_capital_project, Require(SiteManage);
+    get "/api/v1/capital-projects/:id" => handlers::get_capital_project, Require(UnitRead);
+    get "/api/v1/capital-projects/:id/installments" => handlers::list_capital_installments, Require(UnitRead);
+    post "/api/v1/capital-projects/:id/accrue-installment" => handlers::accrue_capital_installment, Require(LedgerManageAll);
+    get "/api/v1/capital-projects/:id/disbursements" => handlers::list_capital_disbursements, Require(SiteManage);
+    post "/api/v1/capital-projects/:id/disbursements" => handlers::record_capital_disbursement, Require(SiteManage);
+    get "/api/v1/capital-projects/:id/unit-shares" => handlers::get_unit_capital_shares, Require(UnitRead);
+    get "/api/v1/site-admin/overview" => handlers::get_site_overview, Require(SiteManage);
+    post "/api/v1/system/reset-demo-data" => handlers::reset_demo_data, Development;
+    post "/api/v1/system/sync-db" => handlers::sync_db, Development;
+    post "/api/v1/system/reset-to-initial-state" => handlers::reset_to_initial_state, Development;
+    post "/api/v1/system/wipe-all-data" => handlers::wipe_all_data, Development;
+    post "/api/v1/system/delete-all-data" => handlers::wipe_all_data, Development;
+    post "/api/v1/system/fresh-start" => handlers::wipe_all_data, Development;
+    post "/api/v1/system/purge-site/:site_id" => handlers::purge_site_cascade, Development;
+    post "/api/v1/system/delete-site-cascade/:site_id" => handlers::purge_site_cascade, Development;
+    post "/api/v1/system/recreate-db" => handlers::recreate_db, Development;
+    post "/api/v1/system/accrue-test-due" => handlers::accrue_test_due, Development;
+    post "/api/v1/system/seed-test-fixtures" => handlers::seed_test_fixtures, Development;
+    post "/api/v1/system/seed-test-data" => handlers::seed_test_fixtures, Development;
+    post "/api/v1/system/clear-all-data" => handlers::clear_all_data, Development;
+    post "/api/v1/system/provision-site-units" => handlers::provision_site_units, Development;
+    get "/api/v1/system/units-summary" => handlers::get_units_summary, Development;
+    get "/api/v1/system/site-payments" => handlers::get_site_payments, Development;
+    post "/api/v1/auth/refresh" => security::refresh, Public;
+    post "/api/v1/auth/logout" => security::logout, SelfOnly;
+    post "/api/v1/auth/logout-all" => security::logout_all, SelfOnly;
+    post "/api/v1/auth/step-up" => security::step_up, SelfOnly;
+    get "/api/v1/audit/events" => authorization::audit_events, Require(AuditLogRead);
+    get "/api/v1/audit/export" => authorization::audit_events, Require(AuditLogExport);
+    post "/api/v1/support/grants" => authorization::request_grant, Require(SupportAccess);
+    post "/api/v1/support/grants/approve" => authorization::approve_grant, Require(SupportAccess);
+    post "/api/v1/support/grants/revoke" => authorization::revoke_grant, Require(SupportAccess);
+    get "/api/v1/payments/receipts/:id/pdf" => handlers::get_payment_receipt_pdf, Require(UnitRead);
+    get "/api/v1/public/receipts/verify" => handlers::verify_receipt, Public;
+    post "/api/v1/payments/provider/webhook" => handlers::provider_webhook, Public;
+    get "/api/v1/payment-provider/sandbox/checkout/:reference" => handlers::sandbox_checkout_page, Public;
+    post "/api/v1/payment-provider/sandbox/checkout/:reference/complete" => handlers::sandbox_checkout_complete, Public;
+    get "/api/v1/residents/:unit_id/statement" => handlers::get_resident_statement, Require(UnitRead);
+    get "/api/v1/residents/:unit_id/operating-budget" => handlers::get_resident_operating_budget, Require(UnitRead);
+    post "/api/v1/residents/:unit_id/payment-intents" => handlers::create_payment_intent, Require(UnitPay);
+    get "/api/v1/residents/:unit_id/payment-intents/:intent_id" => handlers::get_payment_intent, Require(UnitPay);
+    get "/api/v1/operating-budgets" => handlers::list_operating_budgets, Require(SiteManage);
+    post "/api/v1/operating-budgets" => handlers::create_operating_budget, Require(SiteManage);
+    get "/api/v1/operating-budgets/compliance" => handlers::get_budget_compliance, Require(SiteManage);
+    put "/api/v1/operating-budgets/policy" => handlers::set_budget_policy, Require(SiteManage);
+    get "/api/v1/operating-budgets/:id" => handlers::get_operating_budget, Require(SiteManage);
+    delete "/api/v1/operating-budgets/:id" => handlers::delete_operating_budget, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/issue-interim" => handlers::issue_interim_budget, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/approve" => handlers::approve_operating_budget, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/reject" => handlers::reject_operating_budget, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/finalize" => handlers::finalize_operating_budget, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/service" => handlers::record_budget_service, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/objections" => handlers::file_budget_objection, Require(SiteManage);
+    post "/api/v1/operating-budgets/:id/objections/:objection_id/resolve" => handlers::resolve_budget_objection, Require(SiteManage);
+    get "/api/v1/revaluation-rates" => handlers::list_revaluation_rates, SelfOnly;
+    put "/api/v1/revaluation-rates" => handlers::set_revaluation_rate, Require(TenantManage);
+}
 pub fn build_router(state: AppState) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(cors_origins())
@@ -24,424 +173,28 @@ pub fn build_router(state: AppState) -> Router {
             header::AUTHORIZATION,
             header::CONTENT_TYPE,
             HeaderName::from_static("idempotency-key"),
-        ]);
-
-    let app = Router::new()
-        .route("/health", get(handlers::health_check))
-        .route("/api/v1/health", get(handlers::health_check))
-        // Resident Dashboard
-        .route(
-            "/api/v1/residents/:unit_id/dashboard",
-            get(handlers::get_resident_dashboard),
-        )
-        // Auth
-        .route("/api/v1/auth/login", post(handlers::login_password))
-        .route("/api/v1/auth/google", post(handlers::login_google))
-        .route("/api/v1/auth/register", post(handlers::register_password))
-        .route(
-            "/api/v1/auth/change-password",
-            post(handlers::change_password),
-        )
-        .route("/api/v1/auth/me", get(handlers::get_profile))
-        // SaaS Multi-Tenancy
-        .route(
-            "/api/v1/saas/sites",
-            get(handlers::get_all_sites).post(handlers::register_site),
-        )
-        .route(
-            "/api/v1/saas/sites/:id",
-            put(handlers::update_site).delete(handlers::delete_site),
-        )
-        .route(
-            "/api/v1/saas/sites/:id/reset-admin-password",
-            post(handlers::reset_site_admin_password),
-        )
-        .route("/api/v1/saas/stats", get(handlers::get_saas_stats))
-        // Site Admin & Flats
-        .route(
-            "/api/v1/site-admin/home-owners",
-            get(handlers::get_home_owners).post(handlers::register_home_owner),
-        )
-        .route(
-            "/api/v1/site-admin/home-owners/:id",
-            put(handlers::update_home_owner).delete(handlers::delete_home_owner),
-        )
-        .route(
-            "/api/v1/site-admin/units/:id/move-out",
-            post(handlers::move_out_resident),
-        )
-        .route(
-            "/api/v1/site-admin/units/:id/move-in",
-            post(handlers::move_in_resident),
-        )
-        .route(
-            "/api/v1/site-admin/units/:id/occupancy-history",
-            get(handlers::get_unit_occupancy_history),
-        )
-        .route(
-            "/api/v1/site-admin/house-types",
-            get(handlers::get_house_types).post(handlers::create_house_type),
-        )
-        .route(
-            "/api/v1/site-admin/house-types/:id",
-            delete(handlers::delete_house_type),
-        )
-        .route(
-            "/api/v1/site-admin/blocks",
-            get(handlers::get_blocks).post(handlers::create_block),
-        )
-        // Self-Registration & Approval Queue
-        .route(
-            "/api/v1/registration/invite-link",
-            get(handlers::generate_registration_link),
-        )
-        .route(
-            "/api/v1/registration/submit/:slug",
-            post(handlers::submit_self_registration),
-        )
-        .route(
-            "/api/v1/registration/pending",
-            get(handlers::get_pending_registrations),
-        )
-        .route(
-            "/api/v1/registration/approve/:id",
-            post(handlers::approve_registration),
-        )
-        .route(
-            "/api/v1/registration/reject/:id",
-            post(handlers::reject_registration),
-        )
-        // Co-Resident & Household Members
-        .route(
-            "/api/v1/home-residents/invite-link/:unit_id",
-            get(handlers::generate_unit_invite_link),
-        )
-        .route(
-            "/api/v1/home-residents/register",
-            post(handlers::register_home_resident),
-        )
-        .route(
-            "/api/v1/home-residents/members/:unit_id",
-            get(handlers::get_unit_members).post(handlers::add_unit_member),
-        )
-        .route(
-            "/api/v1/home-residents/members/:unit_id/:resident_id",
-            delete(handlers::delete_unit_member).put(handlers::update_unit_member),
-        )
-        // Bank Statement Ingestion & Automated Reconciliation (STORY-07-02)
-        .route(
-            "/api/v1/bank/statements/parse",
-            post(handlers::parse_bank_statement),
-        )
-        .route(
-            "/api/v1/bank/statements/reconciliation-queue",
-            get(handlers::get_reconciliation_queue),
-        )
-        .route(
-            "/api/v1/bank/statements/confirm-reconciliation",
-            post(handlers::confirm_reconciliation),
-        )
-        // Site Bank Account Configuration (STORY-08-01)
-        .route(
-            "/api/v1/site-admin/banks",
-            get(handlers::list_supported_banks),
-        )
-        .route(
-            "/api/v1/site-admin/bank-account/:site_id",
-            get(handlers::get_site_bank_account).post(handlers::configure_site_bank_account),
-        )
-        // Kuveyt Türk Sandbox & Flat Virtual IBAN Allocation (STORY-07-01 & STORY-07-06)
-        .route(
-            "/api/v1/units/:id/virtual-iban",
-            get(handlers::get_or_allocate_virtual_iban)
-                .post(handlers::get_or_allocate_virtual_iban),
-        )
-        .route(
-            "/api/v1/bank/kuveyt-turk/status",
-            get(handlers::get_kuveyt_turk_status),
-        )
-        .route(
-            "/api/v1/bank/kuveyt-turk/configure",
-            post(handlers::configure_kuveyt_turk),
-        )
-        .route(
-            "/api/v1/bank/kuveyt-turk/test-connection",
-            post(handlers::test_kuveyt_turk_connection),
-        )
-        // Real-Time Bank Webhook & Virtual IBAN Settlement (STORY-07-03)
-        .route(
-            "/api/v1/bank/webhook/incoming-transfer",
-            post(handlers::handle_bank_incoming_webhook),
-        )
-        .route(
-            "/api/v1/bank/remembered-ibans",
-            post(handlers::remember_sender_iban),
-        )
-        // Homeowner Payment Matching Criteria
-        .route(
-            "/api/v1/residents/:unit_id/matching-criteria",
-            get(handlers::get_unit_matching_criteria),
-        )
-        .route(
-            "/api/v1/residents/:unit_id/matching-criteria/ibans",
-            post(handlers::add_unit_sender_iban),
-        )
-        .route(
-            "/api/v1/residents/:unit_id/matching-criteria/ibans/:sender_iban",
-            delete(handlers::delete_unit_sender_iban),
-        )
-        .route(
-            "/api/v1/residents/:unit_id/matching-criteria/payer-names",
-            put(handlers::update_unit_payer_names),
-        )
-        // Periodic Dues Accrual & Automatic Advance Balance Offsetting
-        .route(
-            "/api/v1/dues/periods",
-            get(handlers::list_dues_periods).post(handlers::create_dues_period),
-        )
-        .route(
-            "/api/v1/dues/accrue-period",
-            post(handlers::accrue_monthly_dues),
-        )
-        // Homeowner Payments Collection & Matching
-        .route(
-            "/api/v1/payments/record",
-            post(handlers::record_homeowner_payment),
-        )
-        .route(
-            "/api/v1/payments/match-all",
-            post(handlers::match_all_homeowner_payments),
-        )
-        .route(
-            "/api/v1/payments/homeowner-records",
-            get(handlers::get_homeowner_payments),
-        )
-        // Payment Tracking & Unified Treasury Streams (STORY-09-01 .. STORY-09-07)
-        .route("/api/v1/payments/stream", get(handlers::get_payment_stream))
-        .route(
-            "/api/v1/payments/debt-aging",
-            get(handlers::get_debt_aging_report),
-        )
-        .route(
-            "/api/v1/payments/record-manual",
-            post(handlers::record_manual_payment),
-        )
-        .route(
-            "/api/v1/payments/inter-ledger-transfer",
-            post(handlers::inter_ledger_transfer),
-        )
-        .route("/api/v1/payments/reverse", post(handlers::reverse_payment))
-        .route(
-            "/api/v1/payments/debt-aging/snapshot",
-            post(handlers::snapshot_debt_aging),
-        )
-        .route(
-            "/api/v1/payments/receipts/:id",
-            get(handlers::get_payment_receipt),
-        )
-        // SPEC-007: receipt PDF, public verification, card payments, statement, işletme projesi
-        .route(
-            "/api/v1/payments/receipts/:id/pdf",
-            get(handlers::get_payment_receipt_pdf),
-        )
-        .route(
-            "/api/v1/public/receipts/verify",
-            get(handlers::verify_receipt),
-        )
-        .route(
-            "/api/v1/payments/provider/webhook",
-            post(handlers::provider_webhook),
-        )
-        .route(
-            "/api/v1/payment-provider/sandbox/checkout/:reference",
-            get(handlers::sandbox_checkout_page),
-        )
-        .route(
-            "/api/v1/payment-provider/sandbox/checkout/:reference/complete",
-            post(handlers::sandbox_checkout_complete),
-        )
-        .route(
-            "/api/v1/residents/:unit_id/statement",
-            get(handlers::get_resident_statement),
-        )
-        .route(
-            "/api/v1/residents/:unit_id/operating-budget",
-            get(handlers::get_resident_operating_budget),
-        )
-        .route(
-            "/api/v1/residents/:unit_id/payment-intents",
-            post(handlers::create_payment_intent),
-        )
-        .route(
-            "/api/v1/residents/:unit_id/payment-intents/:intent_id",
-            get(handlers::get_payment_intent),
-        )
-        .route(
-            "/api/v1/operating-budgets",
-            get(handlers::list_operating_budgets).post(handlers::create_operating_budget),
-        )
-        .route(
-            "/api/v1/operating-budgets/compliance",
-            get(handlers::get_budget_compliance),
-        )
-        .route(
-            "/api/v1/operating-budgets/policy",
-            put(handlers::set_budget_policy),
-        )
-        .route(
-            "/api/v1/operating-budgets/:id",
-            get(handlers::get_operating_budget).delete(handlers::delete_operating_budget),
-        )
-        .route(
-            "/api/v1/operating-budgets/:id/issue-interim",
-            post(handlers::issue_interim_budget),
-        )
-        .route(
-            "/api/v1/operating-budgets/:id/approve",
-            post(handlers::approve_operating_budget),
-        )
-        .route(
-            "/api/v1/operating-budgets/:id/reject",
-            post(handlers::reject_operating_budget),
-        )
-        .route(
-            "/api/v1/operating-budgets/:id/finalize",
-            post(handlers::finalize_operating_budget),
-        )
-        .route(
-            "/api/v1/operating-budgets/:id/service",
-            post(handlers::record_budget_service),
-        )
-        .route(
-            "/api/v1/operating-budgets/:id/objections",
-            post(handlers::file_budget_objection),
-        )
-        .route(
-            "/api/v1/operating-budgets/:id/objections/:objection_id/resolve",
-            post(handlers::resolve_budget_objection),
-        )
-        .route(
-            "/api/v1/revaluation-rates",
-            get(handlers::list_revaluation_rates).put(handlers::set_revaluation_rate),
-        )
-        .route(
-            "/api/v1/site-admin/units/:id/transfer-ownership",
-            post(handlers::transfer_unit_ownership),
-        )
-        // Capital Projects & Fixtures Management (Demirbaş Yönetimi - EPIC-10)
-        .route(
-            "/api/v1/capital-projects",
-            get(handlers::list_capital_projects).post(handlers::create_capital_project),
-        )
-        .route(
-            "/api/v1/capital-projects/:id",
-            get(handlers::get_capital_project),
-        )
-        .route(
-            "/api/v1/capital-projects/:id/installments",
-            get(handlers::list_capital_installments),
-        )
-        .route(
-            "/api/v1/capital-projects/:id/accrue-installment",
-            post(handlers::accrue_capital_installment),
-        )
-        .route(
-            "/api/v1/capital-projects/:id/disbursements",
-            get(handlers::list_capital_disbursements).post(handlers::record_capital_disbursement),
-        )
-        .route(
-            "/api/v1/capital-projects/:id/unit-shares",
-            get(handlers::get_unit_capital_shares),
-        )
-        .route(
-            "/api/v1/site-admin/overview",
-            get(handlers::get_site_overview),
-        );
-
-    // Demo/reset tooling is never routed unless explicitly enabled outside production.
-    let app = if dev_routes_enabled() {
-        tracing::warn!(
-            "SITEPULSE_ENABLE_DEV_ROUTES=true: /api/v1/system/* demo and reset routes are enabled"
-        );
-        app.merge(system_routes())
-    } else {
-        app
-    };
-
-    app.layer(middleware::from_fn_with_state(
-        state.clone(),
-        auth::require_auth,
-    ))
-    .layer(cors)
-    .with_state(state)
+            HeaderName::from_static("x-sitepulse-support-grant"),
+        ])
+        .expose_headers([HeaderName::from_static("x-request-id")]);
+    registered_routes()
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_auth,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            audit::security_boundary,
+        ))
+        .layer(cors)
+        .layer(middleware::from_fn(audit::correlate))
+        .with_state(state)
 }
-
 pub fn dev_routes_enabled() -> bool {
     !state::AppStateInner::is_production()
         && std::env::var("SITEPULSE_ENABLE_DEV_ROUTES")
             .map(|v| v == "true")
             .unwrap_or(false)
 }
-
-fn system_routes() -> Router<AppState> {
-    Router::new()
-        .route(
-            "/api/v1/system/reset-demo-data",
-            post(handlers::reset_demo_data),
-        )
-        .route("/api/v1/system/sync-db", post(handlers::sync_db))
-        .route(
-            "/api/v1/system/reset-to-initial-state",
-            post(handlers::reset_to_initial_state),
-        )
-        .route(
-            "/api/v1/system/wipe-all-data",
-            post(handlers::wipe_all_data),
-        )
-        .route(
-            "/api/v1/system/delete-all-data",
-            post(handlers::wipe_all_data),
-        )
-        .route("/api/v1/system/fresh-start", post(handlers::wipe_all_data))
-        .route(
-            "/api/v1/system/purge-site/:site_id",
-            post(handlers::purge_site_cascade),
-        )
-        .route(
-            "/api/v1/system/delete-site-cascade/:site_id",
-            post(handlers::purge_site_cascade),
-        )
-        .route("/api/v1/system/recreate-db", post(handlers::recreate_db))
-        .route(
-            "/api/v1/system/accrue-test-due",
-            post(handlers::accrue_test_due),
-        )
-        .route(
-            "/api/v1/system/seed-test-fixtures",
-            post(handlers::seed_test_fixtures),
-        )
-        .route(
-            "/api/v1/system/seed-test-data",
-            post(handlers::seed_test_fixtures),
-        )
-        .route(
-            "/api/v1/system/clear-all-data",
-            post(handlers::clear_all_data),
-        )
-        .route(
-            "/api/v1/system/provision-site-units",
-            post(handlers::provision_site_units),
-        )
-        .route(
-            "/api/v1/system/units-summary",
-            get(handlers::get_units_summary),
-        )
-        .route(
-            "/api/v1/system/site-payments",
-            get(handlers::get_site_payments),
-        )
-}
-
 /// Origins allowed by CORS: `SITEPULSE_CORS_ORIGINS` (comma separated), plus
 /// localhost on any port outside production for local Flutter web development.
 fn cors_origins() -> AllowOrigin {

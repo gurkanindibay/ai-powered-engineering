@@ -27,17 +27,17 @@ pub type DbResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 /// * `DB_SSLMODE=require` encrypts the connection with TLS (rustls, verified
 ///   against the Mozilla root store). The default is `disable` for local
 ///   development; production requires `require`.
-pub fn create_pool() -> Option<Pool> {
+pub fn create_pool() -> Result<Option<Pool>, String> {
     create_pool_named(std::env::var("DB_NAME").ok())
 }
 
 /// Like [`create_pool`] for an explicit database (throwaway test databases).
 /// Credentials, host and TLS mode still come from the environment.
 pub fn create_pool_for(dbname: &str) -> Option<Pool> {
-    create_pool_named(Some(dbname.to_string()))
+    create_pool_named(Some(dbname.to_string())).ok().flatten()
 }
 
-fn create_pool_named(dbname: Option<String>) -> Option<Pool> {
+fn create_pool_named(dbname: Option<String>) -> Result<Option<Pool>, String> {
     let in_memory = std::env::var("SITEPULSE_IN_MEMORY")
         .map(|v| v == "true")
         .unwrap_or(false);
@@ -45,10 +45,17 @@ fn create_pool_named(dbname: Option<String>) -> Option<Pool> {
     let password = match std::env::var("DB_PASS") {
         Ok(p) if !p.is_empty() => p,
         _ if in_memory && !production => {
-            warn!("SITEPULSE_IN_MEMORY=true: running without PostgreSQL; nothing will be persisted");
-            return None;
+            warn!(
+                "SITEPULSE_IN_MEMORY=true: running without PostgreSQL; nothing will be persisted"
+            );
+            return Ok(None);
         }
-        _ => panic!("DB_PASS is required (set it in backend/.env); use SITEPULSE_IN_MEMORY=true for a database-less demo"),
+        _ => {
+            return Err(
+                "DB_PASS is required; use SITEPULSE_IN_MEMORY=true for a database-less demo"
+                    .to_string(),
+            )
+        }
     };
     let host = std::env::var("DB_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let port = std::env::var("DB_PORT")
@@ -61,7 +68,7 @@ fn create_pool_named(dbname: Option<String>) -> Option<Pool> {
         .unwrap_or_else(|_| "disable".to_string())
         .to_lowercase();
     if production && ssl_mode != "require" {
-        panic!("DB_SSLMODE=require is mandatory in production");
+        return Err("DB_SSLMODE=require is mandatory in production".to_string());
     }
 
     let mut cfg = Config::new();
@@ -88,29 +95,41 @@ fn create_pool_named(dbname: Option<String>) -> Option<Pool> {
                 rustls::crypto::ring::default_provider(),
             ))
             .with_safe_default_protocol_versions()
-            .expect("rustls protocol versions")
+            .map_err(|e| e.to_string())?
             .with_root_certificates(roots)
             .with_no_client_auth();
-            cfg.create_pool(
-                Some(Runtime::Tokio1),
-                tokio_postgres_rustls::MakeRustlsConnect::new(tls_config),
-            )
+            cfg.builder(tokio_postgres_rustls::MakeRustlsConnect::new(tls_config))
+                .map(|b| {
+                    b.runtime(Runtime::Tokio1)
+                        .post_create(crate::audit::checkout_hook())
+                        .post_recycle(crate::audit::checkout_hook())
+                        .build()
+                })
         }
-        "disable" => cfg.create_pool(Some(Runtime::Tokio1), NoTls),
-        other => panic!(
-            "Unsupported DB_SSLMODE '{}': use 'disable' or 'require'",
-            other
-        ),
+        "disable" => cfg.builder(NoTls).map(|b| {
+            b.runtime(Runtime::Tokio1)
+                .post_create(crate::audit::checkout_hook())
+                .post_recycle(crate::audit::checkout_hook())
+                .build()
+        }),
+        other => return Err(format!("Unsupported DB_SSLMODE: {}", other)),
     };
     match pool {
-        Ok(pool) => {
+        Ok(Ok(pool)) => {
             info!(
                 "PostgreSQL connection pool configured (sslmode={})",
                 ssl_mode
             );
-            Some(pool)
+            Ok(Some(pool))
         }
-        Err(e) => panic!("Failed to create PostgreSQL connection pool: {}", e),
+        Ok(Err(e)) => Err(format!(
+            "Failed to create PostgreSQL connection pool: {}",
+            e
+        )),
+        Err(e) => Err(format!(
+            "Failed to configure PostgreSQL connection pool: {}",
+            e
+        )),
     }
 }
 
@@ -314,5 +333,18 @@ pub async fn wipe_all_db_data(pool: &Pool) -> Result<(), Box<dyn std::error::Err
         .await?;
     init_db(pool).await?;
     info!("All database tables recreated cleanly with zero sites, zero units, zero homeowners, and zero residents.");
+    Ok(())
+}
+
+/// Verify that a production runtime cannot bypass row policies or disable evidence triggers.
+///
+/// # Errors
+/// Rejects privileged/owner roles and failed privilege inspection.
+pub async fn validate_runtime_role(pool: &Pool) -> DbResult<()> {
+    let client = pool.get().await?;
+    let row=client.query_one("SELECT r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' AND pg_has_role(r.oid,c.relowner,'MEMBER')) FROM pg_roles r WHERE r.rolname=current_user",&[]).await?;
+    if row.get::<_, bool>(0) {
+        return Err("Production requires a non-owner runtime role without SUPERUSER or BYPASSRLS; run migrations separately".into());
+    }
     Ok(())
 }

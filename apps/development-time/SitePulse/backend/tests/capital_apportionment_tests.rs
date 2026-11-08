@@ -27,18 +27,18 @@ fn unit(id: &str, site_id: &str, unit_number: i32, land_share: i32) -> Independe
     }
 }
 
-/// Replaces the seeded units with three units on `site-x` (land shares 1:1:1)
-/// and two units on another tenant's `site-y`.
+/// Replaces the seeded units with three units on `site-90` (land shares 1:1:1)
+/// and two units on another tenant's `site-91`.
 async fn state_with_two_sites() -> AppState {
     let state = AppState::new();
     {
         let mut inner = state.inner.write().await;
         inner.units = vec![
-            unit("x-1", "site-x", 1, 1),
-            unit("x-2", "site-x", 2, 1),
-            unit("x-3", "site-x", 3, 1),
-            unit("y-1", "site-y", 1, 5),
-            unit("y-2", "site-y", 2, 5),
+            unit("x-1", "site-90", 1, 1),
+            unit("x-2", "site-90", 2, 1),
+            unit("x-3", "site-90", 3, 1),
+            unit("y-1", "site-91", 1, 5),
+            unit("y-2", "site-91", 2, 5),
         ];
     }
     state
@@ -79,7 +79,7 @@ async fn when_accruing_installment_then_only_project_site_units_are_charged() {
     let service = CapitalProjectService::new(state.clone());
     let project = service
         .create_project(project_request(
-            "site-x",
+            "site-90",
             "Roof Repair",
             "100.00",
             AllocationBasis::ByLandShare,
@@ -90,7 +90,7 @@ async fn when_accruing_installment_then_only_project_site_units_are_charged() {
     let res = service.accrue_installment(&project.id, 1).await.unwrap();
     assert_eq!(
         res.charged_units_count, 3,
-        "site-y units must not be charged for a site-x project"
+        "site-91 units must not be charged for a site-90 project"
     );
 
     let inner = state.inner.read().await;
@@ -118,7 +118,7 @@ async fn when_summarizing_shares_then_matches_accrued_amounts_and_sums_to_budget
     let service = CapitalProjectService::new(state.clone());
     let project = service
         .create_project(project_request(
-            "site-x",
+            "site-90",
             "Facade Insulation",
             "1000.00",
             AllocationBasis::EqualPerUnit,
@@ -150,7 +150,7 @@ async fn when_summarizing_then_other_projects_dues_are_not_attributed() {
     let service = CapitalProjectService::new(state.clone());
     let first = service
         .create_project(project_request(
-            "site-x",
+            "site-90",
             "Elevator Revision",
             "300.00",
             AllocationBasis::EqualPerUnit,
@@ -159,7 +159,7 @@ async fn when_summarizing_then_other_projects_dues_are_not_attributed() {
         .unwrap();
     let second = service
         .create_project(project_request(
-            "site-x",
+            "site-90",
             "Garden Lighting",
             "60.00",
             AllocationBasis::EqualPerUnit,
@@ -185,12 +185,12 @@ async fn when_units_have_negative_land_share_then_apportionment_is_rejected() {
     let state = AppState::new();
     {
         let mut inner = state.inner.write().await;
-        inner.units = vec![unit("x-1", "site-x", 1, 2), unit("x-2", "site-x", 2, -1)];
+        inner.units = vec![unit("x-1", "site-90", 1, 2), unit("x-2", "site-90", 2, -1)];
     }
     let service = CapitalProjectService::new(state);
     let project = service
         .create_project(project_request(
-            "site-x",
+            "site-90",
             "Boiler",
             "10.00",
             AllocationBasis::ByLandShare,

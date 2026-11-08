@@ -339,3 +339,132 @@ pub fn render_receipt_pdf(receipt: &PaymentReceipt, unit_label: &str) -> Result<
 
     doc.save_to_bytes().map_err(|e| e.to_string())
 }
+
+// ---------------------------------------------------------------------------
+// SPEC-009: generic text documents (ihtarname draft, rent-deduction
+// certificate, account report, evidence pack). Coordinates are layout values,
+// not money; every amount arrives already formatted.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("The document could not be rendered: {0}")]
+pub struct DocumentError(pub String);
+
+/// A table: header cells and rows of the same width.
+#[derive(Debug, Clone, Default)]
+pub struct DocTable {
+    pub headers: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DocSection {
+    pub heading: Option<String>,
+    /// Label / value pairs.
+    pub rows: Vec<(String, String)>,
+    pub paragraphs: Vec<String>,
+    pub table: Option<DocTable>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TextDocument {
+    pub issuer: String,
+    pub issuer_lines: Vec<String>,
+    pub title: String,
+    pub sections: Vec<DocSection>,
+    pub footer: String,
+}
+
+/// `format_try` with the lira sign, for document rows.
+pub fn try_amount(amount: Decimal) -> String {
+    format!("₺{}", format_try(amount))
+}
+
+/// Renders a multi-page A4 document with the embedded DejaVu fonts.
+pub fn render_text_document(document: &TextDocument) -> Result<Vec<u8>, DocumentError> {
+    let err = |e: &dyn std::fmt::Display| DocumentError(e.to_string());
+    let (doc, page, layer) =
+        PdfDocument::new(document.title.clone(), Mm(210.0), Mm(297.0), "page-1");
+    let regular = doc
+        .add_external_font(std::io::Cursor::new(FONT_REGULAR))
+        .map_err(|e| err(&e))?;
+    let bold = doc
+        .add_external_font(std::io::Cursor::new(FONT_BOLD))
+        .map_err(|e| err(&e))?;
+    let mut pen = Pen {
+        layer: doc.get_page(page).get_layer(layer),
+        regular: &regular,
+        bold: &bold,
+        y: 277.0,
+    };
+    let mut pages = 1;
+    let mut ensure = |pen: &mut Pen, needed: f32| {
+        if pen.y - needed < 18.0 {
+            pages += 1;
+            let (p, l) = doc.add_page(Mm(210.0), Mm(297.0), format!("page-{}", pages));
+            pen.layer = doc.get_page(p).get_layer(l);
+            pen.y = 277.0;
+        }
+    };
+    pen.text(&document.issuer, 13.0, 18.0, true);
+    pen.y -= 6.0;
+    for l in &document.issuer_lines {
+        for w in wrap(l, 95) {
+            pen.text(&w, 8.5, 18.0, false);
+            pen.y -= 4.5;
+        }
+    }
+    pen.y -= 4.0;
+    for w in wrap(&document.title, 60) {
+        pen.text(&w, 15.0, 18.0, true);
+        pen.y -= 8.0;
+    }
+    pen.rule();
+    for section in &document.sections {
+        if let Some(ref h) = section.heading {
+            ensure(&mut pen, 14.0);
+            pen.text(h, 10.5, 18.0, true);
+            pen.y -= 6.5;
+        }
+        for (label, value) in &section.rows {
+            ensure(&mut pen, 6.0);
+            pen.row(label, value);
+        }
+        for p in &section.paragraphs {
+            for w in wrap(p, 105) {
+                ensure(&mut pen, 5.0);
+                pen.text(&w, 8.5, 18.0, false);
+                pen.y -= 4.4;
+            }
+            pen.y -= 2.0;
+        }
+        if let Some(ref table) = section.table {
+            let columns = table.headers.len().max(1);
+            let width = 174.0 / columns as f32;
+            let chars = ((width / 1.8) as usize).max(4);
+            let cell = |s: &str| s.chars().take(chars).collect::<String>();
+            ensure(&mut pen, 10.0);
+            for (i, h) in table.headers.iter().enumerate() {
+                pen.text(&cell(h), 8.0, 18.0 + width * i as f32, true);
+            }
+            pen.y -= 5.0;
+            for row in &table.rows {
+                ensure(&mut pen, 5.0);
+                for (i, c) in row.iter().enumerate().take(columns) {
+                    pen.text(&cell(c), 8.0, 18.0 + width * i as f32, false);
+                }
+                pen.y -= 4.6;
+            }
+            pen.y -= 2.0;
+        }
+        pen.y -= 2.0;
+        ensure(&mut pen, 8.0);
+        pen.rule();
+    }
+    ensure(&mut pen, 10.0);
+    for w in wrap(&document.footer, 110) {
+        pen.text(&w, 7.5, 18.0, false);
+        pen.y -= 4.0;
+    }
+    doc.save_to_bytes().map_err(|e| err(&e))
+}

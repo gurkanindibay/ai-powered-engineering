@@ -376,8 +376,11 @@ pub async fn provider_webhook(
             format!("Invalid notification: {}", e),
         )
     })?;
-    CardPaymentService::new(state)
-        .apply_provider_event(event)
+    crate::audit::CONTEXT
+        .scope(
+            crate::audit::AuditContext::service("payment-provider"),
+            CardPaymentService::new(state).apply_provider_event(event),
+        )
         .await
         .map(Json)
         .map_err(card_status)
@@ -449,8 +452,11 @@ pub async fn sandbox_checkout_complete(
                 "Sandbox signature mismatch".to_string(),
             ));
         }
-        current = service
-            .apply_provider_event(event)
+        current = crate::audit::CONTEXT
+            .scope(
+                crate::audit::AuditContext::service("payment-provider"),
+                service.apply_provider_event(event),
+            )
             .await
             .map_err(card_status)?;
     }
@@ -472,11 +478,9 @@ pub async fn get_payment_receipt_pdf(
         .get_receipt(&site_id, &id)
         .await
         .map_err(|e| (StatusCode::NOT_FOUND, e))?;
-    if !claims.is_site_staff()
-        && !crate::auth::same_id(claims.unit_id.as_deref().unwrap_or(""), &receipt.unit_id)
-    {
-        return Err((StatusCode::NOT_FOUND, "Receipt not found".to_string()));
-    }
+    crate::authorization::unit(&state, &claims, &receipt.unit_id)
+        .await
+        .map_err(|_| (StatusCode::NOT_FOUND, "Receipt not found".to_string()))?;
     let unit_label = {
         let inner = state.inner.read().await;
         inner

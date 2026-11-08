@@ -48,9 +48,18 @@ pub async fn insert_operating_budget(pool: &Pool, budget: &mut OperatingBudget) 
     for line in budget.lines.iter_mut() {
         let line_id: i64 = tx
             .query_one(
-                "INSERT INTO operating_budget_lines (budget_id, category, description, annual_amount, allocation_key)
-                 VALUES ($1, $2, $3, $4, $5) RETURNING id",
-                &[&id, &line.category, &line.description, &line.annual_amount, &line.allocation_key],
+                "INSERT INTO operating_budget_lines (budget_id, category, description, annual_amount, allocation_key, unit_weights)
+                 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+                &[
+                    &id,
+                    &line.category,
+                    &line.description,
+                    &line.annual_amount,
+                    &line.allocation_key,
+                    &(!line.unit_weights.is_empty())
+                        .then(|| serde_json::to_value(&line.unit_weights))
+                        .transpose()?,
+                ],
             )
             .await?
             .get(0);
@@ -275,7 +284,7 @@ pub async fn load_budget_snapshot(
     };
 
     for r in client
-        .query("SELECT id, budget_id, category, description, annual_amount, allocation_key FROM operating_budget_lines ORDER BY id", &[])
+        .query("SELECT id, budget_id, category, description, annual_amount, allocation_key, unit_weights FROM operating_budget_lines ORDER BY id", &[])
         .await?
     {
         if let Some(i) = index(&budgets, r.get(1)) {
@@ -285,6 +294,11 @@ pub async fn load_budget_snapshot(
                 description: r.get(3),
                 annual_amount: r.get(4),
                 allocation_key: r.get(5),
+                unit_weights: r
+                    .get::<_, Option<serde_json::Value>>(6)
+                    .map(serde_json::from_value)
+                    .transpose()?
+                    .unwrap_or_default(),
             });
         }
     }

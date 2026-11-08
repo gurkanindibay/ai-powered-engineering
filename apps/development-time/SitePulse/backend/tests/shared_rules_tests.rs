@@ -33,7 +33,7 @@ fn when_matching_upper_case_bank_narrative_then_dotted_i_names_match() {
 
 #[tokio::test]
 async fn when_stored_email_has_surrounding_whitespace_then_login_still_finds_user() {
-    let state = AppState::new();
+    let state = AppState::new_with_test_fixtures();
     let password = "Correct-Horse-9!";
     {
         let mut inner = state.inner.write().await;
@@ -43,7 +43,9 @@ async fn when_stored_email_has_surrounding_whitespace_then_login_still_finds_use
             full_name: "Whitespace User".to_string(),
             email: "  Mixed.Case@Example.COM ".to_string(),
             phone: String::new(),
-            password_hash: Some(sitepulse_backend::auth::hash_password(password)),
+            password_hash: Some(
+                sitepulse_backend::auth::hash_password(password).expect("test password hash"),
+            ),
             role: Role::HomeOwner,
             must_change_password: false,
             auth_provider: AuthProvider::Local,

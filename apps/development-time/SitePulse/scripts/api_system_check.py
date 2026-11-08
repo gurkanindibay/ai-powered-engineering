@@ -53,6 +53,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from decimal import Decimal
 from typing import Callable, Dict, List, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -66,7 +67,7 @@ PAYMENT_WEBHOOK_SECRET = "api-system-check-payment-secret"
 
 # Must mirror auth::route_access: routes reachable without a bearer token.
 PUBLIC_ROUTES = {
-    "/health", "/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/register",
+    "/health", "/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/register", "/api/v1/auth/refresh",
     "/api/v1/home-residents/register", "/api/v1/bank/webhook/incoming-transfer", "/api/v1/site-admin/banks",
     "/api/v1/registration/submit/:slug",
     "/api/v1/public/receipts/verify", "/api/v1/payments/provider/webhook",
@@ -82,6 +83,7 @@ CHECKS = [
     "tenant_surplus_virman", "reversal_restores_ledger", "webhook_claim_scoped", "issuer_snapshot_on_receipt",
     "debt_aging_snapshot_persisted", "virman_reversal_restores_advance", "resident_statement_scoped",
     "receipt_pdf_and_verification", "card_payment_via_provider", "budget_accrual_legal_basis", "ledger_integrity_clean",
+    "security_session_lifecycle", "transactional_audit", "audit_scope_and_privileges", "registration_repository_scope", "support_grant_lifecycle", "household_members_persisted", "invitation_atomic_registration",
 ]
 
 
@@ -225,10 +227,26 @@ def http(method: str, url: str, token: Optional[str] = None, body: Optional[obje
 
 
 def login(backend: Backend, email: str, password: str) -> str:
-    status, body = http("POST", backend.base + "/api/v1/auth/login", body={"email": email, "password": password})
+    passwords = getattr(backend, "passwords", {})
+    effective = passwords.get(email, password)
+    status, body = http("POST", backend.base + "/api/v1/auth/login", body={"email": email, "password": effective})
     if status != 200:
         raise SetupError(f"login as {email} failed: {status} {body[:200]}")
-    return json.loads(body)["access_token"]
+    result = json.loads(body)
+    if result["user"]["must_change_password"]:
+        changed = effective + "-Changed"
+        status, body = http("POST", backend.base + "/api/v1/auth/change-password", token=result["access_token"],
+                            body={"email": email, "current_password": effective, "new_password": changed})
+        if status != 200:
+            raise SetupError(f"mandatory password change failed: {status}")
+        result = json.loads(body)
+        passwords[email] = changed
+        backend.passwords = passwords
+        effective = changed
+    status, _ = http("POST", backend.base + "/api/v1/auth/step-up", token=result["access_token"], body={"password": effective})
+    if status != 200:
+        raise SetupError(f"password step-up failed: {status}")
+    return result["access_token"]
 
 
 def hash_password(password: str) -> str:
@@ -245,12 +263,8 @@ def hash_password(password: str) -> str:
 
 def routes_from_app() -> List[Tuple[str, str]]:
     text = APP_RS.read_text(encoding="utf-8")
-    found: List[Tuple[str, str]] = []
-    for m in re.finditer(r'\.route\(\s*"([^"]+)"(.*?)(?=\.route\(|\n\s*\}|\Z)', text, re.S):
-        path, rest = m.group(1), m.group(2)
-        for method in re.findall(r"\b(get|post|put|delete)\(handlers::", rest):
-            found.append((method.upper(), path))
-    return found
+    return [(method.upper(), path) for method, path in
+            re.findall(r'(?m)^\s*(get|post|put|delete)\s+"([^"\n]+)"\s*=>', text)]
 
 
 def concrete(path: str) -> str:
@@ -273,7 +287,7 @@ def check_unauthenticated(ctx: Context) -> Tuple[bool, str]:
         return False, f"only {len(routes)} routes parsed from app.rs"
     bad = []
     for method, path in routes:
-        if path in PUBLIC_ROUTES:
+        if path in PUBLIC_ROUTES or path.startswith("/api/v1/system/"):
             continue
         status, _ = http(method, ctx.backend.base + concrete(path))
         if status != 401:
@@ -298,7 +312,7 @@ def check_cross_site(ctx: Context) -> Tuple[bool, str]:
         http("POST", b + "/api/v1/payments/record-manual", token=ctx.other_manager, body={"site_id": "1", "unit_id": ctx.unit_id, "amount": "1.00", "payer_name": "x"})[0],
     ]
     own = http("GET", b + "/api/v1/site-admin/home-owners", token=ctx.manager)[0]
-    return all(p == 403 for p in probes) and own == 200, f"foreign {probes}, own {own}"
+    return all(p == 404 for p in probes) and own == 200, f"foreign {probes}, own {own}"
 
 
 def check_webhook(ctx: Context) -> Tuple[bool, str]:
@@ -482,7 +496,7 @@ def check_reversal(ctx: Context) -> Tuple[bool, str]:
     paid_after = ctx.psql.run(db, "SELECT sum(paid_principal + paid_penalty) FROM dues_liabilities;")
     unallocated = float(original["allocated_principal"]) + float(original["allocated_penalty"])
     row = ctx.psql.run(db, (
-        "SELECT o.settlement_status || '|' || c.settlement_status || '|' || c.entry_type || '|' || (c.recorded_by LIKE '%mehmet.demir%')"
+        "SELECT o.settlement_status || '|' || c.settlement_status || '|' || c.entry_type || '|' || (c.recorded_by = (SELECT id::text FROM users WHERE email='mehmet.demir@begonya.com'))"
         " || '|' || (SELECT count(*) FROM advance_ledger_entries WHERE entry_type = 'REFUND' AND reference_id = rr.receipt_number"
         f"            AND amount = {original['allocated_advance']})"
         " FROM payment_entries o JOIN payment_entries c ON c.reverses_entry_id = o.id JOIN payment_receipts rr ON rr.id = c.receipt_id"
@@ -598,8 +612,8 @@ def check_virman_reversal(ctx: Context) -> Tuple[bool, str]:
         f" AND debtor_type = 'OWNER') || '|' || (SELECT count(*) FROM advance_ledger_entries WHERE entry_type = 'VIRMAN_REVERSAL'"
         f" AND reference_id = '{rev['reversal_receipt']['receipt_number']}' AND amount = 9.00)"
         f" FROM dues_liabilities d WHERE d.period = '{period}';"))
-    expected = f"PENDING|0.00|{float(before):.2f}|1"
-    ok = row == expected and float(rev.get("restored_advance", 0)) == 9.0
+    expected = f"PENDING|0.00|{Decimal(before):.2f}|1"
+    ok = row == expected and Decimal(str(rev.get("restored_advance", 0))) == Decimal("9.00")
     return ok, f"{virman_no} -> {rev['reversal_receipt']['receipt_number']}, due|paid|advance|ledger {row} (want {expected})"
 
 
@@ -607,14 +621,21 @@ def check_resident_statement(ctx: Context) -> Tuple[bool, str]:
     """SPEC-007 R2: the statement is served for the unit and scoped to its site."""
     b = ctx.backend.base
     status, body = http("GET", f"{b}/api/v1/residents/{ctx.unit_id}/statement", token=ctx.manager)
-    other = http("GET", f"{b}/api/v1/residents/{ctx.unit_id}/statement", token=ctx.other_manager)[0]
+    # The earlier purge intentionally deleted the original second site and actor.
+    # Provision a live foreign actor so this assertion tests scope, not revocation.
+    suffix = str(time.time_ns())
+    foreign_site = ctx.psql.run(ctx.backend.db_name, f"INSERT INTO sites(name,slug,address,status,plan_type) VALUES ('Foreign Site','scope-{suffix}','Test','ACTIVE','STANDARD') RETURNING id;")
+    foreign_hash = hash_password("Scope-Manager-123")
+    ctx.psql.run(ctx.backend.db_name, f"INSERT INTO users(site_id,email,password_hash,role,must_change_password) VALUES ({foreign_site},'scope-{suffix}@example.com','{foreign_hash}','SITE_MANAGER',false);")
+    foreign_token = login(ctx.backend, f"scope-{suffix}@example.com", "Scope-Manager-123")
+    other = http("GET", f"{b}/api/v1/residents/{ctx.unit_id}/statement", token=foreign_token)[0]
     if status != 200:
         return False, f"statement {status} {body[:200]}"
     st = json.loads(body)
     owner = next((d for d in st["debtors"] if d["debtor_type"] == "OWNER"), None)
-    buckets = owner and sum(float(owner[k]) for k in ("current_due", "overdue_1_30_days", "overdue_31_60_days",
+    buckets = owner and sum(Decimal(owner[k]) for k in ("current_due", "overdue_1_30_days", "overdue_31_60_days",
                                                       "overdue_61_90_days", "overdue_90_plus_days"))
-    ok = owner is not None and abs(buckets - float(owner["principal_outstanding"])) < 0.001 and other == 403
+    ok = owner is not None and buckets == Decimal(owner["principal_outstanding"]) and other == 404
     return ok, f"owner principal {owner and owner['principal_outstanding']} = buckets {buckets}, receipts {len(st['receipts'])}, other site {other}"
 
 
@@ -638,7 +659,10 @@ def check_receipt_pdf(ctx: Context) -> Tuple[bool, str]:
 def check_card_payment(ctx: Context) -> Tuple[bool, str]:
     """SPEC-007 R4: sandbox hosted page -> signed notifications -> one receipt; forged notifications rejected."""
     db, b = ctx.backend.db_name, ctx.backend.base
-    status, body = http("POST", f"{b}/api/v1/residents/{ctx.unit_id}/payment-intents", token=ctx.manager,
+    owner_hash = hash_password("CardOwner-123")
+    owner_email = ctx.psql.run(db, f"UPDATE users SET password_hash='{owner_hash}',must_change_password=false WHERE person_id=(SELECT owner_person_id FROM units WHERE id={int(ctx.unit_id)}) AND role='HOME_OWNER' RETURNING email;")
+    owner_token = login(ctx.backend, owner_email, "CardOwner-123")
+    status, body = http("POST", f"{b}/api/v1/residents/{ctx.unit_id}/payment-intents", token=owner_token,
                         body={"amount": "9.50", "debtor_type": "OWNER"})
     if status != 201:
         return False, f"intent {status} {body[:200]}"
@@ -696,7 +720,7 @@ def check_budget_accrual(ctx: Context) -> Tuple[bool, str]:
         f" FROM dues_liabilities WHERE period = '{period}';"))
     count, linked, amount, owner_rows = (row.split("|") + ["", "", "", ""])[:4]
     ok = (reloaded.get("status") == "APPROVED" and share is not None and acc_status == 200 and typed == 409
-          and count == linked and int(count or 0) > 0 and float(amount) == float(share["monthly_amount"])
+          and count == linked and int(count or 0) > 0 and Decimal(amount) == Decimal(share["monthly_amount"])
           and int(owner_rows or 0) > 0)
     return ok, (f"budget {budget['id']} reloaded {reloaded.get('status')}, accrue {acc_status}, typed amount {typed}, "
                 f"rows|linked|unit amount|owner rows {row} (share {share and share['monthly_amount']})")
@@ -708,7 +732,182 @@ def check_ledger_integrity(ctx: Context) -> Tuple[bool, str]:
     return rows == "", f"violations: {rows.replace(chr(10), ', ') or 'none'}"
 
 
+def check_security_session_lifecycle(ctx: Context) -> Tuple[bool, str]:
+    base = ctx.backend.base
+    email = "mehmet.demir@begonya.com"
+    password = getattr(ctx.backend, "passwords", {}).get(email, "mehmet123")
+    status, body = http("POST", base + "/api/v1/auth/login", body={"email": email, "password": password})
+    if status != 200:
+        return False, f"sign-in {status}"
+    credentials = json.loads(body)
+    status, body = http("POST", base + "/api/v1/auth/refresh", body={"refresh_token": credentials["refresh_token"]})
+    if status != 200:
+        return False, f"refresh {status}"
+    rotated = json.loads(body)
+    reused, _ = http("POST", base + "/api/v1/auth/refresh", body={"refresh_token": credentials["refresh_token"]})
+    revoked, _ = http("GET", base + "/api/v1/auth/me", token=rotated["access_token"])
+    separate = login(ctx.backend, email, "mehmet123")
+    logout, _ = http("POST", base + "/api/v1/auth/logout", token=separate)
+    copied, _ = http("GET", base + "/api/v1/auth/me", token=separate)
+    return (reused, revoked, logout, copied) == (401, 401, 200, 401), f"reuse {reused}, family {revoked}, logout {logout}, copied JWT {copied}"
+
+
+def check_transactional_audit(ctx: Context) -> Tuple[bool, str]:
+    base, db = ctx.backend.base, ctx.backend.db_name
+    status, body = pay(ctx, key="AAA-AUDIT-RECORDED")
+    receipt = json.loads(body) if status == 201 else {}
+    if status != 201:
+        return False, f"payment {status}"
+    event = ctx.psql.run(db, f"SELECT count(*)>0 FROM audit_events WHERE resource_type='payment_receipts' AND resource_id='{int(receipt['id'])}' AND actor_kind='USER' AND actor_id IS NOT NULL AND request_id<>'database';")
+    before = ctx.psql.run(db, "SELECT count(*) FROM payment_receipts;")
+    ctx.psql.run(db, """
+        CREATE FUNCTION sp_aaa_test_audit_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN IF NEW.resource_type='payment_receipts' THEN RAISE EXCEPTION 'Injected audit failure'; END IF; RETURN NEW; END $$;
+        CREATE TRIGGER aaa_test_audit_failure BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION sp_aaa_test_audit_failure();
+    """)
+    try:
+        failed, _ = pay(ctx, key="AAA-AUDIT-ROLLBACK")
+    finally:
+        ctx.psql.run(db, "DROP TRIGGER aaa_test_audit_failure ON audit_events; DROP FUNCTION sp_aaa_test_audit_failure();")
+    after = ctx.psql.run(db, "SELECT count(*) FROM payment_receipts;")
+    clean = ctx.psql.run(db, "SELECT NOT EXISTS(SELECT 1 FROM audit_events WHERE changes::text LIKE '%$argon2%' OR changes::text LIKE '%SuperSecretPassword%');")
+    return event == "t" and failed >= 400 and before == after and clean == "t", f"attribution {event}, injected failure {failed}, receipts {before}->{after}, redaction {clean}"
+
+
+def check_audit_scope_and_privileges(ctx: Context) -> Tuple[bool, str]:
+    base, db = ctx.backend.base, ctx.backend.db_name
+    own_status, body = http("GET", base + "/api/v1/audit/events?limit=25", token=ctx.manager)
+    own = json.loads(body).get("events", []) if own_status == 200 else []
+    manager_site = ctx.psql.run(db, "SELECT site_id FROM users WHERE email='mehmet.demir@begonya.com';")
+    isolated = all(str(row['site_id']) == manager_site for row in own)
+    foreign_status, _ = http("GET", base + "/api/v1/audit/events?site_id=2", token=ctx.manager)
+    export_status, _ = http("GET", base + "/api/v1/audit/export?limit=1", token=ctx.manager)
+    # A non-owner role proves RLS and append-only behavior independently of the owner API connection.
+    role = f"sitepulse_aaa_probe_{os.getpid()}"
+    try:
+        ctx.psql.run(db, f"CREATE ROLE {role} NOLOGIN; GRANT USAGE ON SCHEMA public TO {role}; GRANT SELECT,UPDATE,DELETE ON audit_events TO {role};")
+        visible = ctx.psql.run(db, f"SET ROLE {role}; SELECT set_config('sitepulse.audit_context','{{\"site_id\":\"{manager_site}\",\"actor_role\":\"SITE_MANAGER\",\"permissions\":[\"AUDIT_LOG_READ\"]}}',false); SELECT NOT EXISTS(SELECT 1 FROM audit_events WHERE site_id IS DISTINCT FROM {int(manager_site)});").splitlines()[-1]
+        immutable = False
+        try:
+            ctx.psql.run(db, f"SET ROLE {role}; UPDATE audit_events SET action='TAMPERED'; DELETE FROM audit_events;")
+            immutable = ctx.psql.run(db, "SELECT NOT EXISTS(SELECT 1 FROM audit_events WHERE action='TAMPERED');") == "t"
+        except SetupError:
+            immutable = True
+    finally:
+        ctx.psql.run(db, f"DROP OWNED BY {role}; DROP ROLE {role};")
+    return own_status == 200 and isolated and foreign_status == 404 and export_status == 200 and visible == "t" and immutable, f"read {own_status}, scoped {isolated}, foreign {foreign_status}, export {export_status}, RLS {visible}, immutable {immutable}"
+
+
+def check_registration_repository_scope(ctx: Context) -> Tuple[bool, str]:
+    db, base = ctx.backend.db_name, ctx.backend.base
+    # The earlier purge check deliberately removed the original second site.
+    # Create a fresh actor and site, without restarting or populating the cache.
+    hashed = hash_password("ScopeManager-123")
+    ctx.psql.run(db, f"INSERT INTO sites(name,address,slug) VALUES ('AAA scope site','Test','aaa-scope-site'); INSERT INTO users(site_id,email,password_hash,role) SELECT id,'aaa-scope-manager@example.com','{hashed}','SITE_MANAGER' FROM sites WHERE slug='aaa-scope-site';")
+    other_manager = login(ctx.backend,"aaa-scope-manager@example.com","ScopeManager-123")
+    ctx.psql.run(db, """INSERT INTO pending_registrations(request_id,site_id,block,unit_no,floor,full_name,email,phone,is_resident)
+        SELECT 'aaa-db-only',site_id,'A Blok',1,1,'AAA Review','aaa-review@example.com','',true FROM users WHERE email='aaa-scope-manager@example.com';""")
+    rejected, _ = http("POST", base + "/api/v1/registration/reject/aaa-db-only", token=ctx.manager)
+    approved, _ = http("POST", base + "/api/v1/registration/approve/aaa-db-only", token=ctx.manager)
+    unchanged = ctx.psql.run(db, "SELECT status FROM pending_registrations WHERE request_id='aaa-db-only';")
+    own, _ = http("POST", base + "/api/v1/registration/reject/aaa-db-only", token=other_manager)
+    return (rejected, approved, unchanged, own) == (404, 404, "PENDING", 200), f"foreign reject/approve {rejected}/{approved}, unchanged {unchanged}, authorized reject {own}"
+
+
+def check_support_grant_lifecycle(ctx: Context) -> Tuple[bool, str]:
+    db, base = ctx.backend.db_name, ctx.backend.base
+    first = login(ctx.backend,"admin@sitepulse.io",ADMIN_PASSWORD)
+    hashed = hash_password("Approver-Password-123")
+    ctx.psql.run(db, f"INSERT INTO users(email,password_hash,role) VALUES ('aaa-approver@example.com','{hashed}','SAAS_ADMIN');")
+    second = login(ctx.backend,"aaa-approver@example.com","Approver-Password-123")
+    operator = ctx.psql.run(db,"SELECT id FROM users WHERE email='admin@sitepulse.io';")
+    create, body = http("POST",base+"/api/v1/support/grants",token=first,body={"site_id":"1","operator_user_id":operator,"permissions":["SITE_MANAGE","AUDIT_LOG_READ","UNIT_READ"],"reason":"Investigate a support ticket","minutes":5})
+    if create != 200:
+        return False,f"request {create}"
+    grant = json.loads(body)["id"]
+    header = {"X-SitePulse-Support-Grant":grant}
+    self_approve, _ = http("POST",base+"/api/v1/support/grants/approve",token=first,body={"id":grant})
+    pending, _ = http("GET",base+"/api/v1/site-admin/home-owners",token=first,headers=header)
+    approve, _ = http("POST",base+"/api/v1/support/grants/approve",token=second,body={"id":grant})
+    allowed, _ = http("GET",base+"/api/v1/site-admin/home-owners",token=first,headers=header)
+    ordinary, _ = http("GET",base+"/api/v1/site-admin/home-owners",token=first)
+    receipt_status, receipt_body = pay(ctx, key="SUPPORT-RECEIPT")
+    receipt_id = json.loads(receipt_body).get("id",0) if receipt_status==201 else 0
+    receipt_access, _ = http("GET",base+f"/api/v1/payments/receipts/{receipt_id}",token=first,headers=header)
+    used = ctx.psql.run(db,f"SELECT count(*) FROM audit_events WHERE action='SUPPORT_GRANT_USED' AND support_grant_id='{grant}';")
+    revoke, _ = http("POST",base+"/api/v1/support/grants/revoke",token=second,body={"id":grant})
+    revoked, _ = http("GET",base+"/api/v1/site-admin/home-owners",token=first,headers=header)
+    return self_approve==404 and receipt_access==200 and int(used)>=2 and (pending,approve,allowed,ordinary,revoke,revoked)==(403,200,200,403,200,403), f"self {self_approve}, pending {pending}, approve {approve}, granted {allowed}, receipt {receipt_access}, audited uses {used}, ordinary {ordinary}, revoke {revoke}/{revoked}"
+
+
+def check_household_members(ctx: Context) -> Tuple[bool, str]:
+    """Manager household entries persist and failed evidence rolls identity writes back."""
+    db, base = ctx.backend.db_name, ctx.backend.base
+    suffix = str(time.time_ns())
+    email = f"household-{suffix}@example.com"
+    path = f"/api/v1/home-residents/members/{ctx.unit_id}"
+    status, body = http("POST", base + path, token=ctx.manager, body={
+        "full_name": "Household Verifier", "phone": "", "email": email, "relationship": "Family"})
+    if status != 201:
+        return False, f"creation {status} {body[:160]}"
+    member = json.loads(body)
+    relogin(ctx)
+    read_status, read_body = http("GET", base + path, token=ctx.manager)
+    members = json.loads(read_body) if read_status == 200 else []
+    persisted = any(m["resident_id"] == member["resident_id"] and m["email"] == email and not m["is_owner"] for m in members)
+    ctx.psql.run(db, """CREATE FUNCTION reject_household_evidence() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Injected household failure'; END $$;
+        CREATE TRIGGER reject_household_evidence BEFORE INSERT ON occupancy_members FOR EACH ROW EXECUTE FUNCTION reject_household_evidence();""")
+    rejected_email = f"rejected-{suffix}@example.com"
+    try:
+        rejected, _ = http("POST", base + path, token=ctx.manager, body={
+            "full_name": "Rejected Household", "phone": "", "email": rejected_email, "relationship": "Family"})
+    finally:
+        ctx.psql.run(db, "DROP TRIGGER reject_household_evidence ON occupancy_members; DROP FUNCTION reject_household_evidence();")
+    count = ctx.psql.run(db, f"SELECT count(*) FROM persons WHERE email='{rejected_email}';")
+    evidence = ctx.psql.run(db, f"SELECT count(*) FROM audit_events WHERE resource_type='occupancy_members' AND resource_id='{int(member['resident_id'])}';")
+    ok = persisted and int(member["resident_id"]) > 0 and rejected == 503 and count == "0" and int(evidence) > 0
+    return ok, f"persistent {persisted}, audited {evidence}, injected failure {rejected}, orphan persons {count}"
+
+
+def check_invitation_atomic_registration(ctx: Context) -> Tuple[bool, str]:
+    db, base = ctx.backend.db_name, ctx.backend.base
+    hashed = hash_password("InviteOwner-123")
+    email = ctx.psql.run(db, f"UPDATE users SET password_hash='{hashed}',must_change_password=false WHERE person_id=(SELECT owner_person_id FROM units WHERE id={int(ctx.unit_id)}) AND role='HOME_OWNER' RETURNING email;")
+    owner = login(ctx.backend,email,"InviteOwner-123")
+    status, body = http("GET",base+f"/api/v1/home-residents/invite-link/{ctx.unit_id}",token=owner)
+    if status != 200:
+        return False,f"invitation {status}"
+    invitation = json.loads(body)["token"]
+    def register(index: int):
+        return http("POST",base+"/api/v1/auth/register",body={"full_name":f"Invited Member {index}","email":f"aaa-invited-{index}@example.com","password":"Invited-Password-123","unit_invite_token":invitation})
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(register,[1,2]))
+    statuses = sorted(result[0] for result in results)
+    winner = next((json.loads(body) for code, body in results if code == 201),{})
+    scoped = http("GET",base+f"/api/v1/residents/{ctx.unit_id}/dashboard",token=winner.get("access_token"))[0]
+    count = ctx.psql.run(db,"SELECT count(*) FROM users WHERE email LIKE 'aaa-invited-%@example.com';")
+    # A failure after token consumption must restore the invitation and all identity rows.
+    _, body = http("GET",base+f"/api/v1/home-residents/invite-link/{ctx.unit_id}",token=owner)
+    rollback_token = json.loads(body)["token"]
+    request = {"full_name":"Rollback Member","email":"aaa-invite-rollback@example.com","password":"Invited-Password-123","unit_invite_token":rollback_token}
+    ctx.psql.run(db,"CREATE FUNCTION sp_aaa_invite_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.resource_type='occupancy_members' THEN RAISE EXCEPTION 'Injected membership audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER aaa_invite_failure BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION sp_aaa_invite_failure();")
+    try:
+        failed, _ = http("POST",base+"/api/v1/auth/register",body=request)
+    finally:
+        ctx.psql.run(db,"DROP TRIGGER aaa_invite_failure ON audit_events; DROP FUNCTION sp_aaa_invite_failure();")
+    absent = ctx.psql.run(db,"SELECT NOT EXISTS(SELECT 1 FROM users WHERE email='aaa-invite-rollback@example.com') AND NOT EXISTS(SELECT 1 FROM persons WHERE email='aaa-invite-rollback@example.com');")
+    retry, _ = http("POST",base+"/api/v1/auth/register",body=request)
+    return statuses==[201,400] and scoped==200 and count=="1" and failed>=400 and absent=="t" and retry==201, f"concurrent {statuses}, current unit {scoped}, accounts {count}, failed {failed}, rollback {absent}, retry {retry}"
+
+
 CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
+    "invitation_atomic_registration":check_invitation_atomic_registration,
+    "household_members_persisted":check_household_members,
+    "support_grant_lifecycle":check_support_grant_lifecycle,
+    "security_session_lifecycle":check_security_session_lifecycle,
+    "transactional_audit":check_transactional_audit,
+    "audit_scope_and_privileges":check_audit_scope_and_privileges,
+    "registration_repository_scope":check_registration_repository_scope,
     "unauthenticated_routes_rejected": check_unauthenticated,
     "forged_token_rejected": check_forged,
     "cross_site_forbidden": check_cross_site,
@@ -772,6 +971,12 @@ def run(selected: List[str], container: str, keep: bool, log_dir: Path) -> Dict[
                 continue
             try:
                 ok, detail = CHECK_FUNCS[name](ctx)
+                # Check at each boundary: later payments must not conceal earlier drift.
+                if name != "ledger_integrity_clean":
+                    clean, evidence = check_ledger_integrity(ctx)
+                    if not clean:
+                        ok = False
+                        detail += "; ledger postcondition: " + evidence
             except Exception as e:  # a crashing check is a failing check
                 ok, detail = False, f"{type(e).__name__}: {e}"
             results.append({"name": name, "passed": ok, "detail": detail})

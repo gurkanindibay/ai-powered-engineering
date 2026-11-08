@@ -131,10 +131,13 @@ GATES: Dict[str, List[CommandSpec]] = {
     "flutter-reuse": [CommandSpec(["python3", "scripts/flutter_reuse_inventory.py", "--check", "--json"], ".", 120)],
     # Multi-tenant guardrails: handlers pin site input through TenantScope, object-id
     # routes check ownership, no guessed tenants, service transactions bind their
-    # tenant, and every tenant-keyed table has a row-level security policy (V19).
+    # tenant, and every tenant-keyed table has a row-level security policy (V21).
     "tenant-lint": [CommandSpec(["python3", "scripts/tenant_isolation_lint.py", "--json"], ".", 120)],
     # No guard on the global AppState lock is held across database/network I/O.
     "lock-lint": [CommandSpec(["python3", "scripts/lock_scope_lint.py", "--json"], ".", 120)],
+    # Cross-stack logging standards (docs/LOGGING_STANDARDS.md): no println/dbg in backend,
+    # no raw print in Flutter, structured AppLogger usage, no credential leaks.
+    "logging-standards-lint": [CommandSpec(["python3", "scripts/logging_standards_lint.py", "--json"], ".", 120)],
     # Browser end-to-end suite (e2e/): isolated DB, release backend, Flutter E2E web build, Chrome.
     # Strict xfails pin known product defects; an unexpected pass (XPASS) fails the gate.
     "gui-e2e": [CommandSpec(["python3", "scripts/gui_e2e.py", "run", "--json"], ".", 3600)],

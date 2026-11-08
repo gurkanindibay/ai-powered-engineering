@@ -149,13 +149,17 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 ## 5b. API System Check (`api_system_check.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/api_system_check.py](file:///apps/development-time/SitePulse/scripts/api_system_check.py) (symlinked to `scripts/api_system_check.py`)
-- **Purpose:** Creates a throwaway database, boots the real backend binary on a free port, seeds it, and checks over HTTP: every non-public route returns 401 without a token, forged tokens are rejected, cross-site access is 403, bank webhooks need a valid HMAC, 20 concurrent payments get unique receipt numbers, idempotent retries return the first receipt, receipts/inserts survive a backend restart, match-all settles an `UNMATCHED` entry in place (no duplicate ledger row), payments record the payer person on entry and receipt, the non-production site purge removes a site with ledger history atomically (SPEC-005 / V16); a tenant surplus is TENANT credit and a `TENANT -> OWNER` virman pays the owner's capital due (`tenant_surplus_virman`), a reversal issues an `IAD-` receipt with a contra entry, un-allocates, refunds advance, survives a restart and is idempotent (`reversal_restores_ledger`), webhook claims record account, receipt and payload hash and a reused id with other content is 409 (`webhook_claim_scoped`), the site tax id is validated and snapshotted on receipts (`issuer_snapshot_on_receipt`), the aging snapshot writes one row per unit/debtor per day (`debt_aging_snapshot_persisted`) (SPEC-006 / V17); a reversed virman reopens its dues and credits `VIRMAN_REVERSAL` to the source advance (`virman_reversal_restores_advance`), the resident statement ages open items and is site-scoped (`resident_statement_scoped`), a receipt downloads as a PDF and the public QR check confirms it without payer data (`receipt_pdf_and_verification`), a sandbox card payment is captured through the signed provider webhook exactly once and forged notifications are 401 (`card_payment_via_provider`), accrual from an approved işletme projesi records the budget on every liability and a typed amount is 409 (`budget_accrual_legal_basis`) (SPEC-007 / V18), and `v_integrity_violations` is empty afterwards.
+- **Purpose:** Creates a throwaway database, boots the real backend binary on a free port, seeds it, and checks over HTTP: every non-public route returns 401 without a token, forged tokens are rejected, cross-site resources return scoped 404, bank webhooks need a valid HMAC, 20 concurrent payments get unique receipt numbers, idempotent retries return the first receipt, receipts/inserts survive a backend restart, match-all settles an `UNMATCHED` entry in place (no duplicate ledger row), payments record the payer person on entry and receipt, the non-production site purge removes a site with ledger history atomically (SPEC-005 / V16); a tenant surplus is TENANT credit and a `TENANT -> OWNER` virman pays the owner's capital due (`tenant_surplus_virman`), a reversal issues an `IAD-` receipt with a contra entry, un-allocates, refunds advance, survives a restart and is idempotent (`reversal_restores_ledger`), webhook claims record account, receipt and payload hash and a reused id with other content is 409 (`webhook_claim_scoped`), the site tax id is validated and snapshotted on receipts (`issuer_snapshot_on_receipt`), the aging snapshot writes one row per unit/debtor per day (`debt_aging_snapshot_persisted`), and `v_integrity_violations` is empty afterwards (SPEC-006 / V17).
+
+- **Additional payment coverage:** virman reversal, scoped statements, receipt PDFs/public verification, signed provider captures and budget-based accrual (SPEC-007 / V18).
 
 ```bash
 DB_PASS=... ./scripts/api_system_check.py                    # all checks
 DB_PASS=... ./scripts/api_system_check.py --only cross_site_forbidden,restart_persistence --json
 ```
 Uses `psql` when on PATH, otherwise `docker exec <--pg-container> psql`.
+
+SPEC-008 checks also verify durable household membership and rollback (`household_members_persisted`), session rotation/replay/logout (`security_session_lifecycle`), payment rollback on audit failure (`transactional_audit`), non-owner RLS and immutable evidence (`audit_scope_and_privileges`), database-only registration review (`registration_repository_scope`), second-approver support access (`support_grant_lifecycle`), and concurrent invitation consumption with identity/membership rollback (`invitation_atomic_registration`). The method/template inventory is parsed from the router registry. GUI bundles are rebuilt when source, dependencies, assets, or the API origin change; fixture resets preserve audit evidence.
 
 ## 5b-2. GUI End-to-End Suite (`gui_e2e.py`)
 
@@ -217,15 +221,25 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ./scripts/gui_traceability.py --json
 ```
 
-## 5c. Full Verification Run (`run_tests.py`)
+## 5c. Test Execution & Verification Run (`run_tests.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)
-- **Purpose:** Runs every harness gate with the real tools: harness self-tests, `cargo build`, `clippy -D warnings`, `cargo test`, the shared money fixtures (Rust + Dart), `flutter analyze`, `flutter test`, the persistence lint, the testId lint, the schema gate, the API system check and the browser suite (`gui-e2e`, about 15 minutes; an unexpected XPASS fails it). A missing toolchain fails; nothing is printed as passed unless the tool passed; nothing in the repo is modified.
+- **Test Plan & Matrix:** [docs/TEST_PLAN_AND_EXECUTION_MATRIX.md](file:///docs/TEST_PLAN_AND_EXECUTION_MATRIX.md)
+- **Purpose:** Runs platform verification across 6 execution cases: full platform run, area-specific verification (`finance`, `auth`, `residents`, `ui`, `db`, `core`), or change-driven selective testing (`--changed`) using real compilers, linters, test targets, and database tools.
 
 ```bash
-DB_PASS=... ./scripts/run_tests.py            # everything
+# Area-specific verification & change-driven testing
+./scripts/run_tests.py --list-areas               # list all 6 functional areas and their test assets
+./scripts/run_tests.py --area ui                  # run UI design system & widget test battery
+./scripts/run_tests.py --area finance --skip-db   # run finance invariants & ledger tests without DB
+./scripts/run_tests.py --changed --skip-db        # auto-detect git diff/status and run tests covering changes
+./scripts/run_tests.py --area finance --plan      # dry-run print execution plan without running tests
+
+# Global & CI verification gates
+DB_PASS=... ./scripts/run_tests.py            # everything including GUI Playwright suite
+./scripts/run_tests.py --from-dev-container  # load local container credentials without printing them
 ./scripts/run_tests.py --skip-db              # DB gates (incl. gui-e2e) reported as SKIPPED, not passed
-DB_PASS=... ./scripts/run_tests.py --skip-gui # everything except the browser suite
+DB_PASS=... ./scripts/run_tests.py --skip-gui # everything except the browser suite (CI gate)
 ./scripts/run_tests.py --only rust-test,money-fixtures --json
 ```
 
@@ -250,28 +264,22 @@ echo -n 'new-password' | cargo run --quiet --bin hash-password   # from backend/
 
 ---
 
-## 6. Team Orchestrator & Dynamic Model Selection (`team_orchestrator.py`)
+## 6. Durable Engineering Harness (`development_harness.py`)
 
-- **Skill Definition:** [.agents/skills/team-orchestration/SKILL.md](file:///.agents/skills/team-orchestration/SKILL.md)
-- **Executable Script:** [scripts/team_orchestrator.py](file:///scripts/team_orchestrator.py)
-- **Purpose:** Multi-agent software engineering team orchestration across Product Owner, Architect, Developer, and Tester roles with dynamic model selection based on complexity (low, medium, high, critical).
+- **Skill:** [.agents/skills/team-orchestration/SKILL.md](.agents/skills/team-orchestration/SKILL.md)
+- **Guide:** [docs/engineering-harness.md](docs/engineering-harness.md)
+- **Runtime:** `scripts/development_harness.py` (Python 3.12+, Docker for execution).
+- **Planner compatibility:** `scripts/team_orchestrator.py`; plans only, unresolved model targets without capabilities.
+- **Capabilities:** five specialized roles plus conditional Architect, risk floors, live target validation, SQLite scheduling, decimal budgets, per-attempt evidence, cancellation/recovery, container isolation and trusted final-candidate gates.
+- **CLI:** `plan`, `create`, `step`, `run`, `status`, `cancel`, `recover`, `events`, `audit`, `evaluate`, `validate-policy`, `sitepulse-policy`; `--help` and `--json` supported.
 
-### Capabilities:
-- Automated complexity calculation based on task descriptions, file counts, and risk domains (financial invariants, schema migrations, concurrency, authentication).
-- Dynamic model, provider, reasoning effort, and git worktree isolation configuration per role.
-- Generates ready-to-run T3 `delegate_task` JSON payloads for automated execution.
-
-### Quick Usage Examples:
 ```bash
-# Auto-score complexity and view model assignments
-./scripts/team_orchestrator.py --task "Implement payment gateway retry logic"
-
-# Output structured JSON for automation or scripting
-./scripts/team_orchestrator.py --task "Migrate user authentication schema" --schema --auth --json
-
-# Explicitly override complexity
-./scripts/team_orchestrator.py --task "Refactor logging pipeline" --complexity medium
+python3 scripts/development_harness.py --json plan --task "Implement payment reconciliation" --financial
+python3 scripts/development_harness.py --json evaluate --cases config/engineering-harness/routing-cases.json
+python3 -m unittest discover -s tests/engineering_harness -v
 ```
+
+Execution needs a digest-pinned bridge/toolchain image and operator policy. The bundled gateway bridge uses live `/v1/models` and Chat Completions through an external credential-brokering proxy. Registry tiers/prices require operator evaluation; fixture results do not establish model quality. Existing SitePulse checks are reused through a generated policy. Full setup and protocol schemas are in the guide.
 
 ### Core Rules:
 1. **Notice Repetitive Need:** If an ad-hoc query or multi-step command is executed more than once, extract and structure it.

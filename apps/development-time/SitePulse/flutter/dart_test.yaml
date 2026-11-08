@@ -1,0 +1,19 @@
+# Dart & Flutter test runner configuration for SitePulse
+# Configures area tags allowing targeted test execution:
+#   flutter test --tags finance
+#   flutter test --tags auth
+#   flutter test --tags residents
+#   flutter test --tags ui
+#   flutter test --tags core
+
+tags:
+  finance:
+    description: "Financial ledger, dues calculations, bank statements, payments, tariffs, and capital projects"
+  auth:
+    description: "Identity, authentication, permissions, multi-tenancy, and session security"
+  residents:
+    description: "Residents directory, owners, house types, and occupancy lifecycle"
+  ui:
+    description: "Design system tokens, reusable widgets, navigation shell, and theme styling"
+  core:
+    description: "Core controllers, standardized error handling, and quality verification"

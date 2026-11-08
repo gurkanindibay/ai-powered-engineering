@@ -3,6 +3,8 @@ pub mod bank_account_repository;
 pub mod base;
 pub mod budget_repository;
 pub mod dues_repository;
+pub mod finance_records;
+pub mod finance_store;
 pub mod payment_intent_repository;
 pub mod payment_repository;
 pub mod reconciliation_repository;
@@ -27,3 +29,6 @@ pub use sync::*;
 pub use tenant_guard::*;
 pub use unit_repository::*;
 pub use user_repository::*;
+
+mod security_repository;
+pub use security_repository::security_connection;

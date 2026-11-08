@@ -284,12 +284,28 @@ async fn when_approving_pending_registration_then_provisions_user_and_returns_cr
     let state = AppState::new();
     let service = RegistrationApprovalService::new(state);
 
+    let token = sitepulse_backend::auth::issue_token(
+        "usr-site-manager-1",
+        "manager@test.example",
+        Role::SiteManager,
+        "site-1",
+        None,
+    )
+    .unwrap();
+    let mut claims = sitepulse_backend::auth::verify_token(&token).unwrap();
+    claims.role = Role::SiteManager;
+    claims.site_id = "site-1".to_string();
+    let ctx = sitepulse_backend::authorization::AuthzContext {
+        claims,
+        permissions: Permission::permissions_for_role(Role::SiteManager),
+        request_id: "test-approval".to_string(),
+    };
     let res = service
-        .approve_registration("req-seed-01")
+        .approve_registration(&ctx, "req-seed-01")
         .await
         .expect("Approval failed");
     assert_eq!(res.status, RegistrationStatus::Approved);
-    assert!(res.temporary_password.starts_with("SP-SAKIN-"));
+    assert!(res.temporary_password.starts_with("SP-RESIDENT-"));
     assert_eq!(res.email, "kerem.yilmaz@gmail.com");
 }
 
@@ -300,7 +316,8 @@ async fn when_generating_unit_invite_link_then_returns_unit_scoped_url_and_token
 
     let res = service
         .generate_unit_invite_link("d-14", Some("Aile Bireyi".to_string()))
-        .await;
+        .await
+        .expect("invitation persisted");
     assert!(res.token.starts_with("SP-HANE-"));
     assert!(res.invite_url.contains("units/d-14?token="));
     assert!(res.security_notice.contains("A Blok D:14 yetkisi tanımlar"));
@@ -313,7 +330,8 @@ async fn when_registering_home_resident_then_assigns_home_resident_role_and_unit
 
     let invite = service
         .generate_unit_invite_link("d-14", Some("Kardeş".to_string()))
-        .await;
+        .await
+        .expect("invitation persisted");
 
     let req = RegisterHomeResidentRequest {
         token: invite.token,
@@ -337,7 +355,10 @@ async fn when_duplicate_email_for_home_resident_then_throws_exception() {
     let state = AppState::new();
     let service = HomeResidentInvitationService::new(state);
 
-    let invite = service.generate_unit_invite_link("d-14", None).await;
+    let invite = service
+        .generate_unit_invite_link("d-14", None)
+        .await
+        .expect("invitation persisted");
 
     let req = RegisterHomeResidentRequest {
         token: invite.token,
@@ -358,7 +379,8 @@ async fn when_valid_password_registration_then_can_authenticate() {
     let state = AppState::new();
     let invite = HomeResidentInvitationService::new(state.clone())
         .generate_unit_invite_link("d-14", None)
-        .await;
+        .await
+        .expect("invitation persisted");
     let service = AuthService::new(state);
 
     let reg_req = RegisterUserRequest {
@@ -381,7 +403,10 @@ async fn when_valid_password_registration_then_can_authenticate() {
     assert_eq!(reg_res.user.unit_id, "d-14");
     let claims =
         sitepulse_backend::auth::verify_token(&reg_res.access_token).expect("signed token");
-    assert_eq!(claims.unit_id.as_deref(), Some("d-14"));
+    assert!(
+        claims.unit_id.is_none(),
+        "access credentials carry no cached resource authority"
+    );
 
     // The invite token is single-use.
     let replay = service
@@ -430,7 +455,8 @@ async fn when_valid_google_id_token_then_authenticates_and_links_account() {
     let state = AppState::new();
     let invite = HomeResidentInvitationService::new(state.clone())
         .generate_unit_invite_link("d-14", None)
-        .await;
+        .await
+        .expect("invitation persisted");
     let service = AuthService::new(state);
 
     let req = GoogleLoginRequest {
@@ -452,8 +478,8 @@ fn when_resident_role_then_has_unit_restricted_permissions() {
     let permissions = Permission::permissions_for_role(Role::HomeResident);
     assert!(permissions.contains(&Permission::UnitRead));
     assert!(permissions.contains(&Permission::UnitPay));
-    assert!(permissions.contains(&Permission::UnitInviteCoResident));
-    assert!(permissions.contains(&Permission::UnitManageHousehold));
+    assert!(!permissions.contains(&Permission::UnitInviteCoResident));
+    assert!(!permissions.contains(&Permission::UnitManageHousehold));
     assert!(!permissions.contains(&Permission::SiteManage));
     assert!(!permissions.contains(&Permission::LedgerManageAll));
     assert!(!permissions.contains(&Permission::TenantManage));
@@ -1041,10 +1067,18 @@ fn when_unit_created_then_generates_unique_sanal_iban() {
 
 #[tokio::test]
 async fn when_probing_kuveyt_turk_sandbox_status_then_reports_keys_loaded() {
-    let state = AppState::new();
-    let status_json =
-        sitepulse_backend::handlers::get_kuveyt_turk_status(axum::extract::State(state.clone()))
-            .await;
+    let directory =
+        std::env::temp_dir().join(format!("sitepulse-key-presence-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&directory).unwrap();
+    let private = directory.join("private.asc");
+    let public = directory.join("public.asc");
+    std::fs::write(&private, "test-only key presence fixture").unwrap();
+    std::fs::write(&public, "test-only key presence fixture").unwrap();
+    let mut service = sitepulse_backend::services::KuveytTurkSandboxService::new();
+    service.private_key_path = private.to_string_lossy().into_owned();
+    service.public_key_path = public.to_string_lossy().into_owned();
+    let status_json = service.get_config_status(None);
+    std::fs::remove_dir_all(directory).unwrap();
     assert!(status_json.is_sandbox);
     assert_eq!(
         status_json.identity_url,
@@ -1054,40 +1088,9 @@ async fn when_probing_kuveyt_turk_sandbox_status_then_reports_keys_loaded() {
         status_json.gateway_url,
         "https://prep-gateway.kuveytturk.com.tr"
     );
-    // Keys live in backend/keys/, which is git-ignored, so they never exist in
-    // a clean checkout. Assert presence only where keys are provisioned
-    // (SITEPULSE_REQUIRE_KT_KEYS=1); otherwise report the skip explicitly.
-    if std::env::var("SITEPULSE_REQUIRE_KT_KEYS").as_deref() == Ok("1") {
-        assert!(status_json.private_key_present);
-        assert!(status_json.public_key_present);
-    } else if !(status_json.private_key_present && status_json.public_key_present) {
-        eprintln!(
-            "SKIPPED key-presence assertions: Kuveyt Türk sandbox keys are not provisioned \
-             (set SITEPULSE_REQUIRE_KT_KEYS=1 to require them)."
-        );
-    }
-}
-
-#[test]
-fn when_kuveyt_turk_key_files_exist_then_key_status_reports_them_loaded() {
-    use sitepulse_backend::services::kuveyt_turk_service::KuveytTurkSandboxService;
-    let dir = std::env::temp_dir().join(format!("sitepulse-kt-keys-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let private_path = dir.join("kt-private-key.asc");
-    let public_path = dir.join("kt-public-key.asc");
-    let svc = KuveytTurkSandboxService {
-        identity_base_url: KuveytTurkSandboxService::DEFAULT_PREP_IDENTITY.to_string(),
-        gateway_base_url: KuveytTurkSandboxService::DEFAULT_PREP_GATEWAY.to_string(),
-        private_key_path: private_path.to_string_lossy().into_owned(),
-        public_key_path: public_path.to_string_lossy().into_owned(),
-    };
-    assert_eq!(svc.get_key_status(), (false, false));
-    std::fs::write(&private_path, "test private key").unwrap();
-    std::fs::write(&public_path, "test public key").unwrap();
-    assert_eq!(svc.get_key_status(), (true, true));
-    let status = svc.get_config_status(None);
-    assert!(status.private_key_present && status.public_key_present);
-    std::fs::remove_dir_all(&dir).unwrap();
+    // Presence checks use isolated fixtures, never real banking credentials.
+    assert!(status_json.private_key_present);
+    assert!(status_json.public_key_present);
 }
 
 #[tokio::test]
@@ -3191,7 +3194,8 @@ async fn when_tenant_pays_with_capital_dues_keyword_then_routes_to_capital_and_m
     assert!(receipt
         .legal_statutory_note
         .unwrap()
-        .contains("TBK Madde 314"));
+        .contains("TBK md. 314"));
+
     assert_eq!(receipt.verification_hash.len(), 64);
     let capital_line = receipt
         .allocation_breakdown
