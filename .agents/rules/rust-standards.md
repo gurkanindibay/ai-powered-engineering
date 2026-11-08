@@ -30,3 +30,5 @@ When modifying, generating, or reviewing Rust source code in this workspace:
 7. **One Rule, One Place:** Reuse `src/domain/` (`apportion`, `fold_turkish`, `TrIban`, `NormalizedEmail`, `fingerprint`) instead of re-implementing a rule inline. A rule needed in a second place moves to `src/domain/` first.
 8. **Persisted Contracts:** Never change the output of a stored or hashed value (virtual IBANs, slugs, payload/receipt hashes) in place; version it and pin it with a golden test.
 9. **Ratchet, Never Raise:** The counts in `apps/development-time/SitePulse/scripts/rust_standards_baseline.json` (unwrap, expect, String errors, pool branches, unformatted files) may only go down.
+10. **Structured Tracing:** Follow [docs/LOGGING_STANDARDS.md](file:///docs/LOGGING_STANDARDS.md). Zero `println!`, `eprintln!`, or `dbg!`. Use `tracing::` macros with structured key-value fields and pass `scripts/logging_standards_lint.py`.
+

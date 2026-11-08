@@ -185,10 +185,7 @@ pub fn debtor_user<'a>(
     } else {
         unit.owner_user_id.as_ref()
     }?;
-    inner
-        .users
-        .iter()
-        .find(|u| crate::auth::same_id(&u.id, id))
+    inner.users.iter().find(|u| crate::auth::same_id(&u.id, id))
 }
 
 pub fn debtor_name(inner: &AppStateInner, unit: &IndependentUnit, debtor: &str) -> String {

@@ -791,9 +791,10 @@ pub async fn remember_sender_iban(
         ));
     }
     if !inner.units.iter().any(|u| u.id == payload.unit_id) {
-        return Err(crate::error::AppError::not_found(
-            format!("Unit '{}' not found in this site.", payload.unit_id),
-        ));
+        return Err(crate::error::AppError::not_found(format!(
+            "Unit '{}' not found in this site.",
+            payload.unit_id
+        )));
     }
 
     inner
@@ -841,7 +842,9 @@ pub async fn get_unit_matching_criteria(
         .units
         .iter()
         .find(|u| u.id == unit_id)
-        .ok_or_else(|| crate::error::AppError::not_found(format!("Unit '{}' not found", unit_id)))?;
+        .ok_or_else(|| {
+            crate::error::AppError::not_found(format!("Unit '{}' not found", unit_id))
+        })?;
 
     let owner_name = unit
         .owner_user_id
@@ -903,9 +906,10 @@ pub async fn add_unit_sender_iban(
     {
         let mut inner = state.inner.write().await;
         if !inner.units.iter().any(|u| u.id == unit_id) {
-            return Err(crate::error::AppError::not_found(
-                format!("Unit '{}' not found", unit_id),
-            ));
+            return Err(crate::error::AppError::not_found(format!(
+                "Unit '{}' not found",
+                unit_id
+            )));
         }
 
         inner
@@ -981,9 +985,10 @@ pub async fn update_unit_payer_names(
     {
         let mut inner = state.inner.write().await;
         if !inner.units.iter().any(|u| u.id == unit_id) {
-            return Err(crate::error::AppError::not_found(
-                format!("Unit '{}' not found", unit_id),
-            ));
+            return Err(crate::error::AppError::not_found(format!(
+                "Unit '{}' not found",
+                unit_id
+            )));
         }
 
         inner

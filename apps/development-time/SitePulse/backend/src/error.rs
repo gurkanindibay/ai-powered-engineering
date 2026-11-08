@@ -99,53 +99,78 @@ impl AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let trace_id = format!("req-{}", uuid::Uuid::new_v4());
+        let trace_id = crate::audit::current_request_id()
+            .unwrap_or_else(|| format!("req-{}", uuid::Uuid::new_v4()));
         let timestamp = chrono::Utc::now();
 
         let (status, code, client_message, details) = match self {
-            AppError::Validation(msg, details) => (
-                StatusCode::BAD_REQUEST,
-                "VALIDATION_FAILED".to_string(),
-                msg,
-                details,
-            ),
-            AppError::NotFound(msg) => (
-                StatusCode::NOT_FOUND,
-                "RESOURCE_NOT_FOUND".to_string(),
-                msg,
-                None,
-            ),
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, "CONFLICT".to_string(), msg, None),
-            AppError::Unauthorized(msg) => (
-                StatusCode::UNAUTHORIZED,
-                "AUTHENTICATION_REQUIRED".to_string(),
-                msg,
-                None,
-            ),
-            AppError::Forbidden(msg) => (
-                StatusCode::FORBIDDEN,
-                "PERMISSION_DENIED".to_string(),
-                msg,
-                None,
-            ),
-            AppError::BusinessRule(msg) => (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "BUSINESS_RULE_VIOLATION".to_string(),
-                msg,
-                None,
-            ),
-            AppError::RateLimited => (
-                StatusCode::TOO_MANY_REQUESTS,
-                "RATE_LIMITED".to_string(),
-                "Too many authentication attempts. Please wait before retrying.".to_string(),
-                None,
-            ),
-            AppError::Unavailable(msg) => (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "SERVICE_UNAVAILABLE".to_string(),
-                msg,
-                None,
-            ),
+            AppError::Validation(msg, details) => {
+                tracing::warn!(trace_id = %trace_id, error = %msg, "Validation rejection");
+                (
+                    StatusCode::BAD_REQUEST,
+                    "VALIDATION_FAILED".to_string(),
+                    msg,
+                    details,
+                )
+            }
+            AppError::NotFound(msg) => {
+                tracing::warn!(trace_id = %trace_id, error = %msg, "Resource not found");
+                (
+                    StatusCode::NOT_FOUND,
+                    "RESOURCE_NOT_FOUND".to_string(),
+                    msg,
+                    None,
+                )
+            }
+            AppError::Conflict(msg) => {
+                tracing::warn!(trace_id = %trace_id, error = %msg, "Conflict rejection");
+                (StatusCode::CONFLICT, "CONFLICT".to_string(), msg, None)
+            }
+            AppError::Unauthorized(msg) => {
+                tracing::warn!(trace_id = %trace_id, error = %msg, "Authentication required");
+                (
+                    StatusCode::UNAUTHORIZED,
+                    "AUTHENTICATION_REQUIRED".to_string(),
+                    msg,
+                    None,
+                )
+            }
+            AppError::Forbidden(msg) => {
+                tracing::warn!(trace_id = %trace_id, error = %msg, "Permission denied");
+                (
+                    StatusCode::FORBIDDEN,
+                    "PERMISSION_DENIED".to_string(),
+                    msg,
+                    None,
+                )
+            }
+            AppError::BusinessRule(msg) => {
+                tracing::warn!(trace_id = %trace_id, error = %msg, "Business rule violation");
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "BUSINESS_RULE_VIOLATION".to_string(),
+                    msg,
+                    None,
+                )
+            }
+            AppError::RateLimited => {
+                tracing::warn!(trace_id = %trace_id, "Rate limit exceeded");
+                (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "RATE_LIMITED".to_string(),
+                    "Too many authentication attempts. Please wait before retrying.".to_string(),
+                    None,
+                )
+            }
+            AppError::Unavailable(msg) => {
+                tracing::warn!(trace_id = %trace_id, error = %msg, "Service unavailable");
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "SERVICE_UNAVAILABLE".to_string(),
+                    msg,
+                    None,
+                )
+            }
             AppError::Internal(msg) => {
                 tracing::error!(trace_id = %trace_id, error = %msg, "Internal server error occurred");
                 (
@@ -171,12 +196,16 @@ impl IntoResponse for AppError {
                 code,
                 message: client_message,
                 details,
-                trace_id,
+                trace_id: trace_id.clone(),
                 timestamp,
             },
         };
 
         let mut res = (status, Json(body)).into_response();
+        if let Ok(value) = axum::http::HeaderValue::from_str(&trace_id) {
+            res.headers_mut()
+                .insert(axum::http::HeaderName::from_static("x-request-id"), value);
+        }
         if status == StatusCode::UNAUTHORIZED {
             res.headers_mut().insert(
                 axum::http::header::WWW_AUTHENTICATE,

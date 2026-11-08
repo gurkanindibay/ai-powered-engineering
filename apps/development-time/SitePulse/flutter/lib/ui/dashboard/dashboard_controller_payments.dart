@@ -14,7 +14,7 @@ extension DashboardControllerPayments on DashboardController {
         notify();
       }
     } catch (e) {
-      debugPrint('Matching criteria fetch error: $e');
+      AppLogger.warn('Matching criteria fetch error', tag: 'PaymentsController', error: e);
     }
   }
 
@@ -46,7 +46,7 @@ extension DashboardControllerPayments on DashboardController {
         return;
       }
     } catch (e) {
-      debugPrint('addSenderIbanToUnit remote error: $e');
+      AppLogger.warn('addSenderIbanToUnit remote error', tag: 'PaymentsController', error: e);
     }
 
     // Local fallback
@@ -80,7 +80,7 @@ extension DashboardControllerPayments on DashboardController {
         return;
       }
     } catch (e) {
-      debugPrint('deleteSenderIbanFromUnit remote error: $e');
+      AppLogger.warn('deleteSenderIbanFromUnit remote error', tag: 'PaymentsController', error: e);
     }
 
     // Local fallback
@@ -111,7 +111,7 @@ extension DashboardControllerPayments on DashboardController {
         return;
       }
     } catch (e) {
-      debugPrint('updateUnitPayerNames remote error: $e');
+      AppLogger.warn('updateUnitPayerNames remote error', tag: 'PaymentsController', error: e);
     }
 
     // Local fallback
@@ -153,7 +153,7 @@ extension DashboardControllerPayments on DashboardController {
           return _paymentStream!;
         }
       } catch (e) {
-        debugPrint('fetchPaymentStream error: $e');
+        AppLogger.warn('fetchPaymentStream error', tag: 'PaymentsController', error: e);
       }
     }
 
@@ -243,7 +243,7 @@ extension DashboardControllerPayments on DashboardController {
           return _debtAgingReport!;
         }
       } catch (e) {
-        debugPrint('fetchDebtAgingReport error: $e');
+        AppLogger.warn('fetchDebtAgingReport error', tag: 'PaymentsController', error: e);
       }
     }
 
@@ -306,9 +306,13 @@ extension DashboardControllerPayments on DashboardController {
           await fetchDebtAgingReport(siteId: effectiveSiteId);
           return receipt;
         }
-        debugPrint('recordManualPayment rejected: ${response.statusCode} ${utf8.decode(response.bodyBytes)}');
+        AppLogger.warn(
+          'recordManualPayment rejected',
+          tag: 'PaymentsController',
+          context: {'status': response.statusCode},
+        );
       } catch (e) {
-        debugPrint('recordManualPayment error: $e');
+        AppLogger.error('recordManualPayment error', tag: 'PaymentsController', error: e);
       }
       // Never show a receipt for a payment the server did not confirm.
       return null;
@@ -363,9 +367,13 @@ extension DashboardControllerPayments on DashboardController {
           await fetchDebtAgingReport(siteId: effectiveSiteId);
           return res;
         }
-        debugPrint('executeInterLedgerTransfer rejected: ${response.statusCode}');
+        AppLogger.warn(
+          'executeInterLedgerTransfer rejected',
+          tag: 'PaymentsController',
+          context: {'status': response.statusCode},
+        );
       } catch (e) {
-        debugPrint('executeInterLedgerTransfer error: $e');
+        AppLogger.error('executeInterLedgerTransfer error', tag: 'PaymentsController', error: e);
       }
       return null;
     }
@@ -391,7 +399,7 @@ extension DashboardControllerPayments on DashboardController {
           return _selectedReceipt;
         }
       } catch (e) {
-        debugPrint('fetchReceipt error: $e');
+        AppLogger.warn('fetchReceipt error', tag: 'PaymentsController', error: e);
       }
       return null;
     }

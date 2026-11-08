@@ -174,8 +174,12 @@ pub fn compute_unit_shares(
 ) -> Vec<OperatingBudgetUnitShare> {
     let mut annual = vec![Decimal::ZERO; units.len()];
     for line in lines {
-        let weights: Vec<i64> = line_weights(inner, units, line)
-            .unwrap_or_else(|_| units.iter().map(|u| i64::from(u.land_share.max(1))).collect());
+        let weights: Vec<i64> = line_weights(inner, units, line).unwrap_or_else(|_| {
+            units
+                .iter()
+                .map(|u| i64::from(u.land_share.max(1)))
+                .collect()
+        });
         for (i, part) in allocate_by_weight(line.annual_amount, &weights)
             .into_iter()
             .enumerate()
@@ -1010,7 +1014,10 @@ pub fn line_weights(
                     })
             })
             .collect::<BudgetResult<_>>()?,
-        _ => units.iter().map(|u| i64::from(u.land_share.max(1))).collect(),
+        _ => units
+            .iter()
+            .map(|u| i64::from(u.land_share.max(1)))
+            .collect(),
     };
     if weights.iter().sum::<i64>() <= 0 {
         return Err(BudgetError::Invalid(format!(

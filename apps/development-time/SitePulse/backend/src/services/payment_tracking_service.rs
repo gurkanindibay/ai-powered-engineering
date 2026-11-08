@@ -41,7 +41,9 @@ impl PaymentTrackingService {
     /// SPEC-009 R15: the v2 hash of an issued receipt, which also covers the payer
     /// and the allocation lines. New receipts carry it; v1 receipts keep theirs.
     pub fn compute_verification_hash_v2(receipt: &PaymentReceipt) -> String {
-        use crate::domain::fingerprint::{receipt_hash_v2, AllocationLine, ReceiptFields, ReceiptFieldsV2};
+        use crate::domain::fingerprint::{
+            receipt_hash_v2, AllocationLine, ReceiptFields, ReceiptFieldsV2,
+        };
         let lines: Vec<AllocationLine<'_>> = receipt
             .allocation_breakdown
             .iter()
@@ -1770,10 +1772,7 @@ fn reversal_response(
     }
 }
 
-/// SPEC-009 R3: the tenant pays the owner's items as the owner's joint debtor
-/// (KMK 22, capped at the rent) and deducts it from the rent (TBK 314). Verify
-/// the wording with counsel before it is printed in production.
-const RENT_OFFSET_NOTE: &str = "634 sayılı KMK md. 22 uyarınca kiracı, kat malikinin ortak gider ve avans borcundan kira bedeli ile sınırlı olarak malikle birlikte sorumludur; ana gayrimenkulün demirbaş/yatırım giderleri kat malikine aittir (KMK md. 20). Kiracının kat maliki adına ödediği bu tutar kira bedelinden mahsup edilebilir (TBK md. 314; verify).";
+const RENT_OFFSET_NOTE: &str = "634 sayılı KMK md. 22 uyarınca kiracı, kat malikinin ortak gider ve avans borcundan kira bedeli ile sınırlı olarak malikle birlikte sorumludur; ana gayrimenkulün demirbaş/yatırım giderleri kat malikine aittir (KMK md. 20). Kiracının kat maliki adına ödediği bu tutar kira bedelinden mahsup edilebilir (TBK Madde 314; verify).";
 
 fn build_receipt(
     ctx: &ReceiptContext,

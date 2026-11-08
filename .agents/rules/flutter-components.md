@@ -36,6 +36,8 @@ When creating, modifying or reviewing Dart code under `apps/development-time/Sit
 4. **Tokens:** use `AppSpacing`, `AppRadius`, theme text styles and `SpTone` in new code. Do not
    raise the `ui-style-lint` ratchet.
 5. **Keep automation ids:** pass the existing keys and `testId`s through shared components.
+6. **Logging:** Follow [docs/LOGGING_STANDARDS.md](file:///docs/LOGGING_STANDARDS.md). Use `AppLogger` (`lib/domain/logging/app_logger.dart`) for structured logging. Never use raw `print()`, and avoid unstructured `debugPrint()`. Pass `traceId` / context when logging errors.
+
 
 ### For Tester Agent (The Checker)
 1. Reject changes that duplicate a catalogue entry or bypass the money, clipboard or feedback

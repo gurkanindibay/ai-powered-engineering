@@ -46,7 +46,10 @@ fn meeting_view(inner: &AppStateInner, m: &AssemblyMeeting) -> MeetingView {
         .cloned()
         .collect();
     let present_units = u64::try_from(attendance.len()).unwrap_or(0);
-    let present_share: u64 = attendance.iter().map(|a| land_share_of(inner, &a.unit_id)).sum();
+    let present_share: u64 = attendance
+        .iter()
+        .map(|a| land_share_of(inner, &a.unit_id))
+        .sum();
     let mut agenda: Vec<AssemblyAgendaItem> = inner
         .finance
         .agenda_items
@@ -87,12 +90,21 @@ impl AssemblyService {
         }
     }
 
-    pub async fn create_meeting(&self, caller: &Caller, req: CreateMeetingRequest) -> FinanceResult<MeetingView> {
+    pub async fn create_meeting(
+        &self,
+        caller: &Caller,
+        req: CreateMeetingRequest,
+    ) -> FinanceResult<MeetingView> {
         let location = non_empty(&req.location, 3, "location")?;
         if req.agenda.is_empty() {
             return Err(invalid("A meeting needs at least one agenda item"));
         }
-        let kind = req.kind.as_deref().unwrap_or("ORDINARY").trim().to_ascii_uppercase();
+        let kind = req
+            .kind
+            .as_deref()
+            .unwrap_or("ORDINARY")
+            .trim()
+            .to_ascii_uppercase();
         if !matches!(kind.as_str(), "ORDINARY" | "EXTRAORDINARY") {
             return Err(invalid("kind must be ORDINARY or EXTRAORDINARY"));
         }
@@ -102,15 +114,15 @@ impl AssemblyService {
         }
         let mut items = Vec::new();
         for (i, a) in req.agenda.iter().enumerate() {
-            let rule = VoteRule::parse(a.rule.as_deref().unwrap_or("SIMPLE")).map_err(|e| invalid(e.to_string()))?;
+            let rule = VoteRule::parse(a.rule.as_deref().unwrap_or("SIMPLE"))
+                .map_err(|e| invalid(e.to_string()))?;
             if let Some(ref b) = a.linked_budget_id {
                 let ok = self
                     .store
                     .read(|inner| {
-                        inner
-                            .operating_budgets
-                            .iter()
-                            .any(|x| x.id == *b && crate::auth::same_id(&x.site_id, &caller.site_id))
+                        inner.operating_budgets.iter().any(|x| {
+                            x.id == *b && crate::auth::same_id(&x.site_id, &caller.site_id)
+                        })
                     })
                     .await;
                 if !ok {
@@ -143,7 +155,9 @@ impl AssemblyService {
         };
         let (meeting, _) = self
             .store
-            .insert_with_children(meeting, col::meetings, items, col::agenda_items, |c, id| c.meeting_id = id)
+            .insert_with_children(meeting, col::meetings, items, col::agenda_items, |c, id| {
+                c.meeting_id = id
+            })
             .await?;
         Ok(self.store.read(|inner| meeting_view(inner, &meeting)).await)
     }
@@ -182,7 +196,12 @@ impl AssemblyService {
     }
 
     /// Records who attended; the meeting is HELD with a quorum, else NO_QUORUM.
-    pub async fn record_attendance(&self, caller: &Caller, id: i64, req: RecordAttendanceRequest) -> FinanceResult<MeetingView> {
+    pub async fn record_attendance(
+        &self,
+        caller: &Caller,
+        id: i64,
+        req: RecordAttendanceRequest,
+    ) -> FinanceResult<MeetingView> {
         let mut meeting = self.find_meeting(&caller.site_id, id).await?;
         if meeting.status == "CANCELLED" {
             return Err(conflict("The meeting was cancelled"));
@@ -210,8 +229,16 @@ impl AssemblyService {
             };
             self.store.upsert(row, col::attendance).await?;
         }
-        let quorum = self.store.read(|inner| meeting_view(inner, &meeting).quorum).await;
-        meeting.status = if quorum.has_quorum { "HELD" } else { "NO_QUORUM" }.to_string();
+        let quorum = self
+            .store
+            .read(|inner| meeting_view(inner, &meeting).quorum)
+            .await;
+        meeting.status = if quorum.has_quorum {
+            "HELD"
+        } else {
+            "NO_QUORUM"
+        }
+        .to_string();
         meeting.held_on = Some(
             req.held_on
                 .unwrap_or_else(|| meeting.scheduled_at.date_naive()),
@@ -220,11 +247,18 @@ impl AssemblyService {
         Ok(self.store.read(|inner| meeting_view(inner, &meeting)).await)
     }
 
-    pub async fn cast_votes(&self, caller: &Caller, item_id: i64, req: CastVotesRequest) -> FinanceResult<Vec<AssemblyVote>> {
+    pub async fn cast_votes(
+        &self,
+        caller: &Caller,
+        item_id: i64,
+        req: CastVotesRequest,
+    ) -> FinanceResult<Vec<AssemblyVote>> {
         let item = self.open_item(&caller.site_id, item_id).await?;
         let meeting = self.find_meeting(&caller.site_id, item.meeting_id).await?;
         if meeting.status != "HELD" {
-            return Err(conflict("Votes are cast in a meeting that was held with a quorum"));
+            return Err(conflict(
+                "Votes are cast in a meeting that was held with a quorum",
+            ));
         }
         let mut out = Vec::new();
         for v in req.votes {
@@ -233,22 +267,26 @@ impl AssemblyService {
                 .store
                 .read(|inner| {
                     let unit = find_unit(inner, &caller.site_id, &v.unit_id)?;
-                    let present = inner
-                        .finance
-                        .attendance
-                        .iter()
-                        .any(|a| a.meeting_id == meeting.id && crate::auth::same_id(&a.unit_id, &unit.id));
+                    let present = inner.finance.attendance.iter().any(|a| {
+                        a.meeting_id == meeting.id && crate::auth::same_id(&a.unit_id, &unit.id)
+                    });
                     let existing = inner
                         .finance
                         .votes
                         .iter()
-                        .find(|x| x.agenda_item_id == item_id && crate::auth::same_id(&x.unit_id, &unit.id))
+                        .find(|x| {
+                            x.agenda_item_id == item_id
+                                && crate::auth::same_id(&x.unit_id, &unit.id)
+                        })
                         .map(|x| x.id);
                     Ok::<_, FinanceError>((unit.id, existing, present))
                 })
                 .await?;
             if !present {
-                return Err(conflict(format!("Unit {} did not attend; it cannot vote", v.unit_id)));
+                return Err(conflict(format!(
+                    "Unit {} did not attend; it cannot vote",
+                    v.unit_id
+                )));
             }
             let row = AssemblyVote {
                 id: existing.unwrap_or(0),
@@ -265,13 +303,17 @@ impl AssemblyService {
         let item = self
             .store
             .read(|inner| {
-                inner.finance.agenda_items.iter().find(|a| a.id == item_id).cloned().filter(|a| {
-                    inner
-                        .finance
-                        .meetings
-                        .iter()
-                        .any(|m| m.id == a.meeting_id && crate::auth::same_id(&m.site_id, site_id))
-                })
+                inner
+                    .finance
+                    .agenda_items
+                    .iter()
+                    .find(|a| a.id == item_id)
+                    .cloned()
+                    .filter(|a| {
+                        inner.finance.meetings.iter().any(|m| {
+                            m.id == a.meeting_id && crate::auth::same_id(&m.site_id, site_id)
+                        })
+                    })
             })
             .await
             .ok_or_else(|| not_found(format!("Agenda item {} not found", item_id)))?;
@@ -294,24 +336,40 @@ impl AssemblyService {
     }
 
     /// Tallies the votes, writes the decision and applies it to a linked budget.
-    pub async fn close_item(&self, caller: &Caller, item_id: i64, req: CloseAgendaItemRequest) -> FinanceResult<AssemblyDecision> {
+    pub async fn close_item(
+        &self,
+        caller: &Caller,
+        item_id: i64,
+        req: CloseAgendaItemRequest,
+    ) -> FinanceResult<AssemblyDecision> {
         let text = non_empty(&req.decision_text, 5, "decision_text")?;
         let mut item = self.open_item(&caller.site_id, item_id).await?;
         let meeting = self.find_meeting(&caller.site_id, item.meeting_id).await?;
         if meeting.status != "HELD" {
-            return Err(conflict("Only a meeting held with a quorum takes decisions"));
+            return Err(conflict(
+                "Only a meeting held with a quorum takes decisions",
+            ));
         }
         let rule = VoteRule::parse(&item.rule).map_err(|e| invalid(e.to_string()))?;
         let (tally, e, number) = self
             .store
             .read(|inner| {
                 let mut tally = Tally::default();
-                for v in inner.finance.votes.iter().filter(|v| v.agenda_item_id == item_id) {
+                for v in inner
+                    .finance
+                    .votes
+                    .iter()
+                    .filter(|v| v.agenda_item_id == item_id)
+                {
                     if let Ok(vote) = Vote::parse(&v.vote) {
                         tally.add(vote, land_share_of(inner, &v.unit_id));
                     }
                 }
-                (tally, electorate(inner, &caller.site_id), Self::next_decision_number(inner, &caller.site_id))
+                (
+                    tally,
+                    electorate(inner, &caller.site_id),
+                    Self::next_decision_number(inner, &caller.site_id),
+                )
             })
             .await;
         let accepted = passes(rule, tally, e);
@@ -346,8 +404,17 @@ impl AssemblyService {
     }
 
     /// A decision taken outside the app (copied from the paper karar defteri).
-    pub async fn record_decision(&self, caller: &Caller, req: RecordDecisionRequest) -> FinanceResult<AssemblyDecision> {
-        let outcome = req.outcome.as_deref().unwrap_or("ACCEPTED").trim().to_ascii_uppercase();
+    pub async fn record_decision(
+        &self,
+        caller: &Caller,
+        req: RecordDecisionRequest,
+    ) -> FinanceResult<AssemblyDecision> {
+        let outcome = req
+            .outcome
+            .as_deref()
+            .unwrap_or("ACCEPTED")
+            .trim()
+            .to_ascii_uppercase();
         if !matches!(outcome.as_str(), "ACCEPTED" | "REJECTED") {
             return Err(invalid("outcome must be ACCEPTED or REJECTED"));
         }
@@ -385,7 +452,11 @@ impl AssemblyService {
         Ok(decision)
     }
 
-    async fn apply_to_budget(&self, caller: &Caller, decision: &AssemblyDecision) -> FinanceResult<()> {
+    async fn apply_to_budget(
+        &self,
+        caller: &Caller,
+        decision: &AssemblyDecision,
+    ) -> FinanceResult<()> {
         let Some(ref budget_id) = decision.linked_budget_id else {
             return Ok(());
         };
@@ -401,7 +472,9 @@ impl AssemblyService {
             )
             .await
             .map_err(|e| conflict(e.to_string()))?;
-        self.store.set_budget_decision(budget_id, decision.id).await?;
+        self.store
+            .set_budget_decision(budget_id, decision.id)
+            .await?;
         Ok(())
     }
 

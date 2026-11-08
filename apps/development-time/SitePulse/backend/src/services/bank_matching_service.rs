@@ -63,7 +63,12 @@ pub fn feed_for(provider: &str) -> Result<Box<dyn BankFeed>, FeedError> {
     }
 }
 
-fn add_candidate(list: &mut Vec<(String, u32, Vec<String>)>, unit: &str, score: u32, reason: String) {
+fn add_candidate(
+    list: &mut Vec<(String, u32, Vec<String>)>,
+    unit: &str,
+    score: u32,
+    reason: String,
+) {
     match list.iter_mut().find(|c| c.0 == unit) {
         Some(c) => {
             c.1 = c.1.max(score).saturating_add(5).min(99);
@@ -83,7 +88,11 @@ fn open_amount(inner: &AppStateInner, unit_id: &str) -> Decimal {
 }
 
 /// The ledger's bank movement on one day, as individual items (amount, reference).
-fn ledger_bank_items(inner: &AppStateInner, site_id: &str, day: NaiveDate) -> Vec<(Decimal, String)> {
+fn ledger_bank_items(
+    inner: &AppStateInner,
+    site_id: &str,
+    day: NaiveDate,
+) -> Vec<(Decimal, String)> {
     let mut items = Vec::new();
     for r in inner.payment_receipts.iter().filter(|r| {
         crate::auth::same_id(&r.site_id, site_id)
@@ -150,7 +159,11 @@ impl BankMatchingService {
     }
 
     /// Ranks candidate units for each transfer.
-    pub async fn suggest(&self, site_id: &str, req: MatchRequest) -> FinanceResult<Vec<MatchSuggestion>> {
+    pub async fn suggest(
+        &self,
+        site_id: &str,
+        req: MatchRequest,
+    ) -> FinanceResult<Vec<MatchSuggestion>> {
         let mut out = Vec::with_capacity(req.transfers.len());
         for t in req.transfers {
             let hints = payer_match::extract(&t.description);
@@ -160,66 +173,98 @@ impl BankMatchingService {
                     add_candidate(&mut candidates, &unit, 95, "T.C. Kimlik No".into());
                 }
             }
-            let rows = self
-                .store
-                .read(|inner| {
-                    let mut local: Vec<(String, u32, Vec<String>)> = Vec::new();
-                    for unit in site_units(inner, site_id) {
-                        for debtor in [dues_ledger::DEBTOR_OWNER, dues_ledger::DEBTOR_TENANT] {
-                            let Some(user) = debtor_user(inner, unit, debtor) else { continue };
-                            if let (Some(m), Some(phone)) =
-                                (hints.mobile.as_deref(), payer_match::normalize_mobile(&user.phone))
-                            {
-                                if m == phone {
-                                    add_candidate(&mut local, &unit.id, 85, format!("telefon ({})", debtor));
+            let rows =
+                self.store
+                    .read(|inner| {
+                        let mut local: Vec<(String, u32, Vec<String>)> = Vec::new();
+                        for unit in site_units(inner, site_id) {
+                            for debtor in [dues_ledger::DEBTOR_OWNER, dues_ledger::DEBTOR_TENANT] {
+                                let Some(user) = debtor_user(inner, unit, debtor) else {
+                                    continue;
+                                };
+                                if let (Some(m), Some(phone)) = (
+                                    hints.mobile.as_deref(),
+                                    payer_match::normalize_mobile(&user.phone),
+                                ) {
+                                    if m == phone {
+                                        add_candidate(
+                                            &mut local,
+                                            &unit.id,
+                                            85,
+                                            format!("telefon ({})", debtor),
+                                        );
+                                    }
+                                }
+                                if let Some(ref sender) = t.sender_name {
+                                    if !sender.trim().is_empty()
+                                        && fold_turkish(sender.trim())
+                                            == fold_turkish(user.full_name.trim())
+                                    {
+                                        add_candidate(
+                                            &mut local,
+                                            &unit.id,
+                                            50,
+                                            format!("gönderen adı ({})", debtor),
+                                        );
+                                    }
                                 }
                             }
-                            if let Some(ref sender) = t.sender_name {
-                                if !sender.trim().is_empty() && fold_turkish(sender.trim()) == fold_turkish(user.full_name.trim()) {
-                                    add_candidate(&mut local, &unit.id, 50, format!("gönderen adı ({})", debtor));
+                            if let Some((ref block, number)) = hints.block_unit {
+                                let label = fold_turkish(&inner.block_label(&unit.block_id));
+                                let letter = label
+                                    .chars()
+                                    .next()
+                                    .map(|c| c.to_ascii_uppercase().to_string());
+                                if unit.unit_number == number
+                                    && letter.as_deref() == Some(block.as_str())
+                                {
+                                    add_candidate(&mut local, &unit.id, 60, "blok/daire".into());
+                                }
+                            }
+                            if let Some(names) = inner.unit_payer_names.get(&unit.id) {
+                                if let Some(ref sender) = t.sender_name {
+                                    if names.iter().any(|n| {
+                                        fold_turkish(n.trim()) == fold_turkish(sender.trim())
+                                    }) {
+                                        add_candidate(
+                                            &mut local,
+                                            &unit.id,
+                                            55,
+                                            "kayıtlı ödeyen adı".into(),
+                                        );
+                                    }
                                 }
                             }
                         }
-                        if let Some((ref block, number)) = hints.block_unit {
-                            let label = fold_turkish(&inner.block_label(&unit.block_id));
-                            let letter = label.chars().next().map(|c| c.to_ascii_uppercase().to_string());
-                            if unit.unit_number == number && letter.as_deref() == Some(block.as_str()) {
-                                add_candidate(&mut local, &unit.id, 60, "blok/daire".into());
+                        for (unit, score, reasons) in candidates.drain(..) {
+                            for r in reasons {
+                                add_candidate(&mut local, &unit, score, r);
                             }
                         }
-                        if let Some(names) = inner.unit_payer_names.get(&unit.id) {
-                            if let Some(ref sender) = t.sender_name {
-                                if names.iter().any(|n| fold_turkish(n.trim()) == fold_turkish(sender.trim())) {
-                                    add_candidate(&mut local, &unit.id, 55, "kayıtlı ödeyen adı".into());
+                        local
+                            .into_iter()
+                            .map(|(unit, mut score, reasons)| {
+                                let open = open_amount(inner, &unit);
+                                if open == t.amount && open > Decimal::ZERO {
+                                    score = (score + 10).min(99);
                                 }
-                            }
-                        }
-                    }
-                    for (unit, score, reasons) in candidates.drain(..) {
-                        for r in reasons {
-                            add_candidate(&mut local, &unit, score, r);
-                        }
-                    }
-                    local
-                        .into_iter()
-                        .map(|(unit, mut score, reasons)| {
-                            let open = open_amount(inner, &unit);
-                            if open == t.amount && open > Decimal::ZERO {
-                                score = (score + 10).min(99);
-                            }
-                            MatchCandidate {
-                                unit_label: label_of(inner, &unit),
-                                unit_id: unit,
-                                confidence: score,
-                                reasons,
-                                open_amount: open,
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .await;
+                                MatchCandidate {
+                                    unit_label: label_of(inner, &unit),
+                                    unit_id: unit,
+                                    confidence: score,
+                                    reasons,
+                                    open_amount: open,
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .await;
             let mut rows = rows;
-            rows.sort_by(|a, b| b.confidence.cmp(&a.confidence).then(a.unit_label.cmp(&b.unit_label)));
+            rows.sort_by(|a, b| {
+                b.confidence
+                    .cmp(&a.confidence)
+                    .then(a.unit_label.cmp(&b.unit_label))
+            });
             out.push(MatchSuggestion {
                 reference: t.reference,
                 amount: t.amount,
@@ -244,23 +289,33 @@ impl BankMatchingService {
             .await
     }
 
-    pub async fn create_feed(&self, caller: &Caller, req: CreateBankFeedRequest) -> FinanceResult<BankFeedConnection> {
+    pub async fn create_feed(
+        &self,
+        caller: &Caller,
+        req: CreateBankFeedRequest,
+    ) -> FinanceResult<BankFeedConnection> {
         let provider = req.provider.trim().to_ascii_uppercase();
         if !FEED_PROVIDERS.contains(&provider.as_str()) {
-            return Err(invalid(format!("provider must be one of {:?}", FEED_PROVIDERS)));
+            return Err(invalid(format!(
+                "provider must be one of {:?}",
+                FEED_PROVIDERS
+            )));
         }
         let iban = TrIban::parse(&req.account_iban).map_err(|e| invalid(e.to_string()))?;
         if let Some(ref c) = req.credential_ref {
             // A reference is a vault key such as `vault:sitepulse/site-1/bank`, never a password.
             if c.len() > 200 || c.contains(char::is_whitespace) {
-                return Err(invalid("credential_ref is a secret reference, not the secret itself"));
+                return Err(invalid(
+                    "credential_ref is a secret reference, not the secret itself",
+                ));
             }
         }
         let exists = self
             .store
             .read(|inner| {
                 inner.finance.bank_feeds.iter().any(|f| {
-                    crate::auth::same_id(&f.site_id, &caller.site_id) && f.account_iban == iban.as_str()
+                    crate::auth::same_id(&f.site_id, &caller.site_id)
+                        && f.account_iban == iban.as_str()
                 })
             })
             .await;
@@ -283,7 +338,11 @@ impl BankMatchingService {
 
     /// Fetches new lines from a feed (lines feed the reconciliation queue through
     /// the statement parser path in a later step) and records the sync outcome.
-    pub async fn sync_feed(&self, caller: &Caller, feed_id: i64) -> FinanceResult<(BankFeedConnection, usize)> {
+    pub async fn sync_feed(
+        &self,
+        caller: &Caller,
+        feed_id: i64,
+    ) -> FinanceResult<(BankFeedConnection, usize)> {
         let mut feed = self
             .store
             .read(|inner| {
@@ -322,7 +381,10 @@ impl BankMatchingService {
     ) -> FinanceResult<BankReconciliationRun> {
         for (i, l) in req.lines.iter().enumerate() {
             if l.amount.is_zero() || l.amount.scale() > 2 {
-                return Err(invalid(format!("line {}: amount must be non-zero with at most 2 decimals", i)));
+                return Err(invalid(format!(
+                    "line {}: amount must be non-zero with at most 2 decimals",
+                    i
+                )));
             }
         }
         let ledger = self
@@ -337,7 +399,9 @@ impl BankMatchingService {
         for line in &req.lines {
             let pos = unmatched_ledger
                 .iter()
-                .position(|(a, r)| *a == line.amount && line.reference.as_deref().is_none_or(|x| x == r))
+                .position(|(a, r)| {
+                    *a == line.amount && line.reference.as_deref().is_none_or(|x| x == r)
+                })
                 .or_else(|| unmatched_ledger.iter().position(|(a, _)| *a == line.amount));
             match pos {
                 Some(p) => {
@@ -383,7 +447,7 @@ impl BankMatchingService {
                     .filter(|r| crate::auth::same_id(&r.site_id, site_id))
                     .cloned()
                     .collect();
-                rows.sort_by(|a, b| b.business_date.cmp(&a.business_date));
+                rows.sort_by_key(|a| std::cmp::Reverse(a.business_date));
                 rows
             })
             .await

@@ -95,13 +95,10 @@ impl FinanceStore {
                 let mut inner = self.state.inner.write().await;
                 let book = &mut inner.finance;
                 let id = next_memory_id(parents(book));
-                parent.set_id(id);
-                parents(book).push(parent.clone());
-                let mut next = next_memory_id(kids(book));
-                for child in children.iter_mut() {
+                let start_id = next_memory_id(kids(book));
+                for (i, child) in children.iter_mut().enumerate() {
                     link(child, id);
-                    child.set_id(next);
-                    next += 1;
+                    child.set_id(start_id + i as i64);
                 }
                 kids(book).extend(children.iter().cloned());
             }
@@ -111,8 +108,8 @@ impl FinanceStore {
 
     /// Replaces a stored record (matched by id).
     pub async fn update<T: Record>(&self, record: T, collection: Collection<T>) -> DbResult<T> {
-        if let Some(pool) = self.pool() {
-            let client = pool.get().await?;
+        if let Some(p) = self.pool() {
+            let client = p.get().await?;
             rec::update(&**client, &record).await?;
         }
         let mut inner = self.state.inner.write().await;
@@ -135,8 +132,8 @@ impl FinanceStore {
 
     /// Deletes records by id.
     pub async fn delete<T: Record>(&self, ids: &[i64], collection: Collection<T>) -> DbResult<()> {
-        if let Some(pool) = self.pool() {
-            let client = pool.get().await?;
+        if let Some(p) = self.pool() {
+            let client = p.get().await?;
             for id in ids {
                 rec::delete::<T>(&**client, *id).await?;
             }
@@ -154,8 +151,8 @@ impl FinanceStore {
         principal: rust_decimal::Decimal,
         penalty: rust_decimal::Decimal,
     ) -> DbResult<()> {
-        if let Some(pool) = self.pool() {
-            let client = pool.get().await?;
+        if let Some(p) = self.pool() {
+            let client = p.get().await?;
             rec::apply_due_adjustment(&**client, due_id, principal, penalty).await?;
         }
         let mut inner = self.state.inner.write().await;
@@ -180,8 +177,8 @@ impl FinanceStore {
         site_id: &str,
         until: Option<chrono::NaiveDate>,
     ) -> DbResult<()> {
-        if let Some(pool) = self.pool() {
-            let client = pool.get().await?;
+        if let Some(p) = self.pool() {
+            let client = p.get().await?;
             rec::set_site_budget_transition(&**client, site_id, until).await?;
         }
         let mut inner = self.state.inner.write().await;
@@ -204,7 +201,11 @@ impl FinanceStore {
 
     /// Units whose owner or tenant has this national id (none without a database:
     /// national ids are never held in memory).
-    pub async fn units_by_national_id(&self, site_id: &str, national_id: &str) -> DbResult<Vec<String>> {
+    pub async fn units_by_national_id(
+        &self,
+        site_id: &str,
+        national_id: &str,
+    ) -> DbResult<Vec<String>> {
         match self.pool() {
             Some(pool) => {
                 let client = pool.get().await?;
@@ -242,7 +243,10 @@ impl FinanceStore {
     }
 
     /// Units of a site that have a tenant (the occupant pays operational costs).
-    pub async fn tenanted_units(&self, site_id: &str) -> DbResult<std::collections::HashSet<String>> {
+    pub async fn tenanted_units(
+        &self,
+        site_id: &str,
+    ) -> DbResult<std::collections::HashSet<String>> {
         match self.pool() {
             Some(pool) => super::tenanted_unit_ids(pool, site_id).await,
             None => Ok(self
@@ -259,8 +263,8 @@ impl FinanceStore {
     }
 
     pub async fn set_budget_decision(&self, budget_id: &str, decision_id: i64) -> DbResult<()> {
-        if let Some(pool) = self.pool() {
-            let client = pool.get().await?;
+        if let Some(p) = self.pool() {
+            let client = p.get().await?;
             rec::set_budget_decision(&**client, budget_id, decision_id).await?;
         }
         self.state
@@ -279,8 +283,8 @@ impl FinanceStore {
         installments: i32,
         save_card: bool,
     ) -> DbResult<()> {
-        if let Some(pool) = self.pool() {
-            let client = pool.get().await?;
+        if let Some(p) = self.pool() {
+            let client = p.get().await?;
             rec::set_intent_options(&**client, intent_id, installments, save_card).await?;
         }
         self.state

@@ -12,9 +12,11 @@
 use chrono::Utc;
 
 use crate::db::finance_store::FinanceStore;
-use crate::finance_book::col;
 use crate::domain::kvkk::{check_delivery, DeliveryChannel};
-use crate::models::{IndependentUnit, Notification, Role, NOTIFY_BLOCKED, NOTIFY_FAILED, NOTIFY_SENT};
+use crate::finance_book::col;
+use crate::models::{
+    IndependentUnit, Notification, Role, NOTIFY_BLOCKED, NOTIFY_FAILED, NOTIFY_SENT,
+};
 use crate::services::finance_common::{debtor_user, invalid, Caller, FinanceResult};
 use crate::state::AppState;
 
@@ -228,10 +230,7 @@ impl NotificationService {
                 }
             },
         }
-        Ok(self
-            .store
-            .insert(row, col::notifications)
-            .await?)
+        Ok(self.store.insert(row, col::notifications).await?)
     }
 
     /// E-mails every site manager (not personal data about a debtor).
@@ -330,11 +329,10 @@ impl NotificationService {
                     })
                     .cloned()
                     .collect();
-                rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                rows.sort_by_key(|a| std::cmp::Reverse(a.created_at));
                 rows.truncate(limit.clamp(1, 500));
                 rows
             })
             .await
     }
 }
-
