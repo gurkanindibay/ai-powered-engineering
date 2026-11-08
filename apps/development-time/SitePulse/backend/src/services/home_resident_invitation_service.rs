@@ -73,7 +73,9 @@ impl HomeResidentInvitationService {
         stored.token = crate::auth::token_digest(&token);
         stored.invite_url = String::new();
         let mut inner_write = self.state.inner.write().await;
-        inner_write.unit_invite_tokens.insert(stored.token.clone(), stored.clone());
+        inner_write
+            .unit_invite_tokens
+            .insert(stored.token.clone(), stored.clone());
         drop(inner_write);
 
         if let Some(ref pool) = self.state.pool {
@@ -100,9 +102,13 @@ impl HomeResidentInvitationService {
         }
 
         let mut inner = self.state.inner.write().await;
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
 
-        if inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
+        if inner
+            .users
+            .iter()
+            .any(|u| crate::domain::email::same_email(&u.email, &email_norm))
+        {
             return Err(format!(
                 "An account with this email address already exists (zaten mevcut): {}",
                 request.email
@@ -179,10 +185,20 @@ impl HomeResidentInvitationService {
 
         let mut final_resident_id = resident_id.clone();
         if let Some(ref pool) = self.state.pool {
-            crate::db::delete_invitation_token(pool, &digest).await.map_err(|e| e.to_string())?;
-            crate::db::save_user(pool, &resident_user).await.map_err(|e| format!("Failed to persist resident: {}", e))?;
+            crate::db::delete_invitation_token(pool, &digest)
+                .await
+                .map_err(|e| e.to_string())?;
+            crate::db::save_user(pool, &resident_user)
+                .await
+                .map_err(|e| format!("Failed to persist resident: {}", e))?;
             if let Ok(client) = pool.get().await {
-                if let Ok(Some(row)) = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&email_norm]).await {
+                if let Ok(Some(row)) = client
+                    .query_opt(
+                        "SELECT id FROM users WHERE LOWER(email) = $1",
+                        &[&email_norm],
+                    )
+                    .await
+                {
                     let db_id: i64 = row.get("id");
                     final_resident_id = db_id.to_string();
                 }

@@ -66,7 +66,12 @@ pub async fn update_payment_intent(pool: &Pool, i: &PaymentIntent) -> DbResult<(
 
 pub async fn load_payment_intents(pool: &Pool) -> DbResult<Vec<PaymentIntent>> {
     let client = pool.get().await?;
-    let rows = client.query(&format!("SELECT {} FROM payment_intents ORDER BY id", INTENT_COLUMNS), &[]).await?;
+    let rows = client
+        .query(
+            &format!("SELECT {} FROM payment_intents ORDER BY id", INTENT_COLUMNS),
+            &[],
+        )
+        .await?;
     Ok(rows
         .iter()
         .map(|r| PaymentIntent {
@@ -85,7 +90,9 @@ pub async fn load_payment_intents(pool: &Pool) -> DbResult<Vec<PaymentIntent>> {
             fee_amount: r.get(12),
             failure_reason: r.get(13),
             receipt_number: r.get(14),
-            designation: r.get::<_, Option<String>>(15).and_then(|v| serde_json::from_str(&v).ok()),
+            designation: r
+                .get::<_, Option<String>>(15)
+                .and_then(|v| serde_json::from_str(&v).ok()),
             created_by: r.get(16),
             created_at: r.get(17),
             updated_at: r.get(18),

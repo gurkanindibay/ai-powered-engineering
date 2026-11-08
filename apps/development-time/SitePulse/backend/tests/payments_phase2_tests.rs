@@ -35,7 +35,12 @@ async fn site_with_two_units() -> AppState {
         inner.payment_receipts.clear();
         inner.payment_entries.clear();
         inner.payment_idempotency.clear();
-        let mut second = inner.units.iter().find(|u| u.id == "d-14").cloned().unwrap();
+        let mut second = inner
+            .units
+            .iter()
+            .find(|u| u.id == "d-14")
+            .cloned()
+            .unwrap();
         second.id = "d-15".to_string();
         second.unit_number = 15;
         second.land_share = 12;
@@ -56,7 +61,14 @@ fn line(category: &str, amount: &str, key: &str) -> BudgetLineInput {
 }
 
 fn budget_request(year: i32, lines: Vec<BudgetLineInput>) -> CreateOperatingBudgetRequest {
-    CreateOperatingBudgetRequest { site_id: None, fiscal_year: year, period_start: None, period_end: None, notes: None, lines }
+    CreateOperatingBudgetRequest {
+        site_id: None,
+        fiscal_year: year,
+        period_start: None,
+        period_end: None,
+        notes: None,
+        lines,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -76,7 +88,17 @@ fn when_an_amount_is_split_by_weight_then_the_parts_add_up_to_the_kurus() {
 async fn when_a_draft_budget_is_created_then_unit_shares_follow_land_share_and_equal_keys() {
     let state = site_with_two_units().await;
     let budget = OperatingBudgetService::new(state)
-        .create_draft(SITE, budget_request(today().year(), vec![line("CLEANING", "36000.00", "LAND_SHARE"), line("MANAGEMENT_FEE", "2400.00", "EQUAL")]), ACTOR)
+        .create_draft(
+            SITE,
+            budget_request(
+                today().year(),
+                vec![
+                    line("CLEANING", "36000.00", "LAND_SHARE"),
+                    line("MANAGEMENT_FEE", "2400.00", "EQUAL"),
+                ],
+            ),
+            ACTOR,
+        )
         .await
         .unwrap();
     assert_eq!(budget.status, "DRAFT");
@@ -93,14 +115,29 @@ async fn when_a_draft_budget_is_created_then_unit_shares_follow_land_share_and_e
 }
 
 #[tokio::test]
-async fn when_an_interim_budget_exceeds_the_revaluation_rate_then_it_is_refused_and_the_assembly_can_approve_it() {
+async fn when_an_interim_budget_exceeds_the_revaluation_rate_then_it_is_refused_and_the_assembly_can_approve_it(
+) {
     let state = site_with_two_units().await;
     let service = OperatingBudgetService::new(state.clone());
     // 38.400 -> 50.000 is +30.2%, above the 2026 rate of 25.49%.
-    let budget = service.create_draft(SITE, budget_request(2026, vec![line("PERSONNEL", "50000.00", "LAND_SHARE")]), ACTOR).await.unwrap();
-    let err = service.issue_interim(SITE, &budget.id, IssueInterimBudgetRequest::default()).await.unwrap_err();
+    let budget = service
+        .create_draft(
+            SITE,
+            budget_request(2026, vec![line("PERSONNEL", "50000.00", "LAND_SHARE")]),
+            ACTOR,
+        )
+        .await
+        .unwrap();
+    let err = service
+        .issue_interim(SITE, &budget.id, IssueInterimBudgetRequest::default())
+        .await
+        .unwrap_err();
     match err {
-        BudgetError::Conflict(m) => assert!(m.contains("revaluation rate") && m.contains("25.49"), "{}", m),
+        BudgetError::Conflict(m) => assert!(
+            m.contains("revaluation rate") && m.contains("25.49"),
+            "{}",
+            m
+        ),
         other => panic!("expected a conflict, got {:?}", other),
     }
     assert_eq!(service.get(SITE, &budget.id).await.unwrap().status, "DRAFT");
@@ -109,57 +146,130 @@ async fn when_an_interim_budget_exceeds_the_revaluation_rate_then_it_is_refused_
         .approve(
             SITE,
             &budget.id,
-            ApproveBudgetRequest { assembly_decision_ref: "Karar 2026/3".to_string(), assembly_decision_date: today() - Days::new(1) },
+            ApproveBudgetRequest {
+                assembly_decision_ref: "Karar 2026/3".to_string(),
+                assembly_decision_date: today() - Days::new(1),
+            },
         )
         .await
         .unwrap();
     assert_eq!(approved.status, "APPROVED");
-    assert_eq!(approved.assembly_decision_ref.as_deref(), Some("Karar 2026/3"));
+    assert_eq!(
+        approved.assembly_decision_ref.as_deref(),
+        Some("Karar 2026/3")
+    );
 }
 
 #[tokio::test]
-async fn when_an_interim_budget_is_within_the_cap_then_it_is_in_force_with_a_three_month_deadline() {
+async fn when_an_interim_budget_is_within_the_cap_then_it_is_in_force_with_a_three_month_deadline()
+{
     let state = site_with_two_units().await;
     let service = OperatingBudgetService::new(state.clone());
     // +20%: within 25.49%.
-    let budget = service.create_draft(SITE, budget_request(2026, vec![line("PERSONNEL", "46080.00", "LAND_SHARE")]), ACTOR).await.unwrap();
-    let issued_on = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
-    let interim = service.issue_interim(SITE, &budget.id, IssueInterimBudgetRequest { issued_on: Some(issued_on) }).await.unwrap();
-    assert_eq!(interim.status, "INTERIM");
-    assert_eq!(interim.cap_rate, Some(d("25.4900")));
-    assert_eq!(interim.interim_deadline, Some(NaiveDate::from_ymd_opt(2026, 4, 10).unwrap()));
-
-    // The assembly later approves a different budget for the same year: the interim is superseded.
-    let assembly = service.create_draft(SITE, budget_request(2026, vec![line("PERSONNEL", "40000.00", "LAND_SHARE")]), ACTOR).await.unwrap();
-    service
-        .approve(SITE, &assembly.id, ApproveBudgetRequest { assembly_decision_ref: "Karar 2026/1".into(), assembly_decision_date: issued_on })
+    let budget = service
+        .create_draft(
+            SITE,
+            budget_request(2026, vec![line("PERSONNEL", "46080.00", "LAND_SHARE")]),
+            ACTOR,
+        )
         .await
         .unwrap();
-    assert_eq!(service.get(SITE, &budget.id).await.unwrap().status, "SUPERSEDED");
+    let issued_on = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+    let interim = service
+        .issue_interim(
+            SITE,
+            &budget.id,
+            IssueInterimBudgetRequest {
+                issued_on: Some(issued_on),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(interim.status, "INTERIM");
+    assert_eq!(interim.cap_rate, Some(d("25.4900")));
+    assert_eq!(
+        interim.interim_deadline,
+        Some(NaiveDate::from_ymd_opt(2026, 4, 10).unwrap())
+    );
+
+    // The assembly later approves a different budget for the same year: the interim is superseded.
+    let assembly = service
+        .create_draft(
+            SITE,
+            budget_request(2026, vec![line("PERSONNEL", "40000.00", "LAND_SHARE")]),
+            ACTOR,
+        )
+        .await
+        .unwrap();
+    service
+        .approve(
+            SITE,
+            &assembly.id,
+            ApproveBudgetRequest {
+                assembly_decision_ref: "Karar 2026/1".into(),
+                assembly_decision_date: issued_on,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        service.get(SITE, &budget.id).await.unwrap().status,
+        "SUPERSEDED"
+    );
 }
 
-async fn accrue(state: &AppState, period: &str, amount: &str, due: NaiveDate) -> Result<AccrueDuesPeriodResponse, (axum::http::StatusCode, String)> {
+async fn accrue(
+    state: &AppState,
+    period: &str,
+    amount: &str,
+    due: NaiveDate,
+) -> Result<AccrueDuesPeriodResponse, (axum::http::StatusCode, String)> {
     sitepulse_backend::handlers::accrue_monthly_dues(
         State(state.clone()),
-        Json(AccrueDuesPeriodRequest { site_id: SITE.to_string(), period: period.to_string(), amount: d(amount), due_date: due }),
+        Json(AccrueDuesPeriodRequest {
+            site_id: SITE.to_string(),
+            period: period.to_string(),
+            amount: d(amount),
+            due_date: due,
+        }),
     )
     .await
     .map(|(_, Json(r))| r)
 }
 
 #[tokio::test]
-async fn when_a_budget_is_in_force_then_dues_are_accrued_from_unit_shares_with_the_budget_as_legal_basis() {
+async fn when_a_budget_is_in_force_then_dues_are_accrued_from_unit_shares_with_the_budget_as_legal_basis(
+) {
     let state = site_with_two_units().await;
     let service = OperatingBudgetService::new(state.clone());
     let year = today().year();
-    let budget = service.create_draft(SITE, budget_request(year, vec![line("CLEANING", "36000.00", "LAND_SHARE"), line("MANAGEMENT_FEE", "2400.00", "EQUAL")]), ACTOR).await.unwrap();
-    service.issue_interim(SITE, &budget.id, IssueInterimBudgetRequest::default()).await.unwrap();
+    let budget = service
+        .create_draft(
+            SITE,
+            budget_request(
+                year,
+                vec![
+                    line("CLEANING", "36000.00", "LAND_SHARE"),
+                    line("MANAGEMENT_FEE", "2400.00", "EQUAL"),
+                ],
+            ),
+            ACTOR,
+        )
+        .await
+        .unwrap();
+    service
+        .issue_interim(SITE, &budget.id, IssueInterimBudgetRequest::default())
+        .await
+        .unwrap();
 
     let due = today() + Days::new(10);
     let resp = accrue(&state, "Test Dönemi", "0", due).await.unwrap();
     assert_eq!(resp.newly_accrued_units_count, 2);
     assert_eq!(resp.total_amount_accrued, d("3200.00"));
-    assert_eq!(resp.operating_budget_id.as_deref(), Some(budget.id.as_str()));
+    assert_eq!(
+        resp.operating_budget_id.as_deref(),
+        Some(budget.id.as_str())
+    );
     assert!(resp.legal_basis_warning.is_none());
     {
         let inner = state.inner.read().await;
@@ -170,15 +280,22 @@ async fn when_a_budget_is_in_force_then_dues_are_accrued_from_unit_shares_with_t
     }
 
     // A typed amount is refused while a budget is in force.
-    let (status, msg) = accrue(&state, "Başka Dönem", "999.00", due).await.unwrap_err();
+    let (status, msg) = accrue(&state, "Başka Dönem", "999.00", due)
+        .await
+        .unwrap_err();
     assert_eq!(status, axum::http::StatusCode::CONFLICT, "{}", msg);
 }
 
 #[tokio::test]
 async fn when_a_site_requires_a_budget_and_none_is_in_force_then_accrual_is_refused() {
     let state = site_with_two_units().await;
-    OperatingBudgetService::new(state.clone()).set_policy(SITE, true).await.unwrap();
-    let (status, msg) = accrue(&state, "Test Dönemi", "0", today() + Days::new(5)).await.unwrap_err();
+    OperatingBudgetService::new(state.clone())
+        .set_policy(SITE, true)
+        .await
+        .unwrap();
+    let (status, msg) = accrue(&state, "Test Dönemi", "0", today() + Days::new(5))
+        .await
+        .unwrap_err();
     assert_eq!(status, axum::http::StatusCode::CONFLICT);
     assert!(msg.contains("işletme projesi"), "{}", msg);
     assert!(state.inner.read().await.dues.is_empty());
@@ -187,19 +304,39 @@ async fn when_a_site_requires_a_budget_and_none_is_in_force_then_accrual_is_refu
 #[tokio::test]
 async fn when_no_budget_exists_then_legacy_tariff_accrual_carries_a_kmk37_warning() {
     let state = site_with_two_units().await;
-    let resp = accrue(&state, "Test Dönemi", "0", today() + Days::new(5)).await.unwrap();
+    let resp = accrue(&state, "Test Dönemi", "0", today() + Days::new(5))
+        .await
+        .unwrap();
     assert_eq!(resp.total_amount_accrued, d("3200.00")); // 1.800 + 1.400 tariffs
     assert!(resp.legal_basis_warning.unwrap().contains("KMK 37"));
 }
 
 #[tokio::test]
-async fn when_an_approved_budget_is_served_and_the_window_closes_then_it_becomes_final_unless_an_objection_is_upheld() {
+async fn when_an_approved_budget_is_served_and_the_window_closes_then_it_becomes_final_unless_an_objection_is_upheld(
+) {
     let state = site_with_two_units().await;
     let service = OperatingBudgetService::new(state.clone());
     let decided = today() - Days::new(30);
-    let budget = service.create_draft(SITE, budget_request(today().year(), vec![line("ENERGY", "12000.00", "LAND_SHARE")]), ACTOR).await.unwrap();
+    let budget = service
+        .create_draft(
+            SITE,
+            budget_request(
+                today().year(),
+                vec![line("ENERGY", "12000.00", "LAND_SHARE")],
+            ),
+            ACTOR,
+        )
+        .await
+        .unwrap();
     service
-        .approve(SITE, &budget.id, ApproveBudgetRequest { assembly_decision_ref: "Karar 7".into(), assembly_decision_date: decided })
+        .approve(
+            SITE,
+            &budget.id,
+            ApproveBudgetRequest {
+                assembly_decision_ref: "Karar 7".into(),
+                assembly_decision_date: decided,
+            },
+        )
         .await
         .unwrap();
     let served_on = today() - Days::new(20);
@@ -208,7 +345,12 @@ async fn when_an_approved_budget_is_served_and_the_window_closes_then_it_becomes
             .record_service(
                 SITE,
                 &budget.id,
-                RecordBudgetServiceRequest { unit_id: unit.into(), recipient_name: "Kat Maliki".into(), method: "REGISTERED_MAIL".into(), served_on },
+                RecordBudgetServiceRequest {
+                    unit_id: unit.into(),
+                    recipient_name: "Kat Maliki".into(),
+                    method: "REGISTERED_MAIL".into(),
+                    served_on,
+                },
             )
             .await
             .unwrap();
@@ -218,7 +360,12 @@ async fn when_an_approved_budget_is_served_and_the_window_closes_then_it_becomes
         .file_objection(
             SITE,
             &budget.id,
-            FileBudgetObjectionRequest { unit_id: "d-15".into(), objector_name: "Ayşe".into(), filed_on: Some(today()), reason: "Tutar yüksek".into() },
+            FileBudgetObjectionRequest {
+                unit_id: "d-15".into(),
+                objector_name: "Ayşe".into(),
+                filed_on: Some(today()),
+                reason: "Tutar yüksek".into(),
+            },
         )
         .await
         .unwrap_err();
@@ -238,9 +385,19 @@ async fn when_an_approved_budget_is_served_and_the_window_closes_then_it_becomes
         .await
         .unwrap();
     let objection_id = with_objection.objections[0].id.clone();
-    assert!(matches!(service.finalize(SITE, &budget.id, today()).await.unwrap_err(), BudgetError::Conflict(m) if m.contains("still open")));
+    assert!(
+        matches!(service.finalize(SITE, &budget.id, today()).await.unwrap_err(), BudgetError::Conflict(m) if m.contains("still open"))
+    );
     service
-        .resolve_objection(SITE, &budget.id, &objection_id, ResolveBudgetObjectionRequest { status: "DISMISSED".into(), resolution_note: None })
+        .resolve_objection(
+            SITE,
+            &budget.id,
+            &objection_id,
+            ResolveBudgetObjectionRequest {
+                status: "DISMISSED".into(),
+                resolution_note: None,
+            },
+        )
         .await
         .unwrap();
     let fin = service.finalize(SITE, &budget.id, today()).await.unwrap();
@@ -289,26 +446,50 @@ async fn when_a_card_payment_is_captured_then_it_is_recorded_once_through_the_in
     let state = owner_owing("1800.00").await;
     let service = CardPaymentService::new(state.clone());
     let intent = service
-        .create_intent("d-14", CreatePaymentIntentRequest { amount: d("1800.00"), ..Default::default() }, Some("OWNER"), ACTOR)
+        .create_intent(
+            "d-14",
+            CreatePaymentIntentRequest {
+                amount: d("1800.00"),
+                ..Default::default()
+            },
+            Some("OWNER"),
+            ACTOR,
+        )
         .await
         .unwrap();
     assert_eq!(intent.status, "CREATED");
     assert_eq!(intent.provider, "SANDBOX");
-    assert!(intent.checkout_url.as_deref().unwrap().contains(&intent.provider_ref));
+    assert!(intent
+        .checkout_url
+        .as_deref()
+        .unwrap()
+        .contains(&intent.provider_ref));
 
-    service.apply_provider_event(event(&intent, "AUTHORIZED")).await.unwrap();
-    let captured = service.apply_provider_event(event(&intent, "CAPTURED")).await.unwrap();
+    service
+        .apply_provider_event(event(&intent, "AUTHORIZED"))
+        .await
+        .unwrap();
+    let captured = service
+        .apply_provider_event(event(&intent, "CAPTURED"))
+        .await
+        .unwrap();
     assert_eq!(captured.status, "CAPTURED");
     let number = captured.receipt_number.clone().unwrap();
     assert!(number.starts_with("TAH-"));
     // A repeated notification changes nothing.
-    let again = service.apply_provider_event(event(&intent, "CAPTURED")).await.unwrap();
+    let again = service
+        .apply_provider_event(event(&intent, "CAPTURED"))
+        .await
+        .unwrap();
     assert_eq!(again.receipt_number.as_deref(), Some(number.as_str()));
     let inner = state.inner.read().await;
     assert_eq!(inner.payment_receipts.len(), 1);
     let receipt = &inner.payment_receipts[0];
     assert_eq!(receipt.payment_channel, PaymentChannel::CreditCard);
-    assert_eq!(inner.dues.iter().find(|x| x.id == "op-1").unwrap().status, DebtStatus::Paid);
+    assert_eq!(
+        inner.dues.iter().find(|x| x.id == "op-1").unwrap().status,
+        DebtStatus::Paid
+    );
 }
 
 #[tokio::test]
@@ -316,18 +497,33 @@ async fn when_the_provider_amount_differs_or_a_resident_pays_another_debtor_then
     let state = owner_owing("500.00").await;
     let service = CardPaymentService::new(state.clone());
     let intent = service
-        .create_intent("d-14", CreatePaymentIntentRequest { amount: d("500.00"), ..Default::default() }, Some("OWNER"), ACTOR)
+        .create_intent(
+            "d-14",
+            CreatePaymentIntentRequest {
+                amount: d("500.00"),
+                ..Default::default()
+            },
+            Some("OWNER"),
+            ACTOR,
+        )
         .await
         .unwrap();
     let mut wrong = event(&intent, "CAPTURED");
     wrong.amount = d("5.00");
-    assert!(matches!(service.apply_provider_event(wrong).await.unwrap_err(), CardPaymentError::Conflict(_)));
+    assert!(matches!(
+        service.apply_provider_event(wrong).await.unwrap_err(),
+        CardPaymentError::Conflict(_)
+    ));
     assert!(state.inner.read().await.payment_receipts.is_empty());
 
     let other = service
         .create_intent(
             "d-14",
-            CreatePaymentIntentRequest { amount: d("10.00"), debtor_type: Some("TENANT".into()), ..Default::default() },
+            CreatePaymentIntentRequest {
+                amount: d("10.00"),
+                debtor_type: Some("TENANT".into()),
+                ..Default::default()
+            },
             Some("OWNER"),
             ACTOR,
         )
@@ -335,7 +531,13 @@ async fn when_the_provider_amount_differs_or_a_resident_pays_another_debtor_then
         .unwrap_err();
     assert!(matches!(other, CardPaymentError::Invalid(_)));
 
-    let failed = service.apply_provider_event(ProviderWebhookEvent { failure_reason: Some("Yetersiz bakiye".into()), ..event(&intent, "FAILED") }).await.unwrap();
+    let failed = service
+        .apply_provider_event(ProviderWebhookEvent {
+            failure_reason: Some("Yetersiz bakiye".into()),
+            ..event(&intent, "FAILED")
+        })
+        .await
+        .unwrap();
     assert_eq!(failed.status, "FAILED");
     assert_eq!(failed.failure_reason.as_deref(), Some("Yetersiz bakiye"));
 }
@@ -344,8 +546,14 @@ async fn when_the_provider_amount_differs_or_a_resident_pays_another_debtor_then
 fn when_a_provider_body_is_signed_then_only_that_body_verifies() {
     let body = br#"{"provider":"SANDBOX"}"#;
     let sig = card_payment_service::sign_provider_body(body);
-    assert!(card_payment_service::verify_provider_signature(body, Some(&sig)));
-    assert!(!card_payment_service::verify_provider_signature(b"{}", Some(&sig)));
+    assert!(card_payment_service::verify_provider_signature(
+        body,
+        Some(&sig)
+    ));
+    assert!(!card_payment_service::verify_provider_signature(
+        b"{}",
+        Some(&sig)
+    ));
     assert!(!card_payment_service::verify_provider_signature(body, None));
 }
 
@@ -354,16 +562,38 @@ async fn when_a_card_receipt_is_reversed_then_the_intent_is_refunded() {
     let state = owner_owing("300.00").await;
     let service = CardPaymentService::new(state.clone());
     let intent = service
-        .create_intent("d-14", CreatePaymentIntentRequest { amount: d("300.00"), ..Default::default() }, None, ACTOR)
+        .create_intent(
+            "d-14",
+            CreatePaymentIntentRequest {
+                amount: d("300.00"),
+                ..Default::default()
+            },
+            None,
+            ACTOR,
+        )
         .await
         .unwrap();
-    let captured = service.apply_provider_event(event(&intent, "CAPTURED")).await.unwrap();
+    let captured = service
+        .apply_provider_event(event(&intent, "CAPTURED"))
+        .await
+        .unwrap();
     let number = captured.receipt_number.unwrap();
     PaymentTrackingService::new(state.clone())
-        .reverse_payment(ReversePaymentRequest { site_id: Some(SITE.into()), receipt: number.clone(), reason: "Kart itirazı".into() }, ACTOR)
+        .reverse_payment(
+            ReversePaymentRequest {
+                site_id: Some(SITE.into()),
+                receipt: number.clone(),
+                reason: "Kart itirazı".into(),
+            },
+            ACTOR,
+        )
         .await
         .unwrap();
-    let refunded = service.refund_for_receipt(SITE, &number).await.unwrap().unwrap();
+    let refunded = service
+        .refund_for_receipt(SITE, &number)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(refunded.status, "REFUNDED");
 }
 
@@ -399,14 +629,28 @@ async fn when_a_statement_is_built_then_items_are_aged_and_each_debtor_sees_only
     let inner = state.inner.read().await;
     let unit = inner.units.iter().find(|u| u.id == "d-14").unwrap();
     let staff = resident_statement::build_statement(&inner, unit, None, today());
-    let owner = staff.debtors.iter().find(|x| x.debtor_type == "OWNER").unwrap();
+    let owner = staff
+        .debtors
+        .iter()
+        .find(|x| x.debtor_type == "OWNER")
+        .unwrap();
     assert_eq!(owner.current_due, d("100.00"));
     assert_eq!(owner.overdue_31_60_days, d("200.00"));
     assert_eq!(owner.overdue_90_plus_days, d("300.00"));
     assert_eq!(owner.principal_outstanding, d("600.00"));
-    assert!(owner.penalty_outstanding > Decimal::ZERO, "overdue items accrue the KMK 20 penalty");
-    assert_eq!(owner.total_outstanding, owner.principal_outstanding + owner.penalty_outstanding);
-    assert_eq!(owner.open_items.first().unwrap().due_id, "o-120", "oldest first");
+    assert!(
+        owner.penalty_outstanding > Decimal::ZERO,
+        "overdue items accrue the KMK 20 penalty"
+    );
+    assert_eq!(
+        owner.total_outstanding,
+        owner.principal_outstanding + owner.penalty_outstanding
+    );
+    assert_eq!(
+        owner.open_items.first().unwrap().due_id,
+        "o-120",
+        "oldest first"
+    );
     assert!(staff.debtors.iter().any(|x| x.debtor_type == "TENANT"));
 
     let own = resident_statement::build_statement(&inner, unit, Some("OWNER"), today());
@@ -442,11 +686,18 @@ async fn when_a_receipt_pdf_is_rendered_and_verified_then_the_public_check_discl
         .unwrap();
     let pdf = receipt_document::render_receipt_pdf(&receipt, "A Blok D:14").unwrap();
     assert!(pdf.starts_with(b"%PDF"));
-    assert!(pdf.len() < 400_000, "fonts are subset ({} bytes)", pdf.len());
+    assert!(
+        pdf.len() < 400_000,
+        "fonts are subset ({} bytes)",
+        pdf.len()
+    );
 
     let Json(ok) = sitepulse_backend::handlers::verify_receipt(
         State(state.clone()),
-        Query(sitepulse_backend::handlers::VerifyReceiptQuery { no: receipt.receipt_number.clone(), h: receipt.verification_hash.clone() }),
+        Query(sitepulse_backend::handlers::VerifyReceiptQuery {
+            no: receipt.receipt_number.clone(),
+            h: receipt.verification_hash.clone(),
+        }),
     )
     .await;
     assert!(ok.valid);
@@ -456,7 +707,10 @@ async fn when_a_receipt_pdf_is_rendered_and_verified_then_the_public_check_discl
 
     let Json(bad) = sitepulse_backend::handlers::verify_receipt(
         State(state),
-        Query(sitepulse_backend::handlers::VerifyReceiptQuery { no: receipt.receipt_number.clone(), h: "0".repeat(64) }),
+        Query(sitepulse_backend::handlers::VerifyReceiptQuery {
+            no: receipt.receipt_number.clone(),
+            h: "0".repeat(64),
+        }),
     )
     .await;
     assert!(!bad.valid);

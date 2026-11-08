@@ -7,8 +7,8 @@ use serde::Deserialize;
 
 use crate::auth;
 use crate::models::{
-    AuthResponse, AuthProvider, ChangePasswordRequest, GoogleLoginRequest, PasswordLoginRequest, Permission, RegisterUserRequest,
-    Role, User, UserProfileResponse, UserSummary,
+    AuthProvider, AuthResponse, ChangePasswordRequest, GoogleLoginRequest, PasswordLoginRequest,
+    Permission, RegisterUserRequest, Role, User, UserProfileResponse, UserSummary,
 };
 use crate::state::AppState;
 
@@ -33,12 +33,19 @@ impl AuthService {
 
     async fn find_user_by_email(&self, email_norm: &str) -> Result<Option<User>, String> {
         if let Some(ref pool) = self.state.pool {
-            if let Some(u) = crate::db::get_user_by_email(pool, email_norm).await.map_err(|e| e.to_string())? {
+            if let Some(u) = crate::db::get_user_by_email(pool, email_norm)
+                .await
+                .map_err(|e| e.to_string())?
+            {
                 return Ok(Some(u));
             }
         }
         let inner = self.state.inner.read().await;
-        Ok(inner.users.iter().find(|u| u.email.to_lowercase() == email_norm).cloned())
+        Ok(inner
+            .users
+            .iter()
+            .find(|u| crate::domain::email::same_email(&u.email, email_norm))
+            .cloned())
     }
 
     /// Resolves the unit a resident belongs to. Returns `None` rather than guessing.
@@ -47,15 +54,21 @@ impl AuthService {
             let inner = self.state.inner.read().await;
             if let Some(u) = inner.units.iter().find(|un| {
                 (un.site_id == user.site_id || crate::auth::same_id(&un.site_id, &user.site_id))
-                    && (un.owner_user_id.as_deref() == Some(&user.id) || un.tenant_user_id.as_deref() == Some(&user.id))
+                    && (un.owner_user_id.as_deref() == Some(&user.id)
+                        || un.tenant_user_id.as_deref() == Some(&user.id))
             }) {
                 return Some(u.id.clone());
             }
             for (unit_id, members) in inner.unit_members.iter() {
-                if members.iter().any(|m| {
-                    m.email.eq_ignore_ascii_case(&user.email)
-                }) {
-                    if let Some(u) = inner.units.iter().find(|u| &u.id == unit_id || crate::auth::same_id(&u.id, unit_id)) {
+                if members
+                    .iter()
+                    .any(|m| m.email.eq_ignore_ascii_case(&user.email))
+                {
+                    if let Some(u) = inner
+                        .units
+                        .iter()
+                        .find(|u| &u.id == unit_id || crate::auth::same_id(&u.id, unit_id))
+                    {
                         if !crate::auth::same_id(&u.site_id, &user.site_id) {
                             continue;
                         }
@@ -66,7 +79,7 @@ impl AuthService {
         }
         let pool = self.state.pool.as_ref()?;
         let client = pool.get().await.ok()?;
-        let email = user.email.to_lowercase();
+        let email = crate::domain::email::NormalizedEmail::normalize(&user.email);
         let site_id_num = crate::db::parse_id_to_i64(&user.site_id);
 
         let row = if let Some(sid) = site_id_num {
@@ -110,7 +123,10 @@ impl AuthService {
             return Ok(());
         }
         if let Some(ref pool) = self.state.pool {
-            if !crate::db::site_is_active(pool, &user.site_id).await.map_err(|e| e.to_string())? {
+            if !crate::db::site_is_active(pool, &user.site_id)
+                .await
+                .map_err(|e| e.to_string())?
+            {
                 return Err("This site is no longer active.".to_string());
             }
         }
@@ -149,22 +165,32 @@ impl AuthService {
         inner.unit_invite_tokens.remove(token);
         drop(inner);
         if let Some(ref pool) = self.state.pool {
-            crate::db::delete_invitation_token(pool, token).await.map_err(|e| e.to_string())?;
+            crate::db::delete_invitation_token(pool, token)
+                .await
+                .map_err(|e| e.to_string())?;
         }
-        Ok(InviteScope { site_id, unit_id: invite.unit_id })
+        Ok(InviteScope {
+            site_id,
+            unit_id: invite.unit_id,
+        })
     }
 
-    pub async fn authenticate_with_password(&self, request: PasswordLoginRequest) -> Result<AuthResponse, String> {
+    pub async fn authenticate_with_password(
+        &self,
+        request: PasswordLoginRequest,
+    ) -> Result<AuthResponse, String> {
         if request.email.trim().is_empty() || request.password.is_empty() {
             return Err("Email and password are required.".to_string());
         }
-        let email_norm = request.email.trim().to_lowercase();
-        let user = self.find_user_by_email(&email_norm).await?.ok_or_else(|| INVALID_CREDENTIALS.to_string())?;
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
+        let user = self
+            .find_user_by_email(&email_norm)
+            .await?
+            .ok_or_else(|| INVALID_CREDENTIALS.to_string())?;
 
-        let stored = user
-            .password_hash
-            .as_deref()
-            .ok_or_else(|| "This account was created with Google. Please use 'Sign in with Google'.".to_string())?;
+        let stored = user.password_hash.as_deref().ok_or_else(|| {
+            "This account was created with Google. Please use 'Sign in with Google'.".to_string()
+        })?;
         if !auth::verify_password(&request.password, stored) {
             return Err(INVALID_CREDENTIALS.to_string());
         }
@@ -172,7 +198,10 @@ impl AuthService {
         Ok(self.auth_response(&user).await)
     }
 
-    pub async fn authenticate_with_google(&self, request: GoogleLoginRequest) -> Result<AuthResponse, String> {
+    pub async fn authenticate_with_google(
+        &self,
+        request: GoogleLoginRequest,
+    ) -> Result<AuthResponse, String> {
         if request.id_token.trim().is_empty() {
             return Err("Invalid Google ID Token.".to_string());
         }
@@ -180,7 +209,7 @@ impl AuthService {
         if !payload.email_verified {
             return Err("Google account email is not verified.".to_string());
         }
-        let email_norm = payload.email.to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&payload.email);
 
         let existing = {
             let inner = self.state.inner.read().await;
@@ -188,7 +217,12 @@ impl AuthService {
                 .users
                 .iter()
                 .position(|u| u.google_sub.as_deref() == Some(&payload.sub))
-                .or_else(|| inner.users.iter().position(|u| u.email.to_lowercase() == email_norm))
+                .or_else(|| {
+                    inner
+                        .users
+                        .iter()
+                        .position(|u| crate::domain::email::same_email(&u.email, &email_norm))
+                })
         };
 
         let user = if let Some(idx) = existing {
@@ -200,13 +234,20 @@ impl AuthService {
                 }
             }
             if u.google_sub.is_none() && u.role == Role::SaasAdmin {
-                return Err("Platform administrator accounts cannot be linked to Google sign-in.".to_string());
+                return Err(
+                    "Platform administrator accounts cannot be linked to Google sign-in."
+                        .to_string(),
+                );
             }
             u.google_sub = Some(payload.sub.clone());
             if !payload.picture.is_empty() {
                 u.avatar_url = Some(payload.picture.clone());
             }
-            u.auth_provider = if u.password_hash.is_some() { AuthProvider::Hybrid } else { AuthProvider::Google };
+            u.auth_provider = if u.password_hash.is_some() {
+                AuthProvider::Hybrid
+            } else {
+                AuthProvider::Google
+            };
             u.clone()
         } else {
             // A brand-new account must come through a unit invitation; otherwise
@@ -219,7 +260,12 @@ impl AuthService {
             let scope = self.consume_invite_token(token.trim()).await?;
             let next_user_id = {
                 let inner = self.state.inner.read().await;
-                let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+                let max_u = inner
+                    .users
+                    .iter()
+                    .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
+                    .max()
+                    .unwrap_or(0);
                 (max_u + 1).to_string()
             };
             let new_user = User {
@@ -246,9 +292,19 @@ impl AuthService {
         let mut user = user;
         self.ensure_site_active(&user).await?;
         if let Some(ref pool) = self.state.pool {
-            crate::db::save_user(pool, &user).await.map_err(|e| format!("Failed to persist user: {}", e))?;
+            crate::db::save_user(pool, &user)
+                .await
+                .map_err(|e| format!("Failed to persist user: {}", e))?;
             if let Ok(client) = pool.get().await {
-                if let Ok(Some(row)) = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&user.email.to_lowercase()]).await {
+                if let Ok(Some(row)) = client
+                    .query_opt(
+                        "SELECT id FROM users WHERE LOWER(email) = $1",
+                        &[&crate::domain::email::NormalizedEmail::normalize(
+                            &user.email,
+                        )],
+                    )
+                    .await
+                {
                     let db_id: i64 = row.get("id");
                     user.id = db_id.to_string();
                 }
@@ -259,25 +315,40 @@ impl AuthService {
 
     /// Self-service registration is only possible with a unit invitation token,
     /// which fixes the new account's site and unit.
-    pub async fn register_with_password(&self, request: RegisterUserRequest) -> Result<AuthResponse, String> {
-        if request.email.trim().is_empty() || request.password.is_empty() || request.full_name.trim().is_empty() {
+    pub async fn register_with_password(
+        &self,
+        request: RegisterUserRequest,
+    ) -> Result<AuthResponse, String> {
+        if request.email.trim().is_empty()
+            || request.password.is_empty()
+            || request.full_name.trim().is_empty()
+        {
             return Err("Full name, email, and password are required.".to_string());
         }
         auth::validate_new_password(&request.password)?;
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
         if self.find_user_by_email(&email_norm).await?.is_some() {
-            return Err("An account with this email address already exists (zaten mevcut).".to_string());
+            return Err(
+                "An account with this email address already exists (zaten mevcut).".to_string(),
+            );
         }
         let token = request
             .unit_invite_token
             .as_deref()
             .filter(|t| !t.trim().is_empty())
-            .ok_or_else(|| "An invitation token from your site manager is required to register.".to_string())?;
+            .ok_or_else(|| {
+                "An invitation token from your site manager is required to register.".to_string()
+            })?;
         let scope = self.consume_invite_token(token.trim()).await?;
 
         let next_user_id = {
             let inner = self.state.inner.read().await;
-            let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            let max_u = inner
+                .users
+                .iter()
+                .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
+                .max()
+                .unwrap_or(0);
             (max_u + 1).to_string()
         };
 
@@ -302,9 +373,19 @@ impl AuthService {
             attach_member(&mut inner, &scope.unit_id, &new_user);
         }
         if let Some(ref pool) = self.state.pool {
-            crate::db::save_user(pool, &new_user).await.map_err(|e| format!("Failed to persist user: {}", e))?;
+            crate::db::save_user(pool, &new_user)
+                .await
+                .map_err(|e| format!("Failed to persist user: {}", e))?;
             if let Ok(client) = pool.get().await {
-                if let Ok(Some(row)) = client.query_opt("SELECT id FROM users WHERE LOWER(email) = $1", &[&new_user.email.to_lowercase()]).await {
+                if let Ok(Some(row)) = client
+                    .query_opt(
+                        "SELECT id FROM users WHERE LOWER(email) = $1",
+                        &[&crate::domain::email::NormalizedEmail::normalize(
+                            &new_user.email,
+                        )],
+                    )
+                    .await
+                {
                     let db_id: i64 = row.get("id");
                     new_user.id = db_id.to_string();
                 }
@@ -329,11 +410,16 @@ impl AuthService {
             },
         };
         let unit_id = match user.role {
-            Role::HomeOwner | Role::HomeResident => self.resolve_unit_id(&user).await.unwrap_or_default(),
+            Role::HomeOwner | Role::HomeResident => {
+                self.resolve_unit_id(&user).await.unwrap_or_default()
+            }
             _ => String::new(),
         };
         let permissions = Permission::permissions_for_role(user.role);
-        let descriptions = permissions.iter().map(|p| format!("{:?}: {}", p, p.description())).collect();
+        let descriptions = permissions
+            .iter()
+            .map(|p| format!("{:?}: {}", p, p.description()))
+            .collect();
         Ok(UserProfileResponse {
             id: user.id.clone(),
             full_name: user.full_name.clone(),
@@ -350,16 +436,28 @@ impl AuthService {
         })
     }
 
-    pub async fn change_password(&self, request: ChangePasswordRequest) -> Result<AuthResponse, String> {
-        if request.email.trim().is_empty() || request.current_password.is_empty() || request.new_password.is_empty() {
+    pub async fn change_password(
+        &self,
+        request: ChangePasswordRequest,
+    ) -> Result<AuthResponse, String> {
+        if request.email.trim().is_empty()
+            || request.current_password.is_empty()
+            || request.new_password.is_empty()
+        {
             return Err("Email, current password, and new password are required.".to_string());
         }
         auth::validate_new_password(&request.new_password)?;
 
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
         // The same message for "no such user" and "wrong password" avoids user enumeration.
-        let user = self.find_user_by_email(&email_norm).await?.ok_or_else(|| INVALID_CREDENTIALS.to_string())?;
-        let stored = user.password_hash.as_deref().ok_or_else(|| INVALID_CREDENTIALS.to_string())?;
+        let user = self
+            .find_user_by_email(&email_norm)
+            .await?
+            .ok_or_else(|| INVALID_CREDENTIALS.to_string())?;
+        let stored = user
+            .password_hash
+            .as_deref()
+            .ok_or_else(|| INVALID_CREDENTIALS.to_string())?;
         if !auth::verify_password(&request.current_password, stored) {
             return Err(INVALID_CREDENTIALS.to_string());
         }
@@ -380,7 +478,11 @@ impl AuthService {
         }
         {
             let mut inner = self.state.inner.write().await;
-            if let Some(u) = inner.users.iter_mut().find(|u| u.email.to_lowercase() == email_norm) {
+            if let Some(u) = inner
+                .users
+                .iter_mut()
+                .find(|u| crate::domain::email::same_email(&u.email, &email_norm))
+            {
                 u.password_hash = Some(new_hash.clone());
                 u.must_change_password = false;
             }
@@ -398,17 +500,21 @@ pub fn hash_password(password: &str) -> String {
 }
 
 fn attach_member(inner: &mut crate::state::AppStateInner, unit_id: &str, user: &User) {
-    inner.unit_members.entry(unit_id.to_string()).or_default().push(crate::models::UnitMemberDto {
-        resident_id: user.id.clone(),
-        full_name: user.full_name.clone(),
-        relationship: "Ev Sakini".to_string(),
-        phone: user.phone.clone(),
-        email: user.email.clone(),
-        is_owner: false,
-        occupancy_id: None,
-        person_id: user.person_id,
-        resident_user_id: None,
-    });
+    inner
+        .unit_members
+        .entry(unit_id.to_string())
+        .or_default()
+        .push(crate::models::UnitMemberDto {
+            resident_id: user.id.clone(),
+            full_name: user.full_name.clone(),
+            relationship: "Ev Sakini".to_string(),
+            phone: user.phone.clone(),
+            email: user.email.clone(),
+            is_owner: false,
+            occupancy_id: None,
+            person_id: user.person_id,
+            resident_user_id: None,
+        });
 }
 
 fn create_auth_response(user: &User, unit_id: Option<&str>) -> AuthResponse {
@@ -416,7 +522,11 @@ fn create_auth_response(user: &User, unit_id: Option<&str>) -> AuthResponse {
     let summary = UserSummary {
         id: user.id.clone(),
         // Accounts without a linked person (e.g. a seeded admin) have no name yet.
-        full_name: if user.full_name.trim().is_empty() { user.email.clone() } else { user.full_name.clone() },
+        full_name: if user.full_name.trim().is_empty() {
+            user.email.clone()
+        } else {
+            user.full_name.clone()
+        },
         email: user.email.clone(),
         phone: user.phone.clone(),
         role: user.role,
@@ -450,7 +560,9 @@ struct GoogleTokenPayload {
 
 fn mock_google_tokens_allowed() -> bool {
     !crate::state::AppStateInner::is_production()
-        && std::env::var("SITEPULSE_ALLOW_MOCK_GOOGLE_TOKENS").map(|v| v == "true").unwrap_or(false)
+        && std::env::var("SITEPULSE_ALLOW_MOCK_GOOGLE_TOKENS")
+            .map(|v| v == "true")
+            .unwrap_or(false)
 }
 
 async fn google_jwks() -> Result<JwkSet, String> {
@@ -479,22 +591,29 @@ async fn verify_google_id_token(id_token: &str) -> Result<GoogleTokenPayload, St
         }
         let parts: Vec<&str> = rest.split(':').collect();
         return match (parts.first(), parts.get(1)) {
-            (Some(sub), Some(email)) if !sub.is_empty() && email.contains('@') => Ok(GoogleTokenPayload {
-                sub: sub.to_string(),
-                email: email.to_string(),
-                email_verified: true,
-                name: parts.get(2).unwrap_or(&"Google User").to_string(),
-                picture: String::new(),
-            }),
+            (Some(sub), Some(email)) if !sub.is_empty() && email.contains('@') => {
+                Ok(GoogleTokenPayload {
+                    sub: sub.to_string(),
+                    email: email.to_string(),
+                    email_verified: true,
+                    name: parts.get(2).unwrap_or(&"Google User").to_string(),
+                    picture: String::new(),
+                })
+            }
             _ => Err("Invalid Google ID Token.".to_string()),
         };
     }
 
-    let client_id = std::env::var("GOOGLE_CLIENT_ID").map_err(|_| "Google sign-in is not configured on this server.".to_string())?;
+    let client_id = std::env::var("GOOGLE_CLIENT_ID")
+        .map_err(|_| "Google sign-in is not configured on this server.".to_string())?;
     let header = decode_header(id_token).map_err(|_| "Invalid Google ID Token.".to_string())?;
-    let kid = header.kid.ok_or_else(|| "Invalid Google ID Token.".to_string())?;
+    let kid = header
+        .kid
+        .ok_or_else(|| "Invalid Google ID Token.".to_string())?;
     let jwks = google_jwks().await?;
-    let jwk = jwks.find(&kid).ok_or_else(|| "Google ID Token signed with an unknown key.".to_string())?;
+    let jwk = jwks
+        .find(&kid)
+        .ok_or_else(|| "Google ID Token signed with an unknown key.".to_string())?;
     let key = DecodingKey::from_jwk(jwk).map_err(|_| "Invalid Google signing key.".to_string())?;
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_audience(&[client_id]);

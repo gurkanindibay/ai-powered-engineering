@@ -2,8 +2,8 @@ use chrono::{DateTime, Utc};
 use deadpool_postgres::Pool;
 use tracing::info;
 
-use crate::models::{BankStatementFormat, SiteBankAccount};
 use super::base::{parse_id_to_i64, require_id};
+use crate::models::{BankStatementFormat, SiteBankAccount};
 pub async fn save_site_bank_account(
     pool: &Pool,
     account: &SiteBankAccount,
@@ -46,7 +46,10 @@ pub async fn save_site_bank_account(
                     ],
                 )
                 .await?;
-            info!("Saved site bank account {} (numeric ID: {}) to PostgreSQL", account.id, id_num);
+            info!(
+                "Saved site bank account {} (numeric ID: {}) to PostgreSQL",
+                account.id, id_num
+            );
         }
         _ => {
             let row = client
@@ -71,7 +74,10 @@ pub async fn save_site_bank_account(
                 )
                 .await?;
             let new_id: i64 = row.get(0);
-            info!("Saved site bank account (auto-assigned ID: {}) to PostgreSQL", new_id);
+            info!(
+                "Saved site bank account (auto-assigned ID: {}) to PostgreSQL",
+                new_id
+            );
         }
     }
     Ok(())
@@ -119,4 +125,3 @@ pub async fn get_active_site_bank_account(
     }
     Ok(None)
 }
-

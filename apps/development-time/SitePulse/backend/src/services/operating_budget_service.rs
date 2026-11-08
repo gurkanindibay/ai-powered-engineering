@@ -12,10 +12,11 @@ use chrono::{Datelike, Months, NaiveDate, Utc};
 use rust_decimal::{Decimal, RoundingStrategy};
 
 use crate::models::{
-    ApproveBudgetRequest, BudgetComplianceStatus, BudgetLineInput, BudgetObjection, BudgetServiceRecord,
-    CreateOperatingBudgetRequest, FileBudgetObjectionRequest, IndependentUnit, IssueInterimBudgetRequest,
-    OperatingBudget, OperatingBudgetLine, OperatingBudgetUnitShare, RecordBudgetServiceRequest, RejectBudgetRequest,
-    ResolveBudgetObjectionRequest, RevaluationRate, ALLOCATION_KEYS, BUDGET_APPROVED, BUDGET_CATEGORIES, BUDGET_DRAFT,
+    ApproveBudgetRequest, BudgetComplianceStatus, BudgetLineInput, BudgetObjection,
+    BudgetServiceRecord, CreateOperatingBudgetRequest, FileBudgetObjectionRequest, IndependentUnit,
+    IssueInterimBudgetRequest, OperatingBudget, OperatingBudgetLine, OperatingBudgetUnitShare,
+    RecordBudgetServiceRequest, RejectBudgetRequest, ResolveBudgetObjectionRequest,
+    RevaluationRate, ALLOCATION_KEYS, BUDGET_APPROVED, BUDGET_CATEGORIES, BUDGET_DRAFT,
     BUDGET_FINAL, BUDGET_INTERIM, BUDGET_REJECTED, BUDGET_SUPERSEDED, SERVICE_METHODS,
 };
 use crate::state::{AppState, AppStateInner};
@@ -38,9 +39,10 @@ pub enum BudgetError {
 impl std::fmt::Display for BudgetError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BudgetError::NotFound(m) | BudgetError::Invalid(m) | BudgetError::Conflict(m) | BudgetError::Storage(m) => {
-                f.write_str(m)
-            }
+            BudgetError::NotFound(m)
+            | BudgetError::Invalid(m)
+            | BudgetError::Conflict(m)
+            | BudgetError::Storage(m) => f.write_str(m),
         }
     }
 }
@@ -58,10 +60,17 @@ pub struct DuesBasis {
 /// The operational dues of `unit` due on `due_date`: the unit's monthly share of the
 /// budget in force, or (only where the site does not require a budget) its
 /// house-type tariff. `Err` explains why nothing may be accrued.
-pub fn operational_dues_basis(inner: &AppStateInner, unit: &IndependentUnit, due_date: NaiveDate) -> Result<DuesBasis, String> {
+pub fn operational_dues_basis(
+    inner: &AppStateInner,
+    unit: &IndependentUnit,
+    due_date: NaiveDate,
+) -> Result<DuesBasis, String> {
     if let Some(budget) = budget_in_force(inner, &unit.site_id, due_date) {
         return match budget.share_of(&unit.id) {
-            Some(share) => Ok(DuesBasis { amount: share.monthly_amount, operating_budget_id: Some(budget.id.clone()) }),
+            Some(share) => Ok(DuesBasis {
+                amount: share.monthly_amount,
+                operating_budget_id: Some(budget.id.clone()),
+            }),
             None => Err(format!(
                 "Unit {} has no share in operating budget {} ({}); revise the budget to include it",
                 unit.id, budget.id, budget.fiscal_year
@@ -75,20 +84,35 @@ pub fn operational_dues_basis(inner: &AppStateInner, unit: &IndependentUnit, due
         ));
     }
     crate::scheduler::tariff_for(inner, unit)
-        .map(|amount| DuesBasis { amount, operating_budget_id: None })
+        .map(|amount| DuesBasis {
+            amount,
+            operating_budget_id: None,
+        })
         .ok_or_else(|| format!("Unit {} has no house-type tariff", unit.id))
 }
 
-pub fn budget_in_force<'a>(inner: &'a AppStateInner, site_id: &str, date: NaiveDate) -> Option<&'a OperatingBudget> {
+pub fn budget_in_force<'a>(
+    inner: &'a AppStateInner,
+    site_id: &str,
+    date: NaiveDate,
+) -> Option<&'a OperatingBudget> {
     inner
         .operating_budgets
         .iter()
         .filter(|b| crate::auth::same_id(&b.site_id, site_id) && b.is_in_force() && b.covers(date))
-        .max_by_key(|b| (b.status == BUDGET_FINAL || b.status == BUDGET_APPROVED, b.period_start))
+        .max_by_key(|b| {
+            (
+                b.status == BUDGET_FINAL || b.status == BUDGET_APPROVED,
+                b.period_start,
+            )
+        })
 }
 
 pub fn site_requires_budget(inner: &AppStateInner, site_id: &str) -> bool {
-    inner.budget_required_sites.iter().any(|s| crate::auth::same_id(s, site_id))
+    inner
+        .budget_required_sites
+        .iter()
+        .any(|s| crate::auth::same_id(s, site_id))
 }
 
 /// Splits `amount` over `weights` to the kuruş with the largest-remainder method,
@@ -110,7 +134,10 @@ pub fn allocate_by_weight(amount: Decimal, weights: &[i64]) -> Vec<Decimal> {
         })
         .collect();
     let assigned: Decimal = parts.iter().map(|p| p.1).sum();
-    let mut leftover = (total_cents - assigned).to_string().parse::<i64>().unwrap_or(0);
+    let mut leftover = (total_cents - assigned)
+        .to_string()
+        .parse::<i64>()
+        .unwrap_or(0);
     let mut order: Vec<usize> = (0..parts.len()).collect();
     order.sort_by(|&a, &b| parts[b].2.cmp(&parts[a].2).then(a.cmp(&b)));
     for &i in order.iter().cycle().take(parts.len().max(1) * 2) {
@@ -121,18 +148,34 @@ pub fn allocate_by_weight(amount: Decimal, weights: &[i64]) -> Vec<Decimal> {
         leftover -= 1;
     }
     parts.sort_by_key(|p| p.0);
-    parts.into_iter().map(|(_, cents, _)| cents / hundred).collect()
+    parts
+        .into_iter()
+        .map(|(_, cents, _)| cents / hundred)
+        .collect()
 }
 
 /// Per-unit yearly and monthly shares of a budget's lines.
-pub fn compute_unit_shares(inner: &AppStateInner, units: &[IndependentUnit], lines: &[OperatingBudgetLine]) -> Vec<OperatingBudgetUnitShare> {
+pub fn compute_unit_shares(
+    inner: &AppStateInner,
+    units: &[IndependentUnit],
+    lines: &[OperatingBudgetLine],
+) -> Vec<OperatingBudgetUnitShare> {
     let mut annual = vec![Decimal::ZERO; units.len()];
     for line in lines {
         let weights: Vec<i64> = units
             .iter()
-            .map(|u| if line.allocation_key == "EQUAL" { 1 } else { i64::from(u.land_share.max(1)) })
+            .map(|u| {
+                if line.allocation_key == "EQUAL" {
+                    1
+                } else {
+                    i64::from(u.land_share.max(1))
+                }
+            })
             .collect();
-        for (i, part) in allocate_by_weight(line.annual_amount, &weights).into_iter().enumerate() {
+        for (i, part) in allocate_by_weight(line.annual_amount, &weights)
+            .into_iter()
+            .enumerate()
+        {
             annual[i] += part;
         }
     }
@@ -144,13 +187,17 @@ pub fn compute_unit_shares(inner: &AppStateInner, units: &[IndependentUnit], lin
             unit_label: inner.unit_label(&u.block_id, u.unit_number),
             land_share: u.land_share.max(1),
             annual_amount: yearly,
-            monthly_amount: (yearly / Decimal::from(12)).round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero),
+            monthly_amount: (yearly / Decimal::from(12))
+                .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero),
         })
         .collect()
 }
 
 fn percent_increase(baseline: Decimal, total: Decimal) -> Option<Decimal> {
-    (baseline > Decimal::ZERO).then(|| ((total - baseline) * Decimal::from(100) / baseline).round_dp(4))
+    (baseline > Decimal::ZERO).then(|| {
+        ((total - baseline) * Decimal::from(100) / baseline)
+            .round_dp_with_strategy(4, RoundingStrategy::MidpointNearestEven)
+    })
 }
 
 pub struct OperatingBudgetService {
@@ -164,9 +211,17 @@ impl OperatingBudgetService {
 
     pub async fn list(&self, site_id: &str) -> Vec<OperatingBudget> {
         let inner = self.state.inner.read().await;
-        let mut out: Vec<OperatingBudget> =
-            inner.operating_budgets.iter().filter(|b| crate::auth::same_id(&b.site_id, site_id)).cloned().collect();
-        out.sort_by(|a, b| b.fiscal_year.cmp(&a.fiscal_year).then(b.created_at.cmp(&a.created_at)));
+        let mut out: Vec<OperatingBudget> = inner
+            .operating_budgets
+            .iter()
+            .filter(|b| crate::auth::same_id(&b.site_id, site_id))
+            .cloned()
+            .collect();
+        out.sort_by(|a, b| {
+            b.fiscal_year
+                .cmp(&a.fiscal_year)
+                .then(b.created_at.cmp(&a.created_at))
+        });
         out
     }
 
@@ -176,32 +231,69 @@ impl OperatingBudgetService {
     }
 
     /// A DRAFT budget with its lines and the unit shares they produce.
-    pub async fn create_draft(&self, site_id: &str, req: CreateOperatingBudgetRequest, actor: &str) -> BudgetResult<OperatingBudget> {
+    pub async fn create_draft(
+        &self,
+        site_id: &str,
+        req: CreateOperatingBudgetRequest,
+        actor: &str,
+    ) -> BudgetResult<OperatingBudget> {
         if !(2000..=2100).contains(&req.fiscal_year) {
-            return Err(BudgetError::Invalid("fiscal_year must be between 2000 and 2100".into()));
+            return Err(BudgetError::Invalid(
+                "fiscal_year must be between 2000 and 2100".into(),
+            ));
         }
-        let period_start = req.period_start.unwrap_or_else(|| NaiveDate::from_ymd_opt(req.fiscal_year, 1, 1).unwrap());
-        let period_end = req.period_end.unwrap_or_else(|| NaiveDate::from_ymd_opt(req.fiscal_year, 12, 31).unwrap());
+        let period_start = req
+            .period_start
+            .unwrap_or_else(|| NaiveDate::from_ymd_opt(req.fiscal_year, 1, 1).unwrap_or_default());
+        let period_end = req.period_end.unwrap_or_else(|| {
+            NaiveDate::from_ymd_opt(req.fiscal_year, 12, 31).unwrap_or_default()
+        });
         if period_end < period_start {
-            return Err(BudgetError::Invalid("period_end is before period_start".into()));
+            return Err(BudgetError::Invalid(
+                "period_end is before period_start".into(),
+            ));
         }
         if req.lines.is_empty() {
-            return Err(BudgetError::Invalid("A budget needs at least one expense line".into()));
+            return Err(BudgetError::Invalid(
+                "A budget needs at least one expense line".into(),
+            ));
         }
-        let lines = req.lines.iter().enumerate().map(|(i, l)| validate_line(i, l)).collect::<BudgetResult<Vec<_>>>()?;
+        let lines = req
+            .lines
+            .iter()
+            .enumerate()
+            .map(|(i, l)| validate_line(i, l))
+            .collect::<BudgetResult<Vec<_>>>()?;
         let total: Decimal = lines.iter().map(|l| l.annual_amount).sum();
 
         let mut budget = {
             let inner = self.state.inner.read().await;
-            if !inner.sites.iter().any(|s| crate::auth::same_id(&s.id, site_id)) {
-                return Err(BudgetError::NotFound(format!("Site not found: {}", site_id)));
+            if !inner
+                .sites
+                .iter()
+                .any(|s| crate::auth::same_id(&s.id, site_id))
+            {
+                return Err(BudgetError::NotFound(format!(
+                    "Site not found: {}",
+                    site_id
+                )));
             }
-            let mut units: Vec<IndependentUnit> =
-                inner.units.iter().filter(|u| crate::auth::same_id(&u.site_id, site_id)).cloned().collect();
+            let mut units: Vec<IndependentUnit> = inner
+                .units
+                .iter()
+                .filter(|u| crate::auth::same_id(&u.site_id, site_id))
+                .cloned()
+                .collect();
             if units.is_empty() {
-                return Err(BudgetError::Conflict("The site has no units to share the budget".into()));
+                return Err(BudgetError::Conflict(
+                    "The site has no units to share the budget".into(),
+                ));
             }
-            units.sort_by(|a, b| a.block_id.cmp(&b.block_id).then(a.unit_number.cmp(&b.unit_number)));
+            units.sort_by(|a, b| {
+                a.block_id
+                    .cmp(&b.block_id)
+                    .then(a.unit_number.cmp(&b.unit_number))
+            });
             let previous = inner
                 .operating_budgets
                 .iter()
@@ -214,7 +306,13 @@ impl OperatingBudgetService {
             let baseline = match previous {
                 Some(p) => p.total_annual_amount,
                 // A site's first budget is measured against its current tariffs' yearly run-rate.
-                None => units.iter().filter_map(|u| crate::scheduler::tariff_for(&inner, u)).sum::<Decimal>() * Decimal::from(12),
+                None => {
+                    units
+                        .iter()
+                        .filter_map(|u| crate::scheduler::tariff_for(&inner, u))
+                        .sum::<Decimal>()
+                        * Decimal::from(12)
+                }
             };
             OperatingBudget {
                 id: String::new(),
@@ -244,7 +342,10 @@ impl OperatingBudgetService {
         };
 
         if let Some(ref pool) = self.state.pool {
-            budget.id = crate::db::insert_operating_budget(pool, &mut budget).await.map_err(storage)?.to_string();
+            budget.id = crate::db::insert_operating_budget(pool, &mut budget)
+                .await
+                .map_err(storage)?
+                .to_string();
         } else {
             let inner = self.state.inner.read().await;
             budget.id = next_id(inner.operating_budgets.iter().map(|b| b.id.as_str()));
@@ -254,7 +355,12 @@ impl OperatingBudgetService {
                 l.id = line_id.to_string();
             }
         }
-        self.state.inner.write().await.operating_budgets.push(budget.clone());
+        self.state
+            .inner
+            .write()
+            .await
+            .operating_budgets
+            .push(budget.clone());
         Ok(budget)
     }
 
@@ -264,27 +370,45 @@ impl OperatingBudgetService {
             let inner = self.state.inner.read().await;
             let b = find(&inner, site_id, budget_id)?;
             if b.status != BUDGET_DRAFT {
-                return Err(BudgetError::Conflict(format!("Only a draft can be deleted; budget {} is {}", b.id, b.status)));
+                return Err(BudgetError::Conflict(format!(
+                    "Only a draft can be deleted; budget {} is {}",
+                    b.id, b.status
+                )));
             }
             b.id.clone()
         };
         if let Some(ref pool) = self.state.pool {
-            crate::db::delete_draft_budget(pool, &id).await.map_err(storage)?;
+            crate::db::delete_draft_budget(pool, &id)
+                .await
+                .map_err(storage)?;
         }
-        self.state.inner.write().await.operating_budgets.retain(|b| b.id != id);
+        self.state
+            .inner
+            .write()
+            .await
+            .operating_budgets
+            .retain(|b| b.id != id);
         Ok(())
     }
 
     /// The manager's interim budget (DRAFT -> INTERIM). Refused when the increase
     /// over the baseline exceeds that year's revaluation rate: such an increase
     /// needs the assembly's decision (`approve`).
-    pub async fn issue_interim(&self, site_id: &str, budget_id: &str, req: IssueInterimBudgetRequest) -> BudgetResult<OperatingBudget> {
+    pub async fn issue_interim(
+        &self,
+        site_id: &str,
+        budget_id: &str,
+        req: IssueInterimBudgetRequest,
+    ) -> BudgetResult<OperatingBudget> {
         let issued_on = req.issued_on.unwrap_or_else(|| Utc::now().date_naive());
         let updated = {
             let inner = self.state.inner.read().await;
             let b = find(&inner, site_id, budget_id)?;
             if b.status != BUDGET_DRAFT {
-                return Err(BudgetError::Conflict(format!("Budget {} is {}; only a draft can be issued as interim", b.id, b.status)));
+                return Err(BudgetError::Conflict(format!(
+                    "Budget {} is {}; only a draft can be issued as interim",
+                    b.id, b.status
+                )));
             }
             let mut b = b.clone();
             let year = b.period_start.year();
@@ -299,7 +423,7 @@ impl OperatingBudgetService {
                 if increase > cap {
                     return Err(BudgetError::Conflict(format!(
                         "The interim budget raises the yearly amount by {}% (₺{:.2} -> ₺{:.2}), above the {} revaluation rate of {}%. KMK 37: only the assembly can approve this increase",
-                        increase.round_dp(2), b.baseline_annual_amount, b.total_annual_amount, year, cap
+                        increase.round_dp_with_strategy(2, RoundingStrategy::MidpointNearestEven), b.baseline_annual_amount, b.total_annual_amount, year, cap
                     )));
                 }
             }
@@ -313,19 +437,31 @@ impl OperatingBudgetService {
     }
 
     /// The assembly's approval (DRAFT/INTERIM -> APPROVED), with the decision it rests on.
-    pub async fn approve(&self, site_id: &str, budget_id: &str, req: ApproveBudgetRequest) -> BudgetResult<OperatingBudget> {
+    pub async fn approve(
+        &self,
+        site_id: &str,
+        budget_id: &str,
+        req: ApproveBudgetRequest,
+    ) -> BudgetResult<OperatingBudget> {
         let decision = req.assembly_decision_ref.trim().to_string();
         if decision.chars().count() < 3 {
-            return Err(BudgetError::Invalid("assembly_decision_ref (karar defteri reference) is required".into()));
+            return Err(BudgetError::Invalid(
+                "assembly_decision_ref (karar defteri reference) is required".into(),
+            ));
         }
         let updated = {
             let inner = self.state.inner.read().await;
             let b = find(&inner, site_id, budget_id)?;
             if b.status != BUDGET_DRAFT && b.status != BUDGET_INTERIM {
-                return Err(BudgetError::Conflict(format!("Budget {} is {} and cannot be approved", b.id, b.status)));
+                return Err(BudgetError::Conflict(format!(
+                    "Budget {} is {} and cannot be approved",
+                    b.id, b.status
+                )));
             }
             if req.assembly_decision_date > Utc::now().date_naive() {
-                return Err(BudgetError::Invalid("The assembly decision date is in the future".into()));
+                return Err(BudgetError::Invalid(
+                    "The assembly decision date is in the future".into(),
+                ));
             }
             let mut b = b.clone();
             b.status = BUDGET_APPROVED.to_string();
@@ -344,7 +480,10 @@ impl OperatingBudgetService {
                 .operating_budgets
                 .iter()
                 .filter(|o| {
-                    o.id != budget.id && crate::auth::same_id(&o.site_id, &budget.site_id) && o.fiscal_year == budget.fiscal_year && o.is_in_force()
+                    o.id != budget.id
+                        && crate::auth::same_id(&o.site_id, &budget.site_id)
+                        && o.fiscal_year == budget.fiscal_year
+                        && o.is_in_force()
                 })
                 .cloned()
                 .map(|mut o| {
@@ -356,7 +495,9 @@ impl OperatingBudgetService {
         let mut changed = superseded.clone();
         changed.push(budget.clone());
         if let Some(ref pool) = self.state.pool {
-            crate::db::update_budget_headers(pool, &changed).await.map_err(storage)?;
+            crate::db::update_budget_headers(pool, &changed)
+                .await
+                .map_err(storage)?;
         }
         let mut inner = self.state.inner.write().await;
         for c in changed {
@@ -367,16 +508,29 @@ impl OperatingBudgetService {
         Ok(budget)
     }
 
-    pub async fn reject(&self, site_id: &str, budget_id: &str, req: RejectBudgetRequest) -> BudgetResult<OperatingBudget> {
+    pub async fn reject(
+        &self,
+        site_id: &str,
+        budget_id: &str,
+        req: RejectBudgetRequest,
+    ) -> BudgetResult<OperatingBudget> {
         let reason = req.reason.trim();
         if reason.chars().count() < 3 {
-            return Err(BudgetError::Invalid("A rejection reason of at least 3 characters is required".into()));
+            return Err(BudgetError::Invalid(
+                "A rejection reason of at least 3 characters is required".into(),
+            ));
         }
         let updated = {
             let inner = self.state.inner.read().await;
             let b = find(&inner, site_id, budget_id)?;
-            if !matches!(b.status.as_str(), BUDGET_DRAFT | BUDGET_INTERIM | BUDGET_APPROVED) {
-                return Err(BudgetError::Conflict(format!("Budget {} is {} and cannot be rejected", b.id, b.status)));
+            if !matches!(
+                b.status.as_str(),
+                BUDGET_DRAFT | BUDGET_INTERIM | BUDGET_APPROVED
+            ) {
+                return Err(BudgetError::Conflict(format!(
+                    "Budget {} is {} and cannot be rejected",
+                    b.id, b.status
+                )));
             }
             let mut b = b.clone();
             b.status = BUDGET_REJECTED.to_string();
@@ -392,10 +546,18 @@ impl OperatingBudgetService {
 
     /// Service of an approved budget on one owner; the objection window runs
     /// from the latest service date.
-    pub async fn record_service(&self, site_id: &str, budget_id: &str, req: RecordBudgetServiceRequest) -> BudgetResult<OperatingBudget> {
+    pub async fn record_service(
+        &self,
+        site_id: &str,
+        budget_id: &str,
+        req: RecordBudgetServiceRequest,
+    ) -> BudgetResult<OperatingBudget> {
         let method = req.method.trim().to_uppercase();
         if !SERVICE_METHODS.contains(&method.as_str()) {
-            return Err(BudgetError::Invalid(format!("method must be one of {}", SERVICE_METHODS.join(", "))));
+            return Err(BudgetError::Invalid(format!(
+                "method must be one of {}",
+                SERVICE_METHODS.join(", ")
+            )));
         }
         if req.recipient_name.trim().is_empty() {
             return Err(BudgetError::Invalid("recipient_name is required".into()));
@@ -407,15 +569,25 @@ impl OperatingBudgetService {
             let inner = self.state.inner.read().await;
             let b = find(&inner, site_id, budget_id)?;
             if b.status != BUDGET_APPROVED {
-                return Err(BudgetError::Conflict(format!("Budget {} is {}; only an approved budget is served", b.id, b.status)));
+                return Err(BudgetError::Conflict(format!(
+                    "Budget {} is {}; only an approved budget is served",
+                    b.id, b.status
+                )));
             }
             let unit_id = b
                 .share_of(&req.unit_id)
                 .map(|s| s.unit_id.clone())
-                .ok_or_else(|| BudgetError::NotFound(format!("Unit {} has no share in budget {}", req.unit_id, b.id)))?;
+                .ok_or_else(|| {
+                    BudgetError::NotFound(format!(
+                        "Unit {} has no share in budget {}",
+                        req.unit_id, b.id
+                    ))
+                })?;
             if let Some(decided) = b.assembly_decision_date {
                 if req.served_on < decided {
-                    return Err(BudgetError::Invalid("served_on is before the assembly decision".into()));
+                    return Err(BudgetError::Invalid(
+                        "served_on is before the assembly decision".into(),
+                    ));
                 }
             }
             (b.clone(), unit_id)
@@ -436,8 +608,13 @@ impl OperatingBudgetService {
             .max()
             .and_then(|d| d.checked_add_days(chrono::Days::new(OBJECTION_WINDOW_DAYS)));
         if let Some(ref pool) = self.state.pool {
-            record.id = crate::db::upsert_budget_service(pool, &budget.id, &record).await.map_err(storage)?.to_string();
-            crate::db::update_budget_headers(pool, std::slice::from_ref(&budget)).await.map_err(storage)?;
+            record.id = crate::db::upsert_budget_service(pool, &budget.id, &record)
+                .await
+                .map_err(storage)?
+                .to_string();
+            crate::db::update_budget_headers(pool, std::slice::from_ref(&budget))
+                .await
+                .map_err(storage)?;
         } else {
             record.id = format!("{}-{}", budget.id, unit_id);
         }
@@ -445,10 +622,17 @@ impl OperatingBudgetService {
         self.replace(budget).await
     }
 
-    pub async fn file_objection(&self, site_id: &str, budget_id: &str, req: FileBudgetObjectionRequest) -> BudgetResult<OperatingBudget> {
+    pub async fn file_objection(
+        &self,
+        site_id: &str,
+        budget_id: &str,
+        req: FileBudgetObjectionRequest,
+    ) -> BudgetResult<OperatingBudget> {
         let reason = req.reason.trim().to_string();
         if reason.chars().count() < 3 {
-            return Err(BudgetError::Invalid("An objection reason of at least 3 characters is required".into()));
+            return Err(BudgetError::Invalid(
+                "An objection reason of at least 3 characters is required".into(),
+            ));
         }
         if req.objector_name.trim().is_empty() {
             return Err(BudgetError::Invalid("objector_name is required".into()));
@@ -458,12 +642,20 @@ impl OperatingBudgetService {
             let inner = self.state.inner.read().await;
             let b = find(&inner, site_id, budget_id)?;
             if b.status != BUDGET_APPROVED {
-                return Err(BudgetError::Conflict(format!("Budget {} is {}; objections are filed against an approved budget", b.id, b.status)));
+                return Err(BudgetError::Conflict(format!(
+                    "Budget {} is {}; objections are filed against an approved budget",
+                    b.id, b.status
+                )));
             }
             let unit_id = b
                 .share_of(&req.unit_id)
                 .map(|s| s.unit_id.clone())
-                .ok_or_else(|| BudgetError::NotFound(format!("Unit {} has no share in budget {}", req.unit_id, b.id)))?;
+                .ok_or_else(|| {
+                    BudgetError::NotFound(format!(
+                        "Unit {} has no share in budget {}",
+                        req.unit_id, b.id
+                    ))
+                })?;
             if let Some(served) = b.service_records.iter().find(|r| r.unit_id == unit_id) {
                 let last_day = served.served_on + chrono::Days::new(OBJECTION_WINDOW_DAYS);
                 if filed_on > last_day {
@@ -486,7 +678,10 @@ impl OperatingBudgetService {
             resolution_note: None,
         };
         if let Some(ref pool) = self.state.pool {
-            objection.id = crate::db::save_budget_objection(pool, &budget.id, &objection).await.map_err(storage)?.to_string();
+            objection.id = crate::db::save_budget_objection(pool, &budget.id, &objection)
+                .await
+                .map_err(storage)?
+                .to_string();
         } else {
             objection.id = format!("{}-{}", budget.id, budget.objections.len() + 1);
         }
@@ -503,7 +698,9 @@ impl OperatingBudgetService {
     ) -> BudgetResult<OperatingBudget> {
         let status = req.status.trim().to_uppercase();
         if status != "UPHELD" && status != "DISMISSED" {
-            return Err(BudgetError::Invalid("status must be UPHELD or DISMISSED".into()));
+            return Err(BudgetError::Invalid(
+                "status must be UPHELD or DISMISSED".into(),
+            ));
         }
         let mut budget = {
             let inner = self.state.inner.read().await;
@@ -513,28 +710,43 @@ impl OperatingBudgetService {
             .objections
             .iter_mut()
             .find(|o| o.id == objection_id)
-            .ok_or_else(|| BudgetError::NotFound(format!("Objection {} not found", objection_id)))?;
+            .ok_or_else(|| {
+                BudgetError::NotFound(format!("Objection {} not found", objection_id))
+            })?;
         if objection.status != "OPEN" {
-            return Err(BudgetError::Conflict(format!("Objection {} is already {}", objection.id, objection.status)));
+            return Err(BudgetError::Conflict(format!(
+                "Objection {} is already {}",
+                objection.id, objection.status
+            )));
         }
         objection.status = status;
         objection.resolved_on = Some(Utc::now().date_naive());
         objection.resolution_note = req.resolution_note.clone().filter(|n| !n.trim().is_empty());
         let saved = objection.clone();
         if let Some(ref pool) = self.state.pool {
-            crate::db::save_budget_objection(pool, &budget.id, &saved).await.map_err(storage)?;
+            crate::db::save_budget_objection(pool, &budget.id, &saved)
+                .await
+                .map_err(storage)?;
         }
         self.replace(budget).await
     }
 
     /// APPROVED -> FINAL: every unit served, the objection window closed, and no
     /// objection open or upheld (an upheld one means the budget must be revised).
-    pub async fn finalize(&self, site_id: &str, budget_id: &str, today: NaiveDate) -> BudgetResult<OperatingBudget> {
+    pub async fn finalize(
+        &self,
+        site_id: &str,
+        budget_id: &str,
+        today: NaiveDate,
+    ) -> BudgetResult<OperatingBudget> {
         let updated = {
             let inner = self.state.inner.read().await;
             let b = find(&inner, site_id, budget_id)?;
             if b.status != BUDGET_APPROVED {
-                return Err(BudgetError::Conflict(format!("Budget {} is {}; only an approved budget becomes final", b.id, b.status)));
+                return Err(BudgetError::Conflict(format!(
+                    "Budget {} is {}; only an approved budget becomes final",
+                    b.id, b.status
+                )));
             }
             let unserved: Vec<&str> = b
                 .unit_shares
@@ -546,18 +758,29 @@ impl OperatingBudgetService {
                 return Err(BudgetError::Conflict(format!(
                     "{} unit(s) have not been served the budget yet: {}",
                     unserved.len(),
-                    unserved.iter().take(5).cloned().collect::<Vec<_>>().join(", ")
+                    unserved
+                        .iter()
+                        .take(5)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )));
             }
             match b.objection_deadline {
                 Some(deadline) if today > deadline => {}
                 Some(deadline) => {
-                    return Err(BudgetError::Conflict(format!("The objection window is open until {}", deadline)));
+                    return Err(BudgetError::Conflict(format!(
+                        "The objection window is open until {}",
+                        deadline
+                    )));
                 }
                 None => return Err(BudgetError::Conflict("No service has been recorded".into())),
             }
             if let Some(o) = b.objections.iter().find(|o| o.status == "OPEN") {
-                return Err(BudgetError::Conflict(format!("Objection {} by {} is still open", o.id, o.objector_name)));
+                return Err(BudgetError::Conflict(format!(
+                    "Objection {} by {} is still open",
+                    o.id, o.objector_name
+                )));
             }
             if let Some(o) = b.objections.iter().find(|o| o.status == "UPHELD") {
                 return Err(BudgetError::Conflict(format!(
@@ -615,10 +838,14 @@ impl OperatingBudgetService {
 
     pub async fn set_policy(&self, site_id: &str, require: bool) -> Result<(), String> {
         if let Some(ref pool) = self.state.pool {
-            crate::db::set_site_budget_policy(pool, site_id, require).await.map_err(|e| e.to_string())?;
+            crate::db::set_site_budget_policy(pool, site_id, require)
+                .await
+                .map_err(|e| e.to_string())?;
         }
         let mut inner = self.state.inner.write().await;
-        inner.budget_required_sites.retain(|s| !crate::auth::same_id(s, site_id));
+        inner
+            .budget_required_sites
+            .retain(|s| !crate::auth::same_id(s, site_id));
         if require {
             inner.budget_required_sites.push(site_id.to_string());
         }
@@ -632,7 +859,10 @@ impl OperatingBudgetService {
         rates
     }
 
-    pub async fn set_revaluation_rate(&self, rate: RevaluationRate) -> Result<RevaluationRate, String> {
+    pub async fn set_revaluation_rate(
+        &self,
+        rate: RevaluationRate,
+    ) -> Result<RevaluationRate, String> {
         if !(2000..=2100).contains(&rate.year) {
             return Err("year must be between 2000 and 2100".into());
         }
@@ -640,29 +870,46 @@ impl OperatingBudgetService {
             return Err("rate is a percentage between 0 and 1000 with at most 4 decimals".into());
         }
         if let Some(ref pool) = self.state.pool {
-            crate::db::upsert_revaluation_rate(pool, &rate).await.map_err(|e| e.to_string())?;
+            crate::db::upsert_revaluation_rate(pool, &rate)
+                .await
+                .map_err(|e| e.to_string())?;
         }
-        self.state.inner.write().await.revaluation_rates.insert(rate.year, rate.clone());
+        self.state
+            .inner
+            .write()
+            .await
+            .revaluation_rates
+            .insert(rate.year, rate.clone());
         Ok(rate)
     }
 
     async fn save_header(&self, budget: OperatingBudget) -> BudgetResult<OperatingBudget> {
         if let Some(ref pool) = self.state.pool {
-            crate::db::update_budget_headers(pool, std::slice::from_ref(&budget)).await.map_err(storage)?;
+            crate::db::update_budget_headers(pool, std::slice::from_ref(&budget))
+                .await
+                .map_err(storage)?;
         }
         self.replace(budget).await
     }
 
     async fn replace(&self, budget: OperatingBudget) -> BudgetResult<OperatingBudget> {
         let mut inner = self.state.inner.write().await;
-        if let Some(slot) = inner.operating_budgets.iter_mut().find(|b| b.id == budget.id) {
+        if let Some(slot) = inner
+            .operating_budgets
+            .iter_mut()
+            .find(|b| b.id == budget.id)
+        {
             *slot = budget.clone();
         }
         Ok(budget)
     }
 }
 
-fn find<'a>(inner: &'a AppStateInner, site_id: &str, budget_id: &str) -> BudgetResult<&'a OperatingBudget> {
+fn find<'a>(
+    inner: &'a AppStateInner,
+    site_id: &str,
+    budget_id: &str,
+) -> BudgetResult<&'a OperatingBudget> {
     inner
         .operating_budgets
         .iter()
@@ -673,14 +920,30 @@ fn find<'a>(inner: &'a AppStateInner, site_id: &str, budget_id: &str) -> BudgetR
 fn validate_line(index: usize, l: &BudgetLineInput) -> BudgetResult<OperatingBudgetLine> {
     let category = l.category.trim().to_uppercase();
     if !BUDGET_CATEGORIES.contains(&category.as_str()) {
-        return Err(BudgetError::Invalid(format!("line {}: category must be one of {}", index + 1, BUDGET_CATEGORIES.join(", "))));
+        return Err(BudgetError::Invalid(format!(
+            "line {}: category must be one of {}",
+            index + 1,
+            BUDGET_CATEGORIES.join(", ")
+        )));
     }
     if l.annual_amount <= Decimal::ZERO || l.annual_amount.scale() > 2 {
-        return Err(BudgetError::Invalid(format!("line {}: annual_amount must be positive with at most 2 decimals", index + 1)));
+        return Err(BudgetError::Invalid(format!(
+            "line {}: annual_amount must be positive with at most 2 decimals",
+            index + 1
+        )));
     }
-    let key = l.allocation_key.as_deref().unwrap_or("LAND_SHARE").trim().to_uppercase();
+    let key = l
+        .allocation_key
+        .as_deref()
+        .unwrap_or("LAND_SHARE")
+        .trim()
+        .to_uppercase();
     if !ALLOCATION_KEYS.contains(&key.as_str()) {
-        return Err(BudgetError::Invalid(format!("line {}: allocation_key must be one of {}", index + 1, ALLOCATION_KEYS.join(", "))));
+        return Err(BudgetError::Invalid(format!(
+            "line {}: allocation_key must be one of {}",
+            index + 1,
+            ALLOCATION_KEYS.join(", ")
+        )));
     }
     Ok(OperatingBudgetLine {
         id: String::new(),
@@ -692,9 +955,16 @@ fn validate_line(index: usize, l: &BudgetLineInput) -> BudgetResult<OperatingBud
 }
 
 fn next_id<'a>(ids: impl Iterator<Item = &'a str>) -> String {
-    (ids.filter_map(crate::db::parse_id_to_i64).max().unwrap_or(0) + 1).to_string()
+    (ids.filter_map(crate::db::parse_id_to_i64)
+        .max()
+        .unwrap_or(0)
+        + 1)
+    .to_string()
 }
 
 fn storage(e: Box<dyn std::error::Error + Send + Sync>) -> BudgetError {
-    BudgetError::Storage(format!("Budget was not saved: {}", crate::db::describe_db_error(e.as_ref())))
+    BudgetError::Storage(format!(
+        "Budget was not saved: {}",
+        crate::db::describe_db_error(e.as_ref())
+    ))
 }

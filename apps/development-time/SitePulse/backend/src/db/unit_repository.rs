@@ -2,10 +2,13 @@ use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use tracing::info;
 
-use crate::models::{IndependentUnit, User};
 use super::base::{parse_id_to_i64, require_id};
 use super::user_repository::save_user;
-pub async fn save_unit(pool: &Pool, unit: &IndependentUnit) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+use crate::models::{IndependentUnit, User};
+pub async fn save_unit(
+    pool: &Pool,
+    unit: &IndependentUnit,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let id_num = parse_id_to_i64(&unit.id).unwrap_or(unit.unit_number as i64);
     let site_id_num = require_id("entity", &unit.site_id)?;
@@ -55,7 +58,10 @@ pub async fn save_unit(pool: &Pool, unit: &IndependentUnit) -> Result<(), Box<dy
 
     let owner_id_num = unit.owner_user_id.as_deref().and_then(parse_id_to_i64);
     let effective_owner_id = if let Some(oid) = owner_id_num {
-        let exists = client.query_opt("SELECT id FROM persons WHERE id = $1", &[&oid]).await?.is_some();
+        let exists = client
+            .query_opt("SELECT id FROM persons WHERE id = $1", &[&oid])
+            .await?
+            .is_some();
         if exists {
             Some(oid)
         } else {
@@ -80,7 +86,10 @@ pub async fn save_unit(pool: &Pool, unit: &IndependentUnit) -> Result<(), Box<dy
 
     let tenant_id_num = unit.tenant_user_id.as_deref().and_then(parse_id_to_i64);
     let effective_tenant_id = if let Some(tid) = tenant_id_num {
-        let exists = client.query_opt("SELECT id FROM persons WHERE id = $1", &[&tid]).await?.is_some();
+        let exists = client
+            .query_opt("SELECT id FROM persons WHERE id = $1", &[&tid])
+            .await?
+            .is_some();
         if exists {
             Some(tid)
         } else {
@@ -131,10 +140,12 @@ pub async fn save_unit(pool: &Pool, unit: &IndependentUnit) -> Result<(), Box<dy
             ],
         )
         .await?;
-    info!("Saved unit {} (numeric ID: {}, D:{}) to PostgreSQL units", unit.id, id_num, unit.unit_number);
+    info!(
+        "Saved unit {} (numeric ID: {}, D:{}) to PostgreSQL units",
+        unit.id, id_num, unit.unit_number
+    );
     Ok(())
 }
-
 
 pub async fn save_unit_member(
     pool: &Pool,
@@ -163,8 +174,8 @@ pub async fn save_unit_member(
     // Link the household member to the person record when one exists for this email.
     let person_id: Option<i64> = client
         .query_opt(
-            "SELECT id FROM persons WHERE LOWER(email) = LOWER($1)",
-            &[&email.trim()],
+            "SELECT id FROM persons WHERE LOWER(email) = $1",
+            &[&crate::domain::email::NormalizedEmail::normalize(email)],
         )
         .await?
         .map(|r| r.get(0));
@@ -200,7 +211,6 @@ pub async fn save_unit_member(
     Ok(member_id)
 }
 
-
 pub async fn save_remembered_sender_iban(
     pool: &Pool,
     iban: &str,
@@ -222,7 +232,10 @@ pub async fn save_remembered_sender_iban(
             &[&iban, &unit_id_num, &label, &bank_name],
         )
         .await?;
-    info!("Saved remembered sender IBAN {} for unit {} to PostgreSQL", iban, unit_id);
+    info!(
+        "Saved remembered sender IBAN {} for unit {} to PostgreSQL",
+        iban, unit_id
+    );
     Ok(())
 }
 
@@ -232,7 +245,10 @@ pub async fn delete_remembered_sender_iban(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     client
-        .execute("DELETE FROM unit_sender_ibans WHERE sender_iban = $1", &[&iban])
+        .execute(
+            "DELETE FROM unit_sender_ibans WHERE sender_iban = $1",
+            &[&iban],
+        )
         .await?;
     info!("Deleted remembered sender IBAN {} from PostgreSQL", iban);
     Ok(())
@@ -245,7 +261,12 @@ pub async fn save_unit_payer_names(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let unit_id_num = require_id("entity", unit_id)?;
-    client.execute("DELETE FROM unit_payer_names WHERE unit_id = $1", &[&unit_id_num]).await?;
+    client
+        .execute(
+            "DELETE FROM unit_payer_names WHERE unit_id = $1",
+            &[&unit_id_num],
+        )
+        .await?;
     for name in names {
         client
             .execute(
@@ -254,10 +275,13 @@ pub async fn save_unit_payer_names(
             )
             .await.map_err(|e| e.to_string())?;
     }
-    info!("Saved {} payer names for unit {} to PostgreSQL", names.len(), unit_id);
+    info!(
+        "Saved {} payer names for unit {} to PostgreSQL",
+        names.len(),
+        unit_id
+    );
     Ok(())
 }
-
 
 pub async fn transfer_unit_ownership_db(
     pool: &Pool,
@@ -276,7 +300,12 @@ pub async fn transfer_unit_ownership_db(
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
     let new_person_id: Option<i64> = tx
-        .query_opt("SELECT person_id FROM users WHERE LOWER(email) = LOWER($1)", &[&new_user.email])
+        .query_opt(
+            "SELECT person_id FROM users WHERE LOWER(email) = $1",
+            &[&crate::domain::email::NormalizedEmail::normalize(
+                &new_user.email,
+            )],
+        )
         .await?
         .and_then(|r| r.get(0));
 
@@ -301,28 +330,28 @@ pub async fn transfer_unit_ownership_db(
             .await?;
 
         // 5. Deactivate old owner occupancy if active
-        tx
-            .execute(
-                r#"
+        tx.execute(
+            r#"
                 UPDATE unit_occupancies
                 SET is_active = false, end_date = $2, exit_balance = $3, notes = COALESCE($4, notes)
                 WHERE unit_id = $1 AND is_active = true AND occupancy_type = 'OWNER'
                 "#,
-                &[&unit_id_num, &transfer_date, &exit_balance, &notes],
-            )
-            .await?;
+            &[&unit_id_num, &transfer_date, &exit_balance, &notes],
+        )
+        .await?;
 
         // 6. Update units owner
-        tx
-            .execute(
-                "UPDATE units SET owner_person_id = $2 WHERE id = $1",
-                &[&unit_id_num, &pid],
-            )
-            .await?;
+        tx.execute(
+            "UPDATE units SET owner_person_id = $2 WHERE id = $1",
+            &[&unit_id_num, &pid],
+        )
+        .await?;
     }
 
-    info!("Transferred ownership for unit {} to user {} in PostgreSQL", unit_id, new_user.email);
+    info!(
+        "Transferred ownership for unit {} to user {} in PostgreSQL",
+        unit_id, new_user.email
+    );
     tx.commit().await?;
     Ok(())
 }
-

@@ -19,12 +19,10 @@ impl SiteBankAccountService {
 
     /// Returns the currently active bank account for the given site, or `None` if not yet
     /// configured.
-    pub async fn get_active_account(
-        &self,
-        site_id: &str,
-    ) -> Option<BankAccountConfigResponse> {
+    pub async fn get_active_account(&self, site_id: &str) -> Option<BankAccountConfigResponse> {
         if let Some(ref pool) = self.state.pool {
-            if let Ok(Some(account)) = crate::db::get_active_site_bank_account(pool, site_id).await {
+            if let Ok(Some(account)) = crate::db::get_active_site_bank_account(pool, site_id).await
+            {
                 return Some(Self::to_response(&account));
             }
         }
@@ -50,17 +48,25 @@ impl SiteBankAccountService {
         req: ConfigureBankAccountRequest,
     ) -> Result<BankAccountConfigResponse, String> {
         // --- Validate bank code ---
-        let bank = SupportedBank::from_code(&req.bank_code)
-            .ok_or_else(|| format!("Unknown bank code '{}'. See /api/v1/site-admin/banks for supported banks.", req.bank_code))?;
+        let bank = SupportedBank::from_code(&req.bank_code).ok_or_else(|| {
+            format!(
+                "Unknown bank code '{}'. See /api/v1/site-admin/banks for supported banks.",
+                req.bank_code
+            )
+        })?;
 
         // --- Validate IBAN ---
-        let iban_clean = req.iban.replace(' ', "").to_uppercase();
-        if !iban_clean.starts_with("TR") || iban_clean.len() != 26 {
-            return Err(
-                "Invalid IBAN. Turkish IBANs must start with 'TR' and be 26 characters long."
-                    .to_string(),
-            );
+        // Structure and MOD-97 check digits, via the shared value object.
+        let iban = crate::domain::TrIban::parse(&req.iban).map_err(|e| e.to_string())?;
+        if iban.bank_code() != bank.eft_code() {
+            return Err(format!(
+                "Invalid IBAN. IBAN bank code {} does not belong to {} (expected {}).",
+                iban.bank_code(),
+                bank.display_name(),
+                bank.eft_code()
+            ));
         }
+        let iban_clean = iban.into_string();
         if req.account_holder.trim().is_empty() {
             return Err("Account holder name is required.".to_string());
         }
@@ -77,7 +83,10 @@ impl SiteBankAccountService {
         let new_id = if let Some(ref pool) = self.state.pool {
             let client = pool.get().await.map_err(|e| e.to_string())?;
             let site_id_num = crate::db::require_id("entity", site_id)?;
-            let config_by_num = req.configured_by.as_deref().and_then(crate::db::parse_id_to_i64);
+            let config_by_num = req
+                .configured_by
+                .as_deref()
+                .and_then(crate::db::parse_id_to_i64);
             client.execute(
                 "UPDATE site_bank_accounts SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE site_id = $1 AND is_active = true",
                 &[&site_id_num],
@@ -106,7 +115,12 @@ impl SiteBankAccountService {
             db_id.to_string()
         } else {
             let inner = self.state.inner.read().await;
-            let max_id = inner.site_bank_accounts.iter().filter_map(|b| crate::db::parse_id_to_i64(&b.id)).max().unwrap_or(0);
+            let max_id = inner
+                .site_bank_accounts
+                .iter()
+                .filter_map(|b| crate::db::parse_id_to_i64(&b.id))
+                .max()
+                .unwrap_or(0);
             (max_id + 1).to_string()
         };
 
@@ -157,12 +171,10 @@ impl SiteBankAccountService {
 
         ALL_BANKS
             .iter()
-            .map(|b| {
-                SupportedBankEntry {
-                    code: b.as_code().to_string(),
-                    display_name: b.display_name().to_string(),
-                    statement_format: b.statement_format(),
-                }
+            .map(|b| SupportedBankEntry {
+                code: b.as_code().to_string(),
+                display_name: b.display_name().to_string(),
+                statement_format: b.statement_format(),
             })
             .collect()
     }

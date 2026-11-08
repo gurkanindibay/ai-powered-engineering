@@ -61,16 +61,25 @@ impl RegistrationApprovalService {
         }
 
         let mut inner = self.state.inner.write().await;
-        let email_norm = request.email.trim().to_lowercase();
+        let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
 
-        if inner.users.iter().any(|u| u.email.to_lowercase() == email_norm) {
+        if inner
+            .users
+            .iter()
+            .any(|u| crate::domain::email::same_email(&u.email, &email_norm))
+        {
             return Err(format!(
                 "An account with this email address already exists (zaten mevcut): {}",
                 request.email
             ));
         }
 
-        let max_req = inner.pending_registrations.iter().filter_map(|r| crate::db::parse_id_to_i64(&r.request_id)).max().unwrap_or(0);
+        let max_req = inner
+            .pending_registrations
+            .iter()
+            .filter_map(|r| crate::db::parse_id_to_i64(&r.request_id))
+            .max()
+            .unwrap_or(0);
         let request_id = (max_req + 1).to_string();
         let site_id = inner
             .sites
@@ -97,13 +106,18 @@ impl RegistrationApprovalService {
         drop(inner);
 
         if let Some(ref pool) = self.state.pool {
-            crate::db::save_pending_registration(pool, &item).await.map_err(|e| e.to_string())?;
+            crate::db::save_pending_registration(pool, &item)
+                .await
+                .map_err(|e| e.to_string())?;
         }
 
         Ok(item)
     }
 
-    pub async fn get_pending_registrations(&self, site_id: &str) -> Vec<PendingRegistrationResponse> {
+    pub async fn get_pending_registrations(
+        &self,
+        site_id: &str,
+    ) -> Vec<PendingRegistrationResponse> {
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
                 if let Some(rows) = crate::db::logged(client
@@ -168,7 +182,9 @@ impl RegistrationApprovalService {
         drop(inner); // drop write lock before doing DB operations
 
         if let Some(ref pool) = self.state.pool {
-            crate::db::update_pending_registration_status(pool, request_id, "APPROVED").await.map_err(|e| e.to_string())?;
+            crate::db::update_pending_registration_status(pool, request_id, "APPROVED")
+                .await
+                .map_err(|e| e.to_string())?;
         }
 
         let temp_pass = generate_resident_temporary_password();
@@ -195,12 +211,14 @@ impl RegistrationApprovalService {
         };
 
         let site_numeric_id = crate::db::require_id("entity", &req.site_id)?;
-        let viban = crate::services::virtual_iban_service::VirtualIbanService::generate_virtual_iban(
-            crate::services::virtual_iban_service::VirtualIbanService::KUVEYT_TURK_BANK_CODE,
-            &site_numeric_id.to_string(),
-            &format!("blok-{}", effective_clean_block),
-            req.unit_no,
-        );
+        let viban =
+            crate::services::virtual_iban_service::VirtualIbanService::generate_virtual_iban(
+                crate::services::virtual_iban_service::VirtualIbanService::KUVEYT_TURK_BANK_CODE,
+                &site_numeric_id.to_string(),
+                &format!("blok-{}", effective_clean_block),
+                req.unit_no,
+            )
+            .map_err(|e| e.to_string())?;
 
         let mut user_numeric_id = 0i64;
         #[allow(unused_assignments)]
@@ -234,9 +252,19 @@ impl RegistrationApprovalService {
                 };
 
                 // Find or create person
-                let person_type = if req.is_resident { "HOME_RESIDENT" } else { "HOME_OWNER" };
+                let person_type = if req.is_resident {
+                    "HOME_RESIDENT"
+                } else {
+                    "HOME_OWNER"
+                };
                 let existing_person = client
-                    .query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&req.email])
+                    .query_opt(
+                        "SELECT id FROM persons WHERE LOWER(email) = $1",
+                        // The parameter must be normalized too: LOWER() only applies to the column.
+                        &[&crate::domain::email::NormalizedEmail::normalize(
+                            &req.email,
+                        )],
+                    )
                     .await
                     .ok()
                     .flatten();
@@ -256,7 +284,11 @@ impl RegistrationApprovalService {
 
                 // Insert user
                 let user_role_str = "HOME_RESIDENT";
-                let person_id_opt: Option<i64> = if person_numeric_id > 0 { Some(person_numeric_id) } else { None };
+                let person_id_opt: Option<i64> = if person_numeric_id > 0 {
+                    Some(person_numeric_id)
+                } else {
+                    None
+                };
                 if let Some(user_row) = crate::db::logged(client
                     .query_one(
                         r#"
@@ -310,7 +342,12 @@ impl RegistrationApprovalService {
         let user_id = if user_numeric_id > 0 {
             user_numeric_id.to_string()
         } else {
-            let max_u = inner.users.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            let max_u = inner
+                .users
+                .iter()
+                .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
+                .max()
+                .unwrap_or(0);
             (max_u + 1).to_string()
         };
 
@@ -327,21 +364,35 @@ impl RegistrationApprovalService {
             google_sub: None,
             avatar_url: None,
             created_at: Utc::now(),
-            person_id: if person_numeric_id > 0 { Some(person_numeric_id) } else { None },
+            person_id: if person_numeric_id > 0 {
+                Some(person_numeric_id)
+            } else {
+                None
+            },
         };
         inner.users.push(resident_user.clone());
 
         let unit_id = if unit_numeric_id > 0 {
             unit_numeric_id.to_string()
         } else {
-            let max_unit = inner.units.iter().filter_map(|u| crate::db::parse_id_to_i64(&u.id)).max().unwrap_or(0);
+            let max_unit = inner
+                .units
+                .iter()
+                .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
+                .max()
+                .unwrap_or(0);
             (max_unit + 1).to_string()
         };
 
         let block_id_str = if block_numeric_id > 0 {
             block_numeric_id.to_string()
         } else {
-            let max_blk = inner.blocks.iter().filter_map(|b| crate::db::parse_id_to_i64(&b.id)).max().unwrap_or(0);
+            let max_blk = inner
+                .blocks
+                .iter()
+                .filter_map(|b| crate::db::parse_id_to_i64(&b.id))
+                .max()
+                .unwrap_or(0);
             (max_blk + 1).to_string()
         };
 
@@ -358,11 +409,9 @@ impl RegistrationApprovalService {
             house_type: Some("2+1".to_string()),
         };
 
-        if let Some(pos) = inner
-            .units
-            .iter()
-            .position(|u| u.id == unit.id || (u.site_id == unit.site_id && u.unit_number == unit.unit_number))
-        {
+        if let Some(pos) = inner.units.iter().position(|u| {
+            u.id == unit.id || (u.site_id == unit.site_id && u.unit_number == unit.unit_number)
+        }) {
             inner.units[pos] = unit.clone();
         } else {
             inner.units.push(unit.clone());
@@ -420,7 +469,9 @@ impl RegistrationApprovalService {
         drop(inner);
 
         if let Some(ref pool) = self.state.pool {
-            crate::db::update_pending_registration_status(pool, request_id, "REJECTED").await.map_err(|e| e.to_string())?;
+            crate::db::update_pending_registration_status(pool, request_id, "REJECTED")
+                .await
+                .map_err(|e| e.to_string())?;
         }
 
         Ok(result)

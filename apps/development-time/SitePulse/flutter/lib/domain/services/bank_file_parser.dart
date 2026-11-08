@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:decimal/decimal.dart';
 
+import '../formatting/money_formatter.dart';
+
 class ParsedBankRow {
   final String rawId;
   final DateTime date;
@@ -129,8 +131,11 @@ class BankFileParser {
         }
 
         // Parse amount
-        final cleanAmtStr = amtStr.replaceAll('.', '').replaceAll(',', '.');
-        final amt = Decimal.tryParse(cleanAmtStr) ?? Decimal.zero;
+        // Text cells use Turkish grouping (`1.423,33`); numeric cells use a
+        // plain dot (`1423.33`). parseAmount handles both.
+        final unsignedAmt = parseAmount(amtStr);
+        if (unsignedAmt == null) continue;
+        final amt = amtStr.trim().startsWith('-') ? -unsignedAmt : unsignedAmt;
 
         // Extract sender name from Turkish bank format:
         // e.g. "Para Transferi, Gönderen: ALAETTİN ÇELİK  , Alıcı: GÜRKAN İNDİBAY..."
@@ -167,8 +172,67 @@ class BankFileParser {
     return results;
   }
 
-  /// Parses text lines from CSV, TSV, or MT940
+  /// Normalises a statement amount (`1.423,33`, `1423,33`, `1423.33`,
+  /// `₺1.423,33`) with the shared [MoneyFormatter.tryParse] rule.
+  static Decimal? parseAmount(String raw) => MoneyFormatter.tryParse(raw.replaceAll('-', ''));
+
+  /// True when [content] carries SWIFT MT940 transaction tags.
+  static bool isMt940(String content) => content.contains(':61:') && content.contains(':86:');
+
+  static final _mt940Line61 = RegExp(
+    r':61:\s*(\d{2})(\d{2})(\d{2})(?:\d{4})?(RC|RD|CR|DR|C|D)[A-Z]?([0-9]+,[0-9]{0,2})([^\n]*)',
+  );
+  static final _mt940Line86 = RegExp(r':86:\s*(.+?)(?=(?:\r?\n:[0-9]{2}[A-Z]?:)|\r?\n-\s*$|$)', dotAll: true);
+
+  /// Parses every `:61:` statement line of an MT940 statement, pairing it with
+  /// the `:86:` narrative that follows it.
+  ///
+  /// `C`/`CR`/`RD` entries are credits (incoming); `D`/`DR`/`RC` are debits.
+  /// The value date (`YYMMDD`) becomes [ParsedBankRow.date]; the bank
+  /// reference after `//` becomes [ParsedBankRow.rawId] when present.
+  static List<ParsedBankRow> parseMt940(String content) {
+    final results = <ParsedBankRow>[];
+    final entries = _mt940Line61.allMatches(content).toList();
+    for (var i = 0; i < entries.length; i++) {
+      final m61 = entries[i];
+      final rawAmount = m61.group(5)!;
+      // MT940 allows a bare trailing comma (`1423,` means 1423,00).
+      final amount = parseAmount(rawAmount.endsWith(',') ? '${rawAmount}00' : rawAmount);
+      if (amount == null) continue;
+
+      final nextStart = i + 1 < entries.length ? entries[i + 1].start : content.length;
+      final m86 = _mt940Line86.firstMatch(content.substring(m61.end, nextStart));
+      final narrative = (m86?.group(1) ?? '').replaceAll(RegExp(r'\s*\r?\n\s*'), ' ').trim();
+
+      final mark = m61.group(4)!;
+      final isIncoming = mark == 'C' || mark == 'CR' || mark == 'RD';
+      final tail = m61.group(6) ?? '';
+      final refIndex = tail.indexOf('//');
+      final reference = refIndex >= 0 ? tail.substring(refIndex + 2).trim() : '';
+
+      final year = 2000 + int.parse(m61.group(1)!);
+      final date = DateTime(year, int.parse(m61.group(2)!), int.parse(m61.group(3)!));
+
+      String? sender;
+      final senderMatch = RegExp(r'Gönderen:\s*([A-ZÇĞİÖŞÜa-zçğıöşü\s]+?)(?:,|\*|Alıcı:|$)', caseSensitive: false)
+          .firstMatch(narrative);
+      if (senderMatch != null) sender = senderMatch.group(1)!.trim();
+
+      results.add(ParsedBankRow(
+        rawId: reference.isNotEmpty ? reference : 'TXN-MT940-${(i + 1).toString().padLeft(3, '0')}',
+        date: date,
+        amount: amount,
+        description: narrative.isNotEmpty ? narrative : tail.trim(),
+        senderName: sender,
+        isIncoming: isIncoming,
+      ));
+    }
+    return results;
+  }
+
+  /// Parses MT940, CSV/TSV, or free-form statement text.
   static List<ParsedBankRow> parseText(String content) {
+    if (isMt940(content)) return parseMt940(content);
     final List<ParsedBankRow> results = [];
     final lines = content.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
 
@@ -208,15 +272,9 @@ class BankFileParser {
             if (foundAmt == null) {
               final amtReg = RegExp(r'^-?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+[.,][0-9]{2}|[0-9]+)$');
               if (amtReg.hasMatch(col.replaceAll('₺', '').trim())) {
-                var clean = col.replaceAll('₺', '').replaceAll(' ', '').trim();
+                final clean = col.replaceAll(' ', '').trim();
                 final isNeg = clean.startsWith('-');
-                clean = clean.replaceAll('-', '');
-                if (clean.contains('.') && clean.contains(',')) {
-                  clean = clean.replaceAll('.', '').replaceAll(',', '.');
-                } else if (clean.contains(',')) {
-                  clean = clean.replaceAll(',', '.');
-                }
-                final val = Decimal.tryParse(clean);
+                final val = parseAmount(clean);
                 if (val != null && val > Decimal.zero) {
                   foundAmt = isNeg ? -val : val;
                 }
@@ -257,13 +315,8 @@ class BankFileParser {
       final amtReg = RegExp(r'₺?\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+[.,][0-9]{2})');
       final amtMatch = amtReg.firstMatch(line);
       if (amtMatch != null) {
-        var cleanAmt = amtMatch.group(1)!;
-        if (cleanAmt.contains('.') && cleanAmt.contains(',')) {
-          cleanAmt = cleanAmt.replaceAll('.', '').replaceAll(',', '.');
-        } else if (cleanAmt.contains(',')) {
-          cleanAmt = cleanAmt.replaceAll(',', '.');
-        }
-        final amt = Decimal.tryParse(cleanAmt) ?? Decimal.zero;
+        final amt = parseAmount(amtMatch.group(1)!);
+        if (amt == null) continue;
 
         String? sender;
         final senderMatch = RegExp(r'Gönderen:\s*([A-ZÇĞİÖŞÜa-zçğıöşü\s]+?)(?:,|\*|Alıcı:|$)', caseSensitive: false)

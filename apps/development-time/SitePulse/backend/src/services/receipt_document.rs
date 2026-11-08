@@ -6,7 +6,9 @@
 //! the payer (KVKK).
 
 use chrono::{DateTime, Utc};
-use printpdf::{Color, IndirectFontRef, Line, Mm, PdfDocument, PdfLayerReference, Point, Rect, Rgb};
+use printpdf::{
+    Color, IndirectFontRef, Line, Mm, PdfDocument, PdfLayerReference, Point, Rect, Rgb,
+};
 use rust_decimal::{Decimal, RoundingStrategy};
 
 use crate::models::{PaymentReceipt, LEDGER_KIND_REVERSAL};
@@ -69,7 +71,9 @@ fn expense_tr(expense: &str) -> &str {
 }
 
 fn istanbul(ts: DateTime<Utc>) -> String {
-    ts.with_timezone(&chrono_tz::Europe::Istanbul).format("%d.%m.%Y %H:%M").to_string()
+    ts.with_timezone(&chrono_tz::Europe::Istanbul)
+        .format("%d.%m.%Y %H:%M")
+        .to_string()
 }
 
 /// Greedy word wrap to at most `width` characters per line.
@@ -100,7 +104,13 @@ struct Pen<'a> {
 
 impl Pen<'_> {
     fn text(&self, s: &str, size: f32, x: f32, bold: bool) {
-        self.layer.use_text(s, size, Mm(x), Mm(self.y), if bold { self.bold } else { self.regular });
+        self.layer.use_text(
+            s,
+            size,
+            Mm(x),
+            Mm(self.y),
+            if bold { self.bold } else { self.regular },
+        );
     }
     fn row(&mut self, label: &str, value: &str) {
         self.text(label, 9.0, 18.0, false);
@@ -109,7 +119,10 @@ impl Pen<'_> {
     }
     fn rule(&mut self) {
         self.layer.add_line(Line {
-            points: vec![(Point::new(Mm(18.0), Mm(self.y)), false), (Point::new(Mm(192.0), Mm(self.y)), false)],
+            points: vec![
+                (Point::new(Mm(18.0), Mm(self.y)), false),
+                (Point::new(Mm(192.0), Mm(self.y)), false),
+            ],
             is_closed: false,
         });
         self.y -= 6.0;
@@ -119,14 +132,37 @@ impl Pen<'_> {
 /// Renders one receipt as an A4 PDF. `unit_label` is the unit's display label.
 pub fn render_receipt_pdf(receipt: &PaymentReceipt, unit_label: &str) -> Result<Vec<u8>, String> {
     let reversal = receipt.receipt_type == LEDGER_KIND_REVERSAL;
-    let title = if reversal { "İPTAL / İADE MAKBUZU" } else { "TAHSİLAT MAKBUZU" };
-    let (doc, page, layer) = PdfDocument::new(format!("{} {}", title, receipt.receipt_number), Mm(210.0), Mm(297.0), "receipt");
-    let regular = doc.add_external_font(std::io::Cursor::new(FONT_REGULAR)).map_err(|e| e.to_string())?;
-    let bold = doc.add_external_font(std::io::Cursor::new(FONT_BOLD)).map_err(|e| e.to_string())?;
-    let mut pen = Pen { layer: doc.get_page(page).get_layer(layer), regular: &regular, bold: &bold, y: 277.0 };
+    let title = if reversal {
+        "İPTAL / İADE MAKBUZU"
+    } else {
+        "TAHSİLAT MAKBUZU"
+    };
+    let (doc, page, layer) = PdfDocument::new(
+        format!("{} {}", title, receipt.receipt_number),
+        Mm(210.0),
+        Mm(297.0),
+        "receipt",
+    );
+    let regular = doc
+        .add_external_font(std::io::Cursor::new(FONT_REGULAR))
+        .map_err(|e| e.to_string())?;
+    let bold = doc
+        .add_external_font(std::io::Cursor::new(FONT_BOLD))
+        .map_err(|e| e.to_string())?;
+    let mut pen = Pen {
+        layer: doc.get_page(page).get_layer(layer),
+        regular: &regular,
+        bold: &bold,
+        y: 277.0,
+    };
 
     // Issuer
-    pen.text(receipt.issuer_name.as_deref().unwrap_or("Site Yönetimi"), 13.0, 18.0, true);
+    pen.text(
+        receipt.issuer_name.as_deref().unwrap_or("Site Yönetimi"),
+        13.0,
+        18.0,
+        true,
+    );
     pen.y -= 6.0;
     if let Some(ref address) = receipt.issuer_address {
         for l in wrap(address, 90) {
@@ -151,17 +187,48 @@ pub fn render_receipt_pdf(receipt: &PaymentReceipt, unit_label: &str) -> Result<
     pen.row("Makbuz No", &receipt.receipt_number);
     pen.row("Düzenlenme", &istanbul(receipt.issued_at));
     pen.row("Bağımsız bölüm", unit_label);
-    pen.row("Ödeyen", &format!("{} ({})", receipt.payer_name, role_tr(receipt.payer_role.as_str())));
+    pen.row(
+        "Ödeyen",
+        &format!(
+            "{} ({})",
+            receipt.payer_name,
+            role_tr(receipt.payer_role.as_str())
+        ),
+    );
     if let Some(ref on_behalf) = receipt.on_behalf_of_name {
-        pen.row("Adına ödenen", &format!("{} ({})", on_behalf, role_tr(receipt.on_behalf_of_role.map(|r| r.as_str()).unwrap_or("OWNER"))));
+        pen.row(
+            "Adına ödenen",
+            &format!(
+                "{} ({})",
+                on_behalf,
+                role_tr(
+                    receipt
+                        .on_behalf_of_role
+                        .map(|r| r.as_str())
+                        .unwrap_or("OWNER")
+                )
+            ),
+        );
     }
     pen.row("Ödeme kanalı", channel_tr(receipt.payment_channel.as_str()));
     if let Some(ref reference) = receipt.channel_reference {
-        pen.row(if reversal { "İptal edilen makbuz" } else { "Kanal referansı" }, reference);
+        pen.row(
+            if reversal {
+                "İptal edilen makbuz"
+            } else {
+                "Kanal referansı"
+            },
+            reference,
+        );
     }
     pen.y -= 2.0;
     pen.text("Tutar", 10.0, 18.0, false);
-    pen.text(&format!("₺{}", format_try(receipt.total_amount)), 16.0, 70.0, true);
+    pen.text(
+        &format!("₺{}", format_try(receipt.total_amount)),
+        16.0,
+        70.0,
+        true,
+    );
     pen.y -= 9.0;
     pen.rule();
 
@@ -188,11 +255,28 @@ pub fn render_receipt_pdf(receipt: &PaymentReceipt, unit_label: &str) -> Result<
         pen.y -= 5.0;
     }
     pen.y -= 2.0;
-    pen.row("Toplam anapara", &format!("₺{}", format_try(receipt.allocated_principal)));
-    pen.row("Toplam gecikme tazminatı", &format!("₺{}", format_try(receipt.allocated_penalty)));
+    pen.row(
+        "Toplam anapara",
+        &format!("₺{}", format_try(receipt.allocated_principal)),
+    );
+    pen.row(
+        "Toplam gecikme tazminatı",
+        &format!("₺{}", format_try(receipt.allocated_penalty)),
+    );
     if receipt.allocated_advance > Decimal::ZERO {
-        let whose = receipt.advance_debtor_type.as_deref().map(role_tr).unwrap_or("Ödeyen");
-        pen.row("Avans (fazla ödeme)", &format!("₺{} · {} avansı", format_try(receipt.allocated_advance), whose));
+        let whose = receipt
+            .advance_debtor_type
+            .as_deref()
+            .map(role_tr)
+            .unwrap_or("Ödeyen");
+        pen.row(
+            "Avans (fazla ödeme)",
+            &format!(
+                "₺{} · {} avansı",
+                format_try(receipt.allocated_advance),
+                whose
+            ),
+        );
     }
     pen.rule();
 
@@ -211,19 +295,26 @@ pub fn render_receipt_pdf(receipt: &PaymentReceipt, unit_label: &str) -> Result<
     let size_mm = 32.0_f32;
     let cell = size_mm / modules as f32;
     let (left, top) = (18.0_f32, 52.0_f32);
-    pen.layer.set_fill_color(Color::Rgb(Rgb::new(0.0, 0.0, 0.0, None)));
+    pen.layer
+        .set_fill_color(Color::Rgb(Rgb::new(0.0, 0.0, 0.0, None)));
     for (i, color) in qr.to_colors().iter().enumerate() {
         if *color == qrcode::Color::Dark {
             let (x, y) = ((i % modules) as f32, (i / modules) as f32);
             let x0 = left + x * cell;
             let y0 = top - (y + 1.0) * cell;
-            pen.layer.add_rect(Rect::new(Mm(x0), Mm(y0), Mm(x0 + cell), Mm(y0 + cell)));
+            pen.layer
+                .add_rect(Rect::new(Mm(x0), Mm(y0), Mm(x0 + cell), Mm(y0 + cell)));
         }
     }
     pen.y = 48.0;
     pen.text("Doğrulama", 9.0, 56.0, true);
     pen.y -= 5.0;
-    pen.text("Makbuzu doğrulamak için QR kodu okutun veya adresi açın:", 8.0, 56.0, false);
+    pen.text(
+        "Makbuzu doğrulamak için QR kodu okutun veya adresi açın:",
+        8.0,
+        56.0,
+        false,
+    );
     pen.y -= 4.5;
     // A URL has no spaces to wrap at: cut it into fixed-width pieces.
     let url_chars: Vec<char> = url.chars().collect();
@@ -232,9 +323,19 @@ pub fn render_receipt_pdf(receipt: &PaymentReceipt, unit_label: &str) -> Result<
         pen.y -= 4.0;
     }
     pen.y -= 1.0;
-    pen.text(&format!("Doğrulama kodu: {}", receipt.verification_hash), 7.0, 56.0, false);
+    pen.text(
+        &format!("Doğrulama kodu: {}", receipt.verification_hash),
+        7.0,
+        56.0,
+        false,
+    );
     pen.y = 12.0;
-    pen.text("Bu makbuz SitePulse tarafından elektronik olarak düzenlenmiştir.", 7.5, 18.0, false);
+    pen.text(
+        "Bu makbuz SitePulse tarafından elektronik olarak düzenlenmiştir.",
+        7.5,
+        18.0,
+        false,
+    );
 
     doc.save_to_bytes().map_err(|e| e.to_string())
 }

@@ -12,6 +12,7 @@ import '../../testing/test_id.dart';
 import '../components/app_fullscreen_page.dart';
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
+import '../design_system/sp_money_field.dart';
 import '../theme/app_theme.dart';
 
 /// İşletme projesi (KMK 35/37 as amended by Law 7579): the manager drafts the
@@ -310,17 +311,16 @@ class _OperatingBudgetPageState extends State<OperatingBudgetPage> {
   Future<void> _serve(OperatingBudget b, BudgetUnitShare s) async {
     final recipient = await _ask('${s.unitLabel} tebliğ', 'Tebliğ edilen kişi');
     if (recipient == null || !mounted) return;
-    final method = await showSpPage<String>(
+    final method = await showSpSelection<String>(
       context: context,
-      builder: (ctx) => SpSelectionPage(title: const Text('Tebliğ yöntemi'), children: [
-        for (final m in const {
-          'IN_ASSEMBLY': 'Genel kurulda imza',
-          'SIGNATURE': 'İmza karşılığı',
-          'REGISTERED_MAIL': 'İadeli taahhütlü posta',
-          'E_NOTIFICATION': 'Elektronik tebligat',
-        }.entries)
-          ListTile(onTap: () => Navigator.pop(ctx, m.key), title: Text(m.value)),
-      ]),
+      title: 'Tebliğ yöntemi',
+      options: const ['IN_ASSEMBLY', 'SIGNATURE', 'REGISTERED_MAIL', 'E_NOTIFICATION'],
+      labelOf: (m) => const {
+        'IN_ASSEMBLY': 'Genel kurulda imza',
+        'SIGNATURE': 'İmza karşılığı',
+        'REGISTERED_MAIL': 'İadeli taahhütlü posta',
+        'E_NOTIFICATION': 'Elektronik tebligat',
+      }[m] ?? m,
     );
     if (method == null) return;
     await _run(() => PaymentsPhase2Api.recordService(b.id, s.unitId, recipient, method, DateTime.now(), siteId: widget.siteId),
@@ -329,11 +329,11 @@ class _OperatingBudgetPageState extends State<OperatingBudgetPage> {
 
   Future<void> _object(OperatingBudget b) async {
     if (b.unitShares.isEmpty) return;
-    final unit = await showSpPage<BudgetUnitShare>(
+    final unit = await showSpSelection<BudgetUnitShare>(
       context: context,
-      builder: (ctx) => SpSelectionPage(title: const Text('İtiraz eden daire'), children: [
-        for (final s in b.unitShares) ListTile(onTap: () => Navigator.pop(ctx, s), title: Text(s.unitLabel)),
-      ]),
+      title: 'İtiraz eden daire',
+      options: b.unitShares,
+      labelOf: (s) => s.unitLabel,
     );
     if (unit == null) return;
     final name = await _ask('İtiraz', 'İtiraz eden');
@@ -379,12 +379,12 @@ class _CreateBudgetPageState extends State<_CreateBudgetPage> {
     super.dispose();
   }
 
-  Decimal get _total => _lines.fold(Decimal.zero, (sum, l) => sum + (Decimal.tryParse(l.amount.text.replaceAll(',', '.')) ?? Decimal.zero));
+  Decimal get _total => _lines.fold(Decimal.zero, (sum, l) => sum + (MoneyInput.parse(l.amount.text).amount ?? Decimal.zero));
 
   Future<void> _save() async {
     final lines = <BudgetLine>[];
     for (final l in _lines) {
-      final amount = Decimal.tryParse(l.amount.text.replaceAll(',', '.'));
+      final amount = MoneyInput.parse(l.amount.text).amount;
       if (amount == null || amount <= Decimal.zero) continue;
       lines.add(BudgetLine(category: l.category, annualAmount: amount, allocationKey: l.allocationKey));
     }

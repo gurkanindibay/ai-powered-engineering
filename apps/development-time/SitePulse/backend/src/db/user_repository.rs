@@ -2,29 +2,44 @@ use chrono::{DateTime, Utc};
 use deadpool_postgres::Pool;
 use tracing::{info, warn};
 
-use crate::models::{AuthProvider, Role, UnitInviteLinkResponse, User};
 use super::base::{parse_id_to_i64, require_id};
-pub async fn save_user(pool: &Pool, user: &User) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+use crate::models::{AuthProvider, Role, UnitInviteLinkResponse, User};
+pub async fn save_user(
+    pool: &Pool,
+    user: &User,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let role_str = user.role.as_str();
-    let email = user.email.trim().to_lowercase();
-    let site_id_num = if user.site_id.is_empty() { None } else { Some(require_id("site", &user.site_id)?) };
+    let email = crate::domain::email::NormalizedEmail::normalize(&user.email);
+    let site_id_num = if user.site_id.is_empty() {
+        None
+    } else {
+        Some(require_id("site", &user.site_id)?)
+    };
 
     // Resolve, link, and synchronize person_id
     let person_id: Option<i64> = if let Some(pid) = user.person_id {
         if !user.full_name.is_empty() {
             client
-                .execute("UPDATE persons SET full_name = $1, phone = $2 WHERE id = $3", &[&user.full_name, &user.phone, &pid])
+                .execute(
+                    "UPDATE persons SET full_name = $1, phone = $2 WHERE id = $3",
+                    &[&user.full_name, &user.phone, &pid],
+                )
                 .await?;
         }
         Some(pid)
     } else {
-        let p_row = client.query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&email]).await?;
+        let p_row = client
+            .query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&email])
+            .await?;
         if let Some(r) = p_row {
             let pid: i64 = r.get(0);
             if !user.full_name.is_empty() {
                 client
-                    .execute("UPDATE persons SET full_name = $1, phone = $2 WHERE id = $3", &[&user.full_name, &user.phone, &pid])
+                    .execute(
+                        "UPDATE persons SET full_name = $1, phone = $2 WHERE id = $3",
+                        &[&user.full_name, &user.phone, &pid],
+                    )
                     .await?;
             }
             Some(pid)
@@ -101,7 +116,6 @@ pub async fn save_user(pool: &Pool, user: &User) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-
 pub async fn save_invitation_token(
     pool: &Pool,
     invite: &UnitInviteLinkResponse,
@@ -142,7 +156,9 @@ pub async fn save_invitation_token(
 /// re-hashed with argon2id and the account must change its password on next login.
 /// Unsalted SHA-256 digests cannot be upgraded, so those accounts are locked until
 /// an administrator resets them. Returns the number of rows changed.
-pub async fn upgrade_legacy_password_hashes(pool: &Pool) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn upgrade_legacy_password_hashes(
+    pool: &Pool,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
     let rows = client
         .query("SELECT id, password_hash FROM users WHERE password_hash IS NOT NULL AND password_hash NOT LIKE '$argon2%'", &[])
@@ -156,7 +172,10 @@ pub async fn upgrade_legacy_password_hashes(pool: &Pool) -> Result<u64, Box<dyn 
             None => crate::auth::hash_password(&uuid::Uuid::new_v4().to_string()),
         };
         changed += client
-            .execute("UPDATE users SET password_hash = $1, must_change_password = TRUE WHERE id = $2", &[&new_hash, &id])
+            .execute(
+                "UPDATE users SET password_hash = $1, must_change_password = TRUE WHERE id = $2",
+                &[&new_hash, &id],
+            )
             .await?;
     }
     if changed > 0 {
@@ -166,13 +185,20 @@ pub async fn upgrade_legacy_password_hashes(pool: &Pool) -> Result<u64, Box<dyn 
 }
 
 /// Creates the first SaaS administrator when none exists (see `bootstrap_admin_password`).
-pub async fn ensure_bootstrap_admin(pool: &Pool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn ensure_bootstrap_admin(
+    pool: &Pool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let exists = client.query_opt("SELECT 1 FROM users WHERE role = 'SAAS_ADMIN' LIMIT 1", &[]).await?.is_some();
+    let exists = client
+        .query_opt("SELECT 1 FROM users WHERE role = 'SAAS_ADMIN' LIMIT 1", &[])
+        .await?
+        .is_some();
     if exists {
         return Ok(());
     }
-    let email = std::env::var("SITEPULSE_BOOTSTRAP_ADMIN_EMAIL").unwrap_or_else(|_| "admin@sitepulse.io".to_string()).to_lowercase();
+    let email = std::env::var("SITEPULSE_BOOTSTRAP_ADMIN_EMAIL")
+        .unwrap_or_else(|_| "admin@sitepulse.io".to_string())
+        .to_lowercase();
     let hash = crate::auth::hash_password(&crate::state::bootstrap_admin_password());
     let person_id: i64 = client
         .query_one(
@@ -193,20 +219,26 @@ pub async fn ensure_bootstrap_admin(pool: &Pool) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-
-pub async fn delete_invitation_token(pool: &Pool, token_digest: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn delete_invitation_token(
+    pool: &Pool,
+    token_digest: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    client.execute("DELETE FROM invitation_tokens WHERE token = $1", &[&token_digest]).await?;
+    client
+        .execute(
+            "DELETE FROM invitation_tokens WHERE token = $1",
+            &[&token_digest],
+        )
+        .await?;
     Ok(())
 }
-
 
 pub async fn get_user_by_email(
     pool: &Pool,
     email: &str,
 ) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
-    let email_norm = email.trim().to_lowercase();
+    let email_norm = crate::domain::email::NormalizedEmail::normalize(email);
     let row = client
         .query_opt(
             "SELECT u.id, u.site_id, COALESCE(p.full_name, ''), u.email, COALESCE(p.phone, ''), u.password_hash, u.role, u.must_change_password, u.auth_provider, u.google_sub, u.avatar_url, u.created_at, u.person_id
@@ -241,7 +273,10 @@ pub async fn get_user_by_email(
             password_hash,
             role: Role::from_str_loose(&role_str),
             must_change_password,
-            auth_provider: auth_provider.as_deref().map(AuthProvider::from_str_loose).unwrap_or(AuthProvider::Local),
+            auth_provider: auth_provider
+                .as_deref()
+                .map(AuthProvider::from_str_loose)
+                .unwrap_or(AuthProvider::Local),
             google_sub,
             avatar_url,
             created_at: created_at.unwrap_or_else(Utc::now),
@@ -296,7 +331,10 @@ pub async fn get_user_by_id(
             password_hash,
             role: Role::from_str_loose(&role_str),
             must_change_password,
-            auth_provider: auth_provider.as_deref().map(AuthProvider::from_str_loose).unwrap_or(AuthProvider::Local),
+            auth_provider: auth_provider
+                .as_deref()
+                .map(AuthProvider::from_str_loose)
+                .unwrap_or(AuthProvider::Local),
             google_sub,
             avatar_url,
             created_at: created_at.unwrap_or_else(Utc::now),
@@ -306,4 +344,3 @@ pub async fn get_user_by_id(
     }
     Ok(None)
 }
-
