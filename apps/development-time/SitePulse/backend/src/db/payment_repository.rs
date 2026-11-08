@@ -608,7 +608,7 @@ pub async fn tx_debit_advance(
 pub struct ReversibleEntry {
     pub entry_id: i64,
     pub unit_id: i64,
-    pub settlement_status: String,
+    pub settlement_status: crate::models::SettlementStatus,
     pub entry_type: String,
     pub receipt: PaymentReceipt,
 }

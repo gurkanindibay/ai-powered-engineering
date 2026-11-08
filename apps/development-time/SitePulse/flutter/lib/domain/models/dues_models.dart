@@ -10,6 +10,303 @@ enum DebtStatus {
   const DebtStatus(this.label);
 }
 
+enum DebtorType {
+  tenant('TENANT', 'Kiracı'),
+  owner('OWNER', 'Kat Maliki');
+
+  final String code;
+  final String label;
+  const DebtorType(this.code, this.label);
+
+  static DebtorType fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'TENANT') return DebtorType.tenant;
+    return DebtorType.owner;
+  }
+}
+
+enum ExpenseType {
+  operationalDues('OPERATIONAL_DUES', 'İşletme Projesi (Genel Aidat)'),
+  capitalDues('CAPITAL_DUES', 'Yatırım / Demirbaş Bütçesi');
+
+  final String code;
+  final String label;
+  const ExpenseType(this.code, this.label);
+
+  static ExpenseType fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'CAPITAL_DUES' || upper == 'DEMIRBAS' || upper == 'CAPITAL') {
+      return ExpenseType.capitalDues;
+    }
+    return ExpenseType.operationalDues;
+  }
+}
+
+enum OccupancyStatus {
+  ownerOccupied('OWNER_OCCUPIED', 'Ev Sahibi'),
+  tenantOccupied('TENANT_OCCUPIED', 'Kiracı'),
+  vacant('VACANT', 'Boş');
+
+  final String code;
+  final String label;
+  const OccupancyStatus(this.code, this.label);
+
+  static OccupancyStatus fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'TENANT_OCCUPIED' || upper == 'TENANT') {
+      return OccupancyStatus.tenantOccupied;
+    }
+    if (upper == 'VACANT') {
+      return OccupancyStatus.vacant;
+    }
+    return OccupancyStatus.ownerOccupied;
+  }
+}
+
+enum DuesPeriodStatus {
+  active('ACTIVE', 'Aktif'),
+  closed('CLOSED', 'Kapatıldı'),
+  draft('DRAFT', 'Taslak');
+
+  final String code;
+  final String label;
+  const DuesPeriodStatus(this.code, this.label);
+
+  static DuesPeriodStatus fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'CLOSED') return DuesPeriodStatus.closed;
+    if (upper == 'DRAFT') return DuesPeriodStatus.draft;
+    return DuesPeriodStatus.active;
+  }
+}
+
+enum TenantSiteStatus {
+  active('ACTIVE', 'Aktif'),
+  suspended('SUSPENDED', 'Askıda'),
+  deleted('DELETED', 'Silindi');
+
+  final String code;
+  final String label;
+  const TenantSiteStatus(this.code, this.label);
+
+  static TenantSiteStatus fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'SUSPENDED') return TenantSiteStatus.suspended;
+    if (upper == 'DELETED') return TenantSiteStatus.deleted;
+    return TenantSiteStatus.active;
+  }
+}
+
+enum TenantPlanType {
+  standard('STANDARD', 'Standart'),
+  premium('PREMIUM', 'Premium'),
+  enterprise('ENTERPRISE', 'Kurumsal'),
+  community('COMMUNITY', 'Topluluk');
+
+  final String code;
+  final String label;
+  const TenantPlanType(this.code, this.label);
+
+  static TenantPlanType fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'PREMIUM') return TenantPlanType.premium;
+    if (upper == 'ENTERPRISE') return TenantPlanType.enterprise;
+    if (upper == 'COMMUNITY') return TenantPlanType.community;
+    return TenantPlanType.standard;
+  }
+}
+
+enum BankStatementFormat {
+  excel('EXCEL', 'Excel (.xlsx/.xls)'),
+  csv('CSV', 'CSV Metin Dosyası'),
+  mt940('MT940', 'SWIFT MT940'),
+  auto('AUTO', 'Otomatik Tanıma');
+
+  final String code;
+  final String label;
+  const BankStatementFormat(this.code, this.label);
+
+  static BankStatementFormat fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'CSV') return BankStatementFormat.csv;
+    if (upper == 'MT940') return BankStatementFormat.mt940;
+    if (upper == 'AUTO') return BankStatementFormat.auto;
+    return BankStatementFormat.excel;
+  }
+}
+
+enum ReconciliationStatus {
+  pending('ONAY_BEKLIYOR', 'Onay Bekliyor'),
+  approved('ONAYLANDI', 'Onaylandı'),
+  unmatched('ESLESTIRILEMEDI', 'Eşleştirilemedi'),
+  expense('GIDER', 'Gider'),
+  alreadyUploaded('ZATEN_YUKLENDI', 'Zaten Yüklendi');
+
+  final String code;
+  final String label;
+  const ReconciliationStatus(this.code, this.label);
+
+  static ReconciliationStatus fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'ONAYLANDI' || upper == 'APPROVED') return ReconciliationStatus.approved;
+    if (upper == 'ESLESTIRILEMEDI' || upper == 'UNMATCHED') return ReconciliationStatus.unmatched;
+    if (upper == 'GIDER' || upper == 'EXPENSE') return ReconciliationStatus.expense;
+    if (upper == 'ZATEN_YUKLENDI' || upper == 'ZATEN_ODENDI' || upper == 'ALREADY_UPLOADED') {
+      return ReconciliationStatus.alreadyUploaded;
+    }
+    return ReconciliationStatus.pending;
+  }
+}
+
+enum PaymentChannel {
+  creditCard('CREDIT_CARD', 'Kredi Kartı'),
+  bankTransfer('BANK_TRANSFER', 'Banka Havalesi / EFT'),
+  bankStatement('BANK_STATEMENT', 'Banka Ekstresi'),
+  fast('FAST', 'FAST Anlık Transfer'),
+  cash('CASH', 'Nakit'),
+  manualCash('MANUAL_CASH', 'Elden Nakit'),
+  virtualIban('VIRTUAL_IBAN', 'Sanal IBAN'),
+  interLedger('INTER_LEDGER', 'Hesaplar Arası Virman'),
+  onlinePayment('ONLINE_PAYMENT', 'Online Ödeme'),
+  other('OTHER', 'Diğer');
+
+  final String code;
+  final String label;
+  const PaymentChannel(this.code, this.label);
+
+  static PaymentChannel fromCode(String? code) {
+    final upper = code?.toUpperCase() ?? '';
+    if (upper.contains('CARD') || upper.contains('KART')) return PaymentChannel.creditCard;
+    if (upper.contains('STATEMENT') || upper.contains('EKSTRE')) return PaymentChannel.bankStatement;
+    if (upper.contains('ONLINE')) return PaymentChannel.onlinePayment;
+    if (upper.contains('VIRTUAL') || upper.contains('VIBAN')) return PaymentChannel.virtualIban;
+    if (upper.contains('FAST')) return PaymentChannel.fast;
+    if (upper.contains('INTER_LEDGER')) return PaymentChannel.interLedger;
+    if (upper.contains('MANUAL')) return PaymentChannel.manualCash;
+    if (upper.contains('CASH') || upper.contains('NAKIT')) return PaymentChannel.cash;
+    if (upper.contains('BANK') || upper.contains('HAVALE') || upper.contains('EFT') || upper.contains('TRANSFER')) {
+      return PaymentChannel.bankTransfer;
+    }
+    return PaymentChannel.other;
+  }
+}
+
+enum SettlementStatus {
+  settled('SETTLED', 'Eşleşti ve Kapandı'),
+  pending('PENDING', 'Beklemede'),
+  unmatched('UNMATCHED', 'Eşleşmedi'),
+  reversed('REVERSED', 'İptal / İade Edildi');
+
+  final String code;
+  final String label;
+  const SettlementStatus(this.code, this.label);
+
+  static SettlementStatus fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'PENDING') return SettlementStatus.pending;
+    if (upper == 'UNMATCHED') return SettlementStatus.unmatched;
+    if (upper == 'REVERSED') return SettlementStatus.reversed;
+    return SettlementStatus.settled;
+  }
+}
+
+enum CapitalProjectCategory {
+  elevator('ELEVATOR', 'Asansör & Revizyon'),
+  facadeInsulation('FACADE_INSULATION', 'Çatı & Dış Cephe Yalıtım'),
+  roofWaterproofing('ROOF_WATERPROOFING', 'Çatı İzolasyon ve Onarım'),
+  generator('GENERATOR', 'Jeneratör & Enerji'),
+  securitySystem('SECURITY_SYSTEM', 'Kamera & Güvenlik'),
+  fireSafety('FIRE_SAFETY', 'Yangın Güvenlik Tesisatı'),
+  other('OTHER', 'Diğer Demirbaş');
+
+  final String code;
+  final String label;
+  const CapitalProjectCategory(this.code, this.label);
+
+  static CapitalProjectCategory fromCode(String? code) {
+    final upper = code?.toUpperCase() ?? '';
+    if (upper.contains('ELEVATOR') || upper.contains('ASANSOR')) return CapitalProjectCategory.elevator;
+    if (upper.contains('FACADE') || upper.contains('MANTOLAMA')) return CapitalProjectCategory.facadeInsulation;
+    if (upper.contains('ROOF') || upper.contains('CATI')) return CapitalProjectCategory.roofWaterproofing;
+    if (upper.contains('GENERATOR') || upper.contains('JENERATOR')) return CapitalProjectCategory.generator;
+    if (upper.contains('SECURITY') || upper.contains('GUVENLIK') || upper.contains('KAMERA')) {
+      return CapitalProjectCategory.securitySystem;
+    }
+    if (upper.contains('FIRE') || upper.contains('YANGIN')) return CapitalProjectCategory.fireSafety;
+    return CapitalProjectCategory.other;
+  }
+}
+
+enum AllocationBasis {
+  byLandShare('BY_LAND_SHARE', 'Arsa Payı Oranında (KMK 20)'),
+  equalPerUnit('EQUAL_PER_UNIT', 'Eşit Paylaşım');
+
+  final String code;
+  final String label;
+  const AllocationBasis(this.code, this.label);
+
+  static AllocationBasis fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'EQUAL_PER_UNIT' || upper == 'EQUAL') return AllocationBasis.equalPerUnit;
+    return AllocationBasis.byLandShare;
+  }
+}
+
+enum CapitalProjectStatus {
+  active('ACTIVE', 'Devam Ediyor'),
+  completed('COMPLETED', 'Tamamlandı'),
+  cancelled('CANCELLED', 'İptal Edildi'),
+  draft('DRAFT', 'Taslak');
+
+  final String code;
+  final String label;
+  const CapitalProjectStatus(this.code, this.label);
+
+  static CapitalProjectStatus fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'COMPLETED') return CapitalProjectStatus.completed;
+    if (upper == 'CANCELLED') return CapitalProjectStatus.cancelled;
+    if (upper == 'DRAFT') return CapitalProjectStatus.draft;
+    return CapitalProjectStatus.active;
+  }
+}
+
+enum DisbursementMethod {
+  bankTransfer('BANK_TRANSFER', 'Banka Transferi / Havale'),
+  fast('FAST', 'FAST Transfer'),
+  cash('CASH', 'Nakit'),
+  check('CHECK', 'Çek');
+
+  final String code;
+  final String label;
+  const DisbursementMethod(this.code, this.label);
+
+  static DisbursementMethod fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'FAST') return DisbursementMethod.fast;
+    if (upper == 'CASH') return DisbursementMethod.cash;
+    if (upper == 'CHECK') return DisbursementMethod.check;
+    return DisbursementMethod.bankTransfer;
+  }
+}
+
+enum RegistrationStatus {
+  pending('PENDING', 'Onay Bekliyor'),
+  approved('APPROVED', 'Onaylandı'),
+  rejected('REJECTED', 'Reddedildi');
+
+  final String code;
+  final String label;
+  const RegistrationStatus(this.code, this.label);
+
+  static RegistrationStatus fromCode(String? code) {
+    final upper = code?.toUpperCase();
+    if (upper == 'APPROVED') return RegistrationStatus.approved;
+    if (upper == 'REJECTED') return RegistrationStatus.rejected;
+    return RegistrationStatus.pending;
+  }
+}
+
 
 class DuesLiability {
   final String id;
@@ -21,6 +318,8 @@ class DuesLiability {
   final DateTime dueDate;
   final int daysOverdue;
   final DebtStatus status;
+  final DebtorType debtorType;
+  final ExpenseType expenseType;
 
   const DuesLiability({
     required this.id,
@@ -32,6 +331,8 @@ class DuesLiability {
     required this.dueDate,
     this.daysOverdue = 0,
     required this.status,
+    this.debtorType = DebtorType.tenant,
+    this.expenseType = ExpenseType.operationalDues,
   });
 
   DuesLiability copyWith({
@@ -44,6 +345,8 @@ class DuesLiability {
     DateTime? dueDate,
     int? daysOverdue,
     DebtStatus? status,
+    DebtorType? debtorType,
+    ExpenseType? expenseType,
   }) {
     return DuesLiability(
       id: id ?? this.id,
@@ -55,6 +358,8 @@ class DuesLiability {
       dueDate: dueDate ?? this.dueDate,
       daysOverdue: daysOverdue ?? this.daysOverdue,
       status: status ?? this.status,
+      debtorType: debtorType ?? this.debtorType,
+      expenseType: expenseType ?? this.expenseType,
     );
   }
 }
@@ -360,6 +665,9 @@ class TenantSiteItem {
     this.blocks = const ['A Blok', 'B Blok'],
   });
 
+  TenantSiteStatus get siteStatus => TenantSiteStatus.fromCode(status);
+  TenantPlanType get plan => TenantPlanType.fromCode(planType);
+
   /// Invariant: A site has actions if it has registered units, financial collection volume,
   /// or logged operational actions. Sites with hasActions == false are eligible for deletion.
   bool get hasActions => actionCount > 0 || totalUnits > 0 || monthlyCollectionVolume > Decimal.zero;
@@ -566,9 +874,11 @@ class HomeOwnerItem {
   final String? primaryResponsiblePhone;
   final String? primaryResponsibleEmail;
 
-  bool get isTenantOccupied => occupancyStatus == 'TENANT_OCCUPIED' || (tenantFullName != null && tenantFullName!.isNotEmpty);
-  bool get isVacant => occupancyStatus == 'VACANT';
-  bool get isOwnerOccupied => !isTenantOccupied && !isVacant;
+  OccupancyStatus get occupancy => OccupancyStatus.fromCode(occupancyStatus);
+
+  bool get isTenantOccupied => occupancy == OccupancyStatus.tenantOccupied || (tenantFullName != null && tenantFullName!.isNotEmpty);
+  bool get isVacant => occupancy == OccupancyStatus.vacant;
+  bool get isOwnerOccupied => occupancy == OccupancyStatus.ownerOccupied;
 
   String get activeResponsibleResidentName {
     if (primaryResponsibleName != null && primaryResponsibleName!.isNotEmpty) {
@@ -819,6 +1129,8 @@ class OccupancyHistoryItem {
   final String? notes;
   final DateTime createdAt;
 
+  DebtorType get debtorRole => DebtorType.fromCode(role);
+
   const OccupancyHistoryItem({
     required this.id,
     required this.unitId,
@@ -1001,9 +1313,11 @@ class ReconciliationQueueItem {
     return 'Belirlenemedi';
   }
 
-  bool get isApproved => status == 'ONAYLANDI';
-  bool get isPendingApproval => status == 'ONAY_BEKLIYOR';
-  bool get isAlreadyUploaded => status == 'ZATEN_YUKLENDI' || status == 'ZATEN_ODENDI';
+  ReconciliationStatus get reconciliationStatus => ReconciliationStatus.fromCode(status);
+
+  bool get isApproved => reconciliationStatus == ReconciliationStatus.approved;
+  bool get isPendingApproval => reconciliationStatus == ReconciliationStatus.pending;
+  bool get isAlreadyUploaded => reconciliationStatus == ReconciliationStatus.alreadyUploaded;
 
   factory ReconciliationQueueItem.fromJson(Map<String, dynamic> json) {
     return ReconciliationQueueItem(
@@ -1074,6 +1388,8 @@ enum SupportedBank {
 
   const SupportedBank(this.code, this.displayName, this.statementFormat, this.fileExtension);
 
+  BankStatementFormat get format => BankStatementFormat.fromCode(statementFormat);
+
   static SupportedBank? fromCode(String code) {
     for (final b in SupportedBank.values) {
       if (b.code.toUpperCase() == code.toUpperCase()) return b;
@@ -1108,6 +1424,7 @@ class SiteBankAccount {
   });
 
   SupportedBank? get supportedBank => SupportedBank.fromCode(bankCode);
+  BankStatementFormat get format => BankStatementFormat.fromCode(statementFormat);
 
   factory SiteBankAccount.fromJson(Map<String, dynamic> json) {
     return SiteBankAccount(
@@ -1310,6 +1627,9 @@ class DuesPeriodItem {
     this.createdAt,
   });
 
+  DuesPeriodStatus get periodStatus => DuesPeriodStatus.fromCode(status);
+  bool get isActive => periodStatus == DuesPeriodStatus.active;
+
   factory DuesPeriodItem.fromJson(Map<String, dynamic> json) {
     return DuesPeriodItem(
       id: json['id']?.toString() ?? '',
@@ -1348,6 +1668,8 @@ class AllocationBreakdownItemDto {
     required this.principalPaid,
     required this.penaltyPaid,
   });
+
+  ExpenseType get type => ExpenseType.fromCode(expenseType);
 
   factory AllocationBreakdownItemDto.fromJson(Map<String, dynamic> json) {
     return AllocationBreakdownItemDto(
@@ -1413,6 +1735,10 @@ class PaymentReceiptDto {
     required this.issuedAt,
   });
 
+  DebtorType get payerType => DebtorType.fromCode(payerRole);
+  DebtorType? get onBehalfOfType => onBehalfOfRole != null ? DebtorType.fromCode(onBehalfOfRole) : null;
+  PaymentChannel get channel => PaymentChannel.fromCode(paymentChannel);
+
   factory PaymentReceiptDto.fromJson(Map<String, dynamic> json) {
     var rawList = json['allocation_breakdown'];
     List<AllocationBreakdownItemDto> breakdown = [];
@@ -1465,6 +1791,10 @@ class PaymentEntryDto {
   final String? externalReference;
   final DateTime paymentDate;
   final DateTime createdAt;
+
+  DebtorType get payerType => DebtorType.fromCode(payerRole);
+  PaymentChannel get channel => PaymentChannel.fromCode(paymentChannel);
+  SettlementStatus get settlement => SettlementStatus.fromCode(settlementStatus);
 
   const PaymentEntryDto({
     required this.id,
@@ -1678,6 +2008,10 @@ class CapitalProjectItem {
     this.createdAt,
   });
 
+  CapitalProjectCategory get projectCategory => CapitalProjectCategory.fromCode(category);
+  AllocationBasis get basis => AllocationBasis.fromCode(allocationBasis);
+  CapitalProjectStatus get projectStatus => CapitalProjectStatus.fromCode(status);
+
   String get categoryLabel {
     switch (category) {
       case 'ELEVATOR':
@@ -1807,6 +2141,8 @@ class CapitalContractorDisbursementItem {
     this.notes,
     this.createdAt,
   });
+
+  DisbursementMethod get method => DisbursementMethod.fromCode(disbursementMethod);
 
   factory CapitalContractorDisbursementItem.fromJson(Map<String, dynamic> json) {
     return CapitalContractorDisbursementItem(

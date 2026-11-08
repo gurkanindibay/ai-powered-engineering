@@ -3,7 +3,7 @@ use deadpool_postgres::Pool;
 use rust_decimal::Decimal;
 use tracing::info;
 
-use crate::models::{BlockDto, SaasSiteSummaryDto, Site};
+use crate::models::{BlockDto, PlanType, SaasSiteSummaryDto, Site, SiteStatus};
 use super::base::{logged, parse_id_to_i64, require_id, DbResult};
 pub async fn save_site(pool: &Pool, site: &Site) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = pool.get().await?;
@@ -209,8 +209,16 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
         let name: String = row.get(1);
         let slug: String = row.get::<_, Option<String>>(2).unwrap_or_else(|| id.to_string());
         let address: String = row.get::<_, Option<String>>(3).unwrap_or_default();
-        let status: String = row.get::<_, Option<String>>(4).unwrap_or_else(|| "ACTIVE".to_string());
-        let plan_type: String = row.get::<_, Option<String>>(5).unwrap_or_else(|| "STANDARD".to_string());
+        let status: SiteStatus = row
+            .get::<_, Option<String>>(4)
+            .as_deref()
+            .map(SiteStatus::from_str_loose)
+            .unwrap_or(SiteStatus::Active);
+        let plan_type: PlanType = row
+            .get::<_, Option<String>>(5)
+            .as_deref()
+            .map(PlanType::from_str_loose)
+            .unwrap_or(PlanType::Standard);
         let license_end_date: Option<NaiveDate> = row.get(6);
 
         let manager_row = client

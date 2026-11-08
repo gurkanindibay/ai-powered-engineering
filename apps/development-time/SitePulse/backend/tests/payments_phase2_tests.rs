@@ -165,7 +165,7 @@ async fn when_a_budget_is_in_force_then_dues_are_accrued_from_unit_shares_with_t
         let inner = state.inner.read().await;
         let a14 = inner.dues.iter().find(|x| x.unit_id == "d-14").unwrap();
         assert_eq!(a14.principal_amount, d("2100.00"));
-        assert_eq!(a14.debtor_type, "OWNER");
+        assert_eq!(a14.debtor_type, DebtorType::Owner);
         assert_eq!(inner.dues_budget_basis.get(&a14.id), Some(&budget.id));
     }
 
@@ -277,8 +277,8 @@ async fn owner_owing(amount: &str) -> AppState {
         status: DebtStatus::Pending,
         paid_principal: Decimal::ZERO,
         paid_penalty: Decimal::ZERO,
-        debtor_type: "OWNER".to_string(),
-        expense_type: "OPERATIONAL_DUES".to_string(),
+        debtor_type: DebtorType::Owner,
+        expense_type: ExpenseType::OperationalDues,
         penalty_accrued_through: None,
     });
     state
@@ -307,7 +307,7 @@ async fn when_a_card_payment_is_captured_then_it_is_recorded_once_through_the_in
     let inner = state.inner.read().await;
     assert_eq!(inner.payment_receipts.len(), 1);
     let receipt = &inner.payment_receipts[0];
-    assert_eq!(receipt.payment_channel, "CREDIT_CARD");
+    assert_eq!(receipt.payment_channel, PaymentChannel::CreditCard);
     assert_eq!(inner.dues.iter().find(|x| x.id == "op-1").unwrap().status, DebtStatus::Paid);
 }
 
@@ -387,8 +387,8 @@ async fn when_a_statement_is_built_then_items_are_aged_and_each_debtor_sees_only
             status: DebtStatus::Pending,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: debtor.to_string(),
-            expense_type: "OPERATIONAL_DUES".to_string(),
+            debtor_type: DebtorType::from_str_loose(debtor),
+            expense_type: ExpenseType::OperationalDues,
             penalty_accrued_through: None,
         };
         inner.dues.push(mk("o-current", "OWNER", 0, "100.00"));
@@ -434,8 +434,8 @@ async fn when_a_receipt_pdf_is_rendered_and_verified_then_the_public_check_discl
             unit_id: "d-14".into(),
             amount: d("2000.00"),
             payer_name: "Ahmet Yılmaz".into(),
-            payer_role: "OWNER".into(),
-            payment_channel: "MANUAL_CASH".into(),
+            payer_role: DebtorType::Owner,
+            payment_channel: PaymentChannel::ManualCash,
             ..Default::default()
         })
         .await
@@ -480,8 +480,8 @@ async fn sample_receipt_pdf() {
             unit_id: "d-14".into(),
             amount: d("2000.00"),
             payer_name: "Şükrü Işıkoğlu".into(),
-            payer_role: "OWNER".into(),
-            payment_channel: "CREDIT_CARD".into(),
+            payer_role: DebtorType::Owner,
+            payment_channel: PaymentChannel::CreditCard,
             ..Default::default()
         })
         .await

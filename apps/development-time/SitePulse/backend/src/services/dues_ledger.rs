@@ -7,7 +7,7 @@
 
 use rust_decimal::Decimal;
 
-use crate::models::{DebtStatus, DuesLiability};
+use crate::models::{DebtStatus, DebtorType, DuesLiability, ExpenseType};
 
 pub const DEBTOR_OWNER: &str = "OWNER";
 pub const DEBTOR_TENANT: &str = "TENANT";
@@ -50,10 +50,11 @@ pub fn refresh(d: &mut DuesLiability) {
 /// anything for their unit; a tenant may only pay tenant liabilities (capital
 /// dues are owner-only under KMK and the V12 `chk_dues_capital_owner_only` rule).
 pub fn payer_may_settle(d: &DuesLiability, payer_role: &str) -> bool {
-    if payer_role.eq_ignore_ascii_case(DEBTOR_OWNER) {
+    let role = DebtorType::from_str_loose(payer_role);
+    if role == DebtorType::Owner {
         return true;
     }
-    d.debtor_type.eq_ignore_ascii_case(DEBTOR_TENANT) && !d.expense_type.eq_ignore_ascii_case(EXPENSE_CAPITAL)
+    d.debtor_type == DebtorType::Tenant && d.expense_type != ExpenseType::CapitalDues
 }
 
 /// Pays up to `amount` against one liability: its penalty first, then principal.
@@ -166,7 +167,7 @@ pub fn designated_dues(
                 let d = &dues[i];
                 (des.due_ids.is_empty() || des.due_ids.iter().any(|id| crate::auth::same_id(id, &d.id)))
                     && (des.periods.is_empty() || des.periods.iter().any(|p| fold_turkish(p.trim()) == fold_turkish(d.period.trim())))
-                    && des.expense_type.as_deref().is_none_or(|e| e.eq_ignore_ascii_case(&d.expense_type))
+                    && des.expense_type.as_deref().is_none_or(|e| e.eq_ignore_ascii_case(d.expense_type.as_str()))
             })
             .collect();
     }
@@ -247,8 +248,8 @@ mod tests {
             status: DebtStatus::Overdue,
             paid_principal: Decimal::ZERO,
             paid_penalty: Decimal::ZERO,
-            debtor_type: debtor.to_string(),
-            expense_type: expense.to_string(),
+            debtor_type: DebtorType::from_str_loose(debtor),
+            expense_type: ExpenseType::from_str_loose(expense),
             penalty_accrued_through: None,
         }
     }

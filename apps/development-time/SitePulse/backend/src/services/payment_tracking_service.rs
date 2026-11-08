@@ -3,11 +3,11 @@ use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
 
 use crate::models::{
-    AllocationBreakdownItem, DebtAgingBracket, DebtAgingReport, DebtStatus,
-    InterLedgerTransferRequest, InterLedgerTransferResponse, OccupancyHistoryItem,
-    DuesLiability, PaymentEntry, PaymentMatchStatus, PaymentReceipt, PaymentStreamFilter, PaymentStreamResponse,
-    RecordManualPaymentRequest, ReversePaymentRequest, ReversePaymentResponse, Role, TransferOwnershipRequest,
-    TransferOwnershipResponse, User, LEDGER_KIND_COLLECTION, LEDGER_KIND_REVERSAL,
+    AllocationBreakdownItem, AuthProvider, DebtAgingBracket, DebtAgingReport, DebtStatus, DebtorType,
+    DuesLiability, ExpenseType, InterLedgerTransferRequest, InterLedgerTransferResponse, OccupancyHistoryItem,
+    PaymentChannel, PaymentEntry, PaymentMatchStatus, PaymentReceipt, PaymentStreamFilter, PaymentStreamResponse,
+    RecordManualPaymentRequest, ReversePaymentRequest, ReversePaymentResponse, Role, SettlementStatus,
+    TransferOwnershipRequest, TransferOwnershipResponse, User, LEDGER_KIND_COLLECTION, LEDGER_KIND_REVERSAL,
 };
 use crate::services::dues_ledger;
 use crate::state::AppState;
@@ -92,8 +92,8 @@ impl PaymentTrackingService {
                 let settlement_status = match hp.status {
                     PaymentMatchStatus::MatchedDebt
                     | PaymentMatchStatus::MatchedAdvance
-                    | PaymentMatchStatus::PartiallyMatched => "SETTLED".to_string(),
-                    PaymentMatchStatus::Pending => "UNMATCHED".to_string(),
+                    | PaymentMatchStatus::PartiallyMatched => SettlementStatus::Settled,
+                    PaymentMatchStatus::Pending => SettlementStatus::Unmatched,
                 };
 
                 all_entries.push(PaymentEntry {
@@ -102,11 +102,11 @@ impl PaymentTrackingService {
                     unit_id: hp.unit_id.clone(),
                     unit_label: Some(unit_label),
                     payer_name: hp.homeowner_name.clone().unwrap_or_else(|| "Bilinmeyen Sakin".to_string()),
-                    payer_role: "OWNER".to_string(),
+                    payer_role: DebtorType::Owner,
                     receipt_id: None,
                     receipt_number: hp.reference_code.clone().or_else(|| Some(format!("REC-{}", hp.id))),
                     amount: hp.amount,
-                    payment_channel: hp.payment_method.clone(),
+                    payment_channel: hp.payment_method,
                     settlement_status,
                     description: hp.note.clone(),
                     external_reference: hp.reference_code.clone(),
@@ -128,18 +128,18 @@ impl PaymentTrackingService {
                 if !target_site.is_empty() && e.site_id != target_site && target_site != "all" {
                     return false;
                 }
-                if let Some(ref ch) = filter.channel {
-                    if !ch.is_empty() && &e.payment_channel != ch {
+                if let Some(ch) = filter.channel {
+                    if e.payment_channel != ch {
                         return false;
                     }
                 }
-                if let Some(ref role) = filter.payer_role {
-                    if !role.is_empty() && &e.payer_role != role {
+                if let Some(role) = filter.payer_role {
+                    if e.payer_role != role {
                         return false;
                     }
                 }
-                if let Some(ref status) = filter.settlement_status {
-                    if !status.is_empty() && &e.settlement_status != status {
+                if let Some(status) = filter.settlement_status {
+                    if e.settlement_status != status {
                         return false;
                     }
                 }
@@ -174,15 +174,15 @@ impl PaymentTrackingService {
 
         let total_count = filtered.len();
         // A reversed payment and its contra entry (both REVERSED) cancel out.
-        let total_volume: Decimal = filtered.iter().filter(|e| e.settlement_status != "REVERSED").map(|e| e.amount).sum();
+        let total_volume: Decimal = filtered.iter().filter(|e| e.settlement_status != SettlementStatus::Reversed).map(|e| e.amount).sum();
         let settled_volume: Decimal = filtered
             .iter()
-            .filter(|e| e.settlement_status == "SETTLED")
+            .filter(|e| e.settlement_status == SettlementStatus::Settled)
             .map(|e| e.amount)
             .sum();
         let unmatched_volume: Decimal = filtered
             .iter()
-            .filter(|e| e.settlement_status == "UNMATCHED")
+            .filter(|e| e.settlement_status == SettlementStatus::Unmatched)
             .map(|e| e.amount)
             .sum();
 
@@ -210,7 +210,7 @@ impl PaymentTrackingService {
         let inner = self.state.inner.read().await;
         let today = Utc::now().date_naive();
 
-        let mut brackets_map: std::collections::HashMap<(String, String), DebtAgingBracket> =
+        let mut brackets_map: std::collections::HashMap<(String, DebtorType), DebtAgingBracket> =
             std::collections::HashMap::new();
         let calc = crate::services::DuesCalculationService::new();
 
@@ -233,13 +233,9 @@ impl PaymentTrackingService {
             }
 
             // The debtor is the liability's own (SPEC-005 R5), not the unit's current occupant.
-            let debtor_type = if due.debtor_type.eq_ignore_ascii_case(dues_ledger::DEBTOR_OWNER) {
-                dues_ledger::DEBTOR_OWNER.to_string()
-            } else {
-                dues_ledger::DEBTOR_TENANT.to_string()
-            };
+            let debtor_type = due.debtor_type;
 
-            let tenant_id = unit.tenant_user_id.as_ref().filter(|_| debtor_type == dues_ledger::DEBTOR_TENANT);
+            let tenant_id = unit.tenant_user_id.as_ref().filter(|_| debtor_type == DebtorType::Tenant);
             let resident_name = if let Some(tid) = tenant_id {
                 inner.users.iter().find(|u| &u.id == tid).map(|u| u.full_name.clone()).unwrap_or_else(|| "Kiracı".to_string())
             } else if let Some(ref oid) = unit.owner_user_id {
@@ -249,7 +245,7 @@ impl PaymentTrackingService {
             };
 
             let unit_label = inner.unit_label(&unit.block_id, unit.unit_number);
-            let key = (unit.id.clone(), debtor_type.clone());
+            let key = (unit.id.clone(), debtor_type);
 
             let bracket = brackets_map.entry(key).or_insert_with(|| DebtAgingBracket {
                 unit_id: unit.id.clone(),
@@ -338,11 +334,7 @@ impl PaymentTrackingService {
         if payment_amount.scale() > 2 {
             return Err("Payment amount must have at most 2 decimal places".to_string());
         }
-        let payer_role = req.payer_role.trim().to_uppercase();
-        if payer_role != dues_ledger::DEBTOR_OWNER && payer_role != dues_ledger::DEBTOR_TENANT {
-            return Err(format!("payer_role must be OWNER or TENANT, got '{}'", req.payer_role));
-        }
-        let payment_channel = normalize_payment_channel(&req.payment_channel)?;
+        let payer_role = req.payer_role;
         let idempotency_key = req.idempotency_key.as_deref().map(str::trim).filter(|k| !k.is_empty()).map(str::to_string);
         let unmatched_entry = req.settles_unmatched_entry_id.as_deref().map(str::trim).filter(|k| !k.is_empty()).map(str::to_string);
         let designation = req.designation.clone().filter(|d| !d.is_empty());
@@ -351,11 +343,11 @@ impl PaymentTrackingService {
         let desc = req.description.clone().unwrap_or_default();
         // A tenant paying capital dues explicitly does so on behalf of the owner
         // (KMK 22 rent offset); otherwise a tenant only settles tenant liabilities.
-        let on_behalf_of_owner = payer_role == dues_ledger::DEBTOR_TENANT && Self::is_capital_expenditure_intent(&desc);
-        let settling_role = if on_behalf_of_owner { dues_ledger::DEBTOR_OWNER } else { payer_role.as_str() };
-        let credit_debtor = settling_role.to_string();
+        let on_behalf_of_owner = payer_role == DebtorType::Tenant && Self::is_capital_expenditure_intent(&desc);
+        let settling_role = if on_behalf_of_owner { DebtorType::Owner } else { payer_role };
+        let credit_debtor = settling_role.as_str().to_string();
         let allocate = |dues: &mut Vec<DuesLiability>| {
-            let candidates = dues_ledger::open_dues_for(dues, |_| true, settling_role);
+            let candidates = dues_ledger::open_dues_for(dues, |_| true, settling_role.as_str());
             let designated = dues_ledger::designated_dues(dues, &candidates, designation.as_ref(), description_hint.as_deref());
             let (lines, surplus) = dues_ledger::allocate_with_designation(dues, &candidates, &designated, payment_amount);
             (lines, surplus, !designated.is_empty())
@@ -390,8 +382,8 @@ impl PaymentTrackingService {
             unit_id: unit.id.clone(),
             unit_label: self.state.inner.read().await.unit_label(&unit.block_id, unit.unit_number),
             payer_name: req.payer_name.clone(),
-            payer_role: payer_role.clone(),
-            payment_channel: payment_channel.clone(),
+            payer_role,
+            payment_channel: req.payment_channel,
             amount: payment_amount,
             issued_at,
             on_behalf_of_owner,
@@ -534,7 +526,7 @@ impl PaymentTrackingService {
             None => format!("rec-{}", receipt.id),
         };
         if let Some(existing) = inner.payment_entries.iter_mut().find(|e| unmatched_entry.is_some() && e.id == entry.id) {
-            existing.settlement_status = "SETTLED".to_string();
+            existing.settlement_status = SettlementStatus::Settled;
             existing.receipt_id = entry.receipt_id;
             existing.receipt_number = entry.receipt_number.clone();
         } else {
@@ -557,7 +549,7 @@ impl PaymentTrackingService {
                 unit_number: unit.unit_number,
                 homeowner_name: Some(req.payer_name.clone()),
                 amount: payment_amount,
-                payment_method: payment_channel,
+                payment_method: req.payment_channel,
                 reference_code: Some(receipt.receipt_number.clone()),
                 note: req.description.clone(),
                 status: match_status,
@@ -615,8 +607,8 @@ impl PaymentTrackingService {
             unit_id: unit.id.clone(),
             unit_label: self.state.inner.read().await.unit_label(&unit.block_id, unit.unit_number),
             payer_name,
-            payer_role: source.to_string(),
-            payment_channel: "INTER_LEDGER".to_string(),
+            payer_role: DebtorType::from_str_loose(source),
+            payment_channel: PaymentChannel::InterLedger,
             amount: Decimal::ZERO,
             issued_at: now,
             on_behalf_of_owner: source == dues_ledger::DEBTOR_TENANT && target == dues_ledger::DEBTOR_OWNER,
@@ -633,7 +625,7 @@ impl PaymentTrackingService {
         let allocate = |dues: &mut Vec<DuesLiability>| {
             let candidates: Vec<usize> = dues_ledger::open_dues_for(dues, |_| true, target)
                 .into_iter()
-                .filter(|&i| dues[i].debtor_type.eq_ignore_ascii_case(target))
+                .filter(|&i| dues[i].debtor_type.as_str().eq_ignore_ascii_case(target))
                 .collect();
             dues_ledger::allocate_waterfall(dues, &candidates, transfer_amount)
         };
@@ -785,7 +777,7 @@ impl PaymentTrackingService {
             if original.receipt_type != LEDGER_KIND_COLLECTION || target.entry_type != LEDGER_KIND_COLLECTION {
                 return Err(format!("{} is a reversal receipt and cannot be reversed", original.receipt_number));
             }
-            if target.settlement_status == "REVERSED" {
+            if target.settlement_status == SettlementStatus::Reversed {
                 drop(tx);
                 let rev = {
                     let inner = self.state.inner.read().await;
@@ -793,7 +785,7 @@ impl PaymentTrackingService {
                 };
                 return Ok(reversal_response(rev.ok_or("Reversal receipt not found")?, &original));
             }
-            check_reversible(&original, &target.settlement_status)?;
+            check_reversible(&original, target.settlement_status)?;
             if !crate::db::tx_lock_unit(&tx, target.unit_id, site_num).await.map_err(db_err)? {
                 return Err("Daire bulunamadı".to_string());
             }
@@ -831,7 +823,7 @@ impl PaymentTrackingService {
                 crate::db::tx_credit_advance(
                     &tx,
                     target.unit_id,
-                    &original.payer_role,
+                    original.payer_role.as_str(),
                     "VIRMAN_REVERSAL",
                     original.total_amount,
                     Some(&reversal.receipt_number),
@@ -866,11 +858,11 @@ impl PaymentTrackingService {
                 .find(|e| e.receipt_id == Some(original.id))
                 .cloned()
                 .ok_or_else(|| format!("{} has no ledger entry", original.receipt_number))?;
-            if entry.settlement_status == "REVERSED" {
+            if entry.settlement_status == SettlementStatus::Reversed {
                 let rev = existing_reversal(&inner, &original).ok_or("Reversal receipt not found")?;
                 return Ok(reversal_response(rev, &original));
             }
-            check_reversible(&original, &entry.settlement_status)?;
+            check_reversible(&original, entry.settlement_status)?;
             if original.allocated_advance > Decimal::ZERO {
                 let have = inner.advance_of(&original.unit_id, &advance_debtor_of(&original));
                 if have < original.allocated_advance {
@@ -915,10 +907,10 @@ impl PaymentTrackingService {
             inner.adjust_advance(&original.unit_id, &advance_debtor_of(&original), -original.allocated_advance);
         }
         if is_virman(&original) {
-            inner.adjust_advance(&original.unit_id, &original.payer_role, original.total_amount);
+            inner.adjust_advance(&original.unit_id, original.payer_role.as_str(), original.total_amount);
         }
         if let Some(e) = inner.payment_entries.iter_mut().find(|e| e.receipt_id == Some(original.id)) {
-            e.settlement_status = "REVERSED".to_string();
+            e.settlement_status = SettlementStatus::Reversed;
         }
         inner.payment_entries.push(contra);
         inner.payment_receipts.push(reversal.clone());
@@ -1031,7 +1023,7 @@ impl PaymentTrackingService {
             password_hash: Some("ARGON2_TEMP_HASH".to_string()),
             role: Role::HomeOwner,
             must_change_password: true,
-            auth_provider: "LOCAL".to_string(),
+            auth_provider: AuthProvider::Local,
             google_sub: None,
             avatar_url: None,
             created_at: now,
@@ -1071,7 +1063,7 @@ impl PaymentTrackingService {
             person_name: old_owner_name.clone(),
             person_phone: None,
             person_email: None,
-            role: "OWNER".to_string(),
+            role: DebtorType::Owner,
             start_date: "2020-01-01".to_string(),
             end_date: Some(transfer_date.to_string()),
             is_active: false,
@@ -1123,8 +1115,8 @@ struct ReceiptContext {
     site_id: String,
     unit_id: String,
     payer_name: String,
-    payer_role: String,
-    payment_channel: String,
+    payer_role: DebtorType,
+    payment_channel: PaymentChannel,
     amount: Decimal,
     issued_at: DateTime<Utc>,
     on_behalf_of_owner: bool,
@@ -1199,11 +1191,11 @@ impl Issuer {
 
 /// The debtor whose advance a receipt credited.
 fn advance_debtor_of(receipt: &PaymentReceipt) -> String {
-    receipt.advance_debtor_type.clone().unwrap_or_else(|| receipt.payer_role.clone())
+    receipt.advance_debtor_type.clone().unwrap_or_else(|| receipt.payer_role.to_string())
 }
 
-fn check_reversible(original: &PaymentReceipt, settlement_status: &str) -> Result<(), String> {
-    if settlement_status != "SETTLED" {
+fn check_reversible(original: &PaymentReceipt, settlement_status: SettlementStatus) -> Result<(), String> {
+    if settlement_status != SettlementStatus::Settled {
         return Err(format!("{} is {} and cannot be reversed", original.receipt_number, settlement_status));
     }
     Ok(())
@@ -1211,7 +1203,7 @@ fn check_reversible(original: &PaymentReceipt, settlement_status: &str) -> Resul
 
 /// A virman receipt: its amount was taken from the payer's advance, not paid in.
 fn is_virman(receipt: &PaymentReceipt) -> bool {
-    receipt.payment_channel == "INTER_LEDGER"
+    receipt.payment_channel == PaymentChannel::InterLedger
 }
 
 /// The `IAD-YYYY-NNNNNN` reversal receipt: the original's amounts and lines, in
@@ -1226,11 +1218,11 @@ fn build_reversal_receipt(original: &PaymentReceipt, sequence_number: i64, reaso
         receipt_number,
         sequence_number,
         payer_name: original.payer_name.clone(),
-        payer_role: original.payer_role.clone(),
+        payer_role: original.payer_role,
         on_behalf_of_name: original.on_behalf_of_name.clone(),
-        on_behalf_of_role: original.on_behalf_of_role.clone(),
+        on_behalf_of_role: original.on_behalf_of_role,
         total_amount: original.total_amount,
-        payment_channel: original.payment_channel.clone(),
+        payment_channel: original.payment_channel,
         channel_reference: Some(original.receipt_number.clone()),
         allocated_principal: original.allocated_principal,
         allocated_penalty: original.allocated_penalty,
@@ -1246,7 +1238,7 @@ fn build_reversal_receipt(original: &PaymentReceipt, sequence_number: i64, reaso
         receipt_type: LEDGER_KIND_REVERSAL.to_string(),
         reverses_receipt_id: Some(original.id),
         advance_debtor_type: original.advance_debtor_type.clone().or_else(|| {
-            (original.allocated_advance > Decimal::ZERO).then(|| original.payer_role.clone())
+            (original.allocated_advance > Decimal::ZERO).then(|| original.payer_role.to_string())
         }),
         issuer_name: None,
         issuer_address: None,
@@ -1263,12 +1255,12 @@ fn build_contra_entry(original: &PaymentReceipt, reversal: &PaymentReceipt, orig
         unit_id: original.unit_id.clone(),
         unit_label: None,
         payer_name: original.payer_name.clone(),
-        payer_role: original.payer_role.clone(),
+        payer_role: original.payer_role,
         receipt_id: Some(reversal.id),
         receipt_number: Some(reversal.receipt_number.clone()),
         amount: original.total_amount,
-        payment_channel: original.payment_channel.clone(),
-        settlement_status: "REVERSED".to_string(),
+        payment_channel: original.payment_channel,
+        settlement_status: SettlementStatus::Reversed,
         description: Some(format!("Reversal of {}: {}", original.receipt_number, reason)),
         external_reference: None,
         payment_date: reversal.issued_at,
@@ -1308,7 +1300,7 @@ fn build_receipt(
                 due_id: Some(d.id.clone()),
                 period: d.period.clone(),
                 // Taken from the liability itself, never guessed from the description.
-                expense_type: d.expense_type.clone(),
+                expense_type: d.expense_type,
                 principal_paid: l.settlement.principal,
                 penalty_paid: l.settlement.penalty,
             }
@@ -1316,7 +1308,7 @@ fn build_receipt(
         .collect();
     let allocated_principal: Decimal = lines.iter().map(|l| l.settlement.principal).sum();
     let allocated_penalty: Decimal = lines.iter().map(|l| l.settlement.penalty).sum();
-    let paid_capital = allocation_breakdown.iter().any(|b| b.expense_type == dues_ledger::EXPENSE_CAPITAL);
+    let paid_capital = allocation_breakdown.iter().any(|b| b.expense_type == ExpenseType::CapitalDues);
     let is_rent_offset_eligible = ctx.on_behalf_of_owner && paid_capital;
     PaymentReceipt {
         id: 0,
@@ -1326,11 +1318,11 @@ fn build_receipt(
         receipt_number,
         sequence_number,
         payer_name: ctx.payer_name.clone(),
-        payer_role: ctx.payer_role.clone(),
+        payer_role: ctx.payer_role,
         on_behalf_of_name: if is_rent_offset_eligible { ctx.owner_name.clone() } else { None },
-        on_behalf_of_role: if is_rent_offset_eligible { Some("OWNER".to_string()) } else { None },
+        on_behalf_of_role: if is_rent_offset_eligible { Some(DebtorType::Owner) } else { None },
         total_amount: ctx.amount,
-        payment_channel: ctx.payment_channel.clone(),
+        payment_channel: ctx.payment_channel,
         channel_reference: ctx.channel_reference.clone(),
         allocated_principal,
         allocated_penalty,
@@ -1356,12 +1348,12 @@ fn build_entry(ctx: &ReceiptContext, receipt: &PaymentReceipt) -> PaymentEntry {
         unit_id: ctx.unit_id.clone(),
         unit_label: Some(ctx.unit_label.clone()),
         payer_name: ctx.payer_name.clone(),
-        payer_role: ctx.payer_role.clone(),
+        payer_role: ctx.payer_role,
         receipt_id: if receipt.id > 0 { Some(receipt.id) } else { None },
         receipt_number: Some(receipt.receipt_number.clone()),
         amount: ctx.amount,
-        payment_channel: ctx.payment_channel.clone(),
-        settlement_status: "SETTLED".to_string(),
+        payment_channel: ctx.payment_channel,
+        settlement_status: SettlementStatus::Settled,
         description: ctx.description.clone(),
         external_reference: ctx.external_reference.clone(),
         payment_date: ctx.issued_at,

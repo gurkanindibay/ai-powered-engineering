@@ -3,7 +3,7 @@ use chrono::{Datelike, NaiveDate, Utc};
 use rust_decimal::Decimal;
 
 use crate::handlers::apply_advance_payments_offset;
-use crate::models::{DebtStatus, DuesLiability};
+use crate::models::{DebtStatus, DebtorType, DuesLiability, ExpenseType};
 use crate::state::AppState;
 
 /// Formats a naive date into standard Turkish month and year, e.g. "Ekim 2026".
@@ -83,7 +83,7 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
                 let already = inner
                     .dues
                     .iter()
-                    .any(|d| d.unit_id == unit.id && d.period == period && d.expense_type == "OPERATIONAL_DUES");
+                    .any(|d| d.unit_id == unit.id && d.period == period && d.expense_type == ExpenseType::OperationalDues);
                 if already {
                     continue;
                 }
@@ -96,7 +96,7 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
                 };
                 let amount = basis.amount;
                 let let_to_tenant = tenanted.as_ref().map(|t| t.contains(&unit.id)).unwrap_or(unit.tenant_user_id.is_some());
-                let debtor = if let_to_tenant { "TENANT" } else { "OWNER" };
+                let debtor = if let_to_tenant { DebtorType::Tenant } else { DebtorType::Owner };
                 to_accrue.push((site_id.clone(), DuesLiability {
                     id: String::new(),
                     unit_id: unit.id.clone(),
@@ -108,8 +108,8 @@ pub async fn run_periodic_accrual_for_all_sites(state: &AppState, now: chrono::D
                     status: DebtStatus::Pending,
                     paid_principal: Decimal::ZERO,
                     paid_penalty: Decimal::ZERO,
-                    debtor_type: debtor.to_string(),
-                    expense_type: "OPERATIONAL_DUES".to_string(),
+                    debtor_type: debtor,
+                    expense_type: ExpenseType::OperationalDues,
                     penalty_accrued_through: None,
                 }, basis.operating_budget_id));
             }
