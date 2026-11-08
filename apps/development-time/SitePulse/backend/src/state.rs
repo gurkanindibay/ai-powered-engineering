@@ -8,8 +8,8 @@ use crate::models::{
     AllocationBasis, AuthProvider, BankStatementFormat, CapitalProjectCategory,
     CapitalProjectStatus, DebtStatus, DebtorType, DisbursementMethod, DuesLiability, ExpenseType,
     HomeownerPaymentRecord, IndependentUnit, PendingRegistrationResponse, PlanType,
-    ReconciliationMatch, RegistrationStatus, Role, Site, SiteBankAccount,
-    SiteInvitationLinkResponse, SiteStatus, UnitInviteLinkResponse, UnitMemberDto, User,
+    ReconciliationMatch, RegistrationStatus, Role, Site, SiteBankAccount, SiteStatus,
+    UnitInviteLinkResponse, UnitMemberDto, User,
 };
 use crate::services::VirtualIbanService;
 
@@ -50,8 +50,6 @@ pub struct AppStateInner {
     pub pending_registrations: Vec<PendingRegistrationResponse>,
     pub unit_members: HashMap<String, Vec<UnitMemberDto>>,
     pub unit_invite_tokens: HashMap<String, UnitInviteLinkResponse>,
-    #[allow(dead_code)]
-    pub site_invite_tokens: HashMap<String, SiteInvitationLinkResponse>,
     pub reconciliation_queue: Vec<ReconciliationMatch>,
     pub site_bank_accounts: Vec<SiteBankAccount>,
     /// Advance (avans) balance per unit, split by debtor like `advance_balances`.
@@ -102,7 +100,6 @@ impl AppStateInner {
             pending_registrations: Vec::new(),
             unit_members: HashMap::new(),
             unit_invite_tokens: HashMap::new(),
-            site_invite_tokens: HashMap::new(),
             reconciliation_queue: Vec::new(),
             site_bank_accounts: Vec::new(),
             advance_balances: HashMap::new(),
@@ -545,7 +542,6 @@ impl AppStateInner {
         self.pending_registrations.clear();
         self.unit_members.clear();
         self.unit_invite_tokens.clear();
-        self.site_invite_tokens.clear();
         self.reconciliation_queue.clear();
         self.site_bank_accounts.clear();
         self.advance_balances.clear();
@@ -723,6 +719,10 @@ impl Default for AppState {
 }
 
 impl AppState {
+    pub fn db_pool(&self) -> Option<&deadpool_postgres::Pool> {
+        self.pool.as_ref()
+    }
+
     #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
@@ -735,7 +735,12 @@ impl AppState {
         let mut inner = AppStateInner::new();
         // Server with database pool starts clean and loads strictly from PostgreSQL
         inner.clear_all_data();
-        inner.seed_system_lookups();
+        if pool.is_some() {
+            // When connected to PostgreSQL, no lookups or users are held/mocked in memory.
+            inner.users.clear();
+            inner.house_types.clear();
+            inner.blocks.clear();
+        }
         Self {
             inner: Arc::new(RwLock::new(inner)),
             pool,

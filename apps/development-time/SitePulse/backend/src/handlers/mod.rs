@@ -536,8 +536,16 @@ pub async fn get_reconciliation_queue(
     State(state): State<AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Json<Vec<ReconciliationMatch>> {
+    let site_id = params
+        .get("site_id")
+        .or_else(|| params.get("siteId"))
+        .map(String::as_str);
+    if let Some(p) = state.db_pool() {
+        if let Ok(db_queue) = crate::db::fetch_reconciliation_queue_from_db(p, site_id).await {
+            return Json(db_queue);
+        }
+    }
     let inner = state.inner.read().await;
-    let site_id = params.get("site_id").or_else(|| params.get("siteId"));
     if let Some(target_site) = site_id {
         let filtered: Vec<ReconciliationMatch> = inner
             .reconciliation_queue
@@ -2368,8 +2376,21 @@ pub async fn match_all_homeowner_payments(
 
 /// Returns the list of homeowner payment records
 pub async fn get_homeowner_payments(State(state): State<AppState>) -> impl IntoResponse {
+    if let Some(p) = state.db_pool() {
+        if let Ok(records) = crate::db::fetch_homeowner_payment_records_from_db(p).await {
+            return (
+                StatusCode::OK,
+                Json(serde_json::to_value(records).unwrap_or_default()),
+            )
+                .into_response();
+        }
+    }
     let inner = state.inner.read().await;
-    (StatusCode::OK, Json(inner.homeowner_payments.clone()))
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(&inner.homeowner_payments).unwrap_or_default()),
+    )
+        .into_response()
 }
 
 /// Resets all payments, advance balances, reconciliation items, and dues back to a 100% clean state (₺0.00 debt, 0 transactions)
@@ -3313,6 +3334,11 @@ pub async fn provision_site_units(
 
 /// Returns a summary list of all units in the system for testing & simulator dropdowns
 pub async fn get_units_summary(State(state): State<AppState>) -> impl IntoResponse {
+    if let Some(p) = state.db_pool() {
+        if let Ok(units) = crate::db::unit_repository::fetch_units_summary_from_db(p).await {
+            return (StatusCode::OK, Json(units)).into_response();
+        }
+    }
     let inner = state.inner.read().await;
     let mut result = Vec::new();
 
@@ -3368,7 +3394,7 @@ pub async fn get_units_summary(State(state): State<AppState>) -> impl IntoRespon
         }));
     }
 
-    (StatusCode::OK, Json(result))
+    (StatusCode::OK, Json(result)).into_response()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -3381,6 +3407,15 @@ pub async fn get_site_payments(
     State(state): State<AppState>,
     Query(query): Query<SitePaymentsQuery>,
 ) -> impl IntoResponse {
+    if let Some(p) = state.db_pool() {
+        if let Ok(res) =
+            crate::db::payment_repository::fetch_site_payments_from_db(p, query.site_id.as_deref())
+                .await
+        {
+            return (StatusCode::OK, Json(res)).into_response();
+        }
+    }
+
     let inner = state.inner.read().await;
 
     // 1. Resolve site
@@ -3616,6 +3651,7 @@ pub async fn get_site_payments(
             "guidance": guidance
         })),
     )
+        .into_response()
 }
 
 /// Returns the comprehensive overview for the Site Manager:

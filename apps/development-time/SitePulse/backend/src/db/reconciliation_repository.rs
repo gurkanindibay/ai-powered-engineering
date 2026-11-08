@@ -1,8 +1,10 @@
+use chrono::NaiveDate;
 use deadpool_postgres::Pool;
+use rust_decimal::Decimal;
 use tracing::info;
 
-use super::base::{parse_id_to_i64, require_id};
-use crate::models::ReconciliationMatch;
+use super::base::{parse_id_to_i64, require_id, DbResult};
+use crate::models::{BankTransactionItem, ReconciliationMatch, ReconciliationStatus};
 pub async fn save_reconciliation_match_for_site(
     pool: &Pool,
     m: &ReconciliationMatch,
@@ -98,4 +100,92 @@ pub async fn update_reconciliation_status(
         match_id, code
     );
     Ok(())
+}
+
+pub async fn fetch_reconciliation_queue_from_db(
+    pool: &Pool,
+    site_id: Option<&str>,
+) -> DbResult<Vec<ReconciliationMatch>> {
+    let client = pool.get().await?;
+    let rows = if let Some(sid) = site_id {
+        let site_num = parse_id_to_i64(sid).unwrap_or(0);
+        client
+            .query(
+                "SELECT match_id, transaction_id, txn_date, amount, currency, description, \
+                 sender_name, sender_iban, reference_no, matched_unit_id, matched_block, \
+                 matched_unit_number, matched_resident_name, confidence_score, matched_due_id, \
+                 outstanding_balance, amount_matches_balance, status, notes, site_id \
+                 FROM reconciliation_queue WHERE site_id = $1 ORDER BY txn_date ASC",
+                &[&site_num],
+            )
+            .await?
+    } else {
+        client
+            .query(
+                "SELECT match_id, transaction_id, txn_date, amount, currency, description, \
+                 sender_name, sender_iban, reference_no, matched_unit_id, matched_block, \
+                 matched_unit_number, matched_resident_name, confidence_score, matched_due_id, \
+                 outstanding_balance, amount_matches_balance, status, notes, site_id \
+                 FROM reconciliation_queue ORDER BY txn_date ASC",
+                &[],
+            )
+            .await?
+    };
+
+    let mut list = Vec::new();
+    for row in rows {
+        let match_id: String = row.get(0);
+        let transaction_id: String = row.get(1);
+        let txn_date: NaiveDate = row.get(2);
+        let amount: Decimal = row.get(3);
+        let currency: String = row.get(4);
+        let description: String = row.get(5);
+        let sender_name: Option<String> = row.get(6);
+        let sender_iban: Option<String> = row.get(7);
+        let reference_no: Option<String> = row.get(8);
+        let matched_unit_id: Option<i64> = row.get(9);
+        let matched_block: Option<String> = row.get(10);
+        let matched_unit_number: Option<i32> = row.get(11);
+        let matched_resident_name: Option<String> = row.get(12);
+        let confidence_score: i32 = row.get(13);
+        let matched_due_id: Option<i64> = row.get(14);
+        let outstanding_balance: Option<Decimal> = row.get(15);
+        let amount_matches_balance: bool = row.get(16);
+        let status_str: String = row.get(17);
+        let notes: Option<String> = row.get(18);
+        let site_id_num: Option<i64> = row.get(19);
+        let s_id = site_id_num
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "1".to_string());
+
+        let status = ReconciliationStatus::from_db_code(&status_str);
+        let status_code = status.as_str().to_string();
+
+        list.push(ReconciliationMatch {
+            match_id,
+            site_id: s_id,
+            transaction: BankTransactionItem {
+                transaction_id,
+                date: txn_date,
+                amount,
+                currency,
+                description,
+                sender_name,
+                sender_iban,
+                reference_no,
+            },
+            matched_unit_id: matched_unit_id.map(|v| v.to_string()),
+            matched_block,
+            matched_unit_number,
+            matched_resident_name,
+            confidence_score: confidence_score as u8,
+            matched_due_id: matched_due_id.map(|v| v.to_string()),
+            outstanding_balance,
+            amount_matches_balance,
+            status,
+            status_code,
+            notes,
+        });
+    }
+    Ok(list)
 }

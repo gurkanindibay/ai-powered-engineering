@@ -4,7 +4,7 @@ use rust_decimal::Decimal;
 use tracing::info;
 
 use super::base::{logged, parse_id_to_i64, require_id, DbResult};
-use crate::models::{BlockDto, PlanType, SaasSiteSummaryDto, Site, SiteStatus};
+use crate::models::{BlockDto, PlanType, SaasGlobalStatsDto, SaasSiteSummaryDto, Site, SiteStatus};
 pub async fn save_site(
     pool: &Pool,
     site: &Site,
@@ -293,10 +293,7 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
             )
             .await
             .unwrap_or_default();
-        let mut blocks: Vec<String> = block_rows.iter().map(|r| r.get(0)).collect();
-        if blocks.is_empty() {
-            blocks = vec!["A Blok".to_string(), "B Blok".to_string()];
-        }
+        let blocks: Vec<String> = block_rows.iter().map(|r| r.get(0)).collect();
 
         result.push(SaasSiteSummaryDto {
             site_id: id.to_string(),
@@ -425,4 +422,36 @@ pub async fn get_blocks_for_site_from_db(
         });
     }
     Ok(list)
+}
+
+pub async fn fetch_saas_global_stats(pool: &Pool) -> DbResult<SaasGlobalStatsDto> {
+    let client = pool.get().await?;
+    let sites_row = client
+        .query_one(
+            "SELECT COUNT(*)::bigint, COUNT(*) FILTER (WHERE status = 'ACTIVE')::bigint FROM sites WHERE deleted_at IS NULL",
+            &[],
+        )
+        .await?;
+    let total_sites: i64 = sites_row.get(0);
+    let active_sites: i64 = sites_row.get(1);
+
+    let units_row = client
+        .query_one("SELECT COUNT(*)::bigint FROM units", &[])
+        .await?;
+    let total_units: i64 = units_row.get(0);
+
+    let dues_row = client
+        .query_one(
+            "SELECT COALESCE(SUM(principal_amount), 0) FROM dues_liabilities",
+            &[],
+        )
+        .await?;
+    let monthly_collection_volume: Decimal = dues_row.get(0);
+
+    Ok(SaasGlobalStatsDto {
+        total_sites: total_sites as usize,
+        active_sites: active_sites as usize,
+        total_units: total_units as usize,
+        monthly_collection_volume,
+    })
 }

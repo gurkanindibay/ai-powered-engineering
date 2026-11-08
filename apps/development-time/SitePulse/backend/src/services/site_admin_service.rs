@@ -1165,9 +1165,7 @@ impl SiteAdminService {
                                 household_residents: household,
                             });
                         }
-                        if !db_result.is_empty() {
-                            return db_result;
-                        }
+                        return db_result;
                     }
                 }
             }
@@ -2056,25 +2054,23 @@ impl SiteAdminService {
                         &[&site_numeric],
                     )
                     .await, "site_admin_service") {
-                    if !rows.is_empty() {
-                        return rows
-                            .into_iter()
-                            .map(|row| {
-                                let id: i64 = row.get(0);
-                                let s_id: i64 = row.get(1);
-                                let type_name: String = row.get(2);
-                                let dues_amount: Decimal = row.get(3);
-                                let description: Option<String> = row.get(4);
-                                crate::models::HouseTypeTariff {
-                                    id: id.to_string(),
-                                    site_id: s_id.to_string(),
-                                    type_name,
-                                    dues_amount,
-                                    description,
-                                }
-                            })
-                            .collect();
-                    }
+                    return rows
+                        .into_iter()
+                        .map(|row| {
+                            let id: i64 = row.get(0);
+                            let s_id: i64 = row.get(1);
+                            let type_name: String = row.get(2);
+                            let dues_amount: Decimal = row.get(3);
+                            let description: Option<String> = row.get(4);
+                            crate::models::HouseTypeTariff {
+                                id: id.to_string(),
+                                site_id: s_id.to_string(),
+                                type_name,
+                                dues_amount,
+                                description,
+                            }
+                        })
+                        .collect();
                 }
             }
         }
@@ -2227,29 +2223,23 @@ impl SiteAdminService {
     }
 
     pub async fn get_blocks_for_site(&self, site_id: &str) -> Vec<crate::models::BlockDto> {
-        let mut list = Vec::new();
         if let Some(ref pool) = self.state.pool {
             if let Ok(db_blocks) = crate::db::get_blocks_for_site_from_db(pool, site_id).await {
-                if !db_blocks.is_empty() {
-                    list = db_blocks;
-                }
+                return db_blocks;
             }
         }
-
-        if list.is_empty() {
-            let site_numeric = crate::db::parse_id_to_i64(site_id);
-            let inner = self.state.inner.read().await;
-            list = inner
-                .blocks
-                .iter()
-                .filter(|b| {
-                    b.site_id == site_id
-                        || (site_numeric.is_some()
-                            && crate::db::parse_id_to_i64(&b.site_id) == site_numeric)
-                })
-                .cloned()
-                .collect();
-        }
+        let site_numeric = crate::db::parse_id_to_i64(site_id);
+        let inner = self.state.inner.read().await;
+        let mut list: Vec<crate::models::BlockDto> = inner
+            .blocks
+            .iter()
+            .filter(|b| {
+                b.site_id == site_id
+                    || (site_numeric.is_some()
+                        && crate::db::parse_id_to_i64(&b.site_id) == site_numeric)
+            })
+            .cloned()
+            .collect();
 
         if list.is_empty() {
             list = vec![

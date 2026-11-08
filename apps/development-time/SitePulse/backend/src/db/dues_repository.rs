@@ -341,3 +341,199 @@ pub async fn tenanted_unit_ids(
         .map(|r| r.get::<_, i64>(0).to_string())
         .collect())
 }
+
+pub async fn fetch_debt_aging_report_from_db(
+    pool: &Pool,
+    site_id: &str,
+) -> DbResult<crate::models::DebtAgingReport> {
+    let client = pool.get().await?;
+    let today = chrono::Utc::now().date_naive();
+
+    let rows = if site_id != "all" && !site_id.is_empty() {
+        let site_num = parse_id_to_i64(site_id).unwrap_or(0);
+        client
+            .query(
+                r#"
+                SELECT 
+                    dl.id::text,
+                    dl.unit_id::text,
+                    dl.period,
+                    dl.principal_amount,
+                    dl.due_date,
+                    dl.status,
+                    dl.delay_penalty,
+                    dl.paid_amount,
+                    dl.paid_principal,
+                    dl.paid_penalty,
+                    dl.debtor_type,
+                    dl.expense_type,
+                    dl.penalty_accrued_through,
+                    b.block_name,
+                    u.unit_number,
+                    COALESCE(
+                        CASE WHEN dl.debtor_type = 'TENANT' THEN tp.full_name ELSE op.full_name END,
+                        CASE WHEN dl.debtor_type = 'TENANT' THEN 'Kiracı' ELSE 'Kat Maliki' END
+                    ) as resident_name
+                FROM dues_liabilities dl
+                JOIN units u ON dl.unit_id = u.id
+                JOIN blocks b ON u.block_id = b.id
+                LEFT JOIN persons op ON u.owner_person_id = op.id
+                LEFT JOIN persons tp ON u.tenant_person_id = tp.id
+                WHERE dl.status != 'PAID' AND dl.status != 'CANCELLED' AND u.site_id = $1
+                "#,
+                &[&site_num],
+            )
+            .await?
+    } else {
+        client
+            .query(
+                r#"
+                SELECT 
+                    dl.id::text,
+                    dl.unit_id::text,
+                    dl.period,
+                    dl.principal_amount,
+                    dl.due_date,
+                    dl.status,
+                    dl.delay_penalty,
+                    dl.paid_amount,
+                    dl.paid_principal,
+                    dl.paid_penalty,
+                    dl.debtor_type,
+                    dl.expense_type,
+                    dl.penalty_accrued_through,
+                    b.block_name,
+                    u.unit_number,
+                    COALESCE(
+                        CASE WHEN dl.debtor_type = 'TENANT' THEN tp.full_name ELSE op.full_name END,
+                        CASE WHEN dl.debtor_type = 'TENANT' THEN 'Kiracı' ELSE 'Kat Maliki' END
+                    ) as resident_name
+                FROM dues_liabilities dl
+                JOIN units u ON dl.unit_id = u.id
+                JOIN blocks b ON u.block_id = b.id
+                LEFT JOIN persons op ON u.owner_person_id = op.id
+                LEFT JOIN persons tp ON u.tenant_person_id = tp.id
+                WHERE dl.status != 'PAID' AND dl.status != 'CANCELLED'
+                "#,
+                &[],
+            )
+            .await?
+    };
+
+    let calc = crate::services::DuesCalculationService::new();
+    let mut brackets_map: std::collections::HashMap<
+        (String, crate::models::DebtorType),
+        crate::models::DebtAgingBracket,
+    > = std::collections::HashMap::new();
+
+    for row in rows {
+        let id: String = row.get(0);
+        let unit_id: String = row.get(1);
+        let period: String = row.get(2);
+        let principal_amount: Decimal = row.get(3);
+        let due_date: NaiveDate = row.get(4);
+        let status_str: String = row.get(5);
+        let delay_penalty: Decimal = row.get(6);
+        let _paid_amount: Decimal = row.get(7);
+        let paid_principal: Decimal = row.get(8);
+        let paid_penalty: Decimal = row.get(9);
+        let debtor_type_str: String = row.get(10);
+        let expense_type_str: String = row.get(11);
+        let penalty_accrued_through: Option<NaiveDate> = row.get(12);
+        let block_name: String = row.get(13);
+        let unit_number: i32 = row.get(14);
+        let resident_name: String = row.get(15);
+
+        let status = match status_str.as_str() {
+            "PAID" => DebtStatus::Paid,
+            "OVERDUE" => DebtStatus::Overdue,
+            _ => DebtStatus::Pending,
+        };
+        let debtor_type = match debtor_type_str.as_str() {
+            "OWNER" => crate::models::DebtorType::Owner,
+            _ => crate::models::DebtorType::Tenant,
+        };
+        let expense_type = match expense_type_str.as_str() {
+            "CAPITAL_DUES" => crate::models::ExpenseType::CapitalDues,
+            _ => crate::models::ExpenseType::OperationalDues,
+        };
+
+        let stored = DuesLiability {
+            id,
+            unit_id: unit_id.clone(),
+            period,
+            principal_amount,
+            delay_penalty,
+            total_amount: principal_amount + delay_penalty,
+            due_date,
+            status,
+            paid_principal,
+            paid_penalty,
+            debtor_type,
+            expense_type,
+            penalty_accrued_through,
+        };
+
+        let due = calc.calculate_delay_penalty(stored, today);
+        let block_label = if block_name.to_lowercase().contains("blok") {
+            block_name
+        } else {
+            format!("{} Blok", block_name)
+        };
+        let unit_label = format!("{} D:{}", block_label, unit_number);
+        let key = (unit_id.clone(), debtor_type);
+
+        let bracket = brackets_map
+            .entry(key)
+            .or_insert_with(|| crate::models::DebtAgingBracket {
+                unit_id: unit_id.clone(),
+                unit_label,
+                resident_name,
+                debtor_type,
+                current_due: Decimal::ZERO,
+                overdue_1_30_days: Decimal::ZERO,
+                overdue_31_60_days: Decimal::ZERO,
+                overdue_60_plus_days: Decimal::ZERO,
+                accrued_delay_penalty: Decimal::ZERO,
+                total_outstanding: Decimal::ZERO,
+            });
+
+        let principal_remaining = crate::services::dues_ledger::outstanding_principal(&due);
+        let penalty = crate::services::dues_ledger::outstanding_penalty(&due);
+        bracket.accrued_delay_penalty += penalty;
+
+        let days_overdue = (today - due.due_date).num_days();
+        if days_overdue <= 0 {
+            bracket.current_due += principal_remaining;
+        } else if days_overdue <= 30 {
+            bracket.overdue_1_30_days += principal_remaining;
+        } else if days_overdue <= 60 {
+            bracket.overdue_31_60_days += principal_remaining;
+        } else {
+            bracket.overdue_60_plus_days += principal_remaining;
+        }
+
+        bracket.total_outstanding += principal_remaining + penalty;
+    }
+
+    let mut brackets: Vec<crate::models::DebtAgingBracket> = brackets_map.into_values().collect();
+    brackets.sort_by_key(|b| std::cmp::Reverse(b.total_outstanding));
+
+    let total_current: Decimal = brackets.iter().map(|b| b.current_due).sum();
+    let total_1_30_days: Decimal = brackets.iter().map(|b| b.overdue_1_30_days).sum();
+    let total_31_60_days: Decimal = brackets.iter().map(|b| b.overdue_31_60_days).sum();
+    let total_60_plus_days: Decimal = brackets.iter().map(|b| b.overdue_60_plus_days).sum();
+    let total_penalty: Decimal = brackets.iter().map(|b| b.accrued_delay_penalty).sum();
+    let grand_total: Decimal = brackets.iter().map(|b| b.total_outstanding).sum();
+
+    Ok(crate::models::DebtAgingReport {
+        as_of_date: today,
+        total_current,
+        total_1_30_days,
+        total_31_60_days,
+        total_60_plus_days,
+        total_penalty,
+        grand_total,
+        brackets,
+    })
+}
