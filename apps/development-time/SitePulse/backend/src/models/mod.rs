@@ -238,6 +238,11 @@ pub struct Site {
     /// IANA time zone used for accrual dates (e.g. `Europe/Istanbul`).
     #[serde(default = "default_site_timezone")]
     pub timezone: String,
+    /// Vergi Kimlik No (10 digits) or the manager's T.C. Kimlik No (11), printed on receipts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tax_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tax_office: Option<String>,
 }
 
 pub fn default_site_timezone() -> String {
@@ -375,6 +380,11 @@ pub struct UpdateSiteRequest {
     pub site_admin_phone: Option<String>,
     #[serde(default)]
     pub blocks: Option<Vec<String>>,
+    /// Issuer tax id printed on receipts (10 or 11 digits); an empty string clears it.
+    #[serde(default)]
+    pub tax_id: Option<String>,
+    #[serde(default)]
+    pub tax_office: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -917,6 +927,27 @@ impl ReconciliationStatus {
             ReconciliationStatus::AlreadyProcessed => "ZATEN_YUKLENDI",
         }
     }
+
+    /// The single stored vocabulary of `reconciliation_queue.status` (V17, O-7).
+    pub fn db_code(&self) -> &'static str {
+        match self {
+            ReconciliationStatus::PendingApproval => "PENDING_APPROVAL",
+            ReconciliationStatus::Approved => "APPROVED",
+            ReconciliationStatus::Unmatched => "UNMATCHED",
+            ReconciliationStatus::Rejected => "REJECTED",
+            ReconciliationStatus::AlreadyProcessed => "ALREADY_PROCESSED",
+        }
+    }
+
+    pub fn from_db_code(code: &str) -> Self {
+        match code {
+            "APPROVED" => ReconciliationStatus::Approved,
+            "UNMATCHED" => ReconciliationStatus::Unmatched,
+            "REJECTED" => ReconciliationStatus::Rejected,
+            "ALREADY_PROCESSED" => ReconciliationStatus::AlreadyProcessed,
+            _ => ReconciliationStatus::PendingApproval,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1290,6 +1321,30 @@ pub struct PaymentReceipt {
     pub legal_statutory_note: Option<String>,
     pub verification_hash: String,
     pub issued_at: DateTime<Utc>,
+    /// `COLLECTION` (TAH- series) or `REVERSAL` (IAD- series).
+    #[serde(default = "default_ledger_kind")]
+    pub receipt_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reverses_receipt_id: Option<i64>,
+    /// The debtor whose advance received `allocated_advance` (None when it is 0).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advance_debtor_type: Option<String>,
+    /// Issuer legal details as printed when the receipt was issued.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issuer_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issuer_address: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issuer_tax_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issuer_tax_office: Option<String>,
+}
+
+pub const LEDGER_KIND_COLLECTION: &str = "COLLECTION";
+pub const LEDGER_KIND_REVERSAL: &str = "REVERSAL";
+
+pub fn default_ledger_kind() -> String {
+    LEDGER_KIND_COLLECTION.to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1314,6 +1369,37 @@ pub struct PaymentEntry {
     pub external_reference: Option<String>,
     pub payment_date: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    /// `COLLECTION`, or `REVERSAL` for the contra entry of a reversed payment.
+    #[serde(default = "default_ledger_kind")]
+    pub entry_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reverses_entry_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reversal_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorded_by: Option<String>,
+}
+
+/// A unit's advance (avans) balance, one bucket per debtor (V12 `advance_balances`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UnitAdvance {
+    pub owner: Decimal,
+    pub tenant: Decimal,
+}
+
+impl UnitAdvance {
+    pub fn total(&self) -> Decimal {
+        self.owner + self.tenant
+    }
+
+    /// Balance of one debtor (`OWNER` or `TENANT`, case-insensitive).
+    pub fn of(&self, debtor_type: &str) -> Decimal {
+        if debtor_type.eq_ignore_ascii_case("OWNER") { self.owner } else { self.tenant }
+    }
+
+    pub fn bucket_mut(&mut self, debtor_type: &str) -> &mut Decimal {
+        if debtor_type.eq_ignore_ascii_case("OWNER") { &mut self.owner } else { &mut self.tenant }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1379,7 +1465,7 @@ pub struct DebtAgingReport {
     pub brackets: Vec<DebtAgingBracket>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct InterLedgerTransferRequest {
     #[serde(default)]
     pub site_id: Option<String>,
@@ -1389,6 +1475,35 @@ pub struct InterLedgerTransferRequest {
     pub note: Option<String>,
     #[serde(default)]
     pub operator_user_id: Option<String>,
+    /// Whose advance is debited: `OWNER` (default) or `TENANT`.
+    #[serde(default)]
+    pub source_debtor: Option<String>,
+    /// Whose liabilities are settled: `OWNER` (default, e.g. Demirbaş) or `TENANT`.
+    /// TENANT -> OWNER is the tenant surplus paying the owner's capital dues.
+    #[serde(default)]
+    pub target_debtor: Option<String>,
+}
+
+/// Staff request to reverse a settled payment (SPEC-006 R2).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ReversePaymentRequest {
+    #[serde(default)]
+    pub site_id: Option<String>,
+    /// The receipt of the payment to reverse (`TAH-...` number or numeric id).
+    pub receipt: String,
+    /// Why the payment is reversed (bounced transfer, refund to payer, wrong unit...).
+    /// A receipt is reversed at most once, so a retry returns the first reversal.
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReversePaymentResponse {
+    pub reversal_receipt: PaymentReceipt,
+    pub reversed_receipt_number: String,
+    /// Advance that was refunded (debited from the advance ledger as REFUND).
+    pub refunded_advance: Decimal,
+    /// Liabilities whose paid amounts were restored.
+    pub reopened_due_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
