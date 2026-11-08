@@ -42,6 +42,14 @@ This document lists the available skills and custom tools available to AI agents
 
 ---
 
+## 1b. Database Schema Designer (`database-schema-designer`)
+
+- **Skill Definition:** [.agents/skills/database-schema-designer/SKILL.md](file:///.agents/skills/database-schema-designer/SKILL.md)
+- **Source:** [OneWave-AI/claude-skills](https://github.com/OneWave-AI/claude-skills/tree/main/database-schema-designer)
+- **Purpose:** Designs relational schemas, indexes, constraints, ERDs, and reversible migrations driven by real query patterns (PostgreSQL, MySQL, SQLite, MongoDB).
+
+---
+
 ## 2. Rust Engineering Skills (`rust-skills`)
 
 - **Skill Definition:** [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md)
