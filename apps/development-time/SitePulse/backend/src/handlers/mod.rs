@@ -22,7 +22,7 @@ use crate::state::AppState;
 /// balances), used to persist exactly what an in-memory operation changed.
 pub struct LedgerSnapshot {
     dues: std::collections::HashMap<String, (Decimal, Decimal, Decimal, DebtStatus)>,
-    advances: std::collections::HashMap<String, Decimal>,
+    advances: std::collections::HashMap<String, UnitAdvance>,
 }
 
 pub fn ledger_snapshot(inner: &crate::state::AppStateInner) -> LedgerSnapshot {
@@ -32,7 +32,7 @@ pub fn ledger_snapshot(inner: &crate::state::AppStateInner) -> LedgerSnapshot {
             .iter()
             .map(|d| (d.id.clone(), (d.paid_principal, d.paid_penalty, d.delay_penalty, d.status)))
             .collect(),
-        advances: inner.advance_payments.clone(),
+        advances: inner.advance_balances.clone(),
     }
 }
 
@@ -52,10 +52,13 @@ pub async fn persist_ledger_changes(
             }
         }
     }
-    for (unit, bal) in &inner.advance_payments {
-        if before.advances.get(unit) != Some(bal) {
-            if let Err(e) = crate::db::save_advance_balance(pool, unit, *bal).await {
-                errors.push(format!("advance balance {}: {}", unit, e));
+    for (unit, adv) in &inner.advance_balances {
+        let old = before.advances.get(unit).copied().unwrap_or_default();
+        for (debtor, now, was) in [("OWNER", adv.owner, old.owner), ("TENANT", adv.tenant, old.tenant)] {
+            if now != was {
+                if let Err(e) = crate::db::save_advance_balance(pool, unit, debtor, now).await {
+                    errors.push(format!("advance balance {}/{}: {}", unit, debtor, e));
+                }
             }
         }
     }
@@ -68,8 +71,11 @@ pub async fn persist_ledger_changes(
 }
 
 /// Domain Service / Rule: Advance Balance Auto-Offsetting
-/// When dues liabilities exist or arrive for a unit, any available advance balance
-/// (Avans Bakiye) is automatically deducted against the debt (FIFO order by due_date).
+/// When dues liabilities exist or arrive for a unit, available advance balance
+/// (Avans Bakiye) is automatically deducted against the debt (FIFO order by
+/// due_date). Each liability is offset only from its own debtor's advance
+/// (O-1): a tenant's surplus never silently pays the owner's dues; that takes an
+/// explicit TENANT -> OWNER inter-ledger transfer.
 pub fn apply_advance_payments_offset(
     inner: &mut crate::state::AppStateInner,
     target_unit_id: Option<&str>,
@@ -83,8 +89,8 @@ pub fn apply_advance_payments_offset(
     let mut total_offset_amount = Decimal::ZERO;
 
     for u_id in unit_ids {
-        let advance = match inner.advance_payments.get_mut(&u_id) {
-            Some(adv) if *adv > Decimal::ZERO => adv,
+        let mut buckets = match inner.advance_balances.get(&u_id) {
+            Some(adv) if adv.total() > Decimal::ZERO => *adv,
             _ => continue,
         };
 
@@ -112,8 +118,10 @@ pub fn apply_advance_payments_offset(
             .map(|user| user.full_name.clone());
 
         for idx in unpaid_indices {
+            let debtor = inner.dues[idx].debtor_type.clone();
+            let advance = buckets.bucket_mut(&debtor);
             if *advance <= Decimal::ZERO {
-                break;
+                continue;
             }
 
             let due = &mut inner.dues[idx];
@@ -197,6 +205,7 @@ pub fn apply_advance_payments_offset(
                 }
             }
         }
+        inner.advance_balances.insert(u_id.clone(), buckets);
     }
 
     (auto_settled_count, total_offset_amount)
@@ -421,11 +430,7 @@ pub async fn get_resident_dashboard(
         .map(|s| s.name.clone())
         .unwrap_or_else(|| "Site".to_string());
     let site_title = format!("{} • {} Blok D:{}", site_name, unit.block_id, unit.unit_number);
-    let advance_payment = inner
-        .advance_payments
-        .get(&unit_id)
-        .copied()
-        .unwrap_or(Decimal::ZERO);
+    let advance_payment = inner.advance_total(&unit_id);
 
     let mut transactions: Vec<AccountTransactionDto> = Vec::new();
 
@@ -1212,7 +1217,7 @@ pub async fn confirm_reconciliation(
 
     if let Some(ref pool) = state.pool {
         for m in &confirmed_matches {
-            crate::db::update_reconciliation_status(pool, &m.match_id, "Approved", &m.status_code, m.notes.as_deref())
+            crate::db::update_reconciliation_status(pool, &m.match_id, ReconciliationStatus::Approved, m.notes.as_deref())
                 .await
                 .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
         }
@@ -1566,29 +1571,87 @@ pub async fn handle_bank_incoming_webhook(
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Invalid webhook payload: {}", e)))?;
     validate_bank_webhook(&payload)?;
 
-    // Durable idempotency: the transaction id is claimed in PostgreSQL before any
-    // state changes, so a replay (even after a restart) is never applied twice.
+    // Durable idempotency (O-3): the transaction id is claimed in PostgreSQL,
+    // scoped by the receiving bank account (or site), before any state changes,
+    // so a replay (even after a restart) is never applied twice. A transaction id
+    // reused with different content is rejected rather than silently ignored.
+    let mut claim_id: Option<i64> = None;
+    let mut account_scope: Option<i64> = None;
     if let Some(ref pool) = state.pool {
-        let claimed = crate::db::claim_bank_webhook_transaction(pool, &payload.transaction_id)
+        let unavailable = |e: Box<dyn std::error::Error + Send + Sync>| {
+            (StatusCode::SERVICE_UNAVAILABLE, format!("Could not record webhook: {}", e))
+        };
+        let destination = payload.virtual_iban.replace(' ', "").to_uppercase();
+        let scope = crate::db::resolve_webhook_scope(pool, &destination).await.map_err(unavailable)?;
+        account_scope = scope.site_bank_account_id;
+        match crate::db::claim_bank_webhook_transaction(pool, &scope, &payload.transaction_id, &webhook_payload_hash(&payload))
             .await
-            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Could not record webhook: {}", e)))?;
-        if !claimed {
-            return Ok((
-                StatusCode::OK,
-                Json(duplicate_webhook_response(payload.transaction_id)),
-            ));
-        }
-    }
-    let transaction_id = payload.transaction_id.clone();
-    let result = process_bank_incoming_webhook(state.clone(), payload).await;
-    if result.is_err() {
-        if let Some(ref pool) = state.pool {
-            if let Err(e) = crate::db::release_bank_webhook_transaction(pool, &transaction_id).await {
-                tracing::error!("Could not release webhook claim {}: {}", transaction_id, e);
+            .map_err(unavailable)?
+        {
+            crate::db::WebhookClaim::Claimed(id) => claim_id = Some(id),
+            crate::db::WebhookClaim::Duplicate { same_payload: false, .. } => {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!("transaction_id {} was already delivered with different content", payload.transaction_id),
+                ));
+            }
+            crate::db::WebhookClaim::Duplicate { receipt_id, .. } => {
+                let mut resp = duplicate_webhook_response(payload.transaction_id);
+                if let Some(rid) = receipt_id {
+                    let inner = state.inner.read().await;
+                    if let Some(r) = inner.payment_receipts.iter().find(|r| r.id == rid) {
+                        resp.receipt_id = r.receipt_number.clone();
+                    }
+                }
+                return Ok((StatusCode::OK, Json(resp)));
             }
         }
     }
+    let result = process_bank_incoming_webhook_scoped(state.clone(), payload, account_scope).await;
+    if let (Some(pool), Some(id)) = (state.pool.as_ref(), claim_id) {
+        match &result {
+            Err(_) => {
+                if let Err(e) = crate::db::release_bank_webhook_transaction(pool, id).await {
+                    tracing::error!("Could not release webhook claim {}: {}", id, e);
+                }
+            }
+            Ok((_, Json(resp))) if resp.status == "CLEARED" => {
+                let receipt = {
+                    let inner = state.inner.read().await;
+                    inner.payment_receipts.iter().find(|r| r.receipt_number == resp.receipt_id && r.site_id == resp_site(&inner, resp)).map(|r| r.id)
+                };
+                if let Some(rid) = receipt {
+                    if let Err(e) = crate::db::attach_bank_webhook_receipt(pool, id, rid).await {
+                        tracing::error!("Could not link webhook claim {} to receipt {}: {}", id, rid, e);
+                    }
+                }
+            }
+            Ok(_) => {}
+        }
+    }
     result
+}
+
+/// Site of the unit a cleared webhook settled.
+fn resp_site(inner: &crate::state::AppStateInner, resp: &BankIncomingWebhookResponse) -> String {
+    inner.units.iter().find(|u| u.id == resp.matched_unit_id).map(|u| u.site_id.clone()).unwrap_or_default()
+}
+
+/// SHA-256 over the fields that define a bank transfer, so a redelivery can be
+/// told apart from a transaction id reused for a different transfer.
+pub fn webhook_payload_hash(payload: &BankIncomingWebhookRequest) -> String {
+    use sha2::{Digest, Sha256};
+    let clean = |s: Option<&str>| s.unwrap_or("").replace(' ', "").to_uppercase();
+    let canonical = format!(
+        "{}|{:.2}|{}|{}|{}|{}",
+        payload.transaction_id.trim(),
+        payload.amount,
+        payload.currency.as_deref().unwrap_or("TRY").trim().to_uppercase(),
+        clean(Some(&payload.virtual_iban)),
+        clean(payload.sender_iban.as_deref()),
+        payload.description.as_deref().unwrap_or("").trim(),
+    );
+    hex::encode(Sha256::digest(canonical.as_bytes()))
 }
 
 fn duplicate_webhook_response(transaction_id: String) -> BankIncomingWebhookResponse {
@@ -1625,20 +1688,48 @@ pub async fn process_bank_incoming_webhook(
     state: AppState,
     payload: BankIncomingWebhookRequest,
 ) -> Result<(StatusCode, Json<BankIncomingWebhookResponse>), (StatusCode, String)> {
+    process_bank_incoming_webhook_scoped(state, payload, None).await
+}
+
+/// `account_scope`: the receiving site bank account when known; the payment's
+/// idempotency key is then `BANK:<account>:<transaction_id>`, so two accounts
+/// reusing a transaction id never share a receipt (O-3).
+async fn process_bank_incoming_webhook_scoped(
+    state: AppState,
+    payload: BankIncomingWebhookRequest,
+    account_scope: Option<i64>,
+) -> Result<(StatusCode, Json<BankIncomingWebhookResponse>), (StatusCode, String)> {
     let clean_viban = payload.virtual_iban.replace(' ', "").to_uppercase();
     let mut inner = state.inner.write().await;
 
-    // Any earlier delivery of this transaction id (matched or not) is a duplicate.
-    if inner.reconciliation_queue.iter().any(|m| m.transaction.transaction_id == payload.transaction_id) {
+    // Any earlier delivery of this transaction id (matched or not) to the same
+    // site is a duplicate (transaction ids are unique per bank, not globally).
+    let destination_site = inner
+        .units
+        .iter()
+        .find(|u| u.virtual_iban.as_ref().map(|v| v.replace(' ', "").to_uppercase() == clean_viban).unwrap_or(false))
+        .map(|u| u.site_id.clone())
+        .or_else(|| {
+            inner
+                .site_bank_accounts
+                .iter()
+                .find(|ba| ba.iban.replace(' ', "").to_uppercase() == clean_viban)
+                .map(|ba| ba.site_id.clone())
+        });
+    let same_delivery = |m: &ReconciliationMatch| {
+        m.transaction.transaction_id == payload.transaction_id
+            && destination_site.as_deref().map(|s| crate::auth::same_id(s, &m.site_id)).unwrap_or(true)
+    };
+    if inner.reconciliation_queue.iter().any(same_delivery) {
         let unit = inner
             .reconciliation_queue
             .iter()
-            .find(|m| m.transaction.transaction_id == payload.transaction_id)
+            .find(|m| same_delivery(m))
             .and_then(|m| m.matched_unit_id.clone())
             .and_then(|uid| inner.units.iter().find(|u| u.id == uid).cloned());
         let mut resp = duplicate_webhook_response(payload.transaction_id);
         if let Some(u) = unit {
-            resp.advance_payment = inner.advance_payments.get(&u.id).copied().unwrap_or(Decimal::ZERO);
+            resp.advance_payment = inner.advance_total(&u.id);
             resp.matched_unit_id = u.id;
             resp.matched_block = u.block_id;
             resp.matched_unit_number = u.unit_number;
@@ -1722,12 +1813,19 @@ pub async fn process_bank_incoming_webhook(
     let unit = match unit_index {
         Some(idx) => inner.units[idx].clone(),
         None => {
-            let bank_site_id = inner
+            // The unmatched transfer belongs to the site whose account received it;
+            // an IBAN that is no site's account is rejected (never filed under site 1).
+            let (bank_site_id, bank_account_id) = inner
                 .site_bank_accounts
                 .iter()
                 .find(|ba| ba.iban.replace(' ', "").to_uppercase() == clean_viban)
-                .map(|ba| ba.site_id.clone())
-                .unwrap_or_else(|| "1".to_string());
+                .map(|ba| (ba.site_id.clone(), crate::db::parse_id_to_i64(&ba.id)))
+                .ok_or_else(|| {
+                    (
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        format!("Destination IBAN {} is not a site account or a unit's virtual IBAN", payload.virtual_iban),
+                    )
+                })?;
 
             let txn_desc = payload.description.clone().unwrap_or_else(|| {
                 format!("Site Ana Hesabı FAST Transferi: {}", payload.virtual_iban)
@@ -1765,7 +1863,7 @@ pub async fn process_bank_incoming_webhook(
             // The transaction id is already claimed, so the unmatched transfer must be
             // durable: it waits in the reconciliation queue for manual matching.
             if let Some(ref pool) = state.pool {
-                crate::db::save_reconciliation_match(pool, &unmatched)
+                crate::db::save_reconciliation_match_for_site(pool, &unmatched, &unmatched.site_id, bank_account_id.or(account_scope))
                     .await
                     .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Database write failed: {}", e)))?;
             }
@@ -1817,7 +1915,10 @@ pub async fn process_bank_incoming_webhook(
             payment_channel: if is_virtual_iban { "VIRTUAL_IBAN" } else { "BANK_TRANSFER" }.to_string(),
             description: Some(txn_desc.clone()),
             payment_date: None,
-            idempotency_key: Some(format!("BANK:{}", payload.transaction_id)),
+            idempotency_key: Some(match account_scope {
+                Some(account) => format!("BANK:{}:{}", account, payload.transaction_id),
+                None => format!("BANK:{}", payload.transaction_id),
+            }),
             designation: None,
             external_reference: Some(payload.transaction_id.clone()),
             designate_from_description: true,
@@ -1830,7 +1931,7 @@ pub async fn process_bank_incoming_webhook(
     let cleared_amount = receipt.allocated_principal + receipt.allocated_penalty;
     let cleared_period = receipt.allocation_breakdown.first().map(|b| b.period.clone());
     let surplus = receipt.allocated_advance;
-    let total_advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
+    let total_advance = inner.advance_total(&unit.id);
     let remaining_debt: Decimal = inner
         .dues
         .iter()
@@ -1947,7 +2048,7 @@ fn resolve_payer(
 /// HTTP status for a canonical-ingestion failure: storage problems are 503 (the
 /// caller may retry; the payment is idempotent), anything else is a bad request.
 fn payment_error_status(e: String) -> (StatusCode, String) {
-    if e.starts_with("Database unavailable") || e.starts_with("Payment was not recorded") {
+    if e.starts_with("Database unavailable") || e.starts_with("Payment was not recorded") || e.starts_with("Reversal was not recorded") {
         (StatusCode::SERVICE_UNAVAILABLE, e)
     } else {
         (StatusCode::BAD_REQUEST, e)
@@ -2091,7 +2192,9 @@ pub async fn accrue_monthly_dues(
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: "TENANT".to_string(),
+                // Operational dues are the occupant's: the tenant's when the unit is
+                // let, otherwise the owner's (same rule as the scheduler).
+                debtor_type: if unit.tenant_user_id.is_some() { "TENANT" } else { "OWNER" }.to_string(),
                 expense_type: "OPERATIONAL_DUES".to_string(),
                 penalty_accrued_through: None,
             });
@@ -2219,7 +2322,7 @@ pub async fn record_homeowner_payment(
     };
 
     let mut inner = state.inner.write().await;
-    let total_unit_advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
+    let total_unit_advance = inner.advance_total(&unit.id);
     let remaining_debt: Decimal = inner
         .dues
         .iter()
@@ -2709,8 +2812,12 @@ async fn purge_site_rows(pool: &deadpool_postgres::Pool, site_id: i64) -> Result
     const UNIT_SCOPED: &[&str] = &[
         "payment_allocations WHERE payment_entry_id IN (SELECT id FROM payment_entries WHERE site_id = $1)",
         "payment_allocations WHERE dues_liability_id IN (SELECT d.id FROM dues_liabilities d JOIN units u ON u.id = d.unit_id WHERE u.site_id = $1)",
+        "processed_bank_webhooks WHERE site_id = $1 OR receipt_id IN (SELECT id FROM payment_receipts WHERE site_id = $1)
+             OR site_bank_account_id IN (SELECT id FROM site_bank_accounts WHERE site_id = $1)",
+        "payment_entries WHERE site_id = $1 AND reverses_entry_id IS NOT NULL",
         "payment_entries WHERE site_id = $1",
         "payment_idempotency_keys WHERE site_id = $1",
+        "payment_receipts WHERE site_id = $1 AND reverses_receipt_id IS NOT NULL",
         "payment_receipts WHERE site_id = $1",
         "receipt_counters WHERE site_id = $1",
         "advance_ledger_entries WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
@@ -2793,7 +2900,7 @@ pub async fn purge_site_cascade(
     inner.users.retain(|u| u.site_id != site_id);
     inner.dues.retain(|d| !unit_ids.contains(&d.unit_id));
     for uid in &unit_ids {
-        inner.advance_payments.remove(uid);
+        inner.advance_balances.remove(uid);
         inner.reconciliation_queue.retain(|q| q.matched_unit_id.as_deref() != Some(uid.as_str()));
         inner.unit_members.remove(uid);
     }
@@ -2901,6 +3008,8 @@ pub async fn provision_site_units(
                         plan_type: plan,
                         license_end_date: lic_end.unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
                         timezone: crate::models::default_site_timezone(),
+                        tax_id: None,
+                        tax_office: None,
                     });
                 }
                 id_str
@@ -2974,6 +3083,8 @@ pub async fn provision_site_units(
                         plan_type: plan,
                         license_end_date: lic_end.unwrap_or_else(|| Utc::now().date_naive() + chrono::Days::new(365)),
                         timezone: crate::models::default_site_timezone(),
+                        tax_id: None,
+                        tax_office: None,
                     });
                 }
                 id_str
@@ -3014,6 +3125,8 @@ pub async fn provision_site_units(
                     plan_type: "PREMIUM".to_string(),
                     license_end_date: license_end,
                     timezone: crate::models::default_site_timezone(),
+                    tax_id: None,
+                    tax_office: None,
                 });
                 id_str
             }
@@ -3033,6 +3146,8 @@ pub async fn provision_site_units(
                     plan_type: "PREMIUM".to_string(),
                     license_end_date: Utc::now().date_naive() + chrono::Days::new(365),
                     timezone: crate::models::default_site_timezone(),
+                    tax_id: None,
+                    tax_office: None,
                 });
                 id_str
             }
@@ -3153,7 +3268,8 @@ pub async fn provision_site_units(
                 status: DebtStatus::Pending,
                 paid_principal: Decimal::ZERO,
                 paid_penalty: Decimal::ZERO,
-                debtor_type: "TENANT".to_string(),
+                // A freshly provisioned unit has no tenant: its dues are the owner's.
+                debtor_type: "OWNER".to_string(),
                 expense_type: "OPERATIONAL_DUES".to_string(),
                 penalty_accrued_through: None,
             });
@@ -3166,7 +3282,7 @@ pub async fn provision_site_units(
             .filter(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid)
             .map(|d| d.total_amount)
             .sum();
-        let advance = inner.advance_payments.get(&unit_id).copied().unwrap_or(Decimal::ZERO);
+        let advance = inner.advance_total(&unit_id);
 
         provisioned_dtos.push(ProvisionedUnitDto {
             unit_id,
@@ -3223,7 +3339,7 @@ pub async fn get_units_summary(
             .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
             .map(|d| d.total_amount)
             .sum();
-        let advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
+        let advance = inner.advance_total(&unit.id);
 
         result.push(serde_json::json!({
             "unit_id": unit.id,
@@ -3275,7 +3391,7 @@ pub async fn get_site_payments(
 
     let total_advance: Decimal = site_units
         .iter()
-        .map(|u| inner.advance_payments.get(&u.id).copied().unwrap_or(Decimal::ZERO))
+        .map(|u| inner.advance_total(&u.id))
         .sum();
 
     // 3. Collect payments from reconciliation_queue and homeowner_payments for units of this site
@@ -3636,7 +3752,7 @@ pub async fn get_site_overview(
 
         // Find due for this unit in the selected period
         let due_opt = inner.dues.iter().find(|d| d.unit_id == unit.id && d.period == selected_period);
-        let advance = inner.advance_payments.get(&unit.id).copied().unwrap_or(Decimal::ZERO);
+        let advance = inner.advance_total(&unit.id);
         total_advance += advance;
 
         let (amount_due, is_paid, days_overdue, paid_date_str) = if let Some(due) = due_opt {
@@ -3777,6 +3893,41 @@ pub async fn inter_ledger_transfer(
         .await
         .map(Json)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+/// Staff-only (auth::route_access): reverses a settled payment with a reason
+/// (SPEC-006 R2). The operator is taken from the token, never from the body.
+pub async fn reverse_payment(
+    State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::auth::Claims>,
+    Json(mut payload): Json<crate::models::ReversePaymentRequest>,
+) -> Result<(StatusCode, Json<crate::models::ReversePaymentResponse>), (StatusCode, String)> {
+    if !claims.is_site_staff() {
+        return Err((StatusCode::FORBIDDEN, "Only site staff may reverse payments".to_string()));
+    }
+    if payload.site_id.as_deref().map(str::trim).unwrap_or("").is_empty() {
+        payload.site_id = Some(claims.site_id.clone());
+    }
+    let actor = format!("user:{} <{}>", claims.sub, claims.email);
+    let service = crate::services::PaymentTrackingService::new(state);
+    service
+        .reverse_payment(payload, &actor)
+        .await
+        .map(|r| (StatusCode::CREATED, Json(r)))
+        .map_err(payment_error_status)
+}
+
+/// Writes today's debt aging snapshot (O-8). The daily worker does the same.
+pub async fn snapshot_debt_aging(
+    State(state): State<AppState>,
+    Query(q): Query<SiteIdParam>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let service = crate::services::PaymentTrackingService::new(state);
+    let rows = service
+        .snapshot_debt_aging(q.site_id.as_deref().filter(|s| !s.trim().is_empty()))
+        .await
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
+    Ok(Json(serde_json::json!({ "status": "OK", "rows": rows, "as_of_date": Utc::now().date_naive() })))
 }
 
 pub async fn get_payment_receipt(

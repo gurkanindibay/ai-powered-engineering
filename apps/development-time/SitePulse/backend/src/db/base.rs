@@ -2,6 +2,20 @@ use deadpool_postgres::{Config, ManagerConfig, Pool, PoolConfig, RecyclingMethod
 use tokio_postgres::NoTls;
 use tracing::{info, warn};
 
+/// A database error with PostgreSQL's own message and detail (tokio-postgres'
+/// `Display` prints only "db error").
+pub fn describe_db_error(e: &(dyn std::error::Error + Send + Sync + 'static)) -> String {
+    if let Some(pg) = e.downcast_ref::<tokio_postgres::Error>() {
+        if let Some(db) = pg.as_db_error() {
+            return match db.detail() {
+                Some(detail) => format!("{} ({})", db.message(), detail),
+                None => db.message().to_string(),
+            };
+        }
+    }
+    e.to_string()
+}
+
 pub type DbResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 /// Builds the PostgreSQL pool from the environment.
 ///

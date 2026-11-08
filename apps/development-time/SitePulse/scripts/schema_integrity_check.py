@@ -85,12 +85,12 @@ NEGATIVE_CASES = [
         "duplicate capital installment",
         """INSERT INTO capital_projects (site_id, title, category, total_budget, target_start_date)
            VALUES (1, 'T', 'OTHER', 100, CURRENT_DATE);
-           INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, expense_type,
+           INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, expense_type, debtor_type,
                                          capital_project_id, installment_number)
-           SELECT u.id, 'C', 10, CURRENT_DATE, 'CAPITAL_DUES', cp.id, 1 FROM units u, capital_projects cp;
-           INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, expense_type,
+           SELECT u.id, 'C', 10, CURRENT_DATE, 'CAPITAL_DUES', 'OWNER', cp.id, 1 FROM units u, capital_projects cp;
+           INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, expense_type, debtor_type,
                                          capital_project_id, installment_number)
-           SELECT u.id, 'C', 10, CURRENT_DATE, 'CAPITAL_DUES', cp.id, 1 FROM units u, capital_projects cp;""",
+           SELECT u.id, 'C', 10, CURRENT_DATE, 'CAPITAL_DUES', 'OWNER', cp.id, 1 FROM units u, capital_projects cp;""",
     ),
     (
         "receipt allocation must equal total",
@@ -121,7 +121,7 @@ NEGATIVE_CASES = [
     ),
     (
         "payment_entries rejects phantom unit",
-        "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel, settlement_status) VALUES (1, 999999, 'X', 10, 'CASH', 'UNMATCHED')",
+        "INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel, settlement_status) VALUES (1, 999999, 'X', 'OWNER', 10, 'CASH', 'UNMATCHED')",
     ),
     (
         "advance_balances rejects phantom unit",
@@ -155,7 +155,7 @@ NEGATIVE_CASES += [
      " DELETE FROM units WHERE id = (SELECT unit_id FROM advance_ledger_entries LIMIT 1)"),
     ("sites.status vocabulary (M3)", "UPDATE sites SET status = 'WHATEVER'"),
     ("payment channel vocabulary (M3)",
-     "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel, settlement_status) SELECT site_id, id, 'X', 10, 'TELEPATHY', 'UNMATCHED' FROM units LIMIT 1"),
+     "INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel, settlement_status) SELECT site_id, id, 'X', 'OWNER', 10, 'TELEPATHY', 'UNMATCHED' FROM units LIMIT 1"),
     ("paid_amount must equal paid_principal + paid_penalty (M4)",
      "INSERT INTO dues_liabilities (unit_id, period, principal_amount, paid_amount, due_date) SELECT id, 'P-M4', 100, 10, CURRENT_DATE FROM units LIMIT 1"),
     ("advance balance cannot be negative (M4)",
@@ -200,6 +200,73 @@ NEGATIVE_CASES += [
      " SELECT id, 'P-V16', 10, DATE '2026-09-01', DATE '2026-08-01' FROM units LIMIT 1"),
 ]
 
+# V17 / SPEC-006: reversals, webhook claims, issuer details, status vocabularies.
+# A settled collection (receipt + entry + allocation + paid due) to build on.
+V17_SETTLED = (
+    "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, paid_principal, paid_amount)"
+    " SELECT id, '{ref}', 10, CURRENT_DATE + 5, 'PAID', 10, 10 FROM units ORDER BY id LIMIT 1;"
+    " INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role,"
+    " total_amount, allocated_principal, payment_channel, verification_hash)"
+    " SELECT site_id, id, '{ref}', {seq}, 'P', 'OWNER', 10, 10, 'MANUAL_CASH', 'h' FROM units ORDER BY id LIMIT 1;"
+    " INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel, receipt_id, external_reference)"
+    " SELECT r.site_id, r.unit_id, 'P', 'OWNER', 10, 'MANUAL_CASH', r.id, '{ref}' FROM payment_receipts r WHERE r.receipt_number = '{ref}';"
+    " INSERT INTO payment_allocations (payment_entry_id, dues_liability_id, principal_amount)"
+    " SELECT e.id, d.id, 10 FROM payment_entries e, dues_liabilities d WHERE e.external_reference = '{ref}' AND d.period = '{ref}'")
+V17_REVERSAL_RECEIPT = (
+    "INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, total_amount,"
+    " allocated_principal, payment_channel, verification_hash, receipt_type, reverses_receipt_id)"
+    " SELECT site_id, unit_id, '{number}', {seq}, 'P', 'OWNER', 10, 10, 'MANUAL_CASH', 'h', 'REVERSAL', id"
+    " FROM payment_receipts WHERE receipt_number = '{ref}'")
+V17_CONTRA = (
+    "INSERT INTO payment_entries (site_id, unit_id, payer_name, payer_role, amount, payment_channel, settlement_status,"
+    " receipt_id, entry_type, reverses_entry_id, reversal_reason, recorded_by)"
+    " SELECT o.site_id, o.unit_id, 'P', 'OWNER', 10, 'MANUAL_CASH', 'REVERSED', rr.id, 'REVERSAL', o.id, {reason}, 'user:1'"
+    " FROM payment_entries o, payment_receipts rr WHERE o.external_reference = '{ref}' AND rr.receipt_number = '{number}'")
+V17_CLAIM = ("INSERT INTO processed_bank_webhooks (transaction_id, site_id, site_bank_account_id)"
+             " SELECT '{txn}', a.site_id, a.id FROM site_bank_accounts a ORDER BY a.id LIMIT 1")
+NEGATIVE_CASES += [
+    ("a reversal receipt names its original (V17 O-2)",
+     "INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, total_amount,"
+     " allocated_principal, payment_channel, verification_hash, receipt_type)"
+     " SELECT site_id, id, 'V17-N1', 1, 'P', 'OWNER', 10, 10, 'MANUAL_CASH', 'h', 'REVERSAL' FROM units ORDER BY id LIMIT 1"),
+    ("a receipt is reversed at most once (V17 O-2)",
+     V17_SETTLED.format(ref="V17-N2", seq=9201) + "; " + V17_REVERSAL_RECEIPT.format(number="V17-N2-R1", seq=1, ref="V17-N2")
+     + "; " + V17_REVERSAL_RECEIPT.format(number="V17-N2-R2", seq=2, ref="V17-N2")),
+    ("a contra entry needs a reason (V17 O-2)",
+     V17_SETTLED.format(ref="V17-N3", seq=9202) + "; " + V17_REVERSAL_RECEIPT.format(number="V17-N3-R", seq=3, ref="V17-N3")
+     + "; " + V17_CONTRA.format(reason="''", ref="V17-N3", number="V17-N3-R")),
+    ("SETTLED -> REVERSED needs a contra entry (V17 O-2)",
+     V17_SETTLED.format(ref="V17-N4", seq=9203) + "; UPDATE payment_entries SET settlement_status = 'REVERSED' WHERE external_reference = 'V17-N4'"),
+    ("a contra entry's reason is immutable (V17 O-2)",
+     V17_SETTLED.format(ref="V17-N5", seq=9204) + "; " + V17_REVERSAL_RECEIPT.format(number="V17-N5-R", seq=4, ref="V17-N5")
+     + "; " + V17_CONTRA.format(reason="'Bounced transfer'", ref="V17-N5", number="V17-N5-R")
+     + "; UPDATE payment_entries SET reversal_reason = 'edited' WHERE entry_type = 'REVERSAL'"),
+    ("a receipt with advance names the advance debtor (V17 O-1)",
+     "INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, total_amount,"
+     " allocated_advance, payment_channel, verification_hash)"
+     " SELECT site_id, id, 'V17-N6', 9205, 'P', 'OWNER', 10, 10, 'MANUAL_CASH', 'h' FROM units ORDER BY id LIMIT 1"),
+    ("site tax id is 10 or 11 digits (V17 O-5)", "UPDATE sites SET tax_id = '12AB'"),
+    ("one claim per (bank account, transaction) (V17 O-3)",
+     V17_CLAIM.format(txn="V17-N7") + "; " + V17_CLAIM.format(txn="V17-N7")),
+    ("webhook payload hash is a SHA-256 hex digest (V17 O-3)",
+     "INSERT INTO processed_bank_webhooks (transaction_id, payload_hash) VALUES ('V17-N8', 'not-a-hash')"),
+    ("reconciliation status has one vocabulary (V17 O-7)",
+     "INSERT INTO reconciliation_queue (match_id, transaction_id, txn_date, amount, description, status, site_id)"
+     " SELECT 'V17-N9', 'V17-N9', CURRENT_DATE, 1, 'd', 'Approved', id FROM sites LIMIT 1"),
+    ("a bank account with statement history cannot be deleted (V17 O-7)",
+     "INSERT INTO reconciliation_queue (match_id, transaction_id, txn_date, amount, description, status, site_id, site_bank_account_id)"
+     " SELECT 'V17-N10', 'V17-N10', CURRENT_DATE, 1, 'd', 'UNMATCHED', a.site_id, a.id FROM site_bank_accounts a ORDER BY a.id LIMIT 1;"
+     " DELETE FROM site_bank_accounts WHERE id = (SELECT site_bank_account_id FROM reconciliation_queue WHERE match_id = 'V17-N10')"),
+    ("PAID requires the liability to be fully paid (V17 O-6)",
+     "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status) SELECT id, 'V17-N11', 10, CURRENT_DATE, 'PAID' FROM units LIMIT 1"),
+    ("a fully paid liability cannot stay open (V17 O-6)",
+     "INSERT INTO dues_liabilities (unit_id, period, principal_amount, paid_principal, paid_amount, due_date, status)"
+     " SELECT id, 'V17-N12', 10, 10, 10, CURRENT_DATE, 'PENDING' FROM units LIMIT 1"),
+    ("payer_role has no silent default (V17 O-10)",
+     "INSERT INTO payment_entries (site_id, unit_id, payer_name, amount, payment_channel, settlement_status)"
+     " SELECT site_id, id, 'X', 10, 'BANK_TRANSFER', 'UNMATCHED' FROM units LIMIT 1"),
+]
+
 # (name, statement, assertion query that must return 't')
 POSITIVE_CASES = [
     ("national id is never stored in clear text (M6)",
@@ -224,6 +291,26 @@ POSITIVE_CASES = [
      " BEGIN; SET LOCAL sitepulse.allow_ledger_purge = 'on'; DELETE FROM payment_receipts WHERE receipt_number = 'V16-P2'; COMMIT;",
      "SELECT NOT EXISTS (SELECT 1 FROM payment_receipts WHERE receipt_number = 'V16-P2')"
      " AND coalesce(current_setting('sitepulse.allow_ledger_purge', true), '') <> 'on'"),
+    ("a reversal restores the paid amounts and keeps the drift views clean (V17 O-2)",
+     V17_SETTLED.format(ref="V17-P1", seq=9301) + "; " + V17_REVERSAL_RECEIPT.format(number="V17-P1-R", seq=9301, ref="V17-P1")
+     + "; " + V17_CONTRA.format(reason="'Bounced transfer'", ref="V17-P1", number="V17-P1-R")
+     + "; UPDATE dues_liabilities SET paid_principal = 0, paid_amount = 0, status = 'PENDING' WHERE period = 'V17-P1'"
+     + "; UPDATE payment_entries SET settlement_status = 'REVERSED' WHERE external_reference = 'V17-P1'",
+     "SELECT (SELECT settlement_status FROM payment_entries WHERE external_reference = 'V17-P1') = 'REVERSED'"
+     " AND NOT EXISTS (SELECT 1 FROM v_integrity_violations)"
+     " AND NOT EXISTS (SELECT 1 FROM v_duplicated_fact_drift f JOIN payment_receipts r ON r.id::text = f.subject"
+     "                 WHERE f.fact LIKE 'payment_receipts%' AND r.receipt_number LIKE 'V17-P1%')"),
+    ("TAH and IAD series number independently per site (V17 O-2)",
+     "SELECT 1",
+     "SELECT count(DISTINCT receipt_type) = 2 AND count(DISTINCT site_id) = 1 AND count(DISTINCT sequence_number) = 1"
+     " FROM payment_receipts WHERE receipt_number IN ('V17-P1', 'V17-P1-R')"),
+    ("the same transaction id is accepted for another bank account or site (V17 O-3)",
+     V17_CLAIM.format(txn="V17-P2") + "; INSERT INTO processed_bank_webhooks (transaction_id, site_id) SELECT 'V17-P2', site_id FROM site_bank_accounts ORDER BY id LIMIT 1"
+     "; INSERT INTO processed_bank_webhooks (transaction_id) VALUES ('V17-P2')",
+     "SELECT count(*) = 3 AND count(DISTINCT scope_key) = 3 FROM processed_bank_webhooks WHERE transaction_id = 'V17-P2'"),
+    ("the effective status of an unpaid past-due liability is OVERDUE (V17 O-6)",
+     "INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status) SELECT id, 'V17-P3', 10, CURRENT_DATE - 3, 'PENDING' FROM units LIMIT 1",
+     "SELECT effective_status = 'OVERDUE' FROM v_dues_effective_status WHERE period = 'V17-P3'"),
     ("no integrity violations on seeded data (M4)", "SELECT 1", "SELECT count(*) = 0 FROM v_integrity_violations"),
 ]
 
@@ -237,6 +324,11 @@ INSERT INTO users (id, site_id, person_id, email, password_hash, role, must_chan
     VALUES (1, 1, 1, 'Legacy.Owner@Example.com', 'ARGON2_HASH_legacy', 'HOME_OWNER', FALSE);
 INSERT INTO dues_liabilities (id, unit_id, period, principal_amount, delay_penalty, paid_amount, due_date, status)
     VALUES (1, 1, 'Ocak 2026', 100.00, 5.00, 102.00, '2026-01-15', 'PENDING');
+INSERT INTO payment_receipts (site_id, unit_id, receipt_number, sequence_number, payer_name, payer_role, total_amount,
+                              allocated_principal, payment_channel, channel_reference, verification_hash)
+    VALUES (1, 1, 'TAH-2026-000001', 1, 'Legacy Owner', 'OWNER', 10.00, 10.00, 'MANUAL_CASH', 'IDEMPOTENCY:legacy-key-1', 'h');
+INSERT INTO reconciliation_queue (match_id, transaction_id, txn_date, amount, description, status, status_code, matched_unit_id)
+    VALUES ('MATCH-LEGACY-1', 'TXN-LEGACY-1', '2026-01-20', 10.00, 'legacy', 'Approved', 'ONAYLANDI', 1);
 """
 
 UPGRADE_ASSERTIONS = [
@@ -252,6 +344,16 @@ UPGRADE_ASSERTIONS = [
     ("every constraint is validated", "SELECT count(*) = 0 FROM pg_constraint WHERE connamespace = 'public'::regnamespace AND NOT convalidated"),
     ("open overdue penalties carry their accrual date (V16 P-01)",
      "SELECT bool_and(penalty_accrued_through IS NOT NULL) FROM dues_liabilities WHERE delay_penalty > 0 AND status NOT IN ('PAID', 'CANCELLED')"),
+    ("legacy IDEMPOTENCY:<key> references carried into payment_idempotency_keys (V17 O-4)",
+     "SELECT EXISTS (SELECT 1 FROM payment_idempotency_keys k JOIN payment_receipts r ON r.id = k.receipt_id"
+     " WHERE k.idempotency_key = 'legacy-key-1' AND r.receipt_number = 'TAH-2026-000001')"),
+    ("legacy reconciliation statuses translated, status_code dropped (V17 O-7)",
+     "SELECT (SELECT status FROM reconciliation_queue WHERE match_id = 'MATCH-LEGACY-1') = 'APPROVED'"
+     " AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'reconciliation_queue' AND column_name = 'status_code')"),
+    ("legacy partially paid liability carries a consistent status (V17 O-6)",
+     "SELECT status IN ('PENDING', 'PARTIALLY_PAID') FROM dues_liabilities WHERE id = 1"),
+    ("legacy receipts default to the collection series (V17 O-2)",
+     "SELECT bool_and(receipt_type = 'COLLECTION') FROM payment_receipts"),
     ("ledger triggers installed (V16 P-06)",
      "SELECT count(*) = 5 FROM pg_trigger WHERE tgname IN ('trg_payment_receipts_append_only', 'trg_payment_allocations_append_only',"
      " 'trg_advance_ledger_append_only', 'trg_idempotency_keys_append_only', 'trg_payment_entries_guard')"),
