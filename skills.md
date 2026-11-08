@@ -64,6 +64,21 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 
 ---
 
+## 1c. Database Schema Designer (`database-schema-designer`)
+
+- **Skill Definition:** [.agents/skills/database-schema-designer/SKILL.md](file:///.agents/skills/database-schema-designer/SKILL.md)
+- **Source:** [OneWave-AI/claude-skills](https://github.com/OneWave-AI/claude-skills/tree/main/database-schema-designer)
+- **Purpose:** Designs relational and document database schemas from requirements or application specifications — tables, keys, relationships, constraints, indexes derived from real query patterns, ERDs, and reversible migration scripts, with PostgreSQL (including Supabase), MySQL, SQLite, and MongoDB supported.
+- **Key References:**
+  - [PostgreSQL Patterns & Idioms](file:///.agents/skills/database-schema-designer/references/postgres.md)
+  - [Schema Templates & Worked Examples](file:///.agents/skills/database-schema-designer/references/schema-templates.md)
+  - [Output Format Guidelines](file:///.agents/skills/database-schema-designer/references/output-format.md)
+  - [Other Engines (MySQL, SQLite, MongoDB)](file:///.agents/skills/database-schema-designer/references/other-engines.md)
+- **SitePulse / Workspace Integration:**
+  - Complements `schema_integrity_check.py` and `db_verify.py` by ensuring all newly authored migrations strictly adhere to 3NF normalization, explicit foreign key cascades/restrictions, numeric monetary fields (`NUMERIC(15,2)` / `rust_decimal`), case-insensitive uniqueness, tenant scoping (`site_id`), and query-driven partial indexes.
+
+---
+
 ## 2. Rust Engineering Skills & Standards (`rust-skills`)
 
 - **Skill Definition:** [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md)
