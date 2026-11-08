@@ -605,6 +605,7 @@ impl AccountingService {
                     .map(|e| expense_view(inner, e))
                     .collect();
                 rows.sort_by_key(|a| std::cmp::Reverse(a.invoice.invoice_date));
+
                 rows
             })
             .await

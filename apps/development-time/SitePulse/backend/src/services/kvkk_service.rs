@@ -72,6 +72,7 @@ impl KvkkService {
                     .cloned()
                     .collect();
                 rows.sort_by_key(|a| std::cmp::Reverse(a.occurred_at));
+
                 rows.truncate(limit.clamp(1, 1000));
                 rows
             })

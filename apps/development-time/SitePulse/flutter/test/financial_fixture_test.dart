@@ -1,7 +1,10 @@
 // Runs the shared financial fixture (harness/fixtures/financial_cases.json)
 // against CalculateDuesUseCase. The backend runs the same fixture in
 // backend/tests/financial_fixtures.rs, so both sides agree on every number.
+@Tags(['finance'])
+library;
 import 'dart:convert';
+
 import 'dart:io';
 
 import 'package:decimal/decimal.dart';

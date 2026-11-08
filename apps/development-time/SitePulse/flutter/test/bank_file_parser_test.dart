@@ -1,3 +1,5 @@
+@Tags(['finance'])
+library;
 import 'dart:io';
 import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';

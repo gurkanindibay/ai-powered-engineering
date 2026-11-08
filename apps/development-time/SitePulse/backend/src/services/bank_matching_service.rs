@@ -448,6 +448,7 @@ impl BankMatchingService {
                     .cloned()
                     .collect();
                 rows.sort_by_key(|a| std::cmp::Reverse(a.business_date));
+
                 rows
             })
             .await
