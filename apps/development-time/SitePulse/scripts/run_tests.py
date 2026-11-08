@@ -3,7 +3,7 @@
 
 Runs, in order: harness self-tests, Rust build, clippy (-D warnings), Rust tests,
 the shared financial fixtures (Rust + Dart), Flutter analyze, Flutter tests,
-the persistence lint, the testId lint, the schema integrity gate, the API
+the persistence lint, the Rust standards lint, the testId lint, the schema integrity gate, the API
 system check and the browser end-to-end suite (gui-e2e).
 
 * A missing toolchain (cargo, flutter, psql/docker) fails its gate.
@@ -35,7 +35,7 @@ from harness.loop.verification_gates import GATES, run_gate  # noqa: E402
 
 ORDER = [
     "harness-selftest", "rust-build", "rust-clippy", "rust-test", "money-fixtures",
-    "flutter-analyze", "flutter-test", "persistence-lint", "testid-lint", "ui-style-lint", "schema-integrity", "api-system",
+    "flutter-analyze", "flutter-test", "persistence-lint", "rust-standards-lint", "testid-lint", "ui-style-lint", "schema-integrity", "api-system",
     "gui-e2e",
 ]
 DB_GATES = {"schema-integrity", "api-system", "gui-e2e"}

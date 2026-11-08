@@ -114,6 +114,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `testid_lint.py` | `apps/development-time/SitePulse/scripts/testid_lint.py` | Every widget `Key` has a matching GUI `testId` (gate `testid-lint`) |
 | `ui_style_lint.py` | `apps/development-time/SitePulse/scripts/ui_style_lint.py` | Design-system rules: 12 px floor, `MoneyFormatter` for amounts, no emoji icons, no popups/partial sheets (`no-popup`); ratchet on literal font sizes and colours (gate `ui-style-lint`) |
 | `gui_traceability.py` | `apps/development-time/SitePulse/scripts/gui_traceability.py` | Story → GUI scenario → test status; refreshes the section in `COMPLETION_STATUS.md` |
+| `rust_standards_lint.py` | `apps/development-time/SitePulse/scripts/rust_standards_lint.py` | Rust standards §10–16: domain purity, layering, no inline email/Turkish-fold/IBAN rules, static regexes, explicit rounding, no floats, hashing only in `domain::fingerprint`, English identifiers; ratchet on unwrap/expect/String errors/pool branches/unformatted files (gate `rust-standards-lint`) |
 | `memory_persistence_lint.py` | `apps/development-time/SitePulse/scripts/memory_persistence_lint.py` | Catching discarded database results |
 | `db_verify.py` | `apps/development-time/SitePulse/scripts/db_verify.py` | Inspecting and auditing a database (parameterised; non-zero exit on issues) |
 | `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |

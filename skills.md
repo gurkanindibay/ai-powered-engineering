@@ -72,6 +72,28 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 - **Purpose:** 265 coding rules across 26 categories ([leonardomso/rust-skills](https://github.com/leonardomso/rust-skills)) covering ownership, error handling, async patterns, concurrency, memory optimization, and numeric precision (`rust_decimal`).
 - **Agent Bindings:** Formally bound to **Architect Agent** (contracts, DTOs, migrations, concurrency models) and **Developer Agent** (synthesis, zero-clippy, zero-unwrap, persistence safety).
 
+### 2a. SitePulse Rust Backend Workflow (`sitepulse-rust-backend`)
+
+- **Skill Definition:** [.agents/skills/sitepulse-rust-backend/SKILL.md](file:///.agents/skills/sitepulse-rust-backend/SKILL.md)
+- **Purpose:** How to apply `docs/RUST_STANDARDS.md` sections 10–16 in the backend. Covers where new code goes (`src/domain/` vs services vs db vs handlers), which shared primitives to reuse (`apportion`, `fold_turkish`, `TrIban`, `NormalizedEmail`, `fingerprint`, `ParseReport`), recipes for domain primitives, persisted contracts, money, external input and multi-tenant state, test conventions, verification commands, and a review checklist.
+
+### 2b. Rust Standards Lint (`rust_standards_lint.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/rust_standards_lint.py](file:///apps/development-time/SitePulse/scripts/rust_standards_lint.py) (symlinked to `scripts/rust_standards_lint.py`)
+- **Purpose:** Mechanically enforces `docs/RUST_STANDARDS.md` sections 10–16 on `backend/src`.
+  - **Hard rules** fail on any hit: `domain-purity` (no Axum/PostgreSQL/AppState/env in `src/domain/`), `layering` (only handlers/app/main import `crate::handlers`), `inline-email`, `inline-turkish-fold`, `inline-iban-check`, `regex-per-call`, `implicit-rounding` (`round_dp(..)`), `float-money`, `ad-hoc-hash` (SHA-256/HMAC outside `domain::fingerprint`), `non-english-identifier`, and `domain-unformatted`.
+  - **Ratchet rules** count `unwrap`, `expect`, `string-error` (`Result<_, String>` in services), `pool-branch` and `unformatted-file`. These counts in `scripts/rust_standards_baseline.json` may only go down.
+  - Comments, string/char literals and `#[cfg(test)]` modules are ignored. Run against the baseline commit, it reports all 75 issues fixed by the reusability work.
+  - Gate `rust-standards-lint` in `run_tests.py`. Self-tests are in `harness/tests/test_rust_standards_lint.py`.
+
+### Quick Usage Examples:
+```bash
+./scripts/rust_standards_lint.py                    # human-readable, exit 1 on findings
+./scripts/rust_standards_lint.py --json             # CI / harness gate
+./scripts/rust_standards_lint.py --no-fmt           # skip rustfmt-based rules (no cargo)
+./scripts/rust_standards_lint.py --update-baseline  # lower the ratchet after paying down debt
+```
+
 ---
 
 ## 3. Flutter & Dart Development Skills
