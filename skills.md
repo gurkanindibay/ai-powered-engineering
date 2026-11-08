@@ -141,7 +141,7 @@ DB_PASS=... ./scripts/api_system_check.py --only cross_site_forbidden,restart_pe
 ```
 Uses `psql` when on PATH, otherwise `docker exec <--pg-container> psql`.
 
-SPEC-008 checks also verify session rotation/replay/logout (`security_session_lifecycle`), payment rollback on audit failure (`transactional_audit`), non-owner RLS and immutable evidence (`audit_scope_and_privileges`), database-only registration review (`registration_repository_scope`), second-approver support access (`support_grant_lifecycle`), and concurrent invitation consumption with identity/membership rollback (`invitation_atomic_registration`). The method/template inventory is parsed from the router registry. GUI bundles are rebuilt when source, dependencies, assets, or the API origin change; fixture resets preserve audit evidence.
+SPEC-008 checks also verify durable household membership and rollback (`household_members_persisted`), session rotation/replay/logout (`security_session_lifecycle`), payment rollback on audit failure (`transactional_audit`), non-owner RLS and immutable evidence (`audit_scope_and_privileges`), database-only registration review (`registration_repository_scope`), second-approver support access (`support_grant_lifecycle`), and concurrent invitation consumption with identity/membership rollback (`invitation_atomic_registration`). The method/template inventory is parsed from the router registry. GUI bundles are rebuilt when source, dependencies, assets, or the API origin change; fixture resets preserve audit evidence.
 
 ## 5b-2. GUI End-to-End Suite (`gui_e2e.py`)
 

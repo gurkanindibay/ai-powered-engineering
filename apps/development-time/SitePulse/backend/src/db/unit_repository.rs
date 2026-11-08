@@ -155,58 +155,46 @@ pub async fn save_unit_member(
     phone: &str,
     email: &str,
 ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
-    let u_num = require_id("entity", unit_id)?;
-
-    // Household members live on an occupancy session; fall back to the active one.
-    let occ_id: Option<i64> = client
-        .query_opt(
-            "SELECT id FROM unit_occupancies WHERE unit_id = $1 AND is_active = true ORDER BY id DESC LIMIT 1",
-            &[&u_num],
-        )
-        .await?
-        .map(|r| r.get(0));
-
-    let Some(occupancy_id) = occ_id else {
-        return Err(format!("unit {} has no active occupancy session", unit_id).into());
+    let mut connection = pool.get().await?;
+    let client = connection.transaction().await?;
+    let u_num = require_id("unit", unit_id)?;
+    // Serialize occupancy selection and membership creation on the actual unit.
+    let unit = client.query_opt(
+        "SELECT owner_person_id,tenant_person_id FROM units WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",
+        &[&u_num],
+    ).await?.ok_or_else(|| format!("Unit {unit_id} not found"))?;
+    let existing = client.query_opt(
+        "SELECT id FROM unit_occupancies WHERE unit_id=$1 AND is_active AND end_date IS NULL ORDER BY id DESC LIMIT 1",
+        &[&u_num],
+    ).await?;
+    let occupancy_id: i64 = if let Some(row) = existing {
+        row.get(0)
+    } else {
+        let owner: Option<i64> = unit.get(0);
+        let tenant: Option<i64> = unit.get(1);
+        let occupant = tenant
+            .or(owner)
+            .ok_or_else(|| "Unit has no current occupant".to_string())?;
+        client.query_one(
+            "INSERT INTO unit_occupancies(unit_id,person_id,occupancy_type) VALUES ($1,$2,$3) RETURNING id",
+            &[&u_num,&occupant,&if tenant.is_some() { "TENANT" } else { "OWNER" }],
+        ).await?.get(0)
     };
-
-    // Link the household member to the person record when one exists for this email.
-    let person_id: Option<i64> = client
-        .query_opt(
-            "SELECT id FROM persons WHERE LOWER(email) = $1",
-            &[&crate::domain::email::NormalizedEmail::normalize(email)],
-        )
-        .await?
-        .map(|r| r.get(0));
-
-    let row = client
-        .query_one(
-            r#"
-            INSERT INTO occupancy_members (occupancy_id, person_id, full_name, relationship, phone, email, is_emergency_contact, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, false, CURRENT_TIMESTAMP)
-            ON CONFLICT (occupancy_id, person_id) WHERE person_id IS NOT NULL
-            DO UPDATE SET full_name = EXCLUDED.full_name,
-                          relationship = EXCLUDED.relationship,
-                          phone = EXCLUDED.phone,
-                          email = EXCLUDED.email
-            RETURNING id
-            "#,
-            &[
-                &occupancy_id,
-                &person_id,
-                &full_name,
-                &relationship,
-                &phone,
-                &email,
-            ],
-        )
-        .await?;
+    let normalized_email = crate::domain::email::NormalizedEmail::normalize(email);
+    let person_id: i64 = client.query_one(
+        "INSERT INTO persons(full_name,phone,email,person_type) VALUES ($1,$2,$3,'HOME_RESIDENT') ON CONFLICT(email) DO UPDATE SET email=persons.email RETURNING id",
+        &[&full_name,&phone,&normalized_email],
+    ).await?.get(0);
+    let row = client.query_one(
+        "INSERT INTO occupancy_members(occupancy_id,person_id,full_name,relationship,phone,email,is_emergency_contact) VALUES ($1,$2,$3,$4,$5,$6,false) ON CONFLICT(occupancy_id,person_id) WHERE person_id IS NOT NULL DO UPDATE SET full_name=EXCLUDED.full_name,relationship=EXCLUDED.relationship,phone=EXCLUDED.phone,email=EXCLUDED.email RETURNING id",
+        &[&occupancy_id,&person_id,&full_name,&relationship,&phone,&normalized_email],
+    ).await?;
+    client.commit().await?;
 
     let member_id: i64 = row.get(0);
     info!(
-        "Saved household member #{} ({}) for unit {} (occupancy {})",
-        member_id, full_name, unit_id, occupancy_id
+        "Saved household member #{} for unit {} (occupancy {})",
+        member_id, unit_id, occupancy_id
     );
     Ok(member_id)
 }

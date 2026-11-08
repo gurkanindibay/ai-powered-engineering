@@ -266,9 +266,10 @@ impl HomeResidentInvitationService {
                     .query(
                         r#"
                         SELECT om.id, om.full_name, om.relationship, om.phone, om.email,
-                               (uo.occupancy_type = 'OWNER'), om.occupancy_id, om.person_id, om.resident_user_id
+                               COALESCE(om.person_id = unit.owner_person_id, false), om.occupancy_id, om.person_id, om.resident_user_id
                         FROM occupancy_members om
                         JOIN unit_occupancies uo ON om.occupancy_id = uo.id
+                        JOIN units unit ON unit.id = uo.unit_id
                         WHERE uo.unit_id = $1 AND uo.is_active = true
                         ORDER BY om.id ASC
                         "#,

@@ -590,7 +590,7 @@
       "status": "UNVERIFIED",
       "depends_on": [],
       "spec_ref": "SPEC-008",
-      "description": "Implemented and locally validated under SPEC-008 (12 non-browser gates and full GUI suite); formal current-commit checker evidence is pending. No historical task verification is asserted.",
+      "description": "Implemented and locally validated under SPEC-008 (14 non-browser gates, 29 API scenarios and browser coverage); formal current-commit checker evidence is pending. No historical task verification is asserted.",
       "gates": [
         "schema-integrity",
         "api-system"
@@ -605,7 +605,8 @@
         "system:audit_scope_and_privileges",
         "system:registration_repository_scope",
         "system:support_grant_lifecycle",
-        "system:invitation_atomic_registration"
+        "system:invitation_atomic_registration",
+        "system:household_members_persisted"
       ],
       "attempts": 1
     }
