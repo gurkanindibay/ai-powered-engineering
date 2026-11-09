@@ -16,7 +16,9 @@ extension DashboardControllerResidents on DashboardController {
     bool isResident = true,
     String role = 'OWNER',
     String? relationship,
+    int? landShare,
   }) async {
+    _lastHomeOwnerError = null;
     final effectiveHouseType = houseType ?? '2+1';
     final matchedTariff = _houseTypes.cast<HouseTypeTariff?>().firstWhere(
       (h) => h?.typeName.toLowerCase() == effectiveHouseType.toLowerCase(),
@@ -46,8 +48,10 @@ extension DashboardControllerResidents on DashboardController {
             'tenant_full_name': tenantFullName,
             'tenant_email': tenantEmail,
             'tenant_phone': tenantPhone,
-            'land_share': '1/24',
-            'monthly_dues': dues.toString(),
+            // F3: the entered share; without one the server uses the site's usual share and says so.
+            if (landShare != null) 'land_share': '$landShare',
+            // F4: only a known tariff is sent; otherwise the server applies and reports its default.
+            if (duesAmount != null) 'monthly_dues': duesAmount.toString(),
             'house_type': effectiveHouseType,
             'is_resident': isResident,
             'role': role,
@@ -64,6 +68,7 @@ extension DashboardControllerResidents on DashboardController {
           email: email,
           phone: phone,
           activationStatus: created.activationStatus,
+          warnings: created.warnings,
           isResident: isResident,
           duesAmount: dues,
           houseType: effectiveHouseType,
@@ -216,7 +221,7 @@ extension DashboardControllerResidents on DashboardController {
       phone: phone,
       tenantEmail: hasExplicitTenant ? tenantEmail : (isTenant ? email : null),
       tenantPhone: hasExplicitTenant ? tenantPhone : (isTenant ? phone : null),
-      landShare: '1/24',
+      landShare: '${landShare ?? 1}/24',
       monthlyDues: dues,
       houseType: effectiveHouseType,
       isResident: isResident,

@@ -826,6 +826,8 @@ class ProvisionedHomeOwnerCredentials {
   final String phone;
   /// `SENT`, `DELIVERY_FAILED`, `NO_EMAIL`, or `null` when unknown.
   final String? activationStatus;
+  /// Defaults the server applied (`DUES_DEFAULTED`, `LAND_SHARE_DEFAULTED`).
+  final List<String> warnings;
   final bool isResident;
   final Decimal duesAmount;
   final String? houseType;
@@ -837,6 +839,7 @@ class ProvisionedHomeOwnerCredentials {
     required this.email,
     required this.phone,
     this.activationStatus,
+    this.warnings = const [],
     required this.isResident,
     required this.duesAmount,
     this.houseType,
@@ -858,6 +861,8 @@ class HomeOwnerItem {
   final bool isResident;
   /// Activation link status of a freshly created account (`SENT`, `DELIVERY_FAILED`, `NO_EMAIL`).
   final String? activationStatus;
+  /// Defaults the server applied when the account was created.
+  final List<String> warnings;
   final bool mustChangePassword;
   final DateTime createdAt;
   final String occupancyStatus;
@@ -966,6 +971,7 @@ class HomeOwnerItem {
     this.houseType,
     required this.isResident,
     this.activationStatus,
+    this.warnings = const [],
     required this.mustChangePassword,
     required this.createdAt,
     this.occupancyStatus = 'OWNER_OCCUPIED',
@@ -1000,6 +1006,7 @@ class HomeOwnerItem {
       houseType: json['house_type']?.toString(),
       isResident: json['is_resident'] as bool? ?? true,
       activationStatus: (json['activation'] is Map) ? (json['activation'] as Map)['status']?.toString() : null,
+      warnings: (json['warnings'] is List) ? (json['warnings'] as List).map((w) => w.toString()).toList() : const [],
       mustChangePassword: json['must_change_password'] as bool? ?? false,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
@@ -1069,6 +1076,7 @@ class HomeOwnerItem {
       houseType: houseType ?? this.houseType,
       isResident: isResident ?? this.isResident,
       activationStatus: activationStatus ?? this.activationStatus,
+      warnings: warnings,
       mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       createdAt: createdAt ?? this.createdAt,
       occupancyStatus: occupancyStatus ?? this.occupancyStatus,

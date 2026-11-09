@@ -7,6 +7,7 @@ import '../components/app_fullscreen_page.dart';
 import '../components/step_up_prompt.dart';
 import '../../domain/models/household_relationship.dart';
 import 'household_relationship_items.dart';
+import '../../domain/validation/person_validators.dart';
 import '../../domain/logging/app_logger.dart';
 import '../components/house_types_modal.dart';
 import '../dashboard/dashboard_controller.dart';
@@ -1159,6 +1160,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
     final ownerPhoneCtrl = TextEditingController();
     final ownerEmailCtrl = TextEditingController();
     final unitCtrl = TextEditingController();
+    final landShareCtrl = TextEditingController();
 
     // Tenant controllers when occupancyStatus == 'TENANT_OCCUPIED'
     final tenantNameCtrl = TextEditingController();
@@ -1226,6 +1228,15 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       return;
                     }
 
+                    // U2: the same rules the server applies, stated before anything is sent.
+                    final fieldError = validatePersonEmail(ownerEmailCtrl.text) ??
+                        validateTrMobile(ownerPhoneCtrl.text) ??
+                        validateLandShare(landShareCtrl.text);
+                    if (fieldError != null) {
+                      setDlgState(() => formError = fieldError);
+                      return;
+                    }
+
                     if (occupancyStatus == 'TENANT_OCCUPIED' && tenantNameCtrl.text.trim().isEmpty) {
                       setDlgState(() {
                         formError = 'Daire kirada seçildiğinde lütfen Kiracı Ad Soyad bilgisini giriniz.';
@@ -1263,7 +1274,6 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     }
 
                     if (!ctx.mounted) return;
-                    Navigator.pop(ctx);
 
                     final isResident = occupancyStatus == 'OWNER_OCCUPIED';
                     final isTenantOccupied = occupancyStatus == 'TENANT_OCCUPIED';
@@ -1272,18 +1282,25 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                       block: selectedBlock,
                       unitNo: unitNo,
                       ownerName: ownerName,
-                      phone: ownerPhoneCtrl.text.trim().isNotEmpty ? ownerPhoneCtrl.text.trim() : '05550000000',
-                      email: ownerEmailCtrl.text.trim().isNotEmpty
-                          ? ownerEmailCtrl.text.trim()
-                          : 'evsahibi$unitNo@example.com',
+                      phone: ownerPhoneCtrl.text.trim(),
+                      email: ownerEmailCtrl.text.trim(),
                       tenantFullName: isTenantOccupied ? tenantNameCtrl.text.trim() : null,
                       tenantPhone: isTenantOccupied && tenantPhoneCtrl.text.trim().isNotEmpty ? tenantPhoneCtrl.text.trim() : null,
                       tenantEmail: isTenantOccupied && tenantEmailCtrl.text.trim().isNotEmpty ? tenantEmailCtrl.text.trim() : null,
                       houseType: selectedHouseType,
-                      duesAmount: currentTariff?.duesAmount ?? Decimal.parse('1400.00'),
+                      duesAmount: currentTariff?.duesAmount,
                       isResident: isResident,
                       role: isTenantOccupied ? 'TENANT' : 'OWNER',
+                      landShare: int.tryParse(landShareCtrl.text.trim()),
                     );
+
+                    // The dialog stays open until the server has answered; a refusal is shown here.
+                    final registrationError = widget.controller.lastHomeOwnerError;
+                    if (registrationError != null) {
+                      if (ctx.mounted) setDlgState(() => formError = registrationError);
+                      return;
+                    }
+                    if (ctx.mounted) Navigator.pop(ctx);
 
                     // Save any pending household co-residents
                     if (pendingResidents.isNotEmpty) {
@@ -1306,12 +1323,9 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                             block: selectedBlock,
                             unitNo: unitNo,
                             fullName: resName,
-                            phone: res.phoneCtrl.text.trim().isNotEmpty
-                                ? res.phoneCtrl.text.trim()
-                                : (ownerPhoneCtrl.text.trim().isNotEmpty ? ownerPhoneCtrl.text.trim() : '05550000000'),
-                            email: res.emailCtrl.text.trim().isNotEmpty
-                                ? res.emailCtrl.text.trim()
-                                : 'sakin_${unitNo}_${res.relationship.toLowerCase()}@example.com',
+                            // No invented contact details: a member without them is saved without them.
+                            phone: res.phoneCtrl.text.trim(),
+                            email: res.emailCtrl.text.trim(),
                             relationship: res.relationship,
                           );
                         }
@@ -1535,6 +1549,20 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                           decoration: const InputDecoration(
                             labelText: 'Kat Maliki Telefon',
                             hintText: 'Örn: 0532 123 45 67',
+                            filled: true,
+                            border: OutlineInputBorder(),
+                          ),
+                        )),
+                        const SizedBox(height: 10),
+                        testId('module_new_resident_land_share', TextField(
+                          key: const Key('module_new_resident_land_share'),
+                          controller: landShareCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Arsa Payı (pay sayısı)',
+                            hintText: 'Örn: 24',
+                            helperText: 'Ortak giderler bu paya göre bölünür. Boş bırakılırsa sitenin olağan payı kullanılır.',
+                            helperMaxLines: 2,
                             filled: true,
                             border: OutlineInputBorder(),
                           ),
