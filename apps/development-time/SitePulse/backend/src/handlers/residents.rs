@@ -6,7 +6,8 @@ use axum::{
     Json,
 };
 
-use super::site_admin::SiteIdParam;
+use super::site_admin::{person_error, SiteIdParam};
+use crate::error::AppError;
 use crate::models::{
     HomeResidentResponse, RegisterHomeResidentRequest, UnitInviteLinkResponse, UnitMemberDto,
 };
@@ -58,7 +59,7 @@ pub async fn add_unit_member(
     Path(unit_id): Path<String>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<crate::models::AddUnitMemberRequest>,
-) -> Result<(StatusCode, Json<UnitMemberDto>), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<UnitMemberDto>), AppError> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     let relationship = payload
@@ -75,30 +76,21 @@ pub async fn add_unit_member(
         )
         .await
         .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| {
-            (
-                if e == "Household storage unavailable" {
-                    StatusCode::SERVICE_UNAVAILABLE
-                } else {
-                    StatusCode::BAD_REQUEST
-                },
-                e,
-            )
-        })
+        .map_err(person_error)
 }
 
 pub async fn delete_unit_member(
     State(state): State<AppState>,
     Path((unit_id, resident_id)): Path<(String, String)>,
     Query(q): Query<SiteIdParam>,
-) -> Result<StatusCode, (StatusCode, String)> {
+) -> Result<StatusCode, AppError> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .delete_unit_member(&site_id, &unit_id, &resident_id)
         .await
         .map(|_| StatusCode::NO_CONTENT)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(person_error)
 }
 
 pub async fn update_unit_member(
@@ -106,7 +98,7 @@ pub async fn update_unit_member(
     Path((unit_id, resident_id)): Path<(String, String)>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<UpdateUnitMemberRequest>,
-) -> Result<StatusCode, (StatusCode, String)> {
+) -> Result<StatusCode, AppError> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     let relationship = payload
@@ -124,5 +116,5 @@ pub async fn update_unit_member(
         )
         .await
         .map(|_| StatusCode::OK)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(person_error)
 }

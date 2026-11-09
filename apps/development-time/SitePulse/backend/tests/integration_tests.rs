@@ -186,7 +186,7 @@ async fn when_duplicate_email_then_throws_exception() {
 }
 
 #[tokio::test]
-async fn when_registering_home_owner_then_provisions_user_with_resident_password() {
+async fn when_registering_home_owner_then_sends_activation_instead_of_a_password() {
     let state = AppState::new();
     let service = SiteAdminService::new(state);
 
@@ -212,7 +212,7 @@ async fn when_registering_home_owner_then_provisions_user_with_resident_password
         .await
         .expect("Registration failed");
     assert_eq!(res.owner_full_name, "Canan Dağ");
-    assert!(res.temporary_password.unwrap().starts_with("SP-SAKIN-"));
+    assert_eq!(res.activation.expect("activation status").status, "SENT");
     assert!(res.must_change_password);
 }
 
@@ -241,7 +241,11 @@ async fn when_duplicate_email_for_home_owner_then_throws_exception() {
     let res = service.register_home_owner("site-1", req).await;
     assert!(res.is_err());
     let err = res.unwrap_err();
-    assert!(err.contains("already exists") || err.contains("zaten mevcut"));
+    assert_eq!(err, site_admin_service::EMAIL_NOT_AVAILABLE);
+    assert!(
+        !err.contains("ahmet.yilmaz"),
+        "the address must not be echoed back"
+    );
 }
 
 #[tokio::test]

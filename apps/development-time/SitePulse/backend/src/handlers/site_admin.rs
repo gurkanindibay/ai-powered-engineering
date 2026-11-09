@@ -7,11 +7,14 @@ use axum::{
 };
 use serde::Deserialize;
 
+use crate::error::AppError;
 use crate::models::{
     BlockDto, CreateBlockRequest, CreateHouseTypeRequest, HomeOwnerResponse, HouseTypeTariff,
     MoveInResidentRequest, MoveOutResidentRequest, OccupancyHistoryItem, RegisterHomeOwnerRequest,
     UpdateHomeOwnerRequest,
 };
+use crate::services::account_activation_service::{ActivationDelivery, ActivationError};
+use crate::services::AccountActivationService;
 use crate::services::SiteAdminService;
 use crate::state::AppState;
 
@@ -20,18 +23,59 @@ pub struct SiteIdParam {
     pub site_id: Option<String>,
 }
 
+/// Map a person-module service failure to the standard error envelope (S10):
+/// storage and driver failures become a generic 500 with a trace id, never raw text.
+pub(crate) fn person_error(e: String) -> AppError {
+    use crate::services::site_admin_service as service;
+    const INTERNAL_MARKERS: [&str; 8] = [
+        "db error",
+        "DB ",
+        "Database",
+        "Failed to",
+        "Transaction",
+        "Activation storage",
+        "connection",
+        "error communicating",
+    ];
+    if e == service::UNIT_NOT_FOUND {
+        AppError::not_found(e)
+    } else if e == service::EMAIL_NOT_AVAILABLE || e == service::UNIT_HAS_FINANCIAL_HISTORY {
+        AppError::conflict(e)
+    } else if e == "Household storage unavailable" {
+        AppError::unavailable(e)
+    } else if INTERNAL_MARKERS.iter().any(|m| e.contains(m)) {
+        AppError::internal(e)
+    } else {
+        AppError::validation(e)
+    }
+}
+
+/// Map an activation failure to the standard error envelope.
+pub(crate) fn activation_error(e: ActivationError) -> AppError {
+    match e {
+        ActivationError::InvalidToken | ActivationError::Password(_) => {
+            AppError::validation(e.to_string())
+        }
+        ActivationError::UnitNotFound | ActivationError::NoLoginAccount => {
+            AppError::not_found(e.to_string())
+        }
+        ActivationError::AlreadyActive => AppError::conflict(e.to_string()),
+        ActivationError::Storage(_) => AppError::internal(e.to_string()),
+    }
+}
+
 pub async fn register_home_owner(
     State(state): State<AppState>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<RegisterHomeOwnerRequest>,
-) -> Result<(StatusCode, Json<HomeOwnerResponse>), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<HomeOwnerResponse>), AppError> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .register_home_owner(&site_id, payload)
         .await
         .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(person_error)
 }
 
 pub async fn get_home_owners(
@@ -48,35 +92,56 @@ pub async fn update_home_owner(
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<UpdateHomeOwnerRequest>,
-) -> Result<Json<HomeOwnerResponse>, (StatusCode, String)> {
+) -> Result<Json<HomeOwnerResponse>, AppError> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .update_home_owner(&site_id, &id, payload)
         .await
         .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(person_error)
 }
 
 pub async fn delete_home_owner(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
-) -> Result<StatusCode, (StatusCode, String)> {
+) -> Result<StatusCode, AppError> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .delete_home_owner(&site_id, &id)
         .await
         .map(|_| StatusCode::NO_CONTENT)
-        .map_err(|e| {
-            let code = if e == crate::services::site_admin_service::UNIT_HAS_FINANCIAL_HISTORY {
-                StatusCode::CONFLICT
-            } else {
-                StatusCode::BAD_REQUEST
-            };
-            (code, e)
-        })
+        .map_err(person_error)
+}
+
+/// The security boundary adds the caller's `site_id` to JSON bodies, so unknown
+/// fields are tolerated here; only `role` is read.
+#[derive(Deserialize)]
+pub struct ResendActivationRequest {
+    /// `OWNER` (default) or `TENANT`.
+    #[serde(default)]
+    pub role: Option<String>,
+}
+
+/// Send a fresh activation link to a unit's owner or tenant; older links stop working.
+pub async fn resend_activation(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<ResendActivationRequest>,
+) -> Result<Json<ActivationDelivery>, AppError> {
+    let site_id = q.site_id.unwrap_or_default();
+    let tenant = payload
+        .role
+        .as_deref()
+        .is_some_and(|r| r.eq_ignore_ascii_case("TENANT"));
+    AccountActivationService::new(state)
+        .resend_for_unit(&site_id, &id, tenant)
+        .await
+        .map(Json)
+        .map_err(activation_error)
 }
 
 pub async fn move_out_resident(

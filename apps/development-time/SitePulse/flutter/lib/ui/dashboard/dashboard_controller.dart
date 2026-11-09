@@ -273,6 +273,13 @@ class DashboardController extends ChangeNotifier {
   ProvisionedHomeOwnerCredentials? _provisionedHomeOwner;
   ProvisionedHomeOwnerCredentials? get provisionedHomeOwner => _provisionedHomeOwner;
 
+  bool _isRegisteringHomeOwner = false;
+  /// True while a home owner registration is waiting for the server.
+  bool get isRegisteringHomeOwner => _isRegisteringHomeOwner;
+  String? _lastHomeOwnerError;
+  /// The last registration failure, for the form to show next to its submit button.
+  String? get lastHomeOwnerError => _lastHomeOwnerError;
+
   List<HomeOwnerItem> _homeOwners = [];
   List<HomeOwnerItem> get homeOwners => _homeOwners;
 

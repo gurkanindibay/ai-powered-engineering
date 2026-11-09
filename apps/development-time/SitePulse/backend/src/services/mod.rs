@@ -1,3 +1,4 @@
+pub mod account_activation_service;
 pub mod auth_service;
 pub mod bank_statement_parser;
 pub mod capital_project_service;
@@ -37,6 +38,7 @@ pub mod plan_service;
 pub mod portfolio_service;
 pub mod resident_request_service;
 
+pub use account_activation_service::AccountActivationService;
 pub use auth_service::AuthService;
 pub use bank_statement_parser::BankStatementParser;
 pub use capital_project_service::CapitalProjectService;
