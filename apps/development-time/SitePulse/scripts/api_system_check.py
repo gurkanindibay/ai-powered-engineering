@@ -877,7 +877,7 @@ def check_support_grant_lifecycle(ctx: Context) -> Tuple[bool, str]:
     ctx.psql.run(db, f"INSERT INTO users(email,password_hash,role) VALUES ('aaa-approver@example.com','{hashed}','SAAS_ADMIN');")
     second = login(ctx.backend,"aaa-approver@example.com","Approver-Password-123")
     operator = ctx.psql.run(db,"SELECT id FROM users WHERE email='admin@sitepulse.io';")
-    create, body = http("POST",base+"/api/v1/support/grants",token=first,body={"site_id":"1","operator_user_id":operator,"permissions":["SITE_MANAGE","AUDIT_LOG_READ","UNIT_READ"],"reason":"Investigate a support ticket","minutes":5})
+    create, body = http("POST",base+"/api/v1/support/grants",token=first,body={"site_id":"1","operator_user_id":operator,"permissions":["SITE_MANAGE","PERSON_READ","AUDIT_LOG_READ","UNIT_READ"],"reason":"Investigate a support ticket","minutes":5})
     if create != 200:
         return False,f"request {create}"
     grant = json.loads(body)["id"]

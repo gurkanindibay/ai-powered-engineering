@@ -7,16 +7,20 @@ use axum::{
 };
 use serde::Deserialize;
 
+use crate::authorization::{AuthzContext, SecurityError};
 use crate::error::AppError;
+use crate::models::Permission;
 use crate::models::{
     BlockDto, CreateBlockRequest, CreateHouseTypeRequest, HomeOwnerResponse, HouseTypeTariff,
     MoveInResidentRequest, MoveOutResidentRequest, OccupancyHistoryItem, RegisterHomeOwnerRequest,
     UpdateHomeOwnerRequest,
 };
 use crate::services::account_activation_service::{ActivationDelivery, ActivationError};
+use crate::services::site_admin_service as service;
 use crate::services::AccountActivationService;
 use crate::services::SiteAdminService;
 use crate::state::AppState;
+use axum::response::{IntoResponse, Response};
 
 #[derive(Deserialize, Default)]
 pub struct SiteIdParam {
@@ -26,7 +30,6 @@ pub struct SiteIdParam {
 /// Map a person-module service failure to the standard error envelope (S10):
 /// storage and driver failures become a generic 500 with a trace id, never raw text.
 pub(crate) fn person_error(e: String) -> AppError {
-    use crate::services::site_admin_service as service;
     const INTERNAL_MARKERS: [&str; 8] = [
         "db error",
         "DB ",
@@ -89,17 +92,33 @@ pub async fn get_home_owners(
 
 pub async fn update_home_owner(
     State(state): State<AppState>,
+    ctx: AuthzContext,
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<UpdateHomeOwnerRequest>,
-) -> Result<Json<HomeOwnerResponse>, AppError> {
+) -> Response {
     let site_id = q.site_id.unwrap_or_default();
-    let service = SiteAdminService::new(state);
-    service
-        .update_home_owner(&site_id, &id, payload)
-        .await
-        .map(Json)
-        .map_err(person_error)
+    // Contact edits need PersonManage (the route); a login email change is an identity
+    // change and also needs PersonIdentityManage and a recent step-up.
+    let may_change_identity = ctx.permissions.contains(&Permission::PersonIdentityManage);
+    let result = SiteAdminService::new(state)
+        .update_home_owner(
+            &site_id,
+            &id,
+            payload,
+            may_change_identity && ctx.stepped_up,
+        )
+        .await;
+    match result {
+        Ok(updated) => Json(updated).into_response(),
+        Err(e) if e == service::LOGIN_CHANGE_NEEDS_STEP_UP && may_change_identity => {
+            SecurityError::StepUp.into_response()
+        }
+        Err(e) if e == service::LOGIN_CHANGE_NEEDS_STEP_UP => {
+            SecurityError::Forbidden.into_response()
+        }
+        Err(e) => person_error(e).into_response(),
+    }
 }
 
 pub async fn delete_home_owner(

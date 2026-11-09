@@ -377,14 +377,27 @@ extension DashboardControllerResidents on DashboardController {
           }),
         ).timeout(const Duration(seconds: 4));
 
-        if (response.statusCode == 200 || response.statusCode == 204) {
+        _homeOwnerUpdateNeedsStepUp = false;
+        _pendingEmailChanges = const [];
+        _lastHomeOwnerError = null;
+        try {
+          final data = ApiClient.decode(response);
+          final pending = (data is Map<String, dynamic> && data['pending_email_changes'] is List)
+              ? (data['pending_email_changes'] as List)
+                  .whereType<Map<String, dynamic>>()
+                  .map((c) => c['new_email']?.toString() ?? '')
+                  .where((e) => e.isNotEmpty)
+                  .toList()
+              : const <String>[];
+          _pendingEmailChanges = pending;
+          // S5: a login email stays as it is until the new address confirms the change.
           _applyLocalHomeOwnerUpdate(
             unitId: unitId,
             fullName: fullName,
-            email: email,
+            email: pending.contains(email?.trim().toLowerCase()) ? null : email,
             phone: phone,
             tenantFullName: tenantFullName,
-            tenantEmail: tenantEmail,
+            tenantEmail: pending.contains(tenantEmail?.trim().toLowerCase()) ? null : tenantEmail,
             tenantPhone: tenantPhone,
             removeTenant: removeTenant,
             houseType: houseType,
@@ -396,13 +409,18 @@ extension DashboardControllerResidents on DashboardController {
           fetchHomeOwners(siteId: effectiveSiteId).catchError((e) => debugPrint('bg fetchHomeOwners error: $e'));
           fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth).catchError((e) => debugPrint('bg fetchSiteManagerOverview error: $e'));
           return true;
-        } else {
-          final err = utf8.decode(response.bodyBytes);
-          debugPrint('updateHomeOwner failed: ${response.statusCode} - $err');
+        } on ApiException catch (e) {
+          _homeOwnerUpdateNeedsStepUp = e.code == 'STEP_UP_REQUIRED';
+          _lastHomeOwnerError = e.statusCode >= 500
+              ? 'Değişiklik kaydedilemedi. Lütfen tekrar deneyin. (Referans: ${e.traceId ?? '-'})'
+              : e.message;
+          notify();
           return false;
         }
       } catch (e) {
-        debugPrint('updateHomeOwner error: $e');
+        AppLogger.warn('Home owner update did not reach the server', tag: 'Residents');
+        _lastHomeOwnerError = 'Sunucuya ulaşılamadı. Değişiklik kaydedilmedi.';
+        notify();
         return false;
       }
     }

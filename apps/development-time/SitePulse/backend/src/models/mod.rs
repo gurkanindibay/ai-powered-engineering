@@ -114,6 +114,16 @@ pub enum Permission {
     GovernanceManage,
     /// SPEC-009: a management company's portfolio of sites.
     PortfolioRead,
+    /// Person module: read the site's owners and residents directory and unit history.
+    PersonRead,
+    /// Person module: register and edit people, households and contact details.
+    PersonManage,
+    /// Person module: change a login email (with step-up); identity, not contact data.
+    PersonIdentityManage,
+    /// Person module: move-in, move-out and ownership transfer.
+    OccupancyManage,
+    /// Person module: a unit's payer IBANs and payer names used for bank matching.
+    UnitPaymentProfileManage,
 }
 
 impl Permission {
@@ -150,6 +160,11 @@ impl Permission {
             Permission::AdjustmentApprove => "Approve penalty waivers and write-offs",
             Permission::GovernanceManage => "Manage assembly meetings and the decisions book",
             Permission::PortfolioRead => "View a management company's site portfolio",
+            Permission::PersonRead => "View the owners and residents directory",
+            Permission::PersonManage => "Register and edit people, households and contact details",
+            Permission::PersonIdentityManage => "Change a resident's login email (step-up)",
+            Permission::OccupancyManage => "Record move-in, move-out and ownership transfer",
+            Permission::UnitPaymentProfileManage => "Manage a unit's payer IBANs and payer names",
         }
     }
 
@@ -183,12 +198,18 @@ impl Permission {
                 Permission::AdjustmentApprove,
                 Permission::GovernanceManage,
                 Permission::PortfolioRead,
+                Permission::PersonRead,
+                Permission::PersonManage,
+                Permission::PersonIdentityManage,
+                Permission::OccupancyManage,
+                Permission::UnitPaymentProfileManage,
             ],
             Role::HomeOwner => vec![
                 Permission::UnitRead,
                 Permission::UnitPay,
                 Permission::UnitInviteCoResident,
                 Permission::UnitManageHousehold,
+                Permission::UnitPaymentProfileManage,
             ],
             Role::HomeResident => vec![Permission::UnitRead, Permission::UnitPay],
             Role::Auditor => vec![

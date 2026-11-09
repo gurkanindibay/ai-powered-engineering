@@ -25,6 +25,7 @@ fn operator(id: &str) -> sitepulse_backend::authorization::AuthzContext {
         claims,
         permissions: Permission::permissions_for_role(Role::SiteManager),
         request_id: "spec-006".to_string(),
+        stepped_up: false,
     }
 }
 

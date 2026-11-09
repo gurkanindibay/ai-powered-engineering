@@ -1,11 +1,12 @@
-//! Person module security regressions (S2, S3, S5, S8, S9 and the removed fake success paths).
+//! Person module security regressions (S2, S3, S5, S6, S8, S9 and the removed fake success paths).
+mod support;
 use rust_decimal::Decimal;
 use sitepulse_backend::models::*;
 use sitepulse_backend::services::account_activation_service::{
     issue_in_memory, ActivateAccountRequest, ActivationError, ActivationPurpose,
     ConfirmEmailRequest,
 };
-use sitepulse_backend::services::site_admin_service::{EMAIL_NOT_AVAILABLE, UNIT_NOT_FOUND};
+use sitepulse_backend::services::site_admin_service::{self, EMAIL_NOT_AVAILABLE, UNIT_NOT_FOUND};
 use sitepulse_backend::services::*;
 use sitepulse_backend::state::AppState;
 
@@ -220,6 +221,7 @@ async fn login_email_change_waits_for_confirmation_from_the_new_address() {
                 land_share: None,
                 is_resident: None,
             },
+            true,
         )
         .await
         .expect("updated");
@@ -279,6 +281,7 @@ async fn email_change_to_an_address_in_use_is_refused() {
                 land_share: None,
                 is_resident: None,
             },
+            true,
         )
         .await;
     assert_eq!(result.err(), Some(EMAIL_NOT_AVAILABLE.to_string()));
@@ -304,6 +307,7 @@ async fn updating_an_unknown_unit_fails_instead_of_inventing_a_response() {
                 land_share: None,
                 is_resident: None,
             },
+            true,
         )
         .await;
     assert_eq!(result.err(), Some(UNIT_NOT_FOUND.to_string()));
@@ -340,4 +344,115 @@ async fn resend_activation_issues_a_link_until_the_account_is_active() {
         .resend_for_unit("site-1", &created.unit_id, false)
         .await;
     assert_eq!(again.err(), Some(ActivationError::AlreadyActive));
+}
+
+#[tokio::test]
+async fn a_contact_edit_does_not_need_identity_rights_but_a_login_change_does() {
+    let state = AppState::new();
+    let service = SiteAdminService::new(state.clone());
+    let created = service
+        .register_home_owner("site-1", owner_request(50, "contact.50@example.com"))
+        .await
+        .expect("registered");
+    let mut request = UpdateHomeOwnerRequest {
+        owner_full_name: Some("Renamed Owner".to_string()),
+        email: Some("contact.50@example.com".to_string()),
+        phone: None,
+        tenant_full_name: None,
+        tenant_email: None,
+        tenant_phone: None,
+        remove_tenant: None,
+        house_type: None,
+        monthly_dues: None,
+        land_share: None,
+        is_resident: None,
+    };
+    service
+        .update_home_owner("site-1", &created.unit_id, request.clone(), false)
+        .await
+        .expect("an unchanged email with a new name is a contact edit");
+
+    request.email = Some("changed.50@example.com".to_string());
+    let refused = service
+        .update_home_owner("site-1", &created.unit_id, request, false)
+        .await;
+    assert_eq!(
+        refused.err(),
+        Some(site_admin_service::LOGIN_CHANGE_NEEDS_STEP_UP.to_string())
+    );
+    assert!(state
+        .inner
+        .read()
+        .await
+        .users
+        .iter()
+        .any(|u| u.email == "contact.50@example.com"));
+}
+
+mod routes {
+    use super::support;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use sitepulse_backend::{app::build_router, models::Role, state::AppState};
+    use tower::ServiceExt;
+
+    async fn post(
+        state: &AppState,
+        path: &str,
+        token: &str,
+        body: serde_json::Value,
+    ) -> StatusCode {
+        build_router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+    }
+
+    #[tokio::test]
+    async fn s6_a_resident_cannot_change_the_units_payment_profile_but_the_owner_can() {
+        let state = AppState::new_with_test_fixtures();
+        let body = serde_json::json!({"sender_iban": "TR330006100519786457841326", "sender_name": "Payer"});
+        let path = "/api/v1/residents/d-14/matching-criteria/ibans";
+
+        let resident =
+            support::token(&state, "resident-s6", Role::HomeResident, "site-1", None).await;
+        assert_eq!(
+            post(&state, path, &resident, body.clone()).await,
+            StatusCode::FORBIDDEN
+        );
+
+        let owner =
+            support::token(&state, "owner-s6", Role::HomeOwner, "site-1", Some("d-14")).await;
+        let status = post(&state, path, &owner, body).await;
+        assert!(
+            status != StatusCode::FORBIDDEN && status != StatusCode::NOT_FOUND,
+            "the owner is authorized, got {status}"
+        );
+    }
+
+    #[tokio::test]
+    async fn occupancy_changes_need_occupancy_rights() {
+        let state = AppState::new_with_test_fixtures();
+        let owner =
+            support::token(&state, "owner-occ", Role::HomeOwner, "site-1", Some("d-14")).await;
+        let status = post(
+            &state,
+            "/api/v1/site-admin/units/d-14/move-out",
+            &owner,
+            serde_json::json!({}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
 }
