@@ -5,6 +5,8 @@ import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../components/app_fullscreen_page.dart';
 import '../components/step_up_prompt.dart';
+import '../../domain/models/household_relationship.dart';
+import 'household_relationship_items.dart';
 import '../../domain/logging/app_logger.dart';
 import '../components/house_types_modal.dart';
 import '../dashboard/dashboard_controller.dart';
@@ -1113,7 +1115,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                         child: ListTile(
                           leading: const Icon(Icons.family_restroom, color: AppColors.accentPurple),
                           title: Text(m.fullName),
-                          subtitle: Text('${m.relationship} • ${m.phone}'),
+                          subtitle: Text('${HouseholdRelationship.labelFor(m.relationship)} • ${m.phone}'),
                           trailing: ho.primaryResponsibleName == m.fullName
                               ? const Icon(Icons.check_circle, color: AppColors.accentGreen)
                               : null,
@@ -1866,7 +1868,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                       Expanded(
                                         flex: 4,
                                         child: DropdownButtonFormField<String>(
-                                          value: res.relationship,
+                                          value: HouseholdRelationship.fromValue(res.relationship).code,
                                           isDense: true,
                                           dropdownColor: AppColors.card(context),
                                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
@@ -1878,15 +1880,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                                             contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                             border: const OutlineInputBorder(),
                                           ),
-                                          items: const [
-                                            DropdownMenuItem(value: 'Eşi', child: Text('Eşi')),
-                                            DropdownMenuItem(value: 'Çocuğu', child: Text('Çocuğu')),
-                                            DropdownMenuItem(value: 'Anne/Baba', child: Text('Anne/Baba')),
-                                            DropdownMenuItem(value: 'Kardeşi', child: Text('Kardeşi')),
-                                            DropdownMenuItem(value: 'Akrabası', child: Text('Akrabası')),
-                                            DropdownMenuItem(value: 'Ev Arkadaşı', child: Text('Ev Arkadaşı')),
-                                            DropdownMenuItem(value: 'Diğer', child: Text('Diğer')),
-                                          ],
+                                          items: householdRelationshipItems(),
                                           onChanged: (val) {
                                             if (val != null) setDlgState(() => res.relationship = val);
                                           },
@@ -2298,7 +2292,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
 
   void _openAddHouseholdMember(HomeOwnerItem ho) {
     final nameCtrl = TextEditingController();
-    final relationCtrl = TextEditingController(text: 'Eşi');
+    final relationCtrl = TextEditingController(text: HouseholdRelationship.spouse.code);
     final phoneCtrl = TextEditingController();
     bool setAsPrimary = false;
 
@@ -2355,14 +2349,12 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     decoration: const InputDecoration(labelText: 'Ad Soyad *', filled: true, border: OutlineInputBorder()),
                   )),
                   const SizedBox(height: 12),
-                  testId('module_member_relation_input', TextField(
+                  testId('module_member_relation_input', DropdownButtonFormField<String>(
                     key: const Key('module_member_relation_input'),
-                    controller: relationCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Yakınlık Derecesi (Eşi, Çocuğu, vb.)',
-                      filled: true,
-                      border: OutlineInputBorder(),
-                    ),
+                    initialValue: relationCtrl.text,
+                    items: householdRelationshipItems(),
+                    onChanged: (code) => relationCtrl.text = code ?? HouseholdRelationship.other.code,
+                    decoration: const InputDecoration(labelText: 'Yakınlık Derecesi', filled: true, border: OutlineInputBorder()),
                   )),
                   const SizedBox(height: 12),
                   testId('module_member_phone_input', TextField(
@@ -2398,7 +2390,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
 
   void _openEditHouseholdMember(HomeOwnerItem ho, UnitResidentMember member) {
     final nameCtrl = TextEditingController(text: member.fullName);
-    final relationCtrl = TextEditingController(text: member.relationship);
+    final relationCtrl = TextEditingController(text: HouseholdRelationship.fromValue(member.relationship).code);
     final phoneCtrl = TextEditingController(text: member.phone);
 
     AppFullscreenPage.push(
@@ -2437,7 +2429,13 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
           children: [
             TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Ad Soyad')),
             const SizedBox(height: 12),
-            TextField(controller: relationCtrl, decoration: const InputDecoration(labelText: 'Yakınlık Derecesi')),
+            testId('module_edit_member_relation_input', DropdownButtonFormField<String>(
+              key: const Key('module_edit_member_relation_input'),
+              initialValue: relationCtrl.text,
+              items: householdRelationshipItems(),
+              onChanged: (code) => relationCtrl.text = code ?? HouseholdRelationship.other.code,
+              decoration: const InputDecoration(labelText: 'Yakınlık Derecesi'),
+            )),
             const SizedBox(height: 12),
             TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Telefon')),
           ],
@@ -2913,7 +2911,7 @@ class _PendingResidentEntry {
   })  : nameCtrl = TextEditingController(text: name ?? ''),
         phoneCtrl = TextEditingController(text: phone ?? ''),
         emailCtrl = TextEditingController(text: email ?? ''),
-        relationship = 'Eşi';
+        relationship = 'SPOUSE';
 
   void dispose() {
     nameCtrl.dispose();

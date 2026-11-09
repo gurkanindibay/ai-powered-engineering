@@ -452,7 +452,7 @@ void main() {
       expect(registered.isResident, isTrue);
 
       // Verify co-resident Selin Demir was added to unit's householdResidents
-      expect(registered.householdResidents.any((m) => m.fullName == 'Selin Demir' && m.relationship == 'Eşi'), isTrue);
+      expect(registered.householdResidents.any((m) => m.fullName == 'Selin Demir' && m.relationship == 'SPOUSE'), isTrue);
     });
   });
 }

@@ -456,3 +456,32 @@ mod routes {
         assert_eq!(status, StatusCode::FORBIDDEN);
     }
 }
+
+#[tokio::test]
+async fn f5_household_relationship_is_stored_as_a_code_and_unknown_text_is_refused() {
+    let state = AppState::new_with_test_fixtures();
+    let service = SiteAdminService::new(state);
+    let added = service
+        .add_unit_member(
+            "site-1",
+            "d-14",
+            "Ada Kaya",
+            "",
+            "ada.kaya@example.com",
+            "Çocuğu",
+        )
+        .await
+        .expect("a legacy label is accepted");
+    assert_eq!(added.relationship, "CHILD");
+    let refused = service
+        .add_unit_member(
+            "site-1",
+            "d-14",
+            "Bo Kaya",
+            "",
+            "bo.kaya@example.com",
+            "Landlord",
+        )
+        .await;
+    assert!(refused.is_err());
+}

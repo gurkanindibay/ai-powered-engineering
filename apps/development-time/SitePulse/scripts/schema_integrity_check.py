@@ -138,11 +138,11 @@ NEGATIVE_CASES = [
     ),
     (
         "occupancy_members rejects phantom occupancy",
-        "INSERT INTO occupancy_members (occupancy_id, full_name, relationship) VALUES (999999, 'X', 'self')",
+        "INSERT INTO occupancy_members (occupancy_id, full_name, relationship) VALUES (999999, 'X', 'OTHER')",
     ),
     (
         "occupancy_members rejects phantom resident user",
-        "INSERT INTO occupancy_members (occupancy_id, resident_user_id, full_name, relationship) VALUES (1, 999999, 'X', 'self')",
+        "INSERT INTO occupancy_members (occupancy_id, resident_user_id, full_name, relationship) VALUES (1, 999999, 'X', 'OTHER')",
     ),
 ]
 
