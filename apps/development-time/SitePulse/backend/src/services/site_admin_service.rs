@@ -561,7 +561,7 @@ impl SiteAdminService {
                         .execute(
                             r#"
                             INSERT INTO occupancy_members (occupancy_id, person_id, resident_user_id, full_name, relationship, phone, email, is_emergency_contact, created_at)
-                            SELECT uo.id, $2, $3, $4, 'Ev Sakini', $5, $6, false, CURRENT_TIMESTAMP
+                            SELECT uo.id, $2, $3, $4, 'OTHER', $5, $6, false, CURRENT_TIMESTAMP
                             FROM unit_occupancies uo
                             WHERE uo.unit_id = $1 AND uo.is_active = true
                             "#,
@@ -763,7 +763,7 @@ impl SiteAdminService {
                         .execute(
                             r#"
                             INSERT INTO occupancy_members (occupancy_id, person_id, resident_user_id, full_name, relationship, phone, email, is_emergency_contact, created_at)
-                            SELECT uo.id, $2, $3, $4, 'Ev Sakini', $5, $6, false, CURRENT_TIMESTAMP
+                            SELECT uo.id, $2, $3, $4, 'OTHER', $5, $6, false, CURRENT_TIMESTAMP
                             FROM unit_occupancies uo
                             WHERE uo.unit_id = $1 AND uo.is_active = true
                             "#,
@@ -917,7 +917,7 @@ impl SiteAdminService {
             let member_dto = crate::models::UnitMemberDto {
                 resident_id: user_id.clone(),
                 full_name: request.owner_full_name.clone(),
-                relationship: "Ev Sakini".to_string(),
+                relationship: "OTHER".to_string(),
                 phone: request.phone.clone(),
                 email: email_norm.clone(),
                 is_owner: false,
@@ -1202,7 +1202,7 @@ impl SiteAdminService {
             vec![crate::models::UnitMemberDto {
                 resident_id: user_id.clone(),
                 full_name: request.owner_full_name.clone(),
-                relationship: "Ev Sakini".to_string(),
+                relationship: "OTHER".to_string(),
                 phone: request.phone.clone(),
                 email: email_norm.clone(),
                 is_owner: false,
@@ -2143,11 +2143,13 @@ impl SiteAdminService {
             return Err("E-posta adresi boş olamaz.".to_string());
         }
 
-        let relationship_val = if relationship.trim().is_empty() {
-            "Ev Sakini"
-        } else {
-            relationship
-        };
+        // F5: one of the fixed codes (legacy labels are read, unknown text is refused).
+        let relationship_val =
+            crate::domain::household_relationship::HouseholdRelationship::from_input(relationship)
+                .ok_or_else(|| {
+                    crate::domain::household_relationship::UNKNOWN_RELATIONSHIP.to_string()
+                })?
+                .as_str();
 
         // Persist into the canonical household table; it resolves the unit's active
         // occupancy and links the person by email. The returned id is the real identifier.
@@ -2234,6 +2236,12 @@ impl SiteAdminService {
         email: &str,
         relationship: &str,
     ) -> Result<(), String> {
+        let relationship =
+            crate::domain::household_relationship::HouseholdRelationship::from_input(relationship)
+                .ok_or_else(|| {
+                    crate::domain::household_relationship::UNKNOWN_RELATIONSHIP.to_string()
+                })?
+                .as_str();
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
                 let unit_id_num = crate::db::require_id("entity", unit_id)?;

@@ -2768,14 +2768,14 @@ async fn when_homeowner_or_tenant_manually_adds_household_member_then_stored_and
         .expect("Manual add resident failed");
 
     assert_eq!(member.full_name, "Zeynep Yılmaz");
-    assert_eq!(member.relationship, "Eş");
+    assert_eq!(member.relationship, "SPOUSE");
     assert_eq!(member.email, "zeynep.yilmaz@gmail.com");
 
     let invitation_service = HomeResidentInvitationService::new(state);
     let members = invitation_service.get_unit_members("d-14").await;
     assert!(members
         .iter()
-        .any(|m| m.full_name == "Zeynep Yılmaz" && m.relationship == "Eş"));
+        .any(|m| m.full_name == "Zeynep Yılmaz" && m.relationship == "SPOUSE"));
 }
 
 #[tokio::test]
@@ -2860,7 +2860,7 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
     assert!(u14
         .household_residents
         .iter()
-        .any(|m| m.full_name == "Sakin Kardeş" && m.relationship == "Ev Sakini"));
+        .any(|m| m.full_name == "Sakin Kardeş" && m.relationship == "OTHER"));
 
     // 5. Verify in get_site_overview:
     // Flat in overview shows Canan Can as primary resident_name (NOT Sakin Kardeş, and not duplicated)

@@ -555,7 +555,7 @@ impl AuthService {
         } else {
             tx.query_opt("INSERT INTO unit_occupancies(unit_id,person_id,occupancy_type) SELECT id,COALESCE(tenant_person_id,owner_person_id),CASE WHEN tenant_person_id IS NOT NULL THEN 'TENANT' ELSE 'OWNER' END FROM units WHERE id=$1 AND COALESCE(tenant_person_id,owner_person_id) IS NOT NULL RETURNING id",&[&unit]).await.map_err(|_|"Household storage unavailable")?.ok_or("The unit has no active household; contact your site manager")?.get(0)
         };
-        tx.execute("INSERT INTO occupancy_members(occupancy_id,person_id,resident_user_id,full_name,email,phone,relationship) VALUES ($1,$2,$3,$4,$5,$6,$7)",&[&occupancy,&person,&id,&user.full_name,&user.email,&user.phone,&relationship.unwrap_or_else(||"HOUSEHOLD_MEMBER".to_string())]).await.map_err(|_|"Household storage unavailable")?;
+        tx.execute("INSERT INTO occupancy_members(occupancy_id,person_id,resident_user_id,full_name,email,phone,relationship) VALUES ($1,$2,$3,$4,$5,$6,$7)",&[&occupancy,&person,&id,&user.full_name,&user.email,&user.phone,&crate::domain::household_relationship::HouseholdRelationship::from_input(relationship.as_deref().unwrap_or("")).unwrap_or(crate::domain::household_relationship::HouseholdRelationship::Other).as_str()]).await.map_err(|_|"Household storage unavailable")?;
         tx.execute(
             "INSERT INTO user_site_roles(user_id,site_id,role) VALUES ($1,$2,'HOME_RESIDENT')",
             &[&id, &site],
@@ -689,7 +689,7 @@ fn attach_member(inner: &mut crate::state::AppStateInner, unit_id: &str, user: &
         .push(crate::models::UnitMemberDto {
             resident_id: user.id.clone(),
             full_name: user.full_name.clone(),
-            relationship: "Ev Sakini".to_string(),
+            relationship: "OTHER".to_string(),
             phone: user.phone.clone(),
             email: user.email.clone(),
             is_owner: false,

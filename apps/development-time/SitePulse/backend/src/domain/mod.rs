@@ -8,6 +8,7 @@
 pub mod apportionment;
 pub mod email;
 pub mod fingerprint;
+pub mod household_relationship;
 pub mod iban;
 pub mod text;
 

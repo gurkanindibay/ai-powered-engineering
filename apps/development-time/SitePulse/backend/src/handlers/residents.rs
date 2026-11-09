@@ -62,9 +62,7 @@ pub async fn add_unit_member(
 ) -> Result<(StatusCode, Json<UnitMemberDto>), AppError> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
-    let relationship = payload
-        .relationship
-        .unwrap_or_else(|| "Ev Sakini".to_string());
+    let relationship = payload.relationship.unwrap_or_else(|| "OTHER".to_string());
     service
         .add_unit_member(
             &site_id,
@@ -101,9 +99,7 @@ pub async fn update_unit_member(
 ) -> Result<StatusCode, AppError> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
-    let relationship = payload
-        .relationship
-        .unwrap_or_else(|| "Ev Sakini".to_string());
+    let relationship = payload.relationship.unwrap_or_else(|| "OTHER".to_string());
     service
         .update_unit_member(
             &site_id,

@@ -33,6 +33,8 @@ import '../residents/resident_directory.dart';
 import '../design_system/sp_filter_chip.dart';
 import '../design_system/sp_clipboard.dart';
 import '../residents/activation_status.dart';
+import '../../domain/models/household_relationship.dart';
+import '../residents/household_relationship_items.dart';
 class DashboardScreen extends StatefulWidget {
   final DashboardController controller;
 
@@ -2559,11 +2561,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final nameCtrl = TextEditingController(text: member.fullName);
     final phoneCtrl = TextEditingController(text: member.phone);
     final emailCtrl = TextEditingController(text: member.email);
-    String selectedRelationship = member.relationship.isNotEmpty ? member.relationship : 'Eşi';
-    final relationships = ['Eşi', 'Çocuğu', 'Anne/Baba', 'Kardeşi', 'Akrabası', 'Ev Arkadaşı', 'Diğer'];
-    if (!relationships.contains(selectedRelationship)) {
-      relationships.add(selectedRelationship);
-    }
+    String selectedRelationship = HouseholdRelationship.fromValue(member.relationship).code;
     bool isSaving = false;
     String? nameError;
     String? generalError;
@@ -2712,7 +2710,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: selectedRelationship,
-                    items: relationships.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                    items: householdRelationshipItems(),
                     onChanged: (val) {
                       if (val != null) {
                         setDialogState(() => selectedRelationship = val);
@@ -2792,8 +2790,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
-    String selectedRelationship = 'Eşi';
-    final relationships = ['Eşi', 'Çocuğu', 'Anne/Baba', 'Kardeşi', 'Akrabası', 'Ev Arkadaşı', 'Diğer'];
+    String selectedRelationship = HouseholdRelationship.spouse.code;
     bool isSaving = false;
     String? nameError;
     String? generalError;
@@ -2947,7 +2944,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: selectedRelationship,
-                    items: relationships.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                    items: householdRelationshipItems(),
                     onChanged: (val) {
                       if (val != null) {
                         setDialogState(() => selectedRelationship = val);
@@ -5980,7 +5977,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String selectedRole = 'OWNER';
     bool isResidentOwner = true;
     String ownerNotResidentOccupancy = 'VACANT'; // 'VACANT' or 'TENANT'
-    String selectedRelationship = 'Eşi';
+    String selectedRelationship = HouseholdRelationship.spouse.code;
     bool showSecondaryOwner = true;
     String? emailError;
     String? phoneError;
@@ -6755,15 +6752,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
                             value: selectedRelationship,
-                            items: const [
-                              DropdownMenuItem(value: 'Eşi', child: Text('Eşi')),
-                              DropdownMenuItem(value: 'Çocuğu', child: Text('Çocuğu')),
-                              DropdownMenuItem(value: 'Anne/Baba', child: Text('Anne/Baba')),
-                              DropdownMenuItem(value: 'Kardeşi', child: Text('Kardeşi')),
-                              DropdownMenuItem(value: 'Akrabası', child: Text('Akrabası')),
-                              DropdownMenuItem(value: 'Ev Arkadaşı', child: Text('Ev Arkadaşı')),
-                              DropdownMenuItem(value: 'Diğer', child: Text('Diğer')),
-                            ],
+                            items: householdRelationshipItems(),
                             onChanged: (val) {
                               if (val != null) {
                                 setDialogState(() => selectedRelationship = val);
@@ -7070,7 +7059,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       Expanded(
                                         flex: 4,
                                         child: DropdownButtonFormField<String>(
-                                          value: res.relationship,
+                                          value: HouseholdRelationship.fromValue(res.relationship).code,
                                           isDense: true,
                                           dropdownColor: AppColors.card(context),
                                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
@@ -7082,15 +7071,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                             border: const OutlineInputBorder(),
                                           ),
-                                          items: const [
-                                            DropdownMenuItem(value: 'Eşi', child: Text('Eşi')),
-                                            DropdownMenuItem(value: 'Çocuğu', child: Text('Çocuğu')),
-                                            DropdownMenuItem(value: 'Anne/Baba', child: Text('Anne/Baba')),
-                                            DropdownMenuItem(value: 'Kardeşi', child: Text('Kardeşi')),
-                                            DropdownMenuItem(value: 'Akrabası', child: Text('Akrabası')),
-                                            DropdownMenuItem(value: 'Ev Arkadaşı', child: Text('Ev Arkadaşı')),
-                                            DropdownMenuItem(value: 'Diğer', child: Text('Diğer')),
-                                          ],
+                                          items: householdRelationshipItems(),
                                           onChanged: (val) {
                                             if (val != null) setDialogState(() => res.relationship = val);
                                           },
@@ -7250,7 +7231,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: ListTile(
                           leading: const Icon(Icons.family_restroom, color: AppColors.accentPurple),
                           title: Text(m.fullName),
-                          subtitle: Text('${m.relationship} • ${m.phone}'),
+                          subtitle: Text('${HouseholdRelationship.labelFor(m.relationship)} • ${m.phone}'),
                           trailing: ho.primaryResponsibleName == m.fullName
                               ? const Icon(Icons.check_circle, color: AppColors.accentGreen)
                               : null,
@@ -8307,7 +8288,7 @@ class _PendingResidentEntry {
     String? name,
     String? phone,
     String? email,
-    this.relationship = 'Eşi',
+    this.relationship = 'SPOUSE',
   })  : nameCtrl = TextEditingController(text: name ?? ''),
         phoneCtrl = TextEditingController(text: phone ?? ''),
         emailCtrl = TextEditingController(text: email ?? '');

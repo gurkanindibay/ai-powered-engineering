@@ -230,7 +230,7 @@ extension DashboardControllerResidents on DashboardController {
         final newMember = UnitResidentMember(
           id: '${existingHo.householdResidents.length + 1}',
           fullName: ownerName,
-          relationship: relationship ?? 'Ev Sakini',
+          relationship: relationship ?? 'OTHER',
           phone: phone,
           email: email,
           isOwner: false,
@@ -247,7 +247,7 @@ extension DashboardControllerResidents on DashboardController {
         final newMember = UnitResidentMember(
           id: '1',
           fullName: ownerName,
-          relationship: relationship ?? 'Ev Sakini',
+          relationship: relationship ?? 'OTHER',
           phone: phone,
           email: email,
           isOwner: false,
