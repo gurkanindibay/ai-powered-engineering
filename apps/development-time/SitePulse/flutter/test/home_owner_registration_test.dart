@@ -103,4 +103,26 @@ void main() {
     expect(controller.lastHomeOwnerError, isNull);
     expect(activationStatusMessage(created.activationStatus, created.email), contains('etkinleştirme bağlantısı'));
   });
+
+  test('F3/F4: the entered land share is sent and no dues are invented without a tariff', () async {
+    Map<String, dynamic>? sent;
+    ApiClient.transport = MockClient((request) async {
+      if (request.method == 'POST') {
+        sent = jsonDecode(request.body) as Map<String, dynamic>;
+        return envelope(409, 'CONFLICT', 'stop here');
+      }
+      return http.Response('[]', 200);
+    });
+    await controller.registerHomeOwner(
+      block: 'C Blok',
+      unitNo: 32,
+      ownerName: 'Ece Yalın',
+      email: 'ece.yalin@example.com',
+      phone: '0532 111 22 33',
+      houseType: 'no-tariff',
+      landShare: 18,
+    );
+    expect(sent!['land_share'], '18');
+    expect(sent!.containsKey('monthly_dues'), isFalse);
+  });
 }

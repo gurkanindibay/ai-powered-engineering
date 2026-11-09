@@ -143,7 +143,7 @@ void main() {
       await tester.tap(saveBtn);
       await tester.pumpAndSettle();
 
-      expect(find.text('Geçerli bir e-posta adresi giriniz (örn: sakin@site.com)'), findsOneWidget);
+      expect(find.text('Geçerli bir e-posta adresi girin (ör. ad@ornek.com).'), findsOneWidget);
 
       // Enter valid email and invalid phone
       await tester.enterText(find.widgetWithText(TextField, 'E-posta (Doğrulama zorunlu)'), 'ahmet@example.com');
@@ -153,7 +153,7 @@ void main() {
       await tester.tap(saveBtn);
       await tester.pumpAndSettle();
 
-      expect(find.text('Geçerli bir telefon numarası giriniz (örn: 0555 123 45 67)'), findsOneWidget);
+      expect(find.text('Geçerli bir cep telefonu girin (ör. 0532 123 45 67).'), findsOneWidget);
 
       // Enter valid phone (Turkish mobile format)
       await tester.enterText(find.widgetWithText(TextField, 'Telefon (Doğrulama zorunlu)'), '0532 555 11 22');

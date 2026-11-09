@@ -24,6 +24,32 @@ pub const EMAIL_NOT_AVAILABLE: &str =
 pub const LOGIN_CHANGE_NEEDS_STEP_UP: &str =
     "Changing a login email requires identity permission and a recent password check.";
 
+/// Monthly dues used when neither a house type tariff nor an amount is given (F4).
+pub const DEFAULT_MONTHLY_DUES: Decimal = Decimal::from_parts(140000, 0, 0, false, 2);
+/// Response warning: the dues amount was not given and the default was used.
+pub const WARNING_DUES_DEFAULTED: &str = "DUES_DEFAULTED";
+/// Response warning: no land share was given; the site's most common share was used.
+pub const WARNING_LAND_SHARE_DEFAULTED: &str = "LAND_SHARE_DEFAULTED";
+
+/// A land share that is not a positive whole number.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("Land share must be a positive whole number of shares.")]
+pub struct InvalidLandShare;
+
+/// F3: a land share is a positive whole number of shares; `n/d` from older clients reads as `n`.
+pub fn parse_land_share(value: Option<&str>) -> Result<Option<i32>, InvalidLandShare> {
+    let Some(raw) = value.map(str::trim).filter(|v| !v.is_empty()) else {
+        return Ok(None);
+    };
+    let numerator = raw.split('/').next().unwrap_or(raw).trim();
+    numerator
+        .parse::<i32>()
+        .ok()
+        .filter(|n| *n > 0)
+        .map(Some)
+        .ok_or(InvalidLandShare)
+}
+
 /// The unit is not in this site (or does not exist); never answered with invented data.
 pub const UNIT_NOT_FOUND: &str = "Unit not found";
 
@@ -316,8 +342,16 @@ impl SiteAdminService {
                 resolved_dues = Some(tariff.dues_amount);
             }
         }
-        let monthly_dues =
-            resolved_dues.unwrap_or_else(|| Decimal::from_str_exact("1400.00").unwrap());
+        // F4: a fallback amount is never applied silently; the response says so.
+        let mut warnings: Vec<String> = Vec::new();
+        let monthly_dues = resolved_dues.unwrap_or_else(|| {
+            warnings.push(WARNING_DUES_DEFAULTED.to_string());
+            DEFAULT_MONTHLY_DUES
+        });
+        // F3: the unit's land share weights capital costs, so it is stored as given.
+        let requested_land_share =
+            parse_land_share(request.land_share.as_deref()).map_err(|e| e.to_string())?;
+        let mut effective_land_share = requested_land_share.unwrap_or(1);
 
         // Parse numeric IDs
         let site_numeric_id = crate::db::require_id("entity", site_id)?;
@@ -542,6 +576,19 @@ impl SiteAdminService {
                 }
             }
 
+            if requested_land_share.is_none() {
+                // The site's most common share, so a missing value does not shrink the unit's weight.
+                let typical: Option<i32> = client
+                    .query_one(
+                        "SELECT mode() WITHIN GROUP (ORDER BY land_share) FROM units WHERE site_id = $1 AND deleted_at IS NULL",
+                        &[&site_numeric_id],
+                    )
+                    .await
+                    .map_err(|e| format!("DB query error: {}", e))?
+                    .get(0);
+                effective_land_share = typical.unwrap_or(1);
+            }
+
             // Check if unit already exists
             let existing_unit_opt = client
                 .query_opt(
@@ -731,7 +778,7 @@ impl SiteAdminService {
                     .query_one(
                         r#"
                         INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, virtual_iban, house_type, occupancy_status)
-                        VALUES ($1, $2, $3, $4, 1, $5, $6, $7, $8, $9)
+                        VALUES ($1, $2, $3, $4, $10, $5, $6, $7, $8, $9)
                         ON CONFLICT (block_id, unit_number) DO UPDATE SET
                             deleted_at = NULL,
                             floor = EXCLUDED.floor,
@@ -753,6 +800,7 @@ impl SiteAdminService {
                             &viban,
                             &effective_house_type,
                             &occ_status,
+                            &effective_land_share,
                         ],
                     )
                     .await
@@ -801,6 +849,17 @@ impl SiteAdminService {
                         )
                         .await.map_err(|e| e.to_string())?;
                 }
+            }
+
+            // An explicitly given land share also corrects an existing unit.
+            if let Some(share) = requested_land_share {
+                client
+                    .execute(
+                        "UPDATE units SET land_share = $1 WHERE id = $2",
+                        &[&share, &unit_numeric_id],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
             }
 
             // Insert due liability if dues > 0 and NOT co-resident
@@ -1019,7 +1078,7 @@ impl SiteAdminService {
                 block_id: block_id_str,
                 unit_number: request.unit_no,
                 floor: effective_floor,
-                land_share: 1,
+                land_share: effective_land_share,
                 owner_user_id: if is_tenant && !has_explicit_tenant {
                     existing_owner_id
                 } else {
@@ -1248,13 +1307,19 @@ impl SiteAdminService {
             owner_full_name: request.owner_full_name,
             email: email_norm,
             phone: request.phone,
-            land_share: request.land_share.unwrap_or_else(|| "1/24".to_string()),
+            land_share: format!("{}/24", effective_land_share),
             monthly_dues,
             house_type: effective_house_type,
             is_resident: request.is_resident,
             activation: owner_activation,
             tenant_activation,
             pending_email_changes: Vec::new(),
+            warnings: {
+                if requested_land_share.is_none() {
+                    warnings.push(WARNING_LAND_SHARE_DEFAULTED.to_string());
+                }
+                warnings
+            },
             must_change_password: true,
             created_at: Utc::now(),
             occupancy_status: Some(if request.is_resident {
@@ -1429,6 +1494,7 @@ impl SiteAdminService {
                                 activation: None,
                                 tenant_activation: None,
                                 pending_email_changes: Vec::new(),
+                                warnings: Vec::new(),
                                 must_change_password: r.get("must_change_password"),
                                 created_at: r.get("created_at"),
                                 occupancy_status: Some(OccupancyStatus::from_str_loose(
@@ -1524,6 +1590,7 @@ impl SiteAdminService {
                 activation: None,
                 tenant_activation: None,
                 pending_email_changes: Vec::new(),
+                warnings: Vec::new(),
                 must_change_password: user.must_change_password,
                 created_at: user.created_at,
                 occupancy_status: Some(OccupancyStatus::OwnerOccupied),
@@ -2139,8 +2206,9 @@ impl SiteAdminService {
         if full_name.trim().is_empty() {
             return Err("Sakin adı soyadı boş olamaz.".to_string());
         }
-        if email.trim().is_empty() {
-            return Err("E-posta adresi boş olamaz.".to_string());
+        // A household member (a child, for example) may have no address; one that is given must be valid.
+        if !email.trim().is_empty() {
+            validate_email(email)?;
         }
 
         // F5: one of the fixed codes (legacy labels are read, unknown text is refused).

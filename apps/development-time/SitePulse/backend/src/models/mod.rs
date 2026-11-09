@@ -1173,6 +1173,9 @@ pub struct HomeOwnerResponse {
     /// Login email changes waiting for the new address to confirm them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pending_email_changes: Vec<PendingEmailChange>,
+    /// Defaults the server applied that the manager should check (`DUES_DEFAULTED`, `LAND_SHARE_DEFAULTED`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
     pub must_change_password: bool,
     pub created_at: DateTime<Utc>,
     #[serde(default)]

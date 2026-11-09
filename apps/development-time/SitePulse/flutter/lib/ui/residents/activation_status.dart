@@ -17,3 +17,15 @@ String activationStatusMessage(String? status, String email) {
       return 'Hesap oluşturuldu. Etkinleştirme durumu sakin kartında görünür.';
   }
 }
+
+/// A default the server applied while registering a unit (person module F3/F4).
+String registrationWarningMessage(String code) {
+  switch (code) {
+    case 'LAND_SHARE_DEFAULTED':
+      return 'Arsa payı girilmediği için sitedeki olağan pay kullanıldı. Ortak giderler bu paya göre bölüneceği için daire kartından doğrulayın.';
+    case 'DUES_DEFAULTED':
+      return 'Konut tipi için tanımlı bir aidat tarifesi bulunamadı; varsayılan aylık aidat (1.400,00 TL) uygulandı. Tarifeyi tanımlayın veya tutarı düzeltin.';
+    default:
+      return code;
+  }
+}

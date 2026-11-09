@@ -485,3 +485,65 @@ async fn f5_household_relationship_is_stored_as_a_code_and_unknown_text_is_refus
         .await;
     assert!(refused.is_err());
 }
+
+#[tokio::test]
+async fn f3_the_given_land_share_is_stored_and_a_missing_one_is_flagged() {
+    let state = AppState::new();
+    let service = SiteAdminService::new(state.clone());
+    let mut given = owner_request(51, "share.51@example.com");
+    given.land_share = Some("18".to_string());
+    let res = service
+        .register_home_owner("site-1", given)
+        .await
+        .expect("registered");
+    assert_eq!(res.land_share, "18/24");
+    assert!(!res.warnings.contains(&"LAND_SHARE_DEFAULTED".to_string()));
+    let stored = state
+        .inner
+        .read()
+        .await
+        .units
+        .iter()
+        .find(|u| u.unit_number == 51)
+        .map(|u| u.land_share);
+    assert_eq!(stored, Some(18));
+
+    let missing = service
+        .register_home_owner("site-1", owner_request(52, "share.52@example.com"))
+        .await
+        .expect("registered");
+    assert!(missing
+        .warnings
+        .contains(&"LAND_SHARE_DEFAULTED".to_string()));
+
+    let mut invalid = owner_request(53, "share.53@example.com");
+    invalid.land_share = Some("0".to_string());
+    assert!(service
+        .register_home_owner("site-1", invalid)
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn f4_a_defaulted_dues_amount_is_reported_not_silent() {
+    let state = AppState::new();
+    let mut request = owner_request(54, "dues.54@example.com");
+    request.house_type = Some("9+9".to_string());
+    request.monthly_dues = None;
+    let res = SiteAdminService::new(state)
+        .register_home_owner("site-1", request)
+        .await
+        .expect("registered");
+    assert_eq!(res.monthly_dues, Decimal::new(140000, 2));
+    assert!(res.warnings.contains(&"DUES_DEFAULTED".to_string()));
+}
+
+#[test]
+fn f3_land_share_parsing() {
+    use sitepulse_backend::services::site_admin_service::parse_land_share;
+    assert_eq!(parse_land_share(None), Ok(None));
+    assert_eq!(parse_land_share(Some("24")), Ok(Some(24)));
+    assert_eq!(parse_land_share(Some("12/240")), Ok(Some(12)));
+    assert!(parse_land_share(Some("-3")).is_err());
+    assert!(parse_land_share(Some("abc")).is_err());
+}
