@@ -20,6 +20,10 @@ pub const UNIT_HAS_FINANCIAL_HISTORY: &str =
 pub const EMAIL_NOT_AVAILABLE: &str =
     "This email address cannot be used for a new account. Check it or contact support.";
 
+/// A login email change was asked without identity permission and a recent step-up.
+pub const LOGIN_CHANGE_NEEDS_STEP_UP: &str =
+    "Changing a login email requires identity permission and a recent password check.";
+
 /// The unit is not in this site (or does not exist); never answered with invented data.
 pub const UNIT_NOT_FOUND: &str = "Unit not found";
 
@@ -41,6 +45,9 @@ pub enum EmailChangeError {
     NotAvailable,
     #[error("{UNIT_NOT_FOUND}")]
     NotFound,
+    /// A login email change needs `PersonIdentityManage` and a recent step-up.
+    #[error("{LOGIN_CHANGE_NEEDS_STEP_UP}")]
+    LoginChangeNotAllowed,
     #[error("DB error: {0}")]
     Storage(String),
 }
@@ -58,6 +65,7 @@ async fn stage_person_email_change<C: deadpool_postgres::GenericClient>(
     requested: &str,
     site: i64,
     changes: &mut Vec<PendingEmailChange>,
+    login_change_allowed: bool,
 ) -> Result<(), EmailChangeError> {
     let new_email = crate::domain::email::NormalizedEmail::normalize(requested);
     validate_email(&new_email).map_err(EmailChangeError::Invalid)?;
@@ -105,6 +113,9 @@ async fn stage_person_email_change<C: deadpool_postgres::GenericClient>(
                 .map_err(email_storage)?;
         }
         Some(user_id) => {
+            if !login_change_allowed {
+                return Err(EmailChangeError::LoginChangeNotAllowed);
+            }
             let taken = client
                 .query_opt(
                     "SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2",
@@ -143,12 +154,16 @@ fn stage_memory_email_change(
     user_idx: usize,
     requested: &str,
     changes: &mut Vec<PendingEmailChange>,
+    login_change_allowed: bool,
 ) -> Result<(), EmailChangeError> {
     let new_email = crate::domain::email::NormalizedEmail::normalize(requested);
     validate_email(&new_email).map_err(EmailChangeError::Invalid)?;
     let user = inner.users[user_idx].clone();
     if crate::domain::email::same_email(&user.email, &new_email) {
         return Ok(());
+    }
+    if !login_change_allowed {
+        return Err(EmailChangeError::LoginChangeNotAllowed);
     }
     if inner
         .users
@@ -1530,6 +1545,7 @@ impl SiteAdminService {
         site_id: &str,
         unit_or_user_id: &str,
         req: crate::models::UpdateHomeOwnerRequest,
+        login_change_allowed: bool,
     ) -> Result<HomeOwnerResponse, String> {
         let site_numeric = crate::db::require_id("entity", site_id)?;
         let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
@@ -1626,6 +1642,7 @@ impl SiteAdminService {
                                 t_email,
                                 site_numeric,
                                 &mut email_changes,
+                                login_change_allowed,
                             )
                             .await
                             .map_err(|e| e.to_string())?;
@@ -1699,6 +1716,7 @@ impl SiteAdminService {
                                 email,
                                 site_numeric,
                                 &mut email_changes,
+                                login_change_allowed,
                             )
                             .await
                             .map_err(|e| e.to_string())?;
@@ -1778,8 +1796,14 @@ impl SiteAdminService {
                 }
                 if let Some(ref t_email) = req.tenant_email {
                     if !persisted {
-                        stage_memory_email_change(&mut inner, t_idx, t_email, &mut email_changes)
-                            .map_err(|e| e.to_string())?;
+                        stage_memory_email_change(
+                            &mut inner,
+                            t_idx,
+                            t_email,
+                            &mut email_changes,
+                            login_change_allowed,
+                        )
+                        .map_err(|e| e.to_string())?;
                     }
                 }
                 if let Some(ref t_phone) = req.tenant_phone {
@@ -1841,8 +1865,14 @@ impl SiteAdminService {
             }
             if let Some(ref email) = req.email {
                 if !persisted {
-                    stage_memory_email_change(&mut inner, usridx, email, &mut email_changes)
-                        .map_err(|e| e.to_string())?;
+                    stage_memory_email_change(
+                        &mut inner,
+                        usridx,
+                        email,
+                        &mut email_changes,
+                        login_change_allowed,
+                    )
+                    .map_err(|e| e.to_string())?;
                 }
             }
         }

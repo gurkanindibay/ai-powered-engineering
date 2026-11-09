@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../components/app_fullscreen_page.dart';
+import '../components/step_up_prompt.dart';
+import '../../domain/logging/app_logger.dart';
 import '../components/house_types_modal.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
@@ -1976,47 +1978,55 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                   onPressed: () async {
                     try {
                       final messenger = ScaffoldMessenger.of(this.context);
-                      bool success = false;
-                      if (occupancyMode == 'TENANT') {
-                        success = await widget.controller.updateHomeOwner(
-                          unitId: ho.unitId,
-                          fullName: ownerNameCtrl.text.trim(),
-                          phone: ownerPhoneCtrl.text.trim(),
-                          email: ownerEmailCtrl.text.trim(),
-                          tenantFullName: tenantNameCtrl.text.trim().isNotEmpty ? tenantNameCtrl.text.trim() : null,
-                          tenantPhone: tenantPhoneCtrl.text.trim().isNotEmpty ? tenantPhoneCtrl.text.trim() : null,
-                          tenantEmail: tenantEmailCtrl.text.trim().isNotEmpty ? tenantEmailCtrl.text.trim() : null,
-                          isResident: false,
-                        );
-                      } else if (occupancyMode == 'OWNER') {
-                        success = await widget.controller.updateHomeOwner(
-                          unitId: ho.unitId,
-                          fullName: ownerNameCtrl.text.trim(),
-                          phone: ownerPhoneCtrl.text.trim(),
-                          email: ownerEmailCtrl.text.trim(),
-                          removeTenant: true,
-                          isResident: true,
-                        );
-                      } else {
-                        // VACANT
-                        success = await widget.controller.updateHomeOwner(
+                      Future<bool> save() {
+                        if (occupancyMode == 'TENANT') {
+                          return widget.controller.updateHomeOwner(
+                            unitId: ho.unitId,
+                            fullName: ownerNameCtrl.text.trim(),
+                            phone: ownerPhoneCtrl.text.trim(),
+                            email: ownerEmailCtrl.text.trim(),
+                            tenantFullName: tenantNameCtrl.text.trim().isNotEmpty ? tenantNameCtrl.text.trim() : null,
+                            tenantPhone: tenantPhoneCtrl.text.trim().isNotEmpty ? tenantPhoneCtrl.text.trim() : null,
+                            tenantEmail: tenantEmailCtrl.text.trim().isNotEmpty ? tenantEmailCtrl.text.trim() : null,
+                            isResident: false,
+                          );
+                        }
+                        return widget.controller.updateHomeOwner(
                           unitId: ho.unitId,
                           fullName: ownerNameCtrl.text.trim(),
                           phone: ownerPhoneCtrl.text.trim(),
                           email: ownerEmailCtrl.text.trim(),
                           removeTenant: true,
-                          isResident: false,
+                          isResident: occupancyMode == 'OWNER',
                         );
+                      }
+
+                      var success = await save();
+                      // A login email change is an identity change: the server asks for the
+                      // manager's password first, then the same edit is retried once.
+                      if (!success && widget.controller.homeOwnerUpdateNeedsStepUp && ctx.mounted) {
+                        final verified = await showStepUpPrompt(
+                          ctx,
+                          reason: 'Bir sakinin giriş e-postasını değiştiriyorsunuz. Devam etmek için kendi şifrenizi doğrulayın.',
+                        );
+                        if (verified) success = await save();
                       }
 
                       if (success && ctx.mounted) {
                         Navigator.pop(ctx);
+                        final pending = widget.controller.pendingEmailChanges;
                         messenger.showSnackBar(
-                          appSnackBar(content: Text('Sakin bilgileri başarıyla güncellendi.')),
+                          appSnackBar(content: Text(pending.isEmpty
+                              ? 'Sakin bilgileri başarıyla güncellendi.'
+                              : 'Bilgiler kaydedildi. E-posta değişikliği, ${pending.join(', ')} adresinden onaylanınca geçerli olur.')),
+                        );
+                      } else if (!success && ctx.mounted && widget.controller.lastHomeOwnerError != null) {
+                        messenger.showSnackBar(
+                          appSnackBar(content: Text(widget.controller.lastHomeOwnerError!)),
                         );
                       }
                     } catch (e) {
-                      debugPrint('_openEditHomeOwner error: $e');
+                      AppLogger.warn('Home owner edit failed', tag: 'Residents', error: e);
                     }
                   },
                   child: const Text(AppStrings.save),

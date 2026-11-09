@@ -303,6 +303,7 @@ async fn when_approving_pending_registration_then_provisions_user_and_returns_cr
         claims,
         permissions: Permission::permissions_for_role(Role::SiteManager),
         request_id: "test-approval".to_string(),
+        stepped_up: false,
     };
     let res = service
         .approve_registration(&ctx, "req-seed-01")

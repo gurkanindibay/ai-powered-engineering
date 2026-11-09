@@ -279,6 +279,12 @@ class DashboardController extends ChangeNotifier {
   String? _lastHomeOwnerError;
   /// The last registration failure, for the form to show next to its submit button.
   String? get lastHomeOwnerError => _lastHomeOwnerError;
+  bool _homeOwnerUpdateNeedsStepUp = false;
+  /// The last edit changed a login email and the server asked for a password check first.
+  bool get homeOwnerUpdateNeedsStepUp => _homeOwnerUpdateNeedsStepUp;
+  List<String> _pendingEmailChanges = const [];
+  /// Login emails from the last edit that wait for confirmation from the new address.
+  List<String> get pendingEmailChanges => _pendingEmailChanges;
 
   List<HomeOwnerItem> _homeOwners = [];
   List<HomeOwnerItem> get homeOwners => _homeOwners;
