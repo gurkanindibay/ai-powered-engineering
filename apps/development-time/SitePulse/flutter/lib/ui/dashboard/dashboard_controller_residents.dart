@@ -25,9 +25,12 @@ extension DashboardControllerResidents on DashboardController {
     final dues = duesAmount ?? matchedTariff?.duesAmount ?? Decimal.parse('1400.00');
     final cleanBlock = block.replaceAll('Blok', '').trim();
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
-    String tempPassword = 'SP-SAKIN-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}';
-
     if (!isTestMode) {
+      // U1/S4: the server is the only source of truth. A failed or unreachable request
+      // changes nothing locally and is reported, so a save never looks done when it is not.
+      _isRegisteringHomeOwner = true;
+      _authMessage = null;
+      notify();
       try {
         final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
         final response = await ApiClient.post(
@@ -49,40 +52,40 @@ extension DashboardControllerResidents on DashboardController {
             'is_resident': isResident,
             'role': role,
           }),
-        ).timeout(const Duration(seconds: 4));
-
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-          if (data['temporary_password'] != null && data['temporary_password'].toString().isNotEmpty) {
-            tempPassword = data['temporary_password'].toString();
-          }
-          await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
-          await fetchHomeOwners(siteId: effectiveSiteId);
-          _provisionedHomeOwner = ProvisionedHomeOwnerCredentials(
-            block: block,
-            unitNo: unitNo,
-            ownerName: ownerName,
-            email: email,
-            phone: phone,
-            temporaryPassword: tempPassword,
-            isResident: isResident,
-            duesAmount: dues,
-            houseType: effectiveHouseType,
-          );
-          notify();
-          return;
-        } else {
-          final errorBody = utf8.decode(response.bodyBytes);
-          debugPrint('registerHomeOwner remote error: ${response.statusCode} - $errorBody');
-          _authMessage = errorBody.isNotEmpty ? errorBody : 'Sakin eklenirken hata oluştu (${response.statusCode})';
-          notify();
-          return;
-        }
+        ).timeout(const Duration(seconds: 15));
+        final data = ApiClient.decode(response) as Map<String, dynamic>;
+        final created = HomeOwnerItem.fromJson(data);
+        await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
+        await fetchHomeOwners(siteId: effectiveSiteId);
+        _provisionedHomeOwner = ProvisionedHomeOwnerCredentials(
+          block: block,
+          unitNo: unitNo,
+          ownerName: ownerName,
+          email: email,
+          phone: phone,
+          activationStatus: created.activationStatus,
+          isResident: isResident,
+          duesAmount: dues,
+          houseType: effectiveHouseType,
+        );
+        _lastHomeOwnerError = null;
+      } on ApiException catch (e) {
+        _lastHomeOwnerError = e.statusCode >= 500
+            ? 'Sakin kaydedilemedi. Lütfen tekrar deneyin. (Referans: ${e.traceId ?? '-'})'
+            : e.message;
+        _authMessage = _lastHomeOwnerError;
       } catch (e) {
-        debugPrint('registerHomeOwner network error: $e');
+        AppLogger.warn('Home owner registration did not reach the server', tag: 'Residents');
+        _lastHomeOwnerError = 'Sunucuya ulaşılamadı. Kayıt yapılmadı; bağlantınızı kontrol edip tekrar deneyin.';
+        _authMessage = _lastHomeOwnerError;
+      } finally {
+        _isRegisteringHomeOwner = false;
+        notify();
       }
+      return;
     }
 
+    // Test mode only: an in-memory simulation of the backend for widget tests.
     final isTenant = role.toUpperCase() == 'TENANT';
     final isResidentRole = role.toUpperCase() == 'RESIDENT';
 
@@ -123,7 +126,7 @@ extension DashboardControllerResidents on DashboardController {
       ownerName: ownerName,
       email: email,
       phone: phone,
-      temporaryPassword: tempPassword,
+      activationStatus: 'SENT',
       isResident: isResident,
       duesAmount: dues,
       houseType: effectiveHouseType,
@@ -217,7 +220,7 @@ extension DashboardControllerResidents on DashboardController {
       monthlyDues: dues,
       houseType: effectiveHouseType,
       isResident: isResident,
-      temporaryPassword: tempPassword,
+      activationStatus: 'SENT',
       mustChangePassword: true,
       createdAt: DateTime.now(),
     );

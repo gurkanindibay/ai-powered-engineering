@@ -170,8 +170,10 @@ AREAS: Dict[str, AreaSpec] = {
         gates=["rust-standards-lint", "persistence-lint"],
         rust_tests=[
             "shared_rules_tests",
+            "person_security_tests",
         ],
         rust_lib_tests=[
+            "account_activation_service::",
             "joint_liability::",
             "assembly_vote::",
             "dunning::",

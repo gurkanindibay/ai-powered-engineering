@@ -1087,6 +1087,13 @@ pub struct UpdateHomeOwnerRequest {
     pub is_resident: Option<bool>,
 }
 
+/// A login email change the person has not confirmed yet.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PendingEmailChange {
+    pub new_email: String,
+    pub delivery: crate::services::account_activation_service::ActivationDelivery,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoveOutResidentRequest {
     pub end_date: Option<String>,
@@ -1136,7 +1143,15 @@ pub struct HomeOwnerResponse {
     #[serde(default)]
     pub house_type: Option<String>,
     pub is_resident: bool,
-    pub temporary_password: Option<String>,
+    /// Whether the owner's activation link was sent. The link itself is never returned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activation: Option<crate::services::account_activation_service::ActivationDelivery>,
+    /// The same for a tenant account created together with the owner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_activation: Option<crate::services::account_activation_service::ActivationDelivery>,
+    /// Login email changes waiting for the new address to confirm them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_email_changes: Vec<PendingEmailChange>,
     pub must_change_password: bool,
     pub created_at: DateTime<Utc>,
     #[serde(default)]

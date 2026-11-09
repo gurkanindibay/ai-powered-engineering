@@ -1358,7 +1358,7 @@ class _LoginScreenState extends State<LoginScreen> {
             style: TextStyle(color: AppColors.textPrimary(context), fontSize: 15, fontWeight: FontWeight.bold),
           ),
           Text(
-            'E-posta: ${p.email} | Şifre: ${p.temporaryPassword}',
+            'E-posta: ${p.email} | Hesap, kişiye gönderilen etkinleştirme bağlantısıyla açılır.',
             style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -1367,7 +1367,6 @@ class _LoginScreenState extends State<LoginScreen> {
             child: ElevatedButton.icon(
               onPressed: () {
                 _homeownerEmailController.text = p.email;
-                _homeownerPasswordController.text = p.temporaryPassword;
                 widget.controller.loginAsProvisionedHomeOwner();
               },
               icon: const Icon(Icons.check_circle_outline, size: 18),

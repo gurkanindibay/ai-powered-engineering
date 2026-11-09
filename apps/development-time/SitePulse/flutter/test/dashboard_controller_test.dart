@@ -110,7 +110,7 @@ void main() {
       expect(updatedSite.blocks, ['A Blok', 'B Blok', 'C Blok']);
     });
 
-    test('when register home owner by manager, then adds flat and issues resident password', () {
+    test('when register home owner by manager, then adds flat and reports an activation link, never a password', () {
       final initialFlatsCount = controller.flatsList.length;
       controller.registerHomeOwner(
         block: 'B Blok',
@@ -127,7 +127,7 @@ void main() {
       final creds = controller.provisionedHomeOwner;
       expect(creds, isNotNull);
       expect(creds?.ownerName, 'Caner Yurt');
-      expect(creds!.temporaryPassword.startsWith('SP-SAKIN-'), isTrue);
+      expect(creds!.activationStatus, 'SENT');
     });
 
     test('when approve registration request, then removes from pending queue and generates credentials', () {

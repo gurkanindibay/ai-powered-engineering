@@ -69,6 +69,7 @@ PAYMENT_WEBHOOK_SECRET = "api-system-check-payment-secret"
 # Must mirror auth::route_access: routes reachable without a bearer token.
 PUBLIC_ROUTES = {
     "/health", "/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/register", "/api/v1/auth/refresh",
+    "/api/v1/auth/activate", "/api/v1/auth/confirm-email",
     "/api/v1/home-residents/register", "/api/v1/bank/webhook/incoming-transfer", "/api/v1/site-admin/banks",
     "/api/v1/registration/submit/:slug",
     "/api/v1/public/receipts/verify", "/api/v1/payments/provider/webhook",
@@ -88,6 +89,7 @@ CHECKS = [
     "receipt_pdf_and_verification", "card_payment_via_provider", "budget_accrual_legal_basis", "ledger_integrity_clean",
     "security_session_lifecycle", "transactional_audit", "audit_scope_and_privileges", "registration_repository_scope", "support_grant_lifecycle", "household_members_persisted", "invitation_atomic_registration",
     "finance_desk_over_http",
+    "person_tenant_isolation", "person_activation_lifecycle",
 ]
 
 
@@ -134,6 +136,14 @@ class Psql:
         if proc.returncode != 0:
             raise SetupError(f"psql failed: {proc.stderr.strip()}")
         return proc.stdout.strip()
+
+    def run_status(self, db: str, sql: str) -> int:
+        """Run SQL that is expected to be refused; returns psql's exit code (0 = it succeeded)."""
+        try:
+            self.run(db, sql)
+            return 0
+        except SetupError:
+            return 1
 
 
 # ---------------------------------------------------------------------------
@@ -946,7 +956,99 @@ def check_invitation_atomic_registration(ctx: Context) -> Tuple[bool, str]:
     return statuses==[201,400] and scoped==200 and count=="1" and failed>=400 and absent=="t" and retry==201, f"concurrent {statuses}, current unit {scoped}, accounts {count}, failed {failed}, rollback {absent}, retry {retry}"
 
 
+def _owner_body(unit_no: int, email: str, name: str = "Isolation Owner") -> Dict[str, object]:
+    return {"block": "S Blok", "unit_no": unit_no, "floor": 1, "owner_full_name": name, "email": email,
+            "phone": "+90 532 000 11 22", "land_share": "1/24", "monthly_dues": "100.00", "house_type": "2+1",
+            "is_resident": True, "role": "OWNER"}
+
+
+def check_person_tenant_isolation(ctx: Context) -> Tuple[bool, str]:
+    """S1/F11/S8: persons are per site, registration is atomic and errors do not echo addresses."""
+    db, base = ctx.backend.db_name, ctx.backend.base
+    suffix = str(time.time_ns())[-9:]
+    shared = f"shared-{suffix}@example.com"
+    # A site of its own: earlier checks may purge the shared second site.
+    other_site = ctx.psql.run(db, f"""INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
+        VALUES ('Isolation Site {suffix}', 'Izmir', 'isolation-{suffix}', 'ACTIVE', 'STANDARD', CURRENT_DATE + 365) RETURNING id;""").strip()
+    # A contact-only person of site 2 with the address site 1 is about to register.
+    ctx.psql.run(db, f"INSERT INTO persons (full_name, email, person_type, site_id) VALUES ('Site Two Person', '{shared}', 'HOME_OWNER', {other_site});")
+    status, body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                        body=_owner_body(700 + int(suffix[-2:]), shared))
+    site_two_untouched = ctx.psql.run(
+        db, f"SELECT full_name FROM persons WHERE lower(email)='{shared}' AND site_id={other_site};") == "Site Two Person"
+    separate = status == 201 and ctx.psql.run(db, f"SELECT count(DISTINCT site_id) FROM persons WHERE lower(email)='{shared}';") == "2"
+    no_secret = "temporary_password" not in body and "SP-SAKIN" not in body
+
+    # Cross-site linking is refused by the database itself.
+    site_one_person = ctx.psql.run(db, f"SELECT id FROM persons WHERE lower(email)='{shared}' AND site_id <> {other_site};").strip()
+    guard = ctx.psql.run_status(db, f"""INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
+        VALUES ({other_site}, {site_one_person}, 'cross-{suffix}@example.com', NULL, 'HOME_OWNER', TRUE);""")
+
+    # F11: a failure late in registration leaves no person, account or unit behind.
+    rolled = f"rolled-{suffix}@example.com"
+    ctx.psql.run(db, """CREATE FUNCTION reject_registration_dues() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Injected dues failure'; END $$;
+        CREATE TRIGGER reject_registration_dues BEFORE INSERT ON dues_liabilities FOR EACH ROW EXECUTE FUNCTION reject_registration_dues();""")
+    try:
+        failed, failed_body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                                   body=_owner_body(800 + int(suffix[-2:]), rolled))
+    finally:
+        ctx.psql.run(db, "DROP TRIGGER reject_registration_dues ON dues_liabilities; DROP FUNCTION reject_registration_dues();")
+    orphans = ctx.psql.run(db, f"SELECT (SELECT count(*) FROM persons WHERE email='{rolled}') + (SELECT count(*) FROM users WHERE email='{rolled}');")
+    generic = "Injected" not in failed_body and "db error" not in failed_body
+
+    # S8: a taken login address is refused without being echoed.
+    dup, dup_body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                         body=_owner_body(900 + int(suffix[-2:]), shared))
+    ok = (separate and site_two_untouched and no_secret and guard != 0 and failed >= 500 and orphans == "0"
+          and generic and dup == 409 and shared not in dup_body)
+    return ok, (f"registered {status}, per-site persons {separate}, site-2 untouched {site_two_untouched}, no secret {no_secret}, "
+                f"cross-site link exit {guard}, injected failure {failed} generic {generic}, orphans {orphans}, duplicate {dup}")
+
+
+def check_person_activation_lifecycle(ctx: Context) -> Tuple[bool, str]:
+    """S2/S3/S5/S9: activation links, confirmed email change and deactivation instead of deletion."""
+    db, base = ctx.backend.db_name, ctx.backend.base
+    suffix = str(time.time_ns())[-9:]
+    email = f"activate-{suffix}@example.com"
+    status, body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                        body=_owner_body(600 + int(suffix[-2:]), email, "Activation Owner"))
+    if status != 201:
+        return False, f"registration {status} {body[:160]}"
+    created = json.loads(body)
+    unit = created["unit_id"]
+    no_password = ctx.psql.run(db, f"SELECT password_hash IS NULL FROM users WHERE email='{email}';") == "t"
+    sent = (created.get("activation") or {}).get("status") == "SENT"
+    blocked = http("POST", base + "/api/v1/auth/login", body={"email": email, "password": "Anything-2026!"})[0]
+
+    # The person's link: plant a known token the way the service stores it (SHA-256 only).
+    token = "a" * 40 + suffix.rjust(24, "0")
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    ctx.psql.run(db, f"""INSERT INTO account_activations (token_hash, user_id, site_id, purpose, expires_at)
+        SELECT '{digest}', id, site_id, 'ACTIVATE', now() + interval '1 hour' FROM users WHERE email='{email}';""")
+    activated = http("POST", base + "/api/v1/auth/activate", body={"token": token, "new_password": "Owner-Chosen-2026!"})[0]
+    reused = http("POST", base + "/api/v1/auth/activate", body={"token": token, "new_password": "Another-Pass-2026!"})[0]
+    logged_in = http("POST", base + "/api/v1/auth/login", body={"email": email, "password": "Owner-Chosen-2026!"})[0]
+    resend_active = http("POST", base + f"/api/v1/site-admin/home-owners/{unit}/resend-activation", token=ctx.manager, body={})[0]
+
+    # S5: a login email change waits for the new address.
+    new_email = f"moved-{suffix}@example.com"
+    updated, updated_body = http("PUT", base + f"/api/v1/site-admin/home-owners/{unit}", token=ctx.manager, body={"email": new_email})
+    still_old = ctx.psql.run(db, f"SELECT count(*) FROM users WHERE email='{email}';") == "1"
+    pending = updated == 200 and json.loads(updated_body).get("pending_email_changes", [{}])[0].get("new_email") == new_email
+
+    # S9: archiving deactivates the account instead of deleting it.
+    removed = http("DELETE", base + f"/api/v1/site-admin/home-owners/{unit}", token=ctx.manager)[0]
+    kept = ctx.psql.run(db, f"SELECT is_active::text FROM users WHERE email='{email}';")
+    ok = (no_password and sent and blocked == 401 and activated == 204 and reused == 400 and logged_in == 200
+          and resend_active == 409 and pending and still_old and removed == 204 and kept == "false")
+    return ok, (f"no password {no_password}, sent {sent}, pre-activation login {blocked}, activate {activated}, reuse {reused}, "
+                f"login {logged_in}, resend on active {resend_active}, email change pending {pending} old kept {still_old}, "
+                f"archive {removed} account kept inactive {kept}")
+
+
 CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
+    "person_tenant_isolation": check_person_tenant_isolation,
+    "person_activation_lifecycle": check_person_activation_lifecycle,
     "invitation_atomic_registration":check_invitation_atomic_registration,
     "household_members_persisted":check_household_members,
     "support_grant_lifecycle":check_support_grant_lifecycle,

@@ -32,6 +32,7 @@ import '../design_system/sp_tone.dart';
 import '../residents/resident_directory.dart';
 import '../design_system/sp_filter_chip.dart';
 import '../design_system/sp_clipboard.dart';
+import '../residents/activation_status.dart';
 class DashboardScreen extends StatefulWidget {
   final DashboardController controller;
 
@@ -5941,21 +5942,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Üretilen Geçici Şifre:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
-            const SizedBox(height: 6),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.card(context),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.accentGreen),
-              ),
-              child: SelectableText(
-                creds.temporaryPassword,
-                style: TextStyle(color: AppColors.successText(context), fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
-              ),
-            ),
+            testId('resident_activation_status', SpGuidanceCard(
+              icon: creds.activationStatus == 'SENT' ? Icons.mark_email_read_outlined : Icons.report_gmailerrorred_outlined,
+              title: creds.activationStatus == 'SENT' ? 'Etkinleştirme bağlantısı gönderildi' : 'Etkinleştirme bekliyor',
+              message: activationStatusMessage(creds.activationStatus, creds.email),
+              tone: creds.activationStatus == 'SENT' ? SpTone.success : SpTone.warning,
+              tonedBorder: true,
+            ), label: activationStatusMessage(creds.activationStatus, creds.email)),
           ],
         ),
       ),

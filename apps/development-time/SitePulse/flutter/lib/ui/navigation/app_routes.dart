@@ -17,6 +17,10 @@ class AppRoutes {
 
   static const login = '/login';
 
+  /// Single-use account links sent by email (person module S2/S3/S5).
+  static const activate = '/activate';
+  static const confirmEmail = '/confirm-email';
+
   /// Tab path segments for the role/path the controller is in now.
   static List<String> tabSegments(DashboardController controller) {
     switch (controller.userRole) {

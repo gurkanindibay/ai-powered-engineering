@@ -2710,8 +2710,11 @@ async fn purge_site_rows(
         "capital_projects WHERE site_id = $1",
         "dues_periods WHERE site_id = $1",
         "user_site_roles WHERE site_id = $1",
+        "account_activations WHERE site_id = $1",
         "users WHERE site_id = $1",
         "units WHERE site_id = $1",
+        // Persons belong to one site (V21); every reference to them is gone by now.
+        "persons WHERE site_id = $1",
         "blocks WHERE site_id = $1",
         "house_types WHERE site_id = $1",
         "site_bank_accounts WHERE site_id = $1",

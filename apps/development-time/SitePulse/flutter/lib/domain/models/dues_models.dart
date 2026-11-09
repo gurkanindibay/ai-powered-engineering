@@ -816,13 +816,16 @@ class ProvisionedSiteCredentials {
   });
 }
 
+/// A home owner the manager just registered. The person activates the account
+/// through their own link; no password ever reaches the manager.
 class ProvisionedHomeOwnerCredentials {
   final String block;
   final int unitNo;
   final String ownerName;
   final String email;
   final String phone;
-  final String temporaryPassword;
+  /// `SENT`, `DELIVERY_FAILED`, `NO_EMAIL`, or `null` when unknown.
+  final String? activationStatus;
   final bool isResident;
   final Decimal duesAmount;
   final String? houseType;
@@ -833,7 +836,7 @@ class ProvisionedHomeOwnerCredentials {
     required this.ownerName,
     required this.email,
     required this.phone,
-    required this.temporaryPassword,
+    this.activationStatus,
     required this.isResident,
     required this.duesAmount,
     this.houseType,
@@ -853,7 +856,8 @@ class HomeOwnerItem {
   final Decimal monthlyDues;
   final String? houseType;
   final bool isResident;
-  final String? temporaryPassword;
+  /// Activation link status of a freshly created account (`SENT`, `DELIVERY_FAILED`, `NO_EMAIL`).
+  final String? activationStatus;
   final bool mustChangePassword;
   final DateTime createdAt;
   final String occupancyStatus;
@@ -961,7 +965,7 @@ class HomeOwnerItem {
     required this.monthlyDues,
     this.houseType,
     required this.isResident,
-    this.temporaryPassword,
+    this.activationStatus,
     required this.mustChangePassword,
     required this.createdAt,
     this.occupancyStatus = 'OWNER_OCCUPIED',
@@ -995,7 +999,7 @@ class HomeOwnerItem {
       monthlyDues: readDecimal(json, 'monthly_dues'),
       houseType: json['house_type']?.toString(),
       isResident: json['is_resident'] as bool? ?? true,
-      temporaryPassword: json['temporary_password']?.toString(),
+      activationStatus: (json['activation'] is Map) ? (json['activation'] as Map)['status']?.toString() : null,
       mustChangePassword: json['must_change_password'] as bool? ?? false,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
@@ -1032,7 +1036,7 @@ class HomeOwnerItem {
     Decimal? monthlyDues,
     String? houseType,
     bool? isResident,
-    String? temporaryPassword,
+    String? activationStatus,
     bool? mustChangePassword,
     DateTime? createdAt,
     String? occupancyStatus,
@@ -1064,7 +1068,7 @@ class HomeOwnerItem {
       monthlyDues: monthlyDues ?? this.monthlyDues,
       houseType: houseType ?? this.houseType,
       isResident: isResident ?? this.isResident,
-      temporaryPassword: temporaryPassword ?? this.temporaryPassword,
+      activationStatus: activationStatus ?? this.activationStatus,
       mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       createdAt: createdAt ?? this.createdAt,
       occupancyStatus: occupancyStatus ?? this.occupancyStatus,
@@ -1097,7 +1101,7 @@ class HomeOwnerItem {
       'monthly_dues': monthlyDues.toString(),
       'house_type': houseType,
       'is_resident': isResident,
-      'temporary_password': temporaryPassword,
+      if (activationStatus != null) 'activation': {'status': activationStatus},
       'must_change_password': mustChangePassword,
       'created_at': createdAt.toIso8601String(),
       'occupancy_status': occupancyStatus,

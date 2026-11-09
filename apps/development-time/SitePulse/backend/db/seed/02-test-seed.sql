@@ -48,13 +48,17 @@ SET total_floors = EXCLUDED.total_floors;
 
 -- 3. Test Persons & Users (Auto-Increment Identity id, foreign keys resolved dynamically)
 -- Development-only credentials (argon2id hashes of mehmet123 / ahmet123 / mehmetoz123).
-INSERT INTO persons (national_id, full_name, phone, email, person_type)
-VALUES 
+-- Persons belong to one site (V21); the upsert key is the site-scoped email.
+INSERT INTO persons (national_id, full_name, phone, email, person_type, site_id)
+SELECT p.national_id, p.full_name, p.phone, p.email, p.person_type, s.id
+FROM (VALUES
     ('55555555555', 'Mehmet Demir', '+90 532 100 2030', 'mehmet.demir@begonya.com', 'HOME_OWNER'),
     ('12345678901', 'Ahmet Yılmaz', '+90 532 111 22 33', 'ahmet.yilmaz@begonya.com', 'HOME_OWNER'),
     ('98765432109', 'Zeynep Kaya', '+90 542 333 44 55', 'zeynep@example.com', 'HOME_RESIDENT'),
     ('44444444444', 'Mehmet Öz', '+90 533 222 33 44', 'mehmet.oz@begonya.com', 'HOME_OWNER')
-ON CONFLICT (email) DO UPDATE
+) AS p(national_id, full_name, phone, email, person_type)
+JOIN sites s ON s.slug = 'begonya-sitesi'
+ON CONFLICT (site_id, lower(email)) WHERE email IS NOT NULL DO UPDATE
 SET full_name = EXCLUDED.full_name,
     phone = EXCLUDED.phone,
     person_type = EXCLUDED.person_type;
@@ -74,7 +78,7 @@ FROM (
         ('begonya-sitesi', 'mehmet.oz@begonya.com', '$argon2id$v=19$m=19456,t=2,p=1$yhcA3VWK507NdmDfi0k1aQ$qRbHm998tv7yn0wexSHEyOZ73qfZqiuCIY4zz8oHAow', 'HOME_OWNER', FALSE)
 ) AS u(site_slug, email, password_hash, role, must_change_password)
 JOIN sites s ON s.slug = u.site_slug
-JOIN persons p ON p.email = u.email
+JOIN persons p ON p.email = u.email AND p.site_id = s.id
 ON CONFLICT (email) DO UPDATE
 SET site_id = EXCLUDED.site_id,
     person_id = EXCLUDED.person_id,
@@ -100,7 +104,7 @@ FROM (
 ) AS u(site_slug, block_name, unit_number, floor, land_share, owner_email, virtual_iban)
 JOIN sites s ON s.slug = u.site_slug
 JOIN blocks b ON b.site_id = s.id AND b.block_name = u.block_name
-LEFT JOIN persons p_owner ON p_owner.email = u.owner_email
+LEFT JOIN persons p_owner ON p_owner.email = u.owner_email AND p_owner.site_id = s.id
 ON CONFLICT (block_id, unit_number) DO UPDATE
 SET floor = EXCLUDED.floor,
     land_share = EXCLUDED.land_share,

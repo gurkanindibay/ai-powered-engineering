@@ -39,6 +39,8 @@ routes! {
     post "/api/v1/auth/google" => handlers::login_google, Public;
     post "/api/v1/auth/register" => handlers::register_password, Public;
     post "/api/v1/auth/change-password" => handlers::change_password, SelfOnly;
+    post "/api/v1/auth/activate" => handlers::activate_account, Public;
+    post "/api/v1/auth/confirm-email" => handlers::confirm_email_change, Public;
     get "/api/v1/auth/me" => handlers::get_profile, SelfOnly;
     get "/api/v1/saas/sites" => handlers::get_all_sites, Require(TenantManage);
     post "/api/v1/saas/sites" => handlers::register_site, Require(TenantManage);
@@ -50,6 +52,7 @@ routes! {
     post "/api/v1/site-admin/home-owners" => handlers::register_home_owner, Require(SiteManage);
     put "/api/v1/site-admin/home-owners/:id" => handlers::update_home_owner, Require(SiteManage);
     delete "/api/v1/site-admin/home-owners/:id" => handlers::delete_home_owner, Require(SiteManage);
+    post "/api/v1/site-admin/home-owners/:id/resend-activation" => handlers::resend_activation, Require(SiteManage);
     post "/api/v1/site-admin/units/:id/move-out" => handlers::move_out_resident, Require(SiteManage);
     post "/api/v1/site-admin/units/:id/move-in" => handlers::move_in_resident, Require(SiteManage);
     get "/api/v1/site-admin/units/:id/occupancy-history" => handlers::get_unit_occupancy_history, Require(SiteManage);
