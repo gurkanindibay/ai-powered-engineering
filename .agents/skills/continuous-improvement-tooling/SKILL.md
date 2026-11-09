@@ -107,7 +107,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 
 | Tool | Path | Use it for |
 | :--- | :--- | :--- |
-| `run_tests.py` | `apps/development-time/SitePulse/scripts/run_tests.py` | The full gate run before concluding any change; `--from-dev-container` loads local development DB settings without exposing credentials |
+| `run_tests.py` | `apps/development-time/SitePulse/scripts/run_tests.py` | The full gate run before concluding any change; `--from-dev-container` loads local development DB settings without exposing credentials; `--summary` gives compact, agent-friendly output |
 | `api_system_check.py` | `apps/development-time/SitePulse/scripts/api_system_check.py` | HTTP auth, tenancy, webhook, concurrency, restart, match-all-in-place, payer identity, site purge, per-debtor virman, reversal, scoped webhook claims, receipt issuer snapshot, aging snapshot, ledger drift, session rotation/revocation, transactional audit failure, audit RLS, scoped review, support approval, atomic invitation, provider payment, household persistence/rollback and budget checks against a real DB, with ledger invariants checked after each scenario |
 
 | `schema_integrity_check.py` | `apps/development-time/SitePulse/scripts/schema_integrity_check.py` | Migration replay, constraint tests (incl. the V16 append-only payment ledger and the V17 reversal / webhook-claim / issuer / status rules) and the upgrade test |
@@ -119,6 +119,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `rust_standards_lint.py` | `apps/development-time/SitePulse/scripts/rust_standards_lint.py` | Rust standards §10–16: domain purity, layering, no inline email/Turkish-fold/IBAN rules, static regexes, explicit rounding, no floats, hashing only in `domain::fingerprint`, English identifiers; ratchet on unwrap/expect/String errors/pool branches/unformatted files (gate `rust-standards-lint`) |
 | `memory_persistence_lint.py` | `apps/development-time/SitePulse/scripts/memory_persistence_lint.py` | Catching discarded database results |
 | `db_verify.py` | `apps/development-time/SitePulse/scripts/db_verify.py` | Inspecting and auditing a database (parameterised; non-zero exit on issues) |
+| `token_guard.py` | `scripts/token_guard.py` | Claude Code hook (`.claude/settings.json`) that denies context-flooding calls (large `cat`/`Read`, `ls -R`, unfiltered `find`, full-size screenshots) and warns on oversized Bash output |
 | `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |
 | `hash-password` | `apps/development-time/SitePulse/backend/src/bin/hash_password.rs` | argon2id hashes for seeds and resets |
 

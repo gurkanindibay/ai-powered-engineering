@@ -238,6 +238,17 @@ DB_PASS=... ./scripts/run_tests.py            # everything including GUI Playwri
 ./scripts/run_tests.py --skip-db              # DB gates (incl. gui-e2e) reported as SKIPPED, not passed
 DB_PASS=... ./scripts/run_tests.py --skip-gui # everything except the browser suite (CI gate)
 ./scripts/run_tests.py --only rust-test,money-fixtures --json
+./scripts/run_tests.py --changed --skip-db --summary   # agent-friendly: one line per gate, <=15 diagnostic lines per failure
+```
+
+## 5c-2. Token Guard Hook (`token_guard.py`)
+
+- **Executable Script:** [scripts/token_guard.py](file:///scripts/token_guard.py), wired in [.claude/settings.json](file:///.claude/settings.json) as a `PreToolUse`/`PostToolUse` hook.
+- **Purpose:** Keeps agent context small, because every tool result is re-sent on each later step. It denies `cat` of files over 50 KB, `ls -R`, unfiltered `find`, `Read` of files over 50 KB without offset/limit, and browser screenshots without `scale` <= 0.5 (including inside `browser_batch`). Each denial suggests a cheaper alternative. Bash results over 30K characters get a non-blocking reminder. Set `TOKEN_GUARD=off` to disable it.
+
+```bash
+echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls -R"}}' | python3 scripts/token_guard.py --json
+python3 -m unittest discover -s tests/token_guard
 ```
 
 ## 5d. Harness CLI (`harness/harness_cli.py`)

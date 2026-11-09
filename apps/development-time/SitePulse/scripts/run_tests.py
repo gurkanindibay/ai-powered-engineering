@@ -284,6 +284,39 @@ AREAS: Dict[str, AreaSpec] = {
 }
 
 
+# --summary: one line per gate, capped failure diagnostics, no command echo for
+# passing gates. Keeps agent context small when the runner is driven by an LLM.
+SUMMARY_DIAGNOSTIC_LINES = 15
+SUMMARY = False
+
+
+def announce(name: str, is_json: bool) -> None:
+    if not is_json and not SUMMARY:
+        print(f"RUNNING  {name} ...", flush=True)
+
+
+def record(report: List[Dict[str, object]], name: str, res, is_json: bool) -> None:
+    """Appends a gate result to the report and prints its status line."""
+    status = "PASSED" if res.passed else "FAILED"
+    limit = SUMMARY_DIAGNOSTIC_LINES if SUMMARY else 40
+    entry: Dict[str, object] = {"name": name, "status": status, "duration_s": round(res.duration_s, 1)}
+    if not (SUMMARY and res.passed):
+        entry["command"] = res.command
+        entry["diagnostics"] = res.diagnostics[:limit] if SUMMARY else res.diagnostics
+    report.append(entry)
+    if not is_json:
+        print(f"{status:<8} {name} ({res.duration_s:.1f}s)")
+        if not res.passed:
+            for d in res.diagnostics[:limit]:
+                print(f"           {d}")
+            if len(res.diagnostics) > limit:
+                print(f"           ... {len(res.diagnostics) - limit} more line(s); rerun with --only {name} for all")
+
+
+def dump_json(payload: object) -> None:
+    print(json.dumps(payload, separators=(",", ":")) if SUMMARY else json.dumps(payload, indent=2))
+
+
 def detect_changed_areas(base: Optional[str] = None) -> List[str]:
     """Detects modified files using git and matches them against area path patterns."""
     repo_root = ROOT
@@ -355,9 +388,10 @@ def detect_changed_areas(base: Optional[str] = None) -> List[str]:
     sitepulse_rel_prefix = "apps/development-time/SitePulse/"
     matched_areas: Set[str] = set()
 
-    print(f"\n[git change-detection] Detected {len(changed_files)} changed file(s):")
+    print(f"\n[git change-detection] Detected {len(changed_files)} changed file(s){'' if SUMMARY else ':'}")
     for f in sorted(changed_files):
-        print(f"  • {f}")
+        if not SUMMARY:
+            print(f"  • {f}")
         norm = f
         if norm.startswith(sitepulse_rel_prefix):
             norm = norm[len(sitepulse_rel_prefix):]
@@ -442,21 +476,9 @@ def execute_area_plan(plan: Dict[str, object], root: Path, is_json: bool = False
                 print(f"SKIPPED  {name} ({reason})")
             continue
 
-        if not is_json:
-            print(f"RUNNING  {name} ...", flush=True)
+        announce(name, is_json)
         res = run_gate(name, root)
-        report.append({
-            "name": name,
-            "status": "PASSED" if res.passed else "FAILED",
-            "duration_s": round(res.duration_s, 1),
-            "command": res.command,
-            "diagnostics": res.diagnostics,
-        })
-        if not is_json:
-            print(f"{'PASSED' if res.passed else 'FAILED'}   {name} ({res.duration_s:.1f}s)")
-            if not res.passed:
-                for d in res.diagnostics[:40]:
-                    print(f"           {d}")
+        record(report, name, res, is_json)
 
     # 2. Run targeted Rust tests for selected areas
     rust_tests = plan["rust_tests"]
@@ -466,42 +488,18 @@ def execute_area_plan(plan: Dict[str, object], root: Path, is_json: bool = False
         for t in rust_tests:
             cmd.extend(["--test", t])
         gate_name = f"rust-area-integration [{', '.join(rust_tests)}]"
-        if not is_json:
-            print(f"RUNNING  {gate_name} ...", flush=True)
+        announce(gate_name, is_json)
         res = run_command(gate_name, CommandSpec(cmd, "backend", 600), root)
-        report.append({
-            "name": gate_name,
-            "status": "PASSED" if res.passed else "FAILED",
-            "duration_s": round(res.duration_s, 1),
-            "command": res.command,
-            "diagnostics": res.diagnostics,
-        })
-        if not is_json:
-            print(f"{'PASSED' if res.passed else 'FAILED'}   {gate_name} ({res.duration_s:.1f}s)")
-            if not res.passed:
-                for d in res.diagnostics[:40]:
-                    print(f"           {d}")
+        record(report, gate_name, res, is_json)
 
     if rust_lib:
         filter_pattern = "|".join(rust_lib)
         cmd = ["cargo", "test", "--locked", "--lib", "--", filter_pattern]
         gate_name = f"rust-area-unit [{', '.join(rust_lib[:3])}{'...' if len(rust_lib) > 3 else ''}]"
 
-        if not is_json:
-            print(f"RUNNING  {gate_name} ...", flush=True)
+        announce(gate_name, is_json)
         res = run_command(gate_name, CommandSpec(cmd, "backend", 600), root)
-        report.append({
-            "name": gate_name,
-            "status": "PASSED" if res.passed else "FAILED",
-            "duration_s": round(res.duration_s, 1),
-            "command": res.command,
-            "diagnostics": res.diagnostics,
-        })
-        if not is_json:
-            print(f"{'PASSED' if res.passed else 'FAILED'}   {gate_name} ({res.duration_s:.1f}s)")
-            if not res.passed:
-                for d in res.diagnostics[:40]:
-                    print(f"           {d}")
+        record(report, gate_name, res, is_json)
 
     # 3. Run targeted Flutter tests using tags or files
     flutter_tags = plan["flutter_tags"]
@@ -509,21 +507,9 @@ def execute_area_plan(plan: Dict[str, object], root: Path, is_json: bool = False
         tag_expr = " || ".join(flutter_tags)
         gate_name = f"flutter-area-test [tags: {tag_expr}]"
         cmd = ["flutter", "test", "-t", tag_expr]
-        if not is_json:
-            print(f"RUNNING  {gate_name} ...", flush=True)
+        announce(gate_name, is_json)
         res = run_command(gate_name, CommandSpec(cmd, "flutter", 600), root)
-        report.append({
-            "name": gate_name,
-            "status": "PASSED" if res.passed else "FAILED",
-            "duration_s": round(res.duration_s, 1),
-            "command": res.command,
-            "diagnostics": res.diagnostics,
-        })
-        if not is_json:
-            print(f"{'PASSED' if res.passed else 'FAILED'}   {gate_name} ({res.duration_s:.1f}s)")
-            if not res.passed:
-                for d in res.diagnostics[:40]:
-                    print(f"           {d}")
+        record(report, gate_name, res, is_json)
 
     return report
 
@@ -564,7 +550,14 @@ def main(argv=None) -> int:
         help="Print the planned gates and commands for the selected area without running them",
     )
     parser.add_argument("--json", action="store_true", help="Print a JSON report")
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Compact output for agents: one line per gate, at most 15 diagnostic lines per failure",
+    )
     args = parser.parse_args(argv)
+    global SUMMARY
+    SUMMARY = args.summary
 
     if args.list_areas:
         print_areas_catalogue()
@@ -626,7 +619,7 @@ def main(argv=None) -> int:
         failed = [r["name"] for r in report if r["status"] == "FAILED"]
         skipped = [r["name"] for r in report if r["status"] == "SKIPPED"]
         if args.json:
-            print(json.dumps({"passed": not failed, "failed": failed, "skipped": skipped, "gates": report}, indent=2))
+            dump_json({"passed": not failed, "failed": failed, "skipped": skipped, "gates": report})
         else:
             print("=" * 72)
             if failed:
@@ -656,26 +649,14 @@ def main(argv=None) -> int:
             if not args.json:
                 print(f"SKIPPED  {name} ({reason})")
             continue
-        if not args.json:
-            print(f"RUNNING  {name} ...", flush=True)
+        announce(name, args.json)
         res = run_gate(name, ROOT)
-        report.append({
-            "name": name,
-            "status": "PASSED" if res.passed else "FAILED",
-            "duration_s": round(res.duration_s, 1),
-            "command": res.command,
-            "diagnostics": res.diagnostics,
-        })
-        if not args.json:
-            print(f"{'PASSED' if res.passed else 'FAILED'}   {name} ({res.duration_s:.1f}s)")
-            if not res.passed:
-                for d in res.diagnostics[:40]:
-                    print(f"           {d}")
+        record(report, name, res, args.json)
 
     failed = [r["name"] for r in report if r["status"] == "FAILED"]
     skipped = [r["name"] for r in report if r["status"] == "SKIPPED"]
     if args.json:
-        print(json.dumps({"passed": not failed, "failed": failed, "skipped": skipped, "gates": report}, indent=2))
+        dump_json({"passed": not failed, "failed": failed, "skipped": skipped, "gates": report})
     else:
         print("=" * 72)
         if failed:

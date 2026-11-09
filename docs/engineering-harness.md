@@ -74,6 +74,8 @@ The included `engineering_harness.gateway_bridge` implements a bounded workspace
    ["python3", "-m", "engineering_harness.gateway_bridge", "--endpoint", "http://YOUR_PROXY:PORT", "--registry", "/opt/models.json"]
    ```
 
+   The bridge keeps worker context bounded: `read_file` accepts `start_line`/`end_line`, a capped `search` tool locates code before reading, each tool result is capped at 16 KiB, and once tool results exceed 48 KiB in total, all but the four most recent are replaced with short stubs. The system prompt and envelope stay a stable prefix so gateway prompt caching remains effective.
+
    Set `network` to the administered internal network. The generated template defaults to `none`, empty model preferences and conservative writable paths; it intentionally cannot reach a provider. Add role preferences when a specific provider/model/options are required. A missing requested target blocks execution; the harness does not silently substitute one. Policy is copied and hashed at intake, so editing its source file does not alter an existing run.
 
 5. Set concrete task acceptance criteria in `acceptance`, mapping each to one or more required gate IDs. Add targeted gates alongside the existing regression checks. The generated SitePulse template only supplies a regression criterion and does not infer a feature's business acceptance. Schema/migration files are not writable by default; an operator must assign those paths and required upgrade checks for that task.
