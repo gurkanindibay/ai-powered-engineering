@@ -93,10 +93,11 @@ def test_new_manager_must_change_password_and_lands_on_an_empty_site(login_page,
     created = api.create_site(saas_ready, "Palmiye Evleri", "murat.yildirim@e2e.test")
 
     login_page.login("manager", "murat.yildirim@e2e.test", created["temporary_password"])
-    ManagerCockpit(page).wait()
+    # A temporary password opens only the change screen, never the cockpit.
     SaasAdmin(page).must_change_password_banner.wait_for(timeout=10_000)
     SaasAdmin(page).change_password(created["temporary_password"], "E2E-New-Manager-5")
     SaasAdmin(page).must_change_password_banner.wait_for(state="detached", timeout=15_000)
+    ManagerCockpit(page).wait()
 
     assert ResidentsTab(page).open().unit_card_ids() == []  # zero-data site: no unit cards
     assert api.login("murat.yildirim@e2e.test", "E2E-New-Manager-5").user["must_change_password"] is False

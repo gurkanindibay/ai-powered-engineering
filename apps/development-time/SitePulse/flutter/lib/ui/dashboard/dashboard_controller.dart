@@ -76,22 +76,35 @@ class DashboardController extends ChangeNotifier {
       _authMessage = 'Session expired. Please sign in again.';
       notifyListeners();
     });
+    _passwordChangeSubscription = ApiClient.passwordChangeRequired.listen((_) {
+      if (!_isAuthenticated || _userSession.mustChangePassword) return;
+      _userSession = _userSession.copyWith(mustChangePassword: true);
+      _authMessage = AppStrings.localizedErrorMessage('PASSWORD_CHANGE_REQUIRED');
+      notifyListeners();
+    });
     _initData();
   }
 
   StreamSubscription<bool>? _offlineSubscription;
   StreamSubscription<void>? _sessionSubscription;
+  StreamSubscription<void>? _passwordChangeSubscription;
 
   @override
   void dispose() {
     _offlineSubscription?.cancel();
     _sessionSubscription?.cancel();
+    _passwordChangeSubscription?.cancel();
     super.dispose();
   }
 
   // Session & Auth
   bool _isAuthenticated;
   bool get isAuthenticated => _isAuthenticated;
+
+  /// Signed in with a temporary password: every role must set a new password
+  /// before it may see or do anything else (STORY-06-06). The router shows only
+  /// the password change screen while this is true.
+  bool get requiresPasswordChange => _isAuthenticated && _userSession.mustChangePassword;
 
   SiteAdminActivePath _siteAdminPath = SiteAdminActivePath.managerCockpit;
   SiteAdminActivePath get siteAdminPath => _siteAdminPath;

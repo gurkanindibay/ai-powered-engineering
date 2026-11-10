@@ -42,7 +42,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | GUI-06-03 | 06-02 | Any | P0 | seed | Wrong password → `login_error_banner` shown, still on the login screen | `login_error_banner` | ✅ |
 | GUI-06-04 | 06-02 | Any | P2 | seed | Empty email or password → validation message, no request sent (check the network log) | NEW:login ids | ◐ |
 | GUI-06-05 | 06-02 | Any | P1 | seed | Clear login cache (homeowner and manager) → fields empty | `btn_clear_login_cache_homeowner`, `btn_clear_login_cache_manager` | ✅ |
-| GUI-06-06 | 03-04/06-04 | SaaS | P0 | seed | Log in with the bootstrap password → `banner_must_change_password` → change password → log out → log in with the new password succeeds and the old one fails | `banner_must_change_password`, `btn_open_change_password` | ✅ |
+| GUI-06-06 | 03-04/06-04/06-06 | SaaS | P0 | seed | Log in with the bootstrap password → forced `screen_force_password_change` (no dashboard) → change password → log out → log in with the new password succeeds and the old one fails | `screen_force_password_change`, `change_password_{current,new,confirm}`, `btn_submit_change_password` | ✅ |
 | GUI-06-07 | 06-04 | Homeowner | P1 | seed | Profile sheet → change password → re-login works | `btn_change_password_sheet` | ✅ |
 | GUI-06-08 | 06-04 | Any role | P1 | seed | Profile sheet → logout → back on the login screen; browser back does not re-enter the dashboard | NEW:`btn_logout` ("Çıkış") | ◐ |
 | GUI-06-09 | 06-01 | Homeowner | P1 | seed | Homeowner session shows no manager actions (no cockpit, no unified dues center, no SaaS); a direct manager API call made with the page token returns 403 | absence of `btn_open_unified_dues_center` | ✅ |
@@ -78,7 +78,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 |---|---|---|---|---|---|---|---|
 | GUI-03-01 | 03-02 | SaaS | P0 | seed (password already changed via api) | SaaS dashboard shows Begonya Sitesi and Kardelen Rezidans cards plus totals (sites, units, monthly dues) equal to the API | NEW:`saas_site_card_*`, `saas_total_*` | ✅ |
 | GUI-03-02 | 03-03/03-04 | SaaS | P0 | seed | "Yeni Site" → fill "Palmiye Evleri Sitesi", Kadıköy/İstanbul, 40 units, plan, admin Murat Yıldırım → save → credentials dialog with `SP-XXXX-YYYY` password and copy button → new card in the portfolio. DB check: slug `palmiye-evleri-sitesi`, SITE_MANAGER user | `add_site_blocks_field`, `btn_save_new_site`, NEW:`credentials_dialog_password`, `btn_copy_credentials` | ✅ |
-| GUI-03-03 | 03-04 | New manager | P1 | ui:GUI-03-02 | Log in with the issued temporary password → forced password change → cockpit of the new, empty site (zero-data guidance) | `banner_must_change_password` | ✅ |
+| GUI-03-03 | 03-04/06-06 | New manager | P1 | ui:GUI-03-02 | Log in with the issued temporary password → forced password change screen (cockpit not reachable) → cockpit of the new, empty site (zero-data guidance) | `screen_force_password_change` | ✅ |
 | GUI-03-04 | 03-01 | Manager | P1 | api:`unit(kardelen-rezidans)` | Begonya manager never sees Kardelen units or totals anywhere in the cockpit or residents module | residents list | ✅ |
 | GUI-03-05 | 03-02 | SaaS | P1 | seed | Edit site → change name/address/admin phone → save → card updated | `btn_edit_site_*`, `edit_site_*_field`, `btn_save_site_edit` | ✅ |
 | GUI-03-06 | 03-06 | SaaS | P1 | ui:GUI-03-02 (empty site) | Delete the empty site → confirm → removed from the portfolio | NEW:`btn_delete_site_*` | ✅ "Sil" |

@@ -20,10 +20,10 @@ class SaasAdmin:
 
     @property
     def must_change_password_banner(self):
-        return by_id(self.page, "banner_must_change_password")
+        """The forced password change screen shown instead of every role's dashboard (STORY-06-06)."""
+        return by_id(self.page, "screen_force_password_change")
 
     def change_password(self, current: str, new: str) -> None:
-        by_id(self.page, "btn_open_change_password").click()
         by_id(self.page, "change_password_current").wait_for(timeout=10_000)
         fill(self.page, "change_password_current", current)
         fill(self.page, "change_password_new", new)

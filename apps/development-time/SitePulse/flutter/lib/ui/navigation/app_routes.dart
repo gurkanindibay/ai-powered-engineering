@@ -11,11 +11,15 @@ import '../dashboard/dashboard_controller.dart';
 /// | SaaS admin                  | 0 `/admin/home`, 1 `/admin/sites`                       |
 /// | Auditor (denetçi)           | 0 `/auditor/home`                                       |
 ///
-/// Signed-out users are always on `/login`.
+/// Signed-out users are always on `/login`. A signed-in user who still has a
+/// temporary password is always on `/change-password`, whatever the role.
 class AppRoutes {
   const AppRoutes._();
 
   static const login = '/login';
+
+  /// The only page open to a user who must change a temporary password (STORY-06-06).
+  static const changePassword = '/change-password';
 
   /// Single-use account links sent by email (person module S2/S3/S5).
   static const activate = '/activate';
