@@ -29,7 +29,7 @@ Without `HARNESS_DOCKER_IMAGE`, the three Docker tests are explicitly skipped. T
 
 ## Configure real model execution
 
-The included `engineering_harness.gateway_bridge` implements a bounded workspace-tool loop against an operator-managed gateway offering `/v1/models` and `/v1/chat/completions`. The message/tool-call and usage formats follow the [official Chat Completions reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) and [function-calling guide](https://developers.openai.com/api/docs/guides/function-calling). Compatible gateways may route to several providers; validate the gateway's actual compatibility. Native Anthropic/Gemini/T3 transports need their own bridge implementation if they do not offer this gateway API. No undocumented T3 endpoint is assumed.
+The included `engineering_harness.gateway_bridge` implements a bounded workspace-tool loop against an operator-managed gateway offering `/v1/models` and `/v1/chat/completions`. The message/tool-call and usage formats follow the [official Chat Completions reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) and [function-calling guide](https://developers.openai.com/api/docs/guides/function-calling). Compatible gateways may route to several providers; validate the gateway's actual compatibility. Native Anthropic/Gemini transports need their own bridge implementation if they do not offer this gateway API. To use T3 Code sessions instead of API tokens, see [Run agents as T3 child sessions](#run-agents-as-t3-child-sessions-no-api-tokens).
 
 1. Populate `config/engineering-harness/model-registry.example.json` with **evaluated, authorized** gateway targets before building a worker image. The committed example has an empty list deliberately. Each entry requires:
 
@@ -80,7 +80,30 @@ The included `engineering_harness.gateway_bridge` implements a bounded workspace
 
 5. Set concrete task acceptance criteria in `acceptance`, mapping each to one or more required gate IDs. Add targeted gates alongside the existing regression checks. The generated SitePulse template only supplies a regression criterion and does not infer a feature's business acceptance. Schema/migration files are not writable by default; an operator must assign those paths and required upgrade checks for that task.
 
-For direct T3-backed execution, implement the same bridge protocol using supported T3 tools in its execution environment. Interactive T3 agents must call `orchestrator_capabilities` and follow the current delegation contract. Planner JSON is not a substitute for that API.
+## Run agents as T3 child sessions (no API tokens)
+
+When the operator works inside T3 Code, role agents run as T3 child sessions on the operator's existing provider subscriptions instead of a token-billed gateway. The Python controller cannot call T3 tools itself, so the work is split:
+
+- **Harness (trusted):** risk assessment, model routing, budgets, envelope/result hashing, path enforcement, integration, Docker gates, audit trail.
+- **T3 orchestrator agent:** calls `orchestrator_capabilities`, sends each harness-built `delegate_task` payload unchanged, and returns the child's final message to the harness.
+
+`config/engineering-harness/t3-registry.json` maps T3 `providerInstanceId`/model pairs to roles and tiers, with per-tier default options (for example `effort`). The live catalog is intersected with it on every dispatch: disabled providers, missing models and unoffered option values drop out, and a tier whose default options are gone is withdrawn instead of retuned. Defaults are Haiku 5.5 (LOW), Sonnet 5.5 (LOW–HIGH, effort rising per tier), Opus 5.5 (HIGH/CRITICAL) and Codex `gpt-6.1-sol` (opt-in through policy `preferences`, for example a cross-provider Tester). Prices in this registry are **relative cost units** for ordering and budgets, not billed currency. `benchmark_id` marks the defaults as unevaluated; replace it after a held-out pilot.
+
+Orchestrator loop (also in the team-orchestration skill):
+
+```bash
+# 1. Save orchestrator_capabilities output to catalog.json (no search filter).
+python3 scripts/development_harness.py --json plan --task "..." --t3-catalog catalog.json
+python3 scripts/development_harness.py --json create --repository . --revision COMMIT_SHA --policy POLICY.json --task "..." --t3-catalog catalog.json
+# 2. Repeat until the status is terminal:
+python3 scripts/development_harness.py --json t3-dispatch RUN_ID --catalog catalog.json
+#    -> send .delegate_task as delegate_task arguments, save the child's final message
+python3 scripts/development_harness.py --json t3-submit RUN_ID ATTEMPT_ID --output child.txt
+```
+
+`t3-dispatch` claims one stage and prints `delegate_task` arguments (title, role, `mode: wait`, timeout, `clientRequestId` = attempt ID, target and prompt). When no stage is pending it runs the trusted gates and returns the resulting status (`READY_FOR_REVIEW`, `REPAIRING`, `BLOCKED`). Children work directly in the harness-owned candidate checkout under the state directory, never in the user's checkout, and must end with a `<<<HARNESS_RESULT ... HARNESS_RESULT>>>` JSON block containing only `status`, `summary`, `artifacts` and `issues`. The controller stamps run/attempt IDs, input hash, candidate and usage. A missing or malformed block, extra fields, writes outside the role's paths, protected-path edits or Git history changes block the run. Duplicate identical submissions are idempotent. `t3-heartbeat RUN_ID ATTEMPT_ID` extends a long child's lease. `cancel` stops the run, but T3 children must be stopped by the orchestrator with `task_cancel`.
+
+Limits of this transport: T3 children run with the orchestrator's T3 permissions rather than in the Docker sandbox, so path rules are enforced when the result is integrated, not by mounts. Edits a child makes outside the candidate checkout are not detected. T3 exposes no per-child token usage, so each attempt charges its full reservation (`min(attempt_tokens, max_tokens)` tokens). Gates still need the digest-pinned Docker image from the policy; `image`, `network` and `limits` apply to them, and `bridge` is ignored by T3 dispatch.
 
 ## Create and run
 
@@ -117,7 +140,7 @@ The controller initially runs only one worker at a time per run. Separate runs h
 
 The container entrypoint receives one UTF-8 JSON document on stdin and returns one JSON document on stdout. Diagnostics belong on stderr (also retained in bounded execution evidence). Capabilities receive `{schema_version: 1, action: "capabilities"}` and return `{schema_version: 1, targets: [...]}` using the registry fields above. A nonzero exit, malformed JSON or invalid result blocks the run conservatively.
 
-Execution envelopes include schema/run/task/attempt IDs, role, objective/instruction, dependency IDs, source and candidate revisions, policy/contract hashes, predecessor artifacts, previous failure diagnostics, selected target, risk reasons, writable paths, accepted criteria, token/cost limits and timeout. Envelopes are bounded to 64 KiB; oversized handoffs block rather than silently losing context.
+Execution envelopes include schema/run/task/attempt IDs, transport (`docker` or `t3`), role, objective/instruction, dependency IDs, source and candidate revisions, policy/contract hashes, predecessor artifacts, previous failure diagnostics, selected target, risk reasons, writable paths, accepted criteria, token/cost limits and timeout. Envelopes are bounded to 64 KiB; oversized handoffs block rather than silently losing context.
 
 Every result has exactly:
 
