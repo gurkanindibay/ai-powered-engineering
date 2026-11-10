@@ -10,7 +10,7 @@ Overall assessment: **mixed, with important unverified behavior**. Small runtime
 
 Assessment covered `apps/runtime/AuditGuard`, `apps/runtime/TaskPilot`, `factory/DevFactory`, and `apps/development-time/SitePulse` (Rust backend, Flutter, Python harness, and browser E2E). Test counts below are test declarations or runner output, not unique requirements, and should not be summed as a single “coverage percentage.”
 
-Execution was performed locally on 2026-11-10. The three .NET suites and SitePulse harness suite passed. SitePulse gates were attempted with DB and GUI explicitly skipped; Rust build, Clippy, Rust tests, money fixtures, Flutter analyze, and Flutter tests failed to start/finish because the filesystem had no space during compilation/tool setup. Those are **inconclusive infrastructure failures**, not evidence that those tests fail functionally. Database/API/schema and GUI gates were explicitly skipped in that run.
+Execution was performed locally on 2026-11-10. The three .NET suites and SitePulse harness suite passed. The first SitePulse gate attempt had DB and GUI explicitly skipped; Rust build, Clippy, Rust tests, money fixtures, Flutter analyze, and Flutter tests stopped because the filesystem ran out of space. Those results were **inconclusive infrastructure failures**, not functional test failures. After cleaning generated build/temp artifacts, the full Flutter suite was rerun successfully (280 tests). Database/API/schema and GUI gates remain unverified in this environment.
 
 ## Case coverage
 
@@ -20,10 +20,11 @@ Execution was performed locally on 2026-11-10. The three .NET suites and SitePul
 | TaskPilot | 13 tests, all passed; domain item, JSON repository, and service workflow | Reasonable unit/workflow coverage for core task behavior; integration and failure-mode breadth is unclear. |
 | DevFactory | 15 tests, all passed; agent, diagnostics, graph, AST gate, and workspace sandbox | Good coverage of selected factory primitives. No evidence here of end-to-end factory runs or broad failure/recovery behavior. |
 | SitePulse harness | 88 Python unit tests, all passed in 1.433s | Strong regression coverage for harness and static-lint rules, but these tests validate tooling more than user-facing product behavior. |
-| SitePulse backend / Flutter | Runner and source inventory show extensive Rust integration/unit and Flutter widget/domain suites; current run could not execute due to disk exhaustion | Potentially broad, but current functional status is unknown until rerun with adequate disk. |
+| SitePulse backend | Runner and source inventory show extensive Rust unit/integration suites; the Rust gates stopped during the disk-exhaustion run | Broad declared coverage, but current functional status remains unknown until rerun. |
+| SitePulse Flutter | 280 tests passed in the full Flutter suite after cleanup | Broad widget/domain/controller checks; the follow-up additions cover several flows previously listed as gaps. |
 | SitePulse GUI | 83/83 catalogued scenarios have a test, from 94 functions / 96 executions in the 2026-11-07 report | Catalogue traceability is strong. Effective behavior confirmation is weaker: 53 expected passes, 43 xfails; 28 scenarios are xfail-only. |
 
-The GUI gap report also identifies roughly 20 existing UI features with no scenario. Examples include card payment/3-D Secure, manual cash recording, house-type create/delete, capital-project validation, household-member edit/delete, and bank reconciliation entry points. It reports only Chrome desktop coverage, with 375px mobile limited to a smoke test; accessibility assertions, large-dataset performance, browser concurrency, and input-hardening checks are absent.
+The GUI gap report (dated 2026-11-07) also identifies roughly 20 existing UI features with no **browser** scenario. Several now have Flutter widget coverage, including hosted card-payment lifecycle, manual cash recording, house-type UI create/delete, capital-project invalid input, SaaS plan/status editing, and payment-stream filters/search. The GUI report lists only Chrome desktop coverage, with 375px mobile limited to a smoke test; accessibility assertions, large-dataset performance, browser concurrency, and input-hardening checks are absent. Browser-level gaps should not be treated as Flutter widget coverage gaps.
 
 ## Performance
 
@@ -50,11 +51,26 @@ No product runtime/load benchmark was performed. The GUI report explicitly recor
 **Limits and risks**
 
 - No line/branch coverage data was generated, so unexecuted code cannot be quantified.
-- SitePulse’s latest local full check is inconclusive due to disk exhaustion. PostgreSQL-dependent and GUI checks were skipped in that run.
+- SitePulse’s backend gates remain inconclusive due to disk exhaustion. PostgreSQL-dependent and GUI checks were skipped in that run; the Flutter-only suite later passed.
 - The latest detailed GUI evidence is dated 2026-11-07 and should be refreshed after product or test changes. It reports 28 xfail-only scenarios and numerous defects/missing features; “all scenarios have a test” overstates functional coverage if interpreted as passing behavior.
 - The GUI report lists no browser accessibility checks, no broad mobile run, no UI input-hardening checks, no two-user browser concurrency, and no large-dataset performance checks.
 - SitePulse `COMPLETION_STATUS.md` says all 25 RTM requirements and all 25 task DAG nodes remain UNVERIFIED until CI evidence is recorded. It also documents that prior 100% completion claims were invalidated.
 - The repository test plan describes change-driven selection and targeted gates, but this assessment did not test whether every change-to-gate mapping is complete.
+
+## Coverage follow-up — 2026-11-10
+
+The follow-up added six test cases and extended the existing SaaS site-edit case:
+
+- Hosted card payment: creates an intent, polls provider status, confirms capture/receipt, and asserts that the app collects no card fields.
+- Manual collection: rejects an empty amount, submits a valid amount, and opens the resulting receipt.
+- House-type management: validates required input, creates a tariff, then confirms deletion through the UI.
+- Capital-project wizard: rejects an empty title and zero budget without creating a project.
+- Payment tracking: checks filter/search interactions and clear actions, plus the API request query contract.
+- SaaS administration: edits site status and plan through the UI, alongside the existing name edit.
+
+The manual-payment test surfaced a 3.3 px overflow in the receipt header. The header now constrains its title column so it wraps within the available width.
+
+Verification after these additions: all 280 Flutter tests passed. `flutter_reuse_inventory.py --check`, `ui_style_lint.py`, and `testid_lint.py` passed. Full `flutter analyze` reports 368 informational diagnostics and zero warnings/errors, so it exits nonzero under the current configuration; the changed files had no warnings.
 
 ## Recommendations
 
