@@ -196,6 +196,43 @@ void main() {
       expect(find.text('₺1.800,00'), findsOneWidget);
     });
 
+    testWidgets('house type management validates, creates, and deletes a tariff through the UI', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1024, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: DashboardScreen(controller: controller))));
+      await tester.pumpAndSettle();
+      final tariffsButton = find.text('Konut Tipleri & Tarifeler').first;
+      await tester.ensureVisible(tariffsButton);
+      await tester.pumpAndSettle();
+      await tester.tap(tariffsButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Yeni Konut Tipi Ekle').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Kaydet'));
+      await tester.pumpAndSettle();
+      expect(find.text('Lütfen Konut Tipi adını giriniz (örn: 2+1, 3+1).'), findsOneWidget);
+
+      await tester.enterText(find.byWidgetPredicate((widget) => widget is TextField && widget.decoration?.labelText == 'Konut Tipi Adı (örn: 1+1, 2+1, 3+1, Dubleks)'), 'Penthouse');
+      await tester.enterText(find.byWidgetPredicate((widget) => widget is TextField && widget.decoration?.labelText == 'Aylık Aidat Tutarı (₺)'), '3250.50');
+      await tester.enterText(find.byWidgetPredicate((widget) => widget is TextField && widget.decoration?.labelText == 'Açıklama (Opsiyonel)'), 'Üst kat daire');
+      await tester.tap(find.text('Kaydet'));
+      await tester.pumpAndSettle();
+
+      expect(controller.houseTypes.any((item) => item.typeName == 'Penthouse'), isTrue);
+      expect(find.text('Penthouse'), findsOneWidget);
+      expect(find.text('Üst kat daire'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Tarifeyi sil').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Penthouse tarifesini silmek istediğinize emin misiniz?'), findsOneWidget);
+      await tester.tap(find.text('Sil').last);
+      await tester.pumpAndSettle();
+      expect(controller.houseTypes.any((item) => item.typeName == 'Penthouse'), isFalse);
+      expect(find.text('Penthouse'), findsNothing);
+    });
+
     testWidgets('Manuel Sakin Ekle dialog presents blocks in dropdown and allows block selection', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1024, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));

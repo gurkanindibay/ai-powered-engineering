@@ -506,6 +506,18 @@ void main() {
     await tester.enterText(nameField, 'Begonya Modern Sitesi');
     await tester.pumpAndSettle();
 
+    final siteStatus = find.byWidgetPredicate((widget) => widget is DropdownButtonFormField<String> && widget.decoration.labelText == 'Durum');
+    await tester.tap(siteStatus);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('SUSPENDED (Askıda)').last);
+    await tester.pumpAndSettle();
+
+    final sitePlan = find.byWidgetPredicate((widget) => widget is DropdownButtonFormField<String> && widget.decoration.labelText == 'Paket / Plan');
+    await tester.tap(sitePlan);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PRO').last);
+    await tester.pumpAndSettle();
+
     final saveBtn = find.byKey(const Key('btn_save_site_edit'));
     expect(saveBtn, findsOneWidget);
     await tester.ensureVisible(saveBtn);
@@ -514,6 +526,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(controller.saasSites.firstWhere((s) => s.id == targetSite.id).name, 'Begonya Modern Sitesi');
+    expect(controller.saasSites.firstWhere((s) => s.id == targetSite.id).status, 'SUSPENDED');
+    expect(controller.saasSites.firstWhere((s) => s.id == targetSite.id).planType, 'PRO');
     expect(find.text('Begonya Modern Sitesi'), findsWidgets);
   });
 
