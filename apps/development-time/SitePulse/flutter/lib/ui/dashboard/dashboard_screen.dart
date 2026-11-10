@@ -1508,7 +1508,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          '${m.fullName} • ${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
+                                          '${m.fullName} • ${HouseholdRelationship.labelFor(m.relationship)}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
                                           style: TextStyle(
                                             color: AppColors.textSecondary(context),
                                             fontSize: 12,
@@ -1985,7 +1985,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      '${m.fullName} • ${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
+                                      '${m.fullName} • ${HouseholdRelationship.labelFor(m.relationship)}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
                                       style: TextStyle(
                                         color: AppColors.textSecondary(context),
                                         fontSize: 12,
@@ -2759,7 +2759,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     AppFullscreenPage.pushConfirmation(
       context: context,
       title: 'Hane Sakinini Sil',
-      message: '${member.fullName} (${member.relationship}) adlı hane sakini kaydını ${ho.block} Blok Daire ${ho.unitNo} listesinden silmek istediğinize emin misiniz?',
+      message: '${member.fullName} (${HouseholdRelationship.labelFor(member.relationship)}) adlı hane sakini kaydını ${ho.block} Blok Daire ${ho.unitNo} listesinden silmek istediğinize emin misiniz?',
       confirmLabel: 'Evet, Sil',
       cancelLabel: AppStrings.cancel,
       confirmColor: AppColors.accentRed,
@@ -3870,7 +3870,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.bold),
                                               ),
                                               Text(
-                                                '${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}${m.email.isNotEmpty ? ' • ${m.email}' : ''}',
+                                                '${HouseholdRelationship.labelFor(m.relationship)}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}${m.email.isNotEmpty ? ' • ${m.email}' : ''}',
                                                 style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                               ),
                                             ],
@@ -4140,7 +4140,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.bold),
                                             ),
                                             Text(
-                                              '${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}${m.email.isNotEmpty ? ' • ${m.email}' : ''}',
+                                              '${HouseholdRelationship.labelFor(m.relationship)}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}${m.email.isNotEmpty ? ' • ${m.email}' : ''}',
                                               style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                             ),
                                           ],
@@ -4694,7 +4694,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                           Text(
-                            r.relationship,
+                            HouseholdRelationship.labelFor(r.relationship),
                             style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                           ),
                           if (r.phone.isNotEmpty || r.email.isNotEmpty)

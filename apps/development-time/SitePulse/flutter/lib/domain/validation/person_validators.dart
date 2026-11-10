@@ -29,3 +29,17 @@ String? validateLandShare(String? value) {
   final n = int.tryParse(v);
   return (n != null && n > 0) ? null : 'Arsa payı pozitif bir tam sayı olmalı.';
 }
+
+/// T.C. Kimlik No (person F10): 11 digits, the first not 0, with the two check
+/// digits the server also verifies (`is_valid_tckn`).
+String? validateTckn(String? value) {
+  final v = (value ?? '').replaceAll(RegExp(r'\s'), '');
+  if (v.isEmpty) return 'Kimlik numarası gerekli.';
+  if (!RegExp(r'^[1-9]\d{10}$').hasMatch(v)) return 'Kimlik numarası 11 haneli olmalı ve 0 ile başlamamalı.';
+  final d = v.split('').map(int.parse).toList();
+  final odd = d[0] + d[2] + d[4] + d[6] + d[8];
+  final even = d[1] + d[3] + d[5] + d[7];
+  final tenth = (odd * 7 + 100 - even) % 10;
+  final eleventh = d.take(10).fold<int>(0, (a, b) => a + b) % 10;
+  return d[9] == tenth && d[10] == eleventh ? null : 'Kimlik numarası geçerli değil.';
+}

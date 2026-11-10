@@ -255,6 +255,35 @@ extension _Registration on _OwnersResidentsModulePageState {
 
                     if (!ctx.mounted) return;
 
+                    // F9: warn before a second record of someone the site already knows.
+                    final duplicates = await widget.controller.findPossibleDuplicates(
+                      fullName: ownerName,
+                      email: ownerEmailCtrl.text.trim(),
+                      phone: ownerPhoneCtrl.text.trim(),
+                    );
+                    if (duplicates.isNotEmpty) {
+                      if (!ctx.mounted) return;
+                      final listed = duplicates
+                          .take(5)
+                          .map((d) => '• ${d.person.fullName} (${d.reasonText})')
+                          .join('\n');
+                      final proceed = await AppFullscreenPage.pushConfirmation(
+                        context: ctx,
+                        title: 'Bu kişi zaten kayıtlı olabilir',
+                        message: 'Sitede benzer kişiler var:\n$listed\n\n'
+                            'Aynı kişiyse yeni kayıt açmayın; dairesine "Mevcut kişiyi seç" ile taşınmayı kullanın. '
+                            'Farklı bir kişiyse kayda devam edebilirsiniz.',
+                        confirmLabel: 'Yine de kaydet',
+                        cancelLabel: AppStrings.cancel,
+                        confirmColor: AppColors.accentOrange,
+                        icon: Icons.people_alt_outlined,
+                        iconColor: AppColors.accentOrange,
+                      );
+                      if (proceed != true) return;
+                    }
+
+                    if (!ctx.mounted) return;
+
                     final isResident = occupancyStatus == 'OWNER_OCCUPIED';
                     final isTenantOccupied = occupancyStatus == 'TENANT_OCCUPIED';
 
@@ -329,7 +358,11 @@ extension _Registration on _OwnersResidentsModulePageState {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (formError != null) ...[
-                    Container(
+                    // U11: a refused registration is announced, not only coloured red.
+                    Semantics(
+                      liveRegion: true,
+                      label: 'Hata: ${formError!}',
+                      child: ExcludeSemantics(child: Container(
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
@@ -349,6 +382,7 @@ extension _Registration on _OwnersResidentsModulePageState {
                           ),
                         ],
                       ),
+                    )),
                     ),
                   ],
 

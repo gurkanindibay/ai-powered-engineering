@@ -21,6 +21,7 @@ import 'resident_directory.dart';
 import 'people_directory_page.dart';
 import '../../domain/services/person_directory_api.dart';
 import '../design_system/sp_filter_chip.dart';
+import '../design_system/sp_semantics.dart';
 import '../design_system/sp_tone.dart';
 
 part 'owners_residents_unit_card.dart';

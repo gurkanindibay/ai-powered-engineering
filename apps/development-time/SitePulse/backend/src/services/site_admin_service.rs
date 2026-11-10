@@ -269,6 +269,22 @@ pub fn validate_phone(phone: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The code a block is registered under: "a blok", "A-Blok" and "A" are all `A`;
+/// an empty name is `A`.
+pub fn block_code(name: &str) -> String {
+    let code = name
+        .to_uppercase()
+        .replace("BLOK", "")
+        .replace(['-', '_', ' '], "")
+        .trim()
+        .to_string();
+    if code.is_empty() {
+        "A".to_string()
+    } else {
+        code
+    }
+}
+
 impl SiteAdminService {
     pub fn new(state: AppState) -> Self {
         Self { state }
@@ -307,18 +323,7 @@ impl SiteAdminService {
             }
         }
 
-        let clean_block = request
-            .block
-            .to_uppercase()
-            .replace("BLOK", "")
-            .replace(['-', '_', ' '], "")
-            .trim()
-            .to_string();
-        let effective_clean_block = if clean_block.is_empty() {
-            "A".to_string()
-        } else {
-            clean_block
-        };
+        let effective_clean_block = block_code(&request.block);
         let formatted_block_name = format!("{} Blok", effective_clean_block);
 
         let effective_floor = if request.floor > 0 {

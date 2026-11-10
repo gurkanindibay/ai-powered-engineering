@@ -260,7 +260,7 @@ extension _UnitCard on _OwnersResidentsModulePageState {
                   child: Row(
                     children: [
                       Expanded(
-                        child: testId('module_tab_residents_${ho.unitId}', InkWell(
+                        child: selectableSemantics(selected: cardTab == 0, child: testId('module_tab_residents_${ho.unitId}', InkWell(
                           key: Key('module_tab_residents_${ho.unitId}'),
                           onTap: () => _update(() => _unitTabs[ho.unitId] = 0),
                           borderRadius: BorderRadius.circular(8),
@@ -290,11 +290,11 @@ extension _UnitCard on _OwnersResidentsModulePageState {
                               ],
                             ),
                           ),
-                        )),
+                        ))),
                       ),
                       const SizedBox(width: 4),
                       Expanded(
-                        child: testId('module_tab_owner_${ho.unitId}', InkWell(
+                        child: selectableSemantics(selected: cardTab == 1, child: testId('module_tab_owner_${ho.unitId}', InkWell(
                           key: Key('module_tab_owner_${ho.unitId}'),
                           onTap: () => _update(() => _unitTabs[ho.unitId] = 1),
                           borderRadius: BorderRadius.circular(8),
@@ -324,7 +324,7 @@ extension _UnitCard on _OwnersResidentsModulePageState {
                               ],
                             ),
                           ),
-                        )),
+                        ))),
                       ),
                     ],
                   ),
@@ -565,7 +565,7 @@ extension _UnitCard on _OwnersResidentsModulePageState {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        '${m.fullName} • ${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
+                                        '${m.fullName} • ${HouseholdRelationship.labelFor(m.relationship)}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
                                         style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                         overflow: TextOverflow.ellipsis,
                                       ),

@@ -19,6 +19,13 @@ use crate::services::account_activation_service::{ActivationDelivery, Activation
 use crate::services::person_directory_service::{
     DirectoryPage, DirectoryQuery, PersonDirectoryError, PersonDirectoryService, PersonProfile,
 };
+use crate::services::person_import_service::{
+    ImportReport, ImportRequest, PersonImportError, PersonImportService,
+};
+use crate::services::person_record_service::{
+    ContactPreferences, DuplicateCandidate, DuplicateQuery, PersonRecordError, PersonRecordService,
+    SetNationalIdRequest,
+};
 use crate::services::site_admin_service as service;
 use crate::services::AccountActivationService;
 use crate::services::SiteAdminService;
@@ -338,4 +345,113 @@ pub async fn export_persons(
         csv,
     )
         .into_response())
+}
+
+fn record_error(e: PersonRecordError) -> AppError {
+    match e {
+        PersonRecordError::NotFound => AppError::not_found("Kişi bulunamadı."),
+        PersonRecordError::InvalidNationalId => {
+            AppError::validation("Geçerli bir T.C. kimlik numarası giriniz (11 hane).")
+        }
+        PersonRecordError::NationalIdInUse => {
+            AppError::conflict("Bu kimlik numarası sitede başka bir kişiye kayıtlı.")
+        }
+        PersonRecordError::InvalidPreference(field) => AppError::validation(match field {
+            "preferred_channel" => "Geçersiz iletişim kanalı.",
+            "preferred_language" => "Geçersiz dil.",
+            "emergency_contact" => "Acil durum kişisinin adı ve telefonu birlikte girilmelidir.",
+            "emergency_contact_phone" => "Acil durum telefonu geçerli değil.",
+            _ => "Acil durum kişisinin adı çok uzun.",
+        }),
+        PersonRecordError::Unavailable => AppError::unavailable(e.to_string()),
+        PersonRecordError::Storage(_) => AppError::internal(e.to_string()),
+    }
+}
+
+fn person_id_of(raw: &str) -> Result<i64, AppError> {
+    crate::db::parse_id_to_i64(raw).ok_or_else(|| AppError::not_found("Kişi bulunamadı."))
+}
+
+/// Records or clears a person's national ID (person F10). The route needs
+/// `PersonIdentityManage` and a recent step-up; the action is audited.
+pub async fn set_person_national_id(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Path(person_id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<SetNationalIdRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let site_id = q.site_id.unwrap_or_default();
+    let id = person_id_of(&person_id)?;
+    let masked = PersonRecordService::new(state)
+        .set_national_id(&ctx, &site_id, id, payload.national_id.as_deref())
+        .await
+        .map_err(record_error)?;
+    Ok(Json(serde_json::json!({ "national_id_masked": masked })))
+}
+
+/// Saves a person's preferred channel, language and emergency contact (person F7).
+pub async fn update_person_preferences(
+    State(state): State<AppState>,
+    Path(person_id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<ContactPreferences>,
+) -> Result<Json<ContactPreferences>, AppError> {
+    let site_id = q.site_id.unwrap_or_default();
+    let id = person_id_of(&person_id)?;
+    PersonRecordService::new(state)
+        .update_preferences(&site_id, id, payload)
+        .await
+        .map(Json)
+        .map_err(record_error)
+}
+
+/// People of the site who may be the one being entered (person F9). A POST, so a
+/// national ID never appears in a URL or an access log.
+pub async fn check_person_duplicates(
+    State(state): State<AppState>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<DuplicateQuery>,
+) -> Result<Json<Vec<DuplicateCandidate>>, AppError> {
+    let site_id = q.site_id.unwrap_or_default();
+    PersonRecordService::new(state)
+        .duplicates(&site_id, &payload)
+        .await
+        .map(Json)
+        .map_err(record_error)
+}
+
+fn import_error(e: PersonImportError) -> AppError {
+    match e {
+        PersonImportError::Storage(_) => AppError::internal(e.to_string()),
+        PersonImportError::Empty => {
+            AppError::validation("Dosyada başlık satırından sonra kayıt yok.")
+        }
+        PersonImportError::TooManyRows => {
+            AppError::validation("Bir dosyada en fazla 500 satır olabilir.")
+        }
+        PersonImportError::TooLarge => AppError::validation("Dosya 1 MB'tan büyük olamaz."),
+        PersonImportError::MissingColumns(columns) => {
+            AppError::validation(format!("Eksik sütunlar: {columns}. Şablonu kullanın."))
+        }
+        PersonImportError::UnterminatedQuote(line) => {
+            AppError::validation(format!("{line}. satırda kapanmamış tırnak var."))
+        }
+    }
+}
+
+/// Checks a CSV of owners and, unless `dry_run`, registers them when no row has an
+/// error (person F8).
+pub async fn import_persons(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<ImportRequest>,
+) -> Result<Json<ImportReport>, AppError> {
+    let site_id = q.site_id.unwrap_or_default();
+    PersonImportService::new(state)
+        .import(&ctx, &site_id, &payload.csv, payload.dry_run)
+        .await
+        .map(Json)
+        .map_err(import_error)
 }

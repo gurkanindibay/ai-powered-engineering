@@ -171,9 +171,13 @@ AREAS: Dict[str, AreaSpec] = {
         rust_tests=[
             "shared_rules_tests",
             "person_security_tests",
+            "person_records_tests",
         ],
         rust_lib_tests=[
             "account_activation_service::",
+            "person_record_service::",
+            "person_import_service::",
+            "person_directory_service::",
             "joint_liability::",
             "assembly_vote::",
             "dunning::",

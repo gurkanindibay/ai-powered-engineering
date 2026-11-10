@@ -14,6 +14,7 @@ import '../design_system/sp_guidance_card.dart';
 import '../design_system/sp_status_badge.dart';
 import '../design_system/sp_tone.dart';
 import '../theme/app_theme.dart';
+import 'person_import_page.dart';
 import 'person_profile_page.dart';
 
 /// The site's people (person module U3/U4/U8/F8): search, role and activation
@@ -135,6 +136,14 @@ class _PeopleDirectoryPageState extends State<PeopleDirectoryPage> {
     if (mounted) _reload();
   }
 
+  Future<void> _openImport() async {
+    final imported = await AppFullscreenPage.push<bool>(
+      context: context,
+      builder: (_) => PersonImportPage(api: widget.api),
+    );
+    if (imported == true && mounted) _reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppFullscreenPage(
@@ -142,6 +151,12 @@ class _PeopleDirectoryPageState extends State<PeopleDirectoryPage> {
       subtitle: _loading && _items.isEmpty ? 'Yükleniyor…' : '$_total kişi',
       icon: const Icon(Icons.badge_outlined),
       actions: [
+        testId('people_import_btn', OutlinedButton.icon(
+          key: const Key('people_import_btn'),
+          onPressed: _openImport,
+          icon: const Icon(Icons.upload_file_outlined, size: 16),
+          label: const Text('İçe aktar'),
+        ), label: 'Kişileri CSV dosyasından içe aktar'),
         testId('people_export_btn', OutlinedButton.icon(
           key: const Key('people_export_btn'),
           onPressed: _exporting ? null : _export,
@@ -188,7 +203,7 @@ class _PeopleDirectoryPageState extends State<PeopleDirectoryPage> {
               message: 'Aramayı veya filtreleri değiştirin.',
             ),
           for (final person in _items) _PersonRow(person: person, onTap: () => _openProfile(person)),
-          if (_loading) const Padding(padding: EdgeInsets.all(AppSpacing.lg), child: Center(child: CircularProgressIndicator())),
+          if (_loading) const Padding(padding: EdgeInsets.all(AppSpacing.lg), child: Center(child: CircularProgressIndicator(semanticsLabel: 'Yükleniyor'))),
           if (_hasMore && !_loading)
             testId('people_load_more_btn', TextButton(
               key: const Key('people_load_more_btn'),

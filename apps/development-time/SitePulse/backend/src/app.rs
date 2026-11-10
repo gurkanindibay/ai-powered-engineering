@@ -56,6 +56,10 @@ routes! {
     get "/api/v1/site-admin/persons" => handlers::list_persons, Require(PersonRead);
     get "/api/v1/site-admin/persons/export" => handlers::export_persons, Require(PersonExport);
     get "/api/v1/site-admin/persons/:person_id" => handlers::get_person_profile, Require(PersonRead);
+    post "/api/v1/site-admin/persons/duplicate-check" => handlers::check_person_duplicates, Require(PersonRead);
+    post "/api/v1/site-admin/persons/import" => handlers::import_persons, Require(PersonManage);
+    put "/api/v1/site-admin/persons/:person_id/national-id" => handlers::set_person_national_id, Require(PersonIdentityManage);
+    put "/api/v1/site-admin/persons/:person_id/preferences" => handlers::update_person_preferences, Require(PersonManage);
     post "/api/v1/site-admin/units/:id/move-out" => handlers::move_out_resident, Require(OccupancyManage);
     post "/api/v1/site-admin/units/:id/move-in" => handlers::move_in_resident, Require(OccupancyManage);
     get "/api/v1/site-admin/units/:id/occupancy-history" => handlers::get_unit_occupancy_history, Require(PersonRead);

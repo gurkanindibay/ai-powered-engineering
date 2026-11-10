@@ -300,7 +300,7 @@ extension _OwnerEdits on _OwnersResidentsModulePageState {
                                             style: TextStyle(color: AppColors.textPrimary(ctx), fontSize: 12, fontWeight: FontWeight.bold),
                                           ),
                                           Text(
-                                            '${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
+                                            '${HouseholdRelationship.labelFor(m.relationship)}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
                                             style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12),
                                           ),
                                         ],
