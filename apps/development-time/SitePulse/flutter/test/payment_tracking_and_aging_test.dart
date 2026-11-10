@@ -1,10 +1,15 @@
 @Tags(['finance'])
 library;
+import 'dart:convert';
+
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
+import 'package:sitepulse/domain/services/api_client.dart';
 import 'package:sitepulse/ui/components/bank_statement_reconciliation_page.dart';
 import 'package:sitepulse/ui/components/dues_management_view.dart';
 import 'package:sitepulse/ui/components/manager_cockpit_view.dart';
@@ -34,6 +39,36 @@ void main() {
       expect(first.receiptNumber, contains('TAH-'));
       expect(first.payerName.isNotEmpty, isTrue);
       expect(first.amount.toDouble(), greaterThan(0));
+    });
+
+    test('payment stream query includes selected filters and search term', () async {
+      final originalTransport = ApiClient.transport;
+      addTearDown(() => ApiClient.transport = originalTransport);
+      final requests = <http.Request>[];
+      ApiClient.transport = MockClient((request) async {
+        requests.add(request);
+        if (request.url.path == '/api/v1/payments/stream') {
+          return http.Response(jsonEncode({
+            'entries': [], 'total_volume': '0.00', 'settled_volume': '0.00',
+            'unmatched_volume': '0.00', 'total_count': 0,
+          }), 200, headers: {'content-type': 'application/json'});
+        }
+        return http.Response('[]', 200);
+      });
+
+      final networkController = DashboardController(isTestMode: false);
+      addTearDown(networkController.dispose);
+      await networkController.fetchPaymentStream(
+        siteId: 'site-1', channel: 'MANUAL_CASH', payerRole: 'TENANT',
+        settlementStatus: 'UNMATCHED', search: 'TAH-2026-000099',
+      );
+
+      final streamRequests = requests.where((request) => request.url.path == '/api/v1/payments/stream').toList();
+      expect(streamRequests, hasLength(1));
+      expect(streamRequests.single.url.queryParameters, {
+        'site_id': 'site-1', 'channel': 'MANUAL_CASH', 'payer_role': 'TENANT',
+        'settlement_status': 'UNMATCHED', 'search': 'TAH-2026-000099',
+      });
     });
 
     test('when fetching debt aging report then returns brackets with 0-30, 31-60, and 60+ days', () async {
@@ -179,6 +214,78 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(BankStatementReconciliationPage), findsOneWidget);
+    });
+
+    testWidgets('manual cash collection validates the amount and issues a receipt', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+      await controller.fetchPaymentStream();
+      await controller.fetchDebtAgingReport();
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: PaymentTrackingPage(controller: controller))));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Manuel Tahsilat Girişi'));
+      await tester.pumpAndSettle();
+      expect(find.text('Manuel Tahsilat Girişi'), findsOneWidget);
+      await tester.tap(find.text('Tahsilatı Kaydet & Makbuz Üret'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tutar zorunludur'), findsOneWidget);
+
+      await tester.enterText(find.byWidgetPredicate((widget) => widget is TextField && widget.decoration?.hintText == '1400,00'), '1600,75');
+      await tester.enterText(find.byWidgetPredicate((widget) => widget is TextField && widget.decoration?.hintText == 'Örn: Kerem Yılmaz'), 'Kerem Yılmaz');
+      await tester.tap(find.text('Tahsilatı Kaydet & Makbuz Üret'));
+      await tester.pumpAndSettle();
+      expect(find.text('Dijital Tahsilat Makbuzu'), findsOneWidget);
+      expect(find.text('TAH-2026-000099'), findsOneWidget);
+    });
+
+    testWidgets('payment stream filters and search can be changed and cleared', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+      await controller.fetchPaymentStream();
+      await controller.fetchDebtAgingReport();
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: PaymentTrackingPage(controller: controller))));
+      await tester.pumpAndSettle();
+
+      final channelFilter = find.text('Kanal: Tüm Kanallar');
+      await tester.ensureVisible(channelFilter);
+      await tester.tap(channelFilter);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter_channel_option_MANUAL_CASH')));
+      await tester.pumpAndSettle();
+      expect(find.text('Kanal: Elden Nakit'), findsOneWidget);
+
+      final roleFilter = find.text('Rol: Tüm Roller');
+      await tester.ensureVisible(roleFilter);
+      await tester.tap(roleFilter);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter_role_option_TENANT')));
+      await tester.pumpAndSettle();
+      expect(find.text('Rol: Kiracı'), findsOneWidget);
+
+      final settlementFilter = find.text('Durum: Tüm Durumlar');
+      await tester.ensureVisible(settlementFilter);
+      await tester.tap(settlementFilter);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter_settlement_option_UNMATCHED')));
+      await tester.pumpAndSettle();
+      expect(find.text('Durum: Havuzda Bekleyen'), findsOneWidget);
+
+      final search = find.byWidgetPredicate((widget) => widget is TextField && widget.decoration?.hintText == 'Sakin adı, daire no, makbuz no veya açıklama ara...');
+      await tester.enterText(search, 'TAH-2026-000002');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Aramayı temizle'), findsOneWidget);
+      await tester.tap(find.text('Temizle'));
+      await tester.pumpAndSettle();
+      expect(find.text('Kanal: Tüm Kanallar'), findsOneWidget);
+      expect(find.text('Rol: Tüm Roller'), findsOneWidget);
+      expect(find.text('Durum: Tüm Durumlar'), findsOneWidget);
+      await tester.tap(find.byTooltip('Aramayı temizle'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Aramayı temizle'), findsNothing);
     });
 
     testWidgets('DuesManagementView contains Tahsilat & Kasa Takibi action button', (tester) async {
