@@ -53,6 +53,9 @@ routes! {
     put "/api/v1/site-admin/home-owners/:id" => handlers::update_home_owner, Require(PersonManage);
     delete "/api/v1/site-admin/home-owners/:id" => handlers::delete_home_owner, Require(PersonManage);
     post "/api/v1/site-admin/home-owners/:id/resend-activation" => handlers::resend_activation, Require(PersonManage);
+    get "/api/v1/site-admin/persons" => handlers::list_persons, Require(PersonRead);
+    get "/api/v1/site-admin/persons/export" => handlers::export_persons, Require(PersonExport);
+    get "/api/v1/site-admin/persons/:person_id" => handlers::get_person_profile, Require(PersonRead);
     post "/api/v1/site-admin/units/:id/move-out" => handlers::move_out_resident, Require(OccupancyManage);
     post "/api/v1/site-admin/units/:id/move-in" => handlers::move_in_resident, Require(OccupancyManage);
     get "/api/v1/site-admin/units/:id/occupancy-history" => handlers::get_unit_occupancy_history, Require(PersonRead);

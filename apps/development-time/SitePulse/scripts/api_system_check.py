@@ -89,7 +89,7 @@ CHECKS = [
     "receipt_pdf_and_verification", "card_payment_via_provider", "budget_accrual_legal_basis", "ledger_integrity_clean",
     "security_session_lifecycle", "transactional_audit", "audit_scope_and_privileges", "registration_repository_scope", "support_grant_lifecycle", "household_members_persisted", "invitation_atomic_registration",
     "finance_desk_over_http",
-    "person_tenant_isolation", "person_activation_lifecycle",
+    "person_tenant_isolation", "person_activation_lifecycle", "person_directory_and_export",
 ]
 
 
@@ -1048,7 +1048,49 @@ def check_person_activation_lifecycle(ctx: Context) -> Tuple[bool, str]:
                 f"archive {removed} account kept inactive {kept}")
 
 
+def check_person_directory_and_export(ctx: Context) -> Tuple[bool, str]:
+    """F1/U3/F8: directory search and paging, site-scoped profile, step-up audited export."""
+    db, base = ctx.backend.db_name, ctx.backend.base
+    suffix = str(time.time_ns())[-9:]
+    email = f"directory-{suffix}@example.com"
+    status, body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                        body=_owner_body(500 + int(suffix[-2:]), email, f"Directory Person {suffix}"))
+    if status != 201:
+        return False, f"registration {status} {body[:160]}"
+    found_status, found_body = http("GET", base + f"/api/v1/site-admin/persons?q=directory-{suffix}&page_size=5", token=ctx.manager)
+    page = json.loads(found_body) if found_status == 200 else {}
+    items = page.get("items", [])
+    found = len(items) == 1 and items[0]["email"] == email and items[0]["login"] == "PENDING" and items[0]["role"] == "HOME_OWNER"
+    pending_filter = http("GET", base + "/api/v1/site-admin/persons?login=PENDING&page_size=100", token=ctx.manager)
+    pending_ok = pending_filter[0] == 200 and any(i["email"] == email for i in json.loads(pending_filter[1])["items"])
+    bad_filter = http("GET", base + "/api/v1/site-admin/persons?role=ADMIN", token=ctx.manager)[0]
+    person_id = items[0]["person_id"] if items else 0
+    profile_status, profile_body = http("GET", base + f"/api/v1/site-admin/persons/{person_id}", token=ctx.manager)
+    units = json.loads(profile_body).get("units", []) if profile_status == 200 else []
+    profile_ok = any(u["relation"] == "OWNER" and u["active"] for u in units)
+    # Another site's person is not visible.
+    foreign = ctx.psql.run(db, f"""INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
+        VALUES ('Directory Site {suffix}', 'Bursa', 'directory-{suffix}', 'ACTIVE', 'STANDARD', CURRENT_DATE + 365) RETURNING id;""").strip()
+    foreign_person = ctx.psql.run(db, f"INSERT INTO persons (full_name, email, person_type, site_id) VALUES ('Foreign', 'foreign-{suffix}@example.com', 'HOME_OWNER', {foreign}) RETURNING id;").strip()
+    foreign_status = http("GET", base + f"/api/v1/site-admin/persons/{foreign_person}", token=ctx.manager)[0]
+    # Export: refused without a fresh password check, audited with one.
+    passwords = getattr(ctx.backend, "passwords", {})
+    plain = http("POST", base + "/api/v1/auth/login", body={"email": "mehmet.demir@begonya.com",
+                 "password": passwords.get("mehmet.demir@begonya.com", "mehmet123")})
+    unstepped = json.loads(plain[1])["access_token"] if plain[0] == 200 else ""
+    no_step_up = http("GET", base + "/api/v1/site-admin/persons/export", token=unstepped)
+    export_status, export_body = http("GET", base + f"/api/v1/site-admin/persons/export?q=directory-{suffix}", token=ctx.manager)
+    exported = export_status == 200 and email in export_body and export_body.startswith("\ufeffperson_id")
+    audited = ctx.psql.run(db, "SELECT count(*) FROM audit_events WHERE action='PERSON_DIRECTORY_EXPORTED';")
+    ok = (found and pending_ok and bad_filter == 400 and profile_ok and foreign_status == 404
+          and no_step_up[0] == 403 and "STEP_UP" in no_step_up[1] and exported and int(audited) >= 1)
+    return ok, (f"search {found}, pending filter {pending_ok}, bad filter {bad_filter}, profile owner {profile_ok}, "
+                f"foreign profile {foreign_status}, export without step-up {no_step_up[0]}, export {export_status} "
+                f"contains {exported}, audited {audited}")
+
+
 CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
+    "person_directory_and_export": check_person_directory_and_export,
     "person_tenant_isolation": check_person_tenant_isolation,
     "person_activation_lifecycle": check_person_activation_lifecycle,
     "invitation_atomic_registration":check_invitation_atomic_registration,

@@ -16,6 +16,9 @@ use crate::models::{
     UpdateHomeOwnerRequest,
 };
 use crate::services::account_activation_service::{ActivationDelivery, ActivationError};
+use crate::services::person_directory_service::{
+    DirectoryPage, DirectoryQuery, PersonDirectoryError, PersonDirectoryService, PersonProfile,
+};
 use crate::services::site_admin_service as service;
 use crate::services::AccountActivationService;
 use crate::services::SiteAdminService;
@@ -265,4 +268,74 @@ pub async fn create_block(
         .await
         .map(|res| (StatusCode::CREATED, Json(res)))
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+fn directory_error(e: PersonDirectoryError) -> AppError {
+    match e {
+        PersonDirectoryError::NotFound => AppError::not_found(e.to_string()),
+        PersonDirectoryError::InvalidFilter(_) => AppError::validation(e.to_string()),
+        PersonDirectoryError::Storage(_) => AppError::internal(e.to_string()),
+    }
+}
+
+/// The site's people with search, role and login filters and paging (person F1/U4).
+pub async fn list_persons(
+    State(state): State<AppState>,
+    Query(q): Query<DirectoryQuery>,
+) -> Result<Json<DirectoryPage>, AppError> {
+    let site_id = q.site_id.clone().unwrap_or_default();
+    PersonDirectoryService::new(state)
+        .directory(&site_id, &q)
+        .await
+        .map(Json)
+        .map_err(directory_error)
+}
+
+/// One person with every unit they own, rent or live in, over time (person U3).
+pub async fn get_person_profile(
+    State(state): State<AppState>,
+    Path(person_id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+) -> Result<Json<PersonProfile>, AppError> {
+    let site_id = q.site_id.unwrap_or_default();
+    let id = crate::db::parse_id_to_i64(&person_id)
+        .ok_or_else(|| AppError::not_found("Person not found"))?;
+    PersonDirectoryService::new(state)
+        .profile(&site_id, id)
+        .await
+        .map(Json)
+        .map_err(directory_error)
+}
+
+/// The filtered directory as CSV; needs step-up and is written to the audit log (person F8).
+pub async fn export_persons(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Query(q): Query<DirectoryQuery>,
+) -> Result<Response, AppError> {
+    let site_id = q.site_id.clone().unwrap_or_default();
+    let directory = PersonDirectoryService::new(state);
+    let (csv, rows) = directory
+        .export_csv(&site_id, &q)
+        .await
+        .map_err(directory_error)?;
+    directory
+        .record_export(&ctx, &site_id, rows)
+        .await
+        .map_err(directory_error)?;
+    tracing::info!(actor_id = %ctx.claims.sub, rows, "Person directory exported");
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "text/csv; charset=utf-8".to_string(),
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                "attachment; filename=\"sakinler.csv\"".to_string(),
+            ),
+        ],
+        csv,
+    )
+        .into_response())
 }

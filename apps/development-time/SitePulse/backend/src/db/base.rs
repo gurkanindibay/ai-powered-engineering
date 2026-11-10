@@ -338,3 +338,19 @@ pub async fn validate_runtime_role(pool: &Pool) -> DbResult<()> {
     }
     Ok(())
 }
+
+/// Where a service keeps its data, chosen once when the service is built, so each
+/// operation has a single storage path instead of branching on the pool itself.
+pub enum Storage {
+    Postgres(deadpool_postgres::Pool),
+    Memory,
+}
+
+impl Storage {
+    pub fn of(state: &crate::state::AppState) -> Self {
+        match state.pool.clone() {
+            Some(pool) => Self::Postgres(pool),
+            None => Self::Memory,
+        }
+    }
+}
