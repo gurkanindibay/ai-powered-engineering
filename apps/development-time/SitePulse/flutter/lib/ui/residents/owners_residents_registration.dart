@@ -211,7 +211,11 @@ extension _Registration on _OwnersResidentsModulePageState {
                     // U2: the same rules the server applies, stated before anything is sent.
                     final fieldError = validatePersonEmail(ownerEmailCtrl.text) ??
                         validateTrMobile(ownerPhoneCtrl.text) ??
-                        validateLandShare(landShareCtrl.text);
+                        validateLandShare(landShareCtrl.text) ??
+                        (occupancyStatus == 'TENANT_OCCUPIED'
+                            ? validatePersonEmail(tenantEmailCtrl.text, required: false) ??
+                                validateTrMobile(tenantPhoneCtrl.text, required: false)
+                            : null);
                     if (fieldError != null) {
                       setDlgState(() => formError = fieldError);
                       return;
@@ -300,7 +304,7 @@ extension _Registration on _OwnersResidentsModulePageState {
                       duesAmount: currentTariff?.duesAmount,
                       isResident: isResident,
                       role: isTenantOccupied ? 'TENANT' : 'OWNER',
-                      landShare: int.tryParse(landShareCtrl.text.trim()),
+                      landShare: parseLandShare(landShareCtrl.text),
                     );
 
                     // The dialog stays open until the server has answered; a refusal is shown here.
