@@ -118,7 +118,9 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
     {
         let rows = client
             .query(
-                "SELECT id, full_name, email, phone, person_type FROM persons",
+                // F6: the current role is derived from what the person holds now (V23).
+                "SELECT p.id, p.full_name, p.email, p.phone, r.derived_role, COALESCE(p.site_id::text, '') \
+                 FROM persons p JOIN v_person_roles r ON r.person_id = p.id",
                 &[],
             )
             .await?;
@@ -129,12 +131,14 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             let p_phone: Option<String> = row.get(3);
             let p_type: String = row.get(4);
             let role = Role::parse(&p_type)?;
+            let p_site: String = row.get(5);
 
             // Persons live in their own id namespace (`person-<id>`) so they can
             // never collide with, or overwrite, a real login account.
             let user = User {
                 id: format!("person-{}", p_id),
-                site_id: String::new(),
+                // Persons belong to one site (V21); the in-memory copy keeps it.
+                site_id: p_site,
                 full_name: p_name,
                 email: p_email.unwrap_or_else(|| format!("kisi-{}@sitepulse.local", p_id)),
                 phone: p_phone.unwrap_or_default(),
