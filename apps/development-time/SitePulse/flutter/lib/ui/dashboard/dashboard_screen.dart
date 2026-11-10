@@ -3334,12 +3334,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String? generalError;
     bool isSaving = false;
 
-    bool isValidPhone(String phone) {
-      if (phone.isEmpty) return false;
-      final digits = phone.replaceAll(RegExp(r'\D'), '');
-      return digits.length >= 10 && digits.length <= 13;
-    }
-
     AppFullscreenPage.push(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -3389,7 +3383,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           final tEmail = tenantEmailCtrl.text.trim();
                           final tPhone = tenantPhoneCtrl.text.trim();
 
-                          final emailRegex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w{2,}$');
                           bool hasError = false;
                           String? newOwnerNameErr;
                           String? newOwnerEmailErr;
@@ -3409,15 +3402,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             if (tEmail.isEmpty) {
                               newTenantEmailErr = 'Kiracı e-posta zorunludur.';
                               hasError = true;
-                            } else if (!emailRegex.hasMatch(tEmail)) {
+                            } else if (validatePersonEmail(tEmail) != null) {
                               newTenantEmailErr = 'Geçerli bir e-posta adresi giriniz.';
                               hasError = true;
                             }
                             if (tPhone.isEmpty) {
                               newTenantPhoneErr = 'Kiracı telefon numarası zorunludur.';
                               hasError = true;
-                            } else if (!isValidPhone(tPhone)) {
-                              newTenantPhoneErr = 'Geçerli bir telefon numarası giriniz (10-12 hane).';
+                            } else if (validateTrMobile(tPhone) != null) {
+                              newTenantPhoneErr = 'Geçerli bir cep telefonu girin (ör. 0532 123 45 67).';
                               hasError = true;
                             }
                           }
@@ -3430,15 +3423,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             if (oEmail.isEmpty) {
                               newOwnerEmailErr = isTenant ? 'Ev Sahibi e-posta zorunludur.' : 'E-posta zorunludur.';
                               hasError = true;
-                            } else if (!emailRegex.hasMatch(oEmail)) {
+                            } else if (validatePersonEmail(oEmail) != null) {
                               newOwnerEmailErr = 'Geçerli bir e-posta adresi giriniz.';
                               hasError = true;
                             }
                             if (oPhone.isEmpty) {
                               newOwnerPhoneErr = isTenant ? 'Ev Sahibi telefon numarası zorunludur.' : 'Telefon numarası zorunludur.';
                               hasError = true;
-                            } else if (!isValidPhone(oPhone)) {
-                              newOwnerPhoneErr = 'Geçerli bir telefon numarası giriniz (10-12 hane).';
+                            } else if (validateTrMobile(oPhone) != null) {
+                              newOwnerPhoneErr = 'Geçerli bir cep telefonu girin (ör. 0532 123 45 67).';
                               hasError = true;
                             }
                           }
@@ -6101,11 +6094,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     final emailProblem = validatePersonEmail(emailText);
                     final phoneProblem = validateTrMobile(phoneText);
                     final landShareProblem = validateLandShare(landShareCtrl.text);
-                    if (emailProblem != null || phoneProblem != null || landShareProblem != null) {
+                    final tenantContactsProblem = selectedRole == 'OWNER' && !isResidentOwner &&
+                            ownerNotResidentOccupancy == 'TENANT'
+                        ? validatePersonEmail(tenantEmailCtrl.text, required: false) ??
+                            validateTrMobile(tenantPhoneCtrl.text, required: false)
+                        : null;
+                    if (emailProblem != null || phoneProblem != null || landShareProblem != null || tenantContactsProblem != null) {
                       setDialogState(() {
                         emailError = emailProblem;
                         phoneError = phoneProblem;
-                        generalError = landShareProblem;
+                        generalError = landShareProblem ?? tenantContactsProblem;
                       });
                       return;
                     }
@@ -6147,7 +6145,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     }
 
                     if (!ctx.mounted) return;
-                    final landShare = int.tryParse(landShareCtrl.text.trim());
+                    final landShare = parseLandShare(landShareCtrl.text);
 
                     if (selectedRole == 'TENANT') {
                       final hasSecondaryOwner = ownerNameCtrl.text.trim().isNotEmpty;
