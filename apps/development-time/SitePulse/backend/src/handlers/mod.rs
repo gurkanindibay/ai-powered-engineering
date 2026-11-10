@@ -64,5 +64,8 @@ pub use registration::*;
 mod residents;
 pub use residents::*;
 
+mod openapi;
+pub use openapi::*;
+
 pub use crate::services::advance_offset_service::{settle_advances, OffsetScope};
 pub use crate::services::ledger_application::apply_advance_payments_offset;

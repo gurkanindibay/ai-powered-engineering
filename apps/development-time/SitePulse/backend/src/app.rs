@@ -34,6 +34,14 @@ routes! {
     post "/api/v1/site-admin/roles" => authorization::assign_role, Require(RoleGrant);
     get "/health" => handlers::health_check, Public;
     get "/api/v1/health" => handlers::health_check, Public;
+    get "/api-docs/openapi.json" => handlers::openapi_spec, Public;
+    get "/api/v1/openapi.json" => handlers::openapi_spec, Public;
+    get "/openapi.json" => handlers::openapi_spec, Public;
+    get "/swagger-ui" => handlers::swagger_ui, Public;
+    get "/swagger-ui/" => handlers::swagger_ui, Public;
+    get "/swagger-ui/index.html" => handlers::swagger_ui, Public;
+    get "/docs" => handlers::swagger_ui, Public;
+    get "/scalar" => handlers::scalar_ui, Public;
     get "/api/v1/residents/:unit_id/dashboard" => handlers::get_resident_dashboard, Require(UnitRead);
     post "/api/v1/auth/login" => handlers::login_password, Public;
     post "/api/v1/auth/google" => handlers::login_google, Public;
