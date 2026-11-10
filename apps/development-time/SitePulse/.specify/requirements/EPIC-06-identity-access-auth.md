@@ -118,3 +118,55 @@ This epic establishes the identity and security framework for the SitePulse plat
   - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
   - Flutter client integration tests & live verification
+
+---
+
+### STORY-06-06: Forced Password Change Gate Before Any Operation
+- **Status:** `COMPLETED`
+- **Target Role:** All Roles (SaaS Admin, Site Manager, Home Owner, Home Resident, Auditor)
+- **Description:** An account flagged `must_change_password = true` (bootstrap SaaS admin, onboarded site manager, approved resident, renewed temporary password) may sign in, but must set a permanent password before it can see or do anything else. The server is the authority; the client mirrors it so the user never lands on an empty or broken screen.
+- **User Flow:**
+  1. User signs in with a temporary password. The login response carries `user.must_change_password = true`.
+  2. The client routes straight to the **Şifre Belirleme** screen (`/change-password`) instead of the role dashboard. No tabs, navigation or role data are shown, and no business APIs are called.
+  3. Any URL the user opens (bookmark, reload, deep link) is held back and shows the same screen; the link is applied once the password is changed.
+  4. The only actions are: change the password (current temporary password + new password + confirmation) or sign out.
+  5. On success the server clears the flag, revokes the old sessions and returns new credentials. The client stores them, loads the role's data and opens the role's home page (or the held-back link).
+  6. If any business API ever answers `403 PASSWORD_CHANGE_REQUIRED` (e.g. the flag was set again by an admin during the session), the client returns to step 2.
+- **Server Rules:**
+  - While the flag is set, every authenticated route except `POST /api/v1/auth/change-password`, `GET /api/v1/auth/me`, `POST /api/v1/auth/logout` and `POST /api/v1/auth/logout-all` returns `403` with error code `PASSWORD_CHANGE_REQUIRED`.
+  - The new password must differ from the current one; a successful change sets `must_change_password = false` and invalidates earlier sessions.
+- **Acceptance Criteria (Gherkin):**
+  ```gherkin
+  Scenario Outline: Temporary-password user is held at the password change screen
+    Given a <role> account with must_change_password = true
+    When the user signs in with the temporary password
+    Then the password change screen is shown instead of the dashboard
+    And no business data is requested from the server
+    When the user sets a new valid password
+    Then the <role> home page is shown with the role's data
+    And signing in again with the new password does not ask for a change
+
+    Examples:
+      | role          |
+      | SAAS_ADMIN    |
+      | SITE_MANAGER  |
+      | HOME_OWNER    |
+      | HOME_RESIDENT |
+      | AUDITOR       |
+
+  Scenario: Server blocks operations before the password is changed
+    Given an authenticated session whose user must change the password
+    When the client calls any business endpoint
+    Then the server answers 403 with code "PASSWORD_CHANGE_REQUIRED"
+    And the client shows the password change screen
+  ```
+- **Implementation Artifacts:**
+  - `apps/development-time/SitePulse/backend/src/auth.rs` (route gate)
+  - `apps/development-time/SitePulse/backend/src/services/auth_service.rs` (`change_password`)
+  - `apps/development-time/SitePulse/flutter/lib/ui/navigation/app_router.dart` (router-level gate)
+  - `apps/development-time/SitePulse/flutter/lib/ui/auth/force_password_change_screen.dart`
+  - `apps/development-time/SitePulse/flutter/lib/domain/services/api_client.dart` (`passwordChangeRequired` signal)
+- **Verification & Tests:**
+  - `when_password_change_required_then_business_routes_are_blocked` (Rust)
+  - `flutter/test/force_password_change_test.dart` (Flutter, every role)
+  - e2e `GUI-06-06`, `GUI-03-03`

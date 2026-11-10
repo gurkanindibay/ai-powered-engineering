@@ -116,6 +116,12 @@ adapter for `destructive:` / `confirmKey:` callers. Pass `cancelId` / `confirmId
 automation ids. Never use `AlertDialog`, `showDialog` or bottom sheets (the `no-popup` rule in
 `ui_style_lint.py`).
 
+### Password change: `ChangePasswordForm` (`ui/components/change_password_form.dart`)
+Current / new / confirm fields, client validation (match, `kMinPasswordLength`, differs from current)
+and submit through `DashboardController.changePassword`. Used by the forced
+`ForcePasswordChangeScreen` (temporary password, every role) and the profile sheet. Pass `idPrefix` /
+`submitId` to keep automation ids. Do not build another password form.
+
 ### Resident directory (`ui/residents/resident_directory.dart`)
 These are feature widgets, shared by the dashboard directory and `OwnersResidentsModulePage`:
 - `ResidentOccupancyStats.from(units)`: counts, plus `occupancyRate` computed with integer

@@ -340,3 +340,66 @@ async fn mandatory_password_change_and_step_up_are_server_enforced() {
         StatusCode::OK
     );
 }
+#[tokio::test]
+async fn when_password_change_required_then_business_routes_are_blocked() {
+    let state = AppState::new_with_test_fixtures();
+    let cases = [
+        ("pcr-saas", Role::SaasAdmin, None, "/api/v1/saas/sites"),
+        (
+            "pcr-manager",
+            Role::SiteManager,
+            None,
+            "/api/v1/site-admin/home-owners",
+        ),
+        (
+            "pcr-owner",
+            Role::HomeOwner,
+            Some("d-14"),
+            "/api/v1/residents/d-14/dashboard",
+        ),
+        (
+            "pcr-resident",
+            Role::HomeResident,
+            Some("d-14"),
+            "/api/v1/residents/d-14/dashboard",
+        ),
+        (
+            "pcr-auditor",
+            Role::Auditor,
+            None,
+            "/api/v1/payments/debt-aging",
+        ),
+    ];
+    for (id, role, unit, path) in cases {
+        let token = support::token(&state, id, role, "site-1", unit).await;
+        let (_, before) = call(&state, "GET", path, Some(&token), serde_json::json!({})).await;
+        assert_ne!(
+            before["error"]["code"], "PASSWORD_CHANGE_REQUIRED",
+            "{role:?} is blocked before the flag is set"
+        );
+        state
+            .inner
+            .write()
+            .await
+            .users
+            .iter_mut()
+            .find(|u| u.id == id)
+            .expect("test user exists")
+            .must_change_password = true;
+        let (status, body) = call(&state, "GET", path, Some(&token), serde_json::json!({})).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{role:?} {path}");
+        assert_eq!(
+            body["error"]["code"], "PASSWORD_CHANGE_REQUIRED",
+            "{role:?}"
+        );
+        let (me, _) = call(
+            &state,
+            "GET",
+            "/api/v1/auth/me",
+            Some(&token),
+            serde_json::json!({}),
+        )
+        .await;
+        assert_eq!(me, StatusCode::OK, "{role:?} can still read its profile");
+    }
+}

@@ -430,17 +430,12 @@ extension DashboardControllerAuth on DashboardController {
               _siteAdminPath = adminPath;
             }
 
-            final mustChange = userData['must_change_password'] == true;
-            if (!mustChange && resolvedRole == UserRole.saasAdmin) {
-              await fetchSaasSites();
-            } else if (!mustChange && resolvedRole == UserRole.siteManager) {
-              attachCurrentManagedSiteForUser(email: trimmedEmail, siteId: siteId);
-              await fetchSiteManagerOverview(siteId: siteId.isNotEmpty ? siteId : _currentManagedSite?.id, period: _selectedDuesMonth);
-            } else if (!mustChange) {
-              attachActiveUnitForUser(email: trimmedEmail, siteId: siteId, unitId: unitId);
-            }
-
+            // A temporary password unlocks nothing but the password change
+            // screen: business data is loaded only once it is changed.
             final mustChangePassword = userData['must_change_password'] == true;
+            if (!mustChangePassword) {
+              await _loadRoleData(role: resolvedRole, email: trimmedEmail, siteId: siteId, unitId: unitId);
+            }
 
             _userSession = _createSession(
               resolvedRole,
@@ -874,12 +869,16 @@ extension DashboardControllerAuth on DashboardController {
         if (response.statusCode == 200) {
           final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
           ApiClient.setSession(data);
+          final userData = data['user'] as Map<String, dynamic>? ?? const {};
+          await _loadRoleData(
+            role: _userSession.role,
+            email: _userSession.email,
+            siteId: userData['site_id']?.toString() ?? '',
+            unitId: userData['unit_id']?.toString() ?? '',
+          );
+          // Cleared last: the router leaves the password change screen only
+          // once the role's data is in place, so the home page never opens empty.
           _userSession = _userSession.copyWith(mustChangePassword: false);
-          if (_userSession.role == UserRole.saasAdmin) {
-            await fetchSaasSites();
-          } else if (_userSession.role == UserRole.siteManager) {
-            await fetchSiteManagerOverview(siteId: _currentManagedSite?.id, period: _selectedDuesMonth);
-          }
           _authMessage = 'Şifreniz başarıyla güncellendi.';
           notify();
           return true;
@@ -903,6 +902,29 @@ extension DashboardControllerAuth on DashboardController {
     _authMessage = 'Şifreniz başarıyla güncellendi (Test Modu).';
     notify();
     return true;
+  }
+
+  /// Loads what the role's home page shows right after sign-in.
+  Future<void> _loadRoleData({
+    required UserRole role,
+    required String email,
+    required String siteId,
+    required String unitId,
+  }) async {
+    switch (role) {
+      case UserRole.saasAdmin:
+        await fetchSaasSites();
+      case UserRole.siteManager:
+        attachCurrentManagedSiteForUser(email: email, siteId: siteId);
+        await fetchSiteManagerOverview(
+          siteId: siteId.isNotEmpty ? siteId : _currentManagedSite?.id,
+          period: _selectedDuesMonth,
+        );
+      case UserRole.homeOwner:
+      case UserRole.homeResident:
+      case UserRole.auditor:
+        attachActiveUnitForUser(email: email, siteId: siteId, unitId: unitId);
+    }
   }
 
   void clearProvisionedCredentials() {

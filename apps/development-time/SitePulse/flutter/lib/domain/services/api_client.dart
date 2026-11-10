@@ -30,6 +30,11 @@ class ApiClient {
   static Future<bool>? _renewal;
   static final _expired = StreamController<void>.broadcast(sync: true);
   static Stream<void> get sessionExpired => _expired.stream;
+  static final _passwordChangeRequired = StreamController<void>.broadcast(sync: true);
+
+  /// Fires when the server answers `403 PASSWORD_CHANGE_REQUIRED`: the signed-in
+  /// user must set a new password before any other operation (STORY-06-06).
+  static Stream<void> get passwordChangeRequired => _passwordChangeRequired.stream;
   @visibleForTesting
   static http.Client transport = http.Client();
 
@@ -161,6 +166,12 @@ class ApiClient {
       );
     }
 
+    if (response.statusCode == 403 &&
+        attemptedToken != null &&
+        response.body.contains('PASSWORD_CHANGE_REQUIRED')) {
+      _passwordChangeRequired.add(null);
+      return response;
+    }
     if (response.statusCode != 401 ||
         attemptedToken == null ||
         const {

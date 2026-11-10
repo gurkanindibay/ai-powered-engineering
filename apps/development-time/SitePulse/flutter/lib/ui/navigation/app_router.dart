@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth/account_link_screen.dart';
+import '../auth/force_password_change_screen.dart';
 import '../auth/login_screen.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -23,6 +24,9 @@ class AppRouteParser extends RouteInformationParser<Uri> {
 ///   remembered and applied right after login.
 /// * Signed in: the URL names the role path and tab (see [AppRoutes]); a URL
 ///   that belongs to another role falls back to that user's home tab.
+/// * Signed in with a temporary password (any role): only
+///   `/change-password` is shown, with no dashboard behind it. A URL opened
+///   meanwhile is remembered and applied once the password is changed.
 class AppRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier, PopNavigatorRouterDelegateMixin<Uri> {
   final DashboardController controller;
 
@@ -37,9 +41,12 @@ class AppRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier, PopNavi
   // Page identity for the Navigator, not an automation target. testid-lint: ignore
   static const _accountLinkPageKey = ValueKey('account-link');
   bool _wasAuthenticated;
+  bool _wasPasswordChangeRequired;
   Object? _sessionIdentity;
 
-  AppRouterDelegate(this.controller) : _wasAuthenticated = controller.isAuthenticated {
+  AppRouterDelegate(this.controller)
+      : _wasAuthenticated = controller.isAuthenticated,
+        _wasPasswordChangeRequired = controller.requiresPasswordChange {
     controller.addListener(_onControllerChanged);
   }
 
@@ -53,19 +60,26 @@ class AppRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier, PopNavi
 
   void _onControllerChanged() {
     final authenticated = controller.isAuthenticated;
+    final mustChange = controller.requiresPasswordChange;
     final identity = authenticated ? (controller.userRole, controller.siteAdminPath) : null;
-    if (authenticated && !_wasAuthenticated) {
+    final unlocked = authenticated && !mustChange && (!_wasAuthenticated || _wasPasswordChangeRequired);
+    if (unlocked) {
+      // Signed in, or just replaced a temporary password: open the remembered link.
       _tab = 0;
       final link = _pendingDeepLink;
       _pendingDeepLink = null;
       if (link != null) _tab = AppRoutes.resolve(controller, link) ?? 0;
+    } else if (authenticated && mustChange) {
+      _tab = 0;
     } else if (!authenticated && _wasAuthenticated) {
       _tab = 0;
+      _pendingDeepLink = null;
     } else if (identity != _sessionIdentity && _sessionIdentity != null) {
       // Role or manager path changed: tabs differ, so start again on Home.
       _tab = 0;
     }
     _wasAuthenticated = authenticated;
+    _wasPasswordChangeRequired = mustChange;
     _sessionIdentity = authenticated ? (controller.userRole, controller.siteAdminPath) : null;
     notifyListeners();
   }
@@ -77,7 +91,9 @@ class AppRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier, PopNavi
   }
 
   @override
-  Uri get currentConfiguration => _accountLink ?? AppRoutes.pathFor(controller, _tab);
+  Uri get currentConfiguration =>
+      _accountLink ??
+      (controller.requiresPasswordChange ? Uri(path: AppRoutes.changePassword) : AppRoutes.pathFor(controller, _tab));
 
   void _closeAccountLink() {
     _accountLink = null;
@@ -92,8 +108,14 @@ class AppRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier, PopNavi
       return;
     }
     if (!controller.isAuthenticated) {
-      final isLogin = configuration.path == AppRoutes.login || configuration.path == '/' || configuration.path.isEmpty;
+      final isLogin = configuration.path == AppRoutes.login || configuration.path == AppRoutes.changePassword || configuration.path == '/' || configuration.path.isEmpty;
       _pendingDeepLink = isLogin ? null : configuration;
+      notifyListeners();
+      return;
+    }
+    if (controller.requiresPasswordChange) {
+      // Nothing opens before the password is changed; keep the link for afterwards.
+      if (configuration.path != AppRoutes.changePassword) _pendingDeepLink = configuration;
       notifyListeners();
       return;
     }
@@ -108,7 +130,13 @@ class AppRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier, PopNavi
     return Navigator(
       key: navigatorKey,
       pages: [
-        if (signedIn)
+        if (signedIn && controller.requiresPasswordChange)
+          MaterialPage<void>(
+            // Page identity for the Navigator, not an automation target. testid-lint: ignore
+            key: const ValueKey('force-password-change'),
+            child: ForcePasswordChangeScreen(controller: controller),
+          )
+        else if (signedIn)
           MaterialPage<void>(
             // Page identity for the Navigator, not an automation target. testid-lint: ignore
             key: const ValueKey('dashboard'),
