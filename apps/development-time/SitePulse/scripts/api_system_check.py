@@ -978,6 +978,8 @@ def check_person_tenant_isolation(ctx: Context) -> Tuple[bool, str]:
         db, f"SELECT full_name FROM persons WHERE lower(email)='{shared}' AND site_id={other_site};") == "Site Two Person"
     separate = status == 201 and ctx.psql.run(db, f"SELECT count(DISTINCT site_id) FROM persons WHERE lower(email)='{shared}';") == "2"
     no_secret = "temporary_password" not in body and "SP-SAKIN" not in body
+    # F6: the role is derived from what the person holds (V23), not the stored type.
+    derived = ctx.psql.run(db, f"SELECT r.derived_role FROM v_person_roles r JOIN persons p ON p.id = r.person_id WHERE lower(p.email)='{shared}' AND p.site_id <> {other_site};")
 
     # Cross-site linking is refused by the database itself.
     site_one_person = ctx.psql.run(db, f"SELECT id FROM persons WHERE lower(email)='{shared}' AND site_id <> {other_site};").strip()
@@ -999,9 +1001,9 @@ def check_person_tenant_isolation(ctx: Context) -> Tuple[bool, str]:
     # S8: a taken login address is refused without being echoed.
     dup, dup_body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
                          body=_owner_body(900 + int(suffix[-2:]), shared))
-    ok = (separate and site_two_untouched and no_secret and guard != 0 and failed >= 500 and orphans == "0"
+    ok = (separate and site_two_untouched and no_secret and derived == "HOME_OWNER" and guard != 0 and failed >= 500 and orphans == "0"
           and generic and dup == 409 and shared not in dup_body)
-    return ok, (f"registered {status}, per-site persons {separate}, site-2 untouched {site_two_untouched}, no secret {no_secret}, "
+    return ok, (f"registered {status}, per-site persons {separate}, site-2 untouched {site_two_untouched}, no secret {no_secret}, derived role {derived}, "
                 f"cross-site link exit {guard}, injected failure {failed} generic {generic}, orphans {orphans}, duplicate {dup}")
 
 
