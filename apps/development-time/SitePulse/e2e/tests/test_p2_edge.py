@@ -265,7 +265,7 @@ def test_tenant_capital_payment_receipt_names_the_owner_and_rent_offset(login_as
     by_id(page, "receipt_on_behalf").wait_for(timeout=10_000)
 
     assert tenant_paid_capital["on_behalf_of_name"] in text_of(by_id(page, "receipt_on_behalf"))
-    assert "TBK Madde 314" in text_of(by_id(page, "receipt_rent_offset_note"))
+    assert "TBK md. 314" in text_of(by_id(page, "receipt_rent_offset_note"))
     # The tenant's operational ledger is untouched: the payment went to the owner's capital due.
     assert stack.sql("SELECT count(*) FROM dues_liabilities WHERE debtor_type = 'TENANT' AND paid_amount > 0;") == "0"
 
