@@ -1073,6 +1073,10 @@ def check_person_directory_and_export(ctx: Context) -> Tuple[bool, str]:
         VALUES ('Directory Site {suffix}', 'Bursa', 'directory-{suffix}', 'ACTIVE', 'STANDARD', CURRENT_DATE + 365) RETURNING id;""").strip()
     foreign_person = ctx.psql.run(db, f"INSERT INTO persons (full_name, email, person_type, site_id) VALUES ('Foreign', 'foreign-{suffix}@example.com', 'HOME_OWNER', {foreign}) RETURNING id;").strip()
     foreign_status = http("GET", base + f"/api/v1/site-admin/persons/{foreign_person}", token=ctx.manager)[0]
+    # U7: moving in "an existing person" only accepts this site's people.
+    unit_for_move = json.loads(body)["unit_id"]
+    foreign_move = http("POST", base + f"/api/v1/site-admin/units/{unit_for_move}/move-in", token=ctx.manager,
+                        body={"person_id": int(foreign_person), "role": "TENANT"})[0]
     # Export: refused without a fresh password check, audited with one.
     passwords = getattr(ctx.backend, "passwords", {})
     plain = http("POST", base + "/api/v1/auth/login", body={"email": "mehmet.demir@begonya.com",
@@ -1082,10 +1086,10 @@ def check_person_directory_and_export(ctx: Context) -> Tuple[bool, str]:
     export_status, export_body = http("GET", base + f"/api/v1/site-admin/persons/export?q=directory-{suffix}", token=ctx.manager)
     exported = export_status == 200 and email in export_body and export_body.startswith("\ufeffperson_id")
     audited = ctx.psql.run(db, "SELECT count(*) FROM audit_events WHERE action='PERSON_DIRECTORY_EXPORTED';")
-    ok = (found and pending_ok and bad_filter == 400 and profile_ok and foreign_status == 404
+    ok = (found and pending_ok and bad_filter == 400 and profile_ok and foreign_status == 404 and foreign_move == 404
           and no_step_up[0] == 403 and "STEP_UP" in no_step_up[1] and exported and int(audited) >= 1)
     return ok, (f"search {found}, pending filter {pending_ok}, bad filter {bad_filter}, profile owner {profile_ok}, "
-                f"foreign profile {foreign_status}, export without step-up {no_step_up[0]}, export {export_status} "
+                f"foreign profile {foreign_status}, foreign move-in {foreign_move}, export without step-up {no_step_up[0]}, export {export_status} "
                 f"contains {exported}, audited {audited}")
 
 

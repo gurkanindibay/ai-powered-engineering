@@ -50,6 +50,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
     final phoneCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     String selectedRole = 'TENANT'; // 'TENANT' or 'OWNER'
+    PersonSummary? chosen; // U7: an existing person of the site
 
     AppFullscreenPage.push(
       context: context,
@@ -66,14 +67,25 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                   key: const Key('module_confirm_move_in_btn'),
                   onPressed: () async {
                     final name = nameCtrl.text.trim();
-                    if (name.isEmpty) return;
+                    final messenger = ScaffoldMessenger.of(this.context);
+                    final problem = name.isEmpty
+                        ? 'Ad soyad gerekli.'
+                        : (chosen == null ? validatePersonEmail(emailCtrl.text) : null);
+                    if (problem != null) {
+                      messenger.showSnackBar(spSnackBar(kind: ToastKind.warning, content: Text(problem)));
+                      return;
+                    }
                     final success = await widget.controller.moveInResident(
                       ho.unitId,
                       role: selectedRole,
                       fullName: name,
                       phone: phoneCtrl.text.trim(),
                       email: emailCtrl.text.trim(),
+                      personId: chosen?.personId,
                     );
+                    if (!success && ctx.mounted) {
+                      messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: const Text('Giriş kaydedilemedi. Bilgileri kontrol edip tekrar deneyin.')));
+                    }
                     if (success && ctx.mounted) {
                       Navigator.pop(ctx);
                       final roleLabel = selectedRole == 'OWNER' ? 'Kat Maliki' : 'Kiracı';
@@ -118,8 +130,48 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                     )),
                   ),
                   const SizedBox(height: 16),
+                  testId('module_move_in_pick_existing_btn', OutlinedButton.icon(
+                    key: const Key('module_move_in_pick_existing_btn'),
+                    onPressed: () async {
+                      final messenger = ScaffoldMessenger.of(this.context);
+                      try {
+                        final page = await const PersonDirectoryApi().directory(pageSize: 100);
+                        if (!ctx.mounted) return;
+                        final picked = await showSpSelection<PersonSummary>(
+                          context: ctx,
+                          title: 'Mevcut kişiyi seçin',
+                          options: page.items,
+                          labelOf: (p) => [p.fullName, if (p.email.isNotEmpty) p.email].join(' • '),
+                          idOf: (p) => 'move_in_person_${p.personId}',
+                        );
+                        if (picked == null) return;
+                        setDlgState(() {
+                          chosen = picked;
+                          nameCtrl.text = picked.fullName;
+                          phoneCtrl.text = picked.phone;
+                          emailCtrl.text = picked.email;
+                        });
+                      } catch (_) {
+                        messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: const Text('Kişi listesi yüklenemedi.')));
+                      }
+                    },
+                    icon: const Icon(Icons.person_search_outlined, size: 16),
+                    label: Text(chosen == null ? 'Mevcut kişilerden seç' : 'Seçili: ${chosen!.fullName} (değiştir)'),
+                  )),
+                  if (chosen != null)
+                    TextButton(
+                      onPressed: () => setDlgState(() {
+                        chosen = null;
+                        nameCtrl.clear();
+                        phoneCtrl.clear();
+                        emailCtrl.clear();
+                      }),
+                      child: const Text('Yeni kişi gir'),
+                    ),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: nameCtrl,
+                    readOnly: chosen != null,
                     decoration: InputDecoration(
                       labelText: selectedRole == 'OWNER' ? 'Kat Maliki Ad Soyad *' : 'Kiracı Ad Soyad *',
                       filled: true,
@@ -129,12 +181,14 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                   const SizedBox(height: 12),
                   TextField(
                     controller: phoneCtrl,
+                    readOnly: chosen != null,
                     keyboardType: TextInputType.phone,
                     decoration: const InputDecoration(labelText: 'Telefon', filled: true, border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: emailCtrl,
+                    readOnly: chosen != null,
                     keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(labelText: 'E-posta', filled: true, border: OutlineInputBorder()),
                   ),
