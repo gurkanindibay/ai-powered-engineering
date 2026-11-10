@@ -17,9 +17,11 @@ rule encodes a leak class that was found in the codebase and fixed:
                               (Leak fixed: /capital-projects/:id, including the
                               installment accrual and disbursement writes.)
                               An `AuthzContext` handler counts as scoped when it
-                              calls `ctx.require(..)`, pins via `TenantScope`, or
-                              states `// tenant-scope: checked in <Service::fn>`
-                              when the service performs the check.
+                              calls `ctx.require(..)`, pins via `TenantScope`,
+                              takes the site from the token (`ctx.claims..`),
+                              passes the caller context (`&ctx`) to a service
+                              that looks objects up by the caller's site, or
+                              states `// tenant-scope: checked in <Service::fn>`.
   guessed-tenant              Production code falls back to a hard-coded tenant
                               (`"1"`, `"site-1"`, `"site-begonya"`) when a site
                               is unknown, attributing data to some other site.
@@ -166,7 +168,11 @@ def _is_scoped(sig: str, body: str) -> bool:
         return False
     # The check may live in the service the context is passed to; that has to be
     # stated explicitly (`// tenant-scope: checked in <Service::method>`).
-    return ".require(" in body or "TenantScope::from_claims" in body or DELEGATED_MARKER in body
+    if ".require(" in body or "TenantScope::from_claims" in body or DELEGATED_MARKER in body:
+        return True
+    # Site taken from the verified token, or the caller context handed to the
+    # service (master's convention: services look objects up by the caller's site).
+    return bool(re.search(r"\bctx\.claims\b|[(,]\s*&ctx\b", body))
 
 
 def lint_handlers(backend: Path, findings: list[Finding]) -> None:

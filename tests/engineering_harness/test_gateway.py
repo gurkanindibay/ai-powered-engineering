@@ -3,7 +3,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from scripts.engineering_harness.gateway_bridge import execute, workspace_tool
+from scripts.engineering_harness.gateway_bridge import (HISTORY_CHARS, KEEP_RECENT_RESULTS, TOOL_RESULT_CHARS,
+                                                        compact_history, execute, workspace_tool)
 from scripts.engineering_harness.contracts import validate_result
 from scripts.engineering_harness.routing import HarnessError
 from support import capabilities
@@ -67,3 +68,46 @@ class GatewayTests(unittest.TestCase):
                                ("write_file", {"path": "checks/weak.py", "text": "bad"})]:
                 with self.assertRaises(HarnessError):
                     workspace_tool(name, args, self.envelope(), Path(temp))
+
+    def test_read_file_supports_line_ranges_and_caps_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / "src").mkdir()
+            (Path(temp) / "src/a.py").write_text("".join(f"line {i}\n" for i in range(1, 11)))
+            self.assertEqual(workspace_tool("read_file", {"path": "src/a.py", "start_line": 3, "end_line": 4},
+                                            self.envelope(), Path(temp)), "line 3\nline 4\n")
+            (Path(temp) / "src/big.py").write_text("x" * 100 + "\n" * 0 + ("y" * 99 + "\n") * 1000)
+            out = workspace_tool("read_file", {"path": "src/big.py"}, self.envelope(), Path(temp))
+            self.assertLess(len(out), TOOL_RESULT_CHARS + 200)
+            self.assertIn("[truncated at line", out)
+            with self.assertRaises(HarnessError):
+                workspace_tool("read_file", {"path": "src/a.py", "start_line": 5, "end_line": 2}, self.envelope(), Path(temp))
+
+    def test_search_returns_capped_matches_and_skips_git_and_symlinks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "src").mkdir()
+            (root / ".git").mkdir()
+            (root / "src/a.py").write_text("def total():\n    return 1\n")
+            (root / ".git/config").write_text("def total(): secret\n")
+            outside = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False)
+            outside.write("def total(): outside\n")
+            outside.close()
+            (root / "src/link.py").symlink_to(outside.name)
+            out = workspace_tool("search", {"pattern": r"def total", "path": "."}, self.envelope(), root)
+            self.assertEqual(out, "src/a.py:1: def total():")
+            (root / "src/many.py").write_text("hit\n" * 200)
+            self.assertIn("[more matches", workspace_tool("search", {"pattern": "hit", "path": "src"}, self.envelope(), root))
+            with self.assertRaises(HarnessError):
+                workspace_tool("search", {"pattern": "(", "path": "src"}, self.envelope(), root)
+            Path(outside.name).unlink()
+
+    def test_history_compaction_stubs_old_results_and_keeps_prefix(self):
+        messages = [{"role": "system", "content": "s"}, {"role": "user", "content": "envelope"}]
+        for i in range(KEEP_RECENT_RESULTS + 3):
+            messages.append({"role": "assistant", "content": None, "tool_calls": []})
+            messages.append({"role": "tool", "tool_call_id": str(i), "content": "z" * (HISTORY_CHARS // 4)})
+        compact_history(messages)
+        tools = [m for m in messages if m["role"] == "tool"]
+        self.assertTrue(all(m["content"].startswith("[elided") for m in tools[:-KEEP_RECENT_RESULTS]))
+        self.assertTrue(all(m["content"].startswith("z") for m in tools[-KEEP_RECENT_RESULTS:]))
+        self.assertEqual(messages[:2], [{"role": "system", "content": "s"}, {"role": "user", "content": "envelope"}])

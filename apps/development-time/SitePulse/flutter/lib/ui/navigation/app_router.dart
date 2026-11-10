@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../auth/account_link_screen.dart';
 import '../auth/login_screen.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -30,6 +31,11 @@ class AppRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier, PopNavi
 
   int _tab = 0;
   Uri? _pendingDeepLink;
+  /// An activation or email-confirmation link being handled; shown above everything else.
+  Uri? _accountLink;
+
+  // Page identity for the Navigator, not an automation target. testid-lint: ignore
+  static const _accountLinkPageKey = ValueKey('account-link');
   bool _wasAuthenticated;
   Object? _sessionIdentity;
 
@@ -71,10 +77,20 @@ class AppRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier, PopNavi
   }
 
   @override
-  Uri get currentConfiguration => AppRoutes.pathFor(controller, _tab);
+  Uri get currentConfiguration => _accountLink ?? AppRoutes.pathFor(controller, _tab);
+
+  void _closeAccountLink() {
+    _accountLink = null;
+    notifyListeners();
+  }
 
   @override
   Future<void> setNewRoutePath(Uri configuration) async {
+    if (configuration.path == AppRoutes.activate || configuration.path == AppRoutes.confirmEmail) {
+      _accountLink = configuration;
+      notifyListeners();
+      return;
+    }
     if (!controller.isAuthenticated) {
       final isLogin = configuration.path == AppRoutes.login || configuration.path == '/' || configuration.path.isEmpty;
       _pendingDeepLink = isLogin ? null : configuration;
@@ -108,8 +124,19 @@ class AppRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier, PopNavi
             key: const ValueKey('login'),
             child: LoginScreen(controller: controller),
           ),
+        if (_accountLink != null)
+          MaterialPage<void>(
+            key: _accountLinkPageKey,
+            child: AccountLinkScreen(
+              kind: _accountLink!.path == AppRoutes.activate ? AccountLinkKind.activate : AccountLinkKind.confirmEmail,
+              token: _accountLink!.queryParameters['token'] ?? '',
+              onDone: _closeAccountLink,
+            ),
+          ),
       ],
-      onDidRemovePage: (_) {},
+      onDidRemovePage: (page) {
+        if (page.key == _accountLinkPageKey) _closeAccountLink();
+      },
     );
   }
 }

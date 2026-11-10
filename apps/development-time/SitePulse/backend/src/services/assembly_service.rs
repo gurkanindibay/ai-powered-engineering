@@ -378,7 +378,9 @@ impl AssemblyService {
             site_id: caller.site_id.clone(),
             meeting_id: Some(meeting.id),
             decision_number: number,
-            decided_on: meeting.held_on.unwrap_or_else(|| Utc::now().date_naive()),
+            decided_on: meeting
+                .held_on
+                .unwrap_or_else(|| meeting.scheduled_at.date_naive()),
             title: item.title.clone(),
             text,
             outcome: if accepted { "ACCEPTED" } else { "REJECTED" }.to_string(),
@@ -418,7 +420,11 @@ impl AssemblyService {
         if !matches!(outcome.as_str(), "ACCEPTED" | "REJECTED") {
             return Err(invalid("outcome must be ACCEPTED or REJECTED"));
         }
-        if req.decided_on > Utc::now().date_naive() {
+        let today = self
+            .store
+            .read(|inner| site_today(inner, &caller.site_id))
+            .await;
+        if req.decided_on > today {
             return Err(invalid("decided_on is in the future"));
         }
         let number = self

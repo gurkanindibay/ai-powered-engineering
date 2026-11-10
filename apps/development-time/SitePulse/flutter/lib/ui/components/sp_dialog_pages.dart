@@ -243,3 +243,104 @@ Future<T?> showSpSelection<T>({
     ),
   );
 }
+
+/// Key (and automation id) of the text field and submit button of [showSpTextPrompt].
+const spPromptFieldKey = 'field_sp_prompt';
+const spPromptSubmitKey = 'btn_sp_prompt_submit';
+
+/// Opens a full-screen page that asks for one line or paragraph of text (a
+/// reason, a note, a decision text) and returns it trimmed, or `null` when the
+/// user goes back. Submitting is disabled until [minLength] characters are typed.
+Future<String?> showSpTextPrompt({
+  required BuildContext context,
+  required String title,
+  required String label,
+  String? message,
+  String submitLabel = 'Gönder',
+  int minLength = 3,
+  int maxLines = 4,
+  String? initialValue,
+}) {
+  return showSpPage<String>(
+    context: context,
+    builder: (ctx) => SpTextPromptPage(
+      title: title,
+      label: label,
+      message: message,
+      submitLabel: submitLabel,
+      minLength: minLength,
+      maxLines: maxLines,
+      initialValue: initialValue,
+    ),
+  );
+}
+
+class SpTextPromptPage extends StatefulWidget {
+  final String title;
+  final String label;
+  final String? message;
+  final String submitLabel;
+  final int minLength;
+  final int maxLines;
+  final String? initialValue;
+
+  const SpTextPromptPage({
+    super.key,
+    required this.title,
+    required this.label,
+    this.message,
+    this.submitLabel = 'Gönder',
+    this.minLength = 3,
+    this.maxLines = 4,
+    this.initialValue,
+  });
+
+  @override
+  State<SpTextPromptPage> createState() => _SpTextPromptPageState();
+}
+
+class _SpTextPromptPageState extends State<SpTextPromptPage> {
+  late final TextEditingController _text = TextEditingController(text: widget.initialValue ?? '');
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  bool get _valid => _text.text.trim().length >= widget.minLength;
+
+  @override
+  Widget build(BuildContext context) {
+    return SpDialogPage(
+      title: widget.title,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.message != null) ...[
+              Text(widget.message!, style: TextStyle(color: AppColors.textSecondary(context))),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            testId(spPromptFieldKey, TextField(
+              key: const Key(spPromptFieldKey),
+              controller: _text,
+              autofocus: true,
+              minLines: 1,
+              maxLines: widget.maxLines,
+              decoration: InputDecoration(labelText: widget.label, border: const OutlineInputBorder()),
+              onChanged: (_) => setState(() {}),
+            )),
+            const SizedBox(height: AppSpacing.lg),
+            testId(spPromptSubmitKey, FilledButton(
+              key: const Key(spPromptSubmitKey),
+              onPressed: _valid ? () => Navigator.pop(context, _text.text.trim()) : null,
+              child: Text(widget.submitLabel),
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+}

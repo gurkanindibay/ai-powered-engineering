@@ -174,11 +174,11 @@ pub async fn create_site_with_manager_and_blocks(
     let person_row = client
         .query_one(
             r#"
-            INSERT INTO persons (full_name, phone, email, person_type)
-            VALUES ($1, $2, $3, 'SITE_MANAGER')
+            INSERT INTO persons (full_name, phone, email, person_type, site_id)
+            VALUES ($1, $2, $3, 'SITE_MANAGER', $4)
             RETURNING id
             "#,
-            &[&admin_full_name, &admin_phone, &admin_email],
+            &[&admin_full_name, &admin_phone, &admin_email, &numeric_site],
         )
         .await?;
     let p_id: i64 = person_row.get(0);

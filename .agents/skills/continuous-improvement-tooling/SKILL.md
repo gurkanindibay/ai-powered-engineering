@@ -107,7 +107,7 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 
 | Tool | Path | Use it for |
 | :--- | :--- | :--- |
-| `run_tests.py` | `apps/development-time/SitePulse/scripts/run_tests.py` | The full gate run before concluding any change; `--from-dev-container` loads local development DB settings without exposing credentials |
+| `run_tests.py` | `apps/development-time/SitePulse/scripts/run_tests.py` | The full gate run before concluding any change; `--from-dev-container` loads local development DB settings without exposing credentials; `--summary` gives compact, agent-friendly output |
 | `api_system_check.py` | `apps/development-time/SitePulse/scripts/api_system_check.py` | HTTP auth, tenancy, webhook, concurrency, restart, match-all-in-place, payer identity, site purge, per-debtor virman, reversal, scoped webhook claims, receipt issuer snapshot, aging snapshot, ledger drift, session rotation/revocation, transactional audit failure, audit RLS, scoped review, support approval, atomic invitation, provider payment, household persistence/rollback and budget checks against a real DB, with ledger invariants checked after each scenario |
 
 | `schema_integrity_check.py` | `apps/development-time/SitePulse/scripts/schema_integrity_check.py` | Migration replay, constraint tests (incl. the V16 append-only payment ledger and the V17 reversal / webhook-claim / issuer / status rules) and the upgrade test |
@@ -121,10 +121,11 @@ Use these before writing ad-hoc commands (details and examples in [skills.md](fi
 | `tenant_isolation_lint.py` | `apps/development-time/SitePulse/scripts/tenant_isolation_lint.py` | Multi-tenant guardrails: handlers pin `site_id` through `TenantScope`, path object ids are ownership-checked, no guessed tenants, service transactions call `tx_bind_tenant`, every tenant-keyed table has row-level security (gate `tenant-lint`) |
 | `lock_scope_lint.py` | `apps/development-time/SitePulse/scripts/lock_scope_lint.py` | No guard on the global `AppState` lock held across database/network I/O (gate `lock-lint`) |
 | `db_verify.py` | `apps/development-time/SitePulse/scripts/db_verify.py` | Inspecting and auditing a database (parameterised; non-zero exit on issues) |
+| `token_guard.py` | `scripts/token_guard.py` | Claude Code hook (`.claude/settings.json`) that denies context-flooding calls (large `cat`/`Read`, `ls -R`, unfiltered `find`, full-size screenshots) and warns on oversized Bash output |
 | `harness_cli.py` | `apps/development-time/SitePulse/harness/harness_cli.py` | Task-scoped verification and evidence (`--record` in CI only) |
 | `hash-password` | `apps/development-time/SitePulse/backend/src/bin/hash_password.rs` | argon2id hashes for seeds and resets |
 
 
 ## Registered workspace orchestration tool
 
-`python3 scripts/development_harness.py --help` provides durable run planning/execution, candidate-bound evidence, cancellation/recovery and evaluation. Reuse it instead of scratch orchestration scripts. Guide: [docs/engineering-harness.md](../../../docs/engineering-harness.md); role workflow: [team-orchestration](../team-orchestration/SKILL.md). Registration and examples: `skills.md` section 6.
+`python3 scripts/development_harness.py --help` provides durable run planning/execution (Docker gateway workers or T3 child sessions via `t3-dispatch`/`t3-submit`), candidate-bound evidence, cancellation/recovery and evaluation. Reuse it instead of scratch orchestration scripts. Guide: [docs/engineering-harness.md](../../../docs/engineering-harness.md); role workflow: [team-orchestration](../team-orchestration/SKILL.md). Registration and examples: `skills.md` section 6.

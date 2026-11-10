@@ -91,6 +91,12 @@
       "skillPath": "skills/dart-write-documentation/SKILL.md",
       "computedHash": "48724a1c25019504248ae10bdc37d77b077dcca2a26d4830860201c9d7a77126"
     },
+    "database-schema-designer": {
+      "source": "OneWave-AI/claude-skills",
+      "sourceType": "github",
+      "skillPath": "database-schema-designer/SKILL.md",
+      "computedHash": "8807c7f705b4e9a4bf219dcc02184fa1f872af3e249081819470e48fd0f47b84"
+    },
     "flutter-add-integration-test": {
       "source": "flutter/skills",
       "sourceType": "github",

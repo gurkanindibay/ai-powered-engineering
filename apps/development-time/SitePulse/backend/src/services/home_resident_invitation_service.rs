@@ -48,9 +48,13 @@ impl HomeResidentInvitationService {
         );
         let expires_at = Utc::now() + chrono::Days::new(7);
 
-        let rel = relationship
-            .filter(|r| !r.trim().is_empty())
-            .unwrap_or_else(|| "Aile Üyesi / Sakin".to_string());
+        // F5: invitations carry a code; free text from older clients becomes OTHER.
+        let rel = crate::domain::household_relationship::HouseholdRelationship::from_input(
+            relationship.as_deref().unwrap_or(""),
+        )
+        .unwrap_or(crate::domain::household_relationship::HouseholdRelationship::Other)
+        .as_str()
+        .to_string();
         let security_notice = format!(
             "Bu link sadece {} D:{} yetkisi tanımlar. Başka daire bilgilerine veya yönetim fonksiyonlarına erişemez.",
             building, unit_number
@@ -164,9 +168,16 @@ impl HomeResidentInvitationService {
             .map(|u| u.site_id.clone())
             .ok_or_else(|| "The invited unit no longer exists.".to_string())?;
         inner.unit_invite_tokens.remove(&digest);
-        let relationship = request
-            .relationship
-            .unwrap_or_else(|| token_info.relationship.clone());
+        let relationship =
+            crate::domain::household_relationship::HouseholdRelationship::from_input(
+                request
+                    .relationship
+                    .as_deref()
+                    .unwrap_or(&token_info.relationship),
+            )
+            .unwrap_or(crate::domain::household_relationship::HouseholdRelationship::Other)
+            .as_str()
+            .to_string();
 
         let max_user = inner
             .users

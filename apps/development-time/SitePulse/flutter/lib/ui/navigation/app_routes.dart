@@ -9,12 +9,17 @@ import '../dashboard/dashboard_controller.dart';
 /// | Site manager (cockpit)      | 0 `/manager/home`, 1 `/manager/dues`, 2 `/manager/residents` |
 /// | Site manager (own flat)     | 0 `/manager/my-flat/home`, 1 `/manager/my-flat/unit`    |
 /// | SaaS admin                  | 0 `/admin/home`, 1 `/admin/sites`                       |
+/// | Auditor (denetçi)           | 0 `/auditor/home`                                       |
 ///
 /// Signed-out users are always on `/login`.
 class AppRoutes {
   const AppRoutes._();
 
   static const login = '/login';
+
+  /// Single-use account links sent by email (person module S2/S3/S5).
+  static const activate = '/activate';
+  static const confirmEmail = '/confirm-email';
 
   /// Tab path segments for the role/path the controller is in now.
   static List<String> tabSegments(DashboardController controller) {
@@ -25,6 +30,8 @@ class AppRoutes {
             : const ['home', 'unit'];
       case UserRole.saasAdmin:
         return const ['home', 'sites'];
+      case UserRole.auditor:
+        return const ['home'];
       case UserRole.homeOwner:
       case UserRole.homeResident:
         return const ['home', 'unit'];
@@ -37,6 +44,8 @@ class AppRoutes {
         return controller.siteAdminPath == SiteAdminActivePath.managerCockpit ? '/manager' : '/manager/my-flat';
       case UserRole.saasAdmin:
         return '/admin';
+      case UserRole.auditor:
+        return '/auditor';
       case UserRole.homeOwner:
       case UserRole.homeResident:
         return '/resident';
@@ -62,6 +71,9 @@ class AppRoutes {
       case 'resident':
         if (role != UserRole.homeOwner && role != UserRole.homeResident) return null;
         tabName = parts.length > 1 ? parts[1] : 'home';
+      case 'auditor':
+        if (role != UserRole.auditor) return null;
+        tabName = 'home';
       case 'admin':
         if (role != UserRole.saasAdmin) return null;
         tabName = parts.length > 1 ? parts[1] : 'home';

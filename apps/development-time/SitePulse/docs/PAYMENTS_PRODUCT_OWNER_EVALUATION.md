@@ -51,6 +51,30 @@ So the module is **further along on ledger correctness** than the draft said. It
 
 ---
 
+## Implementation status (2026-11-09)
+
+SPEC-007 (V18) and SPEC-009 (V20, [spec](../.specify/specs/009-payments-phase3/spec.md), [EPIC-11](../.specify/requirements/EPIC-11-payments-phase3.md)) implement every feature in §3.2. External services are behind ports with **sandbox** implementations only, and items marked (verify) still need counsel or a mali müşavir before production.
+
+| ID | Feature | Status | Where | Still needed for production |
+|---|---|---|---|---|
+| F-01 | İşletme projesi, cap, allocation, lifecycle | ✅ SPEC-007 + `HOUSE_TYPE`/`METER`/`CUSTOM` keys, 90-day transition, legal-basis report, interim-deadline reminders, decision link | `operating_budget_service`, `budget_compliance_service` | Verify the revaluation-rate source |
+| F-02 | Licensed PSP checkout, resident API | ✅ SPEC-007; instalments and save-card on intents | `card_payment_service`, `create_payment_intent_v2` | A real provider (`PaymentProvider`) and its contract |
+| F-03 | KVKK controls | ✅ notices, acknowledgements, consents, personal-channel rule (also a DB constraint), masked export, access log, retention review/purge | `domain::kvkk`, `kvkk_service` | Counsel review of retention periods |
+| F-04 | KMK 22 rent cap (verify) | ✅ leases, joint-exposure view, rent-deduction certificate PDF, corrected receipt citation | `domain::joint_liability`, `lease_service` | The legal opinion in §7.5 |
+| F-05 | Notifications and dunning | ✅ delivery log with dedupe, KVKK enforcement, per-site schedule, daily run, ihtarname draft PDF | `notification_service`, `dunning_service` | Real SMS / push / e-mail vendors |
+| F-06 | Resident self-service | ✅ statement and PDF/QR (SPEC-007), debt selection (TBK 101), disputes, virman requests | `resident_request_service`, Flutter `resident_self_service.dart` | — |
+| F-07 | Autopay and instalments | ✅ provider tokens, mandates, D+2/D+5 retries, expiry suspension, decline notices | `autopay_service` | Merchant-initiated charges at a real provider |
+| F-08 | Expenses, GL, account report | ✅ vendors (VKN/TCKN, IBAN), invoices, four-eyes and auditor threshold, payments, derived double-entry ledger, trial balance, budget vs actual, yearly report PDF, `AUDITOR` role | `domain::double_entry`, `accounting_service` | Mali müşavir review of the chart of accounts |
+| F-09 | Collections and legal handover | ✅ case workflow, evidence pack PDF, KMK 25 counter, limitation warnings, token-based lawyer access | `collections_service` | Counsel review of mediation and limitation |
+| F-10 | Multi-bank feeds and matching | ✅ TCKN (digest) / phone / block-unit matching, feed connections with credential references, daily reconciliation | `domain::payer_match`, `bank_matching_service` | Corporate bank API integrations |
+| F-11 | Plans, waivers, write-offs | ✅ instalment plans, broken-plan trigger, four-eyes adjustments, penalty waiver on completion | `domain::installments`, `plan_service` | — |
+| F-13 | Heat-share (verify) | ✅ periods, readings, consumption/area split, accrual to the occupant | `domain::heat_share`, `heat_share_service` | Verify the split rule against the regulation |
+| F-14 | Decisions book and assembly | ✅ meetings, quorum, votes by count and land share, numbered decisions that approve budgets | `domain::assembly_vote`, `assembly_service` | Verify the majority rules (KMK 30) |
+| F-15 | Portfolio and fee invoicing | ✅ companies, members, portfolio summary, monthly e-Arşiv / e-Fatura invoices | `portfolio_service` | A GİB özel entegratör |
+| F-16 | Reserve fund | ✅ account 549 with the budget's `RESERVE` target | `accounting_service::reserve_fund` | — |
+| F-17 | Collection analytics | ✅ collection and on-time rates, DSO, channel and zero-touch shares, 6-month forecast, at-risk scoring | `domain::collection_metrics`, `analytics_service` | Baselines from the pilot (§6) |
+| §3.3 | Hygiene | ✅ receipt hash v2 (payer + allocation), virman reversal (SPEC-007), stream KPIs through analytics | `domain::fingerprint` | — |
+
 ## 1. Executive summary
 
 SitePulse has a **better-engineered payment core than its Turkish competitors advertise**:

@@ -58,6 +58,14 @@ The workspace is strictly partitioned into two paradigms:
    - Harness verification gate `logging-standards-lint` (`scripts/logging_standards_lint.py`) must pass on every check.
 
 
+9. **Token Budget Discipline**:
+   - Every tool result stays in context and is re-sent on every later step; keep results small.
+   - Locate before reading: `graphify query`/`explain`, `rg -l`, or `grep -n ... | head -30`; then read only the needed range (`sed -n 'A,Bp'`, Read with offset/limit). Never `cat` whole large files, `ls -R`, or unbounded `find`.
+   - Run gates in compact form: `run_tests.py --summary` (or `--json --summary`); pipe other build/test output through `tail -40` or a failure filter.
+   - Browser checks: prefer `get_page_text`/`read_page`; screenshots only when visual layout matters, with `scale` ≤ 0.5.
+   - One task per session; `/compact` or start fresh once context passes ~200K tokens. Use Sonnet for routine edits, test runs and exploration; reserve Opus for design-heavy work.
+   - The `.claude/settings.json` hook (`scripts/token_guard.py`) denies known-wasteful calls and warns on oversized output; follow its suggestion rather than working around it.
+
 ## Durable engineering harness
 
 For persistent multi-role development runs, use `python3 scripts/development_harness.py --help` and the [team-orchestration skill](.agents/skills/team-orchestration/SKILL.md). Setup, execution boundaries and recovery are in [docs/engineering-harness.md](docs/engineering-harness.md). Preserve user changes; create runs from an explicit committed revision. Model targets require live capabilities and configured eligibility; a plan alone does not execute agents.

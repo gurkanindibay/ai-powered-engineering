@@ -46,6 +46,9 @@ pub use capital::*;
 mod payments_phase2;
 pub use payments_phase2::*;
 
+mod payments_phase3;
+pub use payments_phase3::*;
+
 mod auth;
 pub use auth::*;
 

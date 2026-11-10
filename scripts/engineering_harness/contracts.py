@@ -105,6 +105,25 @@ def validate_policy(value: dict) -> dict:
     return value
 
 
+ROLE_ARTIFACTS = {
+    "product_owner": ("scope", "acceptance_criteria", "exclusions"),
+    "business_analyst": ("domain_rules", "contracts", "edge_cases"),
+    "architect": ("design", "risks"),
+    "tester": ("criteria", "verdict", "residual_risks"),
+}
+DEVELOPER_ARTIFACTS = ("changes", "tests")
+ARTIFACT_TYPES = {
+    "scope": str, "acceptance_criteria": list, "exclusions": list, "domain_rules": list,
+    "contracts": dict, "edge_cases": list, "design": str, "risks": list, "criteria": dict,
+    "verdict": str, "residual_risks": list, "changes": list, "tests": list,
+}
+
+
+def role_artifacts(role: str) -> tuple[str, ...]:
+    """Artifact names a completed result for this role must provide."""
+    return ROLE_ARTIFACTS.get(role, DEVELOPER_ARTIFACTS)
+
+
 def validate_result(result: dict, envelope: dict) -> dict:
     required = {"schema_version", "run_id", "task_id", "attempt_id", "input_hash", "candidate", "status", "summary", "artifacts", "issues", "usage"}
     if not isinstance(result, dict) or set(result) != required or result["schema_version"] != 1:
@@ -123,20 +142,13 @@ def validate_result(result: dict, envelope: dict) -> dict:
     if not isinstance(result["artifacts"], dict):
         raise HarnessError("Worker artifacts must be an object")
     role = envelope["role"]
-    fields = {"product_owner": {"scope", "acceptance_criteria", "exclusions"},
-              "business_analyst": {"domain_rules", "contracts", "edge_cases"},
-              "architect": {"design", "risks"},
-              "tester": {"criteria", "verdict", "residual_risks"}}.get(role, {"changes", "tests"})
+    fields = set(role_artifacts(role))
     if result["status"] == "completed":
         if result["issues"] or not fields <= set(result["artifacts"]):
             raise HarnessError("Completed result has unresolved issues or missing role artifacts")
         if any(not result["artifacts"][field] for field in fields - {"exclusions", "residual_risks", "risks"}):
             raise HarnessError("Required role artifacts must not be empty")
-        types = {
-            "scope": str, "acceptance_criteria": list, "exclusions": list, "domain_rules": list,
-            "contracts": dict, "edge_cases": list, "design": str, "risks": list, "criteria": dict,
-            "verdict": str, "residual_risks": list, "changes": list, "tests": list,
-        }
+        types = ARTIFACT_TYPES
         for field in fields:
             artifact = result["artifacts"][field]
             if not isinstance(artifact, types[field]) or (isinstance(artifact, list) and any(not isinstance(v, str) for v in artifact)):

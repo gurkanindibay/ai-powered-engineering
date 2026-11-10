@@ -92,6 +92,8 @@ pub struct AuthzContext {
     pub claims: Claims,
     pub permissions: Vec<Permission>,
     pub request_id: String,
+    /// The caller re-entered their password recently (sensitive actions).
+    pub stepped_up: bool,
 }
 impl AuthzContext {
     /// Require a permission for the currently authorized tenant context.
@@ -352,6 +354,7 @@ pub async fn request_grant(
     let allowed = [
         Permission::UnitRead,
         Permission::SiteManage,
+        Permission::PersonRead,
         Permission::ResidentInviteSite,
         Permission::ResidentApprove,
         Permission::LedgerManageAll,

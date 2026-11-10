@@ -10,6 +10,10 @@ import 'package:sitepulse/domain/formatting/money_formatter.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/domain/services/bank_file_parser.dart';
 import 'package:sitepulse/ui/components/sp_dialog_pages.dart';
+import 'package:sitepulse/ui/components/step_up_prompt.dart';
+import 'package:sitepulse/domain/services/api_client.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:sitepulse/ui/design_system/sp_clipboard.dart';
 import 'package:sitepulse/ui/design_system/sp_filter_chip.dart';
 import 'package:sitepulse/ui/design_system/sp_guidance_card.dart';
@@ -402,6 +406,53 @@ void main() {
       await tester.tap(find.byKey(const Key(spPageBackKey)));
       await tester.pumpAndSettle();
       expect(result, isNull);
+    });
+  });
+
+  group('StepUpPromptPage', () {
+    late http.Client previous;
+    setUp(() => previous = ApiClient.transport);
+    tearDown(() => ApiClient.transport = previous);
+
+    for (final dark in [false, true]) {
+      testWidgets('states the reason and verifies the password (${dark ? 'dark' : 'light'}, 2x text)', (tester) async {
+        String? sent;
+        ApiClient.transport = MockClient((request) async {
+          sent = request.body;
+          return http.Response('{}', 200);
+        });
+        bool? result;
+        await tester.pumpWidget(MaterialApp(
+          theme: dark ? AppTheme.dark() : AppTheme.light(),
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: Builder(builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async => result = await showStepUpPrompt(context, reason: 'Login email change'),
+                child: const Text('open'),
+              ),
+            )),
+          ),
+        ));
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        expect(find.text('Login email change'), findsOneWidget);
+        await tester.enterText(find.byKey(const Key('step_up_password')), 'Manager-Pass-1');
+        await tester.tap(find.byKey(const Key('btn_step_up_verify')));
+        await tester.pumpAndSettle();
+        expect(sent, contains('Manager-Pass-1'));
+        expect(result, isTrue);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('a wrong password keeps the page open and says so', (tester) async {
+      ApiClient.transport = MockClient((_) async => http.Response('{}', 401));
+      await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: const StepUpPromptPage(reason: 'r')));
+      await tester.enterText(find.byKey(const Key('step_up_password')), 'wrong');
+      await tester.tap(find.byKey(const Key('btn_step_up_verify')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('doğrulanamadı'), findsOneWidget);
     });
   });
 }

@@ -1,5 +1,6 @@
 import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
+import '../../domain/models/auth_models.dart';
 import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../dashboard/dashboard_controller.dart';
@@ -26,6 +27,10 @@ class UnitMatchingCriteriaCard extends StatefulWidget {
 }
 
 class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
+  /// The unit's payer IBANs and names steer bank matching; only the owner and the
+  /// manager may change them (person module S6, `UNIT_PAYMENT_PROFILE_MANAGE`).
+  bool get _canEditPaymentProfile => widget.controller.userRole != UserRole.homeResident;
+
   void _showAddIbanDialog(BuildContext context) {
     final ibanController = TextEditingController(text: 'TR');
     final labelController = TextEditingController();
@@ -559,7 +564,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                     ),
                   ),
                 ])),
-              TextButton.icon(
+              if (_canEditPaymentProfile) TextButton.icon(
                 onPressed: () => _showAddIbanDialog(context),
                 icon: const Icon(Icons.add, size: 14, color: AppColors.accentOrange),
                 label: Text(
@@ -627,7 +632,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                         ],
                       ),
                     ),
-                    IconButton(
+                    if (_canEditPaymentProfile) IconButton(
                       icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.accentRed),
                       tooltip: 'IBAN\'ı Kaldır',
                       onPressed: () => _confirmDeleteIban(context, ibanItem),
@@ -654,7 +659,7 @@ class _UnitMatchingCriteriaCardState extends State<UnitMatchingCriteriaCard> {
                     ),
                   ),
                 ])),
-              testId('btn_edit_payer_names', TextButton.icon(
+              if (_canEditPaymentProfile) testId('btn_edit_payer_names', TextButton.icon(
                 onPressed: () => _showEditPayerNamesDialog(context, criteria.registeredPayerNames),
                 icon: const Icon(Icons.edit, size: 13, color: AppColors.accentGreen),
                 label: Text(

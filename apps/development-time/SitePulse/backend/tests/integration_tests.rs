@@ -186,7 +186,7 @@ async fn when_duplicate_email_then_throws_exception() {
 }
 
 #[tokio::test]
-async fn when_registering_home_owner_then_provisions_user_with_resident_password() {
+async fn when_registering_home_owner_then_sends_activation_instead_of_a_password() {
     let state = AppState::new();
     let service = SiteAdminService::new(state);
 
@@ -212,7 +212,7 @@ async fn when_registering_home_owner_then_provisions_user_with_resident_password
         .await
         .expect("Registration failed");
     assert_eq!(res.owner_full_name, "Canan Dağ");
-    assert!(res.temporary_password.unwrap().starts_with("SP-SAKIN-"));
+    assert_eq!(res.activation.expect("activation status").status, "SENT");
     assert!(res.must_change_password);
 }
 
@@ -241,7 +241,11 @@ async fn when_duplicate_email_for_home_owner_then_throws_exception() {
     let res = service.register_home_owner("site-1", req).await;
     assert!(res.is_err());
     let err = res.unwrap_err();
-    assert!(err.contains("already exists") || err.contains("zaten mevcut"));
+    assert_eq!(err, site_admin_service::EMAIL_NOT_AVAILABLE);
+    assert!(
+        !err.contains("ahmet.yilmaz"),
+        "the address must not be echoed back"
+    );
 }
 
 #[tokio::test]
@@ -299,6 +303,7 @@ async fn when_approving_pending_registration_then_provisions_user_and_returns_cr
         claims,
         permissions: Permission::permissions_for_role(Role::SiteManager),
         request_id: "test-approval".to_string(),
+        stepped_up: false,
     };
     let res = service
         .approve_registration(&ctx, "req-seed-01")
@@ -2786,14 +2791,14 @@ async fn when_homeowner_or_tenant_manually_adds_household_member_then_stored_and
         .expect("Manual add resident failed");
 
     assert_eq!(member.full_name, "Zeynep Yılmaz");
-    assert_eq!(member.relationship, "Eş");
+    assert_eq!(member.relationship, "SPOUSE");
     assert_eq!(member.email, "zeynep.yilmaz@gmail.com");
 
     let invitation_service = HomeResidentInvitationService::new(state);
     let members = invitation_service.get_unit_members("d-14").await;
     assert!(members
         .iter()
-        .any(|m| m.full_name == "Zeynep Yılmaz" && m.relationship == "Eş"));
+        .any(|m| m.full_name == "Zeynep Yılmaz" && m.relationship == "SPOUSE"));
 }
 
 #[tokio::test]
@@ -2878,7 +2883,7 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
     assert!(u14
         .household_residents
         .iter()
-        .any(|m| m.full_name == "Sakin Kardeş" && m.relationship == "Ev Sakini"));
+        .any(|m| m.full_name == "Sakin Kardeş" && m.relationship == "OTHER"));
 
     // 5. Verify in get_site_overview:
     // Flat in overview shows Canan Can as primary resident_name (NOT Sakin Kardeş, and not duplicated)

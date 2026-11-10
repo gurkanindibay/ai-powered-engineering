@@ -114,6 +114,18 @@ pub enum Permission {
     GovernanceManage,
     /// SPEC-009: a management company's portfolio of sites.
     PortfolioRead,
+    /// Person module: read the site's owners and residents directory and unit history.
+    PersonRead,
+    /// Person module: register and edit people, households and contact details.
+    PersonManage,
+    /// Person module: change a login email (with step-up); identity, not contact data.
+    PersonIdentityManage,
+    /// Person module: move-in, move-out and ownership transfer.
+    OccupancyManage,
+    /// Person module: a unit's payer IBANs and payer names used for bank matching.
+    UnitPaymentProfileManage,
+    /// Person module: export the people directory (step-up, audited).
+    PersonExport,
 }
 
 impl Permission {
@@ -150,6 +162,12 @@ impl Permission {
             Permission::AdjustmentApprove => "Approve penalty waivers and write-offs",
             Permission::GovernanceManage => "Manage assembly meetings and the decisions book",
             Permission::PortfolioRead => "View a management company's site portfolio",
+            Permission::PersonRead => "View the owners and residents directory",
+            Permission::PersonManage => "Register and edit people, households and contact details",
+            Permission::PersonIdentityManage => "Change a resident's login email (step-up)",
+            Permission::OccupancyManage => "Record move-in, move-out and ownership transfer",
+            Permission::UnitPaymentProfileManage => "Manage a unit's payer IBANs and payer names",
+            Permission::PersonExport => "Export the people directory (step-up, audited)",
         }
     }
 
@@ -183,12 +201,19 @@ impl Permission {
                 Permission::AdjustmentApprove,
                 Permission::GovernanceManage,
                 Permission::PortfolioRead,
+                Permission::PersonRead,
+                Permission::PersonManage,
+                Permission::PersonIdentityManage,
+                Permission::OccupancyManage,
+                Permission::UnitPaymentProfileManage,
+                Permission::PersonExport,
             ],
             Role::HomeOwner => vec![
                 Permission::UnitRead,
                 Permission::UnitPay,
                 Permission::UnitInviteCoResident,
                 Permission::UnitManageHousehold,
+                Permission::UnitPaymentProfileManage,
             ],
             Role::HomeResident => vec![Permission::UnitRead, Permission::UnitPay],
             Role::Auditor => vec![
@@ -1087,6 +1112,13 @@ pub struct UpdateHomeOwnerRequest {
     pub is_resident: Option<bool>,
 }
 
+/// A login email change the person has not confirmed yet.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PendingEmailChange {
+    pub new_email: String,
+    pub delivery: crate::services::account_activation_service::ActivationDelivery,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoveOutResidentRequest {
     pub end_date: Option<String>,
@@ -1136,7 +1168,18 @@ pub struct HomeOwnerResponse {
     #[serde(default)]
     pub house_type: Option<String>,
     pub is_resident: bool,
-    pub temporary_password: Option<String>,
+    /// Whether the owner's activation link was sent. The link itself is never returned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activation: Option<crate::services::account_activation_service::ActivationDelivery>,
+    /// The same for a tenant account created together with the owner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_activation: Option<crate::services::account_activation_service::ActivationDelivery>,
+    /// Login email changes waiting for the new address to confirm them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_email_changes: Vec<PendingEmailChange>,
+    /// Defaults the server applied that the manager should check (`DUES_DEFAULTED`, `LAND_SHARE_DEFAULTED`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
     pub must_change_password: bool,
     pub created_at: DateTime<Utc>,
     #[serde(default)]

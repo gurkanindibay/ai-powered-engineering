@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "_comment": "T3 child-agent routing. provider = T3 providerInstanceId. Prices are relative cost units for budget ordering, not billed currency; replace them and benchmark_id after a held-out pilot. Lowest input+output price wins among eligible targets.",
+  "targets": [
+    {
+      "provider": "claudeAgent",
+      "model": "claude-haiku-5-5",
+      "roles": [
+        "product_owner",
+        "business_analyst",
+        "backend_developer",
+        "frontend_developer",
+        "developer",
+        "tester"
+      ],
+      "tiers": [
+        "low"
+      ],
+      "options": {
+        "effort": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "tier_options": {
+        "low": {
+          "effort": "medium"
+        }
+      },
+      "input_per_million": "1",
+      "output_per_million": "5",
+      "max_tokens": 200000,
+      "price_date": "2026-11-09",
+      "benchmark_id": "t3-default-unevaluated-2026-11"
+    },
+    {
+      "provider": "claudeAgent",
+      "model": "claude-sonnet-5-5",
+      "roles": [
+        "product_owner",
+        "business_analyst",
+        "architect",
+        "backend_developer",
+        "frontend_developer",
+        "developer",
+        "tester"
+      ],
+      "tiers": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "options": {
+        "effort": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "tier_options": {
+        "low": {
+          "effort": "medium"
+        },
+        "medium": {
+          "effort": "high"
+        },
+        "high": {
+          "effort": "xhigh"
+        }
+      },
+      "input_per_million": "3",
+      "output_per_million": "15",
+      "max_tokens": 200000,
+      "price_date": "2026-11-09",
+      "benchmark_id": "t3-default-unevaluated-2026-11"
+    },
+    {
+      "provider": "claudeAgent",
+      "model": "claude-opus-5-5",
+      "roles": [
+        "product_owner",
+        "business_analyst",
+        "architect",
+        "backend_developer",
+        "frontend_developer",
+        "developer",
+        "tester"
+      ],
+      "tiers": [
+        "high",
+        "critical"
+      ],
+      "options": {
+        "effort": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "tier_options": {
+        "high": {
+          "effort": "high"
+        },
+        "critical": {
+          "effort": "xhigh"
+        }
+      },
+      "input_per_million": "5",
+      "output_per_million": "25",
+      "max_tokens": 200000,
+      "price_date": "2026-11-09",
+      "benchmark_id": "t3-default-unevaluated-2026-11"
+    },
+    {
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "roles": [
+        "architect",
+        "backend_developer",
+        "developer",
+        "tester"
+      ],
+      "tiers": [
+        "medium",
+        "high",
+        "critical"
+      ],
+      "options": {
+        "reasoningEffort": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "tier_options": {
+        "medium": {
+          "reasoningEffort": "medium"
+        },
+        "high": {
+          "reasoningEffort": "high"
+        },
+        "critical": {
+          "reasoningEffort": "xhigh"
+        }
+      },
+      "input_per_million": "5",
+      "output_per_million": "30",
+      "max_tokens": 200000,
+      "price_date": "2026-11-09",
+      "benchmark_id": "t3-default-unevaluated-2026-11"
+    }
+  ]
+}

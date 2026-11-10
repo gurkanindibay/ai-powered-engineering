@@ -76,3 +76,27 @@ pub async fn get_profile(
         .map(Json)
         .map_err(|e| (StatusCode::NOT_FOUND, e))
 }
+
+/// Set the first password of an account with the single-use link the person received (S2/S3).
+pub async fn activate_account(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::services::account_activation_service::ActivateAccountRequest>,
+) -> Result<StatusCode, crate::error::AppError> {
+    crate::services::AccountActivationService::new(state)
+        .activate(payload)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(super::site_admin::activation_error)
+}
+
+/// Apply a login email change once the new address confirms it (S5).
+pub async fn confirm_email_change(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::services::account_activation_service::ConfirmEmailRequest>,
+) -> Result<StatusCode, crate::error::AppError> {
+    crate::services::AccountActivationService::new(state)
+        .confirm_email(payload)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(super::site_admin::activation_error)
+}

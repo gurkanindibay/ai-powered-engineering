@@ -62,6 +62,12 @@ impl IntoResponse for TenantDenied {
     }
 }
 
+impl From<TenantDenied> for crate::error::AppError {
+    fn from(d: TenantDenied) -> Self {
+        crate::error::AppError::from((d.status, d.message))
+    }
+}
+
 impl From<TenantDenied> for (StatusCode, String) {
     fn from(d: TenantDenied) -> Self {
         (d.status, d.message)
