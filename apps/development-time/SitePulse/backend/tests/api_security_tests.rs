@@ -437,3 +437,38 @@ async fn homeowner_payment_records_are_confined_to_their_site() {
         body
     );
 }
+
+/// The web client sends `x-request-id` (correlation) with every call. A CORS
+/// preflight that does not allow it makes the browser report "could not
+/// connect" for every request, including login.
+#[tokio::test]
+async fn cors_preflight_allows_the_client_correlation_header() {
+    let resp = build_router(AppState::new_with_test_fixtures())
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/api/v1/auth/login")
+                .header("origin", "http://localhost:9190")
+                .header("access-control-request-method", "POST")
+                .header(
+                    "access-control-request-headers",
+                    "content-type,authorization,x-request-id",
+                )
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let allowed = resp
+        .headers()
+        .get("access-control-allow-headers")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    assert!(
+        allowed.contains("x-request-id"),
+        "preflight must allow x-request-id, got {:?} ({})",
+        allowed,
+        resp.status()
+    );
+}
