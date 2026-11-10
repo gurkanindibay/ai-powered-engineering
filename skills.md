@@ -279,7 +279,8 @@ echo -n 'new-password' | cargo run --quiet --bin hash-password   # from backend/
 - **Runtime:** `scripts/development_harness.py` (Python 3.12+, Docker for execution).
 - **Planner compatibility:** `scripts/team_orchestrator.py`; plans only, unresolved model targets without capabilities.
 - **Capabilities:** five specialized roles plus conditional Architect, risk floors, live target validation, SQLite scheduling, decimal budgets, per-attempt evidence, cancellation/recovery, container isolation and trusted final-candidate gates.
-- **CLI:** `plan`, `create`, `step`, `run`, `status`, `cancel`, `recover`, `events`, `audit`, `evaluate`, `validate-policy`, `sitepulse-policy`; `--help` and `--json` supported.
+- **CLI:** `plan`, `create`, `step`, `run`, `status`, `cancel`, `recover`, `events`, `audit`, `evaluate`, `validate-policy`, `sitepulse-policy`, `t3-dispatch`, `t3-submit`, `t3-heartbeat`; `--help` and `--json` supported.
+- **T3 transport:** `--t3-catalog` (saved `orchestrator_capabilities` output) routes roles to T3 child-agent models from `config/engineering-harness/t3-registry.json`; the T3 orchestrator sends each `t3-dispatch` payload via `delegate_task` and returns the child's message with `t3-submit`.
 
 ```bash
 python3 scripts/development_harness.py --json plan --task "Implement payment reconciliation" --financial

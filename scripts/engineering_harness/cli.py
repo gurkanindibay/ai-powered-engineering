@@ -7,6 +7,7 @@ import sqlite3
 from pathlib import Path
 import sys
 
+from . import t3
 from .contracts import canonical, validate_policy
 from .engine import Engine
 from .evaluation import evaluate
@@ -37,6 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--roles", nargs="+", choices=ROLES)
         p.add_argument("--scope", choices=("fullstack", "backend", "frontend", "mechanical"), default="fullstack")
         p.add_argument("--capabilities", type=Path, help="Offline capabilities snapshot; execution always revalidates live capabilities")
+        p.add_argument("--t3-catalog", type=Path, help="Saved T3 orchestrator_capabilities result; routes stages to T3 child-agent models")
+        p.add_argument("--t3-registry", type=Path, default=t3.DEFAULT_REGISTRY, help="Operator T3 role/tier model registry")
         if command == "create":
             p.add_argument("--policy", type=Path, required=True, help="Trusted operator policy outside worker control")
             p.add_argument("--repository", type=Path, default=Path.cwd())
@@ -44,6 +47,17 @@ def build_parser() -> argparse.ArgumentParser:
     for command in ("status", "step", "run", "cancel", "recover", "events", "audit"):
         p = sub.add_parser(command)
         p.add_argument("run_id")
+    p = sub.add_parser("t3-dispatch", help="Claim the next stage and print its T3 delegate_task payload (or run gates when none remain)")
+    p.add_argument("run_id")
+    p.add_argument("--catalog", type=Path, required=True, help="Fresh T3 orchestrator_capabilities result")
+    p.add_argument("--registry", type=Path, default=t3.DEFAULT_REGISTRY)
+    p = sub.add_parser("t3-submit", help="Record a T3 child's final message for a claimed attempt")
+    p.add_argument("run_id")
+    p.add_argument("attempt_id")
+    p.add_argument("--output", type=Path, required=True, help="File with the child's final message; - reads stdin")
+    p = sub.add_parser("t3-heartbeat", help="Extend the lease of a long-running T3 child")
+    p.add_argument("run_id")
+    p.add_argument("attempt_id")
     p = sub.add_parser("evaluate")
     p.add_argument("--cases", type=Path, required=True)
     p.add_argument("--measurements", type=Path, help="Paired baseline/routed evaluation results")
@@ -60,11 +74,21 @@ def main(argv=None) -> int:
     store = None
     try:
         if args.command in ("plan", "create"):
+            if args.capabilities and args.t3_catalog:
+                raise HarnessError("Use either --capabilities or --t3-catalog")
+            capabilities = read_json(args.capabilities) if args.capabilities else None
+            if args.t3_catalog:
+                capabilities = t3.capabilities_from_catalog(read_json(args.t3_registry), read_json(args.t3_catalog))
             options = dict(files_count=args.files, financial=args.financial, schema=args.schema,
                            auth=args.auth, requested=args.complexity, roles=args.roles, scope=args.scope,
-                           capabilities=read_json(args.capabilities) if args.capabilities else None)
+                           capabilities=capabilities)
             if args.command == "plan":
                 value = plan(args.task, **options)
+                if args.t3_catalog:
+                    for stage in value["stages"]:
+                        target = t3.with_tier_options(stage["target"], value["complexity"])
+                        stage["target"] = {"providerInstanceId": target["provider"], "model": target["model"],
+                                           "options": target["selected_options"]}
             else:
                 policy = validate_policy(read_json(args.policy))
                 store = Store(args.state)
@@ -92,6 +116,17 @@ def main(argv=None) -> int:
                     while status not in TERMINAL:
                         status = engine.step(args.run_id)
                 value = {"run_id": args.run_id, "status": status}
+            elif args.command == "t3-dispatch":
+                capabilities = t3.capabilities_from_catalog(read_json(args.registry), read_json(args.catalog))
+                value = engine.t3_dispatch(args.run_id, capabilities)
+            elif args.command == "t3-submit":
+                output = sys.stdin.read() if str(args.output) == "-" else args.output.read_text()
+                value = {"run_id": args.run_id, "status": engine.t3_submit(args.run_id, args.attempt_id, output)}
+            elif args.command == "t3-heartbeat":
+                if store.attempt(args.attempt_id)["run_id"] != args.run_id:
+                    raise HarnessError("Attempt does not belong to this run")
+                store.heartbeat(args.attempt_id)
+                value = {"run_id": args.run_id, "attempt_id": args.attempt_id, "heartbeat": True}
             elif args.command in ("cancel", "recover"):
                 value = {"run_id": args.run_id, "status": getattr(engine, args.command)(args.run_id)}
             elif args.command == "events":

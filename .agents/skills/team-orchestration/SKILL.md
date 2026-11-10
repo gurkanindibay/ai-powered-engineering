@@ -32,4 +32,16 @@ Gate failures trigger bounded developer repairs followed by another tester revie
 - `python3 scripts/development_harness.py --json evaluate --cases config/engineering-harness/routing-cases.json`
 - Run the existing project suites required by AGENTS.md. Fixture agents test the controller; they are not evidence of live model quality or cost savings.
 
-T3 delegation from an interactive session follows the current T3 tool contract and `orchestrator_capabilities`. The Python runtime uses a container bridge protocol, not an undocumented T3 server endpoint. Do not confuse these transports or feed planner JSON directly into delegate_task.
+## Running role agents as T3 child sessions
+
+Inside T3 Code, role agents run as T3 children on separate models chosen by the harness. You are the transport; the harness decides.
+
+1. Call `orchestrator_capabilities` (no `search`) and write its JSON to a private file, e.g. `catalog.json`. Refresh it if a dispatch reports no eligible target.
+2. `plan --task "..." --t3-catalog catalog.json` to show per-role models; `create ... --t3-catalog catalog.json` from a committed revision.
+3. Loop until the status is terminal:
+   - `--json t3-dispatch RUN_ID --catalog catalog.json`. If it returns `delegate_task`, call `delegate_task` with exactly those arguments. Do not change the target, add context or rewrite the prompt.
+   - Write the child's final message verbatim to a file and run `--json t3-submit RUN_ID ATTEMPT_ID --output FILE`.
+   - A `status` without `delegate_task` is the post-gate result: continue on `QUEUED`/`REPAIRING`, stop on `READY_FOR_REVIEW`, `BLOCKED`, `CANCELLED`, `TIMED_OUT`.
+4. If a child times out, errors or asks a question, do not answer for it. `cancel` the run, `task_cancel` the child and report to the user.
+
+Rules: one child at a time per run. Never edit the candidate checkout yourself or hand-write a result block. A blocked run is reported, not retried with a different model. Model routing comes from `config/engineering-harness/t3-registry.json` plus policy `preferences` (`provider` is the T3 `providerInstanceId`).
