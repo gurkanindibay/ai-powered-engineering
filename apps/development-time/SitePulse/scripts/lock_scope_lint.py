@@ -83,7 +83,13 @@ def lint_file(path: Path, rel: str, findings: list[Finding]) -> None:
             # Re-binding the same name ends the old guard's use for our purposes.
             if re.search(rf"\blet\s+(?:mut\s+)?{guard}\b", cur) and j != i:
                 break
-            if IO_AWAIT_RE.search(cur):
+            # Match across the whole statement: rustfmt often puts `.await` on its own line.
+            statement = cur
+            k = j
+            while ";" not in statement and "{" not in statement and k + 1 < len(lines) and k < j + 8:
+                k += 1
+                statement += " " + lines[k].strip()
+            if IO_AWAIT_RE.search(statement):
                 findings.append(Finding(
                     f"{kind}-guard-across-io", rel, i + 1,
                     f"`{guard}` ({kind} guard on the global state) is still held at line {j + 1}: "

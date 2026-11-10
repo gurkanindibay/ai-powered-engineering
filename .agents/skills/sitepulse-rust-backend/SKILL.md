@@ -126,7 +126,7 @@ call site is written, never after.
    unit (project, budget, receipt), load the object and return **404** unless
    `scope.allows(&object.site_id)`; see `handlers::capital::scoped_capital_project`.
 5. Never guess a tenant (`unwrap_or_else(|| "1".to_string())`): unknown stays empty.
-6. A transaction for one site starts with `crate::db::tx_bind_tenant(&tx, site)` (RLS, V19); a
+6. A transaction for one site starts with `crate::db::tx_bind_tenant(&tx, site)` (RLS, V21); a
    single-site read uses `crate::db::begin_tenant_read`. A new table with a tenant key gets
    `SELECT sp_enable_tenant_rls(..)` in its migration.
 7. GET handlers never move money: take `inner.read()`, no offsets, no ledger writes. Advance

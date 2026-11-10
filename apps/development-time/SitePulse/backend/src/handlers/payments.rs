@@ -85,7 +85,7 @@ pub async fn record_homeowner_payment(
         PaymentMatchStatus::MatchedAdvance
     };
 
-    let mut inner = state.inner.write().await;
+    let inner = state.inner.read().await;
     let total_unit_advance = inner.advance_total(&unit.id);
     let remaining_debt: Decimal = inner
         .dues
@@ -149,6 +149,8 @@ pub async fn record_homeowner_payment(
         status_code: ReconciliationStatus::Approved.as_str().to_string(),
         notes: Some(message.clone()),
     };
+    // Persist without holding the global lock; memory follows on success.
+    drop(inner);
     if let Some(ref pool) = state.pool {
         crate::db::save_reconciliation_match(pool, &r_match)
             .await
@@ -159,7 +161,7 @@ pub async fn record_homeowner_payment(
                 )
             })?;
     }
-    inner.reconciliation_queue.push(r_match);
+    state.inner.write().await.reconciliation_queue.push(r_match);
 
     Ok((
         StatusCode::OK,
@@ -644,13 +646,9 @@ pub async fn reverse_payment(
     ctx: crate::authorization::AuthzContext,
     Json(mut payload): Json<crate::models::ReversePaymentRequest>,
 ) -> Result<(StatusCode, Json<crate::models::ReversePaymentResponse>), (StatusCode, String)> {
-    if payload
-        .site_id
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or("")
-        .is_empty()
-    {
+    // A foreign site in the body is refused; a missing one becomes the caller's.
+    crate::tenancy::TenantScope::from_claims(&ctx.claims).pin_opt(&mut payload.site_id)?;
+    if payload.site_id.is_none() {
         payload.site_id = Some(ctx.claims.site_id.clone());
     }
     let site_id = payload.site_id.clone().unwrap_or_default();

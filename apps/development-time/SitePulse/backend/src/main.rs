@@ -29,8 +29,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             db::upgrade_legacy_password_hashes(p).await?;
             db::ensure_bootstrap_admin(p).await?;
         }
-        let mut inner = state.inner.write().await;
-        db::load_all_from_db(p, &mut inner).await?;
+        // Loaded outside the global lock and swapped in (lock-lint).
+        state.reload_from_db().await?;
     }
 
     if migrations_only {

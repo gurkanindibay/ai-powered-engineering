@@ -306,7 +306,7 @@ and pass now**.
    closed (401 without claims, 403 for an empty site claim). All 36 handlers that accept a
    `site_id` pin it through the scope, and handlers for path object ids check ownership and return
    404 for foreign objects.
-2. **PostgreSQL row-level security** (migration V19) covers 32 tenant-keyed tables.
+2. **PostgreSQL row-level security** (migration V21) covers 64 tenant-keyed tables.
    `db::tx_bind_tenant` sets `app.tenant_site_id` for the transaction only and runs
    `SET LOCAL ROLE sitepulse_tenant`, a role without BYPASSRLS. RLS therefore applies even
    though the service connects as a superuser or as the table owner, and it rejects foreign
@@ -314,7 +314,7 @@ and pass now**.
    transactions, and the single-site payment read, are tenant-bound.
 3. **Static gates:** `tenant_isolation_lint.py` (`tenant-lint`) and `lock_scope_lint.py`
    (`lock-lint`). Run on `258eedc`, they report 83 tenant findings and 10 lock findings; the
-   current tree has none.
+   current tree has none (see the merge addendum below for what master brought in).
 4. **PostgreSQL tests:** `tests/db_tenant_isolation_tests.rs` (gate `rust-db-test`) covers RLS
    isolation and write rejection, read-only GETs, transactional accrual offsets with zero
    integrity violations, cross-site listing isolation, and 503 on database loss.
@@ -348,3 +348,21 @@ and pass now**.
 4. **Paginate in SQL** (`LIMIT`/keyset) for the payment stream and reconciliation queue.
 5. **Make provisioning atomic.** `provision-site-units` now persists only its own site and
    reports errors, but it still uses one statement per row rather than one transaction.
+
+### Addendum: merge with master (`ab050e3`, 9 November 2026)
+
+Master added session-backed authentication (`AuthzContext`, V19), payments phase 3 (V20) and a
+table-style route registry. The tenant RLS migration became **V21**. It is still unreleased,
+so it was extended in place rather than appended to. The guardrails ran on the merged tree and
+caught the following, all now fixed:
+
+| Finding | Fix |
+|---|---|
+| 36 new tenant-keyed tables from V19/V20 had no RLS policy | Added to V21: 64 tables are now forced-RLS. Exempt, with reasons in `RLS_EXEMPT`: `auth_sessions`, `audit_events`, `financial_access_log`, `management_company_sites` |
+| `reverse_payment` (rewritten on master) accepted a body `site_id` without a handler-level check | Pinned through `TenantScope::from_claims` |
+| Invited registration and registration approve/reject opened unbound transactions | `tx_bind_tenant` once the site is known |
+| 6 more write guards held across database I/O (dues periods, homeowner payment, reconciliation confirm, two sender-IBAN handlers, the bank webhook's unmatched branch, the SaaS manager password reset). The earlier lint missed them because `.await` sat on a continuation line | Database first, without the lock; memory follows only on success. The lint now matches whole statements |
+| **Sender IBANs were saved with arguments swapped** (`(unit_id, iban)` passed into `(iban, unit_id)`) in three handlers, so every database-backed "remember sender IBAN" failed after memory had changed | Fixed. Test: `sender_ibans_are_persisted_for_their_unit` |
+| The budget approval compared the assembly decision date with the **UTC** date, so it refused "today" between 00:00 and 03:00 Istanbul time | Compares with the site's local date. Same pattern still open in `served_on` (`operating_budget_service.rs`) and `decided_on` (`assembly_service.rs`) |
+| `unscoped-object-path` could not parse master's route table, so it silently checked nothing | Parses both formats and fails loudly when no route is found |
+| The PostgreSQL tests minted tokens that master's session check rejects (401) | They seed real managers and log in through `/api/v1/auth/login` |

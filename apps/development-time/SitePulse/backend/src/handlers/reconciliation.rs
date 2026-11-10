@@ -335,6 +335,9 @@ pub async fn confirm_reconciliation(
             .insert(iban.clone(), unit_id.clone());
     }
     let confirmed_count = confirmed_matches.len();
+    // The queue is updated in memory; release the global lock before the
+    // database writes below.
+    drop(inner);
 
     if let Some(ref pool) = state.pool {
         for m in &confirmed_matches {
@@ -353,7 +356,9 @@ pub async fn confirm_reconciliation(
             })?;
         }
         for (uid, iban) in &remembered {
-            crate::db::save_remembered_sender_iban(pool, uid, iban, None, None)
+            // (iban, unit_id): the arguments used to be swapped, so remembering a
+            // sender IBAN always failed after the payments had settled.
+            crate::db::save_remembered_sender_iban(pool, iban, uid, None, None)
                 .await
                 .map_err(|e| {
                     (
@@ -363,7 +368,6 @@ pub async fn confirm_reconciliation(
                 })?;
         }
     }
-    drop(inner);
     if let Some((code, msg)) = failure {
         // Lines before the failing one are settled and recorded; retrying the
         // whole batch is safe (each line is idempotent).
@@ -410,7 +414,6 @@ pub async fn remember_sender_iban(
     Json(mut payload): Json<RememberSenderIbanRequest>,
 ) -> Result<Json<RememberSenderIbanResponse>, (StatusCode, String)> {
     scope.pin(&mut payload.site_id)?;
-    let mut inner = state.inner.write().await;
     let clean = payload.sender_iban.replace(' ', "").to_uppercase();
     if clean.is_empty() {
         return Err((
@@ -418,27 +421,26 @@ pub async fn remember_sender_iban(
             "Sender IBAN cannot be empty.".to_string(),
         ));
     }
-    if !inner.units.iter().any(|u| u.id == payload.unit_id) {
+    let in_site = {
+        let inner = state.inner.read().await;
+        inner.units.iter().any(|u| {
+            crate::auth::same_id(&u.id, &payload.unit_id)
+                && crate::auth::same_id(&u.site_id, &payload.site_id)
+        })
+    };
+    if !in_site {
         return Err((
             StatusCode::NOT_FOUND,
             format!("Unit '{}' not found in this site.", payload.unit_id),
         ));
     }
 
-    inner
-        .remembered_sender_ibans
-        .insert(clean.clone(), payload.unit_id.clone());
-    if let Some(ref sender_name) = payload.sender_name {
-        inner
-            .sender_iban_metadata
-            .insert(clean.clone(), (Some(sender_name.clone()), None));
-    }
-
+    // Database first, without the global lock; memory follows on success.
     if let Some(ref pool) = state.pool {
         crate::db::save_remembered_sender_iban(
             pool,
-            &payload.unit_id,
             &clean,
+            &payload.unit_id,
             payload.sender_name.as_deref(),
             None,
         )
@@ -449,6 +451,17 @@ pub async fn remember_sender_iban(
                 format!("Database write failed: {}", e),
             )
         })?;
+    }
+    {
+        let mut inner = state.inner.write().await;
+        inner
+            .remembered_sender_ibans
+            .insert(clean.clone(), payload.unit_id.clone());
+        if let Some(ref sender_name) = payload.sender_name {
+            inner
+                .sender_iban_metadata
+                .insert(clean.clone(), (Some(sender_name.clone()), None));
+        }
     }
 
     Ok(Json(RememberSenderIbanResponse {
@@ -535,29 +548,27 @@ pub async fn add_unit_sender_iban(
         ));
     }
 
-    {
-        let mut inner = state.inner.write().await;
-        if !inner.units.iter().any(|u| u.id == unit_id) {
-            return Err((
-                StatusCode::NOT_FOUND,
-                format!("Unit '{}' not found", unit_id),
-            ));
-        }
-
+    let known = {
+        let inner = state.inner.read().await;
         inner
-            .remembered_sender_ibans
-            .insert(clean.clone(), unit_id.clone());
-        inner.sender_iban_metadata.insert(
-            clean.clone(),
-            (payload.label.clone(), payload.bank_name.clone()),
-        );
+            .units
+            .iter()
+            .any(|u| crate::auth::same_id(&u.id, &unit_id))
+    };
+    if !known {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("Unit '{}' not found", unit_id),
+        ));
     }
 
+    // Database first, without the global lock: (iban, unit_id) — the arguments
+    // used to be swapped, so every database-backed save failed.
     if let Some(ref pool) = state.pool {
         crate::db::save_remembered_sender_iban(
             pool,
-            &unit_id,
             &clean,
+            &unit_id,
             payload.label.as_deref(),
             payload.bank_name.as_deref(),
         )
@@ -568,6 +579,16 @@ pub async fn add_unit_sender_iban(
                 format!("Database write failed: {}", e),
             )
         })?;
+    }
+    {
+        let mut inner = state.inner.write().await;
+        inner
+            .remembered_sender_ibans
+            .insert(clean.clone(), unit_id.clone());
+        inner.sender_iban_metadata.insert(
+            clean.clone(),
+            (payload.label.clone(), payload.bank_name.clone()),
+        );
     }
 
     get_unit_matching_criteria(Path(unit_id), State(state)).await
@@ -983,7 +1004,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
     account_scope: Option<i64>,
 ) -> Result<(StatusCode, Json<BankIncomingWebhookResponse>), (StatusCode, String)> {
     let clean_viban = payload.virtual_iban.replace(' ', "").to_uppercase();
-    let mut inner = state.inner.write().await;
+    let inner = state.inner.read().await;
 
     // Any earlier delivery of this transaction id (matched or not) to the same
     // site is a duplicate (transaction ids are unique per bank, not globally).
@@ -1172,6 +1193,8 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
             };
             // The transaction id is already claimed, so the unmatched transfer must be
             // durable: it waits in the reconciliation queue for manual matching.
+            // The global lock is released for the write and re-taken for memory.
+            drop(inner);
             if let Some(ref pool) = state.pool {
                 crate::db::save_reconciliation_match_for_site(
                     pool,
@@ -1187,7 +1210,12 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
                     )
                 })?;
             }
-            inner.reconciliation_queue.push(unmatched);
+            state
+                .inner
+                .write()
+                .await
+                .reconciliation_queue
+                .push(unmatched);
 
             return Ok((
                 StatusCode::OK,

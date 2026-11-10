@@ -38,7 +38,7 @@ pub async fn create_dues_period(
     Json(mut payload): Json<CreateDuesPeriodRequest>,
 ) -> Result<(StatusCode, Json<DuesPeriod>), (StatusCode, String)> {
     scope.pin(&mut payload.site_id)?;
-    let mut inner = state.inner.write().await;
+    let inner = state.inner.read().await;
 
     // Check if period already exists
     if let Some(existing) = inner.dues_periods.iter().find(|p| {
@@ -65,8 +65,8 @@ pub async fn create_dues_period(
         created_at: Some(chrono::Utc::now()),
     };
 
-    inner.dues_periods.push(new_period.clone());
-
+    // Persist first, without the global lock; memory follows only on success.
+    drop(inner);
     if let Some(ref pool) = state.pool {
         crate::db::save_dues_period(pool, &new_period)
             .await
@@ -76,6 +76,13 @@ pub async fn create_dues_period(
                     format!("Database write failed: {}", e),
                 )
             })?;
+    }
+    let mut inner = state.inner.write().await;
+    if !inner.dues_periods.iter().any(|p| {
+        crate::auth::same_id(&p.site_id, &new_period.site_id)
+            && p.period_name.eq_ignore_ascii_case(&new_period.period_name)
+    }) {
+        inner.dues_periods.push(new_period.clone());
     }
 
     Ok((StatusCode::CREATED, Json(new_period)))

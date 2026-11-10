@@ -16,7 +16,7 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
 use deadpool_postgres::Pool;
-use sitepulse_backend::{app::build_router, auth, db, models::Role, state::AppState};
+use sitepulse_backend::{app::build_router, auth, db, state::AppState};
 use tower::ServiceExt;
 
 struct TestDb {
@@ -44,6 +44,24 @@ impl TestDb {
         let pool = db::create_pool_for(&name).expect("pool");
         db::init_db(&pool).await.expect("migrations");
         db::seed_test_data(&pool).await.expect("test seed");
+        // One real site manager per site: tokens are session-backed, so the
+        // tests log in through /api/v1/auth/login instead of minting tokens.
+        let hash = auth::hash_password(MANAGER_PASSWORD).expect("hash");
+        pool.get()
+            .await
+            .expect("connection")
+            .execute(
+                "WITH s AS (SELECT id FROM sites WHERE deleted_at IS NULL),
+                      p AS (INSERT INTO persons (full_name, email, person_type)
+                            SELECT 'Manager ' || id, 'manager' || id || '@tenant.test', 'SITE_MANAGER' FROM s
+                            RETURNING id, email)
+                 INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
+                 SELECT s.id, p.id, p.email, $1, 'SITE_MANAGER', FALSE
+                 FROM s JOIN p ON p.email = 'manager' || s.id || '@tenant.test'",
+                &[&hash],
+            )
+            .await
+            .expect("seed site managers");
         Self { name, admin, pool }
     }
 
@@ -106,15 +124,42 @@ impl TestDb {
     }
 }
 
-fn manager_token(site: i64) -> String {
-    auth::issue_token(
-        &format!("test-manager-{}", site),
+const MANAGER_PASSWORD: &str = "Tenant-Manager-123";
+
+/// Logs in as the seeded manager of `site` and returns a session-backed token.
+async fn manager_token(app: &Router, site: i64) -> String {
+    login(
+        app,
         &format!("manager{}@tenant.test", site),
-        Role::SiteManager,
-        &site.to_string(),
-        None,
+        MANAGER_PASSWORD,
     )
-    .expect("issue token")
+    .await
+}
+
+/// Logs in through /api/v1/auth/login and returns the access token.
+async fn login(app: &Router, email: &str, password: &str) -> String {
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "email": email, "password": password }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = resp.status();
+    let bytes = to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or_default();
+    assert_eq!(status, StatusCode::OK, "login as {}: {}", email, json);
+    json["access_token"]
+        .as_str()
+        .expect("access_token")
+        .to_string()
 }
 
 async fn call(
@@ -206,7 +251,7 @@ async fn get_views_never_change_the_ledger_and_accrual_offsets_transactionally()
     let unit = t.unit_of(a).await;
     let state = t.state().await;
     let app = build_router(state.clone());
-    let token = manager_token(a);
+    let token = manager_token(&app, a).await;
 
     // A payment far above the open dues leaves an OWNER advance.
     let (status, receipt) = call(
@@ -307,7 +352,7 @@ async fn tenant_data_never_crosses_sites() {
         &app,
         "POST",
         "/api/v1/payments/record-manual",
-        &manager_token(a),
+        &manager_token(&app, a).await,
         Some(serde_json::json!({
             "unit_id": unit_a.to_string(), "amount": "77.00", "payer_name": "Private Payer A",
             "payer_role": "OWNER", "payment_channel": "MANUAL_CASH"
@@ -317,7 +362,7 @@ async fn tenant_data_never_crosses_sites() {
     assert_eq!(status, StatusCode::CREATED);
 
     // Site B's manager: no site A payment records leak through any listing.
-    let token_b = manager_token(b);
+    let token_b = manager_token(&app, b).await;
     let (status, records) = call(
         &app,
         "GET",
@@ -361,7 +406,7 @@ async fn financial_reads_fail_loudly_when_the_database_is_gone() {
     let a = t.site_id("begonya-sitesi").await;
     let state = t.state().await;
     let app = build_router(state);
-    let token = manager_token(a);
+    let token = manager_token(&app, a).await;
     let (status, _) = call(&app, "GET", "/api/v1/payments/stream", &token, None).await;
     assert_eq!(status, StatusCode::OK);
 
@@ -389,4 +434,110 @@ async fn financial_reads_fail_loudly_when_the_database_is_gone() {
             body
         );
     }
+}
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn household_members_round_trip_and_stay_in_their_site() {
+    let t = TestDb::create("household").await;
+    let a = t.site_id("begonya-sitesi").await;
+    let b = t.site_id("kardelen-rezidans").await;
+    let unit = t.unit_of(a).await;
+    let state = t.state().await;
+    let app = build_router(state);
+    let token = manager_token(&app, a).await;
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/home-residents/members/{}?site_id={}", unit, a),
+        &token,
+        Some(serde_json::json!({
+            "full_name": "Ali Kaya", "phone": "05320000001", "email": "ali.kaya@rust.test"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{}", body);
+
+    let (status, members) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/home-residents/members/{}?site_id={}", unit, a),
+        &token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        members.to_string().contains("Ali Kaya"),
+        "member not listed: {}",
+        members
+    );
+
+    let (status, _) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/home-residents/members/{}", unit),
+        &manager_token(&app, b).await,
+        None,
+    )
+    .await;
+    assert!(
+        status == StatusCode::FORBIDDEN || status == StatusCode::NOT_FOUND,
+        "another site's manager read the household: {}",
+        status
+    );
+    t.drop_db().await;
+}
+
+/// Sender IBANs are stored as (iban -> unit). The handlers used to pass the unit
+/// id where the IBAN goes, so every database-backed save failed after the
+/// in-memory copy had already been changed.
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn sender_ibans_are_persisted_for_their_unit() {
+    let t = TestDb::create("ibans").await;
+    let a = t.site_id("begonya-sitesi").await;
+    // Unit 14 is owned by the seeded home owner, who adds IBANs for it.
+    let unit = t
+        .scalar_i64(&format!(
+            "SELECT id FROM units WHERE site_id = {} AND unit_number = 14 ORDER BY id LIMIT 1",
+            a
+        ))
+        .await;
+    let state = t.state().await;
+    let app = build_router(state);
+    let token = manager_token(&app, a).await;
+    let owner = login(&app, "ahmet.yilmaz@begonya.com", "ahmet123").await;
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/residents/{}/matching-criteria/ibans", unit),
+        &owner,
+        Some(serde_json::json!({ "sender_iban": "TR33 0006 1005 1978 6457 8413 26", "label": "Maaş" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{}", body);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/bank/remembered-ibans",
+        &token,
+        Some(serde_json::json!({
+            "site_id": a.to_string(), "unit_id": unit.to_string(),
+            "sender_iban": "TR12 0006 2000 0000 0000 0000 01"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{}", body);
+    let stored = t
+        .scalar_i64(&format!(
+            "SELECT count(*) FROM unit_sender_ibans WHERE unit_id = {} AND sender_iban IN \
+             ('TR330006100519786457841326', 'TR120006200000000000000001')",
+            unit
+        ))
+        .await;
+    assert_eq!(stored, 2, "both sender IBANs must be stored for the unit");
+    t.drop_db().await;
 }
