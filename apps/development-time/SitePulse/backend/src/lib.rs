@@ -12,6 +12,7 @@ pub mod finance_book;
 pub mod handlers;
 pub mod migrations;
 pub mod models;
+pub mod openapi;
 pub mod scheduler;
 pub mod security;
 pub mod services;

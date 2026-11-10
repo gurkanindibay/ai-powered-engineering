@@ -35,11 +35,10 @@ webpki-roots = "0.26"
 # Receipt PDFs (SPEC-007 R3): embedded, subset DejaVu Sans for Turkish glyphs, and the verification QR code.
 printpdf = { version = "0.7.0", default-features = false, features = ["font_subsetting"] }
 qrcode = { version = "0.14.1", default-features = false }
+utoipa = { version = "6.0.0", features = ["chrono", "decimal", "uuid"] }
 
 # Password hashing is deliberately expensive; keep it fast in debug/test builds.
 [profile.dev.package.argon2]
-opt-level = 3
-[profile.dev.package.blake2]
 opt-level = 3
 
 [[bin]]
@@ -49,6 +48,10 @@ path = "src/main.rs"
 [[bin]]
 name = "hash-password"
 path = "src/bin/hash_password.rs"
+
+[[bin]]
+name = "generate-openapi"
+path = "src/bin/generate_openapi.rs"
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }
