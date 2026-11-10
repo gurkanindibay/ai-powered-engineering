@@ -394,6 +394,17 @@ impl CardPaymentService {
         }
         intent.status = status;
         self.save(&intent).await?;
+        // SPEC-009 R6: a hosted payment that asked to save the card keeps the
+        // provider's token (the sandbox issues one). A failure here never undoes
+        // the recorded payment; it is reported and the card is simply not saved.
+        if intent.status == INTENT_CAPTURED {
+            if let Err(e) = crate::services::autopay_service::AutopayService::new(&self.state)
+                .after_capture(&intent, None)
+                .await
+            {
+                tracing::error!("Saved card for intent {} was not stored: {}", intent.id, e);
+            }
+        }
         Ok(intent)
     }
 

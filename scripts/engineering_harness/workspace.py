@@ -10,6 +10,11 @@ import tarfile
 from .contracts import safe_path, under
 from .routing import HarnessError
 
+# Interpreter/tool caches that workers create by running tests. They are never
+# integrated; gates only see committed content, so ignoring them cannot hide source.
+CACHE_EXCLUDES = ("__pycache__/", "*.py[co]", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/",
+                  "node_modules/", ".dart_tool/")
+
 
 def git(root: Path, *args: str, binary: bool = False):
     env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": "/nonexistent",
@@ -48,6 +53,7 @@ class Workspace:
                     raise HarnessError(f"Tracked credentials must not enter a worker snapshot: {name}")
             data.extractall(self.path, filter="data")
         git(self.path, "init", "--quiet")
+        self.exclude_caches()
         git(self.path, "add", "--all")
         git(self.path, "commit", "--quiet", "--allow-empty", "-m", f"Harness source {source}")
         return source, self.head()
@@ -62,6 +68,14 @@ class Workspace:
                 if not (entry.isfile() or entry.isdir()):
                     raise HarnessError("Candidate contains a link or special file")
             data.extractall(destination, filter="data")
+
+    def exclude_caches(self):
+        """(Re)write the harness-owned exclude list; restores it if a worker edited it."""
+        path = self.path / ".git" / "info" / "exclude"
+        if path.is_symlink():
+            raise HarnessError("Candidate Git exclude file must not be a symlink")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(CACHE_EXCLUDES) + "\n")
 
     def head(self) -> str:
         return git(self.path, "rev-parse", "HEAD")
@@ -86,6 +100,7 @@ class Workspace:
         return sorted(set(p for p in tracked + extra if p))
 
     def integrate(self, allowed: list[str], protected: list[str], message: str) -> str:
+        self.exclude_caches()
         for name in self.changes():
             safe_path(name)
             if not any(under(name, prefix) for prefix in allowed):

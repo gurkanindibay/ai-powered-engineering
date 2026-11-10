@@ -469,20 +469,10 @@ impl OperatingBudgetService {
                     b.id, b.status
                 )));
             }
-            // "Today" is the site's local date (Europe/Istanbul by default), not UTC:
-            // between 00:00 and 03:00 in Istanbul the UTC date is still yesterday.
-            let site_today = inner
-                .sites
-                .iter()
-                .find(|s| crate::auth::same_id(&s.id, site_id))
-                .map(|s| crate::scheduler::site_local_date(&s.timezone, Utc::now()))
-                .unwrap_or_else(|| {
-                    crate::scheduler::site_local_date(
-                        &crate::models::default_site_timezone(),
-                        Utc::now(),
-                    )
-                });
-            if req.assembly_decision_date > site_today {
+            // "Future" is judged in the site's time zone (an Istanbul evening is already tomorrow in UTC+3).
+            if req.assembly_decision_date
+                > crate::services::finance_common::site_today(&inner, site_id)
+            {
                 return Err(BudgetError::Invalid(
                     "The assembly decision date is in the future".into(),
                 ));
@@ -586,7 +576,11 @@ impl OperatingBudgetService {
         if req.recipient_name.trim().is_empty() {
             return Err(BudgetError::Invalid("recipient_name is required".into()));
         }
-        if req.served_on > Utc::now().date_naive() {
+        let site_today = {
+            let inner = self.state.inner.read().await;
+            crate::services::finance_common::site_today(&inner, site_id)
+        };
+        if req.served_on > site_today {
             return Err(BudgetError::Invalid("served_on is in the future".into()));
         }
         let (mut budget, unit_id) = {

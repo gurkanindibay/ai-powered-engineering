@@ -10,6 +10,7 @@ import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
 import '../../domain/services/api_client.dart';
 import '../../domain/services/bank_file_parser.dart';
+import '../../domain/services/person_directory_api.dart';
 import '../../domain/services/platform_env.dart';
 import '../../domain/usecases/calculate_dues_usecase.dart';
 import '../design_system/money_formatter.dart';
@@ -272,6 +273,19 @@ class DashboardController extends ChangeNotifier {
 
   ProvisionedHomeOwnerCredentials? _provisionedHomeOwner;
   ProvisionedHomeOwnerCredentials? get provisionedHomeOwner => _provisionedHomeOwner;
+
+  bool _isRegisteringHomeOwner = false;
+  /// True while a home owner registration is waiting for the server.
+  bool get isRegisteringHomeOwner => _isRegisteringHomeOwner;
+  String? _lastHomeOwnerError;
+  /// The last registration failure, for the form to show next to its submit button.
+  String? get lastHomeOwnerError => _lastHomeOwnerError;
+  bool _homeOwnerUpdateNeedsStepUp = false;
+  /// The last edit changed a login email and the server asked for a password check first.
+  bool get homeOwnerUpdateNeedsStepUp => _homeOwnerUpdateNeedsStepUp;
+  List<String> _pendingEmailChanges = const [];
+  /// Login emails from the last edit that wait for confirmation from the new address.
+  List<String> get pendingEmailChanges => _pendingEmailChanges;
 
   List<HomeOwnerItem> _homeOwners = [];
   List<HomeOwnerItem> get homeOwners => _homeOwners;

@@ -25,6 +25,8 @@ local port (the backend applies the migrations), seeds it, and checks over HTTP:
   receipt_pdf_and_verification     a receipt downloads as a PDF; the public QR check confirms it without payer data (R3)
   card_payment_via_provider        a sandbox card payment is captured through the signed webhook exactly once (R4)
   budget_accrual_legal_basis       accrual from an approved işletme projesi records the budget on each liability (R5)
+  finance_desk_over_http           SPEC-009: balanced ledger, dunning, analytics, four-eyes invoices, isolation, lawyer token
+  person_records_and_import        person F7-F10: hashed national ID (step-up, audited), preferences, duplicates, CSV import
   ledger_integrity_clean           v_integrity_violations is empty after all checks
 
 PostgreSQL access: set DB_HOST/DB_PORT/DB_USER/DB_PASS. SQL is run with `psql`
@@ -68,10 +70,13 @@ PAYMENT_WEBHOOK_SECRET = "api-system-check-payment-secret"
 # Must mirror auth::route_access: routes reachable without a bearer token.
 PUBLIC_ROUTES = {
     "/health", "/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/register", "/api/v1/auth/refresh",
+    "/api/v1/auth/activate", "/api/v1/auth/confirm-email",
     "/api/v1/home-residents/register", "/api/v1/bank/webhook/incoming-transfer", "/api/v1/site-admin/banks",
     "/api/v1/registration/submit/:slug",
     "/api/v1/public/receipts/verify", "/api/v1/payments/provider/webhook",
     "/api/v1/payment-provider/sandbox/checkout/:reference", "/api/v1/payment-provider/sandbox/checkout/:reference/complete",
+    # SPEC-009 R8: the lawyer's evidence pack is authenticated by its one-time token.
+    "/api/v1/public/collection-cases/pack",
 }
 SAMPLE_PARAMS = {"unit_id": "14", "id": "14", "site_id": "1", "resident_id": "1", "sender_iban": "TR1", "slug": "x",
                  "reference": "SBX-x", "intent_id": "1", "objection_id": "1"}
@@ -84,6 +89,9 @@ CHECKS = [
     "debt_aging_snapshot_persisted", "virman_reversal_restores_advance", "resident_statement_scoped",
     "receipt_pdf_and_verification", "card_payment_via_provider", "budget_accrual_legal_basis", "ledger_integrity_clean",
     "security_session_lifecycle", "transactional_audit", "audit_scope_and_privileges", "registration_repository_scope", "support_grant_lifecycle", "household_members_persisted", "invitation_atomic_registration",
+    "finance_desk_over_http",
+    "person_tenant_isolation", "person_activation_lifecycle", "person_directory_and_export",
+    "person_records_and_import",
 ]
 
 
@@ -130,6 +138,14 @@ class Psql:
         if proc.returncode != 0:
             raise SetupError(f"psql failed: {proc.stderr.strip()}")
         return proc.stdout.strip()
+
+    def run_status(self, db: str, sql: str) -> int:
+        """Run SQL that is expected to be refused; returns psql's exit code (0 = it succeeded)."""
+        try:
+            self.run(db, sql)
+            return 0
+        except SetupError:
+            return 1
 
 
 # ---------------------------------------------------------------------------
@@ -639,6 +655,48 @@ def check_resident_statement(ctx: Context) -> Tuple[bool, str]:
     return ok, f"owner principal {owner and owner['principal_outstanding']} = buckets {buckets}, receipts {len(st['receipts'])}, other site {other}"
 
 
+def check_finance_desk(ctx: Context) -> Tuple[bool, str]:
+    """SPEC-009 over HTTP and PostgreSQL: the derived ledger balances, dunning and
+    analytics run, the debtor export is named for staff, an invoice is never
+    approved by the person who recorded it, another site sees none of it, a
+    forged lawyer token is refused, and the SPEC-009 integrity view is clean."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    tb_status, tb_body = http("GET", f"{b}/api/v1/accounting/trial-balance", token=ctx.manager)
+    balanced = tb_status == 200 and json.loads(tb_body).get("balanced") is True
+    dunning = http("POST", f"{b}/api/v1/dunning/run", token=ctx.manager)[0]
+    analytics = http("GET", f"{b}/api/v1/analytics/collections?months=3", token=ctx.manager)[0]
+    ex_status, ex_body = http("GET", f"{b}/api/v1/kvkk/debtor-export", token=ctx.manager)
+    named = ex_status == 200 and json.loads(ex_body).get("masked") is False
+    vendor_status, vendor_body = http("POST", f"{b}/api/v1/accounting/vendors", token=ctx.manager,
+                                      body={"name": "Syscheck Temizlik", "tax_id": "0010180009"})
+    if vendor_status == 409:
+        vendors = json.loads(http("GET", f"{b}/api/v1/accounting/vendors", token=ctx.manager)[1])
+        vendor_id = next(v["id"] for v in vendors if v["tax_id"] == "0010180009")
+    elif vendor_status == 201:
+        vendor_id = json.loads(vendor_body)["id"]
+    else:
+        return False, f"vendor {vendor_status} {vendor_body[:200]}"
+    inv_status, inv_body = http("POST", f"{b}/api/v1/accounting/expenses", token=ctx.manager, body={
+        "vendor_id": vendor_id, "invoice_number": f"SYS-{time.time_ns()}", "invoice_date": time.strftime("%Y-%m-%d"),
+        "category": "CLEANING", "net_amount": "100.00"})
+    if inv_status != 201:
+        return False, f"expense {inv_status} {inv_body[:200]}"
+    self_approve = http("POST", f"{b}/api/v1/accounting/expenses/{json.loads(inv_body)['id']}/approve", token=ctx.manager)[0]
+    # Earlier checks purge the second site, so a live foreign manager is provisioned here.
+    suffix = str(time.time_ns())
+    foreign_site = ctx.psql.run(db, f"INSERT INTO sites(name,slug,address,status,plan_type) VALUES ('Finance Foreign','fin-{suffix}','Test','ACTIVE','STANDARD') RETURNING id;")
+    ctx.psql.run(db, f"INSERT INTO users(site_id,email,password_hash,role,must_change_password) VALUES ({foreign_site},'fin-{suffix}@example.com','{hash_password('Finance-Foreign-123')}','SITE_MANAGER',false);")
+    foreign_token = login(ctx.backend, f"fin-{suffix}@example.com", "Finance-Foreign-123")
+    foreign = http("GET", f"{b}/api/v1/accounting/vendors", token=foreign_token)
+    isolated = foreign[0] == 200 and json.loads(foreign[1]) == []
+    lawyer = http("GET", f"{b}/api/v1/public/collection-cases/pack?token=forged")[0]
+    violations = ctx.psql.run(db, "SELECT count(*) FROM v_finance_integrity_violations;").strip()
+    ok = (balanced and dunning == 200 and analytics == 200 and named and self_approve == 403
+          and isolated and lawyer == 403 and violations == "0")
+    return ok, (f"trial balance {tb_status}/{balanced}, dunning {dunning}, analytics {analytics}, export named {named}, "
+                f"self-approval {self_approve}, foreign isolated {isolated}, forged lawyer token {lawyer}, violations {violations}")
+
+
 def check_receipt_pdf(ctx: Context) -> Tuple[bool, str]:
     """SPEC-007 R3: PDF download and public verification without payer data."""
     db, b = ctx.backend.db_name, ctx.backend.base
@@ -821,7 +879,7 @@ def check_support_grant_lifecycle(ctx: Context) -> Tuple[bool, str]:
     ctx.psql.run(db, f"INSERT INTO users(email,password_hash,role) VALUES ('aaa-approver@example.com','{hashed}','SAAS_ADMIN');")
     second = login(ctx.backend,"aaa-approver@example.com","Approver-Password-123")
     operator = ctx.psql.run(db,"SELECT id FROM users WHERE email='admin@sitepulse.io';")
-    create, body = http("POST",base+"/api/v1/support/grants",token=first,body={"site_id":"1","operator_user_id":operator,"permissions":["SITE_MANAGE","AUDIT_LOG_READ","UNIT_READ"],"reason":"Investigate a support ticket","minutes":5})
+    create, body = http("POST",base+"/api/v1/support/grants",token=first,body={"site_id":"1","operator_user_id":operator,"permissions":["SITE_MANAGE","PERSON_READ","AUDIT_LOG_READ","UNIT_READ"],"reason":"Investigate a support ticket","minutes":5})
     if create != 200:
         return False,f"request {create}"
     grant = json.loads(body)["id"]
@@ -900,7 +958,215 @@ def check_invitation_atomic_registration(ctx: Context) -> Tuple[bool, str]:
     return statuses==[201,400] and scoped==200 and count=="1" and failed>=400 and absent=="t" and retry==201, f"concurrent {statuses}, current unit {scoped}, accounts {count}, failed {failed}, rollback {absent}, retry {retry}"
 
 
+def _owner_body(unit_no: int, email: str, name: str = "Isolation Owner") -> Dict[str, object]:
+    return {"block": "S Blok", "unit_no": unit_no, "floor": 1, "owner_full_name": name, "email": email,
+            "phone": "+90 532 000 11 22", "land_share": "1/24", "monthly_dues": "100.00", "house_type": "2+1",
+            "is_resident": True, "role": "OWNER"}
+
+
+def check_person_tenant_isolation(ctx: Context) -> Tuple[bool, str]:
+    """S1/F11/S8: persons are per site, registration is atomic and errors do not echo addresses."""
+    db, base = ctx.backend.db_name, ctx.backend.base
+    suffix = str(time.time_ns())[-9:]
+    shared = f"shared-{suffix}@example.com"
+    # A site of its own: earlier checks may purge the shared second site.
+    other_site = ctx.psql.run(db, f"""INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
+        VALUES ('Isolation Site {suffix}', 'Izmir', 'isolation-{suffix}', 'ACTIVE', 'STANDARD', CURRENT_DATE + 365) RETURNING id;""").strip()
+    # A contact-only person of site 2 with the address site 1 is about to register.
+    ctx.psql.run(db, f"INSERT INTO persons (full_name, email, person_type, site_id) VALUES ('Site Two Person', '{shared}', 'HOME_OWNER', {other_site});")
+    status, body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                        body=_owner_body(700 + int(suffix[-2:]), shared))
+    site_two_untouched = ctx.psql.run(
+        db, f"SELECT full_name FROM persons WHERE lower(email)='{shared}' AND site_id={other_site};") == "Site Two Person"
+    separate = status == 201 and ctx.psql.run(db, f"SELECT count(DISTINCT site_id) FROM persons WHERE lower(email)='{shared}';") == "2"
+    no_secret = "temporary_password" not in body and "SP-SAKIN" not in body
+    # F6: the role is derived from what the person holds (V23), not the stored type.
+    derived = ctx.psql.run(db, f"SELECT r.derived_role FROM v_person_roles r JOIN persons p ON p.id = r.person_id WHERE lower(p.email)='{shared}' AND p.site_id <> {other_site};")
+
+    # Cross-site linking is refused by the database itself.
+    site_one_person = ctx.psql.run(db, f"SELECT id FROM persons WHERE lower(email)='{shared}' AND site_id <> {other_site};").strip()
+    guard = ctx.psql.run_status(db, f"""INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
+        VALUES ({other_site}, {site_one_person}, 'cross-{suffix}@example.com', NULL, 'HOME_OWNER', TRUE);""")
+
+    # F11: a failure late in registration leaves no person, account or unit behind.
+    rolled = f"rolled-{suffix}@example.com"
+    ctx.psql.run(db, """CREATE FUNCTION reject_registration_dues() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Injected dues failure'; END $$;
+        CREATE TRIGGER reject_registration_dues BEFORE INSERT ON dues_liabilities FOR EACH ROW EXECUTE FUNCTION reject_registration_dues();""")
+    try:
+        failed, failed_body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                                   body=_owner_body(800 + int(suffix[-2:]), rolled))
+    finally:
+        ctx.psql.run(db, "DROP TRIGGER reject_registration_dues ON dues_liabilities; DROP FUNCTION reject_registration_dues();")
+    orphans = ctx.psql.run(db, f"SELECT (SELECT count(*) FROM persons WHERE email='{rolled}') + (SELECT count(*) FROM users WHERE email='{rolled}');")
+    generic = "Injected" not in failed_body and "db error" not in failed_body
+
+    # S8: a taken login address is refused without being echoed.
+    dup, dup_body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                         body=_owner_body(900 + int(suffix[-2:]), shared))
+    ok = (separate and site_two_untouched and no_secret and derived == "HOME_OWNER" and guard != 0 and failed >= 500 and orphans == "0"
+          and generic and dup == 409 and shared not in dup_body)
+    return ok, (f"registered {status}, per-site persons {separate}, site-2 untouched {site_two_untouched}, no secret {no_secret}, derived role {derived}, "
+                f"cross-site link exit {guard}, injected failure {failed} generic {generic}, orphans {orphans}, duplicate {dup}")
+
+
+def check_person_activation_lifecycle(ctx: Context) -> Tuple[bool, str]:
+    """S2/S3/S5/S9: activation links, confirmed email change and deactivation instead of deletion."""
+    db, base = ctx.backend.db_name, ctx.backend.base
+    suffix = str(time.time_ns())[-9:]
+    email = f"activate-{suffix}@example.com"
+    status, body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                        body=_owner_body(600 + int(suffix[-2:]), email, "Activation Owner"))
+    if status != 201:
+        return False, f"registration {status} {body[:160]}"
+    created = json.loads(body)
+    unit = created["unit_id"]
+    no_password = ctx.psql.run(db, f"SELECT password_hash IS NULL FROM users WHERE email='{email}';") == "t"
+    sent = (created.get("activation") or {}).get("status") == "SENT"
+    blocked = http("POST", base + "/api/v1/auth/login", body={"email": email, "password": "Anything-2026!"})[0]
+
+    # The person's link: plant a known token the way the service stores it (SHA-256 only).
+    token = "a" * 40 + suffix.rjust(24, "0")
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    ctx.psql.run(db, f"""INSERT INTO account_activations (token_hash, user_id, site_id, purpose, expires_at)
+        SELECT '{digest}', id, site_id, 'ACTIVATE', now() + interval '1 hour' FROM users WHERE email='{email}';""")
+    activated = http("POST", base + "/api/v1/auth/activate", body={"token": token, "new_password": "Owner-Chosen-2026!"})[0]
+    reused = http("POST", base + "/api/v1/auth/activate", body={"token": token, "new_password": "Another-Pass-2026!"})[0]
+    logged_in = http("POST", base + "/api/v1/auth/login", body={"email": email, "password": "Owner-Chosen-2026!"})[0]
+    resend_active = http("POST", base + f"/api/v1/site-admin/home-owners/{unit}/resend-activation", token=ctx.manager, body={})[0]
+
+    # S5: a login email change waits for the new address.
+    new_email = f"moved-{suffix}@example.com"
+    updated, updated_body = http("PUT", base + f"/api/v1/site-admin/home-owners/{unit}", token=ctx.manager, body={"email": new_email})
+    still_old = ctx.psql.run(db, f"SELECT count(*) FROM users WHERE email='{email}';") == "1"
+    pending = updated == 200 and json.loads(updated_body).get("pending_email_changes", [{}])[0].get("new_email") == new_email
+
+    # S9: archiving deactivates the account instead of deleting it.
+    removed = http("DELETE", base + f"/api/v1/site-admin/home-owners/{unit}", token=ctx.manager)[0]
+    kept = ctx.psql.run(db, f"SELECT is_active::text FROM users WHERE email='{email}';")
+    ok = (no_password and sent and blocked == 401 and activated == 204 and reused == 400 and logged_in == 200
+          and resend_active == 409 and pending and still_old and removed == 204 and kept == "false")
+    return ok, (f"no password {no_password}, sent {sent}, pre-activation login {blocked}, activate {activated}, reuse {reused}, "
+                f"login {logged_in}, resend on active {resend_active}, email change pending {pending} old kept {still_old}, "
+                f"archive {removed} account kept inactive {kept}")
+
+
+def check_person_directory_and_export(ctx: Context) -> Tuple[bool, str]:
+    """F1/U3/F8: directory search and paging, site-scoped profile, step-up audited export."""
+    db, base = ctx.backend.db_name, ctx.backend.base
+    suffix = str(time.time_ns())[-9:]
+    email = f"directory-{suffix}@example.com"
+    status, body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                        body=_owner_body(500 + int(suffix[-2:]), email, f"Directory Person {suffix}"))
+    if status != 201:
+        return False, f"registration {status} {body[:160]}"
+    found_status, found_body = http("GET", base + f"/api/v1/site-admin/persons?q=directory-{suffix}&page_size=5", token=ctx.manager)
+    page = json.loads(found_body) if found_status == 200 else {}
+    items = page.get("items", [])
+    found = len(items) == 1 and items[0]["email"] == email and items[0]["login"] == "PENDING" and items[0]["role"] == "HOME_OWNER"
+    pending_filter = http("GET", base + "/api/v1/site-admin/persons?login=PENDING&page_size=100", token=ctx.manager)
+    pending_ok = pending_filter[0] == 200 and any(i["email"] == email for i in json.loads(pending_filter[1])["items"])
+    bad_filter = http("GET", base + "/api/v1/site-admin/persons?role=ADMIN", token=ctx.manager)[0]
+    person_id = items[0]["person_id"] if items else 0
+    profile_status, profile_body = http("GET", base + f"/api/v1/site-admin/persons/{person_id}", token=ctx.manager)
+    units = json.loads(profile_body).get("units", []) if profile_status == 200 else []
+    profile_ok = any(u["relation"] == "OWNER" and u["active"] for u in units)
+    # Another site's person is not visible.
+    foreign = ctx.psql.run(db, f"""INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
+        VALUES ('Directory Site {suffix}', 'Bursa', 'directory-{suffix}', 'ACTIVE', 'STANDARD', CURRENT_DATE + 365) RETURNING id;""").strip()
+    foreign_person = ctx.psql.run(db, f"INSERT INTO persons (full_name, email, person_type, site_id) VALUES ('Foreign', 'foreign-{suffix}@example.com', 'HOME_OWNER', {foreign}) RETURNING id;").strip()
+    foreign_status = http("GET", base + f"/api/v1/site-admin/persons/{foreign_person}", token=ctx.manager)[0]
+    # U7: moving in "an existing person" only accepts this site's people.
+    unit_for_move = json.loads(body)["unit_id"]
+    foreign_move = http("POST", base + f"/api/v1/site-admin/units/{unit_for_move}/move-in", token=ctx.manager,
+                        body={"person_id": int(foreign_person), "role": "TENANT"})[0]
+    # Export: refused without a fresh password check, audited with one.
+    passwords = getattr(ctx.backend, "passwords", {})
+    plain = http("POST", base + "/api/v1/auth/login", body={"email": "mehmet.demir@begonya.com",
+                 "password": passwords.get("mehmet.demir@begonya.com", "mehmet123")})
+    unstepped = json.loads(plain[1])["access_token"] if plain[0] == 200 else ""
+    no_step_up = http("GET", base + "/api/v1/site-admin/persons/export", token=unstepped)
+    export_status, export_body = http("GET", base + f"/api/v1/site-admin/persons/export?q=directory-{suffix}", token=ctx.manager)
+    exported = export_status == 200 and email in export_body and export_body.startswith("\ufeffperson_id")
+    audited = ctx.psql.run(db, "SELECT count(*) FROM audit_events WHERE action='PERSON_DIRECTORY_EXPORTED';")
+    ok = (found and pending_ok and bad_filter == 400 and profile_ok and foreign_status == 404 and foreign_move == 404
+          and no_step_up[0] == 403 and "STEP_UP" in no_step_up[1] and exported and int(audited) >= 1)
+    return ok, (f"search {found}, pending filter {pending_ok}, bad filter {bad_filter}, profile owner {profile_ok}, "
+                f"foreign profile {foreign_status}, foreign move-in {foreign_move}, export without step-up {no_step_up[0]}, export {export_status} "
+                f"contains {exported}, audited {audited}")
+
+
+def check_person_records_and_import(ctx: Context) -> Tuple[bool, str]:
+    """F10/F7/F9/F8: national ID (hashed, step-up, audited), preferences, duplicate check, CSV import."""
+    db, base = ctx.backend.db_name, ctx.backend.base
+    suffix = str(time.time_ns())[-9:]
+    email = f"records-{suffix}@example.com"
+    status, body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                        body=_owner_body(400 + int(suffix[-2:]), email, f"Records Person {suffix}"))
+    if status != 201:
+        return False, f"registration {status} {body[:160]}"
+    person = ctx.psql.run(db, f"SELECT id FROM persons WHERE lower(email)='{email}';").strip()
+    other = ctx.psql.run(db, f"""INSERT INTO persons (full_name, email, person_type, site_id)
+        SELECT 'Other Records {suffix}', 'other-{suffix}@example.com', 'HOME_OWNER', site_id FROM persons WHERE id={person} RETURNING id;""").strip()
+    # F10: a valid TCKN is stored only as hash and mask; a bad one, a duplicate or a missing step-up is refused.
+    tckn = "10000000146"
+    ctx.psql.run(db, f"UPDATE persons SET national_id_hash=NULL, national_id_masked=NULL WHERE national_id_masked='*******0146' AND site_id=(SELECT site_id FROM persons WHERE id={person});")
+    set_status, set_body = http("PUT", base + f"/api/v1/site-admin/persons/{person}/national-id", token=ctx.manager, body={"national_id": tckn})
+    masked = set_status == 200 and json.loads(set_body).get("national_id_masked") == "*******0146"
+    stored = ctx.psql.run(db, f"SELECT (national_id IS NULL AND national_id_hash IS NOT NULL)::text FROM persons WHERE id={person};") == "true"
+    invalid = http("PUT", base + f"/api/v1/site-admin/persons/{other}/national-id", token=ctx.manager, body={"national_id": "10000000147"})[0]
+    taken = http("PUT", base + f"/api/v1/site-admin/persons/{other}/national-id", token=ctx.manager, body={"national_id": tckn})[0]
+    passwords = getattr(ctx.backend, "passwords", {})
+    plain = http("POST", base + "/api/v1/auth/login", body={"email": "mehmet.demir@begonya.com",
+                 "password": passwords.get("mehmet.demir@begonya.com", "mehmet123")})
+    unstepped = json.loads(plain[1])["access_token"] if plain[0] == 200 else ""
+    no_step_up = http("PUT", base + f"/api/v1/site-admin/persons/{other}/national-id", token=unstepped, body={"national_id": tckn})
+    audited = ctx.psql.run(db, f"SELECT count(*) FROM audit_events WHERE action='PERSON_NATIONAL_ID_SET' AND resource_id='{person}';")
+    # F7: preferences are saved and shown on the profile; an unknown channel is refused.
+    prefs = {"preferred_channel": "sms", "preferred_language": "en",
+             "emergency_contact_name": "Acil Kisi", "emergency_contact_phone": "0532 999 88 77"}
+    pref_status = http("PUT", base + f"/api/v1/site-admin/persons/{person}/preferences", token=ctx.manager, body=prefs)[0]
+    bad_pref = http("PUT", base + f"/api/v1/site-admin/persons/{person}/preferences", token=ctx.manager,
+                    body={"preferred_channel": "FAX", "preferred_language": "tr"})[0]
+    profile_status, profile_body = http("GET", base + f"/api/v1/site-admin/persons/{person}", token=ctx.manager)
+    record = json.loads(profile_body).get("record", {}) if profile_status == 200 else {}
+    profile_ok = (record.get("national_id_masked") == "*******0146" and record.get("preferences", {}).get("preferred_channel") == "SMS"
+                  and len(record.get("consents", [])) == 4)
+    # F9: the same national ID or email is reported before a second record is made.
+    dup_status, dup_body = http("POST", base + "/api/v1/site-admin/persons/duplicate-check", token=ctx.manager,
+                                body={"full_name": "someone else", "email": email.upper(), "national_id": tckn})
+    dups = json.loads(dup_body) if dup_status == 200 else []
+    dup_ok = any(d["person"]["person_id"] == int(person) and {"SAME_NATIONAL_ID", "SAME_EMAIL"} <= set(d["reasons"]) for d in dups)
+    # F8: a dry run changes nothing, a commit registers every row, a repeat is refused row by row.
+    block = f"I{suffix[-5:]}"
+    csv_text = ("block;unit_no;floor;owner_full_name;owner_email;owner_phone;land_share;monthly_dues;is_resident;tenant_full_name;tenant_email;tenant_phone\n"
+                f"{block} Blok;1;1;Import One {suffix};import1-{suffix}@example.com;0532 {suffix[-3:]} 10 01;10;1.250,50;evet;;;\n"
+                f"{block} Blok;2;1;Import Two {suffix};import2-{suffix}@example.com;0532 {suffix[-3:]} 10 02;;;hayır;Import Tenant {suffix};import3-{suffix}@example.com;0532 {suffix[-3:]} 10 03\n")
+    dry_status, dry_body = http("POST", base + "/api/v1/site-admin/persons/import", token=ctx.manager, body={"csv": csv_text, "dry_run": True})
+    dry = json.loads(dry_body) if dry_status == 200 else {}
+    untouched = ctx.psql.run(db, f"SELECT count(*) FROM users WHERE email LIKE 'import_-{suffix}@example.com';") == "0"
+    commit_status, commit_body = http("POST", base + "/api/v1/site-admin/persons/import", token=ctx.manager, body={"csv": csv_text})
+    commit = json.loads(commit_body) if commit_status == 200 else {}
+    accounts = ctx.psql.run(db, f"SELECT count(*) FROM users WHERE email LIKE 'import_-{suffix}@example.com';")
+    dues = ctx.psql.run(db, f"""SELECT count(*) FROM units u JOIN blocks b ON b.id=u.block_id WHERE b.block_name ILIKE '{block}%' AND u.deleted_at IS NULL;""")
+    repeat = http("POST", base + "/api/v1/site-admin/persons/import", token=ctx.manager, body={"csv": csv_text})
+    repeated = json.loads(repeat[1]) if repeat[0] == 200 else {}
+    import_audit = ctx.psql.run(db, "SELECT count(*) FROM audit_events WHERE action='PERSON_IMPORT_COMMITTED';")
+    ok = (masked and stored and invalid == 400 and taken == 409 and no_step_up[0] == 403 and "STEP_UP" in no_step_up[1]
+          and int(audited) == 1 and pref_status == 200 and bad_pref == 400 and profile_ok and dup_ok
+          and dry.get("invalid") == 0 and dry.get("committed") is False and untouched
+          and commit.get("created") == 2 and accounts == "3" and dues == "2"
+          and repeated.get("committed") is False and repeated.get("invalid") == 2 and int(import_audit) >= 1)
+    return ok, (f"national id set {set_status} masked {masked} hashed {stored}, invalid {invalid}, taken {taken}, no step-up {no_step_up[0]}, "
+                f"audited {audited}, preferences {pref_status} bad {bad_pref}, profile record {profile_ok}, duplicates {dup_ok}, "
+                f"dry run {dry_status} invalid {dry.get('invalid')} untouched {untouched}, commit {commit_status} created {commit.get('created')} "
+                f"accounts {accounts} units {dues}, repeat invalid {repeated.get('invalid')}, import audited {import_audit}")
+
+
 CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
+    "person_records_and_import": check_person_records_and_import,
+    "person_directory_and_export": check_person_directory_and_export,
+    "person_tenant_isolation": check_person_tenant_isolation,
+    "person_activation_lifecycle": check_person_activation_lifecycle,
     "invitation_atomic_registration":check_invitation_atomic_registration,
     "household_members_persisted":check_household_members,
     "support_grant_lifecycle":check_support_grant_lifecycle,
@@ -930,6 +1196,7 @@ CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
     "card_payment_via_provider": check_card_payment,
     "budget_accrual_legal_basis": check_budget_accrual,
     "ledger_integrity_clean": check_ledger_integrity,
+    "finance_desk_over_http": check_finance_desk,
 }
 
 

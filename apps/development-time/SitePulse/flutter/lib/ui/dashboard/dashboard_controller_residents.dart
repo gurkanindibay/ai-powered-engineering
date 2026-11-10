@@ -2,6 +2,53 @@ part of 'dashboard_controller.dart';
 
 /// Homeowners, resident directory, household members, registration approvals and occupancy management.
 extension DashboardControllerResidents on DashboardController {
+  /// F9: people of the site who may be the person about to be registered. The offline
+  /// simulation compares the homeowners it holds; a failed check never blocks a
+  /// registration, the server still refuses a taken login email.
+  Future<List<DuplicateCandidate>> findPossibleDuplicates({
+    required String fullName,
+    required String email,
+    required String phone,
+    PersonDirectoryApi api = const PersonDirectoryApi(),
+  }) async {
+    if (!isTestMode) {
+      try {
+        return await api.findDuplicates(fullName: fullName, email: email, phone: phone);
+      } catch (e) {
+        AppLogger.warn('Duplicate check did not reach the server: $e', tag: 'Residents');
+        return const [];
+      }
+    }
+    String digits(String v) {
+      final d = v.replaceAll(RegExp(r'\D'), '');
+      return d.length >= 10 ? d.substring(d.length - 10) : '';
+    }
+    String name(String v) => (v.toLowerCase().split(RegExp(r'\s+'))..sort()).join(' ').trim();
+    final found = <DuplicateCandidate>[];
+    for (final h in homeOwners) {
+      final reasons = <String>[
+        if (email.trim().isNotEmpty && h.email.toLowerCase() == email.trim().toLowerCase()) 'SAME_EMAIL',
+        if (digits(phone).isNotEmpty && digits(h.phone) == digits(phone)) 'SAME_PHONE',
+        if (name(fullName).isNotEmpty && name(h.ownerFullName) == name(fullName)) 'SIMILAR_NAME',
+      ];
+      if (reasons.isEmpty) continue;
+      found.add(DuplicateCandidate(
+        person: PersonSummary(
+          personId: 0,
+          fullName: h.ownerFullName,
+          email: h.email,
+          phone: h.phone,
+          role: 'HOME_OWNER',
+          ownedUnits: 1,
+          occupiedUnits: h.isResident ? 1 : 0,
+          login: PersonLogin.fromCode(h.activationStatus == null ? 'ACTIVE' : 'PENDING'),
+        ),
+        reasons: reasons,
+      ));
+    }
+    return found;
+  }
+
   Future<void> registerHomeOwner({
     required String block,
     required int unitNo,
@@ -16,7 +63,9 @@ extension DashboardControllerResidents on DashboardController {
     bool isResident = true,
     String role = 'OWNER',
     String? relationship,
+    int? landShare,
   }) async {
+    _lastHomeOwnerError = null;
     final effectiveHouseType = houseType ?? '2+1';
     final matchedTariff = _houseTypes.cast<HouseTypeTariff?>().firstWhere(
       (h) => h?.typeName.toLowerCase() == effectiveHouseType.toLowerCase(),
@@ -25,9 +74,12 @@ extension DashboardControllerResidents on DashboardController {
     final dues = duesAmount ?? matchedTariff?.duesAmount ?? Decimal.parse('1400.00');
     final cleanBlock = block.replaceAll('Blok', '').trim();
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
-    String tempPassword = 'SP-SAKIN-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}';
-
     if (!isTestMode) {
+      // U1/S4: the server is the only source of truth. A failed or unreachable request
+      // changes nothing locally and is reported, so a save never looks done when it is not.
+      _isRegisteringHomeOwner = true;
+      _authMessage = null;
+      notify();
       try {
         final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/home-owners?site_id=$effectiveSiteId');
         final response = await ApiClient.post(
@@ -43,46 +95,49 @@ extension DashboardControllerResidents on DashboardController {
             'tenant_full_name': tenantFullName,
             'tenant_email': tenantEmail,
             'tenant_phone': tenantPhone,
-            'land_share': '1/24',
-            'monthly_dues': dues.toString(),
+            // F3: the entered share; without one the server uses the site's usual share and says so.
+            if (landShare != null) 'land_share': '$landShare',
+            // F4: only a known tariff is sent; otherwise the server applies and reports its default.
+            if (duesAmount != null) 'monthly_dues': duesAmount.toString(),
             'house_type': effectiveHouseType,
             'is_resident': isResident,
             'role': role,
           }),
-        ).timeout(const Duration(seconds: 4));
-
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-          if (data['temporary_password'] != null && data['temporary_password'].toString().isNotEmpty) {
-            tempPassword = data['temporary_password'].toString();
-          }
-          await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
-          await fetchHomeOwners(siteId: effectiveSiteId);
-          _provisionedHomeOwner = ProvisionedHomeOwnerCredentials(
-            block: block,
-            unitNo: unitNo,
-            ownerName: ownerName,
-            email: email,
-            phone: phone,
-            temporaryPassword: tempPassword,
-            isResident: isResident,
-            duesAmount: dues,
-            houseType: effectiveHouseType,
-          );
-          notify();
-          return;
-        } else {
-          final errorBody = utf8.decode(response.bodyBytes);
-          debugPrint('registerHomeOwner remote error: ${response.statusCode} - $errorBody');
-          _authMessage = errorBody.isNotEmpty ? errorBody : 'Sakin eklenirken hata oluştu (${response.statusCode})';
-          notify();
-          return;
-        }
+        ).timeout(const Duration(seconds: 15));
+        final data = ApiClient.decode(response) as Map<String, dynamic>;
+        final created = HomeOwnerItem.fromJson(data);
+        await fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth);
+        await fetchHomeOwners(siteId: effectiveSiteId);
+        _provisionedHomeOwner = ProvisionedHomeOwnerCredentials(
+          block: block,
+          unitNo: unitNo,
+          ownerName: ownerName,
+          email: email,
+          phone: phone,
+          activationStatus: created.activationStatus,
+          warnings: created.warnings,
+          isResident: isResident,
+          duesAmount: dues,
+          houseType: effectiveHouseType,
+        );
+        _lastHomeOwnerError = null;
+      } on ApiException catch (e) {
+        _lastHomeOwnerError = e.statusCode >= 500
+            ? 'Sakin kaydedilemedi. Lütfen tekrar deneyin. (Referans: ${e.traceId ?? '-'})'
+            : e.message;
+        _authMessage = _lastHomeOwnerError;
       } catch (e) {
-        debugPrint('registerHomeOwner network error: $e');
+        AppLogger.warn('Home owner registration did not reach the server', tag: 'Residents');
+        _lastHomeOwnerError = 'Sunucuya ulaşılamadı. Kayıt yapılmadı; bağlantınızı kontrol edip tekrar deneyin.';
+        _authMessage = _lastHomeOwnerError;
+      } finally {
+        _isRegisteringHomeOwner = false;
+        notify();
       }
+      return;
     }
 
+    // Test mode only: an in-memory simulation of the backend for widget tests.
     final isTenant = role.toUpperCase() == 'TENANT';
     final isResidentRole = role.toUpperCase() == 'RESIDENT';
 
@@ -123,7 +178,7 @@ extension DashboardControllerResidents on DashboardController {
       ownerName: ownerName,
       email: email,
       phone: phone,
-      temporaryPassword: tempPassword,
+      activationStatus: 'SENT',
       isResident: isResident,
       duesAmount: dues,
       houseType: effectiveHouseType,
@@ -213,11 +268,11 @@ extension DashboardControllerResidents on DashboardController {
       phone: phone,
       tenantEmail: hasExplicitTenant ? tenantEmail : (isTenant ? email : null),
       tenantPhone: hasExplicitTenant ? tenantPhone : (isTenant ? phone : null),
-      landShare: '1/24',
+      landShare: '${landShare ?? 1}/24',
       monthlyDues: dues,
       houseType: effectiveHouseType,
       isResident: isResident,
-      temporaryPassword: tempPassword,
+      activationStatus: 'SENT',
       mustChangePassword: true,
       createdAt: DateTime.now(),
     );
@@ -227,7 +282,7 @@ extension DashboardControllerResidents on DashboardController {
         final newMember = UnitResidentMember(
           id: '${existingHo.householdResidents.length + 1}',
           fullName: ownerName,
-          relationship: relationship ?? 'Ev Sakini',
+          relationship: relationship ?? 'OTHER',
           phone: phone,
           email: email,
           isOwner: false,
@@ -244,7 +299,7 @@ extension DashboardControllerResidents on DashboardController {
         final newMember = UnitResidentMember(
           id: '1',
           fullName: ownerName,
-          relationship: relationship ?? 'Ev Sakini',
+          relationship: relationship ?? 'OTHER',
           phone: phone,
           email: email,
           isOwner: false,
@@ -374,14 +429,27 @@ extension DashboardControllerResidents on DashboardController {
           }),
         ).timeout(const Duration(seconds: 4));
 
-        if (response.statusCode == 200 || response.statusCode == 204) {
+        _homeOwnerUpdateNeedsStepUp = false;
+        _pendingEmailChanges = const [];
+        _lastHomeOwnerError = null;
+        try {
+          final data = ApiClient.decode(response);
+          final pending = (data is Map<String, dynamic> && data['pending_email_changes'] is List)
+              ? (data['pending_email_changes'] as List)
+                  .whereType<Map<String, dynamic>>()
+                  .map((c) => c['new_email']?.toString() ?? '')
+                  .where((e) => e.isNotEmpty)
+                  .toList()
+              : const <String>[];
+          _pendingEmailChanges = pending;
+          // S5: a login email stays as it is until the new address confirms the change.
           _applyLocalHomeOwnerUpdate(
             unitId: unitId,
             fullName: fullName,
-            email: email,
+            email: pending.contains(email?.trim().toLowerCase()) ? null : email,
             phone: phone,
             tenantFullName: tenantFullName,
-            tenantEmail: tenantEmail,
+            tenantEmail: pending.contains(tenantEmail?.trim().toLowerCase()) ? null : tenantEmail,
             tenantPhone: tenantPhone,
             removeTenant: removeTenant,
             houseType: houseType,
@@ -393,13 +461,18 @@ extension DashboardControllerResidents on DashboardController {
           fetchHomeOwners(siteId: effectiveSiteId).catchError((e) => debugPrint('bg fetchHomeOwners error: $e'));
           fetchSiteManagerOverview(siteId: effectiveSiteId, period: _selectedDuesMonth).catchError((e) => debugPrint('bg fetchSiteManagerOverview error: $e'));
           return true;
-        } else {
-          final err = utf8.decode(response.bodyBytes);
-          debugPrint('updateHomeOwner failed: ${response.statusCode} - $err');
+        } on ApiException catch (e) {
+          _homeOwnerUpdateNeedsStepUp = e.code == 'STEP_UP_REQUIRED';
+          _lastHomeOwnerError = e.statusCode >= 500
+              ? 'Değişiklik kaydedilemedi. Lütfen tekrar deneyin. (Referans: ${e.traceId ?? '-'})'
+              : e.message;
+          notify();
           return false;
         }
       } catch (e) {
-        debugPrint('updateHomeOwner error: $e');
+        AppLogger.warn('Home owner update did not reach the server', tag: 'Residents');
+        _lastHomeOwnerError = 'Sunucuya ulaşılamadı. Değişiklik kaydedilmedi.';
+        notify();
         return false;
       }
     }
@@ -857,6 +930,7 @@ extension DashboardControllerResidents on DashboardController {
     required String email,
     String? phone,
     String? notes,
+    int? personId,
   }) async {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
@@ -867,6 +941,8 @@ extension DashboardControllerResidents on DashboardController {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'role': role,
+            // U7: an existing person of the site is linked instead of being re-typed.
+            'person_id': ?personId,
             'full_name': fullName,
             'email': email,
             'phone': phone,

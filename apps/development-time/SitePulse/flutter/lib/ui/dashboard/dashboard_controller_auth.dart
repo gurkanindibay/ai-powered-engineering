@@ -964,6 +964,14 @@ extension DashboardControllerAuth on DashboardController {
           PermissionScope(code: 'LEDGER_MANAGE_ALL', title: 'Site Finansını Yönetme', isGranted: false, isolationNote: 'Engelli: Site yönetimi yetkisi yok'),
         ];
         break;
+      case UserRole.auditor:
+        permissions = const [
+          PermissionScope(code: 'FINANCE_READ', title: 'Defter, Rapor ve Tahsilat Görüntüleme', isGranted: true, isolationNote: 'Yalnızca kendi sitesi, salt okunur'),
+          PermissionScope(code: 'EXPENSE_APPROVE', title: 'Limit Üstü Gider Onayı', isGranted: true, isolationNote: 'Kaydeden kişiden farklı onaycı'),
+          PermissionScope(code: 'AUDIT_LOG_READ', title: 'Erişim Kaydı', isGranted: true, isolationNote: 'Finansal veri erişimleri'),
+          PermissionScope(code: 'LEDGER_MANAGE_ALL', title: 'Site Finansını Yönetme', isGranted: false, isolationNote: 'Engelli: Denetçi değişiklik yapmaz'),
+        ];
+        break;
     }
 
     final name = customName ?? role.displayName;

@@ -6,12 +6,216 @@ use crate::models::{
     AuthProvider, DebtStatus, DebtorType, DuesLiability, ExpenseType, HomeOwnerResponse,
     IndependentUnit, OccupancyStatus, RegisterHomeOwnerRequest, Role, UnitMemberDto, User,
 };
+use crate::services::account_activation_service::{
+    self as activation, AccountActivationService, ActivationPurpose, IssuedToken,
+};
 use crate::services::virtual_iban_service::VirtualIbanService;
 use crate::state::AppState;
 
 /// Refusal for deleting a unit that has payments, receipts, advance history, paid dues or a matured receivable.
 pub const UNIT_HAS_FINANCIAL_HISTORY: &str =
     "Bu dairenin finansal geçmişi (ödeme, makbuz, avans, ödenmiş veya vadesi geçmiş aidat) var; silinemez. Tahliye veya malik devri kullanın.";
+
+/// S8: one refusal for an address in use anywhere, without echoing it back.
+pub const EMAIL_NOT_AVAILABLE: &str =
+    "This email address cannot be used for a new account. Check it or contact support.";
+
+/// A login email change was asked without identity permission and a recent step-up.
+pub const LOGIN_CHANGE_NEEDS_STEP_UP: &str =
+    "Changing a login email requires identity permission and a recent password check.";
+
+/// Monthly dues used when neither a house type tariff nor an amount is given (F4).
+pub const DEFAULT_MONTHLY_DUES: Decimal = Decimal::from_parts(140000, 0, 0, false, 2);
+/// Response warning: the dues amount was not given and the default was used.
+pub const WARNING_DUES_DEFAULTED: &str = "DUES_DEFAULTED";
+/// Response warning: no land share was given; the site's most common share was used.
+pub const WARNING_LAND_SHARE_DEFAULTED: &str = "LAND_SHARE_DEFAULTED";
+
+/// A land share that is not a positive whole number.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("Land share must be a positive whole number of shares.")]
+pub struct InvalidLandShare;
+
+/// F3: a land share is a positive whole number of shares; `n/d` from older clients reads as `n`.
+pub fn parse_land_share(value: Option<&str>) -> Result<Option<i32>, InvalidLandShare> {
+    let Some(raw) = value.map(str::trim).filter(|v| !v.is_empty()) else {
+        return Ok(None);
+    };
+    let numerator = raw.split('/').next().unwrap_or(raw).trim();
+    numerator
+        .parse::<i32>()
+        .ok()
+        .filter(|n| *n > 0)
+        .map(Some)
+        .ok_or(InvalidLandShare)
+}
+
+/// The chosen person is not one of this site's people.
+pub const PERSON_NOT_FOUND: &str = "Person not found";
+
+/// The unit is not in this site (or does not exist); never answered with invented data.
+pub const UNIT_NOT_FOUND: &str = "Unit not found";
+
+/// A login email change staged until the new address confirms it.
+struct PendingEmailChange {
+    user_id: String,
+    name: String,
+    old_email: String,
+    new_email: String,
+    issued: IssuedToken,
+}
+
+/// Why a person's email change was refused.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum EmailChangeError {
+    #[error("{0}")]
+    Invalid(String),
+    #[error("{EMAIL_NOT_AVAILABLE}")]
+    NotAvailable,
+    #[error("{UNIT_NOT_FOUND}")]
+    NotFound,
+    /// A login email change needs `PersonIdentityManage` and a recent step-up.
+    #[error("{LOGIN_CHANGE_NEEDS_STEP_UP}")]
+    LoginChangeNotAllowed,
+    #[error("DB error: {0}")]
+    Storage(String),
+}
+
+fn email_storage(e: impl std::fmt::Display) -> EmailChangeError {
+    EmailChangeError::Storage(e.to_string())
+}
+
+/// S5: change a person's email. A contact-only person is updated at once; a person
+/// with a login gets a confirmation link at the new address and keeps the old login
+/// until it is used.
+async fn stage_person_email_change<C: deadpool_postgres::GenericClient>(
+    client: &C,
+    person_id: i64,
+    requested: &str,
+    site: i64,
+    changes: &mut Vec<PendingEmailChange>,
+    login_change_allowed: bool,
+) -> Result<(), EmailChangeError> {
+    let new_email = crate::domain::email::NormalizedEmail::normalize(requested);
+    validate_email(&new_email).map_err(EmailChangeError::Invalid)?;
+    let row = client
+        .query_opt(
+            "SELECT COALESCE(p.email, ''), p.full_name, u.id, COALESCE(u.email, '') FROM persons p \
+             LEFT JOIN users u ON u.person_id = p.id AND u.is_active \
+             WHERE p.id = $1 AND (p.site_id = $2 OR p.site_id IS NULL) LIMIT 1",
+            &[&person_id, &site],
+        )
+        .await
+        .map_err(email_storage)?
+        .ok_or(EmailChangeError::NotFound)?;
+    let contact_email: String = row.get(0);
+    let name: String = row.get(1);
+    let user_id: Option<i64> = row.get(2);
+    let login_email: String = row.get(3);
+    let current = if login_email.is_empty() {
+        contact_email
+    } else {
+        login_email
+    };
+    if crate::domain::email::same_email(&current, &new_email) {
+        return Ok(());
+    }
+    let taken_in_site = client
+        .query_opt(
+            "SELECT 1 FROM persons WHERE site_id = $1 AND lower(email) = $2 AND id <> $3",
+            &[&site, &new_email, &person_id],
+        )
+        .await
+        .map_err(email_storage)?
+        .is_some();
+    if taken_in_site {
+        return Err(EmailChangeError::NotAvailable);
+    }
+    match user_id {
+        None => {
+            client
+                .execute(
+                    "UPDATE persons SET email = $1 WHERE id = $2",
+                    &[&new_email, &person_id],
+                )
+                .await
+                .map_err(email_storage)?;
+        }
+        Some(user_id) => {
+            if !login_change_allowed {
+                return Err(EmailChangeError::LoginChangeNotAllowed);
+            }
+            let taken = client
+                .query_opt(
+                    "SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2",
+                    &[&new_email, &user_id],
+                )
+                .await
+                .map_err(email_storage)?
+                .is_some();
+            if taken {
+                return Err(EmailChangeError::NotAvailable);
+            }
+            let issued = activation::issue_in(
+                client,
+                user_id,
+                Some(site),
+                ActivationPurpose::EmailChange,
+                Some(&new_email),
+            )
+            .await
+            .map_err(email_storage)?;
+            changes.push(PendingEmailChange {
+                user_id: user_id.to_string(),
+                name,
+                old_email: current,
+                new_email,
+                issued,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// The no-database counterpart of [`stage_person_email_change`] for a login user.
+fn stage_memory_email_change(
+    inner: &mut crate::state::AppStateInner,
+    user_idx: usize,
+    requested: &str,
+    changes: &mut Vec<PendingEmailChange>,
+    login_change_allowed: bool,
+) -> Result<(), EmailChangeError> {
+    let new_email = crate::domain::email::NormalizedEmail::normalize(requested);
+    validate_email(&new_email).map_err(EmailChangeError::Invalid)?;
+    let user = inner.users[user_idx].clone();
+    if crate::domain::email::same_email(&user.email, &new_email) {
+        return Ok(());
+    }
+    if !login_change_allowed {
+        return Err(EmailChangeError::LoginChangeNotAllowed);
+    }
+    if inner
+        .users
+        .iter()
+        .any(|u| u.id != user.id && crate::domain::email::same_email(&u.email, &new_email))
+    {
+        return Err(EmailChangeError::NotAvailable);
+    }
+    let issued = activation::issue_in_memory(
+        inner,
+        &user.id,
+        ActivationPurpose::EmailChange,
+        Some(&new_email),
+    );
+    changes.push(PendingEmailChange {
+        user_id: user.id,
+        name: user.full_name,
+        old_email: user.email,
+        new_email,
+        issued,
+    });
+    Ok(())
+}
 
 pub struct SiteAdminService {
     state: AppState,
@@ -65,6 +269,22 @@ pub fn validate_phone(phone: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The code a block is registered under: "a blok", "A-Blok" and "A" are all `A`;
+/// an empty name is `A`.
+pub fn block_code(name: &str) -> String {
+    let code = name
+        .to_uppercase()
+        .replace("BLOK", "")
+        .replace(['-', '_', ' '], "")
+        .trim()
+        .to_string();
+    if code.is_empty() {
+        "A".to_string()
+    } else {
+        code
+    }
+}
+
 impl SiteAdminService {
     pub fn new(state: AppState) -> Self {
         Self { state }
@@ -99,29 +319,12 @@ impl SiteAdminService {
                 .iter()
                 .any(|u| crate::domain::email::same_email(&u.email, &email_norm))
             {
-                return Err(format!(
-                    "An account with this email address already exists (zaten mevcut): {}",
-                    request.email
-                ));
+                return Err(EMAIL_NOT_AVAILABLE.to_string());
             }
         }
 
-        let clean_block = request
-            .block
-            .to_uppercase()
-            .replace("BLOK", "")
-            .replace(['-', '_', ' '], "")
-            .trim()
-            .to_string();
-        let effective_clean_block = if clean_block.is_empty() {
-            "A".to_string()
-        } else {
-            clean_block
-        };
+        let effective_clean_block = block_code(&request.block);
         let formatted_block_name = format!("{} Blok", effective_clean_block);
-
-        let temp_pass = generate_resident_temporary_password();
-        let password_hash = crate::auth::hash_password_async(temp_pass.clone()).await?;
 
         let effective_floor = if request.floor > 0 {
             request.floor
@@ -147,8 +350,16 @@ impl SiteAdminService {
                 resolved_dues = Some(tariff.dues_amount);
             }
         }
-        let monthly_dues =
-            resolved_dues.unwrap_or_else(|| Decimal::from_str_exact("1400.00").unwrap());
+        // F4: a fallback amount is never applied silently; the response says so.
+        let mut warnings: Vec<String> = Vec::new();
+        let monthly_dues = resolved_dues.unwrap_or_else(|| {
+            warnings.push(WARNING_DUES_DEFAULTED.to_string());
+            DEFAULT_MONTHLY_DUES
+        });
+        // F3: the unit's land share weights capital costs, so it is stored as given.
+        let requested_land_share =
+            parse_land_share(request.land_share.as_deref()).map_err(|e| e.to_string())?;
+        let mut effective_land_share = requested_land_share.unwrap_or(1);
 
         // Parse numeric IDs
         let site_numeric_id = crate::db::require_id("entity", site_id)?;
@@ -174,13 +385,28 @@ impl SiteAdminService {
             .map(|s| !s.trim().is_empty())
             .unwrap_or(false);
         let mut explicit_tenant_pid: Option<i64> = None;
+        // Activation tokens issued inside the transaction, delivered after commit:
+        // (user id, display name, email).
+        let mut pending_activations: Vec<(i64, String, String, IssuedToken)> = Vec::new();
+        // Whether PostgreSQL holds the data (and its tokens); otherwise memory is the store.
+        let mut persisted = false;
 
         // 2. Persist to PostgreSQL if pool is available
         if let Some(ref pool) = self.state.pool {
-            let client = pool
+            let mut connection = pool
                 .get()
                 .await
                 .map_err(|e| format!("DB connection error: {}", e))?;
+            // F11: the person, account, block, unit, occupancy and dues are one unit of work.
+            let client = connection
+                .transaction()
+                .await
+                .map_err(|e| format!("Transaction error: {}", e))?;
+            persisted = true;
+            // Tenant guardrail (RLS, V25): the new unit and its dues stay in this site.
+            crate::db::tx_bind_tenant(&client, site_numeric_id)
+                .await
+                .map_err(|e| format!("Transaction error: {}", e))?;
 
             // Check duplicate email in DB
             let existing_user = client
@@ -191,10 +417,7 @@ impl SiteAdminService {
                 .await
                 .map_err(|e| format!("DB query error: {}", e))?;
             if existing_user.is_some() {
-                return Err(format!(
-                    "An account with this email address already exists (zaten mevcut): {}",
-                    request.email
-                ));
+                return Err(EMAIL_NOT_AVAILABLE.to_string());
             }
 
             // Find or create block
@@ -225,10 +448,11 @@ impl SiteAdminService {
             } else {
                 "HOME_OWNER"
             };
+            // S1: a person is matched only inside this site.
             let existing_person = client
                 .query_opt(
-                    "SELECT id FROM persons WHERE LOWER(email) = $1",
-                    &[&email_norm],
+                    "SELECT id FROM persons WHERE site_id = $2 AND LOWER(email) = $1",
+                    &[&email_norm, &site_numeric_id],
                 )
                 .await
                 .map_err(|e| format!("DB query error: {}", e))?;
@@ -238,8 +462,8 @@ impl SiteAdminService {
             } else {
                 let row = client
                     .query_one(
-                        "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, $4) RETURNING id",
-                        &[&request.owner_full_name, &request.phone, &email_norm, &person_type],
+                        "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+                        &[&request.owner_full_name, &request.phone, &email_norm, &person_type, &site_numeric_id],
                     )
                     .await
                     .map_err(|e| format!("Failed to insert person: {}", e))?;
@@ -256,20 +480,35 @@ impl SiteAdminService {
                 .query_one(
                     r#"
                     INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
-                    VALUES ($1, $2, $3, $4, $5, TRUE)
+                    VALUES ($1, $2, $3, NULL, $4, TRUE)
                     RETURNING id
                     "#,
                     &[
                         &site_numeric_id,
                         &person_numeric_id,
                         &email_norm,
-                        &password_hash,
                         &user_role_str,
                     ],
                 )
                 .await
                 .map_err(|e| format!("Failed to insert user: {}", e))?;
             user_numeric_id = user_row.get(0);
+            // S2/S3: no password is issued; the person sets one through their own link.
+            let issued = activation::issue_in(
+                &client,
+                user_numeric_id,
+                Some(site_numeric_id),
+                ActivationPurpose::Activate,
+                None,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            pending_activations.push((
+                user_numeric_id,
+                request.owner_full_name.clone(),
+                email_norm.clone(),
+                issued,
+            ));
 
             // Handle optional explicit tenant when registered together with owner
             let mut explicit_tenant_person_id: Option<i64> = None;
@@ -284,12 +523,11 @@ impl SiteAdminService {
                 let existing_t_person = if !t_email_norm.is_empty() {
                     client
                         .query_opt(
-                            "SELECT id FROM persons WHERE LOWER(email) = $1",
-                            &[&t_email_norm],
+                            "SELECT id FROM persons WHERE site_id = $2 AND LOWER(email) = $1",
+                            &[&t_email_norm, &site_numeric_id],
                         )
                         .await
-                        .ok()
-                        .flatten()
+                        .map_err(|e| format!("DB query error: {}", e))?
                 } else {
                     None
                 };
@@ -299,8 +537,8 @@ impl SiteAdminService {
                 } else {
                     let row = client
                         .query_one(
-                            "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, 'HOME_RESIDENT') RETURNING id",
-                            &[&t_name, &t_phone, &t_email_norm],
+                            "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, NULLIF($3, ''), 'HOME_RESIDENT', $4) RETURNING id",
+                            &[&t_name, &t_phone, &t_email_norm, &site_numeric_id],
                         )
                         .await
                         .map_err(|e| format!("Failed to insert tenant person: {}", e))?;
@@ -316,20 +554,51 @@ impl SiteAdminService {
                             &[&t_email_norm],
                         )
                         .await
-                        .ok()
-                        .flatten();
+                        .map_err(|e| format!("DB query error: {}", e))?;
                     if existing_t_user.is_none() {
-                        client
-                            .execute(
+                        // S2: the tenant gets their own account and their own activation link.
+                        let tenant_user_id: i64 = client
+                            .query_one(
                                 r#"
                                 INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
-                                VALUES ($1, $2, $3, $4, 'HOME_RESIDENT', TRUE)
+                                VALUES ($1, $2, $3, NULL, 'HOME_RESIDENT', TRUE)
+                                RETURNING id
                                 "#,
-                                &[&site_numeric_id, &t_pid, &t_email_norm, &password_hash],
+                                &[&site_numeric_id, &t_pid, &t_email_norm],
                             )
-                            .await.map_err(|e| e.to_string())?;
+                            .await
+                            .map_err(|e| e.to_string())?
+                            .get(0);
+                        let issued = activation::issue_in(
+                            &client,
+                            tenant_user_id,
+                            Some(site_numeric_id),
+                            ActivationPurpose::Activate,
+                            None,
+                        )
+                        .await
+                        .map_err(|e| e.to_string())?;
+                        pending_activations.push((
+                            tenant_user_id,
+                            t_name.to_string(),
+                            t_email_norm.clone(),
+                            issued,
+                        ));
                     }
                 }
+            }
+
+            if requested_land_share.is_none() {
+                // The site's most common share, so a missing value does not shrink the unit's weight.
+                let typical: Option<i32> = client
+                    .query_one(
+                        "SELECT mode() WITHIN GROUP (ORDER BY land_share) FROM units WHERE site_id = $1 AND deleted_at IS NULL",
+                        &[&site_numeric_id],
+                    )
+                    .await
+                    .map_err(|e| format!("DB query error: {}", e))?
+                    .get(0);
+                effective_land_share = typical.unwrap_or(1);
             }
 
             // Check if unit already exists
@@ -351,7 +620,7 @@ impl SiteAdminService {
                         .execute(
                             r#"
                             INSERT INTO occupancy_members (occupancy_id, person_id, resident_user_id, full_name, relationship, phone, email, is_emergency_contact, created_at)
-                            SELECT uo.id, $2, $3, $4, 'Ev Sakini', $5, $6, false, CURRENT_TIMESTAMP
+                            SELECT uo.id, $2, $3, $4, 'OTHER', $5, $6, false, CURRENT_TIMESTAMP
                             FROM unit_occupancies uo
                             WHERE uo.unit_id = $1 AND uo.is_active = true
                             "#,
@@ -373,8 +642,7 @@ impl SiteAdminService {
                             &[&unit_numeric_id],
                         )
                         .await
-                        .ok()
-                        .flatten();
+                        .map_err(|e| format!("DB query error: {}", e))?;
 
                     if let Some(occ_row) = active_occ_row {
                         let occ_id: i64 = occ_row.get(0);
@@ -522,7 +790,7 @@ impl SiteAdminService {
                     .query_one(
                         r#"
                         INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, virtual_iban, house_type, occupancy_status)
-                        VALUES ($1, $2, $3, $4, 1, $5, $6, $7, $8, $9)
+                        VALUES ($1, $2, $3, $4, $10, $5, $6, $7, $8, $9)
                         ON CONFLICT (block_id, unit_number) DO UPDATE SET
                             deleted_at = NULL,
                             floor = EXCLUDED.floor,
@@ -544,6 +812,7 @@ impl SiteAdminService {
                             &viban,
                             &effective_house_type,
                             &occ_status,
+                            &effective_land_share,
                         ],
                     )
                     .await
@@ -554,7 +823,7 @@ impl SiteAdminService {
                         .execute(
                             r#"
                             INSERT INTO occupancy_members (occupancy_id, person_id, resident_user_id, full_name, relationship, phone, email, is_emergency_contact, created_at)
-                            SELECT uo.id, $2, $3, $4, 'Ev Sakini', $5, $6, false, CURRENT_TIMESTAMP
+                            SELECT uo.id, $2, $3, $4, 'OTHER', $5, $6, false, CURRENT_TIMESTAMP
                             FROM unit_occupancies uo
                             WHERE uo.unit_id = $1 AND uo.is_active = true
                             "#,
@@ -594,6 +863,17 @@ impl SiteAdminService {
                 }
             }
 
+            // An explicitly given land share also corrects an existing unit.
+            if let Some(share) = requested_land_share {
+                client
+                    .execute(
+                        "UPDATE units SET land_share = $1 WHERE id = $2",
+                        &[&share, &unit_numeric_id],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+
             // Insert due liability if dues > 0 and NOT co-resident
             if !is_resident_only && monthly_dues > Decimal::ZERO {
                 let now = Utc::now();
@@ -625,6 +905,10 @@ impl SiteAdminService {
                     )
                     .await.map_err(|e| e.to_string())?;
             }
+            client
+                .commit()
+                .await
+                .map_err(|e| format!("Transaction commit error: {}", e))?;
         }
 
         // 3. Update in-memory state
@@ -648,7 +932,7 @@ impl SiteAdminService {
             full_name: request.owner_full_name.clone(),
             email: email_norm.clone(),
             phone: request.phone.clone(),
-            password_hash: Some(password_hash.clone()),
+            password_hash: None,
             role: if is_tenant || is_resident_only {
                 Role::HomeResident
             } else {
@@ -665,6 +949,21 @@ impl SiteAdminService {
                 None
             },
         };
+        let mut memory_activations: Vec<(String, String, String, IssuedToken)> = Vec::new();
+        if !persisted {
+            let issued = activation::issue_in_memory(
+                &mut inner,
+                &user_id,
+                ActivationPurpose::Activate,
+                None,
+            );
+            memory_activations.push((
+                user_id.clone(),
+                request.owner_full_name.clone(),
+                email_norm.clone(),
+                issued,
+            ));
+        }
         inner.users.push(resident_user.clone());
 
         let existing_unit_pos = inner.units.iter().position(|u| {
@@ -689,7 +988,7 @@ impl SiteAdminService {
             let member_dto = crate::models::UnitMemberDto {
                 resident_id: user_id.clone(),
                 full_name: request.owner_full_name.clone(),
-                relationship: "Ev Sakini".to_string(),
+                relationship: "OTHER".to_string(),
                 phone: request.phone.clone(),
                 email: email_norm.clone(),
                 is_owner: false,
@@ -739,7 +1038,14 @@ impl SiteAdminService {
                     .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
                     .max()
                     .unwrap_or(0);
-                let tid = (max_u + 1).to_string();
+                let tenant_email_norm = crate::domain::email::NormalizedEmail::normalize(
+                    request.tenant_email.as_deref().unwrap_or(""),
+                );
+                let tid = pending_activations
+                    .iter()
+                    .find(|(_, _, email, _)| !email.is_empty() && *email == tenant_email_norm)
+                    .map(|(id, _, _, _)| id.to_string())
+                    .unwrap_or_else(|| (max_u + 1).to_string());
                 let tenant_user = User {
                     id: tid.clone(),
                     site_id: site_id.to_string(),
@@ -751,7 +1057,7 @@ impl SiteAdminService {
                         .trim()
                         .to_lowercase(),
                     phone: request.tenant_phone.clone().unwrap_or_default(),
-                    password_hash: Some(password_hash.clone()),
+                    password_hash: None,
                     role: Role::HomeResident,
                     must_change_password: true,
                     auth_provider: AuthProvider::Local,
@@ -760,6 +1066,20 @@ impl SiteAdminService {
                     created_at: Utc::now(),
                     person_id: explicit_tenant_pid,
                 };
+                if !persisted && !tenant_user.email.is_empty() {
+                    let issued = activation::issue_in_memory(
+                        &mut inner,
+                        &tid,
+                        ActivationPurpose::Activate,
+                        None,
+                    );
+                    memory_activations.push((
+                        tid.clone(),
+                        tenant_user.full_name.clone(),
+                        tenant_user.email.clone(),
+                        issued,
+                    ));
+                }
                 inner.users.push(tenant_user);
                 explicit_tenant_user_id_in_mem = Some(tid);
             }
@@ -770,7 +1090,7 @@ impl SiteAdminService {
                 block_id: block_id_str,
                 unit_number: request.unit_no,
                 floor: effective_floor,
-                land_share: 1,
+                land_share: effective_land_share,
                 owner_user_id: if is_tenant && !has_explicit_tenant {
                     existing_owner_id
                 } else {
@@ -953,7 +1273,7 @@ impl SiteAdminService {
             vec![crate::models::UnitMemberDto {
                 resident_id: user_id.clone(),
                 full_name: request.owner_full_name.clone(),
-                relationship: "Ev Sakini".to_string(),
+                relationship: "OTHER".to_string(),
                 phone: request.phone.clone(),
                 email: email_norm.clone(),
                 is_owner: false,
@@ -965,6 +1285,31 @@ impl SiteAdminService {
             Vec::new()
         };
 
+        drop(inner);
+        // Deliver after the data is committed, so a link never points at a rolled-back account.
+        let activations = AccountActivationService::new(self.state.clone());
+        let mut deliveries: Vec<(String, String, String, IssuedToken)> = pending_activations
+            .into_iter()
+            .map(|(id, name, email, issued)| (id.to_string(), name, email, issued))
+            .collect();
+        deliveries.extend(memory_activations);
+        let mut owner_activation = None;
+        let mut tenant_activation = None;
+        for (id, name, email, issued) in &deliveries {
+            let delivery = activations.deliver(
+                &format!("user-{}", id),
+                name,
+                email,
+                ActivationPurpose::Activate,
+                issued,
+            );
+            if crate::auth::same_id(id, &user_id) {
+                owner_activation = Some(delivery);
+            } else {
+                tenant_activation = Some(delivery);
+            }
+        }
+
         Ok(HomeOwnerResponse {
             unit_id,
             site_id: site_id.to_string(),
@@ -974,11 +1319,19 @@ impl SiteAdminService {
             owner_full_name: request.owner_full_name,
             email: email_norm,
             phone: request.phone,
-            land_share: request.land_share.unwrap_or_else(|| "1/24".to_string()),
+            land_share: format!("{}/24", effective_land_share),
             monthly_dues,
             house_type: effective_house_type,
             is_resident: request.is_resident,
-            temporary_password: Some(temp_pass),
+            activation: owner_activation,
+            tenant_activation,
+            pending_email_changes: Vec::new(),
+            warnings: {
+                if requested_land_share.is_none() {
+                    warnings.push(WARNING_LAND_SHARE_DEFAULTED.to_string());
+                }
+                warnings
+            },
             must_change_password: true,
             created_at: Utc::now(),
             occupancy_status: Some(if request.is_resident {
@@ -1150,7 +1503,10 @@ impl SiteAdminService {
                                 monthly_dues: dues_val,
                                 house_type: r.get("house_type"),
                                 is_resident,
-                                temporary_password: None,
+                                activation: None,
+                                tenant_activation: None,
+                                pending_email_changes: Vec::new(),
+                                warnings: Vec::new(),
                                 must_change_password: r.get("must_change_password"),
                                 created_at: r.get("created_at"),
                                 occupancy_status: Some(OccupancyStatus::from_str_loose(
@@ -1243,7 +1599,10 @@ impl SiteAdminService {
                     || matching_unit
                         .map(|u| u.tenant_user_id.is_none())
                         .unwrap_or(true),
-                temporary_password: None,
+                activation: None,
+                tenant_activation: None,
+                pending_email_changes: Vec::new(),
+                warnings: Vec::new(),
                 must_change_password: user.must_change_password,
                 created_at: user.created_at,
                 occupancy_status: Some(OccupancyStatus::OwnerOccupied),
@@ -1265,6 +1624,7 @@ impl SiteAdminService {
         site_id: &str,
         unit_or_user_id: &str,
         req: crate::models::UpdateHomeOwnerRequest,
+        login_change_allowed: bool,
     ) -> Result<HomeOwnerResponse, String> {
         let site_numeric = crate::db::require_id("entity", site_id)?;
         let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
@@ -1273,38 +1633,42 @@ impl SiteAdminService {
         // follows it so the two never touch different units.
         let mut resolved_unit_id: Option<String> = None;
 
+        // Login email changes waiting for the new address to confirm them.
+        let mut email_changes: Vec<PendingEmailChange> = Vec::new();
+        // Whether PostgreSQL holds the data; otherwise memory is the store.
+        let mut persisted = false;
+
         // 1. If DB pool is available, update database
         if let Some(ref pool) = self.state.pool {
             {
-                let client = pool
+                let mut connection = pool
                     .get()
                     .await
                     .map_err(|e| format!("Database connection error: {}", e))?;
-                let unit_row_opt = if let Some(uid) = id_numeric {
-                    // A unit id wins over a person id: both are numbers, and the old
-                    // OR-match could return two rows, fail silently and fall back to
-                    // in-memory state (the tenant then stayed in the database).
-                    client
+                let client = connection
+                    .transaction()
+                    .await
+                    .map_err(|e| format!("Transaction error: {}", e))?;
+                // Tenant guardrail (RLS, V25).
+                crate::db::tx_bind_tenant(&client, site_numeric)
+                    .await
+                    .map_err(|e| format!("Transaction error: {}", e))?;
+                persisted = true;
+                // S7: the route authorizes `:id` as a unit of this site, so it is read as nothing else.
+                let unit_row_opt = match id_numeric {
+                    Some(uid) => client
                         .query_opt(
                             "SELECT id, block_id, unit_number, floor, owner_person_id, tenant_person_id, house_type FROM units \
-                             WHERE (id = $1 OR owner_person_id = $1 OR tenant_person_id = $1) AND site_id = $2 AND deleted_at IS NULL \
-                             ORDER BY (id = $1) DESC, id LIMIT 1",
+                             WHERE id = $1 AND site_id = $2 AND deleted_at IS NULL FOR UPDATE",
                             &[&uid, &site_numeric],
                         )
                         .await
-                        .map_err(|e| e.to_string())?
-                } else {
-                    client
-                        .query_opt(
-                            "SELECT u.id, u.block_id, u.unit_number, u.floor, u.owner_person_id, u.tenant_person_id, u.house_type FROM units u \
-                             JOIN persons p ON (u.owner_person_id = p.id OR u.tenant_person_id = p.id) \
-                             WHERE LOWER(p.email) = LOWER($1) AND u.site_id = $2 AND u.deleted_at IS NULL \
-                             ORDER BY (u.owner_person_id = p.id) DESC, u.id LIMIT 1",
-                            &[&unit_or_user_id, &site_numeric],
-                        )
-                        .await
-                        .map_err(|e| e.to_string())?
+                        .map_err(|e| e.to_string())?,
+                    None => None,
                 };
+                if unit_row_opt.is_none() {
+                    return Err(UNIT_NOT_FOUND.to_string());
+                }
 
                 if let Some(u_row) = unit_row_opt {
                     let u_id: i64 = u_row.get(0);
@@ -1355,46 +1719,50 @@ impl SiteAdminService {
                                 .map_err(|e| e.to_string())?;
                         }
                         if let Some(ref t_email) = req.tenant_email {
-                            let email_norm =
-                                crate::domain::email::NormalizedEmail::normalize(t_email);
-                            let prev_email: Option<String> = client
-                                .query_opt(
-                                    "SELECT email FROM persons WHERE id = $1",
-                                    &[&tenant_person_id],
-                                )
-                                .await
-                                .ok()
-                                .flatten()
-                                .map(|r| r.get(0));
-                            client
-                                .execute(
-                                    "UPDATE persons SET email = $1 WHERE id = $2",
-                                    &[&email_norm, &tenant_person_id],
-                                )
-                                .await
-                                .map_err(|e| e.to_string())?;
-                            if let Some(ref pe) = prev_email {
-                                client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND LOWER(email) = LOWER($3)", &[&email_norm, &site_numeric, pe]).await.map_err(|e| e.to_string())?;
-                            }
+                            stage_person_email_change(
+                                &client,
+                                tenant_person_id,
+                                t_email,
+                                site_numeric,
+                                &mut email_changes,
+                                login_change_allowed,
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
                         }
                     } else if let Some(ref t_name) = req.tenant_full_name {
                         if !t_name.trim().is_empty() {
-                            let t_email = req
-                                .tenant_email
-                                .clone()
-                                .unwrap_or_else(|| format!("tenant.{}@example.com", u_id))
-                                .trim()
-                                .to_lowercase();
+                            let t_email = crate::domain::email::NormalizedEmail::normalize(
+                                req.tenant_email.as_deref().unwrap_or(""),
+                            );
+                            if !t_email.is_empty() {
+                                validate_email(&t_email)?;
+                            }
                             let t_phone = req.tenant_phone.clone().unwrap_or_default();
-                            let row_res = client.query_one(
-                                "INSERT INTO persons (full_name, phone, email, person_type) 
-                                 VALUES ($1, $2, $3, 'HOME_RESIDENT') 
-                                 ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, phone = EXCLUDED.phone 
-                                 RETURNING id",
-                                &[&t_name, &t_phone, &t_email],
-                            ).await;
-                            if let Ok(r) = row_res {
-                                let new_t_id: i64 = r.get(0);
+                            // S1: reuse a person of this site only; never invent an address.
+                            let existing = if t_email.is_empty() {
+                                None
+                            } else {
+                                client
+                                    .query_opt(
+                                        "SELECT id FROM persons WHERE site_id = $1 AND lower(email) = $2",
+                                        &[&site_numeric, &t_email],
+                                    )
+                                    .await
+                                    .map_err(|e| e.to_string())?
+                            };
+                            let new_t_id: i64 = match existing {
+                                Some(row) => row.get(0),
+                                None => client
+                                    .query_one(
+                                        "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, NULLIF($3, ''), 'HOME_RESIDENT', $4) RETURNING id",
+                                        &[&t_name, &t_phone, &t_email, &site_numeric],
+                                    )
+                                    .await
+                                    .map_err(|e| format!("Failed to save tenant: {}", e))?
+                                    .get(0),
+                            };
+                            {
                                 client.execute("UPDATE units SET tenant_person_id = $1, occupancy_status = 'TENANT_OCCUPIED' WHERE id = $2", &[&new_t_id, &u_id]).await.map_err(|e| e.to_string())?;
                                 client.execute(
                                     "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, created_at)
@@ -1425,27 +1793,16 @@ impl SiteAdminService {
                                 .map_err(|e| e.to_string())?;
                         }
                         if let Some(ref email) = req.email {
-                            let email_norm =
-                                crate::domain::email::NormalizedEmail::normalize(email);
-                            let prev_email: Option<String> = client
-                                .query_opt(
-                                    "SELECT email FROM persons WHERE id = $1",
-                                    &[&owner_person_id],
-                                )
-                                .await
-                                .ok()
-                                .flatten()
-                                .map(|r| r.get(0));
-                            client
-                                .execute(
-                                    "UPDATE persons SET email = $1 WHERE id = $2",
-                                    &[&email_norm, &owner_person_id],
-                                )
-                                .await
-                                .map_err(|e| e.to_string())?;
-                            if let Some(ref pe) = prev_email {
-                                client.execute("UPDATE users SET email = $1 WHERE site_id = $2 AND LOWER(email) = LOWER($3)", &[&email_norm, &site_numeric, pe]).await.map_err(|e| e.to_string())?;
-                            }
+                            stage_person_email_change(
+                                &client,
+                                owner_person_id,
+                                email,
+                                site_numeric,
+                                &mut email_changes,
+                                login_change_allowed,
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
                         }
                     }
 
@@ -1465,6 +1822,10 @@ impl SiteAdminService {
                         ).await.map_err(|e| e.to_string())?;
                     }
                 }
+                client
+                    .commit()
+                    .await
+                    .map_err(|e| format!("Transaction commit error: {}", e))?;
             }
         }
 
@@ -1517,8 +1878,16 @@ impl SiteAdminService {
                     inner.users[t_idx].full_name = t_name.clone();
                 }
                 if let Some(ref t_email) = req.tenant_email {
-                    inner.users[t_idx].email =
-                        crate::domain::email::NormalizedEmail::normalize(t_email);
+                    if !persisted {
+                        stage_memory_email_change(
+                            &mut inner,
+                            t_idx,
+                            t_email,
+                            &mut email_changes,
+                            login_change_allowed,
+                        )
+                        .map_err(|e| e.to_string())?;
+                    }
                 }
                 if let Some(ref t_phone) = req.tenant_phone {
                     inner.users[t_idx].phone = t_phone.clone();
@@ -1532,10 +1901,9 @@ impl SiteAdminService {
                         .max()
                         .unwrap_or(0);
                     let new_uid = (max_u + 1).to_string();
-                    let email = req
-                        .tenant_email
-                        .clone()
-                        .unwrap_or_else(|| format!("tenant.{}@example.com", new_uid));
+                    let email = crate::domain::email::NormalizedEmail::normalize(
+                        req.tenant_email.as_deref().unwrap_or(""),
+                    );
                     let phone = req.tenant_phone.clone().unwrap_or_default();
                     inner.users.push(crate::models::User {
                         id: new_uid.clone(),
@@ -1579,7 +1947,16 @@ impl SiteAdminService {
                 inner.users[usridx].phone = phone.clone();
             }
             if let Some(ref email) = req.email {
-                inner.users[usridx].email = crate::domain::email::NormalizedEmail::normalize(email);
+                if !persisted {
+                    stage_memory_email_change(
+                        &mut inner,
+                        usridx,
+                        email,
+                        &mut email_changes,
+                        login_change_allowed,
+                    )
+                    .map_err(|e| e.to_string())?;
+                }
             }
         }
 
@@ -1593,73 +1970,41 @@ impl SiteAdminService {
             .or(resolved_unit_id);
         drop(inner);
 
+        // S5: tell the new address how to confirm and the old one that a change was asked for.
+        let activations = AccountActivationService::new(self.state.clone());
+        let mut pending = Vec::new();
+        for change in &email_changes {
+            let reference = format!("user-{}", change.user_id);
+            let delivery = activations.deliver(
+                &reference,
+                &change.name,
+                &change.new_email,
+                ActivationPurpose::EmailChange,
+                &change.issued,
+            );
+            activations.notify_previous_email(&reference, &change.name, &change.old_email);
+            pending.push(crate::models::PendingEmailChange {
+                new_email: change.new_email.clone(),
+                delivery,
+            });
+        }
+
         let all_owners = self.get_home_owners_for_site(site_id).await;
-        if let Some(ref rid) = resolved_unit_id {
-            if let Some(updated) = all_owners.iter().find(|o| &o.unit_id == rid) {
-                return Ok(updated.clone());
-            }
-        }
-        if let Some(updated) = all_owners.into_iter().find(|o| {
-            o.unit_id == unit_or_user_id
-                || crate::db::parse_id_to_i64(&o.unit_id) == id_numeric
-                || req
-                    .email
-                    .as_ref()
-                    .map(|e| e.trim().eq_ignore_ascii_case(&o.email))
-                    .unwrap_or(false)
-                || (req
-                    .tenant_email
-                    .as_ref()
-                    .map(|e| {
-                        o.tenant_email
-                            .as_ref()
-                            .map(|te| te.trim().eq_ignore_ascii_case(e))
-                            .unwrap_or(false)
+        let mut updated = resolved_unit_id
+            .as_ref()
+            .and_then(|rid| all_owners.iter().find(|o| &o.unit_id == rid).cloned())
+            .or_else(|| {
+                all_owners
+                    .iter()
+                    .find(|o| {
+                        o.unit_id == unit_or_user_id
+                            || crate::db::parse_id_to_i64(&o.unit_id) == id_numeric
                     })
-                    .unwrap_or(false))
-        }) {
-            Ok(updated)
-        } else {
-            // Synthesized fallback response with updated attributes so caller receives 200 OK
-            Ok(HomeOwnerResponse {
-                unit_id: unit_or_user_id.to_string(),
-                site_id: site_id.to_string(),
-                block: "A".to_string(),
-                unit_no: id_numeric.map(|n| n as i32).unwrap_or(1),
-                floor: 1,
-                owner_full_name: req
-                    .owner_full_name
-                    .clone()
-                    .unwrap_or_else(|| "Kat Maliki".to_string()),
-                email: req.email.clone().unwrap_or_default(),
-                phone: req.phone.clone().unwrap_or_default(),
-                land_share: req.land_share.clone().unwrap_or_else(|| "1/1".to_string()),
-                monthly_dues: req.monthly_dues.unwrap_or(rust_decimal::Decimal::ZERO),
-                house_type: req.house_type.clone(),
-                is_resident: req.is_resident.unwrap_or(true),
-                temporary_password: None,
-                must_change_password: false,
-                created_at: chrono::Utc::now(),
-                occupancy_status: Some(if req.remove_tenant == Some(true) {
-                    if req.is_resident == Some(true) {
-                        OccupancyStatus::OwnerOccupied
-                    } else {
-                        OccupancyStatus::Vacant
-                    }
-                } else if req.tenant_full_name.is_some() {
-                    OccupancyStatus::TenantOccupied
-                } else {
-                    OccupancyStatus::OwnerOccupied
-                }),
-                tenant_full_name: req.tenant_full_name.clone(),
-                tenant_email: req.tenant_email.clone(),
-                tenant_phone: req.tenant_phone.clone(),
-                operational_dues_balance: None,
-                capital_dues_balance: None,
-                advance_balance: None,
-                household_residents: vec![],
+                    .cloned()
             })
-        }
+            .ok_or_else(|| UNIT_NOT_FOUND.to_string())?;
+        updated.pending_email_changes = pending;
+        Ok(updated)
     }
 
     pub async fn delete_home_owner(
@@ -1687,20 +2032,14 @@ impl SiteAdminService {
 
             let unit_row_opt = if let Some(uid) = id_numeric {
                 tx.query_opt(
-                    // A unit id wins over an owner person id: both are numbers, and an
-                    // OR-match returning two rows used to fail the whole delete.
-                    "SELECT id, owner_person_id, tenant_person_id FROM units WHERE (id = $1 OR owner_person_id = $1) AND site_id = $2 AND deleted_at IS NULL ORDER BY (id = $1) DESC, id LIMIT 1",
+                    // S7: the route authorizes `:id` as a unit of this site, so it is read as nothing else.
+                    "SELECT id, owner_person_id, tenant_person_id FROM units WHERE id = $1 AND site_id = $2 AND deleted_at IS NULL FOR UPDATE",
                     &[&uid, &site_numeric],
                 )
                 .await
                 .map_err(|e| e.to_string())?
             } else {
-                tx.query_opt(
-                    "SELECT u.id, u.owner_person_id, u.tenant_person_id FROM units u JOIN persons p ON u.owner_person_id = p.id WHERE p.email = $1 AND u.site_id = $2",
-                    &[&unit_or_user_id, &site_numeric],
-                )
-                .await
-                .map_err(|e| e.to_string())?
+                None
             };
 
             if let Some(u_row) = unit_row_opt {
@@ -1768,7 +2107,11 @@ impl SiteAdminService {
                     if other_units == 0 && other_occ == 0 {
                         // The login account goes; the person stays, because the closed
                         // ownership/occupancy history references it (zero data loss).
-                        tx.execute("DELETE FROM users WHERE site_id = $1 AND email = (SELECT email FROM persons WHERE id = $2)", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
+                        // S9: the account is deactivated, not deleted, so its audit trail and
+                        // KVKK retention survive; deactivation also ends every session.
+                        tx.execute("UPDATE users SET is_active = false WHERE site_id = $1 AND person_id = $2", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
+                        tx.execute("UPDATE auth_sessions SET revoked_at = now() WHERE revoked_at IS NULL AND user_id IN (SELECT id FROM users WHERE site_id = $1 AND person_id = $2)", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
+                        tx.execute("UPDATE account_activations SET used_at = now() WHERE used_at IS NULL AND user_id IN (SELECT id FROM users WHERE site_id = $1 AND person_id = $2)", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
                     }
                 }
             }
@@ -1873,7 +2216,7 @@ impl SiteAdminService {
 
     pub async fn add_unit_member(
         &self,
-        site_id: &str,
+        _site_id: &str, // the unit, authorized for this site, determines the site
         unit_id: &str,
         full_name: &str,
         phone: &str,
@@ -1883,15 +2226,18 @@ impl SiteAdminService {
         if full_name.trim().is_empty() {
             return Err("Sakin adı soyadı boş olamaz.".to_string());
         }
-        if email.trim().is_empty() {
-            return Err("E-posta adresi boş olamaz.".to_string());
+        // A household member (a child, for example) may have no address; one that is given must be valid.
+        if !email.trim().is_empty() {
+            validate_email(email)?;
         }
 
-        let relationship_val = if relationship.trim().is_empty() {
-            "Ev Sakini"
-        } else {
-            relationship
-        };
+        // F5: one of the fixed codes (legacy labels are read, unknown text is refused).
+        let relationship_val =
+            crate::domain::household_relationship::HouseholdRelationship::from_input(relationship)
+                .ok_or_else(|| {
+                    crate::domain::household_relationship::UNKNOWN_RELATIONSHIP.to_string()
+                })?
+                .as_str();
 
         // Persist into the canonical household table; it resolves the unit's active
         // occupancy and links the person by email. The returned id is the real identifier.
@@ -1921,11 +2267,6 @@ impl SiteAdminService {
             resident_user_id: None,
         };
 
-        let memory_password = if member_id == 0 {
-            Some(crate::auth::hash_password_async(generate_resident_temporary_password()).await?)
-        } else {
-            None
-        };
         let mut inner = self.state.inner.write().await;
         for key in &[
             unit_id.to_string(),
@@ -1937,41 +2278,6 @@ impl SiteAdminService {
                 .entry(key.clone())
                 .or_default()
                 .push(member.clone());
-        }
-
-        // Also add to inner.users so the co-resident can log in with temporary password if needed
-        let email_norm = crate::domain::email::NormalizedEmail::normalize(email);
-        if memory_password.is_some()
-            && !email_norm.is_empty()
-            && !inner
-                .users
-                .iter()
-                .any(|u| crate::domain::email::same_email(&u.email, &email_norm))
-        {
-            let password_hash =
-                memory_password.ok_or_else(|| "Memory password unavailable".to_string())?;
-            let s_id = site_id.to_string();
-            let max_u = inner
-                .users
-                .iter()
-                .filter_map(|u| crate::db::parse_id_to_i64(&u.id))
-                .max()
-                .unwrap_or(0);
-            inner.users.push(crate::models::User {
-                id: (max_u + 1).to_string(),
-                site_id: s_id,
-                full_name: full_name.to_string(),
-                email: email_norm,
-                phone: phone.to_string(),
-                password_hash: Some(password_hash),
-                role: crate::models::Role::HomeResident,
-                must_change_password: true,
-                auth_provider: AuthProvider::Local,
-                google_sub: None,
-                avatar_url: None,
-                created_at: chrono::Utc::now(),
-                person_id: None,
-            });
         }
 
         Ok(member)
@@ -2018,6 +2324,12 @@ impl SiteAdminService {
         email: &str,
         relationship: &str,
     ) -> Result<(), String> {
+        let relationship =
+            crate::domain::household_relationship::HouseholdRelationship::from_input(relationship)
+                .ok_or_else(|| {
+                    crate::domain::household_relationship::UNKNOWN_RELATIONSHIP.to_string()
+                })?
+                .as_str();
         if let Some(ref pool) = self.state.pool {
             if let Ok(client) = pool.get().await {
                 let unit_id_num = crate::db::require_id("entity", unit_id)?;
@@ -2576,7 +2888,7 @@ impl SiteAdminService {
         unit_id: &str,
         req: crate::models::MoveInResidentRequest,
     ) -> Result<crate::models::OccupancyHistoryItem, String> {
-        let _site_numeric = crate::db::require_id("entity", site_id)?;
+        let site_numeric = crate::db::require_id("entity", site_id)?;
         let unit_numeric = crate::db::parse_id_to_i64(unit_id)
             .or_else(|| {
                 if unit_id.starts_with("unit-") {
@@ -2594,20 +2906,32 @@ impl SiteAdminService {
             .ok_or_else(|| format!("Invalid unit ID: {}", unit_id))?;
 
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                // Resolve or create person
+            // A storage failure is reported; it no longer falls back to memory as if saved.
+            {
+                let client = pool
+                    .get()
+                    .await
+                    .map_err(|e| format!("Database connection error: {}", e))?;
+                // Resolve or create the person, always inside this site (S1, U7).
                 let person_id: i64 = if let Some(pid) = req.person_id {
-                    pid
+                    client
+                        .query_opt(
+                            "SELECT id FROM persons WHERE id = $1 AND site_id = $2",
+                            &[&pid, &site_numeric],
+                        )
+                        .await
+                        .map_err(|e| format!("DB query error: {}", e))?
+                        .map(|row| row.get(0))
+                        .ok_or_else(|| PERSON_NOT_FOUND.to_string())?
                 } else if let Some(ref email) = req.email {
                     let clean_email = crate::domain::email::NormalizedEmail::normalize(email);
                     let existing = client
                         .query_opt(
-                            "SELECT id FROM persons WHERE LOWER(email) = $1",
-                            &[&clean_email],
+                            "SELECT id FROM persons WHERE site_id = $2 AND LOWER(email) = $1",
+                            &[&clean_email, &site_numeric],
                         )
                         .await
-                        .ok()
-                        .flatten();
+                        .map_err(|e| format!("DB query error: {}", e))?;
                     if let Some(p) = existing {
                         p.get(0)
                     } else {
@@ -2623,8 +2947,8 @@ impl SiteAdminService {
                         };
                         let row = client
                             .query_one(
-                                "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, $4) RETURNING id",
-                                &[&full_name, &phone, &clean_email, &p_type],
+                                "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+                                &[&full_name, &phone, &clean_email, &p_type, &site_numeric],
                             )
                             .await
                             .map_err(|e| e.to_string())?;
@@ -2802,8 +3126,4 @@ impl SiteAdminService {
         }
         Ok(Vec::new())
     }
-}
-
-fn generate_resident_temporary_password() -> String {
-    crate::auth::generate_temporary_password("SP-SAKIN-")
 }

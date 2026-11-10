@@ -64,6 +64,21 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 
 ---
 
+## 1c. Database Schema Designer (`database-schema-designer`)
+
+- **Skill Definition:** [.agents/skills/database-schema-designer/SKILL.md](file:///.agents/skills/database-schema-designer/SKILL.md)
+- **Source:** [OneWave-AI/claude-skills](https://github.com/OneWave-AI/claude-skills/tree/main/database-schema-designer)
+- **Purpose:** Designs relational and document database schemas from requirements or application specifications — tables, keys, relationships, constraints, indexes derived from real query patterns, ERDs, and reversible migration scripts, with PostgreSQL (including Supabase), MySQL, SQLite, and MongoDB supported.
+- **Key References:**
+  - [PostgreSQL Patterns & Idioms](file:///.agents/skills/database-schema-designer/references/postgres.md)
+  - [Schema Templates & Worked Examples](file:///.agents/skills/database-schema-designer/references/schema-templates.md)
+  - [Output Format Guidelines](file:///.agents/skills/database-schema-designer/references/output-format.md)
+  - [Other Engines (MySQL, SQLite, MongoDB)](file:///.agents/skills/database-schema-designer/references/other-engines.md)
+- **SitePulse / Workspace Integration:**
+  - Complements `schema_integrity_check.py` and `db_verify.py` by ensuring all newly authored migrations strictly adhere to 3NF normalization, explicit foreign key cascades/restrictions, numeric monetary fields (`NUMERIC(15,2)` / `rust_decimal`), case-insensitive uniqueness, tenant scoping (`site_id`), and query-driven partial indexes.
+
+---
+
 ## 2. Rust Engineering Skills & Standards (`rust-skills`)
 
 - **Skill Definition:** [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md)
@@ -241,6 +256,17 @@ DB_PASS=... ./scripts/run_tests.py            # everything including GUI Playwri
 ./scripts/run_tests.py --skip-db              # DB gates (incl. gui-e2e) reported as SKIPPED, not passed
 DB_PASS=... ./scripts/run_tests.py --skip-gui # everything except the browser suite (CI gate)
 ./scripts/run_tests.py --only rust-test,money-fixtures --json
+./scripts/run_tests.py --changed --skip-db --summary   # agent-friendly: one line per gate, <=15 diagnostic lines per failure
+```
+
+## 5c-2. Token Guard Hook (`token_guard.py`)
+
+- **Executable Script:** [scripts/token_guard.py](file:///scripts/token_guard.py), wired in [.claude/settings.json](file:///.claude/settings.json) as a `PreToolUse`/`PostToolUse` hook.
+- **Purpose:** Keeps agent context small, because every tool result is re-sent on each later step. It denies `cat` of files over 50 KB, `ls -R`, unfiltered `find`, `Read` of files over 50 KB without offset/limit, and browser screenshots without `scale` <= 0.5 (including inside `browser_batch`). Each denial suggests a cheaper alternative. Bash results over 30K characters get a non-blocking reminder. Set `TOKEN_GUARD=off` to disable it.
+
+```bash
+echo '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls -R"}}' | python3 scripts/token_guard.py --json
+python3 -m unittest discover -s tests/token_guard
 ```
 
 ## 5d. Harness CLI (`harness/harness_cli.py`)
@@ -271,7 +297,8 @@ echo -n 'new-password' | cargo run --quiet --bin hash-password   # from backend/
 - **Runtime:** `scripts/development_harness.py` (Python 3.12+, Docker for execution).
 - **Planner compatibility:** `scripts/team_orchestrator.py`; plans only, unresolved model targets without capabilities.
 - **Capabilities:** five specialized roles plus conditional Architect, risk floors, live target validation, SQLite scheduling, decimal budgets, per-attempt evidence, cancellation/recovery, container isolation and trusted final-candidate gates.
-- **CLI:** `plan`, `create`, `step`, `run`, `status`, `cancel`, `recover`, `events`, `audit`, `evaluate`, `validate-policy`, `sitepulse-policy`; `--help` and `--json` supported.
+- **CLI:** `plan`, `create`, `step`, `run`, `status`, `cancel`, `recover`, `events`, `audit`, `evaluate`, `validate-policy`, `sitepulse-policy`, `t3-dispatch`, `t3-submit`, `t3-heartbeat`; `--help` and `--json` supported.
+- **T3 transport:** `--t3-catalog` (saved `orchestrator_capabilities` output) routes roles to T3 child-agent models from `config/engineering-harness/t3-registry.json`; the T3 orchestrator sends each `t3-dispatch` payload via `delegate_task` and returns the child's message with `t3-submit`.
 
 ```bash
 python3 scripts/development_harness.py --json plan --task "Implement payment reconciliation" --financial

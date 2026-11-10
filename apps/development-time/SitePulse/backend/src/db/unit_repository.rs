@@ -160,7 +160,7 @@ pub async fn save_unit_member(
     let u_num = require_id("unit", unit_id)?;
     // Serialize occupancy selection and membership creation on the actual unit.
     let unit = client.query_opt(
-        "SELECT owner_person_id,tenant_person_id FROM units WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",
+        "SELECT owner_person_id,tenant_person_id,site_id FROM units WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",
         &[&u_num],
     ).await?.ok_or_else(|| format!("Unit {unit_id} not found"))?;
     let existing = client.query_opt(
@@ -181,10 +181,24 @@ pub async fn save_unit_member(
         ).await?.get(0)
     };
     let normalized_email = crate::domain::email::NormalizedEmail::normalize(email);
-    let person_id: i64 = client.query_one(
-        "INSERT INTO persons(full_name,phone,email,person_type) VALUES ($1,$2,$3,'HOME_RESIDENT') ON CONFLICT(email) DO UPDATE SET email=persons.email RETURNING id",
-        &[&full_name,&phone,&normalized_email],
-    ).await?.get(0);
+    // S1: a household member is the unit's site's person; an address is matched only in that site.
+    let site_id: Option<i64> = unit.get(2);
+    let existing_person =
+        if normalized_email.is_empty() {
+            None
+        } else {
+            client.query_opt(
+            "SELECT id FROM persons WHERE site_id IS NOT DISTINCT FROM $1 AND lower(email)=$2",
+            &[&site_id,&normalized_email],
+        ).await?
+        };
+    let person_id: i64 = match existing_person {
+        Some(row) => row.get(0),
+        None => client.query_one(
+            "INSERT INTO persons(full_name,phone,email,person_type,site_id) VALUES ($1,$2,NULLIF($3,''),'HOME_RESIDENT',$4) RETURNING id",
+            &[&full_name,&phone,&normalized_email,&site_id],
+        ).await?.get(0),
+    };
     let row = client.query_one(
         "INSERT INTO occupancy_members(occupancy_id,person_id,full_name,relationship,phone,email,is_emergency_contact) VALUES ($1,$2,$3,$4,$5,$6,false) ON CONFLICT(occupancy_id,person_id) WHERE person_id IS NOT NULL DO UPDATE SET full_name=EXCLUDED.full_name,relationship=EXCLUDED.relationship,phone=EXCLUDED.phone,email=EXCLUDED.email RETURNING id",
         &[&occupancy_id,&person_id,&full_name,&relationship,&phone,&normalized_email],

@@ -99,10 +99,19 @@ SPEC-007 closed the PSP checkout, the core işletme projesi lifecycle, the resid
 - `receipt_hash_v2` also covers the payer and the allocation breakdown for new receipts; verification accepts v1 for older receipts.
 
 ## 3. Acceptance
-- Domain unit tests in each `src/domain/*.rs` module.
-- `tests/payments_phase3_tests.rs`: one or more in-memory scenarios per requirement, including two-site isolation.
-- PostgreSQL: the schema-integrity gate replays V19. `tests/finance_store_pg_tests.rs` (opt-in with `SITEPULSE_PG_TESTS=1`) round-trips every record through the database.
-- Flutter: `test/payments_phase3_api_test.dart` (JSON parsing), widget tests for the finance hub.
+- Domain unit tests in each `src/domain/*.rs` module (tax id, KVKK channel rule, dunning steps, instalments, double entry, heat share, assembly vote, collection metrics, KMK 22 rent cap, payer hints, limitation).
+- `tests/payments_phase3_tests.rs`: 28 in-memory scenarios covering R1–R15, including two-site isolation and the daily job. Dates are the site's local date (Europe/Istanbul), the same date every service uses.
+- PostgreSQL: the schema-integrity gate replays V20. `tests/finance_store_pg_tests.rs` (opt-in with `SITEPULSE_PG_TESTS=1` and a scratch `DB_NAME`) writes every SPEC-009 record through the services and reloads the book from the database. `api_system_check.py` check `finance_desk_over_http`: balanced ledger, dunning, analytics, staff export, four-eyes on invoices, site isolation, forged lawyer token, clean `v_finance_integrity_violations`.
+- Flutter: `test/payments_phase3_test.dart` (models, designation total, the shared `showSpTextPrompt` page, the finance desk and its read-only auditor view, designated payment).
+
+### 3.1 Client
+- Manager: **Finans Masası** (cockpit tile `cockpit_finance_hub`): expenses and approvals, ledger and the yearly account report PDF, collection cases with the evidence pack, payment plans, waiver and write-off approvals, resident requests, the decisions book, analytics and the KVKK access log.
+- Auditor (`AUDITOR`): `/auditor/home` shows the same desk read-only (expense approval allowed).
+- Resident: under the statement, choose the items to pay (TBK 101 designation) and optionally save the card, dispute an item, request a virman; the **Otomatik Ödeme** and **Gizlilik ve İzinler** pages.
+
+### 3.2 Fixes found while implementing
+- "Is this date in the future?" checks for assembly decisions and service dates compared a site-local date with the UTC date and refused today's Istanbul evening decisions. They now use the site's local date (`finance_common::site_today`).
+- Receipt timestamps are turned into dates in the site's time zone (`finance_common::local_date`) for plans, reconciliation, analytics and the ledger.
 
 ## 4. Out of scope
 Real SMS, push or e-mail vendors, real bank corporate APIs, real e-invoice integrators and real PSP tokenization (all behind ports with sandbox implementations). UYAP submission (lawyer handover only). e-Tebligat.

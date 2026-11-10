@@ -552,7 +552,7 @@ impl AuthService {
         )
         .await
         .map_err(|_| "Site is unavailable")?;
-        let person:i64=tx.query_one("INSERT INTO persons(full_name,email,phone,person_type) VALUES ($1,$2,$3,'HOME_RESIDENT') RETURNING id",&[&user.full_name,&user.email,&user.phone]).await.map_err(|_|"This identity cannot be registered; ask your site manager for assistance")?.get(0);
+        let person:i64=tx.query_one("INSERT INTO persons(full_name,email,phone,person_type,site_id) VALUES ($1,$2,$3,'HOME_RESIDENT',$4) RETURNING id",&[&user.full_name,&user.email,&user.phone,&site]).await.map_err(|_|"This identity cannot be registered; ask your site manager for assistance")?.get(0);
         let id:i64=tx.query_one("INSERT INTO users(site_id,person_id,email,password_hash,role,must_change_password,auth_provider,google_sub,avatar_url) VALUES ($1,$2,$3,$4,'HOME_RESIDENT',$5,$6,$7,$8) RETURNING id",&[&site,&person,&user.email,&user.password_hash,&user.must_change_password,&user.auth_provider,&user.google_sub,&user.avatar_url]).await.map_err(|_|"This identity cannot be registered")?.get(0);
         let occupancy=tx.query_opt("SELECT id FROM unit_occupancies WHERE unit_id=$1 AND is_active AND end_date IS NULL ORDER BY start_date DESC,id DESC LIMIT 1 FOR UPDATE",&[&unit]).await.map_err(|_|"Household storage unavailable")?;
         let occupancy: i64 = if let Some(row) = occupancy {
@@ -560,7 +560,7 @@ impl AuthService {
         } else {
             tx.query_opt("INSERT INTO unit_occupancies(unit_id,person_id,occupancy_type) SELECT id,COALESCE(tenant_person_id,owner_person_id),CASE WHEN tenant_person_id IS NOT NULL THEN 'TENANT' ELSE 'OWNER' END FROM units WHERE id=$1 AND COALESCE(tenant_person_id,owner_person_id) IS NOT NULL RETURNING id",&[&unit]).await.map_err(|_|"Household storage unavailable")?.ok_or("The unit has no active household; contact your site manager")?.get(0)
         };
-        tx.execute("INSERT INTO occupancy_members(occupancy_id,person_id,resident_user_id,full_name,email,phone,relationship) VALUES ($1,$2,$3,$4,$5,$6,$7)",&[&occupancy,&person,&id,&user.full_name,&user.email,&user.phone,&relationship.unwrap_or_else(||"HOUSEHOLD_MEMBER".to_string())]).await.map_err(|_|"Household storage unavailable")?;
+        tx.execute("INSERT INTO occupancy_members(occupancy_id,person_id,resident_user_id,full_name,email,phone,relationship) VALUES ($1,$2,$3,$4,$5,$6,$7)",&[&occupancy,&person,&id,&user.full_name,&user.email,&user.phone,&crate::domain::household_relationship::HouseholdRelationship::from_input(relationship.as_deref().unwrap_or("")).unwrap_or(crate::domain::household_relationship::HouseholdRelationship::Other).as_str()]).await.map_err(|_|"Household storage unavailable")?;
         tx.execute(
             "INSERT INTO user_site_roles(user_id,site_id,role) VALUES ($1,$2,'HOME_RESIDENT')",
             &[&id, &site],
@@ -694,7 +694,7 @@ fn attach_member(inner: &mut crate::state::AppStateInner, unit_id: &str, user: &
         .push(crate::models::UnitMemberDto {
             resident_id: user.id.clone(),
             full_name: user.full_name.clone(),
-            relationship: "Ev Sakini".to_string(),
+            relationship: "OTHER".to_string(),
             phone: user.phone.clone(),
             email: user.email.clone(),
             is_owner: false,

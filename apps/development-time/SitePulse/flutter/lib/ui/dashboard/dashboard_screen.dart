@@ -1,3 +1,4 @@
+import '../payments/finance_hub_page.dart';
 import '../../testing/test_id.dart';
 import 'dart:async';
 import 'package:decimal/decimal.dart';
@@ -31,6 +32,10 @@ import '../design_system/sp_tone.dart';
 import '../residents/resident_directory.dart';
 import '../design_system/sp_filter_chip.dart';
 import '../design_system/sp_clipboard.dart';
+import '../residents/activation_status.dart';
+import '../../domain/models/household_relationship.dart';
+import '../residents/household_relationship_items.dart';
+import '../../domain/validation/person_validators.dart';
 class DashboardScreen extends StatefulWidget {
   final DashboardController controller;
 
@@ -508,6 +513,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           );
         }
+      case UserRole.auditor:
+        return const FinanceHubView(readOnly: true);
       case UserRole.saasAdmin:
         return SaasAdminView(
           controller: widget.controller,
@@ -1501,7 +1508,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          '${m.fullName} • ${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
+                                          '${m.fullName} • ${HouseholdRelationship.labelFor(m.relationship)}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
                                           style: TextStyle(
                                             color: AppColors.textSecondary(context),
                                             fontSize: 12,
@@ -1978,7 +1985,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      '${m.fullName} • ${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
+                                      '${m.fullName} • ${HouseholdRelationship.labelFor(m.relationship)}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}',
                                       style: TextStyle(
                                         color: AppColors.textSecondary(context),
                                         fontSize: 12,
@@ -2555,11 +2562,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final nameCtrl = TextEditingController(text: member.fullName);
     final phoneCtrl = TextEditingController(text: member.phone);
     final emailCtrl = TextEditingController(text: member.email);
-    String selectedRelationship = member.relationship.isNotEmpty ? member.relationship : 'Eşi';
-    final relationships = ['Eşi', 'Çocuğu', 'Anne/Baba', 'Kardeşi', 'Akrabası', 'Ev Arkadaşı', 'Diğer'];
-    if (!relationships.contains(selectedRelationship)) {
-      relationships.add(selectedRelationship);
-    }
+    String selectedRelationship = HouseholdRelationship.fromValue(member.relationship).code;
     bool isSaving = false;
     String? nameError;
     String? generalError;
@@ -2708,7 +2711,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: selectedRelationship,
-                    items: relationships.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                    items: householdRelationshipItems(),
                     onChanged: (val) {
                       if (val != null) {
                         setDialogState(() => selectedRelationship = val);
@@ -2756,7 +2759,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     AppFullscreenPage.pushConfirmation(
       context: context,
       title: 'Hane Sakinini Sil',
-      message: '${member.fullName} (${member.relationship}) adlı hane sakini kaydını ${ho.block} Blok Daire ${ho.unitNo} listesinden silmek istediğinize emin misiniz?',
+      message: '${member.fullName} (${HouseholdRelationship.labelFor(member.relationship)}) adlı hane sakini kaydını ${ho.block} Blok Daire ${ho.unitNo} listesinden silmek istediğinize emin misiniz?',
       confirmLabel: 'Evet, Sil',
       cancelLabel: AppStrings.cancel,
       confirmColor: AppColors.accentRed,
@@ -2788,8 +2791,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
-    String selectedRelationship = 'Eşi';
-    final relationships = ['Eşi', 'Çocuğu', 'Anne/Baba', 'Kardeşi', 'Akrabası', 'Ev Arkadaşı', 'Diğer'];
+    String selectedRelationship = HouseholdRelationship.spouse.code;
     bool isSaving = false;
     String? nameError;
     String? generalError;
@@ -2943,7 +2945,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: selectedRelationship,
-                    items: relationships.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                    items: householdRelationshipItems(),
                     onChanged: (val) {
                       if (val != null) {
                         setDialogState(() => selectedRelationship = val);
@@ -3868,7 +3870,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.bold),
                                               ),
                                               Text(
-                                                '${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}${m.email.isNotEmpty ? ' • ${m.email}' : ''}',
+                                                '${HouseholdRelationship.labelFor(m.relationship)}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}${m.email.isNotEmpty ? ' • ${m.email}' : ''}',
                                                 style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                               ),
                                             ],
@@ -4138,7 +4140,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.bold),
                                             ),
                                             Text(
-                                              '${m.relationship}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}${m.email.isNotEmpty ? ' • ${m.email}' : ''}',
+                                              '${HouseholdRelationship.labelFor(m.relationship)}${m.phone.isNotEmpty ? ' • ${m.phone}' : ''}${m.email.isNotEmpty ? ' • ${m.email}' : ''}',
                                               style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                             ),
                                           ],
@@ -4692,7 +4694,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                           Text(
-                            r.relationship,
+                            HouseholdRelationship.labelFor(r.relationship),
                             style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                           ),
                           if (r.phone.isNotEmpty || r.email.isNotEmpty)
@@ -5938,21 +5940,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Üretilen Geçici Şifre:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
-            const SizedBox(height: 6),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.card(context),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.accentGreen),
-              ),
-              child: SelectableText(
-                creds.temporaryPassword,
-                style: TextStyle(color: AppColors.successText(context), fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
-              ),
-            ),
+            testId('resident_activation_status', SpGuidanceCard(
+              icon: creds.activationStatus == 'SENT' ? Icons.mark_email_read_outlined : Icons.report_gmailerrorred_outlined,
+              title: creds.activationStatus == 'SENT' ? 'Etkinleştirme bağlantısı gönderildi' : 'Etkinleştirme bekliyor',
+              message: activationStatusMessage(creds.activationStatus, creds.email),
+              tone: creds.activationStatus == 'SENT' ? SpTone.success : SpTone.warning,
+              tonedBorder: true,
+            ), label: activationStatusMessage(creds.activationStatus, creds.email)),
+            for (final warning in creds.warnings) ...[
+              const SizedBox(height: AppSpacing.md),
+              testId('resident_warning_${warning.toLowerCase()}', SpGuidanceCard(
+                icon: Icons.info_outline,
+                title: 'Kontrol edin',
+                message: registrationWarningMessage(warning),
+                tone: SpTone.warning,
+              )),
+            ],
           ],
         ),
       ),
@@ -5966,6 +5969,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
+    final landShareCtrl = TextEditingController();
     final ownerNameCtrl = TextEditingController();
     final ownerEmailCtrl = TextEditingController();
     final ownerPhoneCtrl = TextEditingController();
@@ -5984,7 +5988,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String selectedRole = 'OWNER';
     bool isResidentOwner = true;
     String ownerNotResidentOccupancy = 'VACANT'; // 'VACANT' or 'TENANT'
-    String selectedRelationship = 'Eşi';
+    String selectedRelationship = HouseholdRelationship.spouse.code;
     bool showSecondaryOwner = true;
     String? emailError;
     String? phoneError;
@@ -6093,21 +6097,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       return;
                     }
 
-                    // Email validation
-                    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
-                    if (emailText.isEmpty || !emailRegex.hasMatch(emailText)) {
+                    // U2: the server's rules, checked next to each field before sending.
+                    final emailProblem = validatePersonEmail(emailText);
+                    final phoneProblem = validateTrMobile(phoneText);
+                    final landShareProblem = validateLandShare(landShareCtrl.text);
+                    if (emailProblem != null || phoneProblem != null || landShareProblem != null) {
                       setDialogState(() {
-                        emailError = 'Geçerli bir e-posta adresi giriniz (örn: sakin@site.com)';
-                      });
-                      return;
-                    }
-
-                    // Phone validation
-                    final cleanPhone = phoneText.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-                    final phoneRegex = RegExp(r'^\+?[0-9]{10,13}$');
-                    if (cleanPhone.isEmpty || !phoneRegex.hasMatch(cleanPhone)) {
-                      setDialogState(() {
-                        phoneError = 'Geçerli bir telefon numarası giriniz (örn: 0555 123 45 67)';
+                        emailError = emailProblem;
+                        phoneError = phoneProblem;
+                        generalError = landShareProblem;
                       });
                       return;
                     }
@@ -6149,7 +6147,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     }
 
                     if (!ctx.mounted) return;
-                    Navigator.pop(ctx);
+                    final landShare = int.tryParse(landShareCtrl.text.trim());
 
                     if (selectedRole == 'TENANT') {
                       final hasSecondaryOwner = ownerNameCtrl.text.trim().isNotEmpty;
@@ -6163,7 +6161,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         tenantEmail: emailText,
                         tenantPhone: phoneText,
                         houseType: selectedHouseType,
-                        duesAmount: currentTariff?.duesAmount ?? Decimal.zero,
+                        duesAmount: currentTariff?.duesAmount,
+                        landShare: landShare,
                         isResident: false,
                         role: selectedRole,
                       );
@@ -6175,7 +6174,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         email: emailText,
                         phone: phoneText,
                         houseType: selectedHouseType,
-                        duesAmount: currentTariff?.duesAmount ?? Decimal.zero,
+                        duesAmount: currentTariff?.duesAmount,
+                        landShare: landShare,
                         isResident: true,
                         role: selectedRole,
                         relationship: selectedRelationship,
@@ -6193,11 +6193,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         tenantEmail: isRented && tenantEmailCtrl.text.trim().isNotEmpty ? tenantEmailCtrl.text.trim() : null,
                         tenantPhone: isRented && tenantPhoneCtrl.text.trim().isNotEmpty ? tenantPhoneCtrl.text.trim() : null,
                         houseType: selectedHouseType,
-                        duesAmount: currentTariff?.duesAmount ?? Decimal.zero,
+                        duesAmount: currentTariff?.duesAmount,
+                        landShare: landShare,
                         isResident: isResidentOwner,
                         role: isRented ? 'TENANT' : selectedRole,
                       );
                     }
+
+                    // The page stays open until the server has answered; a refusal is shown here.
+                    final registrationError = widget.controller.lastHomeOwnerError;
+                    if (registrationError != null) {
+                      if (ctx.mounted) setDialogState(() => generalError = registrationError);
+                      return;
+                    }
+                    if (ctx.mounted) Navigator.pop(ctx);
 
                     // Save any pending household co-residents
                     if (pendingResidents.isNotEmpty) {
@@ -6221,8 +6230,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             block: selectedBlock!,
                             unitNo: parsedUnit,
                             fullName: resName,
-                            phone: res.phoneCtrl.text.trim().isNotEmpty ? res.phoneCtrl.text.trim() : phoneText,
-                            email: res.emailCtrl.text.trim().isNotEmpty ? res.emailCtrl.text.trim() : 'sakin_$parsedUnit@example.com',
+                            // No invented contact details for household members.
+                            phone: res.phoneCtrl.text.trim(),
+                            email: res.emailCtrl.text.trim(),
                             relationship: res.relationship,
                           );
                         }
@@ -6753,21 +6763,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                         )),
+                        if (selectedRole != 'RESIDENT') ...[
+                          const SizedBox(height: 12),
+                          testId('add_resident_land_share_field', TextField(
+                            controller: landShareCtrl,
+                            keyboardType: TextInputType.number,
+                            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),
+                            decoration: InputDecoration(
+                              labelText: 'Arsa Payı (pay sayısı)',
+                              hintText: 'Örn: 24',
+                              helperText: 'Ortak giderler bu paya göre bölünür. Boşsa sitenin olağan payı kullanılır.',
+                              helperMaxLines: 2,
+                              labelStyle: TextStyle(color: AppColors.textSecondary(context)),
+                              filled: true,
+                              fillColor: AppColors.surface(context),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          )),
+                        ],
 
                         // Extra option for Ev Sakini: Relationship selector
                         if (selectedRole == 'RESIDENT') ...[
                           const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
                             value: selectedRelationship,
-                            items: const [
-                              DropdownMenuItem(value: 'Eşi', child: Text('Eşi')),
-                              DropdownMenuItem(value: 'Çocuğu', child: Text('Çocuğu')),
-                              DropdownMenuItem(value: 'Anne/Baba', child: Text('Anne/Baba')),
-                              DropdownMenuItem(value: 'Kardeşi', child: Text('Kardeşi')),
-                              DropdownMenuItem(value: 'Akrabası', child: Text('Akrabası')),
-                              DropdownMenuItem(value: 'Ev Arkadaşı', child: Text('Ev Arkadaşı')),
-                              DropdownMenuItem(value: 'Diğer', child: Text('Diğer')),
-                            ],
+                            items: householdRelationshipItems(),
                             onChanged: (val) {
                               if (val != null) {
                                 setDialogState(() => selectedRelationship = val);
@@ -7074,7 +7094,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       Expanded(
                                         flex: 4,
                                         child: DropdownButtonFormField<String>(
-                                          value: res.relationship,
+                                          value: HouseholdRelationship.fromValue(res.relationship).code,
                                           isDense: true,
                                           dropdownColor: AppColors.card(context),
                                           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
@@ -7086,15 +7106,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                             border: const OutlineInputBorder(),
                                           ),
-                                          items: const [
-                                            DropdownMenuItem(value: 'Eşi', child: Text('Eşi')),
-                                            DropdownMenuItem(value: 'Çocuğu', child: Text('Çocuğu')),
-                                            DropdownMenuItem(value: 'Anne/Baba', child: Text('Anne/Baba')),
-                                            DropdownMenuItem(value: 'Kardeşi', child: Text('Kardeşi')),
-                                            DropdownMenuItem(value: 'Akrabası', child: Text('Akrabası')),
-                                            DropdownMenuItem(value: 'Ev Arkadaşı', child: Text('Ev Arkadaşı')),
-                                            DropdownMenuItem(value: 'Diğer', child: Text('Diğer')),
-                                          ],
+                                          items: householdRelationshipItems(),
                                           onChanged: (val) {
                                             if (val != null) setDialogState(() => res.relationship = val);
                                           },
@@ -7254,7 +7266,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: ListTile(
                           leading: const Icon(Icons.family_restroom, color: AppColors.accentPurple),
                           title: Text(m.fullName),
-                          subtitle: Text('${m.relationship} • ${m.phone}'),
+                          subtitle: Text('${HouseholdRelationship.labelFor(m.relationship)} • ${m.phone}'),
                           trailing: ho.primaryResponsibleName == m.fullName
                               ? const Icon(Icons.check_circle, color: AppColors.accentGreen)
                               : null,
@@ -8311,7 +8323,7 @@ class _PendingResidentEntry {
     String? name,
     String? phone,
     String? email,
-    this.relationship = 'Eşi',
+    this.relationship = 'SPOUSE',
   })  : nameCtrl = TextEditingController(text: name ?? ''),
         phoneCtrl = TextEditingController(text: phone ?? ''),
         emailCtrl = TextEditingController(text: email ?? '');

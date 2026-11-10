@@ -1807,7 +1807,10 @@ fn reversal_response(
     }
 }
 
-const RENT_OFFSET_NOTE: &str = "634 sayılı KMK md. 22 uyarınca kiracı, kat malikinin ortak gider ve avans borcundan kira bedeli ile sınırlı olarak malikle birlikte sorumludur; ana gayrimenkulün demirbaş/yatırım giderleri kat malikine aittir (KMK md. 20). Kiracının kat maliki adına ödediği bu tutar kira bedelinden mahsup edilebilir (TBK md. 314; verify).";
+/// SPEC-009 R3: the tenant pays the owner's items as the owner's joint debtor
+/// (KMK 22, capped at the rent) and deducts it from the rent (TBK 314). Verify
+/// the wording with counsel before it is printed in production.
+const RENT_OFFSET_NOTE: &str = "634 sayılı KMK Madde 22 uyarınca kiracı, kat malikinin ortak gider ve avans borcundan kira bedeli ile sınırlı olarak malikle birlikte sorumludur; ana gayrimenkulün demirbaş/yatırım giderleri kat malikine aittir (KMK Madde 20). Kiracının kat maliki adına ödediği bu tutar kira bedelinden mahsup edilebilir (TBK md. 314; verify).";
 
 fn build_receipt(
     ctx: &ReceiptContext,

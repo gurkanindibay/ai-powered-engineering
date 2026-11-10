@@ -744,6 +744,8 @@ pub async fn require_auth(State(state): State<AppState>, mut req: Request, next:
             crate::models::Permission::PaymentReverse
                 | crate::models::Permission::SupportAccess
                 | crate::models::Permission::RoleGrant
+                | crate::models::Permission::PersonExport
+                | crate::models::Permission::PersonIdentityManage
         ) || matches!(
             permission,
             crate::models::Permission::BankAccountManage
@@ -781,6 +783,7 @@ pub async fn require_auth(State(state): State<AppState>, mut req: Request, next:
         claims: claims.clone(),
         permissions,
         request_id: audit.request_id.clone(),
+        stepped_up,
     };
     crate::audit::CONTEXT
         .scope(audit, async move {
@@ -840,13 +843,18 @@ async fn scope_request(
             3
         };
         if let Some(id) = parts.get(idx) {
+            // Household and payment-profile changes by residents need the unit's owner;
+            // managers are scoped to their site by `check_unit_access`.
             if matches!(
                 policy,
                 RoutePolicy::Require(
                     Permission::UnitInviteCoResident | Permission::UnitManageHousehold
                 )
-            ) || matches!(policy, RoutePolicy::RequireAny(_))
-                && matches!(claims.role, Role::HomeOwner | Role::HomeResident)
+            ) || matches!(
+                policy,
+                RoutePolicy::RequireAny(_)
+                    | RoutePolicy::Require(Permission::UnitPaymentProfileManage)
+            ) && matches!(claims.role, Role::HomeOwner | Role::HomeResident)
             {
                 authorization::owned_unit(state, claims, id)
                     .await

@@ -80,6 +80,9 @@ pub struct AppStateInner {
     pub payment_intents: Vec<crate::models::PaymentIntent>,
     /// SPEC-009 aggregates (KVKK, notifications, autopay, expenses, collections, ...).
     pub finance: crate::finance_book::FinanceBook,
+    /// Activation and email-confirmation tokens by SHA-256 digest (no-database mode).
+    pub account_activations:
+        HashMap<String, crate::services::account_activation_service::MemoryActivation>,
 }
 
 impl Default for AppStateInner {
@@ -133,6 +136,7 @@ impl AppStateInner {
             budget_required_sites: Vec::new(),
             dues_budget_basis: HashMap::new(),
             payment_intents: Vec::new(),
+            account_activations: HashMap::new(),
             finance: crate::finance_book::FinanceBook::default(),
         }
     }

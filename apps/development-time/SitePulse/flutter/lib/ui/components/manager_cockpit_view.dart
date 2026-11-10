@@ -7,6 +7,7 @@ import '../dashboard/dashboard_controller.dart';
 
 import '../design_system/money_formatter.dart';
 import '../payments/operating_budget_page.dart';
+import '../payments/finance_hub_page.dart';
 import '../design_system/sp_typography.dart';
 import 'app_fullscreen_page.dart';
 import '../design_system/sp_metric.dart';
@@ -454,6 +455,42 @@ class ManagerCockpitView extends StatelessWidget {
                       Text('İşletme Projesi', style: TextStyle(color: AppColors.textPrimary(context), fontSize: SpFontSize.body, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 2),
                       Text('Yıllık bütçe, genel kurul onayı, tebliğ ve itirazlar; aidat payları buradan gelir.',
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: SpFontSize.caption)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textSecondary(context)),
+              ],
+            ),
+          ),
+        )),
+
+        // SPEC-009: expenses, ledger, collections, requests, decisions, analytics, KVKK.
+        const SizedBox(height: 14),
+        testId('cockpit_finance_hub', InkWell(
+          onTap: () => AppFullscreenPage.push(
+            context: context,
+            builder: (ctx) => FinanceHubPage(siteName: controller.currentManagedSite?.name ?? ''),
+          ),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.surface(context),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border(context)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.account_balance_outlined, color: AppColors.accentCyan),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Finans Masası', style: TextStyle(color: AppColors.textPrimary(context), fontSize: SpFontSize.body, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text('Giderler, defter ve hesap raporu, takip dosyaları, talepler, karar defteri ve KVKK kaydı.',
                           style: TextStyle(color: AppColors.textSecondary(context), fontSize: SpFontSize.caption)),
                     ],
                   ),

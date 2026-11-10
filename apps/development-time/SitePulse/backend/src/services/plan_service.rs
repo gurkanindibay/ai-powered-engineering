@@ -32,7 +32,10 @@ pub fn paid_since(
     inner
         .payment_receipts
         .iter()
-        .filter(|r| crate::auth::same_id(&r.site_id, site_id) && r.issued_at.date_naive() >= since)
+        .filter(|r| {
+            crate::auth::same_id(&r.site_id, site_id)
+                && local_date(inner, site_id, r.issued_at) >= since
+        })
         .flat_map(|r| {
             let sign = if r.receipt_type == LEDGER_KIND_REVERSAL {
                 Decimal::NEGATIVE_ONE

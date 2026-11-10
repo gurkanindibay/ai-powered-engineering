@@ -103,7 +103,10 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
             ("WRITE_OFF", de::WRITE_OFF_EXPENSE)
         };
         out.push(Entry {
-            date: a.decided_at.map(|t| t.date_naive()).unwrap_or(today),
+            date: a
+                .decided_at
+                .map(|t| local_date(inner, site_id, t))
+                .unwrap_or(today),
             source,
             reference: format!("ADJ-{}", a.id),
             description: a.reason.clone(),
@@ -122,7 +125,7 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
         let allocated = r.allocated_principal + r.allocated_penalty;
         let reversal = r.receipt_type == LEDGER_KIND_REVERSAL;
         let virman = r.payment_channel == PaymentChannel::InterLedger;
-        let date = r.issued_at.date_naive();
+        let date = local_date(inner, site_id, r.issued_at);
         let mut lines = if virman {
             vec![
                 Posting::debit(de::ADVANCES_RECEIVED, allocated),

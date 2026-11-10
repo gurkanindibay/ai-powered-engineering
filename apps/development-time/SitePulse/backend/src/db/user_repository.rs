@@ -30,7 +30,10 @@ pub async fn save_user(
         Some(pid)
     } else {
         let p_row = client
-            .query_opt("SELECT id FROM persons WHERE LOWER(email) = $1", &[&email])
+            .query_opt(
+                "SELECT id FROM persons WHERE site_id IS NOT DISTINCT FROM $2 AND LOWER(email) = $1",
+                &[&email, &site_id_num],
+            )
             .await?;
         if let Some(r) = p_row {
             let pid: i64 = r.get(0);
@@ -53,8 +56,8 @@ pub async fn save_user(
             };
             let row = client
                 .query_one(
-                    "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, $4) RETURNING id",
-                    &[&user.full_name, &user.phone, &email, &p_type],
+                    "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+                    &[&user.full_name, &user.phone, &email, &p_type, &site_id_num],
                 )
                 .await?;
             Some(row.get(0))
@@ -201,14 +204,23 @@ pub async fn ensure_bootstrap_admin(
         .unwrap_or_else(|_| "admin@sitepulse.io".to_string())
         .to_lowercase();
     let hash = crate::auth::hash_password_async(crate::state::bootstrap_admin_password()).await?;
-    let person_id: i64 = client
-        .query_one(
-            "INSERT INTO persons (full_name, email, person_type) VALUES ('SaaS Platform Admin', $1, 'SAAS_ADMIN')
-             ON CONFLICT (email) DO UPDATE SET full_name = persons.full_name RETURNING id",
+    // Platform people have no site; persons are unique per site, so look up before inserting.
+    let existing = client
+        .query_opt(
+            "SELECT id FROM persons WHERE site_id IS NULL AND lower(email) = $1",
             &[&email],
         )
-        .await?
-        .get(0);
+        .await?;
+    let person_id: i64 = match existing {
+        Some(row) => row.get(0),
+        None => client
+            .query_one(
+                "INSERT INTO persons (full_name, email, person_type) VALUES ('SaaS Platform Admin', $1, 'SAAS_ADMIN') RETURNING id",
+                &[&email],
+            )
+            .await?
+            .get(0),
+    };
     client
         .execute(
             "INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)

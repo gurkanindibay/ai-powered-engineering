@@ -96,7 +96,9 @@ FROM unnest(ARRAY[
     'expense_approval_policies', 'expense_invoices', 'expense_payments', 'fee_invoices',
     'heat_cost_periods', 'ledger_adjustments', 'ledger_disputes', 'manual_journal_entries',
     'notifications', 'payment_plans', 'privacy_acknowledgements', 'privacy_notices',
-    'saved_payment_methods', 'tenancy_leases', 'vendors', 'virman_requests'
+    'saved_payment_methods', 'tenancy_leases', 'vendors', 'virman_requests',
+    -- V21 (person tenant scope and account activation)
+    'account_activations'
 ]) AS t;
 
 -- Tables owned through a unit.
