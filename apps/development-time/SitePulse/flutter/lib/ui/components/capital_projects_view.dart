@@ -3,6 +3,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
+import '../../domain/validation/person_validators.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
 import '../design_system/sp_semantics.dart';
@@ -1373,6 +1374,7 @@ class _CapitalProjectWizardPageState extends State<CapitalProjectWizardPage> {
                 fillColor: AppColors.isDark(context) ? Colors.white.withOpacity(0.04) : Colors.grey.shade100,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
               ),
+              validator: (value) => validateTrIban(value, required: false),
             ),
             const SizedBox(height: 16),
 
@@ -1573,7 +1575,7 @@ class _RecordDisbursementModalState extends State<RecordDisbursementModal> {
                   fillColor: AppColors.isDark(context) ? Colors.white.withOpacity(0.04) : Colors.grey.shade100,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                 ),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'IBAN zorunludur' : null,
+                validator: (v) => validateTrIban(v),
               )),
               const SizedBox(height: 10),
               TextFormField(

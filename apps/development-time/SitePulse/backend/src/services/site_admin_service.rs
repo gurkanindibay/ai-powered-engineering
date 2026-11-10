@@ -1,4 +1,6 @@
 use chrono::{DateTime, Datelike, Utc};
+use regex::Regex;
+use std::sync::LazyLock;
 
 use rust_decimal::Decimal;
 
@@ -30,6 +32,8 @@ pub const DEFAULT_MONTHLY_DUES: Decimal = Decimal::from_parts(140000, 0, 0, fals
 pub const WARNING_DUES_DEFAULTED: &str = "DUES_DEFAULTED";
 /// Response warning: no land share was given; the site's most common share was used.
 pub const WARNING_LAND_SHARE_DEFAULTED: &str = "LAND_SHARE_DEFAULTED";
+static EMAIL_PATTERN: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"));
 
 /// A land share that is not a positive whole number.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -41,7 +45,17 @@ pub fn parse_land_share(value: Option<&str>) -> Result<Option<i32>, InvalidLandS
     let Some(raw) = value.map(str::trim).filter(|v| !v.is_empty()) else {
         return Ok(None);
     };
-    let numerator = raw.split('/').next().unwrap_or(raw).trim();
+    let numerator = match raw.split_once('/') {
+        Some((numerator, denominator)) => {
+            if denominator.contains('/')
+                || !matches!(denominator.trim().parse::<i32>(), Ok(value) if value > 0)
+            {
+                return Err(InvalidLandShare);
+            }
+            numerator.trim()
+        }
+        None => raw,
+    };
     numerator
         .parse::<i32>()
         .ok()
@@ -226,22 +240,11 @@ pub fn validate_email(email: &str) -> Result<(), String> {
     if email.is_empty() {
         return Err("E-posta adresi boş bırakılamaz.".to_string());
     }
-    let parts: Vec<&str> = email.split('@').collect();
-    if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
+    let pattern = EMAIL_PATTERN
+        .as_ref()
+        .map_err(|_| "Email validation is unavailable".to_string())?;
+    if !pattern.is_match(email) {
         return Err("Geçerli bir e-posta adresi giriniz (örn: sakin@sitepulse.io).".to_string());
-    }
-    let domain = parts[1];
-    if !domain.contains('.') || domain.starts_with('.') || domain.ends_with('.') {
-        return Err("Geçerli bir e-posta adresi giriniz (örn: sakin@sitepulse.io).".to_string());
-    }
-    let domain_parts: Vec<&str> = domain.split('.').collect();
-    if domain_parts.iter().any(|p| p.is_empty())
-        || domain_parts.last().map(|tld| tld.len()).unwrap_or(0) < 2
-    {
-        return Err("Geçerli bir e-posta adresi giriniz (örn: sakin@sitepulse.io).".to_string());
-    }
-    if email.contains(' ') || email.contains('\t') || email.contains('\n') {
-        return Err("E-posta adresi boşluk içeremez.".to_string());
     }
     Ok(())
 }
@@ -260,8 +263,7 @@ pub fn validate_phone(phone: &str) -> Result<(), String> {
     }
     let is_valid = (clean.len() == 10 && clean.starts_with('5'))
         || (clean.len() == 11 && clean.starts_with("05"))
-        || (clean.len() == 12 && clean.starts_with("905"))
-        || (clean.len() >= 10 && clean.len() <= 13);
+        || (clean.len() == 12 && clean.starts_with("905"));
 
     if !is_valid {
         return Err("Geçerli bir cep telefonu numarası giriniz (örn: 05XX XXX XX XX).".to_string());
@@ -308,6 +310,20 @@ impl SiteAdminService {
         // Validate email & phone
         validate_email(&request.email)?;
         validate_phone(&request.phone)?;
+        if let Some(email) = request
+            .tenant_email
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            validate_email(email)?;
+        }
+        if let Some(phone) = request
+            .tenant_phone
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            validate_phone(phone)?;
+        }
 
         let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
 
@@ -1622,6 +1638,26 @@ impl SiteAdminService {
         req: crate::models::UpdateHomeOwnerRequest,
         login_change_allowed: bool,
     ) -> Result<HomeOwnerResponse, String> {
+        if let Some(email) = req.email.as_deref() {
+            validate_email(email)?;
+        }
+        if let Some(phone) = req.phone.as_deref() {
+            validate_phone(phone)?;
+        }
+        if let Some(email) = req
+            .tenant_email
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            validate_email(email)?;
+        }
+        if let Some(phone) = req
+            .tenant_phone
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            validate_phone(phone)?;
+        }
         let site_numeric = crate::db::require_id("entity", site_id)?;
         let id_numeric = crate::db::parse_id_to_i64(unit_or_user_id);
 
@@ -2217,6 +2253,9 @@ impl SiteAdminService {
         // A household member (a child, for example) may have no address; one that is given must be valid.
         if !email.trim().is_empty() {
             validate_email(email)?;
+        }
+        if !phone.trim().is_empty() {
+            validate_phone(phone)?;
         }
 
         // F5: one of the fixed codes (legacy labels are read, unknown text is refused).
