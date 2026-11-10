@@ -124,6 +124,8 @@ pub enum Permission {
     OccupancyManage,
     /// Person module: a unit's payer IBANs and payer names used for bank matching.
     UnitPaymentProfileManage,
+    /// Person module: export the people directory (step-up, audited).
+    PersonExport,
 }
 
 impl Permission {
@@ -165,6 +167,7 @@ impl Permission {
             Permission::PersonIdentityManage => "Change a resident's login email (step-up)",
             Permission::OccupancyManage => "Record move-in, move-out and ownership transfer",
             Permission::UnitPaymentProfileManage => "Manage a unit's payer IBANs and payer names",
+            Permission::PersonExport => "Export the people directory (step-up, audited)",
         }
     }
 
@@ -203,6 +206,7 @@ impl Permission {
                 Permission::PersonIdentityManage,
                 Permission::OccupancyManage,
                 Permission::UnitPaymentProfileManage,
+                Permission::PersonExport,
             ],
             Role::HomeOwner => vec![
                 Permission::UnitRead,

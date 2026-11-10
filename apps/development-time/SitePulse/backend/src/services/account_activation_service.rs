@@ -11,6 +11,7 @@ use chrono::{DateTime, Duration, Utc};
 use deadpool_postgres::{GenericClient, Pool};
 use serde::{Deserialize, Serialize};
 
+use crate::db::Storage;
 use crate::domain::kvkk::DeliveryChannel;
 use crate::services::notification_service::{configured_sender, Recipient};
 use crate::state::AppState;
@@ -195,12 +196,6 @@ fn public_link(path: &str, token: &str) -> String {
     format!("{}/#/{}?token={}", base.trim_end_matches('/'), path, token)
 }
 
-/// Where tokens live: chosen once, so each operation has one storage path.
-enum ActivationStore {
-    Postgres(Pool),
-    Memory,
-}
-
 /// A login account a token is issued for.
 struct ActivationTarget {
     user_id: String,
@@ -211,15 +206,12 @@ struct ActivationTarget {
 
 pub struct AccountActivationService {
     state: AppState,
-    store: ActivationStore,
+    store: Storage,
 }
 
 impl AccountActivationService {
     pub fn new(state: AppState) -> Self {
-        let store = match state.pool.clone() {
-            Some(pool) => ActivationStore::Postgres(pool),
-            None => ActivationStore::Memory,
-        };
+        let store = Storage::of(&state);
         Self { state, store }
     }
 
@@ -315,10 +307,8 @@ impl AccountActivationService {
         let site = crate::db::parse_id_to_i64(site_id).ok_or(ActivationError::UnitNotFound)?;
         let unit = crate::db::parse_id_to_i64(unit_id).ok_or(ActivationError::UnitNotFound)?;
         let target = match &self.store {
-            ActivationStore::Postgres(pool) => {
-                Self::resend_target_in_db(pool, site, unit, tenant).await?
-            }
-            ActivationStore::Memory => self.resend_target_in_memory(site_id, unit, tenant).await?,
+            Storage::Postgres(pool) => Self::resend_target_in_db(pool, site, unit, tenant).await?,
+            Storage::Memory => self.resend_target_in_memory(site_id, unit, tenant).await?,
         };
         Ok(self.deliver(
             &format!("user-{}", target.user_id),
@@ -428,7 +418,7 @@ impl AccountActivationService {
             .map_err(storage)?;
         let digest = crate::auth::token_digest(request.token.trim());
         let mut inner = match &self.store {
-            ActivationStore::Postgres(pool) => {
+            Storage::Postgres(pool) => {
                 let mut client = pool.get().await.map_err(storage)?;
                 let tx = client.transaction().await.map_err(storage)?;
                 let (user_id, _) = Self::consume(&tx, &digest, ActivationPurpose::Activate).await?;
@@ -448,7 +438,7 @@ impl AccountActivationService {
                 tracing::info!(user_id = %user_id, "Account activated");
                 return Ok(());
             }
-            ActivationStore::Memory => self.state.inner.write().await,
+            Storage::Memory => self.state.inner.write().await,
         };
         let (user_id, _) =
             Self::consume_in_memory(&mut inner, &digest, ActivationPurpose::Activate)?;
@@ -475,8 +465,8 @@ impl AccountActivationService {
     pub async fn confirm_email(&self, request: ConfirmEmailRequest) -> Result<(), ActivationError> {
         let digest = crate::auth::token_digest(request.token.trim());
         let (user_id, new_email) = match &self.store {
-            ActivationStore::Postgres(pool) => Self::confirm_email_in_db(pool, &digest).await?,
-            ActivationStore::Memory => {
+            Storage::Postgres(pool) => Self::confirm_email_in_db(pool, &digest).await?,
+            Storage::Memory => {
                 let mut inner = self.state.inner.write().await;
                 let (id, email) =
                     Self::consume_in_memory(&mut inner, &digest, ActivationPurpose::EmailChange)?;
