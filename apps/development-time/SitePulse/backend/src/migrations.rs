@@ -54,6 +54,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(23, "V23__derived_person_roles.sql"),
     migration!(24, "V24__person_contact_preferences.sql"),
     migration!(25, "V25__tenant_row_level_security.sql"),
+    migration!(26, "V26__saas_site_onboarding_scope.sql"),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.

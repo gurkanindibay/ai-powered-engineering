@@ -89,7 +89,7 @@ impl SaasTenantService {
                 &blocks_list,
             )
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| crate::db::describe_db_error(e.as_ref()))?;
 
             (reg.site_id, reg.user_id, reg.blocks, Some(reg.person_id))
         } else {

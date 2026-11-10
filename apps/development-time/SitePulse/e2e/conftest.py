@@ -14,6 +14,12 @@ from pathlib import Path
 
 import pytest
 
+# Linux limits UNIX domain socket paths to 108 chars (sockaddr_un.sun_path).
+# When run under agent harnesses, TMPDIR can be 70+ chars long, causing
+# Chrome's SingletonSocket creation to abort with "Socket path too long".
+if len(os.environ.get("TMPDIR", "")) > 30:
+    os.environ["TMPDIR"] = "/tmp"
+
 E2E = Path(__file__).resolve().parent
 sys.path.insert(0, str(E2E))
 

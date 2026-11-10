@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 SITEPULSE = Path(__file__).resolve().parents[2]
@@ -81,7 +82,14 @@ class _QuietHandler(http.server.SimpleHTTPRequestHandler):
 class WebServer:
     def __init__(self, port: int = E2E_WEB_PORT, root: Path = WEB_BUILD):
         handler = functools.partial(_QuietHandler, directory=str(root))
-        self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
+        for attempt in range(10):
+            try:
+                self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
+                break
+            except OSError as err:
+                if attempt == 9 or err.errno != 98:
+                    raise
+                time.sleep(1.0)
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
 
     def start(self) -> None:
