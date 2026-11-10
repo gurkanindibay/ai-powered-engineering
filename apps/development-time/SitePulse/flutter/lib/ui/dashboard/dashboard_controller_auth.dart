@@ -620,9 +620,10 @@ extension DashboardControllerAuth on DashboardController {
           return true;
         } else {
           final errorBody = utf8.decode(response.bodyBytes);
-          _authMessage = errorBody.isNotEmpty
-              ? errorBody
-              : 'Site kaydı başarısız oldu (HTTP ${response.statusCode})';
+          _authMessage = extractErrorMessage(
+            response,
+            fallback: 'Site kaydı başarısız oldu (HTTP ${response.statusCode})',
+          );
           debugPrint('registerNewSite error: ${response.statusCode} - $errorBody');
           notify();
           return false;
@@ -811,8 +812,10 @@ extension DashboardControllerAuth on DashboardController {
             tempPassword = data['temporary_password'].toString();
           }
         } else {
-          final err = utf8.decode(response.bodyBytes);
-          _authMessage = 'Şifre yenilenemedi: $err';
+          _authMessage = extractErrorMessage(
+            response,
+            fallback: 'Şifre yenilenemedi.',
+          );
           notify();
           return false;
         }
@@ -881,8 +884,10 @@ extension DashboardControllerAuth on DashboardController {
           notify();
           return true;
         } else {
-          final err = utf8.decode(response.bodyBytes);
-          _authMessage = err.isNotEmpty ? err : 'Şifre değiştirilemedi.';
+          _authMessage = extractErrorMessage(
+            response,
+            fallback: 'Şifre değiştirilemedi.',
+          );
           notify();
           return false;
         }

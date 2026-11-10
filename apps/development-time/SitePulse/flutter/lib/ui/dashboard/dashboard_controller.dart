@@ -14,6 +14,8 @@ import '../../domain/services/person_directory_api.dart';
 import '../../domain/services/platform_env.dart';
 import '../../domain/usecases/calculate_dues_usecase.dart';
 import '../design_system/money_formatter.dart';
+import '../../l10n/app_strings.dart';
+import 'package:http/http.dart' as http;
 part 'dashboard_controller_auth.dart';
 part 'dashboard_controller_residents.dart';
 part 'dashboard_controller_reconciliation.dart';
@@ -26,6 +28,34 @@ class DashboardController extends ChangeNotifier {
 
   /// Modular extension helper to dispatch state change notifications.
   void notify() => notifyListeners();
+
+  /// Extracts a user-friendly, localized error message from an HTTP response,
+  /// parsing the standard `{"error": {"code": "...", "message": "..."}}` envelope.
+  String extractErrorMessage(http.Response response, {String? fallback}) {
+    final bodyText = utf8.decode(response.bodyBytes);
+    try {
+      final decoded = json.decode(bodyText);
+      if (decoded is Map<String, dynamic>) {
+        if (decoded['error'] is Map<String, dynamic>) {
+          final err = decoded['error'] as Map<String, dynamic>;
+          final code = err['code']?.toString();
+          final serverMsg = err['message']?.toString();
+          return AppStrings.localizedErrorMessage(code, fallback: serverMsg ?? fallback);
+        } else if (decoded['error'] is String) {
+          return decoded['error'] as String;
+        } else if (decoded['message'] != null) {
+          return decoded['message'].toString();
+        }
+      }
+    } catch (_) {
+      // Not a valid JSON envelope, fallback below.
+    }
+    final trimmed = bodyText.trim();
+    if (trimmed.isNotEmpty && !trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      return trimmed;
+    }
+    return fallback ?? 'İşlem başarısız oldu (HTTP ${response.statusCode})';
+  }
 
   final CalculateDuesUseCase _calculateDuesUseCase;
 

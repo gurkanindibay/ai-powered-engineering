@@ -7508,6 +7508,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showAddSiteDialog() {
+    if (widget.controller.userSession.mustChangePassword) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.lock_reset, color: AppColors.accentOrange),
+              const SizedBox(width: 8),
+              const Text('Şifre Değişikliği Gerekli', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: const Text(
+            'Geçici şifrenizle giriş yaptınız. Yeni bir site kaydetmeden önce hesap güvenliğiniz için şifrenizi değiştirmeniz gerekmektedir.',
+            style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(AppStrings.cancel),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showChangePasswordDialog();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryFill,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Şifreyi Değiştir'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final nameCtrl = TextEditingController();
     final cityCtrl = TextEditingController(text: 'İstanbul');
     final addressCtrl = TextEditingController();
