@@ -16,6 +16,10 @@ rule encodes a leak class that was found in the codebase and fixed:
                               that the object belongs to the caller's site.
                               (Leak fixed: /capital-projects/:id, including the
                               installment accrual and disbursement writes.)
+                              An `AuthzContext` handler counts as scoped when it
+                              calls `ctx.require(..)`, pins via `TenantScope`, or
+                              states `// tenant-scope: checked in <Service::fn>`
+                              when the service performs the check.
   guessed-tenant              Production code falls back to a hard-coded tenant
                               (`"1"`, `"site-1"`, `"site-begonya"`) when a site
                               is unknown, attributing data to some other site.
@@ -23,7 +27,7 @@ rule encodes a leak class that was found in the codebase and fixed:
                               modules are exempt.
   unbound-tenant-transaction  A transaction opened in `src/services/` is not
                               bound to its tenant with `tx_bind_tenant` (row-
-                              level security, V19). Platform-wide transactions
+                              level security, V21). Platform-wide transactions
                               opt out with a `// tenant-guard: platform` comment.
   rls-coverage                A table with a tenant key column (`site_id`,
                               `unit_id`, `payment_entry_id`, `project_id`,
@@ -71,9 +75,11 @@ NOT_TENANT_PATHS = (
     "/api/v1/payment-provider/sandbox/", "/api/v1/public/",
 )
 ROUTE_OPEN_RE = re.compile(r'\.route\(\s*"([^"]+)"')
+ROUTE_TABLE_RE = re.compile(r'\b(?:get|post|put|patch|delete)\s+"([^"]+)"\s*=>\s*handlers::(\w+)')
 TX_OPEN_RE = re.compile(r"\.transaction\(\)|\.build_transaction\(\)")
 TX_BIND_WINDOW = 30
 PLATFORM_MARKER = "tenant-guard: platform"
+DELEGATED_MARKER = "tenant-scope: checked in"
 TENANT_KEYS = ("site_id", "unit_id", "payment_entry_id", "project_id", "budget_id")
 # Tables whose rows legitimately span tenants (identity, platform settings) or
 # that are tenant roots handled explicitly.
@@ -81,6 +87,10 @@ RLS_EXEMPT = {
     "users",            # login identity: looked up by email before the tenant is known
     "user_site_roles",  # role membership across sites (SaaS administration)
     "persons",          # natural persons can own units in several sites
+    "auth_sessions",    # identity: sessions are resolved before a tenant is known
+    "audit_events",     # append-only audit trail, nullable site, written from platform contexts
+    "financial_access_log",      # append-only access audit, nullable site (platform reads)
+    "management_company_sites",  # one management company spans several sites
     "schema_migrations",
 }
 
@@ -131,6 +141,34 @@ def site_bearing_types(src: Path) -> set[str]:
     return types
 
 
+def _body(code: str, after_sig: int) -> str:
+    """The handler body following its signature (brace-balanced)."""
+    start = code.find("{", after_sig)
+    if start < 0:
+        return ""
+    depth = 0
+    for i in range(start, len(code)):
+        if code[i] == "{":
+            depth += 1
+        elif code[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return code[start : i + 1]
+    return code[start:]
+
+
+def _is_scoped(sig: str, body: str) -> bool:
+    """`TenantScope`/`Claims` in the signature, or an `AuthzContext` whose
+    handler actually checks the site (`ctx.require(..)` or a `TenantScope`)."""
+    if any(marker in sig for marker in SCOPE_MARKERS):
+        return True
+    if "AuthzContext" not in sig:
+        return False
+    # The check may live in the service the context is passed to; that has to be
+    # stated explicitly (`// tenant-scope: checked in <Service::method>`).
+    return ".require(" in body or "TenantScope::from_claims" in body or DELEGATED_MARKER in body
+
+
 def lint_handlers(backend: Path, findings: list[Finding]) -> None:
     src = backend / "src"
     handlers = src / "handlers"
@@ -144,20 +182,23 @@ def lint_handlers(backend: Path, findings: list[Finding]) -> None:
             sig = _signature(code, m.end() - 1)
             inputs = re.findall(r"(?:Query|Json)\s*<\s*(?:[\w:]*::)?(\w+)\s*>", sig)
             bearing = [t for t in inputs if t in site_types]
-            if bearing and not any(marker in sig for marker in SCOPE_MARKERS):
+            if bearing and not _is_scoped(sig, _body(code, m.end())):
                 findings.append(Finding(
                     "unscoped-site-input", rel, _line_of(code, m.start()),
                     f"`{m.group(1)}` accepts {', '.join(bearing)} (has `site_id`) without a "
                     "`TenantScope`; add `scope: crate::tenancy::TenantScope` and pin the site"))
 
 
-def handler_signatures(backend: Path) -> dict[str, str]:
+def handler_signatures(backend: Path) -> tuple[dict[str, str], dict[str, str]]:
     sigs: dict[str, str] = {}
+    bodies: dict[str, str] = {}
     for f in (backend / "src" / "handlers").rglob("*.rs"):
         code = _strip_test_modules(f.read_text(encoding="utf-8"))
         for m in re.finditer(r"pub async fn (\w+)\s*\(", code):
-            sigs[m.group(1)] = _signature(code, m.end() - 1)
-    return sigs
+            sig = _signature(code, m.end() - 1)
+            sigs[m.group(1)] = sig
+            bodies[m.group(1)] = _body(code, m.end() - 1 + len(sig) + 2)
+    return sigs, bodies
 
 
 def lint_object_paths(backend: Path, findings: list[Finding]) -> None:
@@ -165,19 +206,30 @@ def lint_object_paths(backend: Path, findings: list[Finding]) -> None:
     if not app.is_file() or not (backend / "src" / "handlers").is_dir():
         return
     code = app.read_text(encoding="utf-8")
-    sigs = handler_signatures(backend)
+    sigs, bodies = handler_signatures(backend)
+    routes: list[tuple[str, list[str], int]] = []
+    # Builder style: .route("/path", get(handlers::a).post(handlers::b))
     for m in ROUTE_OPEN_RE.finditer(code):
-        path = m.group(1)
+        body = _signature(code, code.index("(", m.start()))
+        routes.append((m.group(1), re.findall(r"handlers::(\w+)", body), m.start()))
+    # Table style: post "/path" => handlers::name, Require(...);
+    for m in ROUTE_TABLE_RE.finditer(code):
+        routes.append((m.group(1), [m.group(2)], m.start()))
+    if not routes:
+        findings.append(Finding(
+            "unscoped-object-path", "src/app.rs", 1,
+            "no routes could be parsed from src/app.rs: update ROUTE_OPEN_RE / ROUTE_TABLE_RE in "
+            "tenant_isolation_lint.py so this rule keeps checking object-id routes"))
+        return
+    for path, handlers, offset in routes:
         if ":" not in path or path.startswith(MIDDLEWARE_SCOPED_PATHS) or path.startswith(NOT_TENANT_PATHS):
             continue
-        # Balanced extraction: comments between routes never merge two routes.
-        body = _signature(code, code.index("(", m.start()))
-        for handler in re.findall(r"handlers::(\w+)", body):
+        for handler in handlers:
             sig = sigs.get(handler)
-            if sig is None or any(marker in sig for marker in SCOPE_MARKERS):
+            if sig is None or _is_scoped(sig, bodies.get(handler, "")):
                 continue
             findings.append(Finding(
-                "unscoped-object-path", "src/app.rs", _line_of(code, m.start()),
+                "unscoped-object-path", "src/app.rs", _line_of(code, offset),
                 f"`{path}` -> `{handler}`: the path id is not attributable to a site by the "
                 "middleware; take a `TenantScope` and check the object's site (404 if foreign)"))
 

@@ -65,6 +65,22 @@ class TenantIsolationLintTests(unittest.TestCase):
         })
         self.assertEqual(rules, ["unscoped-object-path"])
 
+    def test_route_table_style_is_parsed(self):
+        rules = _run(tenant_lint, {
+            "src/models/mod.rs": MODELS,
+            "src/handlers/mod.rs": "pub async fn get_project(State(s): State<AppState>, Path(id): Path<String>) -> X {\n}\n",
+            "src/app.rs": 'routes! {\n    get "/api/v1/projects/:id" => handlers::get_project, Require(UnitRead);\n}\n',
+        })
+        self.assertEqual(rules, ["unscoped-object-path"])
+
+    def test_an_unparseable_router_fails_loudly(self):
+        rules = _run(tenant_lint, {
+            "src/models/mod.rs": MODELS,
+            "src/handlers/mod.rs": "pub async fn x() -> X {\n}\n",
+            "src/app.rs": "fn build_router() {}\n",
+        })
+        self.assertEqual(rules, ["unscoped-object-path"])
+
     def test_guessed_tenant_fallbacks_are_flagged_outside_fixtures_and_tests(self):
         rules = _run(tenant_lint, {
             "src/services/x.rs": 'fn f(s: Option<String>) -> String { s.unwrap_or_else(|| "1".to_string()) }\n'
@@ -100,6 +116,17 @@ class LockScopeLintTests(unittest.TestCase):
             "    let mut inner = state.inner.write().await;\n"
             "    inner.x = 1;\n"
             "    crate::db::save(pool, &inner).await;\n"
+            "}\n"
+        )})
+        self.assertEqual(rules, ["write-guard-across-io"])
+
+    def test_await_on_its_own_line_is_still_found(self):
+        rules = _run(lock_lint, {"src/main.rs": (
+            "async fn main() {\n"
+            "    let mut inner = state.inner.write().await;\n"
+            "    db::load_all_from_db(p, &mut inner)\n"
+            "        .await\n"
+            "        .expect(\"load\");\n"
             "}\n"
         )})
         self.assertEqual(rules, ["write-guard-across-io"])

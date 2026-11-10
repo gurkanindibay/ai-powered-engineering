@@ -557,7 +557,7 @@ impl PaymentTrackingService {
                 )
             };
             // Tenant guardrail: from here on PostgreSQL row-level security
-            // hides every other site's rows (V19).
+            // hides every other site's rows (V21).
             crate::db::tx_bind_tenant(&tx, site_num)
                 .await
                 .map_err(db_err)?;
@@ -914,7 +914,7 @@ impl PaymentTrackingService {
                 )
             };
             // Tenant guardrail: from here on PostgreSQL row-level security
-            // hides every other site's rows (V19).
+            // hides every other site's rows (V21).
             crate::db::tx_bind_tenant(&tx, site_num)
                 .await
                 .map_err(db_err)?;
@@ -1131,7 +1131,7 @@ impl PaymentTrackingService {
                 )
             };
             // Tenant guardrail: from here on PostgreSQL row-level security
-            // hides every other site's rows (V19).
+            // hides every other site's rows (V21).
             crate::db::tx_bind_tenant(&tx, site_num)
                 .await
                 .map_err(db_err)?;

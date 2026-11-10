@@ -52,6 +52,8 @@ pub async fn approve_registration(
     State(state): State<AppState>,
     ctx: crate::authorization::AuthzContext,
 ) -> Result<Json<ApprovalResultResponse>, crate::authorization::SecurityError> {
+    // tenant-scope: checked in RegistrationApprovalService::approve_registration
+    // (ctx.require on the caller's site; SQL filters request_id AND site_id).
     RegistrationApprovalService::new(state)
         .approve_registration(&ctx, &request_id)
         .await
@@ -63,6 +65,8 @@ pub async fn reject_registration(
     State(state): State<AppState>,
     ctx: crate::authorization::AuthzContext,
 ) -> Result<Json<PendingRegistrationResponse>, crate::authorization::SecurityError> {
+    // tenant-scope: checked in RegistrationApprovalService::reject_registration
+    // (ctx.require on the caller's site; SQL filters request_id AND site_id).
     RegistrationApprovalService::new(state)
         .reject_registration(&ctx, &request_id)
         .await

@@ -469,7 +469,20 @@ impl OperatingBudgetService {
                     b.id, b.status
                 )));
             }
-            if req.assembly_decision_date > Utc::now().date_naive() {
+            // "Today" is the site's local date (Europe/Istanbul by default), not UTC:
+            // between 00:00 and 03:00 in Istanbul the UTC date is still yesterday.
+            let site_today = inner
+                .sites
+                .iter()
+                .find(|s| crate::auth::same_id(&s.id, site_id))
+                .map(|s| crate::scheduler::site_local_date(&s.timezone, Utc::now()))
+                .unwrap_or_else(|| {
+                    crate::scheduler::site_local_date(
+                        &crate::models::default_site_timezone(),
+                        Utc::now(),
+                    )
+                });
+            if req.assembly_decision_date > site_today {
                 return Err(BudgetError::Invalid(
                     "The assembly decision date is in the future".into(),
                 ));

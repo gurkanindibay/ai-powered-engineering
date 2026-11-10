@@ -18,6 +18,12 @@
 --
 -- Referential-integrity checks bypass row security by design, so foreign keys
 -- keep working across the policy boundary.
+--
+-- Deliberately not isolated here (scripts/tenant_isolation_lint.py RLS_EXEMPT):
+-- users, user_site_roles, persons and auth_sessions (identity, resolved before a
+-- tenant is known), audit_events and financial_access_log (append-only audit
+-- trails with a nullable site, written from platform contexts too) and
+-- management_company_sites (one management company spans several sites).
 
 CREATE OR REPLACE FUNCTION sp_tenant_site() RETURNS BIGINT
 LANGUAGE sql STABLE AS
@@ -82,7 +88,15 @@ FROM unnest(ARRAY[
     'payment_entries', 'payment_receipts', 'payment_idempotency_keys', 'payment_intents',
     'receipt_counters', 'processed_bank_webhooks', 'reconciliation_queue',
     'debt_aging_snapshots', 'site_bank_accounts', 'unit_sender_ibans',
-    'invitation_tokens', 'pending_registrations', 'capital_projects', 'operating_budgets'
+    'invitation_tokens', 'pending_registrations', 'capital_projects', 'operating_budgets',
+    -- V19 / V20 (authorization, payments phase 3, assemblies, expenses, compliance)
+    'support_grants', 'assembly_meetings', 'assembly_decisions', 'autopay_mandates',
+    'bank_feed_connections', 'bank_reconciliation_runs', 'collection_cases',
+    'communication_consents', 'data_retention_policies', 'dunning_actions', 'dunning_policies',
+    'expense_approval_policies', 'expense_invoices', 'expense_payments', 'fee_invoices',
+    'heat_cost_periods', 'ledger_adjustments', 'ledger_disputes', 'manual_journal_entries',
+    'notifications', 'payment_plans', 'privacy_acknowledgements', 'privacy_notices',
+    'saved_payment_methods', 'tenancy_leases', 'vendors', 'virman_requests'
 ]) AS t;
 
 -- Tables owned through a unit.
@@ -90,7 +104,8 @@ SELECT sp_enable_tenant_rls(t, 'unit_id IN (SELECT u.id FROM units u WHERE u.sit
 FROM unnest(ARRAY[
     'dues_liabilities', 'advance_balances', 'advance_ledger_entries',
     'unit_occupancies', 'unit_ownerships', 'unit_payer_names',
-    'operating_budget_unit_shares', 'budget_objections', 'budget_service_records'
+    'operating_budget_unit_shares', 'budget_objections', 'budget_service_records',
+    'assembly_attendance', 'assembly_votes', 'heat_cost_shares', 'heat_meter_readings'
 ]) AS t;
 
 -- Tables owned through a payment entry, a capital project or a budget.

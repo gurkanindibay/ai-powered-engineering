@@ -541,6 +541,11 @@ impl AuthService {
         let unit: i64 = row.get(0);
         let site: i64 = row.get(1);
         let relationship: Option<String> = row.get(2);
+        // The tenant is known once the invitation is consumed: bind it (RLS, V21)
+        // so every write below is confined to the invitation's site.
+        crate::db::tx_bind_tenant(&tx, site)
+            .await
+            .map_err(|_| "Identity storage unavailable")?;
         tx.query_one(
             "SELECT id FROM sites WHERE id=$1 AND status IN ('ACTIVE','TRIAL') FOR SHARE",
             &[&site],

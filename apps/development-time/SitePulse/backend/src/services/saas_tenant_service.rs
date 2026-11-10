@@ -642,7 +642,7 @@ impl SaasTenantService {
             }
         }
 
-        let mut inner = self.state.inner.write().await;
+        let inner = self.state.inner.read().await;
 
         let site = inner
             .sites
@@ -671,19 +671,28 @@ impl SaasTenantService {
         let admin_full_name;
         let admin_email;
         let updated_user = {
-            let user = &mut inner.users[user_idx];
+            let mut user = inner.users[user_idx].clone();
             user.password_hash = Some(password_hash);
             user.must_change_password = true;
             admin_user_id = user.id.clone();
             admin_full_name = user.full_name.clone();
             admin_email = user.email.clone();
-            user.clone()
+            user
         };
+        drop(inner);
 
+        // Database first, without the global lock: memory gets the new credential
+        // only once it is stored, so the two never disagree about a password.
         if let Some(ref pool) = self.state.pool {
             crate::db::save_user(pool, &updated_user)
                 .await
                 .map_err(|e| e.to_string())?;
+        }
+        {
+            let mut inner = self.state.inner.write().await;
+            if let Some(user) = inner.users.iter_mut().find(|u| u.id == updated_user.id) {
+                *user = updated_user.clone();
+            }
         }
 
         Ok(SiteAdminPasswordResetResponse {

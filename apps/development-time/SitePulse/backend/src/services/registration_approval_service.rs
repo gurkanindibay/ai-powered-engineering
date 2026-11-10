@@ -182,6 +182,10 @@ impl RegistrationApprovalService {
                 .map_err(|_| SecurityError::Unavailable)?;
             let site = crate::db::require_id("site", &ctx.claims.site_id)
                 .map_err(|_| SecurityError::BadRequest)?;
+            // Tenant guardrail (RLS, V21): other sites' rows are invisible from here on.
+            crate::db::tx_bind_tenant(&tx, site)
+                .await
+                .map_err(|_| SecurityError::Unavailable)?;
             let row=tx.query_opt("SELECT block,unit_no,floor,full_name,email,phone,is_resident,status FROM pending_registrations WHERE request_id=$1 AND site_id=$2 FOR UPDATE",&[&request_id,&site]).await.map_err(|_|SecurityError::Unavailable)?.ok_or(SecurityError::NotFound)?;
             if row.get::<_, String>(7) != "PENDING" {
                 return Err(SecurityError::Conflict);
@@ -384,6 +388,10 @@ impl RegistrationApprovalService {
                 .map_err(|_| SecurityError::Unavailable)?;
             let site = crate::db::require_id("site", &ctx.claims.site_id)
                 .map_err(|_| SecurityError::BadRequest)?;
+            // Tenant guardrail (RLS, V21): other sites' rows are invisible from here on.
+            crate::db::tx_bind_tenant(&tx, site)
+                .await
+                .map_err(|_| SecurityError::Unavailable)?;
             let row=tx.query_opt("UPDATE pending_registrations SET status='REJECTED' WHERE request_id=$1 AND site_id=$2 AND status='PENDING' RETURNING block,unit_no,floor,full_name,email,phone,is_resident,submitted_at",&[&request_id,&site]).await.map_err(|_|SecurityError::Unavailable)?.ok_or(SecurityError::NotFound)?;
             let result = PendingRegistrationResponse {
                 request_id: request_id.to_string(),

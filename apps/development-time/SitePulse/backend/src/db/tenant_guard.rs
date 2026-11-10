@@ -1,11 +1,11 @@
-//! Database-level tenant guardrail (defense in depth, migration V19).
+//! Database-level tenant guardrail (defense in depth, migration V21).
 //!
 //! Tenant-bound transactions call [`tx_bind_tenant`] first. It
 //!
 //! 1. sets `app.tenant_site_id` for the transaction only (`set_config(.., true)`),
 //!    so a pooled connection never carries a tenant into the next checkout, and
 //! 2. drops to the `sitepulse_tenant` role (`SET LOCAL ROLE`) when it exists.
-//!    That role has no `BYPASSRLS`, so the row-level security policies of V19
+//!    That role has no `BYPASSRLS`, so the row-level security policies of V21
 //!    apply even when the service connects as a superuser or as the table owner.
 //!
 //! Inside such a transaction a query that forgets its `site_id` predicate still
@@ -19,7 +19,7 @@ use deadpool_postgres::Pool;
 
 use super::base::DbResult;
 
-/// The non-bypass role tenant-bound transactions switch to (V19).
+/// The non-bypass role tenant-bound transactions switch to (V21).
 pub const TENANT_ROLE: &str = "sitepulse_tenant";
 
 /// 0 = not probed yet, 1 = role usable, 2 = role missing or not granted.
