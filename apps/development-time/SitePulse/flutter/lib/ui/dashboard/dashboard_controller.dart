@@ -10,6 +10,7 @@ import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
 import '../../domain/services/api_client.dart';
 import '../../domain/services/bank_file_parser.dart';
+import '../../domain/services/person_directory_api.dart';
 import '../../domain/services/platform_env.dart';
 import '../../domain/usecases/calculate_dues_usecase.dart';
 import '../design_system/money_formatter.dart';

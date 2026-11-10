@@ -26,6 +26,7 @@ local port (the backend applies the migrations), seeds it, and checks over HTTP:
   card_payment_via_provider        a sandbox card payment is captured through the signed webhook exactly once (R4)
   budget_accrual_legal_basis       accrual from an approved işletme projesi records the budget on each liability (R5)
   finance_desk_over_http           SPEC-009: balanced ledger, dunning, analytics, four-eyes invoices, isolation, lawyer token
+  person_records_and_import        person F7-F10: hashed national ID (step-up, audited), preferences, duplicates, CSV import
   ledger_integrity_clean           v_integrity_violations is empty after all checks
 
 PostgreSQL access: set DB_HOST/DB_PORT/DB_USER/DB_PASS. SQL is run with `psql`
@@ -90,6 +91,7 @@ CHECKS = [
     "security_session_lifecycle", "transactional_audit", "audit_scope_and_privileges", "registration_repository_scope", "support_grant_lifecycle", "household_members_persisted", "invitation_atomic_registration",
     "finance_desk_over_http",
     "person_tenant_isolation", "person_activation_lifecycle", "person_directory_and_export",
+    "person_records_and_import",
 ]
 
 
@@ -1093,7 +1095,75 @@ def check_person_directory_and_export(ctx: Context) -> Tuple[bool, str]:
                 f"contains {exported}, audited {audited}")
 
 
+def check_person_records_and_import(ctx: Context) -> Tuple[bool, str]:
+    """F10/F7/F9/F8: national ID (hashed, step-up, audited), preferences, duplicate check, CSV import."""
+    db, base = ctx.backend.db_name, ctx.backend.base
+    suffix = str(time.time_ns())[-9:]
+    email = f"records-{suffix}@example.com"
+    status, body = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                        body=_owner_body(400 + int(suffix[-2:]), email, f"Records Person {suffix}"))
+    if status != 201:
+        return False, f"registration {status} {body[:160]}"
+    person = ctx.psql.run(db, f"SELECT id FROM persons WHERE lower(email)='{email}';").strip()
+    other = ctx.psql.run(db, f"""INSERT INTO persons (full_name, email, person_type, site_id)
+        SELECT 'Other Records {suffix}', 'other-{suffix}@example.com', 'HOME_OWNER', site_id FROM persons WHERE id={person} RETURNING id;""").strip()
+    # F10: a valid TCKN is stored only as hash and mask; a bad one, a duplicate or a missing step-up is refused.
+    tckn = "10000000146"
+    ctx.psql.run(db, f"UPDATE persons SET national_id_hash=NULL, national_id_masked=NULL WHERE national_id_masked='*******0146' AND site_id=(SELECT site_id FROM persons WHERE id={person});")
+    set_status, set_body = http("PUT", base + f"/api/v1/site-admin/persons/{person}/national-id", token=ctx.manager, body={"national_id": tckn})
+    masked = set_status == 200 and json.loads(set_body).get("national_id_masked") == "*******0146"
+    stored = ctx.psql.run(db, f"SELECT (national_id IS NULL AND national_id_hash IS NOT NULL)::text FROM persons WHERE id={person};") == "true"
+    invalid = http("PUT", base + f"/api/v1/site-admin/persons/{other}/national-id", token=ctx.manager, body={"national_id": "10000000147"})[0]
+    taken = http("PUT", base + f"/api/v1/site-admin/persons/{other}/national-id", token=ctx.manager, body={"national_id": tckn})[0]
+    passwords = getattr(ctx.backend, "passwords", {})
+    plain = http("POST", base + "/api/v1/auth/login", body={"email": "mehmet.demir@begonya.com",
+                 "password": passwords.get("mehmet.demir@begonya.com", "mehmet123")})
+    unstepped = json.loads(plain[1])["access_token"] if plain[0] == 200 else ""
+    no_step_up = http("PUT", base + f"/api/v1/site-admin/persons/{other}/national-id", token=unstepped, body={"national_id": tckn})
+    audited = ctx.psql.run(db, f"SELECT count(*) FROM audit_events WHERE action='PERSON_NATIONAL_ID_SET' AND resource_id='{person}';")
+    # F7: preferences are saved and shown on the profile; an unknown channel is refused.
+    prefs = {"preferred_channel": "sms", "preferred_language": "en",
+             "emergency_contact_name": "Acil Kisi", "emergency_contact_phone": "0532 999 88 77"}
+    pref_status = http("PUT", base + f"/api/v1/site-admin/persons/{person}/preferences", token=ctx.manager, body=prefs)[0]
+    bad_pref = http("PUT", base + f"/api/v1/site-admin/persons/{person}/preferences", token=ctx.manager,
+                    body={"preferred_channel": "FAX", "preferred_language": "tr"})[0]
+    profile_status, profile_body = http("GET", base + f"/api/v1/site-admin/persons/{person}", token=ctx.manager)
+    record = json.loads(profile_body).get("record", {}) if profile_status == 200 else {}
+    profile_ok = (record.get("national_id_masked") == "*******0146" and record.get("preferences", {}).get("preferred_channel") == "SMS"
+                  and len(record.get("consents", [])) == 4)
+    # F9: the same national ID or email is reported before a second record is made.
+    dup_status, dup_body = http("POST", base + "/api/v1/site-admin/persons/duplicate-check", token=ctx.manager,
+                                body={"full_name": "someone else", "email": email.upper(), "national_id": tckn})
+    dups = json.loads(dup_body) if dup_status == 200 else []
+    dup_ok = any(d["person"]["person_id"] == int(person) and {"SAME_NATIONAL_ID", "SAME_EMAIL"} <= set(d["reasons"]) for d in dups)
+    # F8: a dry run changes nothing, a commit registers every row, a repeat is refused row by row.
+    block = f"I{suffix[-5:]}"
+    csv_text = ("block;unit_no;floor;owner_full_name;owner_email;owner_phone;land_share;monthly_dues;is_resident;tenant_full_name;tenant_email;tenant_phone\n"
+                f"{block} Blok;1;1;Import One {suffix};import1-{suffix}@example.com;0532 {suffix[-3:]} 10 01;10;1.250,50;evet;;;\n"
+                f"{block} Blok;2;1;Import Two {suffix};import2-{suffix}@example.com;0532 {suffix[-3:]} 10 02;;;hayır;Import Tenant {suffix};import3-{suffix}@example.com;0532 {suffix[-3:]} 10 03\n")
+    dry_status, dry_body = http("POST", base + "/api/v1/site-admin/persons/import", token=ctx.manager, body={"csv": csv_text, "dry_run": True})
+    dry = json.loads(dry_body) if dry_status == 200 else {}
+    untouched = ctx.psql.run(db, f"SELECT count(*) FROM users WHERE email LIKE 'import_-{suffix}@example.com';") == "0"
+    commit_status, commit_body = http("POST", base + "/api/v1/site-admin/persons/import", token=ctx.manager, body={"csv": csv_text})
+    commit = json.loads(commit_body) if commit_status == 200 else {}
+    accounts = ctx.psql.run(db, f"SELECT count(*) FROM users WHERE email LIKE 'import_-{suffix}@example.com';")
+    dues = ctx.psql.run(db, f"""SELECT count(*) FROM units u JOIN blocks b ON b.id=u.block_id WHERE b.block_name ILIKE '{block}%' AND u.deleted_at IS NULL;""")
+    repeat = http("POST", base + "/api/v1/site-admin/persons/import", token=ctx.manager, body={"csv": csv_text})
+    repeated = json.loads(repeat[1]) if repeat[0] == 200 else {}
+    import_audit = ctx.psql.run(db, "SELECT count(*) FROM audit_events WHERE action='PERSON_IMPORT_COMMITTED';")
+    ok = (masked and stored and invalid == 400 and taken == 409 and no_step_up[0] == 403 and "STEP_UP" in no_step_up[1]
+          and int(audited) == 1 and pref_status == 200 and bad_pref == 400 and profile_ok and dup_ok
+          and dry.get("invalid") == 0 and dry.get("committed") is False and untouched
+          and commit.get("created") == 2 and accounts == "3" and dues == "2"
+          and repeated.get("committed") is False and repeated.get("invalid") == 2 and int(import_audit) >= 1)
+    return ok, (f"national id set {set_status} masked {masked} hashed {stored}, invalid {invalid}, taken {taken}, no step-up {no_step_up[0]}, "
+                f"audited {audited}, preferences {pref_status} bad {bad_pref}, profile record {profile_ok}, duplicates {dup_ok}, "
+                f"dry run {dry_status} invalid {dry.get('invalid')} untouched {untouched}, commit {commit_status} created {commit.get('created')} "
+                f"accounts {accounts} units {dues}, repeat invalid {repeated.get('invalid')}, import audited {import_audit}")
+
+
 CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
+    "person_records_and_import": check_person_records_and_import,
     "person_directory_and_export": check_person_directory_and_export,
     "person_tenant_isolation": check_person_tenant_isolation,
     "person_activation_lifecycle": check_person_activation_lifecycle,

@@ -745,6 +745,7 @@ pub async fn require_auth(State(state): State<AppState>, mut req: Request, next:
                 | crate::models::Permission::SupportAccess
                 | crate::models::Permission::RoleGrant
                 | crate::models::Permission::PersonExport
+                | crate::models::Permission::PersonIdentityManage
         ) || matches!(
             permission,
             crate::models::Permission::BankAccountManage

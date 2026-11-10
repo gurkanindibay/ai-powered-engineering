@@ -1,5 +1,7 @@
 @Tags(['residents'])
 library;
+import 'dart:ui' show Tristate;
+
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -187,6 +189,15 @@ void main() {
 
       expect(find.text('Kat Maliki (Mülk Sahibi)'), findsWidgets);
       expect(find.byKey(const Key('module_edit_owner_unit-rented-kpi')), findsOneWidget);
+
+      // U11: screen readers hear which tab is selected.
+      final semantics = tester.ensureSemantics();
+      final selected = tester.getSemantics(ownerTab);
+      expect(selected.flagsCollection.isButton, isTrue);
+      expect(selected.flagsCollection.isSelected, Tristate.isTrue);
+      expect(selected.label, startsWith('Kat Maliki'));
+      expect(tester.getSemantics(residentsTabFinder).flagsCollection.isSelected, Tristate.isFalse);
+      semantics.dispose();
 
       // Switch back to Sakinler tab
       await tester.ensureVisible(residentsTabFinder);

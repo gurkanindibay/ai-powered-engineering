@@ -2,6 +2,53 @@ part of 'dashboard_controller.dart';
 
 /// Homeowners, resident directory, household members, registration approvals and occupancy management.
 extension DashboardControllerResidents on DashboardController {
+  /// F9: people of the site who may be the person about to be registered. The offline
+  /// simulation compares the homeowners it holds; a failed check never blocks a
+  /// registration, the server still refuses a taken login email.
+  Future<List<DuplicateCandidate>> findPossibleDuplicates({
+    required String fullName,
+    required String email,
+    required String phone,
+    PersonDirectoryApi api = const PersonDirectoryApi(),
+  }) async {
+    if (!isTestMode) {
+      try {
+        return await api.findDuplicates(fullName: fullName, email: email, phone: phone);
+      } catch (e) {
+        AppLogger.warn('Duplicate check did not reach the server: $e', tag: 'Residents');
+        return const [];
+      }
+    }
+    String digits(String v) {
+      final d = v.replaceAll(RegExp(r'\D'), '');
+      return d.length >= 10 ? d.substring(d.length - 10) : '';
+    }
+    String name(String v) => (v.toLowerCase().split(RegExp(r'\s+'))..sort()).join(' ').trim();
+    final found = <DuplicateCandidate>[];
+    for (final h in homeOwners) {
+      final reasons = <String>[
+        if (email.trim().isNotEmpty && h.email.toLowerCase() == email.trim().toLowerCase()) 'SAME_EMAIL',
+        if (digits(phone).isNotEmpty && digits(h.phone) == digits(phone)) 'SAME_PHONE',
+        if (name(fullName).isNotEmpty && name(h.ownerFullName) == name(fullName)) 'SIMILAR_NAME',
+      ];
+      if (reasons.isEmpty) continue;
+      found.add(DuplicateCandidate(
+        person: PersonSummary(
+          personId: 0,
+          fullName: h.ownerFullName,
+          email: h.email,
+          phone: h.phone,
+          role: 'HOME_OWNER',
+          ownedUnits: 1,
+          occupiedUnits: h.isResident ? 1 : 0,
+          login: PersonLogin.fromCode(h.activationStatus == null ? 'ACTIVE' : 'PENDING'),
+        ),
+        reasons: reasons,
+      ));
+    }
+    return found;
+  }
+
   Future<void> registerHomeOwner({
     required String block,
     required int unitNo,

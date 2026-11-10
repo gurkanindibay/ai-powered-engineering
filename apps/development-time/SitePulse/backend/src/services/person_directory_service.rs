@@ -98,6 +98,8 @@ pub struct PersonProfile {
     pub person: PersonSummary,
     /// Newest first; active relations before ended ones.
     pub units: Vec<PersonUnit>,
+    /// National ID (masked), contact preferences and channel consents (F7/F10).
+    pub record: crate::services::person_record_service::PersonRecord,
 }
 
 struct Filters {
@@ -126,14 +128,14 @@ fn filters(query: &DirectoryQuery) -> Result<Filters, PersonDirectoryError> {
     })
 }
 
-const SUMMARY_SELECT: &str = "SELECT p.id, p.full_name, COALESCE(p.email, ''), COALESCE(p.phone, ''), \
+pub(crate) const SUMMARY_SELECT: &str = "SELECT p.id, p.full_name, COALESCE(p.email, ''), COALESCE(p.phone, ''), \
      COALESCE(r.derived_role, ''), r.owned_units, r.occupied_units + r.member_units, \
      CASE WHEN usr.id IS NULL THEN 'NONE' \
           WHEN usr.password_hash IS NULL AND usr.google_sub IS NULL THEN 'PENDING' ELSE 'ACTIVE' END \
      FROM persons p JOIN v_person_roles r ON r.person_id = p.id \
      LEFT JOIN users usr ON usr.person_id = p.id AND usr.is_active";
 
-fn summary(row: &tokio_postgres::Row) -> PersonSummary {
+pub(crate) fn summary(row: &tokio_postgres::Row) -> PersonSummary {
     let login: String = row.get(7);
     PersonSummary {
         person_id: row.get(0),
@@ -343,7 +345,17 @@ impl PersonDirectoryService {
                 active: r.get(6),
             })
             .collect();
-        Ok(PersonProfile { person, units })
+        drop(client);
+        let record =
+            crate::services::person_record_service::PersonRecordService::new(self.state.clone())
+                .record(site, person_id)
+                .await
+                .map_err(storage)?;
+        Ok(PersonProfile {
+            person,
+            units,
+            record,
+        })
     }
 
     /// Record an export in the audit log (who, which site, how many rows).

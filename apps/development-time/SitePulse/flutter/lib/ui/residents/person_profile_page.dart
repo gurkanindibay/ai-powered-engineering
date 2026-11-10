@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 
 import '../../domain/services/api_client.dart';
 import '../../domain/services/person_directory_api.dart';
+import '../../domain/validation/person_validators.dart';
 import '../../testing/test_id.dart';
 import '../components/app_fullscreen_page.dart';
+import '../components/sp_dialog_pages.dart';
+import '../components/step_up_prompt.dart';
 import '../design_system/sp_feedback.dart';
 import '../design_system/sp_guidance_card.dart';
 import '../design_system/sp_status_badge.dart';
 import '../design_system/sp_tone.dart';
 import '../theme/app_theme.dart';
 import 'activation_status.dart';
+import 'person_preferences_page.dart';
 
 /// One person: contact, login state and every unit they own, rent or live in, as a
 /// timeline (person module U3/U4/U10).
@@ -27,6 +31,7 @@ class _PersonProfilePageState extends State<PersonProfilePage> {
   PersonProfile? _profile;
   String? _error;
   bool _resending = false;
+  bool _savingId = false;
 
   @override
   void initState() {
@@ -65,6 +70,72 @@ class _PersonProfilePageState extends State<PersonProfilePage> {
     }
   }
 
+  /// F10: records or clears the national ID. The server asks for a fresh password check
+  /// first; the change is audited and only a mask is ever shown again.
+  Future<void> _editNationalId(PersonProfile profile, {bool clear = false}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    String value = '';
+    if (!clear) {
+      final entered = await showSpTextPrompt(
+        context: context,
+        title: 'T.C. kimlik numarası',
+        label: 'Kimlik numarası (11 hane)',
+        message: 'Banka ödemelerini daireyle eşleştirmek için kullanılır. Numaranın yalnızca son 4 hanesi gösterilir.',
+        submitLabel: 'Kaydet',
+        minLength: 11,
+        maxLines: 1,
+      );
+      if (entered == null || !mounted) return;
+      final invalid = validateTckn(entered);
+      if (invalid != null) {
+        messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: Text(invalid)));
+        return;
+      }
+      value = entered;
+    }
+    setState(() => _savingId = true);
+    try {
+      try {
+        await widget.api.setNationalId(profile.person.personId, value);
+      } on ApiException catch (e) {
+        if (e.code != 'STEP_UP_REQUIRED' || !mounted) rethrow;
+        final verified = await showStepUpPrompt(
+          context,
+          reason: 'Kimlik numarası bir kimlik bilgisidir. Değiştirmek için şifrenizi doğrulayın; işlem denetim kaydına yazılır.',
+        );
+        if (!verified) return;
+        await widget.api.setNationalId(profile.person.personId, value);
+      }
+      messenger.showSnackBar(spSnackBar(
+        kind: ToastKind.success,
+        content: Text(clear ? 'Kimlik numarası kaldırıldı.' : 'Kimlik numarası kaydedildi.'),
+      ));
+      await _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: Text(e.message)));
+    } catch (_) {
+      messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: const Text('Kimlik numarası kaydedilemedi.')));
+    } finally {
+      if (mounted) setState(() => _savingId = false);
+    }
+  }
+
+  Future<void> _editPreferences(PersonProfile profile) async {
+    final saved = await showSpPage<ContactPreferences>(
+      context: context,
+      builder: (_) => PersonPreferencesPage(
+        personId: profile.person.personId,
+        initial: profile.record.preferences,
+        api: widget.api,
+      ),
+    );
+    if (saved == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      spSnackBar(kind: ToastKind.success, content: const Text('İletişim tercihleri kaydedildi.')),
+    );
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = _profile;
@@ -78,11 +149,15 @@ class _PersonProfilePageState extends State<PersonProfilePage> {
           if (_error != null)
             SpGuidanceCard(icon: Icons.error_outline, title: 'Kişi yüklenemedi', message: _error!, tone: SpTone.danger)
           else if (profile == null)
-            const Padding(padding: EdgeInsets.all(AppSpacing.xl), child: Center(child: CircularProgressIndicator()))
+            const Padding(padding: EdgeInsets.all(AppSpacing.xl), child: Center(child: CircularProgressIndicator(semanticsLabel: 'Yükleniyor')))
           else ...[
             _contact(context, profile.person),
             const SizedBox(height: AppSpacing.lg),
             _login(context, profile),
+            const SizedBox(height: AppSpacing.xl),
+            _identity(context, profile),
+            const SizedBox(height: AppSpacing.lg),
+            _preferences(context, profile),
             const SizedBox(height: AppSpacing.xl),
             Text('Daireler', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
@@ -137,6 +212,92 @@ class _PersonProfilePageState extends State<PersonProfilePage> {
               label: const Text('Bağlantıyı yeniden gönder'),
             ))
           : null,
+    );
+  }
+}
+
+extension on _PersonProfilePageState {
+  Widget _identity(BuildContext context, PersonProfile profile) {
+    final masked = profile.record.nationalIdMasked;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Kimlik', style: Theme.of(context).textTheme.titleMedium),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.badge_outlined),
+          title: Text(masked == null ? 'T.C. kimlik numarası kayıtlı değil' : 'T.C. kimlik no: $masked'),
+          subtitle: const Text('Banka ödemelerini daireyle eşleştirmede kullanılır.'),
+          trailing: Wrap(
+            spacing: AppSpacing.xs,
+            children: [
+              if (masked != null)
+                testId('person_national_id_clear_btn', TextButton(
+                  key: const Key('person_national_id_clear_btn'),
+                  onPressed: _savingId ? null : () => _editNationalId(profile, clear: true),
+                  child: const Text('Kaldır'),
+                ), label: 'Kimlik numarasını kaldır'),
+              testId('person_national_id_btn', OutlinedButton(
+                key: const Key('person_national_id_btn'),
+                onPressed: _savingId ? null : () => _editNationalId(profile),
+                child: Text(masked == null ? 'Ekle' : 'Değiştir'),
+              ), label: masked == null ? 'Kimlik numarası ekle' : 'Kimlik numarasını değiştir'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _preferences(BuildContext context, PersonProfile profile) {
+    final p = profile.record.preferences;
+    final consents = profile.record.consents;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text('İletişim tercihleri', style: Theme.of(context).textTheme.titleMedium)),
+            testId('person_preferences_btn', TextButton.icon(
+              key: const Key('person_preferences_btn'),
+              onPressed: () => _editPreferences(profile),
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              label: const Text('Düzenle'),
+            ), label: 'İletişim tercihlerini düzenle'),
+          ],
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.forum_outlined),
+          title: Text('${p.channelLabel} • ${p.languageLabel}'),
+          subtitle: Text(p.emergencyName == null
+              ? 'Acil durum kişisi girilmemiş'
+              : 'Acil durum: ${p.emergencyName} (${p.emergencyPhone ?? ''})'),
+        ),
+        if (consents.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Semantics(
+            container: true,
+            label: 'İzinler, kişinin kendisi tarafından yönetilir',
+            child: Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              children: [
+                for (final c in consents)
+                  SpStatusBadge(
+                    label: '${c.label}: ${c.granted ? 'izin var' : 'izin yok'}',
+                    tone: c.granted ? SpTone.success : SpTone.neutral,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'İletişim izinlerini yalnızca kişinin kendisi değiştirebilir (KVKK).',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
     );
   }
 }
