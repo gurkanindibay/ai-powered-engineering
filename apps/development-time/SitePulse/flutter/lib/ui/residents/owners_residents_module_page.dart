@@ -18,6 +18,8 @@ import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
 import '../components/sp_dialog_pages.dart';
 import 'resident_directory.dart';
+import 'people_directory_page.dart';
+import '../../domain/services/person_directory_api.dart';
 import '../design_system/sp_filter_chip.dart';
 import '../design_system/sp_tone.dart';
 
@@ -93,6 +95,16 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
           subtitle: '${widget.controller.userSession.siteName} • Yönetim ve Operasyon Portalı',
           icon: const Icon(Icons.people_alt, color: AppColors.accentCyan),
           actions: [
+            testId('module_people_directory_btn', OutlinedButton.icon(
+              key: const Key('module_people_directory_btn'),
+              onPressed: () => AppFullscreenPage.push<void>(
+                context: context,
+                builder: (_) => const PeopleDirectoryPage(),
+              ),
+              icon: const Icon(Icons.badge_outlined, size: 14),
+              label: const Text('Kişiler', style: TextStyle(fontSize: 12)),
+            )),
+            const SizedBox(width: AppSpacing.sm),
             OutlinedButton.icon(
               onPressed: () => showManageHouseTypesFullscreen(context, widget.controller),
               icon: const Icon(Icons.home_work_outlined, size: 14),

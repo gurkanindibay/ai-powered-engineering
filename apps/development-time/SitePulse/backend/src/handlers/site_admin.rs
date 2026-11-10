@@ -43,7 +43,7 @@ pub(crate) fn person_error(e: String) -> AppError {
         "connection",
         "error communicating",
     ];
-    if e == service::UNIT_NOT_FOUND {
+    if e == service::UNIT_NOT_FOUND || e == service::PERSON_NOT_FOUND {
         AppError::not_found(e)
     } else if e == service::EMAIL_NOT_AVAILABLE || e == service::UNIT_HAS_FINANCIAL_HISTORY {
         AppError::conflict(e)
@@ -171,14 +171,14 @@ pub async fn move_out_resident(
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<MoveOutResidentRequest>,
-) -> Result<Json<OccupancyHistoryItem>, (StatusCode, String)> {
+) -> Result<Json<OccupancyHistoryItem>, AppError> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .move_out_resident(&site_id, &id, payload)
         .await
         .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(person_error)
 }
 
 pub async fn move_in_resident(
@@ -186,14 +186,14 @@ pub async fn move_in_resident(
     Path(id): Path<String>,
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<MoveInResidentRequest>,
-) -> Result<Json<OccupancyHistoryItem>, (StatusCode, String)> {
+) -> Result<Json<OccupancyHistoryItem>, AppError> {
     let site_id = q.site_id.unwrap_or_default();
     let service = SiteAdminService::new(state);
     service
         .move_in_resident(&site_id, &id, payload)
         .await
         .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(person_error)
 }
 
 pub async fn get_unit_occupancy_history(

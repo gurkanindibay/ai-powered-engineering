@@ -883,6 +883,7 @@ extension DashboardControllerResidents on DashboardController {
     required String email,
     String? phone,
     String? notes,
+    int? personId,
   }) async {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
@@ -893,6 +894,8 @@ extension DashboardControllerResidents on DashboardController {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'role': role,
+            // U7: an existing person of the site is linked instead of being re-typed.
+            'person_id': ?personId,
             'full_name': fullName,
             'email': email,
             'phone': phone,

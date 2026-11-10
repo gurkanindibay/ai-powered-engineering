@@ -50,6 +50,9 @@ pub fn parse_land_share(value: Option<&str>) -> Result<Option<i32>, InvalidLandS
         .ok_or(InvalidLandShare)
 }
 
+/// The chosen person is not one of this site's people.
+pub const PERSON_NOT_FOUND: &str = "Person not found";
+
 /// The unit is not in this site (or does not exist); never answered with invented data.
 pub const UNIT_NOT_FOUND: &str = "Unit not found";
 
@@ -2868,7 +2871,7 @@ impl SiteAdminService {
         unit_id: &str,
         req: crate::models::MoveInResidentRequest,
     ) -> Result<crate::models::OccupancyHistoryItem, String> {
-        let _site_numeric = crate::db::require_id("entity", site_id)?;
+        let site_numeric = crate::db::require_id("entity", site_id)?;
         let unit_numeric = crate::db::parse_id_to_i64(unit_id)
             .or_else(|| {
                 if unit_id.starts_with("unit-") {
@@ -2886,20 +2889,32 @@ impl SiteAdminService {
             .ok_or_else(|| format!("Invalid unit ID: {}", unit_id))?;
 
         if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                // Resolve or create person
+            // A storage failure is reported; it no longer falls back to memory as if saved.
+            {
+                let client = pool
+                    .get()
+                    .await
+                    .map_err(|e| format!("Database connection error: {}", e))?;
+                // Resolve or create the person, always inside this site (S1, U7).
                 let person_id: i64 = if let Some(pid) = req.person_id {
-                    pid
+                    client
+                        .query_opt(
+                            "SELECT id FROM persons WHERE id = $1 AND site_id = $2",
+                            &[&pid, &site_numeric],
+                        )
+                        .await
+                        .map_err(|e| format!("DB query error: {}", e))?
+                        .map(|row| row.get(0))
+                        .ok_or_else(|| PERSON_NOT_FOUND.to_string())?
                 } else if let Some(ref email) = req.email {
                     let clean_email = crate::domain::email::NormalizedEmail::normalize(email);
                     let existing = client
                         .query_opt(
-                            "SELECT id FROM persons WHERE LOWER(email) = $1",
-                            &[&clean_email],
+                            "SELECT id FROM persons WHERE site_id = $2 AND LOWER(email) = $1",
+                            &[&clean_email, &site_numeric],
                         )
                         .await
-                        .ok()
-                        .flatten();
+                        .map_err(|e| format!("DB query error: {}", e))?;
                     if let Some(p) = existing {
                         p.get(0)
                     } else {
@@ -2915,8 +2930,8 @@ impl SiteAdminService {
                         };
                         let row = client
                             .query_one(
-                                "INSERT INTO persons (full_name, phone, email, person_type) VALUES ($1, $2, $3, $4) RETURNING id",
-                                &[&full_name, &phone, &clean_email, &p_type],
+                                "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+                                &[&full_name, &phone, &clean_email, &p_type, &site_numeric],
                             )
                             .await
                             .map_err(|e| e.to_string())?;
