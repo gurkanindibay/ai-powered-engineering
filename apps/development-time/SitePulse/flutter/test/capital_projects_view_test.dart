@@ -160,5 +160,27 @@ void main() {
       expect(controller.capitalProjects.any((p) => p.title == 'Çatı İzolasyon ve Su Yalıtımı'), true);
       expect(controller.activeCapitalProject?.totalBudget, Decimal.parse('240000.00'));
     });
+
+    testWidgets('CapitalProjectWizardPage rejects missing title and non-positive budget', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final initialCount = controller.capitalProjects.length;
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: CapitalProjectWizardPage(controller: controller))));
+      await tester.pumpAndSettle();
+
+      final submit = find.byKey(const Key('btn_submit_capital_project'));
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.text('Başlık zorunludur'), findsOneWidget);
+      expect(controller.capitalProjects.length, initialCount);
+
+      await tester.enterText(find.byKey(const Key('input_capital_project_title')), 'Asansör Yenileme');
+      await tester.enterText(find.byKey(const Key('input_capital_project_budget')), '0');
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.text('Tutar sıfırdan büyük olmalıdır'), findsOneWidget);
+      expect(controller.capitalProjects.length, initialCount);
+    });
   });
 }
