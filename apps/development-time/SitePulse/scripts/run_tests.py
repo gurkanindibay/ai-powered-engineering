@@ -567,10 +567,18 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     global SUMMARY
     SUMMARY = args.summary
-
     if args.list_areas:
         print_areas_catalogue()
         return 0
+
+    env_file = ROOT / "backend" / ".env"
+    if "DB_PASS" not in os.environ and env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
     if args.from_dev_container:
         try:

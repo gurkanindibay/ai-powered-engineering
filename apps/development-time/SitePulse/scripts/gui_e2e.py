@@ -92,6 +92,8 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
         argv.append("-q")
     argv += passthrough
     env = {**os.environ, "GUI_E2E_REBUILD": "1" if args.rebuild or os.environ.get("GUI_E2E_REBUILD") == "1" else "0"}
+    if len(env.get("TMPDIR", "")) > 30:
+        env["TMPDIR"] = "/tmp"
     started = time.time()
     proc = subprocess.run(argv, cwd=E2E, env=env,
                           stdout=subprocess.PIPE if args.json else None, stderr=subprocess.STDOUT if args.json else None,
