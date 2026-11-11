@@ -461,7 +461,7 @@ async fn when_generating_unit_invite_link_then_returns_unit_scoped_url_and_token
 #[tokio::test]
 async fn when_registering_home_resident_then_assigns_home_resident_role_and_unit_scope() {
     let state = AppState::new();
-    let service = HomeResidentInvitationService::new(state);
+    let service = HomeResidentInvitationService::new(state.clone());
 
     let invite = service
         .generate_unit_invite_link("d-14", Some("Kardeş".to_string()))
@@ -483,6 +483,32 @@ async fn when_registering_home_resident_then_assigns_home_resident_role_and_unit
     assert_eq!(res.role, "HOME_RESIDENT");
     assert!(res.permission_scope.contains("UNIT_ONLY (d-14)"));
     assert!(res.temporary_password.starts_with("SP-HANE-"));
+
+    let token = sitepulse_backend::auth::issue_token(
+        &res.resident_id,
+        &res.email,
+        Role::HomeResident,
+        "site-1",
+        Some(&res.unit_id),
+    )
+    .unwrap();
+    let mut claims = sitepulse_backend::auth::verify_token(&token).unwrap();
+    claims.email = res.email.clone();
+    claims.site_id = "site-1".to_string();
+    claims.role = Role::HomeResident;
+    claims.unit_id = Some(res.unit_id.clone());
+    assert!(state
+        .inner
+        .read()
+        .await
+        .unit_members
+        .get(&res.unit_id)
+        .unwrap()
+        .iter()
+        .any(|member| member.email == claims.email));
+    sitepulse_backend::authorization::unit(&state, &claims, &res.unit_id)
+        .await
+        .expect("new household member can access the invited unit dashboard");
 }
 
 #[tokio::test]
