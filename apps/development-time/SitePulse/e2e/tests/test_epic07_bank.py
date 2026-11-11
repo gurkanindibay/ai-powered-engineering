@@ -5,7 +5,7 @@ import pytest
 
 from pages import DuesManagement, ManagerCockpit
 from support.bank_files import StatementRow, kuveyt_xlsx
-from support.known_issues import BANK_ACCOUNT_NOT_LOADED, RECONCILIATION_NOT_PERSISTED
+from support.known_issues import RECONCILIATION_NOT_PERSISTED
 
 PERIOD = "Ekim 2026"
 DUES = Decimal("1400.00")
@@ -125,7 +125,6 @@ def test_approved_statement_match_clears_the_homeowners_balance(login_as, login_
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-07")
-@pytest.mark.xfail(strict=True, reason=BANK_ACCOUNT_NOT_LOADED)
 def test_wrong_statement_format_is_rejected_and_excel_accepted(login_as, page, tmp_path, october_dues):
     mt940 = tmp_path / "ekstre.sta"
     mt940.write_text(":20:E2E\n:25:TR620020500009863791600001\n:61:261015C1400,00NTRFNONREF\n"
