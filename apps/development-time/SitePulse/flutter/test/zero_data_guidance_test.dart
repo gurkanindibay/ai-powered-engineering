@@ -203,6 +203,7 @@ void main() {
       expect(find.textContaining('Yönetim tarafından adınıza tahakkuk ettirilmiş aktif bir aidat borcu bulunmamaktadır'), findsOneWidget);
       expect(find.text('Avans Yükle'), findsOneWidget);
       expect(find.text('Hesap Özeti'), findsOneWidget);
+      expect(find.text('Kat Maliki Sorumluluğunda'), findsOneWidget);
     });
   });
 }

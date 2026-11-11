@@ -101,8 +101,6 @@ def test_disbursement_larger_than_collected_cash_is_refused(login_as, page, stac
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-10-11")
-@pytest.mark.xfail(strict=True, reason="GAP (STORY-10-06, tenant half): no 'Kat Maliki Sorumluluğunda' badge or "
-                   "owner-responsibility banner exists for tenants")
 def test_tenant_sees_capital_project_as_owner_responsibility(login_as, page):
     login_as("homeowner")
     page.wait_for_timeout(2_000)
