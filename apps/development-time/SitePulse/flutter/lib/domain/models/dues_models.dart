@@ -460,7 +460,15 @@ class AccountTransactionItem {
     this.receiptNumber,
   });
 
-  String get amountStr => isCredit ? MoneyFormatter.formatCredit(amount) : MoneyFormatter.format(amount.abs());
+  /// True for the itemised KMK delay-penalty row (`<due id>-penalty`).
+  bool get isDelayPenalty => id.endsWith('-penalty');
+
+  String get amountStr {
+    if (isCredit || isDelayPenalty) {
+      return MoneyFormatter.formatCredit(amount);
+    }
+    return MoneyFormatter.format(amount.abs());
+  }
 
   factory AccountTransactionItem.fromJson(Map<String, dynamic> json) {
     return AccountTransactionItem(
