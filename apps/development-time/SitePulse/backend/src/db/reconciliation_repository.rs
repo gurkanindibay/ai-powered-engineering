@@ -24,10 +24,10 @@ pub async fn save_reconciliation_match_for_site(
                 match_id, transaction_id, txn_date, amount, currency, description,
                 sender_name, sender_iban, reference_no, matched_unit_id, matched_block,
                 matched_unit_number, matched_resident_name, confidence_score, matched_due_id,
-                outstanding_balance, amount_matches_balance, status, notes,
+                outstanding_balance, amount_matches_balance, status, status_code, notes,
                 site_id, site_bank_account_id, created_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, CURRENT_TIMESTAMP)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, CURRENT_TIMESTAMP)
             ON CONFLICT (match_id) DO UPDATE SET
                 status = EXCLUDED.status,
                 notes = EXCLUDED.notes
@@ -51,6 +51,7 @@ pub async fn save_reconciliation_match_for_site(
                 &m.outstanding_balance,
                 &m.amount_matches_balance,
                 &status_str,
+                &m.status_code,
                 &m.notes,
                 &site_id_num,
                 &bank_account_id,

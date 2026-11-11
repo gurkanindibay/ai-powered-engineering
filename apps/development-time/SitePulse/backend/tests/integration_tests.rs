@@ -770,6 +770,39 @@ async fn when_parsing_turkish_bank_excel_then_matches_flat_and_amount() {
     assert_eq!(m.status_code, "ONAY_BEKLIYOR");
 }
 
+
+#[test]
+fn flutter_reconciliation_payload_uses_backend_enum_contract() {
+    let payload = serde_json::json!({
+        "match_id": "match-1",
+        "site_id": "1",
+        "transaction": {
+            "transaction_id": "txn-1",
+            "date": "2026-09-15",
+            "amount": "100.00",
+            "currency": "TRY",
+            "description": "Aidat",
+            "sender_name": null,
+            "sender_iban": null,
+            "reference_no": null
+        },
+        "matched_unit_id": "14",
+        "matched_block": "A",
+        "matched_unit_number": 14,
+        "matched_resident_name": "Resident",
+        "confidence_score": 90,
+        "matched_due_id": null,
+        "outstanding_balance": "100.00",
+        "amount_matches_balance": true,
+        "status": "PENDING_APPROVAL",
+        "status_code": "ONAY_BEKLIYOR",
+        "notes": null
+    });
+    let parsed: ReconciliationMatch = serde_json::from_value(payload)
+        .expect("Flutter reconciliation payload deserializes on the API");
+    assert_eq!(parsed.status, ReconciliationStatus::PendingApproval);
+}
+
 #[tokio::test]
 async fn when_parsing_mt940_statement_then_extracts_transactions_and_matches_due() {
     let state = AppState::new();

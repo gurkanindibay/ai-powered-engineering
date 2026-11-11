@@ -1378,7 +1378,7 @@ class ReconciliationQueueItem {
         'matched_due_id': matchedDueId,
         'outstanding_balance': outstandingBalance?.toString(),
         'amount_matches_balance': amountMatchesBalance,
-        'status': 'PendingApproval',
+        'status': 'PENDING_APPROVAL',
         'status_code': 'ONAY_BEKLIYOR',
         'notes': notes,
       };
