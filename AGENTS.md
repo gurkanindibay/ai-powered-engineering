@@ -2,21 +2,14 @@
 
 Welcome Antigravity Agent. This workspace implements advanced agentic software engineering paradigms to mitigate the stochasticity of Large Language Models.
 
-The workspace is strictly partitioned into two paradigms:
-1. **Runtime Inference Systems (`apps/runtime/`)**:
-   - `AuditGuard`: Autonomous expense audit microservice with in-loop mathematical validation, policy gates, and directed graph state machine.
-   - `TaskPilot`: High-reliability task and workflow management business service with clean domain boundaries.
-2. **Development-Time Inference Systems (`apps/development-time/`, `factory/`)**:
-   - `SitePulse`: AI-manufactured residential site platform built using Spec-Driven Development (`.specify`), Task DAG dependency graphs, and a closed-loop Maker-Checker verification harness.
-   - `DevFactory`: Autonomous software manufacturing assembly line factory producing standalone C# software.
+The workspace centers on **SitePulse**, a residential site platform built using Spec-Driven Development (`.specify`), Task DAG dependency graphs, and a closed-loop Maker-Checker verification harness under `apps/development-time/SitePulse/`.
 
 ---
 
 ## Workspace Rules & Operational Constraints
 
 1. **Context Boundary Awareness**:
-   - When modifying files under `apps/runtime/`, apply the rules defined in [.agents/rules/runtime-inference.md](file:///.agents/rules/runtime-inference.md).
-   - When modifying files under `apps/development-time/` or `factory/`, apply the rules defined in [.agents/rules/development-time-inference.md](file:///.agents/rules/development-time-inference.md).
+   - When modifying files under `apps/development-time/`, apply the rules defined in [.agents/rules/development-time-inference.md](file:///.agents/rules/development-time-inference.md).
    - When modifying Flutter/Dart code under `apps/development-time/SitePulse/flutter/`, apply the rules defined in [.agents/rules/flutter-components.md](file:///.agents/rules/flutter-components.md) and use the shared components catalogued in [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md) (design-system widgets, `SpMoneyFormField`/`MoneyInput`, `sp_clipboard.dart`, `showSpSelection`, `readDecimal`, resident directory). Reuse or extend a shared component before writing a local one; `scripts/flutter_reuse_inventory.py --check` (gate `flutter-reuse`) must pass.
    - When modifying Rust components (`*.rs`, `Cargo.toml`), apply the rules defined in [.agents/rules/rust-standards.md](file:///.agents/rules/rust-standards.md) and [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md) (operationalizing [rust-skills](file:///.agents/skills/rust-skills/SKILL.md)). Architect and Developer agents are strictly bound to Clean Architecture, zero Clippy warnings (`-D warnings`), zero panics, persistence safety, and `rust_decimal` precision. For the SitePulse backend, follow the [sitepulse-rust-backend](file:///.agents/skills/sitepulse-rust-backend/SKILL.md) workflow and pass `scripts/rust_standards_lint.py`.
 
@@ -25,8 +18,7 @@ The workspace is strictly partitioned into two paradigms:
 
 3. **Verification Before Delivery**:
    - Always run the relevant automated test suite before concluding any code modification:
-     - Runtime tests: `dotnet test apps/runtime/AuditGuard/tests/AuditGuard.Tests` and `dotnet test apps/runtime/TaskPilot/tests/TaskPilot.Tests`
-     - Dev-time tests: `python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests` and `dotnet test factory/DevFactory`
+     - SitePulse harness tests: `python3 -m unittest discover -s apps/development-time/SitePulse/harness/tests`
      - SitePulse full gate run (build, clippy, Rust/Flutter tests, money fixtures, schema and API system checks): `DB_PASS=... python3 apps/development-time/SitePulse/scripts/run_tests.py` (`--skip-db` without PostgreSQL; skipped gates are reported, never counted as passed)
 
 4. **English-Only Development Language**:

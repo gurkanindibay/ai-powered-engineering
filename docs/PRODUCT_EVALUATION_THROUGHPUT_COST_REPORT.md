@@ -2,7 +2,7 @@
 
 > **Target Systems:** 
 > - **Primary Product:** SitePulse (`apps/development-time/SitePulse`) — Rust Axum 0.7 Backend, PostgreSQL 16+, Flutter / Dart Client
-> - **Supporting Ecosystem:** Runtime Microservices (`apps/runtime/AuditGuard`, `apps/runtime/TaskPilot`), DevFactory (`factory/DevFactory`), Python Harness (`python/`)
+> - **Supporting Tooling:** SitePulse specification and verification harness
 > **Evaluation Scope:** Architectural Scalability, Code Quality & Maintainability, Concurrency & Throughput Limits, Cloud Deployment Costs, CI/CD Footprint
 > **Date:** November 2026
 
@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary & Quality Scorecard
 
-The repository represents an advanced, ambitious dual-stack agentic engineering platform. Its flagship product, **SitePulse**, manages residential property operations, legal dues, and payment waterfalls under Turkish Condominium Law (*Kat Mülkiyeti Kanunu* - KMK). Over multiple iterations, critical security vulnerabilities (such as unauthenticated routes, fake JWTs, and plaintext passwords) were hardened, and the database schema was reinforced with strong invariants and append-only financial ledger triggers (V16–V18).
+The repository centers on **SitePulse**, manages residential property operations, legal dues, and payment waterfalls under Turkish Condominium Law (*Kat Mülkiyeti Kanunu* - KMK). Over multiple iterations, critical security vulnerabilities (such as unauthenticated routes, fake JWTs, and plaintext passwords) were hardened, and the database schema was reinforced with strong invariants and append-only financial ledger triggers (V16–V18).
 
 However, from an **operational, throughput, and maintenance perspective**, the product faces critical structural bottlenecks:
 
