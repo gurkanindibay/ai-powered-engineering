@@ -883,6 +883,19 @@ class DashboardController extends ChangeNotifier {
           _duesList = duesJson.map((d) {
             final item = d as Map<String, dynamic>;
             final isItemPaid = item['status'] == 'PAID';
+            final dueDate =
+                DateTime.tryParse(item['due_date']?.toString() ?? '') ??
+                    DateTime.now();
+            final today = DateTime.now();
+            final daysOverdue = isItemPaid
+                ? 0
+                : DateTime(today.year, today.month, today.day)
+                    .difference(
+                      DateTime(dueDate.year, dueDate.month, dueDate.day),
+                    )
+                    .inDays
+                    .clamp(0, 1 << 31)
+                    .toInt();
             return DuesLiability(
               id: item['id'] as String? ?? '',
               unitId: effectiveUnitId,
@@ -890,7 +903,8 @@ class DashboardController extends ChangeNotifier {
               principalAmount: readDecimal(item, 'principal_amount'),
               delayPenalty: isItemPaid ? Decimal.zero : (readDecimal(item, 'delay_penalty')),
               totalAmount: isItemPaid ? Decimal.zero : (readDecimal(item, 'total_amount')),
-              dueDate: DateTime.tryParse(item['due_date']?.toString() ?? '') ?? DateTime.now(),
+              dueDate: dueDate,
+              daysOverdue: daysOverdue,
               status: isItemPaid
                   ? DebtStatus.paid
                   : (data['is_overdue'] == true ? DebtStatus.overdue : DebtStatus.pending),
