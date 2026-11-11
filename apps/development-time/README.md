@@ -42,7 +42,6 @@ flowchart TD
 1. **Spec-Driven Development (Spec Kit / `.specify`)**: Single source of truth containing product rules (`constitution.md`), user stories, and architectural contracts before writing any code.
 2. **Topological Task Scheduling (Task DAG)**: Decomposes application delivery into a dependency graph (`task-dag.json`). Tasks can only be scheduled once their parent dependencies are verified.
 3. **Closed-Loop Verification Harness**: The Maker generates code; the Checker runs static AST syntax checks, compilation, and unit test gates. Errors are captured and fed back to self-heal.
-4. **Autonomous Manufacturing**: Closely integrated with [DevFactory](file:///factory/DevFactory/README.md), which manufactures complete standalone .NET software solutions from natural-language blueprints.
 
 ---
 
@@ -51,7 +50,6 @@ flowchart TD
 | Application / System | Technologies | Methodology | Key Artifacts |
 | :--- | :--- | :--- | :--- |
 | [**SitePulse**](SitePulse/README.md) | Cross-Platform Flutter (Dart, M3) + Rust (Axum, Tokio, rust_decimal) + PostgreSQL 16 | Spec-Driven Development + Task DAG + Loop Harness | `.specify/`, `harness/harness_cli.py`, `flutter/`, `backend/`, `scripts/` |
-| [**DevFactory**](../../factory/DevFactory/README.md) | .NET 10, Roslyn AST In-Memory Analysis, CLI | Multi-Stage Manufacturing Assembly Line | `src/DevFactory.Harness`, `DevFactory.Loop`, `DevFactory.Graph` |
 
 ---
 
