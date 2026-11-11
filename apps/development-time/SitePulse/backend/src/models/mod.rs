@@ -1888,6 +1888,8 @@ pub struct SiteFlatStatusDto {
     pub virtual_iban: Option<String>,
     pub advance_balance: Decimal,
     #[serde(default)]
+    pub registered_payer_names: Vec<String>,
+    #[serde(default)]
     pub house_type: Option<String>,
 }
 

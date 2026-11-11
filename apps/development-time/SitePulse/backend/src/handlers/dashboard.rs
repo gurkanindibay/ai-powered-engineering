@@ -633,6 +633,11 @@ pub async fn get_site_overview(
             paid_date_str,
             virtual_iban: unit.virtual_iban.clone(),
             advance_balance: advance,
+            registered_payer_names: inner
+                .unit_payer_names
+                .get(&unit.id)
+                .cloned()
+                .unwrap_or_default(),
             house_type: unit.house_type.clone(),
         });
     }
