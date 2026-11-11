@@ -6,6 +6,8 @@ import '../theme/app_theme.dart';
 
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_clipboard.dart';
+import '../design_system/sp_status_badge.dart';
+import '../design_system/sp_tone.dart';
 class HeroBalanceCard extends StatelessWidget {
   final DuesLiability dues;
   final String siteName;
@@ -114,6 +116,15 @@ class HeroBalanceCard extends StatelessWidget {
                   color: AppColors.textSecondary(context),
                 ),
               ]),
+          ),
+          const SizedBox(height: 8),
+          testId(
+            'capital_owner_badge',
+            const SpStatusBadge(
+              label: 'Kat Maliki Sorumluluğunda',
+              tone: SpTone.info,
+              icon: Icons.home_work_outlined,
+            ),
           ),
           const SizedBox(height: 14),
 
