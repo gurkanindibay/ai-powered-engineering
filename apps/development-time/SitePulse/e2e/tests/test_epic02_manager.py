@@ -137,8 +137,8 @@ def test_manager_can_create_an_announcement(login_as, page, stack):
     ManagerCockpit(page).wait()
     by_id(page, "btn_create_announcement").click()
     by_id(page, "announcement_title_field").wait_for(timeout=10_000)
-    by_id(page, "announcement_title_field").fill("Planlı Su Kesintisi")
-    by_id(page, "announcement_body_field").fill("Salı 10:00-14:00")
+    fill(page, "announcement_title_field", "Planlı Su Kesintisi")
+    fill(page, "announcement_body_field", "Salı 10:00-14:00")
     by_id(page, "btn_save_announcement").click()
     by_id(page, "btn_create_announcement").wait_for(timeout=10_000)
     assert stack.sql("SELECT count(*) FROM notifications WHERE category = 'ANNOUNCEMENT' "
