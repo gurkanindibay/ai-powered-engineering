@@ -132,13 +132,17 @@ def test_manager_can_send_a_payment_reminder(builders, login_as, page):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-07")
-@pytest.mark.xfail(strict=True, reason="GAP (STORY-02-05): announcements are display-only; there is no create UI "
-                   "and no backend route")
-def test_manager_can_create_an_announcement(login_as, page):
+def test_manager_can_create_an_announcement(login_as, page, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
-    page.wait_for_timeout(1_500)
-    assert by_id(page, "btn_create_announcement").count() == 1
+    by_id(page, "btn_create_announcement").click()
+    by_id(page, "announcement_title_field").wait_for(timeout=10_000)
+    fill(page, "announcement_title_field", "Planlı Su Kesintisi")
+    fill(page, "announcement_body_field", "Salı 10:00-14:00")
+    by_id(page, "btn_save_announcement").click()
+    by_id(page, "btn_create_announcement").wait_for(timeout=10_000)
+    assert stack.sql("SELECT count(*) FROM notifications WHERE category = 'ANNOUNCEMENT' "
+                     "AND subject = 'Planlı Su Kesintisi';") == "1"
 
 
 def _open_house_types(page):

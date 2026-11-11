@@ -326,6 +326,8 @@ impl NotificationService {
                         caller.is_staff()
                             || caller.is_auditor() && n.category == "SYSTEM"
                             || crate::auth::same_id(&n.recipient_ref, &caller.user_id)
+                            || n.category == "ANNOUNCEMENT"
+                                && n.recipient_ref == format!("site:{}:all", caller.site_id)
                     })
                     .cloned()
                     .collect();

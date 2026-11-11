@@ -183,7 +183,7 @@ void main() {
 
     // Verify announcements dialog opened
     expect(find.text('Site Duyuruları'), findsOneWidget);
-    expect(find.text('A ve B Blok Asansör Periyodik Muayenesi'), findsOneWidget);
+    expect(find.text('Henüz site duyurusu yok'), findsOneWidget);
 
     // Close dialog
     await tester.ensureVisible(find.text('Kapat'));
@@ -202,6 +202,29 @@ void main() {
     // Verify issue report dialog opened
     expect(find.text('Yönetime Talep & Arıza'), findsOneWidget);
     expect(find.text('Talebi Gönder'), findsOneWidget);
+  });
+
+  testWidgets('Manager can publish an announcement from the full-screen composer', (WidgetTester tester) async {
+    final controller = _createTestController(startAuthenticated: true);
+    controller.loginAs(role: UserRole.siteManager);
+    await tester.pumpWidget(SitePulseApp(controller: controller));
+    await tester.pumpAndSettle();
+
+    final createButton = find.text('Duyuru Yayınla');
+    await tester.ensureVisible(createButton);
+    await tester.pumpAndSettle();
+    await tester.tap(createButton);
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'Planlı Su Kesintisi');
+    await tester.enterText(fields.at(1), 'Salı 10:00-14:00');
+    await tester.tap(find.text('Duyuruyu Yayınla'));
+    await tester.pumpAndSettle();
+
+    expect(controller.announcementTitle, 'Planlı Su Kesintisi');
+    expect(controller.announcementContent, 'Salı 10:00-14:00');
+    expect(find.text('Duyuru Yayınla'), findsOneWidget);
   });
 
   testWidgets('Tapping Dekontlar action button opens receipts dialog aligned with account transactions and allows opening receipt detail', (WidgetTester tester) async {
