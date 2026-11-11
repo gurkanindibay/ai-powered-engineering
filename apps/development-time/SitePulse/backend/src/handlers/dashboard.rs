@@ -307,20 +307,48 @@ pub async fn get_resident_dashboard(
 
     // 2. If dues are unpaid/pending, show current dues as debit (negative)
     for due in &evaluated_dues {
-        transactions.push(AccountTransactionDto {
-            id: due.id.clone(),
-            title: format!("{} Aidatı", due.period),
-            subtitle: if is_overdue {
-                "Gecikmeli Aidat Borcu"
-            } else {
-                "Ödeme Bekleniyor"
-            }
-            .to_string(),
-            amount: due.total_amount,
-            date: due.due_date.format("%d.%m.%Y").to_string(),
-            is_credit: false,
-            receipt_number: None,
-        });
+        if due.delay_penalty > Decimal::ZERO {
+            // Principal dues row
+            transactions.push(AccountTransactionDto {
+                id: due.id.clone(),
+                title: format!("{} Aidatı", due.period),
+                subtitle: if is_overdue {
+                    "Gecikmeli Aidat Borcu"
+                } else {
+                    "Ödeme Bekleniyor"
+                }
+                .to_string(),
+                amount: due.principal_amount,
+                date: due.due_date.format("%d.%m.%Y").to_string(),
+                is_credit: false,
+                receipt_number: None,
+            });
+            // Itemized KMK delay penalty row
+            transactions.push(AccountTransactionDto {
+                id: format!("{}-penalty", due.id),
+                title: "KMK Gecikme Tazminatı".to_string(),
+                subtitle: format!("{} Gecikme Zammı", due.period),
+                amount: due.delay_penalty,
+                date: today.format("%d.%m.%Y").to_string(),
+                is_credit: false,
+                receipt_number: None,
+            });
+        } else {
+            transactions.push(AccountTransactionDto {
+                id: due.id.clone(),
+                title: format!("{} Aidatı", due.period),
+                subtitle: if is_overdue {
+                    "Gecikmeli Aidat Borcu"
+                } else {
+                    "Ödeme Bekleniyor"
+                }
+                .to_string(),
+                amount: due.total_amount,
+                date: due.due_date.format("%d.%m.%Y").to_string(),
+                is_credit: false,
+                receipt_number: None,
+            });
+        }
     }
 
     let response = ResidentDashboardDto {
