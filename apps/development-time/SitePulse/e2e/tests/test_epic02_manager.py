@@ -59,9 +59,6 @@ def october_dues_b3_paid(api, actors):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-02")
-@pytest.mark.xfail(strict=True, reason="BUG: the '🔴 Geciken (n)' filter drops overdue flats: with A Blok D:14 and "
-                   "B Blok D:3 both overdue the badge says 2 but only one card is listed, and 'Tümü' shows 1 of 2 "
-                   "(flutter/lib/ui/components/dues_management_view.dart, DashboardController flat filter)")
 def test_overdue_filter_lists_every_overdue_flat(login_as, page, api, october_dues_b3_paid, stack):
     api.record_manual_payment(october_dues_b3_paid, "1", Decimal("1400.00"), "Mehmet Öz", payer_role="OWNER")
     overdue_units = set(stack.sql(
