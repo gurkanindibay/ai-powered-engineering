@@ -66,6 +66,14 @@ The workspace is strictly partitioned into two paradigms:
    - One task per session; `/compact` or start fresh once context passes ~200K tokens. Use Sonnet for routine edits, test runs and exploration; reserve Opus for design-heavy work.
    - The `.claude/settings.json` hook (`scripts/token_guard.py`) denies known-wasteful calls and warns on oversized output; follow its suggestion rather than working around it.
 
+10. **Issue Selection & Concurrent Agent Work**:
+   - When choosing an issue to work on, select only issues without the `in progress` label. An issue with this label may already be under active work by another agent.
+   - Recheck the issue's current labels immediately before starting work. If it is labeled `in progress`, skip it and choose another eligible issue.
+
+11. **Worktree Cleanup After Merge**:
+   - After successfully merging an agent's branch into `master`, remove the worktree created for that work using `git worktree remove <worktree-path>` from outside the worktree.
+   - Before removal, verify that the merge succeeded and the worktree has no uncommitted or untracked work. Preserve any remaining work and resolve it before cleanup; never force-remove a dirty worktree.
+
 ## Durable engineering harness
 
 For persistent multi-role development runs, use `python3 scripts/development_harness.py --help` and the [team-orchestration skill](.agents/skills/team-orchestration/SKILL.md). Setup, execution boundaries and recovery are in [docs/engineering-harness.md](docs/engineering-harness.md). Preserve user changes; create runs from an explicit committed revision. Model targets require live capabilities and configured eligibility; a plan alone does not execute agents.
