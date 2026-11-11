@@ -105,9 +105,10 @@ class DashboardController extends ChangeNotifier {
 
   Future<void> prepareGoogleSignIn() {
     if (_googleClientId.isEmpty) {
-      _authMessage = 'Google ile giriş yapılandırılmamış. GOOGLE_CLIENT_ID ayarını ekleyin.';
-      notify();
-      return Future<void>.error(StateError('Google sign-in client ID is not configured.'));
+      // Called from build(): cache the failure and never notify here, or every
+      // rebuild would schedule another notify and the login screen would spin.
+      return _googleSignInInitialization ??=
+          Future<void>.error(StateError('Google sign-in client ID is not configured.'));
     }
     return _googleSignInInitialization ??= GoogleSignIn.instance.initialize(
       clientId: _googleClientId,

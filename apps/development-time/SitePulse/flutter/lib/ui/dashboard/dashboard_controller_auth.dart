@@ -539,10 +539,10 @@ extension DashboardControllerAuth on DashboardController {
         final account = await GoogleSignIn.instance.authenticate();
         await _completeGoogleSignIn(account);
       } catch (_) {
-        if (DashboardController._googleClientId.isNotEmpty) {
-          _authMessage = 'Google hesabıyla giriş başlatılamadı. Tekrar deneyin.';
-          notify();
-        }
+        _authMessage = DashboardController._googleClientId.isEmpty
+            ? 'Google ile giriş yapılandırılmamış. GOOGLE_CLIENT_ID ayarını ekleyin.'
+            : 'Google hesabıyla giriş başlatılamadı. Tekrar deneyin.';
+        notify();
       }
       return;
     }
