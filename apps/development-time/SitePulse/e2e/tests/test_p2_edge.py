@@ -81,8 +81,6 @@ def test_offline_state_shows_a_banner_and_keeps_the_balance(login_as, page, cont
 @pytest.mark.edge
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-06")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-01-04): the 'KMK Madde 20 Yasal Gecikme Cetveli' detail says "
-                   "'0 Gün Gecikme' for a debt that is 10 days overdue (the hero card's badge shows the right days)")
 def test_penalty_detail_shows_days_and_the_penalty_amount(login_as, page, builders, api, actors):
     builders.overdue_dues(principal=Decimal("1400.00"), days_overdue=10)
     dashboard = api.resident_dashboard(api.login(**actors["homeowner"]))
