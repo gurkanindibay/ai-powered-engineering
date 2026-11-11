@@ -133,7 +133,9 @@ def test_co_resident_joins_through_a_unit_invite(login_page, page, api, actors):
     assert zeynep.user["unit_id"] == owner.user["unit_id"]
     with pytest.raises(ApiError, match="-> 403"):
         api.call("GET", "/api/v1/residents/1/dashboard", zeynep.token)
-    login_page.login("homeowner", "zeynep.kaya@e2e.test", joined["temporary_password"])
+    # A temporary password must be changed before any other operation.
+    api.change_password("zeynep.kaya@e2e.test", joined["temporary_password"], "E2E-Zeynep-Kaya-7")
+    login_page.login("homeowner", "zeynep.kaya@e2e.test", "E2E-Zeynep-Kaya-7")
     ResidentHome(page).wait()
 
 
