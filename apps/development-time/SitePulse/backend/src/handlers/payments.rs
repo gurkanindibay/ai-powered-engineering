@@ -713,7 +713,13 @@ pub async fn transfer_unit_ownership(
     Path(unit_id): Path<String>,
     Json(mut payload): Json<crate::models::TransferOwnershipRequest>,
 ) -> Result<Json<crate::models::TransferOwnershipResponse>, (StatusCode, String)> {
-    scope.pin_opt(&mut payload.site_id)?;
+    // A site-scoped manager must use the site from their authenticated scope;
+    // a stale client selection must not block an operation on an authorized unit.
+    if let Some(site_id) = scope.own_site() {
+        payload.site_id = Some(site_id.to_string());
+    } else {
+        scope.pin_opt(&mut payload.site_id)?;
+    }
     payload.unit_id = unit_id;
     let service = crate::services::PaymentTrackingService::new(state);
     service

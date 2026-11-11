@@ -55,6 +55,7 @@ async fn test_cross_tenant_reconciliation_confirmation_blocked() {
     let payload = ConfirmReconciliationRequest {
         site_id: "site-2".to_string(),
         match_ids: vec!["MATCH-SITE1-01".to_string()],
+        matches: vec![],
         optional_message: None,
         remember_sender_iban: None,
     };

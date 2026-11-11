@@ -177,6 +177,8 @@ class DashboardController extends ChangeNotifier {
 
   List<DuesLiability> _duesList = [];
   List<DuesLiability> _managerDuesList = [];
+  List<CapitalDuesSummary> _capitalDues = [];
+  List<CapitalDuesSummary> get capitalDues => List.unmodifiable(_capitalDues);
   List<DuesLiability> get duesList {
     if (_userSession.role == UserRole.siteManager && _siteAdminPath == SiteAdminActivePath.myFlatOwner) {
       return _managerDuesList;
@@ -868,6 +870,11 @@ class DashboardController extends ChangeNotifier {
       final response = await ApiClient.get(url).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+
+        _capitalDues = (data['capital_dues'] as List<dynamic>? ?? const [])
+            .map((item) => CapitalDuesSummary.fromJson(item as Map<String, dynamic>))
+            .where((item) => item.outstandingBalance > Decimal.zero)
+            .toList();
 
         final viban = data['virtual_iban'] as String?;
         final advance = readDecimal(data, 'advance_payment');

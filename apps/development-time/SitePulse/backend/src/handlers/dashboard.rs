@@ -142,6 +142,7 @@ pub(crate) fn format_resident_transaction_display(m: &ReconciliationMatch) -> (S
 pub async fn get_resident_dashboard(
     Path(unit_id): Path<String>,
     State(state): State<AppState>,
+    ctx: crate::authorization::AuthzContext,
 ) -> impl IntoResponse {
     let calc_service = DuesCalculationService::new();
     // Read-only view: the global lock is taken for reading only and never held
@@ -351,6 +352,54 @@ pub async fn get_resident_dashboard(
         }
     }
 
+    let may_view_capital_dues = ctx.claims.role != Role::HomeResident;
+    let mut capital_dues: Vec<CapitalDuesSummaryDto> = if may_view_capital_dues {
+        inner
+            .capital_projects
+            .iter()
+            .filter(|project| crate::auth::same_id(&project.site_id, &unit.site_id))
+            .filter_map(|project| {
+                let period_prefix = format!("{}: Taksit ", project.title);
+                let outstanding: Decimal = inner
+                    .dues
+                    .iter()
+                    .filter(|due| {
+                        crate::auth::same_id(&due.unit_id, &unit_id)
+                            && due.status != DebtStatus::Paid
+                            && due.expense_type == ExpenseType::CapitalDues
+                            && due.period.starts_with(&period_prefix)
+                    })
+                    .map(crate::services::dues_ledger::outstanding)
+                    .sum();
+                (outstanding > Decimal::ZERO).then(|| CapitalDuesSummaryDto {
+                    project_id: project.id.clone(),
+                    project_title: project.title.clone(),
+                    outstanding_balance: outstanding,
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    drop(inner);
+
+    if may_view_capital_dues {
+        if let Some(pool) = &state.pool {
+            match crate::db::fetch_unit_capital_dues_from_db(pool, &unit.site_id, &unit_id).await {
+                Ok(rows) => capital_dues = rows,
+                Err(_) => {
+                    return (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(
+                            json!({"status": "ERROR", "message": "Capital balance is unavailable"}),
+                        ),
+                    )
+                        .into_response();
+                }
+            }
+        }
+    }
+
     let response = ResidentDashboardDto {
         unit_id: unit.id,
         site_title,
@@ -364,6 +413,7 @@ pub async fn get_resident_dashboard(
         virtual_iban: unit.virtual_iban,
         advance_payment,
         transactions,
+        capital_dues,
     };
 
     (StatusCode::OK, Json(response)).into_response()

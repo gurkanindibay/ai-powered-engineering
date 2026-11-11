@@ -4,7 +4,60 @@ use rust_decimal::Decimal;
 use tracing::info;
 
 use super::base::{parse_id_to_i64, require_id, DbResult};
-use crate::models::{DebtStatus, DuesLiability, DuesPeriodStatus};
+use crate::models::{CapitalDuesSummaryDto, DebtStatus, DuesLiability, DuesPeriodStatus};
+
+/// Reads one unit's outstanding capital liabilities grouped by project.
+pub async fn fetch_unit_capital_dues_from_db(
+    pool: &Pool,
+    site_id: &str,
+    unit_id: &str,
+) -> DbResult<Vec<CapitalDuesSummaryDto>> {
+    let invalid_id = |kind: &str| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Invalid {kind} identifier"),
+        )
+    };
+    let site_id = parse_id_to_i64(site_id).ok_or_else(|| invalid_id("site"))?;
+    let unit_id = parse_id_to_i64(unit_id).ok_or_else(|| invalid_id("unit"))?;
+    let mut client = pool.get().await?;
+    let tx = super::tenant_guard::begin_tenant_read(&mut client, site_id).await?;
+    let rows = tx
+        .query(
+            r#"
+            SELECT cp.id::text, cp.title,
+                   COALESCE(SUM(GREATEST(
+                       dl.principal_amount + dl.delay_penalty
+                       - dl.paid_principal - dl.paid_penalty, 0
+                   )), 0)::numeric AS outstanding_balance
+            FROM capital_projects cp
+            LEFT JOIN dues_liabilities dl
+              ON dl.capital_project_id = cp.id
+             AND dl.unit_id = $2
+             AND dl.status <> 'CANCELLED'
+            WHERE cp.site_id = $1
+            GROUP BY cp.id, cp.title
+            HAVING COALESCE(SUM(GREATEST(
+                       dl.principal_amount + dl.delay_penalty
+                       - dl.paid_principal - dl.paid_penalty, 0
+                   )), 0) > 0
+            ORDER BY cp.title
+            "#,
+            &[&site_id, &unit_id],
+        )
+        .await?;
+    let summaries = rows
+        .iter()
+        .map(|row| CapitalDuesSummaryDto {
+            project_id: row.get(0),
+            project_title: row.get(1),
+            outstanding_balance: row.get(2),
+        })
+        .collect();
+    tx.commit().await?;
+    Ok(summaries)
+}
+
 pub async fn save_dues_period(
     pool: &Pool,
     period: &crate::models::DuesPeriod,
