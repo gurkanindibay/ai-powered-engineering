@@ -365,6 +365,24 @@ class DuesLiability {
   }
 }
 
+class CapitalDuesSummary {
+  final String projectId;
+  final String projectTitle;
+  final Decimal outstandingBalance;
+
+  const CapitalDuesSummary({
+    required this.projectId,
+    required this.projectTitle,
+    required this.outstandingBalance,
+  });
+
+  factory CapitalDuesSummary.fromJson(Map<String, dynamic> json) => CapitalDuesSummary(
+        projectId: json['project_id'] as String? ?? '',
+        projectTitle: json['project_title'] as String? ?? '',
+        outstandingBalance: readDecimal(json, 'outstanding_balance'),
+      );
+}
+
 
 class ApartmentUnit {
   final String id;
@@ -770,6 +788,7 @@ class UnitInviteInfo {
   final String unitLabel;
   final String expiresAtStr;
   final String securityNotice;
+  final String title;
 
   const UnitInviteInfo({
     required this.inviteUrl,
@@ -777,6 +796,7 @@ class UnitInviteInfo {
     required this.unitLabel,
     required this.expiresAtStr,
     required this.securityNotice,
+    this.title = 'Hane Sakini Davet Linki',
   });
 }
 
@@ -1278,6 +1298,17 @@ class BankStatementParsedItem {
     );
   }
 
+  Map<String, dynamic> toJson() => {
+        'transaction_id': transactionId,
+        'date': date.toIso8601String().split('T').first,
+        'amount': amount.toString(),
+        'currency': currency,
+        'description': description,
+        'sender_name': senderName,
+        'sender_iban': senderIban,
+        'reference_no': referenceNo,
+      };
+
   BankStatementParsedItem copyWith({
     String? transactionId,
     DateTime? date,
@@ -1362,6 +1393,23 @@ class ReconciliationQueueItem {
       notes: json['notes'],
     );
   }
+
+  Map<String, dynamic> toJson(String siteId) => {
+        'match_id': matchId,
+        'site_id': siteId,
+        'transaction': transaction.toJson(),
+        'matched_unit_id': matchedUnitId,
+        'matched_block': matchedBlock,
+        'matched_unit_number': matchedUnitNumber,
+        'matched_resident_name': matchedResidentName,
+        'confidence_score': confidenceScore,
+        'matched_due_id': matchedDueId,
+        'outstanding_balance': outstandingBalance?.toString(),
+        'amount_matches_balance': amountMatchesBalance,
+        'status': 'PENDING_APPROVAL',
+        'status_code': 'ONAY_BEKLIYOR',
+        'notes': notes,
+      };
 
   ReconciliationQueueItem copyWith({
     String? matchedUnitId,

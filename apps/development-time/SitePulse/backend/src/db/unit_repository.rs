@@ -288,12 +288,14 @@ pub async fn save_unit_payer_names(
 pub async fn transfer_unit_ownership_db(
     pool: &Pool,
     unit_id: &str,
+    site_id: &str,
     new_user: &User,
     transfer_date: chrono::NaiveDate,
     exit_balance: Decimal,
     notes: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let unit_id_num = require_id("unit", unit_id)?;
+    let site_id_num = require_id("site", site_id)?;
 
     // 1. Ensure new user is saved and person is created
     save_user(pool, new_user).await?;
@@ -301,6 +303,16 @@ pub async fn transfer_unit_ownership_db(
     // 2. All ownership changes commit together or not at all.
     let mut client = pool.get().await?;
     let tx = client.transaction().await?;
+    crate::db::tx_bind_tenant(&tx, site_id_num).await?;
+    let unit = tx
+        .query_opt(
+            "SELECT id, owner_person_id, created_at::date AS ownership_start_date FROM units WHERE id = $1 AND site_id = $2 FOR UPDATE",
+            &[&unit_id_num, &site_id_num],
+        )
+        .await?
+        .ok_or("unit does not belong to the requested site")?;
+    let old_person_id: Option<i64> = unit.get("owner_person_id");
+    let old_owner_start_date: chrono::NaiveDate = unit.get("ownership_start_date");
     let new_person_id: Option<i64> = tx
         .query_opt(
             "SELECT person_id FROM users WHERE LOWER(email) = $1",
@@ -312,12 +324,40 @@ pub async fn transfer_unit_ownership_db(
         .and_then(|r| r.get(0));
 
     // 3. Deactivate old ownership in unit_ownerships
-    tx
-        .execute(
-            "UPDATE unit_ownerships SET is_active = false, end_date = $2 WHERE unit_id = $1 AND is_active = true",
-            &[&unit_id_num, &transfer_date],
+    let closed_ownerships = if let Some(old_person_id) = old_person_id {
+        tx.execute(
+            "UPDATE unit_ownerships SET is_active = false, end_date = $3 WHERE unit_id = $1 AND person_id = $2 AND is_active = true",
+            &[&unit_id_num, &old_person_id, &transfer_date],
         )
-        .await?;
+        .await?
+    } else {
+        0
+    };
+    tx.execute(
+        "UPDATE unit_ownerships SET is_active = false, end_date = $2 WHERE unit_id = $1 AND is_active = true",
+        &[&unit_id_num, &transfer_date],
+    )
+    .await?;
+    if closed_ownerships == 0 {
+        if let Some(old_person_id) = old_person_id.filter(|person_id| *person_id > 0) {
+            tx.execute(
+                r#"
+            INSERT INTO unit_ownerships (
+                unit_id, person_id, share_percentage, start_date, end_date, is_active, created_at
+            )
+            VALUES ($1, $2, 100.00, $3, $4, false, CURRENT_TIMESTAMP)
+            ON CONFLICT DO NOTHING
+            "#,
+                &[
+                    &unit_id_num,
+                    &old_person_id,
+                    &old_owner_start_date,
+                    &transfer_date,
+                ],
+            )
+            .await?;
+        }
+    }
 
     // 4. Insert new ownership
     if let Some(pid) = new_person_id {

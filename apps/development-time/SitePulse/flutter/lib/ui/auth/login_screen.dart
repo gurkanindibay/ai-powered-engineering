@@ -6,9 +6,9 @@ import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
 import '../theme/app_theme.dart';
 import '../dashboard/dashboard_controller.dart';
+import 'google_sign_in_entry.dart';
 
 import '../design_system/money_formatter.dart';
-import '../design_system/brand_marks.dart';
 import '../design_system/sp_feedback.dart';
 enum LoginTab {
   quickAll,
@@ -727,15 +727,10 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
-                child: testId('btn_google_sign_in', OutlinedButton.icon(
-                  onPressed: () => widget.controller.loginWithGoogle(),
-                  icon: const GoogleMark(size: 18),
-                  label: const Text('Google ile Giriş Yap'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 11),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                )),
+                child: testId(
+                  'btn_google_sign_in',
+                  Center(child: buildGoogleSignInEntry(widget.controller)),
+                ),
               ),
             ],
           ),
@@ -1238,15 +1233,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 10),
                       SizedBox(
                         width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () => widget.controller.loginWithGoogle(),
-                          icon: const GoogleMark(size: 18),
-                          label: const Text('Google ile Giriş Yap'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 11),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
+                        child: Center(child: buildGoogleSignInEntry(widget.controller)),
                       ),
                     ],
                   ),

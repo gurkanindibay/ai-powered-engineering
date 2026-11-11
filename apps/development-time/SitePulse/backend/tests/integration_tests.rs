@@ -25,6 +25,27 @@ async fn fixture_dues_not_yet_due(state: &AppState) {
     }
 }
 
+fn resident_dashboard_authz(role: Role) -> sitepulse_backend::authorization::AuthzContext {
+    let token = sitepulse_backend::auth::issue_token(
+        "usr-home-owner-1",
+        "homeowner@test.example",
+        role,
+        "site-1",
+        Some("d-14"),
+    )
+    .unwrap();
+    let mut claims = sitepulse_backend::auth::verify_token(&token).unwrap();
+    claims.role = role;
+    claims.site_id = "site-1".to_string();
+    claims.unit_id = Some("d-14".to_string());
+    sitepulse_backend::authorization::AuthzContext {
+        claims,
+        permissions: Permission::permissions_for_role(role),
+        request_id: "resident-dashboard-test".to_string(),
+        stepped_up: false,
+    }
+}
+
 #[test]
 fn when_overdue_by_10_days_then_calculates_exact_5_percent_pro_rated_penalty() {
     let service = DuesCalculationService::new();
@@ -455,13 +476,26 @@ async fn when_generating_unit_invite_link_then_returns_unit_scoped_url_and_token
         .expect("invitation persisted");
     assert!(res.token.starts_with("SP-HANE-"));
     assert!(res.invite_url.contains("units/d-14?token="));
+    assert_eq!(res.building, "A Blok");
+    assert_eq!(res.unit_number, "14");
     assert!(res.security_notice.contains("A Blok D:14 yetkisi tanımlar"));
+}
+
+#[tokio::test]
+async fn when_generating_unit_invite_for_unknown_unit_then_returns_not_found() {
+    let service = HomeResidentInvitationService::new(AppState::new());
+
+    let result = service
+        .generate_unit_invite_link("missing-unit", None)
+        .await;
+
+    assert_eq!(result.unwrap_err(), "Unit not found");
 }
 
 #[tokio::test]
 async fn when_registering_home_resident_then_assigns_home_resident_role_and_unit_scope() {
     let state = AppState::new();
-    let service = HomeResidentInvitationService::new(state);
+    let service = HomeResidentInvitationService::new(state.clone());
 
     let invite = service
         .generate_unit_invite_link("d-14", Some("Kardeş".to_string()))
@@ -483,6 +517,32 @@ async fn when_registering_home_resident_then_assigns_home_resident_role_and_unit
     assert_eq!(res.role, "HOME_RESIDENT");
     assert!(res.permission_scope.contains("UNIT_ONLY (d-14)"));
     assert!(res.temporary_password.starts_with("SP-HANE-"));
+
+    let token = sitepulse_backend::auth::issue_token(
+        &res.resident_id,
+        &res.email,
+        Role::HomeResident,
+        "site-1",
+        Some(&res.unit_id),
+    )
+    .unwrap();
+    let mut claims = sitepulse_backend::auth::verify_token(&token).unwrap();
+    claims.email = res.email.clone();
+    claims.site_id = "site-1".to_string();
+    claims.role = Role::HomeResident;
+    claims.unit_id = Some(res.unit_id.clone());
+    assert!(state
+        .inner
+        .read()
+        .await
+        .unit_members
+        .get(&res.unit_id)
+        .unwrap()
+        .iter()
+        .any(|member| member.email == claims.email));
+    sitepulse_backend::authorization::unit(&state, &claims, &res.unit_id)
+        .await
+        .expect("new household member can access the invited unit dashboard");
 }
 
 #[tokio::test]
@@ -770,6 +830,38 @@ async fn when_parsing_turkish_bank_excel_then_matches_flat_and_amount() {
     assert_eq!(m.status_code, "ONAY_BEKLIYOR");
 }
 
+#[test]
+fn flutter_reconciliation_payload_uses_backend_enum_contract() {
+    let payload = serde_json::json!({
+        "match_id": "match-1",
+        "site_id": "1",
+        "transaction": {
+            "transaction_id": "txn-1",
+            "date": "2026-09-15",
+            "amount": "100.00",
+            "currency": "TRY",
+            "description": "Aidat",
+            "sender_name": null,
+            "sender_iban": null,
+            "reference_no": null
+        },
+        "matched_unit_id": "14",
+        "matched_block": "A",
+        "matched_unit_number": 14,
+        "matched_resident_name": "Resident",
+        "confidence_score": 90,
+        "matched_due_id": null,
+        "outstanding_balance": "100.00",
+        "amount_matches_balance": true,
+        "status": "PENDING_APPROVAL",
+        "status_code": "ONAY_BEKLIYOR",
+        "notes": null
+    });
+    let parsed: ReconciliationMatch = serde_json::from_value(payload)
+        .expect("Flutter reconciliation payload deserializes on the API");
+    assert_eq!(parsed.status, ReconciliationStatus::PendingApproval);
+}
+
 #[tokio::test]
 async fn when_parsing_mt940_statement_then_extracts_transactions_and_matches_due() {
     let state = AppState::new();
@@ -827,7 +919,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
     let txns = parser.parse_statement(content, None).unwrap();
 
     let eval_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
-    let mut inner = state.inner.write().await;
+    let inner = state.inner.write().await;
     let matches = recon_service.reconcile_transactions(
         &txns,
         &inner.units,
@@ -836,9 +928,6 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
         eval_date,
     );
 
-    for m in &matches {
-        inner.reconciliation_queue.push(m.clone());
-    }
     let match_id = matches[0].match_id.clone();
     drop(inner);
 
@@ -846,6 +935,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
     let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
         site_id: "site-1".to_string(),
         match_ids: vec![match_id.clone()],
+        matches: matches.clone(),
         optional_message: None,
         remember_sender_iban: None,
     };
@@ -865,6 +955,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
         Decimal::from_str_exact("1423.33").unwrap()
     );
     assert_eq!(res.updated_unit_ids, vec!["d-14".to_string()]);
+    assert_eq!(res.confirmed_matches.len(), 1);
     assert!(!res.message_sent);
     assert!(res.notification_summary.is_none());
 
@@ -913,6 +1004,7 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
     let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
         site_id: "site-1".to_string(),
         match_ids: vec![match_id.clone()],
+        matches: vec![],
         optional_message: Some(
             "Sayın Ahmet Yılmaz, ₺1.423,33 aidat ödemeniz onaylanmıştır.".to_string(),
         ),
@@ -1234,6 +1326,7 @@ async fn when_querying_resident_dashboard_then_includes_allocated_virtual_iban()
     let res = sitepulse_backend::handlers::get_resident_dashboard(
         axum::extract::Path("d-14".to_string()),
         axum::extract::State(state.clone()),
+        resident_dashboard_authz(Role::HomeOwner),
     )
     .await;
 
@@ -1248,6 +1341,109 @@ async fn when_querying_resident_dashboard_then_includes_allocated_virtual_iban()
     assert!(iban.starts_with("TR"));
     assert!(iban.contains("00205"));
     assert!(VirtualIbanService::validate_tr_iban(&iban));
+}
+
+#[tokio::test]
+async fn when_querying_resident_dashboard_then_separates_capital_dues_by_project() {
+    let state = AppState::new_with_test_fixtures();
+    let project = CapitalProject {
+        id: "cproj-dashboard-test".to_string(),
+        site_id: "site-1".to_string(),
+        title: "Roof Renewal".to_string(),
+        category: CapitalProjectCategory::RoofWaterproofing,
+        description: None,
+        total_budget: Decimal::from_str_exact("1400.00").unwrap(),
+        allocation_basis: AllocationBasis::ByLandShare,
+        target_start_date: chrono::Utc::now().date_naive(),
+        target_completion_date: None,
+        contractor_name: None,
+        contractor_tax_no: None,
+        contractor_iban: None,
+        contract_amount: None,
+        status: CapitalProjectStatus::Active,
+        collected_amount: Decimal::ZERO,
+        disbursed_amount: Decimal::ZERO,
+        remaining_fund_balance: Decimal::ZERO,
+        total_units_count: 1,
+        installments_count: 1,
+        created_at: None,
+    };
+    state
+        .inner
+        .write()
+        .await
+        .capital_projects
+        .push(project.clone());
+    state.inner.write().await.dues.push(DuesLiability {
+        id: "capital-due-d14".to_string(),
+        unit_id: "d-14".to_string(),
+        period: format!("{}: Taksit 1/3", project.title),
+        principal_amount: Decimal::from_str_exact("1400.00").unwrap(),
+        delay_penalty: Decimal::ZERO,
+        total_amount: Decimal::from_str_exact("1400.00").unwrap(),
+        due_date: chrono::Utc::now().date_naive() + chrono::Days::new(10),
+        status: DebtStatus::Pending,
+        paid_principal: Decimal::ZERO,
+        paid_penalty: Decimal::ZERO,
+        debtor_type: DebtorType::Owner,
+        expense_type: ExpenseType::CapitalDues,
+        penalty_accrued_through: None,
+    });
+    {
+        let inner = state.inner.read().await;
+        assert!(inner
+            .dues
+            .iter()
+            .any(|due| due.unit_id == "d-14" && due.expense_type == ExpenseType::CapitalDues));
+        assert!(inner
+            .capital_projects
+            .iter()
+            .any(|item| item.id == project.id && item.site_id == "site-1"));
+        assert_eq!(
+            resident_dashboard_authz(Role::HomeOwner).claims.role,
+            Role::HomeOwner
+        );
+        assert!(inner.dues.iter().any(|due| {
+            due.unit_id == "d-14"
+                && due
+                    .period
+                    .starts_with(&format!("{}: Taksit ", project.title))
+                && due.status != DebtStatus::Paid
+                && due.expense_type == ExpenseType::CapitalDues
+        }));
+    }
+
+    let response = sitepulse_backend::handlers::get_resident_dashboard(
+        axum::extract::Path("d-14".to_string()),
+        axum::extract::State(state.clone()),
+        resident_dashboard_authz(Role::HomeOwner),
+    )
+    .await;
+    let body = axum::body::to_bytes(response.into_response().into_body(), 1024 * 64)
+        .await
+        .unwrap();
+    let dashboard: ResidentDashboardDto = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(dashboard.capital_dues.len(), 1);
+    assert_eq!(dashboard.capital_dues[0].project_id, project.id);
+    assert_eq!(dashboard.capital_dues[0].project_title, project.title);
+    assert_eq!(
+        dashboard.capital_dues[0].outstanding_balance,
+        Decimal::from_str_exact("1400.00").unwrap()
+    );
+
+    let resident_response = sitepulse_backend::handlers::get_resident_dashboard(
+        axum::extract::Path("d-14".to_string()),
+        axum::extract::State(state),
+        resident_dashboard_authz(Role::HomeResident),
+    )
+    .await;
+    let resident_body =
+        axum::body::to_bytes(resident_response.into_response().into_body(), 1024 * 64)
+            .await
+            .unwrap();
+    let resident_dashboard: ResidentDashboardDto = serde_json::from_slice(&resident_body).unwrap();
+    assert!(resident_dashboard.capital_dues.is_empty());
 }
 
 #[tokio::test]
@@ -1436,6 +1632,7 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
     let res = sitepulse_backend::handlers::get_resident_dashboard(
         axum::extract::Path("d-14".to_string()),
         axum::extract::State(state),
+        resident_dashboard_authz(Role::HomeOwner),
     )
     .await;
 
@@ -1531,6 +1728,7 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
     let dash_res = sitepulse_backend::handlers::get_resident_dashboard(
         axum::extract::Path("d-14".to_string()),
         axum::extract::State(state),
+        resident_dashboard_authz(Role::HomeOwner),
     )
     .await;
 
@@ -1955,6 +2153,7 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
     let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
         site_id: "site-1".to_string(),
         match_ids: vec![match_id],
+        matches: vec![],
         optional_message: None,
         remember_sender_iban: None,
     };

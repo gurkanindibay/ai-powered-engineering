@@ -1,5 +1,6 @@
 """P2 (edge) scenarios across epics: GUI_TEST_PLAN.md §3, priority P2."""
 import re
+import os
 from decimal import Decimal
 
 import pytest
@@ -48,12 +49,17 @@ def test_empty_credentials_are_rejected_without_a_request(login_page, page):
 
 @pytest.mark.edge
 @pytest.mark.gui_id("GUI-06-11")
-@pytest.mark.xfail(strict=True, reason="GAP (STORY-06-05): 'Google ile Giriş Yap' is simulated; "
-                   "DashboardController.loginWithGoogle logs in a mock Google user locally and never redirects to "
-                   "an OAuth provider")
 def test_google_sign_in_redirects_to_the_provider(login_page, page):
+    if not os.environ.get("GOOGLE_CLIENT_ID"):
+        pytest.skip("Set GOOGLE_CLIENT_ID to exercise the Google OAuth redirect")
     google_requests: list[str] = []
     page.on("request", lambda r: google_requests.append(r.url) if "accounts.google.com" in r.url else None)
+    page.context.on(
+        "page",
+        lambda popup: popup.on(
+            "request", lambda r: google_requests.append(r.url) if "accounts.google.com" in r.url else None
+        ),
+    )
     by_id(page, "login_tab_homeOwner").click()
     by_id(page, "btn_google_sign_in").click()
     page.wait_for_timeout(3_000)
@@ -123,9 +129,6 @@ def test_adding_a_resident_to_an_occupied_unit_warns_and_saves_nothing(login_as,
 @pytest.mark.edge
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-04-07")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-04-07): registering through a unit invite fails for an owner-occupied "
-                   "unit ('unit 2 has no active occupancy session'): the seed's owner-occupied units have no "
-                   "unit_occupancies row, so no co-resident can join them")
 def test_co_resident_joins_through_a_unit_invite(login_page, page, api, actors):
     owner = api.login(**actors["homeowner"])
     link = api.call("GET", f"/api/v1/home-residents/invite-link/{owner.user['unit_id']}?site_id=1", owner.token)
@@ -136,7 +139,9 @@ def test_co_resident_joins_through_a_unit_invite(login_page, page, api, actors):
     assert zeynep.user["unit_id"] == owner.user["unit_id"]
     with pytest.raises(ApiError, match="-> 403"):
         api.call("GET", "/api/v1/residents/1/dashboard", zeynep.token)
-    login_page.login("homeowner", "zeynep.kaya@e2e.test", joined["temporary_password"])
+    # A temporary password must be changed before any other operation.
+    api.change_password("zeynep.kaya@e2e.test", joined["temporary_password"], "E2E-Zeynep-Kaya-7")
+    login_page.login("homeowner", "zeynep.kaya@e2e.test", "E2E-Zeynep-Kaya-7")
     ResidentHome(page).wait()
 
 

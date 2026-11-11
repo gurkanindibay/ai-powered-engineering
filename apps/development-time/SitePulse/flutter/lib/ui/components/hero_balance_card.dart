@@ -6,6 +6,8 @@ import '../theme/app_theme.dart';
 
 import '../design_system/money_formatter.dart';
 import '../design_system/sp_clipboard.dart';
+import '../design_system/sp_status_badge.dart';
+import '../design_system/sp_tone.dart';
 class HeroBalanceCard extends StatelessWidget {
   final DuesLiability dues;
   final String siteName;
@@ -15,6 +17,7 @@ class HeroBalanceCard extends StatelessWidget {
   final VoidCallback onDetailPressed;
   final Decimal? advancePayment;
   final String? virtualIban;
+  final List<CapitalDuesSummary> capitalDues;
 
   const HeroBalanceCard({
     super.key,
@@ -26,6 +29,7 @@ class HeroBalanceCard extends StatelessWidget {
     required this.onDetailPressed,
     this.advancePayment,
     this.virtualIban,
+    this.capitalDues = const [],
   });
 
   @override
@@ -43,6 +47,10 @@ class HeroBalanceCard extends StatelessWidget {
     final amountText = hasAdvance ? '+$rawAmountText' : rawAmountText;
     final debtFormatted = MoneyFormatter.format(debt);
     final advFormatted = MoneyFormatter.formatCredit(advance);
+    final capitalTotal = capitalDues.fold<Decimal>(
+      Decimal.zero,
+      (total, item) => total + item.outstandingBalance,
+    );
 
     final mainLabel = hasAdvance
         ? 'Toplam Hesap Bakiyesi (Artı Bakiye)'
@@ -114,6 +122,15 @@ class HeroBalanceCard extends StatelessWidget {
                   color: AppColors.textSecondary(context),
                 ),
               ]),
+          ),
+          const SizedBox(height: 8),
+          testId(
+            'capital_owner_badge',
+            const SpStatusBadge(
+              label: 'Kat Maliki Sorumluluğunda',
+              tone: SpTone.info,
+              icon: Icons.home_work_outlined,
+            ),
           ),
           const SizedBox(height: 14),
 
@@ -337,6 +354,44 @@ class HeroBalanceCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
+
+          if (capitalDues.isNotEmpty) ...[
+            Divider(color: AppColors.border(context), height: 1),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Demirbaş Toplamı',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                testId(
+                  'hero_capital_balance',
+                  Text(
+                    MoneyFormatter.format(capitalTotal),
+                    style: TextStyle(
+                      color: SpTone.accent.foreground(context),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (final item in capitalDues)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(item.projectTitle, maxLines: 2, overflow: TextOverflow.ellipsis)),
+                    const SizedBox(width: 12),
+                    Text(MoneyFormatter.format(item.outstandingBalance)),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 14),
+          ],
 
           // ── 5. Action Buttons Row ─────────────────────────────────────
           Row(

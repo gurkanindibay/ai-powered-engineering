@@ -506,6 +506,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ManagerCockpitView(
                 controller: widget.controller,
                 onAddResidentTap: _showAddResidentDialog,
+                onInviteResidentsTap: widget.controller.generateSiteInviteLink,
                 onCreateAnnouncementTap: _showCreateAnnouncementPage,
                 onManageHouseTypesTap: _showManageHouseTypesDialog,
                 onManageHomeOwnersTap: () => _selectTab(2),
@@ -552,6 +553,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         isOffline: widget.controller.isOffline,
         advancePayment: unit.advancePayment,
         virtualIban: unit.virtualIban,
+        capitalDues: isOwner ? widget.controller.capitalDues : const [],
         onPayPressed: () => _showPaymentDialog(dues),
         onDetailPressed: () => _showDuesDetailDialog(dues),
       ),
@@ -5692,7 +5694,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     AppFullscreenPage.push(
       context: context,
       builder: (ctx) => AppFullscreenPage(
-        title: 'Hane Sakini Davet Linki',
+        title: invite.title,
         subtitle: 'Kapsam: ${invite.unitLabel} • ${invite.expiresAtStr}',
         icon: Container(
           padding: const EdgeInsets.all(8),

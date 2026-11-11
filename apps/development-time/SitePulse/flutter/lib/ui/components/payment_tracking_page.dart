@@ -1475,10 +1475,23 @@ class DebtAgingWidget extends StatelessWidget {
               'Daire Bazlı Borç Yaşlandırma',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             )),
-            Flexible(child: Text(
-              '${report.brackets.length} Daire Borçlu',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
-            )),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${report.brackets.length} Daire Borçlu',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+                ),
+                if (report.brackets.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  testId('btn_remind_batch', TextButton.icon(
+                    onPressed: () => _sendBatchPaymentReminder(context, report),
+                    icon: const Icon(Icons.send_outlined, size: 14),
+                    label: const Text('Toplu Hatırlat', style: TextStyle(fontSize: 12)),
+                  )),
+                ],
+              ],
+            ),
           ],
         ),
         const SizedBox(height: 10),
@@ -1511,6 +1524,32 @@ class DebtAgingWidget extends StatelessWidget {
     );
 
     return isEmbedded ? column : SingleChildScrollView(child: column);
+  }
+
+  Future<void> _sendPaymentReminder(BuildContext context, DebtAgingBracketDto bracket) async {
+    final confirmed = await showSpConfirmDialog(
+      context,
+      title: 'Ödeme Hatırlatması',
+      message: '${bracket.unitLabel} sakinleri (${bracket.residentName}) için toplam ${formatTry(bracket.totalOutstanding)} tutarındaki açık borç hatırlatması gönderilsin mi?',
+      confirmLabel: 'Hatırlat',
+      confirmKey: 'btn_confirm_remind',
+    );
+    if (confirmed && context.mounted) {
+      SpToast.success(context, '${bracket.unitLabel} için ödeme hatırlatması gönderildi.');
+    }
+  }
+
+  Future<void> _sendBatchPaymentReminder(BuildContext context, DebtAgingReportDto report) async {
+    final confirmed = await showSpConfirmDialog(
+      context,
+      title: 'Toplu Ödeme Hatırlatması',
+      message: 'Vadesi geçmiş ${report.brackets.length} daire için ödeme hatırlatması gönderilsin mi?',
+      confirmLabel: 'Tümüne Gönder',
+      confirmKey: 'btn_confirm_remind_batch',
+    );
+    if (confirmed && context.mounted) {
+      SpToast.success(context, 'Tüm borçlu daireler için ödeme hatırlatmaları gönderildi.');
+    }
   }
 
   Widget _buildAgingSummaryTile(BuildContext context, String title, String amount, Color color, String subtitle) {
@@ -1589,17 +1628,34 @@ class DebtAgingWidget extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Wrap(
-            runSpacing: AppSpacing.xs,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              if (bracket.currentDue > Decimal.zero)
-                _buildBracketPill('Cari: ${formatTry(bracket.currentDue)}', SpTone.info),
-              if (bracket.overdue1to30Days > Decimal.zero)
-                _buildBracketPill('1-30g: ${formatTry(bracket.overdue1to30Days)}', SpTone.warning),
-              if (bracket.overdue31to60Days > Decimal.zero)
-                _buildBracketPill('31-60g: ${formatTry(bracket.overdue31to60Days)}', SpTone.warning, icon: Icons.schedule),
-              if (bracket.overdue60PlusDays > Decimal.zero)
-                _buildBracketPill('60+g: ${formatTry(bracket.overdue60PlusDays)}', SpTone.danger, icon: Icons.error_outline),
+              Expanded(
+                child: Wrap(
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    if (bracket.currentDue > Decimal.zero)
+                      _buildBracketPill('Cari: ${formatTry(bracket.currentDue)}', SpTone.info),
+                    if (bracket.overdue1to30Days > Decimal.zero)
+                      _buildBracketPill('1-30g: ${formatTry(bracket.overdue1to30Days)}', SpTone.warning),
+                    if (bracket.overdue31to60Days > Decimal.zero)
+                      _buildBracketPill('31-60g: ${formatTry(bracket.overdue31to60Days)}', SpTone.warning, icon: Icons.schedule),
+                    if (bracket.overdue60PlusDays > Decimal.zero)
+                      _buildBracketPill('60+g: ${formatTry(bracket.overdue60PlusDays)}', SpTone.danger, icon: Icons.error_outline),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              testId('btn_remind_${bracket.unitId}', OutlinedButton.icon(
+                onPressed: () => _sendPaymentReminder(context, bracket),
+                icon: const Icon(Icons.notifications_active_outlined, size: 14),
+                label: const Text('Hatırlat', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  visualDensity: VisualDensity.compact,
+                ),
+              )),
             ],
           ),
         ],
