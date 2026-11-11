@@ -365,6 +365,24 @@ class DuesLiability {
   }
 }
 
+class CapitalDuesSummary {
+  final String projectId;
+  final String projectTitle;
+  final Decimal outstandingBalance;
+
+  const CapitalDuesSummary({
+    required this.projectId,
+    required this.projectTitle,
+    required this.outstandingBalance,
+  });
+
+  factory CapitalDuesSummary.fromJson(Map<String, dynamic> json) => CapitalDuesSummary(
+        projectId: json['project_id'] as String? ?? '',
+        projectTitle: json['project_title'] as String? ?? '',
+        outstandingBalance: readDecimal(json, 'outstanding_balance'),
+      );
+}
+
 
 class ApartmentUnit {
   final String id;

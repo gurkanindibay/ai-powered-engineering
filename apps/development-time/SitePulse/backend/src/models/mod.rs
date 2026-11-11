@@ -872,6 +872,15 @@ pub struct ResidentDashboardDto {
     pub advance_payment: Decimal,
     #[serde(default)]
     pub transactions: Vec<AccountTransactionDto>,
+    #[serde(default)]
+    pub capital_dues: Vec<CapitalDuesSummaryDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapitalDuesSummaryDto {
+    pub project_id: String,
+    pub project_title: String,
+    pub outstanding_balance: Decimal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
