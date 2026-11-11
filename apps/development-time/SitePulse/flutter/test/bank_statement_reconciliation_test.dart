@@ -5,8 +5,10 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
+import 'package:sitepulse/domain/services/api_client.dart';
 import 'package:sitepulse/ui/components/bank_statement_reconciliation_page.dart';
 import 'package:sitepulse/ui/components/manual_unit_assignment_page.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
@@ -150,6 +152,33 @@ void main() {
 
       // Check collection summary incremented
       expect(controller.collectionSummary.paidUnitsCount, initialPaidCount + 1);
+    });
+
+    test('when refreshing the live queue then retains imported unmatched transactions', () async {
+      final unmatched = ReconciliationQueueItem(
+        matchId: 'unmatched-transaction',
+        transaction: BankStatementParsedItem(
+          transactionId: 'unknown-transfer',
+          date: DateTime(2026, 10, 15),
+          amount: Decimal.parse('250.00'),
+          currency: 'TRY',
+          description: 'Unknown sender',
+        ),
+        confidenceScore: 0,
+        amountMatchesBalance: false,
+        status: 'ESLESTIRILEMEDI',
+      );
+      controller.isTestMode = false;
+      controller.setReconciliationQueueForTesting([unmatched]);
+      expect(controller.isTestMode, isFalse);
+      expect(controller.unmatchedBankTransactions, [unmatched]);
+      final originalTransport = ApiClient.transport;
+      ApiClient.transport = MockClient((_) async => http.Response('[]', 200));
+      addTearDown(() => ApiClient.transport = originalTransport);
+
+      await controller.fetchReconciliationQueue('site-1');
+
+      expect(controller.unmatchedBankTransactions, [unmatched]);
     });
 
     testWidgets('BankStatementReconciliationPage renders presets, parses statement, and allows batch confirmation', (tester) async {

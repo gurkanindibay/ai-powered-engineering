@@ -232,8 +232,6 @@ def test_manual_assignment_records_the_payment(login_as, page, tmp_path, october
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-05")
-@pytest.mark.xfail(strict=True, reason="BUG: confirming the matched rows of an import also drops its unmatched rows; "
-                   "the '🏦 Eşleşmeyenler' list is empty afterwards and the unknown transfer is lost")
 def test_confirming_matched_rows_keeps_the_unmatched_ones(login_as, page, tmp_path, october_dues):
     login_as("manager")
     ManagerCockpit(page).wait()
