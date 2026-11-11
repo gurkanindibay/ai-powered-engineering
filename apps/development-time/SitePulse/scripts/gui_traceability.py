@@ -43,7 +43,7 @@ STATUS_DOC = ROOT / "COMPLETION_STATUS.md"
 BEGIN, END = "<!-- gui-traceability:begin -->", "<!-- gui-traceability:end -->"
 
 STORY_HEADING = re.compile(r"^###\s+STORY-(\d{2}-\d{2}):\s*(.+?)\s*$")
-SCENARIO_ROW = re.compile(r"^\|\s*(GUI-[0-9X]{1,2}-\d{2})\s*\|\s*([^|]*)\|")
+SCENARIO_ROW = re.compile(r"^\|\s*(GUI-(?:[0-9X]{1,2}|J)-\d{2})\s*\|\s*([^|]*)\|")
 EXCLUDED_ROW = re.compile(r"^\|\s*—\s*\|\s*([^|]+)\|.*\*\*(Excluded|Partial[^:*]*):\*\*\s*([^|]+)\|")
 STORY_REF = re.compile(r"\b(\d{2}-\d{2})\b")
 ORDER = ["FAIL", "MISSING", "NOT RUN", "DEFECT", "GAP", "PASS", "EXCLUDED"]

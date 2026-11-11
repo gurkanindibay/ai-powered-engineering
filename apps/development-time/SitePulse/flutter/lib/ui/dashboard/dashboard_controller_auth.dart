@@ -911,6 +911,9 @@ extension DashboardControllerAuth on DashboardController {
     required String siteId,
     required String unitId,
   }) async {
+    // Role-scoped fetches (canReadSiteDirectory, canManageHousehold) read the
+    // session role, so it must be the signed-in user's before anything loads.
+    _userSession = _userSession.copyWith(role: role);
     switch (role) {
       case UserRole.saasAdmin:
         await fetchSaasSites();
