@@ -45,6 +45,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     super.initState();
     _activeSegment = widget.initialSegment;
     widget.controller.fetchReconciliationQueue();
+    widget.controller.fetchBankAccount();
   }
 
   @override
@@ -72,6 +73,9 @@ class _DuesManagementViewState extends State<DuesManagementView> {
   }
 
   Future<void> _handleFileUpload() async {
+    if (widget.controller.siteBankAccount == null) {
+      await widget.controller.fetchBankAccount();
+    }
     final activeAccount = widget.controller.siteBankAccount;
     final acceptFilter = activeAccount?.supportedBank?.fileExtension;
     final picked = await pickBankFile(accept: acceptFilter);

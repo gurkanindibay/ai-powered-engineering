@@ -122,8 +122,6 @@ def test_manager_never_sees_another_sites_units(login_as, page, builders, stack)
 @pytest.mark.core
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-03-05")
-@pytest.mark.xfail(strict=True, reason="BUG: saving the edit form sends PUT /api/v1/saas/sites/1, which answers 400, "
-                   "yet DashboardController.updateSite returns true and the card shows the new name; nothing is stored")
 def test_edit_site_updates_the_card(saas_ui, stack):
     saas_ui.edit_site("1", "Begonya Sitesi Evleri", "Ataşehir, Yeni Sok. No:1, İstanbul", "+90 532 999 88 77")
 

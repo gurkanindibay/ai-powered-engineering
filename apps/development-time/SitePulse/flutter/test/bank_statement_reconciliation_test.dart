@@ -1,12 +1,15 @@
 @Tags(['finance'])
 library;
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
+import 'package:sitepulse/domain/services/api_client.dart';
 import 'package:sitepulse/ui/components/bank_statement_reconciliation_page.dart';
 import 'package:sitepulse/ui/components/manual_unit_assignment_page.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
@@ -400,6 +403,51 @@ void main() {
       expect(assignmentResult!.flat.flatDesc, 'B Blok D:3');
       expect(assignmentResult!.sendOptionalMessage, true);
       expect(assignmentResult!.optionalMessageText, contains('aidat ödemeniz'));
+    });
+
+    test('fetchBankAccount loads site bank account from API and sets siteBankAccount', () async {
+      final previous = ApiClient.transport;
+      addTearDown(() => ApiClient.transport = previous);
+
+      ApiClient.transport = MockClient((request) async {
+        if (request.url.path == '/api/v1/site-admin/bank-account/site-1') {
+          return http.Response(
+            json.encode({
+              'id': '1',
+              'site_id': 'site-1',
+              'bank_code': 'KUVEYT_TURK',
+              'bank_name': 'Kuveyt Türk Katılım Bankası',
+              'iban': 'TR620020500009863791600001',
+              'account_holder': 'Begonya Sitesi Yönetimi',
+              'statement_format': 'EXCEL',
+              'is_active': true,
+              'configured_by': 'usr-1',
+              'updated_at': '2026-11-01T10:00:00Z',
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final testController = DashboardController(startAuthenticated: true, isTestMode: false);
+      expect(testController.siteBankAccount, isNull);
+
+      await testController.fetchBankAccount('site-1');
+      expect(testController.siteBankAccount, isNotNull);
+      expect(testController.siteBankAccount!.bankCode, 'KUVEYT_TURK');
+      expect(testController.siteBankAccount!.statementFormat, 'EXCEL');
+
+      // Now verifying that format rejection works with the loaded account:
+      final staBytes = Uint8List.fromList(':20:START\n:61:260915CR1423,33\n:86:AHMET YILMAZ'.codeUnits);
+      final success = testController.parseBankStatementFile(
+        fileName: 'ekstre.sta',
+        bytes: staBytes,
+      );
+      expect(success, false);
+      expect(testController.bankStatementError, contains('Format Reddedildi'));
+      expect(testController.bankStatementError, contains('Kuveyt Türk Katılım Bankası'));
     });
   });
 }

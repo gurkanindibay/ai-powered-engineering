@@ -81,8 +81,6 @@ def test_offline_state_shows_a_banner_and_keeps_the_balance(login_as, page, cont
 @pytest.mark.edge
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-06")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-01-04): the 'KMK Madde 20 Yasal Gecikme Cetveli' detail says "
-                   "'0 Gün Gecikme' for a debt that is 10 days overdue (the hero card's badge shows the right days)")
 def test_penalty_detail_shows_days_and_the_penalty_amount(login_as, page, builders, api, actors):
     builders.overdue_dues(principal=Decimal("1400.00"), days_overdue=10)
     dashboard = api.resident_dashboard(api.login(**actors["homeowner"]))
@@ -156,9 +154,6 @@ def test_empty_approval_queue_shows_zero(login_as, page):
 @pytest.mark.edge
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-06")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-07-02): a payer-name alias saved from the unit matching criteria card "
-                   "(stored in unit_payer_names) is ignored when an uploaded statement is matched; the transfer stays "
-                   "unmatched")
 def test_payer_name_alias_auto_matches_the_transfer(login_as, login_page, page, api, actors, tmp_path):
     homeowner = api.login(**actors["homeowner"])
     api.call("PUT", f"/api/v1/residents/{homeowner.user['unit_id']}/matching-criteria/payer-names", homeowner.token,

@@ -388,11 +388,81 @@ impl SaasTenantService {
                     || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(site_id)
             })
             .ok_or_else(|| format!("Site with id '{}' not found", site_id))?;
+        let actual_site_id = inner.sites[site_idx].id.clone();
 
+        // Validate everything before mutating state, so a rejected request leaves
+        // both memory and PostgreSQL untouched.
         if let Some(ref name) = req.site_name {
             if name.trim().is_empty() {
                 return Err("Site name cannot be empty".to_string());
             }
+        }
+
+        // Check email uniqueness if a new email is provided
+        if let Some(ref email) = req.site_admin_email {
+            let email_clean = crate::domain::email::NormalizedEmail::normalize(email);
+            if !email_clean.is_empty() {
+                let user_idx = inner.users.iter().position(|u| {
+                    (u.site_id == actual_site_id
+                        || crate::db::parse_id_to_i64(&u.site_id)
+                            == crate::db::parse_id_to_i64(&actual_site_id))
+                        && u.role == Role::SiteManager
+                        && is_login_account(u)
+                });
+                let current = user_idx.map(|idx| &inner.users[idx]);
+                // The manager's own `person-<id>` shadow row carries the same email;
+                // it is the same person, not a second account.
+                let email_exists = inner.users.iter().any(|u| {
+                    let same_person = current.is_some_and(|c| {
+                        c.id == u.id || (c.person_id.is_some() && c.person_id == u.person_id)
+                    });
+                    !same_person && crate::domain::email::same_email(&u.email, &email_clean)
+                });
+                if email_exists {
+                    return Err(format!(
+                        "An account with this email address already exists (zaten mevcut): {}",
+                        email
+                    ));
+                }
+            }
+        }
+
+        // Blocks are reconciled by name: kept names keep their ids (units reference
+        // them), so only blocks that disappear from the list are removed.
+        let requested_blocks: Option<Vec<String>> = req.blocks.as_ref().map(|names| {
+            let mut unique: Vec<String> = Vec::new();
+            for name in names.iter().map(|n| n.trim()).filter(|n| !n.is_empty()) {
+                if !unique.iter().any(|u| u == name) {
+                    unique.push(name.to_string());
+                }
+            }
+            unique
+        });
+        if let Some(ref wanted) = requested_blocks {
+            let occupied = inner
+                .blocks
+                .iter()
+                .filter(|b| {
+                    b.site_id == actual_site_id
+                        || crate::db::parse_id_to_i64(&b.site_id)
+                            == crate::db::parse_id_to_i64(&actual_site_id)
+                })
+                .filter(|b| !wanted.contains(&b.block_name))
+                .find(|b| {
+                    inner
+                        .units
+                        .iter()
+                        .any(|u| crate::auth::same_id(&u.block_id, &b.id))
+                });
+            if let Some(block) = occupied {
+                return Err(format!(
+                    "Block '{}' still has units and cannot be removed",
+                    block.block_name
+                ));
+            }
+        }
+
+        if let Some(ref name) = req.site_name {
             inner.sites[site_idx].name = name.trim().to_string();
             inner.sites[site_idx].slug = to_slug(name);
         }
@@ -417,32 +487,7 @@ impl SaasTenantService {
             };
         }
 
-        let actual_site_id = inner.sites[site_idx].id.clone();
         let updated_site = inner.sites[site_idx].clone();
-
-        // Check email uniqueness if a new email is provided
-        if let Some(ref email) = req.site_admin_email {
-            let email_clean = crate::domain::email::NormalizedEmail::normalize(email);
-            if !email_clean.is_empty() {
-                let user_idx = inner.users.iter().position(|u| {
-                    (u.site_id == actual_site_id
-                        || crate::db::parse_id_to_i64(&u.site_id)
-                            == crate::db::parse_id_to_i64(&actual_site_id))
-                        && u.role == Role::SiteManager
-                });
-                let current_user_id = user_idx.map(|idx| inner.users[idx].id.clone());
-                let email_exists = inner.users.iter().any(|u| {
-                    Some(&u.id) != current_user_id.as_ref()
-                        && crate::domain::email::same_email(&u.email, &email_clean)
-                });
-                if email_exists {
-                    return Err(format!(
-                        "An account with this email address already exists (zaten mevcut): {}",
-                        email
-                    ));
-                }
-            }
-        }
 
         // Update site admin user if details are provided
         let mut admin_user_to_save: Option<User> = None;
@@ -455,6 +500,7 @@ impl SaasTenantService {
                     || crate::db::parse_id_to_i64(&u.site_id)
                         == crate::db::parse_id_to_i64(&actual_site_id))
                     && u.role == Role::SiteManager
+                    && is_login_account(u)
             }) {
                 if let Some(ref fname) = req.site_admin_full_name {
                     if !fname.trim().is_empty() {
@@ -475,12 +521,12 @@ impl SaasTenantService {
         }
 
         // Update blocks if provided
-        let mut updated_blocks: Vec<String> = Vec::new();
-        if let Some(ref new_blocks) = req.blocks {
+        if let Some(ref wanted) = requested_blocks {
             inner.blocks.retain(|b| {
-                b.site_id != actual_site_id
-                    && crate::db::parse_id_to_i64(&b.site_id)
-                        != crate::db::parse_id_to_i64(&actual_site_id)
+                let same_site = b.site_id == actual_site_id
+                    || crate::db::parse_id_to_i64(&b.site_id)
+                        == crate::db::parse_id_to_i64(&actual_site_id);
+                !same_site || wanted.contains(&b.block_name)
             });
             let mut max_block = inner
                 .blocks
@@ -488,21 +534,30 @@ impl SaasTenantService {
                 .filter_map(|b| crate::db::parse_id_to_i64(&b.id))
                 .max()
                 .unwrap_or(0);
-            for bname in new_blocks {
-                let trimmed = bname.trim();
-                if !trimmed.is_empty() {
+            for name in wanted {
+                let exists = inner
+                    .blocks
+                    .iter()
+                    .filter(|b| {
+                        b.site_id == actual_site_id
+                            || crate::db::parse_id_to_i64(&b.site_id)
+                                == crate::db::parse_id_to_i64(&actual_site_id)
+                    })
+                    .any(|b| &b.block_name == name);
+                if !exists {
                     max_block += 1;
                     inner.blocks.push(crate::models::BlockDto {
                         id: max_block.to_string(),
                         site_id: actual_site_id.clone(),
-                        block_name: trimmed.to_string(),
+                        block_name: name.clone(),
                         total_floors: 10,
                     });
-                    updated_blocks.push(trimmed.to_string());
                 }
             }
-        } else {
-            updated_blocks = inner
+        }
+        let updated_blocks: Vec<String> = match requested_blocks {
+            Some(wanted) => wanted,
+            None => inner
                 .blocks
                 .iter()
                 .filter(|b| {
@@ -511,8 +566,8 @@ impl SaasTenantService {
                             == crate::db::parse_id_to_i64(&actual_site_id)
                 })
                 .map(|b| b.block_name.clone())
-                .collect();
-        }
+                .collect(),
+        };
 
         // Find current admin info for summary
         let admin_info = inner.users.iter().find(|u| {
@@ -520,6 +575,7 @@ impl SaasTenantService {
                 || crate::db::parse_id_to_i64(&u.site_id)
                     == crate::db::parse_id_to_i64(&actual_site_id))
                 && u.role == Role::SiteManager
+                && is_login_account(u)
         });
 
         let primary_name = admin_info
@@ -706,6 +762,12 @@ impl SaasTenantService {
             renewed_at: Utc::now(),
         })
     }
+}
+
+/// True for a real login account; false for the `person-<id>` shadow rows that
+/// state hydration adds to `users` for resident resolution.
+fn is_login_account(user: &User) -> bool {
+    !user.id.starts_with("person-")
 }
 
 pub fn to_slug(input: &str) -> String {

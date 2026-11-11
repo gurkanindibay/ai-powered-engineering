@@ -548,6 +548,7 @@ class FlatPaymentStatus {
   final bool isPaid;
   final String? paidDateStr;
   final String? houseType;
+  final List<String> registeredPayerNames;
 
   FlatPaymentStatus({
     required this.id,
@@ -560,6 +561,7 @@ class FlatPaymentStatus {
     required this.isPaid,
     this.paidDateStr,
     this.houseType,
+    this.registeredPayerNames = const [],
   }) : advanceBalance = advanceBalance ?? Decimal.zero;
 
   bool get hasAdvanceBalance => advanceBalance > Decimal.zero;
@@ -583,6 +585,7 @@ class FlatPaymentStatus {
     bool? isPaid,
     String? paidDateStr,
     String? houseType,
+    List<String>? registeredPayerNames,
   }) {
     return FlatPaymentStatus(
       id: id ?? this.id,
@@ -595,6 +598,7 @@ class FlatPaymentStatus {
       isPaid: isPaid ?? this.isPaid,
       paidDateStr: paidDateStr ?? this.paidDateStr,
       houseType: houseType ?? this.houseType,
+      registeredPayerNames: registeredPayerNames ?? this.registeredPayerNames,
     );
   }
 }

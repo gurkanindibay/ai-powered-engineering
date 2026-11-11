@@ -883,6 +883,19 @@ class DashboardController extends ChangeNotifier {
           _duesList = duesJson.map((d) {
             final item = d as Map<String, dynamic>;
             final isItemPaid = item['status'] == 'PAID';
+            final dueDate =
+                DateTime.tryParse(item['due_date']?.toString() ?? '') ??
+                    DateTime.now();
+            final today = DateTime.now();
+            final daysOverdue = isItemPaid
+                ? 0
+                : DateTime(today.year, today.month, today.day)
+                    .difference(
+                      DateTime(dueDate.year, dueDate.month, dueDate.day),
+                    )
+                    .inDays
+                    .clamp(0, 1 << 31)
+                    .toInt();
             return DuesLiability(
               id: item['id'] as String? ?? '',
               unitId: effectiveUnitId,
@@ -890,7 +903,8 @@ class DashboardController extends ChangeNotifier {
               principalAmount: readDecimal(item, 'principal_amount'),
               delayPenalty: isItemPaid ? Decimal.zero : (readDecimal(item, 'delay_penalty')),
               totalAmount: isItemPaid ? Decimal.zero : (readDecimal(item, 'total_amount')),
-              dueDate: DateTime.tryParse(item['due_date']?.toString() ?? '') ?? DateTime.now(),
+              dueDate: dueDate,
+              daysOverdue: daysOverdue,
               status: isItemPaid
                   ? DebtStatus.paid
                   : (data['is_overdue'] == true ? DebtStatus.overdue : DebtStatus.pending),
@@ -935,6 +949,9 @@ class DashboardController extends ChangeNotifier {
       }
     }
     if (effectiveSiteId == null || effectiveSiteId.isEmpty) return;
+    if (!isTestMode && _siteBankAccount == null) {
+      unawaited(fetchBankAccount(effectiveSiteId));
+    }
     try {
       final url = Uri.parse('${ApiClient.baseUrl}/api/v1/bank/statements/reconciliation-queue?site_id=$effectiveSiteId');
       final response = await ApiClient.get(url).timeout(const Duration(seconds: 2));
@@ -1077,6 +1094,11 @@ class DashboardController extends ChangeNotifier {
               isPaid: item['is_paid'] as bool? ?? false,
               paidDateStr: item['paid_date_str'] as String?,
               houseType: item['house_type'] as String?,
+              registeredPayerNames:
+                  (item['registered_payer_names'] as List<dynamic>?)
+                      ?.map((name) => name.toString())
+                      .toList() ??
+                  const [],
             ));
           }
           _flatsList = list;
@@ -1098,6 +1120,7 @@ class DashboardController extends ChangeNotifier {
         }
 
         if (fetchedSiteId.isNotEmpty) {
+          await fetchBankAccount(fetchedSiteId);
           await fetchReconciliationQueue(fetchedSiteId);
           await fetchHouseTypes(siteId: fetchedSiteId);
           await fetchBlocks(siteId: fetchedSiteId);

@@ -777,15 +777,32 @@ extension DashboardControllerAuth on DashboardController {
           }
           notify();
           return true;
-        } else {
-          debugPrint('updateSite failed with status: ${response.statusCode}');
         }
+        AppLogger.warn('updateSite failed with status: ${response.statusCode}');
+        _rollBackSiteUpdate(index, currentSite, extractErrorMessage(response));
+        return false;
       } catch (e) {
-        debugPrint('updateSite remote sync error: $e');
+        AppLogger.warn('updateSite remote sync error: $e');
+        _rollBackSiteUpdate(index, currentSite, null);
+        return false;
       }
     }
 
     return true;
+  }
+
+  /// Restores the card after the server rejected an edit, so the screen never
+  /// shows values that were not stored.
+  void _rollBackSiteUpdate(int index, TenantSiteItem previous, String? reason) {
+    if (index < _saasSites.length && _saasSites[index].id == previous.id) {
+      _saasSites[index] = previous;
+    }
+    if (_currentManagedSite?.id == previous.id) {
+      _currentManagedSite = previous;
+    }
+    final detail = (reason == null || reason.isEmpty) ? '' : ' ($reason)';
+    _authMessage = '${previous.name} bilgileri kaydedilemedi$detail.';
+    notify();
   }
 
   /// Generates/renews a temporary management password for a site manager.

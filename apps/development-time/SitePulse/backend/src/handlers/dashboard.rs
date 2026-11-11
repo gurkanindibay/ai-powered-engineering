@@ -2,12 +2,21 @@
 
 use super::*;
 
-fn collection_amounts(
-    principal: Decimal,
-    paid_principal: Decimal,
-    paid_penalty: Decimal,
-) -> (Decimal, Decimal) {
-    (principal, paid_principal + paid_penalty)
+fn overdue_days(due_date: chrono::NaiveDate, today: chrono::NaiveDate, is_paid: bool) -> i32 {
+    if is_paid {
+        return 0;
+    }
+
+    (today - due_date).num_days().clamp(0, i64::from(i32::MAX)) as i32
+}
+
+/// (billed, collected) for one due in the period's collection stats.
+///
+/// Both sides use principal only: delay penalties are not part of the billed
+/// amount, so counting a paid penalty as collected would push the collection
+/// rate above 100%.
+fn collection_amounts(principal: Decimal, paid_principal: Decimal) -> (Decimal, Decimal) {
+    (principal, paid_principal.min(principal).max(Decimal::ZERO))
 }
 
 pub(crate) fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, String) {
@@ -464,6 +473,7 @@ pub async fn get_site_overview(
     let selected_period = query
         .period
         .unwrap_or_else(|| available_periods.first().cloned().unwrap_or_default());
+    let today = Utc::now().date_naive();
 
     // 4. Available sites list for site switcher (deduplicated by name)
     let mut available_sites: Vec<crate::models::SiteSummaryBriefDto> = Vec::new();
@@ -584,13 +594,9 @@ pub async fn get_site_overview(
         let (amount_due, billed_amount, collected_amount, is_paid, days_overdue, paid_date_str) =
             if let Some(due) = due_opt {
                 let (billed, collected) =
-                    collection_amounts(due.principal_amount, due.paid_principal, due.paid_penalty);
+                    collection_amounts(due.principal_amount, due.paid_principal);
                 let is_p = due.status == DebtStatus::Paid;
-                let days_o = if due.status == DebtStatus::Overdue {
-                    15
-                } else {
-                    0
-                };
+                let days_o = overdue_days(due.due_date, today, is_p);
                 let p_date = if is_p {
                     Some("Ödendi".to_string())
                 } else {
@@ -644,6 +650,11 @@ pub async fn get_site_overview(
             paid_date_str,
             virtual_iban: unit.virtual_iban.clone(),
             advance_balance: advance,
+            registered_payer_names: inner
+                .unit_payer_names
+                .get(&unit.id)
+                .cloned()
+                .unwrap_or_default(),
             house_type: unit.house_type.clone(),
         });
     }
@@ -707,15 +718,39 @@ pub async fn get_site_overview(
 
 #[cfg(test)]
 mod tests {
-    use super::collection_amounts;
+    use super::{collection_amounts, overdue_days};
+    use chrono::NaiveDate;
     use rust_decimal::Decimal;
 
     #[test]
+    fn unpaid_due_calculates_days_from_its_due_date() {
+        let due_date = NaiveDate::from_ymd_opt(2026, 10, 15).expect("valid test date");
+        let today = NaiveDate::from_ymd_opt(2026, 11, 11).expect("valid test date");
+
+        assert_eq!(overdue_days(due_date, today, false), 27);
+    }
+
+    #[test]
+    fn paid_or_not_yet_due_items_have_no_overdue_days() {
+        let due_date = NaiveDate::from_ymd_opt(2026, 11, 11).expect("valid test date");
+        let tomorrow = NaiveDate::from_ymd_opt(2026, 11, 12).expect("valid test date");
+
+        assert_eq!(overdue_days(due_date, tomorrow, true), 0);
+        assert_eq!(overdue_days(tomorrow, due_date, false), 0);
+    }
+
+    #[test]
     fn fully_paid_due_remains_in_period_collection_totals() {
-        let (billed, collected) =
-            collection_amounts(Decimal::from(1400), Decimal::from(1400), Decimal::ZERO);
+        let (billed, collected) = collection_amounts(Decimal::from(1400), Decimal::from(1400));
 
         assert_eq!(billed, Decimal::from(1400));
         assert_eq!(collected, Decimal::from(1400));
+    }
+
+    #[test]
+    fn collected_never_exceeds_the_billed_principal() {
+        let (billed, collected) = collection_amounts(Decimal::from(1400), Decimal::from(1450));
+
+        assert_eq!(collected, billed);
     }
 }
