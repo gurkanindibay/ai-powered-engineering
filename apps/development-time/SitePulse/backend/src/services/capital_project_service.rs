@@ -604,6 +604,7 @@ impl CapitalProjectService {
     pub async fn record_disbursement(
         &self,
         project_id: &str,
+        site_id: &str,
         req: RecordDisbursementRequest,
     ) -> Result<CapitalContractorDisbursement, String> {
         if req.amount <= Decimal::ZERO {
@@ -625,42 +626,83 @@ impl CapitalProjectService {
         let now = Utc::now();
         let mut dis_id = String::new();
 
-        // Insert into DB if available
+        // Serialize disbursements per project and compare the requested amount
+        // with collected principal before writing the contractor ledger row.
         if let Some(pool) = &self.state.pool {
-            if let Ok(client) = pool.get().await {
-                if let Some(p_id) = crate::db::parse_id_to_i64(project_id) {
-                    let row_res = client
-                        .query_one(
-                            r#"
-                            INSERT INTO capital_contractor_disbursements (
-                                project_id, milestone_name, invoice_number, amount,
-                                disbursement_date, recipient_name, recipient_iban,
-                                payment_reference, disbursement_method, notes, created_at
-                            )
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                            RETURNING id
-                            "#,
-                            &[
-                                &[&p_id][0],
-                                &req.milestone_name,
-                                &req.invoice_number,
-                                &req.amount,
-                                &disbursement_date,
-                                &req.recipient_name,
-                                &req.recipient_iban,
-                                &req.payment_reference,
-                                &disbursement_method,
-                                &req.notes,
-                                &now,
-                            ],
-                        )
-                        .await;
-                    if let Ok(row) = row_res {
-                        let id_val: i64 = row.get("id");
-                        dis_id = id_val.to_string();
-                    }
-                }
+            let p_id = crate::db::require_id("capital project", project_id)?;
+            let site_num = crate::db::require_id("site", site_id)?;
+            let mut client = pool
+                .get()
+                .await
+                .map_err(|e| format!("Database unavailable: {}", e))?;
+            let tx = client
+                .transaction()
+                .await
+                .map_err(|e| format!("Database unavailable: {}", e))?;
+            crate::db::tx_bind_tenant(&tx, site_num)
+                .await
+                .map_err(|e| format!("Could not bind project tenant: {}", e))?;
+            let project = tx
+                .query_opt(
+                    "SELECT id FROM capital_projects WHERE id = $1 AND site_id = $2 FOR UPDATE",
+                    &[&p_id, &site_num],
+                )
+                .await
+                .map_err(|e| format!("Could not load capital project: {}", e))?
+                .ok_or_else(|| "Demirbaş projesi bulunamadı.".to_string())?;
+            let locked_project_id: i64 = project.get("id");
+            let balances = tx
+                .query_one(
+                    r#"
+                    SELECT
+                        COALESCE((SELECT SUM(paid_amount) FROM dues_liabilities
+                                  WHERE capital_project_id = $1), 0.00) AS collected,
+                        COALESCE((SELECT SUM(amount) FROM capital_contractor_disbursements
+                                  WHERE project_id = $1), 0.00) AS disbursed
+                    "#,
+                    &[&locked_project_id],
+                )
+                .await
+                .map_err(|e| format!("Could not read project fund balance: {}", e))?;
+            let collected: Decimal = balances.get("collected");
+            let disbursed: Decimal = balances.get("disbursed");
+            if disbursed + req.amount > collected {
+                return Err(
+                    "Hakediş tutarı projede tahsil edilmiş kullanılabilir bakiyeyi aşamaz."
+                        .to_string(),
+                );
             }
+            let row = tx
+                .query_one(
+                    r#"
+                    INSERT INTO capital_contractor_disbursements (
+                        project_id, milestone_name, invoice_number, amount,
+                        disbursement_date, recipient_name, recipient_iban,
+                        payment_reference, disbursement_method, notes, created_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    RETURNING id
+                    "#,
+                    &[
+                        &locked_project_id,
+                        &req.milestone_name,
+                        &req.invoice_number,
+                        &req.amount,
+                        &disbursement_date,
+                        &req.recipient_name,
+                        &req.recipient_iban,
+                        &req.payment_reference,
+                        &disbursement_method,
+                        &req.notes,
+                        &now,
+                    ],
+                )
+                .await
+                .map_err(|e| format!("Could not record capital disbursement: {}", e))?;
+            dis_id = row.get::<_, i64>("id").to_string();
+            tx.commit()
+                .await
+                .map_err(|e| format!("Could not commit capital disbursement: {}", e))?;
         }
 
         if dis_id.is_empty() {
@@ -692,6 +734,35 @@ impl CapitalProjectService {
         // Update memory state
         {
             let mut inner = self.state.inner.write().await;
+            if self.state.pool.is_none() {
+                let project = inner
+                    .capital_projects
+                    .iter()
+                    .find(|project| project.id == project_id)
+                    .ok_or_else(|| "Demirbaş projesi bulunamadı.".to_string())?;
+                let project_period_prefix = format!("{}: Taksit", project.title);
+                let collected: Decimal = inner
+                    .dues
+                    .iter()
+                    .filter(|due| {
+                        due.paid_principal > Decimal::ZERO
+                            && due.period.starts_with(&project_period_prefix)
+                    })
+                    .map(|due| due.paid_principal + due.paid_penalty)
+                    .sum();
+                let disbursed: Decimal = inner
+                    .capital_disbursements
+                    .iter()
+                    .filter(|entry| entry.project_id == project_id)
+                    .map(|entry| entry.amount)
+                    .sum();
+                if disbursed + req.amount > collected.max(project.collected_amount) {
+                    return Err(
+                        "Hakediş tutarı projede tahsil edilmiş kullanılabilir bakiyeyi aşamaz."
+                            .to_string(),
+                    );
+                }
+            }
             inner.capital_disbursements.push(disbursement.clone());
 
             if let Some(p) = inner

@@ -89,10 +89,10 @@ pub async fn record_capital_disbursement(
     Path(id): Path<String>,
     Json(payload): Json<RecordDisbursementRequest>,
 ) -> Result<(StatusCode, Json<CapitalContractorDisbursement>), (StatusCode, String)> {
-    scoped_capital_project(&state, &scope, &id).await?;
+    let project = scoped_capital_project(&state, &scope, &id).await?;
     let service = CapitalProjectService::new(state);
     service
-        .record_disbursement(&id, payload)
+        .record_disbursement(&id, &project.site_id, payload)
         .await
         .map(|d| (StatusCode::CREATED, Json(d)))
         .map_err(|e| (StatusCode::BAD_REQUEST, e))

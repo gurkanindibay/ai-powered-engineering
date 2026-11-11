@@ -79,7 +79,6 @@ def test_equal_allocation_gives_every_unit_the_same_share(login_as, page, stack)
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-10-06")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-10-05): a ₺120.000,00 contractor disbursement is recorded although the project has collected nothing; there is no overdraw guard")
 def test_disbursement_larger_than_collected_cash_is_refused(login_as, page, stack):
     login_as("manager")
     ManagerCockpit(page).wait()

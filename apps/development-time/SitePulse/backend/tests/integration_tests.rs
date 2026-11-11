@@ -3714,10 +3714,45 @@ async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
         contractor_tax_no: Some("9876543210".to_string()),
         contractor_iban: Some("TR330006200000000098765432".to_string()),
         contract_amount: Some(Decimal::from_str_exact("80000.00").unwrap()),
-        installments: None,
+        installments: Some(vec![CreateInstallmentItem {
+            installment_number: 1,
+            total_installments: 1,
+            due_date: Utc::now().date_naive(),
+            installment_budget: Decimal::from_str_exact("80000.00").unwrap(),
+            percentage: Some(Decimal::from_str_exact("100.00").unwrap()),
+        }]),
     };
 
     let project = service.create_project(req).await.unwrap();
+
+    let unfunded_disbursement = RecordDisbursementRequest {
+        milestone_name: "Unfunded payment".to_string(),
+        invoice_number: None,
+        amount: Decimal::from_str_exact("120000.00").unwrap(),
+        disbursement_date: Some(Utc::now().date_naive()),
+        recipient_name: "Termik Mühendislik".to_string(),
+        recipient_iban: "TR330006200000000098765432".to_string(),
+        payment_reference: None,
+        disbursement_method: Some(DisbursementMethod::BankTransfer),
+        notes: None,
+    };
+    assert!(service
+        .record_disbursement(&project.id, &project.site_id, unfunded_disbursement)
+        .await
+        .is_err());
+    assert!(service.list_disbursements(&project.id).await.is_empty());
+
+    service.accrue_installment(&project.id, 1).await.unwrap();
+    {
+        let mut inner = state.inner.write().await;
+        for due in inner.dues.iter_mut().filter(|due| {
+            due.period
+                .starts_with(&format!("{}: Taksit", project.title))
+        }) {
+            due.status = DebtStatus::Paid;
+            due.paid_principal = due.principal_amount;
+        }
+    }
 
     let disb_req = RecordDisbursementRequest {
         milestone_name: "1. Hakediş: Eski Kazan Sökümü".to_string(),
@@ -3732,7 +3767,7 @@ async fn when_contractor_disbursement_recorded_then_updates_fund_balance() {
     };
 
     let disb = service
-        .record_disbursement(&project.id, disb_req)
+        .record_disbursement(&project.id, &project.site_id, disb_req)
         .await
         .unwrap();
     assert_eq!(disb.amount, Decimal::from_str_exact("25000.00").unwrap());
