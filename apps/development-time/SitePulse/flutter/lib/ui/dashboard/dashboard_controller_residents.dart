@@ -319,6 +319,7 @@ extension DashboardControllerResidents on DashboardController {
   }
 
   Future<void> fetchHomeOwners({String? siteId}) async {
+    if (!isTestMode && !canReadSiteDirectory) return;
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     _isLoadingHomeOwners = true;
 

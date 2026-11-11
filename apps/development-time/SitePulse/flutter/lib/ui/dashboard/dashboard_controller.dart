@@ -106,6 +106,15 @@ class DashboardController extends ChangeNotifier {
   /// the password change screen while this is true.
   bool get requiresPasswordChange => _isAuthenticated && _userSession.mustChangePassword;
 
+  /// The site's owner/resident directory (`PERSON_READ`) is the site manager's.
+  /// Other roles never request it: the server would refuse it with 403.
+  bool get canReadSiteDirectory => _userSession.role == UserRole.siteManager;
+
+  /// Household members of a unit (`UNIT_MANAGE_HOUSEHOLD` / `PERSON_MANAGE`):
+  /// the owner and the site manager, not a resident or an auditor.
+  bool get canManageHousehold =>
+      _userSession.role == UserRole.homeOwner || _userSession.role == UserRole.siteManager;
+
   SiteAdminActivePath _siteAdminPath = SiteAdminActivePath.managerCockpit;
   SiteAdminActivePath get siteAdminPath => _siteAdminPath;
 
@@ -853,7 +862,7 @@ class DashboardController extends ChangeNotifier {
     final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : null);
     if (effectiveUnitId == null || effectiveUnitId.isEmpty) return;
     fetchUnitMatchingCriteria(effectiveUnitId);
-    fetchHouseholdMembers(effectiveUnitId);
+    if (isTestMode || canManageHousehold) fetchHouseholdMembers(effectiveUnitId);
     try {
       final url = ApiClient.uri('/api/v1/residents/$effectiveUnitId/dashboard');
       final response = await ApiClient.get(url).timeout(const Duration(seconds: 2));
@@ -959,7 +968,8 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<void> fetchSiteManagerOverview({String? siteId, String? period}) async {
-    if (isTestMode) return;
+    // SITE_MANAGE is the site manager's; an auditor or resident would only get 403.
+    if (isTestMode || _userSession.role != UserRole.siteManager) return;
     try {
       final queryParams = <String, String>{};
       if (siteId != null && siteId.isNotEmpty) {

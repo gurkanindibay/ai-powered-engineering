@@ -32,17 +32,18 @@ class ResidentActionsRow extends StatelessWidget {
           color: AppColors.primary,
           onTap: onReceiptsTap,
         ),
-        // 2. Invite Resident / Family
-        _buildActionButton(
-          context,
-          icon: Icons.person_add_alt_1_outlined,
-          label: 'Sakin Davet',
-          actionId: 'invite',
-          color: AppColors.accentOrange,
-          badgeText: isOwner ? 'Malik' : 'Sakin',
-          badgeColor: AppColors.accentOrange,
-          onTap: onInviteTap,
-        ),
+        // 2. Invite Resident / Family: only the owner may invite (STORY-04-07, UNIT_INVITE_CO_RESIDENT).
+        if (isOwner)
+          _buildActionButton(
+            context,
+            icon: Icons.person_add_alt_1_outlined,
+            label: 'Sakin Davet',
+            actionId: 'invite',
+            color: AppColors.accentOrange,
+            badgeText: 'Malik',
+            badgeColor: AppColors.accentOrange,
+            onTap: onInviteTap,
+          ),
         // 3. Maintenance Request / Issue Reporting
         _buildActionButton(
           context,

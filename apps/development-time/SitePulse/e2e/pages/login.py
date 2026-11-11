@@ -9,6 +9,9 @@ ROLES = {
     "homeowner": ("homeOwner", "homeowner"),
     "manager": ("siteManager", "manager"),
     "saas": ("saasAdmin", "saas"),
+    # Home residents and auditors use the home-user form; the server decides the role.
+    "resident": ("homeOwner", "homeowner"),
+    "auditor": ("homeOwner", "homeowner"),
 }
 
 

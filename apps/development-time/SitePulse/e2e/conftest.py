@@ -87,11 +87,19 @@ def record_gui_ids(request):
     yield
 
 
+def _is_password_gate(resp) -> bool:
+    try:
+        return "PASSWORD_CHANGE_REQUIRED" in resp.text()
+    except Exception:  # body no longer available
+        return False
+
+
 @pytest.fixture(autouse=True)
 def page_guard(request, page):
-    """Fail on uncaught JS errors and backend 5xx; 4xx are app behaviour, recorded only."""
+    """Fail on uncaught JS errors, backend 5xx and calls refused by the password gate; other 4xx are recorded only."""
     errors: list[str] = []
     client_errors: list[str] = []
+    gate_errors: list[str] = []
     page.on("pageerror", lambda exc: errors.append(f"pageerror: {exc}"))
 
     def on_response(resp):
@@ -100,11 +108,19 @@ def page_guard(request, page):
                 errors.append(f"{resp.status} {resp.request.method} {resp.url}")
             elif resp.status >= 400:
                 client_errors.append(f"{resp.status} {resp.request.method} {resp.url}")
+                # A business call made while the password is still temporary is a client fault
+                # (STORY-06-06): the change screen must be the only thing the app opens.
+                if resp.status == 403 and _is_password_gate(resp):
+                    gate_errors.append(f"403 PASSWORD_CHANGE_REQUIRED {resp.request.method} {resp.url}")
 
     page.on("response", on_response)
     yield
     request.node.user_properties.append(("client_errors", "; ".join(sorted(set(client_errors)))))
-    if errors and "allow_server_errors" not in request.keywords:
+    if "allow_server_errors" in request.keywords:
+        errors = []
+    if "allow_password_gate" not in request.keywords:
+        errors += gate_errors
+    if errors:
         pytest.fail("page/server errors during test:\n" + "\n".join(errors), pytrace=False)
 
 

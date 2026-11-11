@@ -26,6 +26,8 @@ Scope: the Flutter web client driven in a real browser (Playwright), against the
 | Home Owner, A Blok D:14 | `ahmet.yilmaz@begonya.com` / seed test password | seed |
 | Home Owner, B Blok D:3 | `mehmet.oz@begonya.com` / password in a fixture config (hash only in SQL) | seed |
 | SaaS Admin | `admin@sitepulse.io` / `bootstrap_admin_password()` read from backend env; `must_change_password = true` | seed |
+| Home resident (household member of A Blok D:14) | created per journey through the owner's unit invite; temporary password from the registration | api builders |
+| Auditor (denetçi), Begonya Sitesi | created per journey with SQL (no API issues auditor accounts) | SQL arrange |
 | Tenants, co-residents, new owners (Selin Demir, Canan Kaya, Zeynep Kaya, Selim Evsahibi, Burak Demir, Kerem Yılmaz …) | created per test | api builders |
 
 Passwords are never written into test files. `e2e/fixtures/actors.example.json` holds the dev-only seed passwords, and the real file is gitignored.
@@ -151,10 +153,21 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | GUI-10-10 | 10-06 | Owner | P1 | ui:GUI-10-04 | Owner balance card shows the operational and capital lines separately; "Detay" opens the project breakdown, contractor and installment schedule | `hero_*`, "Detay" | ✅ |
 | GUI-10-11 | 10-06 | Tenant | P1 | tenant on a unit with an active project | The tenant sees the project with the "Kat Maliki Sorumluluğunda" badge and the owner-responsibility banner, and no capital debt on their own balance | NEW:`capital_owner_badge` | ❌ **confirmed gap**: neither the badge nor the banner text exists in `lib/ui` |
 
+### User journeys: one per role (`e2e/tests/journeys`, marker `journey`)
+Each journey is one test that follows a single user from the first sign-in with a temporary password to signing in again, through every case that role covers. Steps are named, so a failure names the step (`[auditor journey] step 4 '…' failed`). Every journey starts with the same STORY-06-06 gate: only `screen_force_password_change`, route `/change-password`, **zero business calls** (network log), held deep links, form validation, then the role home **with data that matches the API** and **no refused (4xx) calls**. Each journey ends by logging out, signing in again with the new password and checking that the temporary password is rejected.
+
+| ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |
+|---|---|---|---|---|---|---|---|
+| GUI-J-01 | 03-02/03-03/03-04/03-06/03-07/06-01/06-06 | SaaS | P0 | seed (bootstrap admin flagged as at first boot) | Gate → held `/admin/sites` link opens → portfolio = API site list → a site with units is locked → onboard a site (issued password works, server holds the new manager at the gate) → delete the empty site → step-up, then reset the Begonya manager's password → manager pages and API closed → sign in again | `screen_force_password_change`, `btn_edit_site_*`, `site_credentials_password`, `site_delete_locked_1` | ✅ |
+| GUI-J-02 | 02-03/03-01/06-01/06-06/08-04/10-07 | Manager | P0 | SQL: seed manager flagged (state after a SaaS reset) | Gate → a SaaS link falls back to `/manager/home` → residents tab = every unit of site 1 → register an owner → move a tenant in → dues has 5 segments and the capital wizard → own flat and back (3/2 tabs) → SaaS pages and API closed → sign in again | `delete_ho_*`, `move_in_*`, `btn_open_capital_project_wizard`, `role_path_*` | ✅ |
+| GUI-J-03 | 01-02/01-04/04-07/06-01/06-06/07-04 | Owner | P0 | SQL: overdue dues on A Blok D:14; owner flagged | Gate → balance = API total with penalty, overdue badge → virtual IBAN = API → unit invite link → manager pages and API closed → change the password from the profile → sign in again | `hero_balance_amount`, `virtual_iban_text`, `resident_action_invite`, `invite_link_text` | ✅ |
+| GUI-J-04 | 04-07/06-01/06-06/08-02 | Resident | P0 | API: owner invite link → resident registration (issued temporary password) | Gate → the flat's balance = API → no invite action, invite API refused → manager pages and API closed → sign in again | `hero_balance_amount`, no `resident_action_invite` | ✅ |
+| GUI-J-05 | 06-01/06-06 | Auditor | P0 | SQL: auditor account (no API issues one) | Gate → ledger rows = API trial balance → read-only (no requests tab, dunning or notice publishing) → manager/resident pages and API closed → sign in again | `finance_tab_*`, `trial_balance_*` | ✅ |
+
 ### Cross-cutting
 | ID | Role | Pri | Steps → Expected | UI |
 |---|---|---|---|---|
-| GUI-X-01 | Any | P0 | Every P0 test fails if there are uncaught browser console errors or failed (5xx) API calls | — |
+| GUI-X-01 | Any | P0 | Every test fails if there are uncaught browser console errors, failed (5xx) API calls, or any call refused with 403 `PASSWORD_CHANGE_REQUIRED` (the client called a business route with a temporary password; opt out with `allow_password_gate`) | — |
 | GUI-X-02 | Any | P1 | Theme toggle on the login screen (`controller.toggleTheme`) switches dark/light, and the choice holds after login | ✅ |
 | GUI-X-03 | Manager | P1 | Zero-data guidance on a fresh site (no units, no periods) shows the guidance cards, not errors | ✅ |
 | GUI-X-04 | Homeowner, Manager | P1 | At 375×812 (mobile): login, dashboard, payment checkout and residents module work with no horizontal scroll | — |
@@ -381,3 +394,32 @@ The UI changes from the UX report changed what some tests look for. The suite wa
 | Login tab labels lost their emoji prefixes | none (tests use ids) |
 
 Still open from §8–§10: the cockpit's paid-flat totals (36, first half), the lump ledger row (GUI-01-03), and every other strict xfail. Their reasons are unchanged.
+
+## 12. Per-role user journeys (2026-11-11)
+
+**Why the suite missed the forced password change bug.** A user with a temporary password reached a dashboard where every call was refused, so "the admin can enter but sees nothing". The suite still passed, for four reasons:
+1. **The tests checked a widget, not an outcome.** GUI-06-06 waited for `banner_must_change_password`, changed the password, and waited for the banner to go. It never checked that the admin's sites appeared, before or after. GUI-03-03 used an empty new site, where "no unit cards" looks the same as "nothing loaded".
+2. **Refused calls passed silently.** `page_guard` failed only on 5xx and recorded 4xx. A dashboard full of 403 `PASSWORD_CHANGE_REQUIRED` answers passed.
+3. **No real first sign-in.** `E2EStack.reset()` sets `must_change_password=false` for every seeded user, including the bootstrap admin. Only GUI-06-06 set it back, and GUI-03-03 used a freshly created empty site.
+4. **The suite was organised by epic, not by user.** There were actors and tests for the manager, the owner and the SaaS admin only. **The home resident and the auditor had no GUI test at all.**
+
+**Changes.**
+- `e2e/tests/journeys/`: one journey per role (GUI-J-01 … J-05), built on `support/journey.py` (`Journey.step`, `NetworkLog`) and `pages/onboarding.py` (`ForcePasswordChange`).
+- `page_guard` (GUI-X-01) now fails any test that gets a 403 `PASSWORD_CHANGE_REQUIRED`.
+- `pages/login.py` knows `resident` and `auditor`; they use the home-user form, and the server decides the role.
+- `gui_traceability.py` accepts `GUI-J-nn` ids.
+
+**Verified:** all five journeys pass on the fixed client. Run against the pre-fix client (`e217514`), **all five fail at step 1**, and the guard reports the refused calls (`/saas/sites`, `/site-admin/home-owners`, `/accounting/expenses`).
+
+**Client defects the journeys found (fixed).** Each had been there on every normal sign-in and was hidden by reason 2:
+
+| Defect | Fix |
+|---|---|
+| `DashboardScreen` asked for the site manager's directory (`GET /site-admin/home-owners`) for owners, residents and auditors: 403 | `fetchHomeOwners` returns early unless `canReadSiteDirectory` (site manager) |
+| Residents asked for the owner's household list (`GET /home-residents/members/:unit`): 403 | `fetchResidentDashboard` loads members only when `canManageHousehold` (owner, manager) |
+| The auditor's desk asked for `GET /site-admin/overview` (SITE_MANAGE): 403 | `fetchSiteManagerOverview` is for the site manager only |
+| Residents were offered "Sakin Davet", which the server refuses (STORY-04-07: only the owner invites) | The invite action is shown to owners only |
+| The role checks during sign-in read the previous session's role | `_loadRoleData` sets the session role first |
+
+Flutter unit tests: `test/role_scoped_fetch_test.dart`.
+
