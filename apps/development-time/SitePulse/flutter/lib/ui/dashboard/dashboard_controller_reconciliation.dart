@@ -483,14 +483,20 @@ extension DashboardControllerReconciliation on DashboardController {
     if (!isTestMode) {
       try {
         final uri = ApiClient.uri('/api/v1/bank/statements/confirm-reconciliation');
+        final siteId = _currentManagedSite?.id ?? _activeUnit.siteId;
+        final selectedMatches = _reconciliationQueue
+            .where((item) => matchIds.contains(item.matchId))
+            .map((item) => item.toJson(siteId))
+            .toList();
         final response = await ApiClient.post(
           uri,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
-            'site_id': _currentManagedSite?.id ?? '',
+            'site_id': siteId,
             'match_ids': matchIds,
+            'matches': selectedMatches,
             'remember_sender_iban': rememberSenderIban,
-            'message': optionalHostMessage,
+            'optional_message': optionalHostMessage,
           }),
         ).timeout(const Duration(seconds: 5));
         if (response.statusCode != 200 && response.statusCode != 204) {
@@ -631,24 +637,7 @@ extension DashboardControllerReconciliation on DashboardController {
         '${formatTry(totalCleared)} tutarındaki banka aidat transferi başarıyla onaylandı$messageNote$ibanNote.';
     notify();
 
-    // Dispatch to Rust Backend to persist reconciliation settlement
     if (isTestMode) return;
-    try {
-      final url = ApiClient.uri('/api/v1/bank/statements/confirm-reconciliation');
-      final payload = {
-        'site_id': _currentManagedSite?.id ?? _activeUnit.siteId,
-        'match_ids': matchIds,
-        'optional_message': optionalHostMessage,
-        'remember_sender_iban': rememberSenderIban,
-      };
-      await ApiClient.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(payload),
-      ).timeout(const Duration(seconds: 4));
-    } catch (e) {
-      AppLogger.warn('Confirm reconciliation backend error', tag: 'ReconciliationController', error: e);
-    }
 
     // Refresh live site overview from backend
     try {

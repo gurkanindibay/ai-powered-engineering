@@ -205,5 +205,45 @@ void main() {
       expect(find.text('Hesap Özeti'), findsOneWidget);
       expect(find.text('Kat Maliki Sorumluluğunda'), findsOneWidget);
     });
+
+    testWidgets('HeroBalanceCard shows capital dues separately by project', (tester) async {
+      final zeroDues = DuesLiability(
+        id: '',
+        unitId: 'unit-1',
+        period: '',
+        principalAmount: Decimal.zero,
+        delayPenalty: Decimal.zero,
+        totalAmount: Decimal.zero,
+        dueDate: DateTime.now(),
+        status: DebtStatus.paid,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HeroBalanceCard(
+              dues: zeroDues,
+              siteName: 'Begonya Sitesi',
+              unitName: 'A Blok D:14',
+              isOffline: false,
+              onPayPressed: () {},
+              onDetailPressed: () {},
+              capitalDues: [
+                CapitalDuesSummary(
+                  projectId: 'project-1',
+                  projectTitle: 'Roof Renewal',
+                  outstandingBalance: Decimal.parse('1400.00'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Demirbaş Toplamı'), findsOneWidget);
+      expect(find.text('Roof Renewal'), findsOneWidget);
+      expect(find.textContaining('1.400,00'), findsNWidgets(2));
+    });
   });
 }
