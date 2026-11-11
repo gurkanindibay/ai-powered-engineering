@@ -120,8 +120,8 @@ def test_refused_delete_keeps_the_resident_card(login_as, page, october_dues_b3_
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-06")
-@pytest.mark.xfail(strict=True, reason="GAP (STORY-02-04): no payment reminder or direct message action exists")
-def test_manager_can_send_a_payment_reminder(login_as, page):
+def test_manager_can_send_a_payment_reminder(builders, login_as, page):
+    builders.overdue_dues(unit_number=14, principal=Decimal("1400.00"), days_overdue=10)
     login_as("manager")
     ManagerCockpit(page).wait()
     DuesManagement(page).open().segment(2)  # aging
