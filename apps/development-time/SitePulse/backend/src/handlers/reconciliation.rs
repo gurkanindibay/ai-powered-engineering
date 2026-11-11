@@ -251,8 +251,16 @@ pub async fn confirm_reconciliation(
             }
             let (payer_role, payer_name) =
                 resolve_payer(&inner, &unit, m.transaction.sender_name.as_deref());
+            // A due id is only trusted when it names a real due of the matched unit;
+            // client-built rows may carry placeholders, which fall back to oldest-first.
+            let matched_due_id = m.matched_due_id.clone().filter(|due_id| {
+                inner
+                    .dues
+                    .iter()
+                    .any(|due| &due.id == due_id && due.unit_id == unit.id)
+            });
             let request_designation =
-                m.matched_due_id
+                matched_due_id
                     .clone()
                     .map(|due_id| crate::models::PaymentDesignation {
                         due_ids: vec![due_id],
@@ -267,6 +275,7 @@ pub async fn confirm_reconciliation(
                 item: {
                     let mut item = m.clone();
                     item.site_id = payload.site_id.clone();
+                    item.matched_due_id = matched_due_id;
                     item
                 },
             });
@@ -295,7 +304,8 @@ pub async fn confirm_reconciliation(
                 payer_role: line.payer_role,
                 payment_channel: PaymentChannel::BankStatement,
                 description: Some(txn.description.clone()),
-                payment_date: None,
+                // The money arrived on the statement date; penalties stop accruing there.
+                payment_date: txn.date.and_hms_opt(0, 0, 0).map(|d| d.and_utc()),
                 idempotency_key: Some(format!("STMT:{}", key)),
                 designation: line.request_designation.clone(),
                 external_reference: txn.reference_no.clone().or_else(|| Some(key.clone())),

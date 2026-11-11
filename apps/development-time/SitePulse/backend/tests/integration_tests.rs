@@ -770,7 +770,6 @@ async fn when_parsing_turkish_bank_excel_then_matches_flat_and_amount() {
     assert_eq!(m.status_code, "ONAY_BEKLIYOR");
 }
 
-
 #[test]
 fn flutter_reconciliation_payload_uses_backend_enum_contract() {
     let payload = serde_json::json!({
