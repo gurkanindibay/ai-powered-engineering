@@ -460,8 +460,11 @@ class AccountTransactionItem {
     this.receiptNumber,
   });
 
+  /// True for the itemised KMK delay-penalty row (`<due id>-penalty`).
+  bool get isDelayPenalty => id.endsWith('-penalty');
+
   String get amountStr {
-    if (isCredit || title.contains('Gecikme') || subtitle.contains('Gecikme')) {
+    if (isCredit || isDelayPenalty) {
       return MoneyFormatter.formatCredit(amount);
     }
     return MoneyFormatter.format(amount.abs());
