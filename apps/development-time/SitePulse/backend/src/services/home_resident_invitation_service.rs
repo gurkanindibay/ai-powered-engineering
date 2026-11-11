@@ -22,19 +22,19 @@ impl HomeResidentInvitationService {
         relationship: Option<String>,
     ) -> Result<UnitInviteLinkResponse, String> {
         let inner = self.state.inner.read().await;
-        let unit = inner.units.iter().find(|u| u.id == unit_id);
-        let site_slug = unit
-            .as_ref()
-            .and_then(|u| inner.sites.iter().find(|s| s.id == u.site_id))
-            .map(|s| s.slug.clone())
-            .unwrap_or_else(|| "site".to_string());
-
-        let building = unit
-            .map(|u| format!("{} Blok", u.block_id))
-            .unwrap_or_else(|| "Bağımsız Bölüm".to_string());
-        let unit_number = unit
-            .map(|u| u.unit_number.to_string())
-            .unwrap_or_else(|| unit_id.to_string());
+        let unit = inner
+            .units
+            .iter()
+            .find(|unit| unit.id == unit_id)
+            .ok_or_else(|| "Unit not found".to_string())?;
+        let site_slug = inner
+            .sites
+            .iter()
+            .find(|site| site.id == unit.site_id)
+            .map(|site| site.slug.clone())
+            .ok_or_else(|| "Unit site not found".to_string())?;
+        let building = inner.block_label(&unit.block_id);
+        let unit_number = unit.unit_number.to_string();
 
         let token_part: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)

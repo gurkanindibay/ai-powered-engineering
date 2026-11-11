@@ -1166,13 +1166,39 @@ extension DashboardControllerResidents on DashboardController {
     notify();
   }
 
-  void generateUnitInviteLink() {
-    final token = 'SP-HANE-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}';
-    final unitLabel = _activeUnit.displayLabel.isNotEmpty ? _activeUnit.displayLabel : 'Yetkili Bağımsız Bölüm';
-    final siteSlug = _activeUnit.siteName.isNotEmpty ? _activeUnit.siteName.toLowerCase().replaceAll(' ', '-') : 'site';
-    final unitId = _activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? _activeUnit.unitNumber : '1');
+  Future<void> generateUnitInviteLink() async {
+    if (!isTestMode) {
+      try {
+        final unitId = _activeUnit.id;
+        if (unitId.isEmpty) throw StateError('Active unit is missing an ID');
+        final response = await ApiClient.get(
+          ApiClient.uri('/api/v1/home-residents/invite-link/$unitId'),
+        ).timeout(const Duration(seconds: 10));
+        if (response.statusCode != 200) {
+          throw StateError('Invite endpoint returned ${response.statusCode}');
+        }
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        final expiresAt = DateTime.parse(data['expires_at'] as String).toLocal();
+        _unitInviteInfo = UnitInviteInfo(
+          inviteUrl: data['invite_url'] as String,
+          token: data['token'] as String,
+          unitLabel: '${data['building']} D:${data['unit_number']}',
+          expiresAtStr: 'Geçerlilik: ${expiresAt.day}.${expiresAt.month}.${expiresAt.year}',
+          securityNotice: data['security_notice'] as String,
+        );
+      } catch (error) {
+        AppLogger.warn('Could not generate unit invitation: $error', tag: 'Residents');
+        _authMessage = 'Davet bağlantısı oluşturulamadı. Lütfen tekrar deneyin.';
+      }
+      notify();
+      return;
+    }
+
+    // The offline preview has no invitation service; keep a clearly local fixture.
+    const token = 'SP-HANE-test-token';
+    final unitLabel = '${_activeUnit.block} D:${_activeUnit.unitNo}';
     _unitInviteInfo = UnitInviteInfo(
-      inviteUrl: 'https://sitepulse.app/join/$siteSlug/units/$unitId?token=$token',
+      inviteUrl: 'https://sitepulse.app/join/begonya-sitesi/units/${_activeUnit.id}?token=$token',
       token: token,
       unitLabel: unitLabel,
       expiresAtStr: '7 gün geçerli',

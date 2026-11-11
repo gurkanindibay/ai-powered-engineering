@@ -455,7 +455,20 @@ async fn when_generating_unit_invite_link_then_returns_unit_scoped_url_and_token
         .expect("invitation persisted");
     assert!(res.token.starts_with("SP-HANE-"));
     assert!(res.invite_url.contains("units/d-14?token="));
+    assert_eq!(res.building, "A Blok");
+    assert_eq!(res.unit_number, "14");
     assert!(res.security_notice.contains("A Blok D:14 yetkisi tanımlar"));
+}
+
+#[tokio::test]
+async fn when_generating_unit_invite_for_unknown_unit_then_returns_not_found() {
+    let service = HomeResidentInvitationService::new(AppState::new());
+
+    let result = service
+        .generate_unit_invite_link("missing-unit", None)
+        .await;
+
+    assert_eq!(result.unwrap_err(), "Unit not found");
 }
 
 #[tokio::test]
