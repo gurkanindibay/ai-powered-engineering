@@ -155,6 +155,33 @@ void main() {
       expect(controller.collectionSummary.paidUnitsCount, initialPaidCount + 1);
     });
 
+    test('when refreshing the live queue then retains imported unmatched transactions', () async {
+      final unmatched = ReconciliationQueueItem(
+        matchId: 'unmatched-transaction',
+        transaction: BankStatementParsedItem(
+          transactionId: 'unknown-transfer',
+          date: DateTime(2026, 10, 15),
+          amount: Decimal.parse('250.00'),
+          currency: 'TRY',
+          description: 'Unknown sender',
+        ),
+        confidenceScore: 0,
+        amountMatchesBalance: false,
+        status: 'ESLESTIRILEMEDI',
+      );
+      controller.isTestMode = false;
+      controller.setReconciliationQueueForTesting([unmatched]);
+      expect(controller.isTestMode, isFalse);
+      expect(controller.unmatchedBankTransactions, [unmatched]);
+      final originalTransport = ApiClient.transport;
+      ApiClient.transport = MockClient((_) async => http.Response('[]', 200));
+      addTearDown(() => ApiClient.transport = originalTransport);
+
+      await controller.fetchReconciliationQueue('site-1');
+
+      expect(controller.unmatchedBankTransactions, [unmatched]);
+    });
+
     testWidgets('BankStatementReconciliationPage renders presets, parses statement, and allows batch confirmation', (tester) async {
       await tester.pumpWidget(
         ListenableBuilder(
