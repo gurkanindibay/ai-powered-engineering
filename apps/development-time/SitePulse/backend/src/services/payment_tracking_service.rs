@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 
 use crate::models::{
@@ -1453,6 +1453,9 @@ impl PaymentTrackingService {
             .iter()
             .position(|u| u.id == unit_id)
             .ok_or_else(|| format!("Daire bulunamadı: {}", unit_id))?;
+        if !crate::auth::same_id(&inner.units[unit_idx].site_id, &site_id) {
+            return Err("Daire belirtilen siteye ait değil.".to_string());
+        }
 
         let old_owner_user_id = inner.units[unit_idx].owner_user_id.clone();
         let old_owner_name = old_owner_user_id
@@ -1528,6 +1531,12 @@ impl PaymentTrackingService {
                     .or_else(|| uid.strip_prefix("person-").and_then(|n| n.parse().ok()))
             })
             .unwrap_or(0);
+        let old_owner_start_date = old_owner_user_id
+            .as_deref()
+            .and_then(|uid| inner.users.iter().find(|u| u.id == uid))
+            .map(|user| user.created_at.date_naive())
+            .unwrap_or_else(|| NaiveDate::from_ymd_opt(2020, 1, 1).unwrap_or(transfer_date))
+            .min(transfer_date);
 
         let history_item = OccupancyHistoryItem {
             id: now.timestamp_millis(),
@@ -1537,7 +1546,7 @@ impl PaymentTrackingService {
             person_phone: None,
             person_email: None,
             role: DebtorType::Owner,
-            start_date: "2020-01-01".to_string(),
+            start_date: old_owner_start_date.to_string(),
             end_date: Some(transfer_date.to_string()),
             is_active: false,
             exit_balance: old_owner_exit_balance,
@@ -1560,6 +1569,7 @@ impl PaymentTrackingService {
             crate::db::transfer_unit_ownership_db(
                 pool,
                 &unit_id,
+                &site_id,
                 &new_user,
                 transfer_date,
                 old_owner_exit_balance,
