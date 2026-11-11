@@ -935,6 +935,9 @@ class DashboardController extends ChangeNotifier {
       }
     }
     if (effectiveSiteId == null || effectiveSiteId.isEmpty) return;
+    if (!isTestMode && _siteBankAccount == null) {
+      unawaited(fetchBankAccount(effectiveSiteId));
+    }
     try {
       final url = Uri.parse('${ApiClient.baseUrl}/api/v1/bank/statements/reconciliation-queue?site_id=$effectiveSiteId');
       final response = await ApiClient.get(url).timeout(const Duration(seconds: 2));
@@ -1098,6 +1101,7 @@ class DashboardController extends ChangeNotifier {
         }
 
         if (fetchedSiteId.isNotEmpty) {
+          await fetchBankAccount(fetchedSiteId);
           await fetchReconciliationQueue(fetchedSiteId);
           await fetchHouseTypes(siteId: fetchedSiteId);
           await fetchBlocks(siteId: fetchedSiteId);
