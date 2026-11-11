@@ -145,8 +145,8 @@ void main() {
       expect(success!.temporaryPassword.startsWith('SP-SAKIN-'), isTrue);
     });
 
-    test('when generate unit invite link, then produces unit-scoped URL', () {
-      controller.generateUnitInviteLink();
+    test('when generate unit invite link in preview, then produces unit-scoped URL', () async {
+      await controller.generateUnitInviteLink();
 
       final invite = controller.unitInviteInfo;
       expect(invite, isNotNull);

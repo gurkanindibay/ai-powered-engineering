@@ -43,9 +43,6 @@ def test_unit_invite_link_is_shown_and_copied(login_as, page, browser_name):
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-04-06")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-04-07): the unit invite is built in the client with the slug "
-                   "'sitemiz', the unit id instead of its number ('A Blok Blok D:2' for A Blok D:14), and a token the "
-                   "backend never issued (GET /api/v1/home-residents/invite-link/:unit_id is unused)")
 def test_unit_invite_link_targets_the_right_site_and_unit(login_as, page, stack):
     login_as("homeowner")
     ResidentHome(page).wait()
@@ -56,7 +53,9 @@ def test_unit_invite_link_targets_the_right_site_and_unit(login_as, page, stack)
     assert f"/join/begonya-sitesi/units/{a14}?token=" in link, link
     assert "A Blok D:14" in notice, notice
     token = link.rsplit("token=", 1)[1]
-    assert stack.sql(f"SELECT count(*) FROM invitation_tokens WHERE token = '{token}';") == "1"
+    # Only the SHA-256 digest of the token is persisted (see auth::token_digest).
+    assert stack.sql("SELECT count(*) FROM invitation_tokens "
+                     f"WHERE token = encode(sha256('{token}'::bytea), 'hex');") == "1"
 
 
 @pytest.mark.core
