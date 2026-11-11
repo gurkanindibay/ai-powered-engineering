@@ -827,7 +827,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
     let txns = parser.parse_statement(content, None).unwrap();
 
     let eval_date = NaiveDate::from_ymd_opt(2026, 9, 25).unwrap();
-    let mut inner = state.inner.write().await;
+    let inner = state.inner.write().await;
     let matches = recon_service.reconcile_transactions(
         &txns,
         &inner.units,
@@ -836,9 +836,6 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
         eval_date,
     );
 
-    for m in &matches {
-        inner.reconciliation_queue.push(m.clone());
-    }
     let match_id = matches[0].match_id.clone();
     drop(inner);
 
@@ -846,6 +843,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
     let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
         site_id: "site-1".to_string(),
         match_ids: vec![match_id.clone()],
+        matches: matches.clone(),
         optional_message: None,
         remember_sender_iban: None,
     };
@@ -865,6 +863,7 @@ async fn when_confirming_reconciliation_batch_then_updates_dues_and_ledger() {
         Decimal::from_str_exact("1423.33").unwrap()
     );
     assert_eq!(res.updated_unit_ids, vec!["d-14".to_string()]);
+    assert_eq!(res.confirmed_matches.len(), 1);
     assert!(!res.message_sent);
     assert!(res.notification_summary.is_none());
 
@@ -913,6 +912,7 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
     let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
         site_id: "site-1".to_string(),
         match_ids: vec![match_id.clone()],
+        matches: vec![],
         optional_message: Some(
             "Sayın Ahmet Yılmaz, ₺1.423,33 aidat ödemeniz onaylanmıştır.".to_string(),
         ),
@@ -1955,6 +1955,7 @@ async fn when_confirming_reconciliation_with_surplus_or_zero_debt_then_credits_a
     let payload = sitepulse_backend::models::ConfirmReconciliationRequest {
         site_id: "site-1".to_string(),
         match_ids: vec![match_id],
+        matches: vec![],
         optional_message: None,
         remember_sender_iban: None,
     };

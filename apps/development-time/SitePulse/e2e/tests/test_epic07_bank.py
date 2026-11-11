@@ -5,7 +5,6 @@ import pytest
 
 from pages import DuesManagement, ManagerCockpit
 from support.bank_files import StatementRow, kuveyt_xlsx
-from support.known_issues import RECONCILIATION_NOT_PERSISTED
 
 PERIOD = "Ekim 2026"
 DUES = Decimal("1400.00")
@@ -49,7 +48,6 @@ def test_statement_upload_matches_known_sender_and_flags_unknown(login_as, page,
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-03")
-@pytest.mark.xfail(strict=True, reason=RECONCILIATION_NOT_PERSISTED)
 def test_confirming_matched_rows_records_the_payment(login_as, page, tmp_path, october_dues, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
@@ -111,7 +109,6 @@ def test_checkout_offers_fast_to_the_virtual_iban(login_as, page, builders):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-04")
-@pytest.mark.xfail(strict=True, reason=RECONCILIATION_NOT_PERSISTED)
 def test_approved_statement_match_clears_the_homeowners_balance(login_as, login_page, page, tmp_path, october_dues,
                                                                api, actors):
     login_as("manager")
@@ -210,7 +207,6 @@ def test_unmatched_row_is_assigned_to_a_unit_by_hand(login_as, page, tmp_path, o
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-05")
-@pytest.mark.xfail(strict=True, reason=RECONCILIATION_NOT_PERSISTED + "; the manual unit assignment is client-only too")
 def test_manual_assignment_records_the_payment(login_as, page, tmp_path, october_dues, stack):
     a14 = stack.sql("SELECT u.id FROM units u JOIN blocks b ON b.id = u.block_id "
                     "WHERE b.block_name = 'A Blok' AND u.unit_number = 14;")

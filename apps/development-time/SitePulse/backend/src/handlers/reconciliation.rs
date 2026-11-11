@@ -199,13 +199,19 @@ pub async fn confirm_reconciliation(
     }
     let lines: Vec<Line> = {
         let inner = state.inner.read().await;
+        let submitted: std::collections::HashMap<_, _> = payload
+            .matches
+            .iter()
+            .map(|m| (m.match_id.as_str(), m))
+            .collect();
         for match_id in &payload.match_ids {
             if let Some(m) = inner
                 .reconciliation_queue
                 .iter()
                 .find(|m| m.match_id == *match_id)
+                .or_else(|| submitted.get(match_id.as_str()).copied())
             {
-                if !crate::auth::same_id(&m.site_id, &payload.site_id) {
+                if !m.site_id.is_empty() && !crate::auth::same_id(&m.site_id, &payload.site_id) {
                     return Err((
                         StatusCode::FORBIDDEN,
                         format!(
@@ -222,6 +228,7 @@ pub async fn confirm_reconciliation(
                 .reconciliation_queue
                 .iter()
                 .find(|m| m.match_id == *match_id)
+                .or_else(|| submitted.get(match_id.as_str()).copied())
             else {
                 continue;
             };
@@ -233,6 +240,15 @@ pub async fn confirm_reconciliation(
             else {
                 continue;
             };
+            if !crate::auth::same_id(&unit.site_id, &payload.site_id) {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    format!(
+                        "Unit {} does not belong to site {}",
+                        unit.id, payload.site_id
+                    ),
+                ));
+            }
             let (payer_role, payer_name) =
                 resolve_payer(&inner, &unit, m.transaction.sender_name.as_deref());
             let request_designation =
@@ -248,7 +264,11 @@ pub async fn confirm_reconciliation(
                 payer_role,
                 payer_name,
                 request_designation,
-                item: m.clone(),
+                item: {
+                    let mut item = m.clone();
+                    item.site_id = payload.site_id.clone();
+                    item
+                },
             });
         }
         lines
@@ -317,6 +337,18 @@ pub async fn confirm_reconciliation(
                 receipt.allocated_advance
             ));
             confirmed_matches.push(m.clone());
+        } else {
+            let mut m = line.item.clone();
+            m.status = ReconciliationStatus::Approved;
+            m.status_code = ReconciliationStatus::Approved.as_str().to_string();
+            m.notes = Some(format!(
+                "Makbuz {}: ₺{:.2} borca, ₺{:.2} avansa işlendi",
+                receipt.receipt_number,
+                receipt.allocated_principal + receipt.allocated_penalty,
+                receipt.allocated_advance
+            ));
+            inner.reconciliation_queue.push(m.clone());
+            confirmed_matches.push(m);
         }
         updated_unit_ids.push(line.unit.id.clone());
         total_amount_cleared += line.item.transaction.amount;
@@ -341,6 +373,14 @@ pub async fn confirm_reconciliation(
 
     if let Some(ref pool) = state.pool {
         for m in &confirmed_matches {
+            crate::db::save_reconciliation_match_for_site(pool, m, &payload.site_id, None)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        format!("Database write failed: {}", e),
+                    )
+                })?;
             crate::db::update_reconciliation_status(
                 pool,
                 &m.match_id,
