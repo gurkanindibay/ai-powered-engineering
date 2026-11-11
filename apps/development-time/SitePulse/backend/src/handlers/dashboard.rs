@@ -2,6 +2,14 @@
 
 use super::*;
 
+fn collection_amounts(
+    principal: Decimal,
+    paid_principal: Decimal,
+    paid_penalty: Decimal,
+) -> (Decimal, Decimal) {
+    (principal, paid_principal + paid_penalty)
+}
+
 pub(crate) fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, String) {
     let note = m.notes.as_deref().unwrap_or("");
     let desc = &m.transaction.description;
@@ -573,27 +581,30 @@ pub async fn get_site_overview(
         let advance = inner.advance_total(&unit.id);
         total_advance += advance;
 
-        let (amount_due, is_paid, days_overdue, paid_date_str) = if let Some(due) = due_opt {
-            let is_p = due.status == DebtStatus::Paid;
-            let days_o = if due.status == DebtStatus::Overdue {
-                15
+        let (amount_due, billed_amount, collected_amount, is_paid, days_overdue, paid_date_str) =
+            if let Some(due) = due_opt {
+                let (billed, collected) =
+                    collection_amounts(due.principal_amount, due.paid_principal, due.paid_penalty);
+                let is_p = due.status == DebtStatus::Paid;
+                let days_o = if due.status == DebtStatus::Overdue {
+                    15
+                } else {
+                    0
+                };
+                let p_date = if is_p {
+                    Some("Ödendi".to_string())
+                } else {
+                    None
+                };
+                (due.total_amount, billed, collected, is_p, days_o, p_date)
             } else {
-                0
+                (Decimal::ZERO, Decimal::ZERO, Decimal::ZERO, true, 0, None)
             };
-            let p_date = if is_p {
-                Some("Ödendi".to_string())
-            } else {
-                None
-            };
-            (due.total_amount, is_p, days_o, p_date)
-        } else {
-            (Decimal::ZERO, true, 0, None)
-        };
 
-        if amount_due > Decimal::ZERO {
-            total_expected += amount_due;
+        if billed_amount > Decimal::ZERO {
+            total_expected += billed_amount;
+            total_collected += collected_amount;
             if is_paid {
-                total_collected += amount_due;
                 paid_count += 1;
             } else {
                 total_overdue += amount_due;
@@ -692,4 +703,19 @@ pub async fn get_site_overview(
         StatusCode::OK,
         Json(serde_json::to_value(response).unwrap()),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collection_amounts;
+    use rust_decimal::Decimal;
+
+    #[test]
+    fn fully_paid_due_remains_in_period_collection_totals() {
+        let (billed, collected) =
+            collection_amounts(Decimal::from(1400), Decimal::from(1400), Decimal::ZERO);
+
+        assert_eq!(billed, Decimal::from(1400));
+        assert_eq!(collected, Decimal::from(1400));
+    }
 }
