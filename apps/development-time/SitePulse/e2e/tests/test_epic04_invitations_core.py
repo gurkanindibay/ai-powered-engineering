@@ -53,7 +53,9 @@ def test_unit_invite_link_targets_the_right_site_and_unit(login_as, page, stack)
     assert f"/join/begonya-sitesi/units/{a14}?token=" in link, link
     assert "A Blok D:14" in notice, notice
     token = link.rsplit("token=", 1)[1]
-    assert stack.sql(f"SELECT count(*) FROM invitation_tokens WHERE token = '{token}';") == "1"
+    # Only the SHA-256 digest of the token is persisted (see auth::token_digest).
+    assert stack.sql("SELECT count(*) FROM invitation_tokens "
+                     f"WHERE token = encode(sha256('{token}'::bytea), 'hex');") == "1"
 
 
 @pytest.mark.core
