@@ -164,6 +164,136 @@ async fn when_updating_site_then_site_details_and_admin_info_are_updated() {
     assert_eq!(updated.blocks, vec!["A Blok", "B Blok", "C Blok"]);
 }
 
+fn site_edit_request(blocks: Vec<String>) -> UpdateSiteRequest {
+    UpdateSiteRequest {
+        site_name: Some("Begonya Sitesi Evleri".to_string()),
+        address: Some("Ataşehir, Yeni Sok. No:1, İstanbul".to_string()),
+        status: None,
+        plan_type: None,
+        site_admin_full_name: None,
+        site_admin_email: None,
+        site_admin_phone: None,
+        blocks: Some(blocks),
+        tax_id: None,
+        tax_office: None,
+    }
+}
+
+/// Issue #14: the edit form always resends the block list. Re-saving the blocks a
+/// site already has must keep their ids (units reference them) and succeed.
+#[tokio::test]
+async fn when_site_edit_resends_existing_blocks_then_block_ids_are_kept() {
+    let state = AppState::new();
+    let (site_id, before) = {
+        let inner = state.inner.read().await;
+        let unit = inner.units.first().expect("seeded unit").clone();
+        let blocks: Vec<BlockDto> = inner
+            .blocks
+            .iter()
+            .filter(|b| b.site_id == unit.site_id)
+            .cloned()
+            .collect();
+        (unit.site_id, blocks)
+    };
+    assert!(!before.is_empty(), "seed must have blocks");
+    let mut names: Vec<String> = before.iter().map(|b| b.block_name.clone()).collect();
+    names.push("Yeni Blok".to_string());
+
+    let service = SaasTenantService::new(state.clone());
+    let updated = service
+        .update_site(&site_id, site_edit_request(names.clone()))
+        .await
+        .expect("re-saving existing blocks must succeed");
+    assert_eq!(updated.site_name, "Begonya Sitesi Evleri");
+    assert_eq!(updated.blocks, names);
+
+    let inner = state.inner.read().await;
+    for block in &before {
+        assert!(
+            inner
+                .blocks
+                .iter()
+                .any(|b| b.id == block.id && b.block_name == block.block_name),
+            "block '{}' lost its id",
+            block.block_name
+        );
+    }
+}
+
+/// Issue #14: hydration adds a `person-<id>` shadow row with the manager's email;
+/// re-saving the manager's own email must not count it as a second account.
+#[tokio::test]
+async fn when_site_edit_keeps_manager_email_with_person_shadow_then_it_succeeds() {
+    let state = AppState::new();
+    let (site_id, manager) = {
+        let mut inner = state.inner.write().await;
+        let manager = inner
+            .users
+            .iter()
+            .find(|u| u.role == Role::SiteManager)
+            .expect("seeded manager")
+            .clone();
+        let mut shadow = manager.clone();
+        shadow.id = format!("person-{}", manager.person_id.expect("manager person"));
+        shadow.password_hash = None;
+        inner.users.push(shadow);
+        (manager.site_id.clone(), manager)
+    };
+    let mut req = site_edit_request(Vec::new());
+    req.blocks = None;
+    req.site_admin_full_name = Some(manager.full_name.clone());
+    req.site_admin_email = Some(manager.email.clone());
+    req.site_admin_phone = Some("+90 532 999 88 77".to_string());
+
+    let updated = SaasTenantService::new(state)
+        .update_site(&site_id, req)
+        .await
+        .expect("own email must not be reported as taken");
+    assert_eq!(updated.primary_manager_email, manager.email);
+    assert_eq!(updated.primary_manager_phone, "+90 532 999 88 77");
+}
+
+/// Removing a block that still has units is rejected before anything changes.
+#[tokio::test]
+async fn when_site_edit_drops_an_occupied_block_then_nothing_changes() {
+    let state = AppState::new();
+    let (site_id, site_name, occupied, before) = {
+        let mut inner = state.inner.write().await;
+        let site = inner.sites.first().expect("seeded site").clone();
+        let block = inner
+            .blocks
+            .iter()
+            .find(|b| b.site_id == site.id)
+            .expect("seeded block")
+            .clone();
+        // Put a unit into that block, as PostgreSQL-loaded state does.
+        let unit = inner.units.first_mut().expect("seeded unit");
+        unit.site_id = site.id.clone();
+        unit.block_id = block.id.clone();
+        (site.id, site.name, block.block_name, inner.blocks.clone())
+    };
+    let remaining: Vec<String> = before
+        .iter()
+        .filter(|b| b.site_id == site_id && b.block_name != occupied)
+        .map(|b| b.block_name.clone())
+        .collect();
+
+    let service = SaasTenantService::new(state.clone());
+    let err = service
+        .update_site(&site_id, site_edit_request(remaining))
+        .await
+        .expect_err("dropping an occupied block must fail");
+    assert!(err.contains(&occupied));
+
+    let inner = state.inner.read().await;
+    assert_eq!(inner.blocks.len(), before.len());
+    let site = inner.sites.iter().find(|s| s.id == site_id).expect("site");
+    assert_eq!(
+        site.name, site_name,
+        "rejected edit must not rename the site"
+    );
+}
+
 #[tokio::test]
 async fn when_duplicate_email_then_throws_exception() {
     let state = AppState::new();
