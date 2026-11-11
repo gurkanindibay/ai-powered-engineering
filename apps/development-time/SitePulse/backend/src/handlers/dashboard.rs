@@ -2,6 +2,14 @@
 
 use super::*;
 
+fn overdue_days(due_date: chrono::NaiveDate, today: chrono::NaiveDate, is_paid: bool) -> i32 {
+    if is_paid {
+        return 0;
+    }
+
+    (today - due_date).num_days().clamp(0, i64::from(i32::MAX)) as i32
+}
+
 pub(crate) fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, String) {
     let note = m.notes.as_deref().unwrap_or("");
     let desc = &m.transaction.description;
@@ -456,6 +464,7 @@ pub async fn get_site_overview(
     let selected_period = query
         .period
         .unwrap_or_else(|| available_periods.first().cloned().unwrap_or_default());
+    let today = Utc::now().date_naive();
 
     // 4. Available sites list for site switcher (deduplicated by name)
     let mut available_sites: Vec<crate::models::SiteSummaryBriefDto> = Vec::new();
@@ -575,11 +584,7 @@ pub async fn get_site_overview(
 
         let (amount_due, is_paid, days_overdue, paid_date_str) = if let Some(due) = due_opt {
             let is_p = due.status == DebtStatus::Paid;
-            let days_o = if due.status == DebtStatus::Overdue {
-                15
-            } else {
-                0
-            };
+            let days_o = overdue_days(due.due_date, today, is_p);
             let p_date = if is_p {
                 Some("Ödendi".to_string())
             } else {
@@ -697,4 +702,27 @@ pub async fn get_site_overview(
         StatusCode::OK,
         Json(serde_json::to_value(response).unwrap()),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::overdue_days;
+    use chrono::NaiveDate;
+
+    #[test]
+    fn unpaid_due_calculates_days_from_its_due_date() {
+        let due_date = NaiveDate::from_ymd_opt(2026, 10, 15).expect("valid test date");
+        let today = NaiveDate::from_ymd_opt(2026, 11, 11).expect("valid test date");
+
+        assert_eq!(overdue_days(due_date, today, false), 27);
+    }
+
+    #[test]
+    fn paid_or_not_yet_due_items_have_no_overdue_days() {
+        let due_date = NaiveDate::from_ymd_opt(2026, 11, 11).expect("valid test date");
+        let tomorrow = NaiveDate::from_ymd_opt(2026, 11, 12).expect("valid test date");
+
+        assert_eq!(overdue_days(due_date, tomorrow, true), 0);
+        assert_eq!(overdue_days(tomorrow, due_date, false), 0);
+    }
 }
