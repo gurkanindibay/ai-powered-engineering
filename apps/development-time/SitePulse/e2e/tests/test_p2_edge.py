@@ -123,9 +123,6 @@ def test_adding_a_resident_to_an_occupied_unit_warns_and_saves_nothing(login_as,
 @pytest.mark.edge
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-04-07")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-04-07): registering through a unit invite fails for an owner-occupied "
-                   "unit ('unit 2 has no active occupancy session'): the seed's owner-occupied units have no "
-                   "unit_occupancies row, so no co-resident can join them")
 def test_co_resident_joins_through_a_unit_invite(login_page, page, api, actors):
     owner = api.login(**actors["homeowner"])
     link = api.call("GET", f"/api/v1/home-residents/invite-link/{owner.user['unit_id']}?site_id=1", owner.token)
