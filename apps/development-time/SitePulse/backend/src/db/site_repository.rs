@@ -324,20 +324,44 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
     Ok(result)
 }
 
+/// Reconciles a site's blocks with `blocks` by name, in one transaction.
+///
+/// Blocks whose name is kept stay untouched (units reference them with an
+/// `ON DELETE RESTRICT` foreign key), new names are inserted, and only blocks
+/// that disappeared from the list are deleted. Removing a block that still has
+/// units fails and rolls the whole change back.
 pub async fn replace_site_blocks(pool: &Pool, site_id: &str, blocks: &[String]) -> DbResult<()> {
-    let client = pool.get().await?;
     let numeric_site = require_id("site", site_id)?;
-    client
-        .execute("DELETE FROM blocks WHERE site_id = $1", &[&numeric_site])
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    let existing: Vec<String> = tx
+        .query(
+            "SELECT block_name FROM blocks WHERE site_id = $1",
+            &[&numeric_site],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    let removed: Vec<&String> = existing
+        .iter()
+        .filter(|name| !blocks.contains(name))
+        .collect();
+    for bname in removed {
+        tx.execute(
+            "DELETE FROM blocks WHERE site_id = $1 AND block_name = $2",
+            &[&numeric_site, bname],
+        )
         .await?;
-    for bname in blocks {
-        client
-            .execute(
-                "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10)",
-                &[&numeric_site, bname],
-            )
-            .await?;
     }
+    for bname in blocks.iter().filter(|name| !existing.contains(name)) {
+        tx.execute(
+            "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10)",
+            &[&numeric_site, bname],
+        )
+        .await?;
+    }
+    tx.commit().await?;
     Ok(())
 }
 
