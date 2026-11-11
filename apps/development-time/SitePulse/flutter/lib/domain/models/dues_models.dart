@@ -460,7 +460,12 @@ class AccountTransactionItem {
     this.receiptNumber,
   });
 
-  String get amountStr => isCredit ? MoneyFormatter.formatCredit(amount) : MoneyFormatter.format(amount.abs());
+  String get amountStr {
+    if (isCredit || title.contains('Gecikme') || subtitle.contains('Gecikme')) {
+      return MoneyFormatter.formatCredit(amount);
+    }
+    return MoneyFormatter.format(amount.abs());
+  }
 
   factory AccountTransactionItem.fromJson(Map<String, dynamic> json) {
     return AccountTransactionItem(
