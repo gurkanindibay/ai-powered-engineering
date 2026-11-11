@@ -305,6 +305,7 @@ async fn when_a_statement_line_is_confirmed_twice_then_it_is_settled_once() {
             axum::Json(ConfirmReconciliationRequest {
                 site_id: "site-1".to_string(),
                 match_ids: vec!["MATCH-SPEC5".to_string()],
+                matches: vec![],
                 optional_message: None,
                 remember_sender_iban: None,
             }),
