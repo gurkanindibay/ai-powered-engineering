@@ -770,6 +770,7 @@ class UnitInviteInfo {
   final String unitLabel;
   final String expiresAtStr;
   final String securityNotice;
+  final String title;
 
   const UnitInviteInfo({
     required this.inviteUrl,
@@ -777,6 +778,7 @@ class UnitInviteInfo {
     required this.unitLabel,
     required this.expiresAtStr,
     required this.securityNotice,
+    this.title = 'Hane Sakini Davet Linki',
   });
 }
 

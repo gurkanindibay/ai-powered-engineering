@@ -17,6 +17,7 @@ import '../design_system/sp_guidance_card.dart';
 class ManagerCockpitView extends StatelessWidget {
   final DashboardController controller;
   final VoidCallback onAddResidentTap;
+  final VoidCallback? onInviteResidentsTap;
   final VoidCallback? onManageHouseTypesTap;
   final VoidCallback? onManageHomeOwnersTap;
   final VoidCallback? onNavigateToDuesTab;
@@ -25,6 +26,7 @@ class ManagerCockpitView extends StatelessWidget {
     super.key,
     required this.controller,
     required this.onAddResidentTap,
+    this.onInviteResidentsTap,
     this.onManageHouseTypesTap,
     this.onManageHomeOwnersTap,
     this.onNavigateToDuesTab,
@@ -541,6 +543,16 @@ class ManagerCockpitView extends StatelessWidget {
               spacing: 8,
               runSpacing: 4,
               children: [
+                  if (onInviteResidentsTap != null)
+                    testId('btn_invite_resident_link', OutlinedButton.icon(
+                      key: const Key('btn_invite_resident_link'),
+                      onPressed: onInviteResidentsTap,
+                      icon: const Icon(Icons.share_outlined, size: 16, color: AppColors.accentOrange),
+                      label: const Text(
+                        'Davet Linki',
+                        style: TextStyle(color: AppColors.accentOrange, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    )),
                 if (onManageHomeOwnersTap != null)
                   testId('btn_cockpit_manage_residents', TextButton.icon(
                     key: const Key('btn_cockpit_manage_residents'),

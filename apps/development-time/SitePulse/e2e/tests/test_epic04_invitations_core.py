@@ -17,13 +17,15 @@ def _open_unit_invite(page) -> tuple[str, str]:
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-04-01")
-@pytest.mark.xfail(strict=True, reason="GAP (STORY-04-01/02): the manager has no site invite link in the UI "
-                   "('Davet Linki' exists only for home users); GET /api/v1/registration/invite-link is unused")
 def test_manager_shares_a_site_invite_link(login_as, page):
     login_as("manager")
     ManagerCockpit(page).wait()
     page.wait_for_timeout(1_500)
     assert by_id(page, "btn_invite_resident_link").count() == 1
+    by_id(page, "btn_invite_resident_link").click()
+    by_id(page, "invite_link_text").wait_for(timeout=10_000)
+    invite_link = text_of(by_id(page, "invite_link_text"))
+    assert re.fullmatch(r"https://\S+/join/\S+\?token=\S+", invite_link), invite_link
 
 
 @pytest.mark.core
