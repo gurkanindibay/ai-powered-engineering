@@ -75,11 +75,20 @@ The workspace is strictly partitioned into two paradigms:
      - `git fetch origin master`
      - `git worktree add -b <branch> <worktree-path> origin/master`
      - Never start a new task in a worktree left over from earlier work, and never stack unrelated work on another task's branch or PR.
-   - **After completing the task and opening its PR**, clean up the worktree:
-     - Verify that every change is committed, the branch is pushed (`git status` is clean and the branch has no unpushed commits), and the PR exists.
+   - **After the task's PR is green (see rule 12)**, clean up the worktree:
+     - Verify that every change is committed, the branch is pushed (`git status` is clean and the branch has no unpushed commits), the PR exists, and its checks have passed.
+     - Remove only your own worktree, the one you created for this task. Never remove another agent's worktree.
      - Remove the worktree from outside it with `git worktree remove <worktree-path>`. The branch and the PR remain. If review feedback arrives later, recreate a worktree from the PR branch (`git worktree add <worktree-path> <branch>`).
    - **After a merge into `master`**, remove any worktree that still exists for that branch in the same way, and run `git worktree prune` to drop stale entries.
    - Never force-remove a dirty worktree. Preserve any uncommitted or untracked work by committing and pushing it, or by resolving it, before cleanup.
+
+12. **Wait for PR Test Results Before Completing a Task (All Agents)**:
+   - Applies to every agent (Claude, Antigravity/Gemini, Codex, Copilot, or any other) that opens a PR in this repository.
+   - Opening a PR does not complete the task. After pushing, wait for the PR's CI checks (`.github/workflows/`) to finish: `gh pr checks <pr> --watch` (or `gh pr checks <pr>` until no check is pending).
+   - **If any check fails**, the task is still yours: read the failing log (`gh run view <run-id> --log-failed | tail -80`), fix the cause in the same worktree and branch, run the relevant local suite (rule 3), push, and wait for the checks again. Repeat until every check passes.
+   - Never report a task as complete, and never remove its worktree, while a check is failing or still running. Do not skip, disable, or weaken tests or workflows to make a check pass.
+   - If a failure is unrelated to your change (for example, also failing on `master`, or an infrastructure outage), do not paper over it: report it with the failing check name and log excerpt, and leave the task open for the user to decide.
+   - Once every check passes, the task is complete and you may delete your own worktree as described in rule 11.
 
 ## Durable engineering harness
 
