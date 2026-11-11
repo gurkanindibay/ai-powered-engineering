@@ -10,6 +10,15 @@ fn overdue_days(due_date: chrono::NaiveDate, today: chrono::NaiveDate, is_paid: 
     (today - due_date).num_days().clamp(0, i64::from(i32::MAX)) as i32
 }
 
+/// (billed, collected) for one due in the period's collection stats.
+///
+/// Both sides use principal only: delay penalties are not part of the billed
+/// amount, so counting a paid penalty as collected would push the collection
+/// rate above 100%.
+fn collection_amounts(principal: Decimal, paid_principal: Decimal) -> (Decimal, Decimal) {
+    (principal, paid_principal.min(principal).max(Decimal::ZERO))
+}
+
 pub(crate) fn format_resident_transaction_display(m: &ReconciliationMatch) -> (String, String) {
     let note = m.notes.as_deref().unwrap_or("");
     let desc = &m.transaction.description;
@@ -582,23 +591,26 @@ pub async fn get_site_overview(
         let advance = inner.advance_total(&unit.id);
         total_advance += advance;
 
-        let (amount_due, is_paid, days_overdue, paid_date_str) = if let Some(due) = due_opt {
-            let is_p = due.status == DebtStatus::Paid;
-            let days_o = overdue_days(due.due_date, today, is_p);
-            let p_date = if is_p {
-                Some("Ödendi".to_string())
+        let (amount_due, billed_amount, collected_amount, is_paid, days_overdue, paid_date_str) =
+            if let Some(due) = due_opt {
+                let (billed, collected) =
+                    collection_amounts(due.principal_amount, due.paid_principal);
+                let is_p = due.status == DebtStatus::Paid;
+                let days_o = overdue_days(due.due_date, today, is_p);
+                let p_date = if is_p {
+                    Some("Ödendi".to_string())
+                } else {
+                    None
+                };
+                (due.total_amount, billed, collected, is_p, days_o, p_date)
             } else {
-                None
+                (Decimal::ZERO, Decimal::ZERO, Decimal::ZERO, true, 0, None)
             };
-            (due.total_amount, is_p, days_o, p_date)
-        } else {
-            (Decimal::ZERO, true, 0, None)
-        };
 
-        if amount_due > Decimal::ZERO {
-            total_expected += amount_due;
+        if billed_amount > Decimal::ZERO {
+            total_expected += billed_amount;
+            total_collected += collected_amount;
             if is_paid {
-                total_collected += amount_due;
                 paid_count += 1;
             } else {
                 total_overdue += amount_due;
@@ -706,8 +718,9 @@ pub async fn get_site_overview(
 
 #[cfg(test)]
 mod tests {
-    use super::overdue_days;
+    use super::{collection_amounts, overdue_days};
     use chrono::NaiveDate;
+    use rust_decimal::Decimal;
 
     #[test]
     fn unpaid_due_calculates_days_from_its_due_date() {
@@ -724,5 +737,20 @@ mod tests {
 
         assert_eq!(overdue_days(due_date, tomorrow, true), 0);
         assert_eq!(overdue_days(tomorrow, due_date, false), 0);
+    }
+
+    #[test]
+    fn fully_paid_due_remains_in_period_collection_totals() {
+        let (billed, collected) = collection_amounts(Decimal::from(1400), Decimal::from(1400));
+
+        assert_eq!(billed, Decimal::from(1400));
+        assert_eq!(collected, Decimal::from(1400));
+    }
+
+    #[test]
+    fn collected_never_exceeds_the_billed_principal() {
+        let (billed, collected) = collection_amounts(Decimal::from(1400), Decimal::from(1450));
+
+        assert_eq!(collected, billed);
     }
 }

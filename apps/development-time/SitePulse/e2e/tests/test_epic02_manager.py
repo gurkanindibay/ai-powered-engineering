@@ -222,9 +222,6 @@ def test_cockpit_shows_the_accrued_total_before_any_payment(login_as, page, api,
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-01")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-02-01): the cockpit drops paid flats from its totals: with 2 × "
-                   "₺1.400,00 accrued and B Blok D:3 paid it shows '₺0 / ₺1400' and '%0' instead of ₺1.400 / ₺2.800 "
-                   "and %50 (same root cause as the dues roster's 'Tümü (1)' of 2)")
 def test_cockpit_counts_a_payment_as_collected(login_as, page, api, actors, stack):
     manager = _accrue_october(api, actors, Decimal("1400.00"))
     b3 = stack.sql("SELECT u.id FROM units u JOIN blocks b ON b.id = u.block_id "
