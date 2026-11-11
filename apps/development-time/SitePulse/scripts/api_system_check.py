@@ -77,6 +77,9 @@ PUBLIC_ROUTES = {
     "/api/v1/payment-provider/sandbox/checkout/:reference", "/api/v1/payment-provider/sandbox/checkout/:reference/complete",
     # SPEC-009 R8: the lawyer's evidence pack is authenticated by its one-time token.
     "/api/v1/public/collection-cases/pack",
+    # API documentation: the OpenAPI spec and its Swagger UI / Scalar viewers.
+    "/api-docs/openapi.json", "/api/v1/openapi.json", "/openapi.json",
+    "/swagger-ui", "/swagger-ui/", "/swagger-ui/index.html", "/docs", "/scalar",
 }
 SAMPLE_PARAMS = {"unit_id": "14", "id": "14", "site_id": "1", "resident_id": "1", "sender_iban": "TR1", "slug": "x",
                  "reference": "SBX-x", "intent_id": "1", "objection_id": "1"}
@@ -283,6 +286,18 @@ def routes_from_app() -> List[Tuple[str, str]]:
             re.findall(r'(?m)^\s*(get|post|put|delete)\s+"([^"\n]+)"\s*=>', text)]
 
 
+def public_routes_from_app(text: Optional[str] = None) -> set:
+    """Paths whose route policy in src/app.rs is `Public` (reachable without a bearer token)."""
+    source = APP_RS.read_text(encoding="utf-8") if text is None else text
+    return set(re.findall(r'(?m)^\s*(?:get|post|put|delete)\s+"([^"\n]+)"\s*=>\s*[\w:]+\s*,\s*Public\s*;', source))
+
+
+def public_route_drift(text: Optional[str] = None) -> Tuple[List[str], List[str]]:
+    """(declared Public in app.rs but not mirrored, mirrored but not Public in app.rs)."""
+    declared = public_routes_from_app(text)
+    return sorted(declared - PUBLIC_ROUTES), sorted(PUBLIC_ROUTES - declared)
+
+
 def concrete(path: str) -> str:
     return re.sub(r":([a-z_]+)", lambda m: SAMPLE_PARAMS.get(m.group(1), "1"), path)
 
@@ -301,6 +316,10 @@ def check_unauthenticated(ctx: Context) -> Tuple[bool, str]:
     routes = routes_from_app()
     if len(routes) < 50:
         return False, f"only {len(routes)} routes parsed from app.rs"
+    unmirrored, stale = public_route_drift()
+    if unmirrored or stale:
+        return False, (f"PUBLIC_ROUTES out of sync with app.rs: Public but not mirrored {unmirrored}; "
+                       f"mirrored but not Public {stale}")
     bad = []
     for method, path in routes:
         if path in PUBLIC_ROUTES or path.startswith("/api/v1/system/"):
