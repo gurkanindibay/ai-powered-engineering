@@ -70,9 +70,16 @@ The workspace is strictly partitioned into two paradigms:
    - When choosing an issue to work on, select only issues without the `in progress` label. An issue with this label may already be under active work by another agent.
    - Recheck the issue's current labels immediately before starting work. If it is labeled `in progress`, skip it and choose another eligible issue.
 
-11. **Worktree Cleanup After Merge**:
-   - After successfully merging an agent's branch into `master`, remove the worktree created for that work using `git worktree remove <worktree-path>` from outside the worktree.
-   - Before removal, verify that the merge succeeded and the worktree has no uncommitted or untracked work. Preserve any remaining work and resolve it before cleanup; never force-remove a dirty worktree.
+11. **Worktree Lifecycle (Start From Latest Master, Clean Up After the PR)**:
+   - **Before starting each task**, pull the latest `master` and create a new worktree on it, with a new branch for that task:
+     - `git fetch origin master`
+     - `git worktree add -b <branch> <worktree-path> origin/master`
+     - Never start a new task in a worktree left over from earlier work, and never stack unrelated work on another task's branch or PR.
+   - **After completing the task and opening its PR**, clean up the worktree:
+     - Verify that every change is committed, the branch is pushed (`git status` is clean and the branch has no unpushed commits), and the PR exists.
+     - Remove the worktree from outside it with `git worktree remove <worktree-path>`. The branch and the PR remain. If review feedback arrives later, recreate a worktree from the PR branch (`git worktree add <worktree-path> <branch>`).
+   - **After a merge into `master`**, remove any worktree that still exists for that branch in the same way, and run `git worktree prune` to drop stale entries.
+   - Never force-remove a dirty worktree. Preserve any uncommitted or untracked work by committing and pushing it, or by resolving it, before cleanup.
 
 ## Durable engineering harness
 
