@@ -1108,7 +1108,55 @@ extension DashboardControllerResidents on DashboardController {
     notify();
   }
 
-  void rejectRegistration(String requestId) {
+  /// Loads the manager's queue of submitted registrations from the server.
+  Future<void> fetchPendingRegistrations({String? siteId}) async {
+    if (isTestMode || _userSession.role != UserRole.siteManager) return;
+    try {
+      final params = <String, String>{};
+      if (siteId != null && siteId.isNotEmpty) params['site_id'] = siteId;
+      final response = await ApiClient.get(ApiClient.uri('/api/v1/registration/pending', params))
+          .timeout(const Duration(seconds: 4));
+      if (response.statusCode != 200) {
+        debugPrint('fetchPendingRegistrations remote error: ${response.statusCode}');
+        return;
+      }
+      final list = json.decode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+      _pendingRegistrations = list
+          .map((e) => e as Map<String, dynamic>)
+          .where((m) => (m['status'] as String? ?? 'PENDING').toUpperCase() == 'PENDING')
+          .map((m) => RegistrationRequestItem(
+                id: m['request_id'] as String? ?? '',
+                block: m['block'] as String? ?? '',
+                unitNo: (m['unit_no'] as num?)?.toInt() ?? 0,
+                floor: (m['floor'] as num?)?.toInt() ?? 0,
+                fullName: m['full_name'] as String? ?? '',
+                email: m['email'] as String? ?? '',
+                phone: m['phone'] as String? ?? '',
+                isResident: m['is_resident'] as bool? ?? false,
+                duesAmount: Decimal.zero,
+                timeAgoStr: m['submitted_at'] as String? ?? '',
+              ))
+          .toList();
+      notify();
+    } catch (e) {
+      debugPrint('fetchPendingRegistrations network error: $e');
+    }
+  }
+
+  Future<void> rejectRegistration(String requestId) async {
+    if (!isTestMode) {
+      try {
+        final response = await ApiClient.post(ApiClient.uri('/api/v1/registration/reject/$requestId'))
+            .timeout(const Duration(seconds: 4));
+        if (response.statusCode != 200) {
+          debugPrint('rejectRegistration remote error: ${response.statusCode}');
+          return;
+        }
+      } catch (e) {
+        debugPrint('rejectRegistration network error: $e');
+        return;
+      }
+    }
     _pendingRegistrations = _pendingRegistrations.where((r) => r.id != requestId).toList();
     notify();
   }

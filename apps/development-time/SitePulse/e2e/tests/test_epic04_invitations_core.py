@@ -6,7 +6,6 @@ import pytest
 from pages import ManagerCockpit, ResidentHome
 from support.flutter import by_id, text_of
 
-from support.known_issues import PENDING_QUEUE_GAP
 
 
 def _open_unit_invite(page) -> tuple[str, str]:
@@ -63,7 +62,6 @@ def test_unit_invite_link_targets_the_right_site_and_unit(login_as, page, stack)
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-04-04")
-@pytest.mark.xfail(strict=True, reason=PENDING_QUEUE_GAP + "; rejectRegistration is also client-only (no API call)")
 def test_rejected_registration_leaves_the_queue(login_as, page, api, stack):
     request = api.submit_registration("begonya-sitesi", "Kerem Yılmaz", "kerem.yilmaz@e2e.test", "B Blok", 18)
     login_as("manager")
@@ -77,7 +75,6 @@ def test_rejected_registration_leaves_the_queue(login_as, page, api, stack):
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-04-05")
-@pytest.mark.xfail(strict=True, reason=PENDING_QUEUE_GAP + " (an approved resident can only come from that queue)")
 def test_approved_resident_first_login(login_as, page, api):
     request = api.submit_registration("begonya-sitesi", "Kerem Yılmaz", "kerem.yilmaz@e2e.test", "B Blok", 18)
     login_as("manager")

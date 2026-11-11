@@ -1027,6 +1027,8 @@ class DashboardController extends ChangeNotifier {
           actionCount: 0,
         );
 
+        await fetchPendingRegistrations(siteId: fetchedSiteId);
+
         final sitesJson = data['available_sites'] as List<dynamic>?;
         if (sitesJson != null && sitesJson.isNotEmpty) {
           _managedSitesList = sitesJson.map((s) {
