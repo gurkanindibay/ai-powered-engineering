@@ -47,6 +47,7 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await widget.controller.fetchReconciliationQueue();
+      await widget.controller.fetchBankAccount();
       if (mounted) {
         setState(() {
           _selectAllPending();
@@ -386,6 +387,9 @@ class _BankStatementReconciliationPageState extends State<BankStatementReconcili
                 ),
                 ElevatedButton.icon(
                   onPressed: () async {
+                    if (widget.controller.siteBankAccount == null) {
+                      await widget.controller.fetchBankAccount();
+                    }
                     final activeAccount = widget.controller.siteBankAccount;
                     final acceptFilter = activeAccount?.supportedBank?.fileExtension;
                     final picked = await pickBankFile(accept: acceptFilter);
