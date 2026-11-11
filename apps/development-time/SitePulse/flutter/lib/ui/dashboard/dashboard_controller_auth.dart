@@ -532,10 +532,18 @@ extension DashboardControllerAuth on DashboardController {
     return true;
   }
 
-  void loginWithGoogle() {
+  Future<void> loginWithGoogle() async {
     if (!isTestMode) {
-      _authMessage = 'Use the configured Google identity sign-in flow.';
-      notify();
+      try {
+        await prepareGoogleSignIn();
+        final account = await GoogleSignIn.instance.authenticate();
+        await _completeGoogleSignIn(account);
+      } catch (_) {
+        if (DashboardController._googleClientId.isNotEmpty) {
+          _authMessage = 'Google hesabıyla giriş başlatılamadı. Tekrar deneyin.';
+          notify();
+        }
+      }
       return;
     }
     const role = UserRole.homeOwner;

@@ -1,5 +1,6 @@
 """P2 (edge) scenarios across epics: GUI_TEST_PLAN.md §3, priority P2."""
 import re
+import os
 from decimal import Decimal
 
 import pytest
@@ -48,12 +49,17 @@ def test_empty_credentials_are_rejected_without_a_request(login_page, page):
 
 @pytest.mark.edge
 @pytest.mark.gui_id("GUI-06-11")
-@pytest.mark.xfail(strict=True, reason="GAP (STORY-06-05): 'Google ile Giriş Yap' is simulated; "
-                   "DashboardController.loginWithGoogle logs in a mock Google user locally and never redirects to "
-                   "an OAuth provider")
 def test_google_sign_in_redirects_to_the_provider(login_page, page):
+    if not os.environ.get("GOOGLE_CLIENT_ID"):
+        pytest.skip("Set GOOGLE_CLIENT_ID to exercise the Google OAuth redirect")
     google_requests: list[str] = []
     page.on("request", lambda r: google_requests.append(r.url) if "accounts.google.com" in r.url else None)
+    page.context.on(
+        "page",
+        lambda popup: popup.on(
+            "request", lambda r: google_requests.append(r.url) if "accounts.google.com" in r.url else None
+        ),
+    )
     by_id(page, "login_tab_homeOwner").click()
     by_id(page, "btn_google_sign_in").click()
     page.wait_for_timeout(3_000)

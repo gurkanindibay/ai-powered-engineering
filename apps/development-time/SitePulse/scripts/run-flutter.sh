@@ -8,6 +8,7 @@ export ANDROID_HOME="/home/gurkanindibay/Android/Sdk"
 export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
 
 TARGET="${1:-web}"
+GOOGLE_SIGN_IN_DEFINE="--dart-define=GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}"
 
 cd "$SITEPULSE_ROOT/flutter"
 
@@ -19,15 +20,15 @@ if [ "$TARGET" == "web" ]; then
         sleep 1
     fi
     echo "Starting Flutter Web Server on port 9090..."
-    "$FLUTTER_BIN" run -d web-server --web-port 9090 --web-hostname 0.0.0.0
+    "$FLUTTER_BIN" run -d web-server --web-port 9090 --web-hostname 0.0.0.0 "$GOOGLE_SIGN_IN_DEFINE"
 elif [ "$TARGET" == "chrome" ]; then
     echo "Starting Flutter on Google Chrome..."
-    "$FLUTTER_BIN" run -d chrome
+    "$FLUTTER_BIN" run -d chrome "$GOOGLE_SIGN_IN_DEFINE"
 elif [ "$TARGET" == "android" ] || [ "$TARGET" == "emulator" ]; then
     echo "Launching Android emulator medium_phone..."
     "$FLUTTER_BIN" emulators --launch medium_phone || true
     echo "Running Flutter on Android..."
-    "$FLUTTER_BIN" run -d android
+    "$FLUTTER_BIN" run -d android "$GOOGLE_SIGN_IN_DEFINE"
 else
-    "$FLUTTER_BIN" run "$@"
+    "$FLUTTER_BIN" run "$GOOGLE_SIGN_IN_DEFINE" "$@"
 fi
