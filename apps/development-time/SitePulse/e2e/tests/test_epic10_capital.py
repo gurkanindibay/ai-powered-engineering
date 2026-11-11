@@ -171,9 +171,6 @@ def test_disbursement_within_collected_cash_updates_the_reserve(login_as, page, 
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-10-10")
-@pytest.mark.xfail(strict=True, reason="GAP (STORY-10-06): the owner's dashboard folds capital dues into one balance; "
-                   "there is no separate capital line or project breakdown (capital balances are shown separately only "
-                   "on the manager's resident cards)")
 def test_owner_dashboard_shows_capital_dues_separately(login_as, page, owner_paid_installment, api, actors):
     login_as("homeowner")
     home = ResidentHome(page).wait()
