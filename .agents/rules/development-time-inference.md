@@ -1,11 +1,11 @@
 ---
-description: Behavioral rules and engineering workflows for Development-Time Inference systems (apps/development-time/, factory/).
-globs: apps/development-time/**, factory/**
+description: Behavioral rules and engineering workflows for SitePulse development workflow (apps/development-time/).
+globs: apps/development-time/**
 ---
 
 # Development-Time Inference Engineering Directives
 
-When working on or generating code for **Development-Time Inference** applications (`apps/development-time/`, `factory/`):
+When working on or generating code for **SitePulse** (`apps/development-time/SitePulse/`):
 
 ## 1. Core Principles
 Development-time inference uses AI models, agents, and spec harnesses *during the engineering lifecycle* to specify, design, architect, code, test, and manufacture applications:
@@ -23,7 +23,7 @@ Development-time inference uses AI models, agents, and spec harnesses *during th
      - Domain/Integrity Gate (e.g. `FinancialIntegrityGate`).
      - Build & Unit Test Gate (100% assertions passing).
 4. **Isolated Ephemeral Sandboxing**:
-   - In factory and autonomous generation settings, code must be compiled and tested in an isolated sandbox before being merged into the codebase.
+   - In autonomous generation settings, code must be compiled and tested in an isolated sandbox before being merged into the codebase.
 5. **English-Only Source Code Mandate**:
    - All manufactured code, domain models, database schemas, tables, columns, variables, functions, and tests must be strictly written in English. Non-English code identifiers are strictly prohibited.
 6. **Automatic Stack Restart After Fixes**:
