@@ -197,6 +197,7 @@ routes! {
     get "/api/v1/payments/receipts/:id/rent-deduction-certificate" => handlers::rent_deduction_certificate, Require(UnitRead);
     // SPEC-009 R4: notifications and dunning
     get "/api/v1/notifications" => handlers::list_notifications, RequireAny(&[FinanceManage, FinanceRead, UnitRead]);
+    post "/api/v1/announcements" => handlers::create_announcement, Require(AnnouncementBroadcast);
     post "/api/v1/notifications/broadcast" => handlers::broadcast_notification, Require(AnnouncementBroadcast);
     get "/api/v1/dunning/policy" => handlers::get_dunning_policy, Require(FinanceManage);
     put "/api/v1/dunning/policy" => handlers::set_dunning_policy, Require(FinanceManage);

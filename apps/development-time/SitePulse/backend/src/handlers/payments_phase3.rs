@@ -277,6 +277,51 @@ pub async fn broadcast_notification(
         .await)
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CreateAnnouncementRequest {
+    pub site_id: String,
+    pub title: String,
+    pub body: String,
+}
+
+pub async fn create_announcement(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    ctx: AuthzContext,
+    Json(req): Json<CreateAnnouncementRequest>,
+) -> impl IntoResponse {
+    let site_id = match scope.pinned(Some(req.site_id)) {
+        Ok(site_id) => site_id,
+        Err(denied) => return denied.json().into_response(),
+    };
+    if req.title.trim().is_empty()
+        || req.body.trim().is_empty()
+        || req.title.chars().count() > 120
+        || req.body.chars().count() > 2_000
+    {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "Title and body are required and must be within their length limits".to_string(),
+        )
+        .into_response();
+    }
+    let mut actor = caller(&ctx);
+    actor.site_id = site_id;
+    match NotificationService::new(&state)
+        .broadcast(
+            &actor,
+            "NOTICE_BOARD",
+            "ANNOUNCEMENT",
+            &req.title,
+            &req.body,
+        )
+        .await
+    {
+        Ok(notification) => (StatusCode::CREATED, Json(notification)).into_response(),
+        Err(error) => fail(error).into_response(),
+    }
+}
+
 pub async fn get_dunning_policy(
     State(state): State<AppState>,
     ctx: AuthzContext,

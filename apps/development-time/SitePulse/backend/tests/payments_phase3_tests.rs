@@ -793,6 +793,28 @@ async fn when_a_debt_notice_targets_a_group_channel_then_it_is_blocked_and_logge
     );
 }
 
+#[tokio::test]
+async fn when_a_site_announcement_is_published_then_residents_can_read_it() {
+    let state = fixture().await;
+    let service = NotificationService::new(&state);
+    let announcement = service
+        .broadcast(
+            &manager(),
+            "NOTICE_BOARD",
+            "ANNOUNCEMENT",
+            "Planlı Su Kesintisi",
+            "Salı 10:00-14:00",
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(announcement.status, NOTIFY_SENT);
+    let resident_notices = service.list(&owner(), 10).await;
+    assert_eq!(resident_notices.len(), 1);
+    assert_eq!(resident_notices[0].subject, "Planlı Su Kesintisi");
+    assert_eq!(resident_notices[0].body, "Salı 10:00-14:00");
+}
+
 // ---------------------------------------------------------------------------
 // R5: virman requests and disputes
 // ---------------------------------------------------------------------------

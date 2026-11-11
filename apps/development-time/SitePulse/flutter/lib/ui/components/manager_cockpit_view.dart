@@ -18,6 +18,7 @@ class ManagerCockpitView extends StatelessWidget {
   final DashboardController controller;
   final VoidCallback onAddResidentTap;
   final VoidCallback? onInviteResidentsTap;
+  final VoidCallback? onCreateAnnouncementTap;
   final VoidCallback? onManageHouseTypesTap;
   final VoidCallback? onManageHomeOwnersTap;
   final VoidCallback? onNavigateToDuesTab;
@@ -27,6 +28,7 @@ class ManagerCockpitView extends StatelessWidget {
     required this.controller,
     required this.onAddResidentTap,
     this.onInviteResidentsTap,
+    this.onCreateAnnouncementTap,
     this.onManageHouseTypesTap,
     this.onManageHomeOwnersTap,
     this.onNavigateToDuesTab,
@@ -553,6 +555,16 @@ class ManagerCockpitView extends StatelessWidget {
                         style: TextStyle(color: AppColors.accentOrange, fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     )),
+                if (onCreateAnnouncementTap != null)
+                  testId('btn_create_announcement', OutlinedButton.icon(
+                    key: const Key('btn_create_announcement'),
+                    onPressed: onCreateAnnouncementTap,
+                    icon: const Icon(Icons.campaign_outlined, size: 16, color: AppColors.accentCyan),
+                    label: const Text(
+                      'Duyuru Yayınla',
+                      style: TextStyle(color: AppColors.accentCyan, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  )),
                 if (onManageHomeOwnersTap != null)
                   testId('btn_cockpit_manage_residents', TextButton.icon(
                     key: const Key('btn_cockpit_manage_residents'),
