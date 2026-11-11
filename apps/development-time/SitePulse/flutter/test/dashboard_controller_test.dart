@@ -4,6 +4,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:sitepulse/domain/models/auth_models.dart';
+import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'test_fixtures.dart';
 
@@ -346,6 +347,27 @@ void main() {
       expect(flatAfter.isPaid, isTrue);
       // Surplus: 2000.00 - 1423.33 = 576.67
       expect(controller.activeUnit.advancePayment, Decimal.parse('576.67'));
+    });
+
+    test('when a statement sender matches a registered payer alias, matches the unit', () {
+      controller.setFlatsForTesting([
+        FlatPaymentStatus(
+          id: 'unit-14',
+          block: 'A',
+          unitNo: 14,
+          residentName: 'Ahmet Yılmaz',
+          amountDue: Decimal.parse('1400.00'),
+          daysOverdue: 0,
+          isPaid: false,
+          registeredPayerNames: const ['Ayse Yilmaz'],
+        ),
+      ]);
+
+      controller.parseBankStatement('HAVALE - Ayse Yilmaz - ₺1.400,00');
+
+      final match = controller.reconciliationQueue.single;
+      expect(match.matchedUnitId, 'unit-14');
+      expect(match.matchedUnitNumber, 14);
     });
 
     test('when confirmReconciliation for flat with no debt, credits full payment to advance payment', () {
