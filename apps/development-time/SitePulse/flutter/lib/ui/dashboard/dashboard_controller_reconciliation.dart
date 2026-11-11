@@ -54,6 +54,26 @@ extension DashboardControllerReconciliation on DashboardController {
     return true;
   }
 
+  Future<void> fetchBankAccount([String? siteId]) async {
+    if (isTestMode) return;
+    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : null);
+    if (effectiveSiteId == null || effectiveSiteId.isEmpty) return;
+    try {
+      final url = ApiClient.uri('/api/v1/site-admin/bank-account/$effectiveSiteId');
+      final response = await ApiClient.get(url).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        _siteBankAccount = SiteBankAccount.fromJson(data);
+        notify();
+      } else if (response.statusCode == 404) {
+        _siteBankAccount = null;
+        notify();
+      }
+    } catch (e) {
+      AppLogger.warn('Fetch bank account error', tag: 'ReconciliationController', error: e);
+    }
+  }
+
   Future<void> _syncBankAccountToBackend({
     required String siteId,
     required String bankCode,
@@ -75,9 +95,7 @@ extension DashboardControllerReconciliation on DashboardController {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         if (data['id'] != null) {
-          _siteBankAccount = _siteBankAccount?.copyWith(
-            id: data['id'].toString(),
-          );
+          _siteBankAccount = SiteBankAccount.fromJson(data);
           notify();
         }
       }
