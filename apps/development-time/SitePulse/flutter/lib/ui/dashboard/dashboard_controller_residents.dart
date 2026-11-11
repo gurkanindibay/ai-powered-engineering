@@ -1207,6 +1207,56 @@ extension DashboardControllerResidents on DashboardController {
     notify();
   }
 
+  Future<void> generateSiteInviteLink() async {
+    if (isTestMode) {
+      const siteName = 'Begonya Sitesi';
+      const token = 'SP-INV-E2ETEST';
+      _unitInviteInfo = const UnitInviteInfo(
+        inviteUrl: 'https://sitepulse.app/join/begonya-sitesi?token=$token',
+        token: token,
+        unitLabel: siteName,
+        expiresAtStr: '7 gün geçerli',
+        securityNotice: 'Bu bağlantı siteye kayıt başvurusu oluşturur ve 7 gün içinde geçerliliğini yitirir.',
+        title: 'Site Sakinlerini Davet Et',
+      );
+      notify();
+      return;
+    }
+
+    final siteId = _currentManagedSite?.id;
+    if (siteId == null || siteId.isEmpty) {
+      setAuthError('Davet bağlantısı oluşturmak için yönetilen bir site seçin.');
+      return;
+    }
+    try {
+      final response = await ApiClient.get(
+        ApiClient.uri('/api/v1/registration/invite-link', {'site_id': siteId}),
+      ).timeout(const Duration(seconds: 5));
+      if (response.statusCode != 200) {
+        setAuthError(extractErrorMessage(response, fallback: 'Davet bağlantısı oluşturulamadı.'));
+        return;
+      }
+      final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final inviteUrl = data['join_url']?.toString() ?? '';
+      final token = data['token']?.toString() ?? '';
+      final siteName = data['site_name']?.toString() ?? '';
+      if (inviteUrl.isEmpty || token.isEmpty || siteName.isEmpty) {
+        throw const FormatException('The invitation response is incomplete.');
+      }
+      _unitInviteInfo = UnitInviteInfo(
+        inviteUrl: inviteUrl,
+        token: token,
+        unitLabel: siteName,
+        expiresAtStr: '7 gün geçerli',
+        securityNotice: 'Bu bağlantı $siteName için kayıt başvurusu oluşturur ve 7 gün içinde geçerliliğini yitirir.',
+        title: 'Site Sakinlerini Davet Et',
+      );
+      notify();
+    } catch (_) {
+      setAuthError('Davet bağlantısı alınamadı. Bağlantınızı kontrol edip tekrar deneyin.');
+    }
+  }
+
   void clearUnitInviteInfo() {
     _unitInviteInfo = null;
     notify();
