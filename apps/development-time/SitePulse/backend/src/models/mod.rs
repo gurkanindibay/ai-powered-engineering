@@ -1626,6 +1626,10 @@ pub struct SkippedStatementEntry {
 pub struct ConfirmReconciliationRequest {
     pub site_id: String,
     pub match_ids: Vec<String>,
+    /// Client matched rows are accepted for uploads that were parsed locally.
+    /// The handler revalidates the site and unit before recording any payment.
+    #[serde(default)]
+    pub matches: Vec<ReconciliationMatch>,
     #[serde(default)]
     pub optional_message: Option<String>,
     #[serde(default)]
