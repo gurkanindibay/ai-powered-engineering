@@ -16,6 +16,7 @@ import '../../domain/usecases/calculate_dues_usecase.dart';
 import '../design_system/money_formatter.dart';
 import '../../l10n/app_strings.dart';
 import 'package:http/http.dart' as http;
+import 'package:google_sign_in/google_sign_in.dart';
 part 'dashboard_controller_auth.dart';
 part 'dashboard_controller_residents.dart';
 part 'dashboard_controller_reconciliation.dart';
@@ -23,6 +24,9 @@ part 'dashboard_controller_payments.dart';
 part 'dashboard_controller_capital.dart';
 
 class DashboardController extends ChangeNotifier {
+  static const String _googleClientId = String.fromEnvironment('GOOGLE_CLIENT_ID');
+  static Future<void>? _googleSignInInitialization;
+
   /// Server's reason for the last refused [deleteHomeOwner] call, if any.
   String? lastDeleteHomeOwnerError;
 
@@ -88,13 +92,97 @@ class DashboardController extends ChangeNotifier {
   StreamSubscription<bool>? _offlineSubscription;
   StreamSubscription<void>? _sessionSubscription;
   StreamSubscription<void>? _passwordChangeSubscription;
+  StreamSubscription<GoogleSignInAuthenticationEvent>? _googleSignInSubscription;
 
   @override
   void dispose() {
     _offlineSubscription?.cancel();
     _sessionSubscription?.cancel();
     _passwordChangeSubscription?.cancel();
+    _googleSignInSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> prepareGoogleSignIn() {
+    if (_googleClientId.isEmpty) {
+      // Called from build(): cache the failure and never notify here, or every
+      // rebuild would schedule another notify and the login screen would spin.
+      return _googleSignInInitialization ??=
+          Future<void>.error(StateError('Google sign-in client ID is not configured.'));
+    }
+    return _googleSignInInitialization ??= GoogleSignIn.instance.initialize(
+      clientId: _googleClientId,
+    ).then((_) {
+      _googleSignInSubscription ??= GoogleSignIn.instance.authenticationEvents.listen(
+        (event) {
+          if (kIsWeb && event is GoogleSignInAuthenticationEventSignIn) {
+            unawaited(_completeGoogleSignIn(event.user));
+          }
+        },
+        onError: (Object error) {
+          _authMessage = 'Google hesabıyla giriş yapılamadı. Tekrar deneyin.';
+          notify();
+        },
+      );
+    });
+  }
+
+  Future<void> _completeGoogleSignIn(GoogleSignInAccount account) async {
+    final idToken = account.authentication.idToken;
+    if (idToken == null || idToken.isEmpty) {
+      _authMessage = 'Google hesabından kimlik doğrulama bilgisi alınamadı.';
+      notify();
+      return;
+    }
+    try {
+      final response = await ApiClient.post(
+        ApiClient.uri('/api/v1/auth/google'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'id_token': idToken}),
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) {
+        _authMessage = extractErrorMessage(response, fallback: 'Google ile giriş yapılamadı.');
+        notify();
+        return;
+      }
+      final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final user = data['user'] as Map<String, dynamic>?;
+      if (user == null) throw const FormatException('Missing server profile');
+      final email = user['email']?.toString() ?? account.email;
+      final role = UserRole.fromApi(user['role']);
+      final siteId = user['site_id']?.toString() ?? '';
+      final unitId = user['unit_id']?.toString() ?? '';
+      final mustChangePassword = user['must_change_password'] == true;
+      ApiClient.setSession(data);
+      if (!mustChangePassword) {
+        await _loadRoleData(role: role, email: email, siteId: siteId, unitId: unitId);
+      }
+      final permissions = (user['permissions'] as List<dynamic>? ?? const [])
+          .map((permission) => PermissionScope(
+                code: permission as String,
+                title: permission,
+                isGranted: true,
+                isolationNote: 'Server-authorized scope',
+              ))
+          .toList(growable: false);
+      _userSession = _createSession(
+        role,
+        AuthProvider.google,
+        customName: user['full_name']?.toString() ?? account.displayName ?? email,
+        customEmail: email,
+        customPhone: user['phone']?.toString() ?? '',
+        avatarUrl: user['avatar_url']?.toString() ?? account.photoUrl,
+        mustChangePassword: mustChangePassword,
+      ).copyWith(id: user['id']?.toString(), permissions: permissions);
+      _isAuthenticated = true;
+      _authMessage = 'Google hesabı ile giriş yapıldı.';
+      notify();
+    } catch (error) {
+      ApiClient.clearSession();
+      _isAuthenticated = false;
+      _authMessage = 'Google ile giriş tamamlanamadı. Bağlantınızı kontrol edip tekrar deneyin.';
+      notify();
+    }
   }
 
   // Session & Auth
