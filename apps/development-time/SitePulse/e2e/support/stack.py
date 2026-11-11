@@ -61,13 +61,16 @@ def build_web(force: bool = False) -> None:
         if path.exists():
             digest.update(str(path.relative_to(flutter)).encode())
             digest.update(path.read_bytes())
+    google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    digest.update(google_client_id.encode())
     fingerprint=digest.hexdigest()
     stamp=WEB_BUILD / ".source-fingerprint"
     if WEB_BUILD.joinpath("main.dart.js").exists() and stamp.exists() and stamp.read_text()==fingerprint and not force:
         return
     proc = subprocess.run(
         [str(FLUTTER), "build", "web", "--dart-define=E2E=true",
-         f"--dart-define=SITEPULSE_API_BASE_URL={api_base()}", "--output", str(WEB_BUILD)],
+         f"--dart-define=SITEPULSE_API_BASE_URL={api_base()}",
+         f"--dart-define=GOOGLE_CLIENT_ID={google_client_id}", "--output", str(WEB_BUILD)],
         cwd=SITEPULSE / "flutter", capture_output=True, text=True)
     if proc.returncode != 0:
         raise SetupError("flutter build web failed:\n" + proc.stdout[-2000:] + proc.stderr[-2000:])
