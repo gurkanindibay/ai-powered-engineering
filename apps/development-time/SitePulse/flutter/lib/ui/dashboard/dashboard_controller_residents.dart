@@ -1143,6 +1143,44 @@ extension DashboardControllerResidents on DashboardController {
     }
   }
 
+  Future<bool> createAnnouncement(String title, String body) async {
+    final cleanTitle = title.trim();
+    final cleanBody = body.trim();
+    if (cleanTitle.isEmpty || cleanBody.isEmpty) {
+      setAuthError('Duyuru başlığı ve açıklaması zorunludur.');
+      return false;
+    }
+    if (isTestMode) {
+      _announcementTitle = cleanTitle;
+      _announcementContent = cleanBody;
+      setAuthError('Duyuru yayınlandı.');
+      return true;
+    }
+    final siteId = _currentManagedSite?.id;
+    if (siteId == null || siteId.isEmpty) {
+      setAuthError('Duyuru yayınlamak için yönetilen bir site seçin.');
+      return false;
+    }
+    try {
+      final response = await ApiClient.post(
+        ApiClient.uri('/api/v1/announcements'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'site_id': siteId, 'title': cleanTitle, 'body': cleanBody}),
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode != 201) {
+        setAuthError(extractErrorMessage(response, fallback: 'Duyuru yayınlanamadı.'));
+        return false;
+      }
+      _announcementTitle = cleanTitle;
+      _announcementContent = cleanBody;
+      notify();
+      return true;
+    } catch (_) {
+      setAuthError('Duyuru yayınlanamadı. Bağlantınızı kontrol edip tekrar deneyin.');
+      return false;
+    }
+  }
+
   Future<void> rejectRegistration(String requestId) async {
     if (!isTestMode) {
       try {

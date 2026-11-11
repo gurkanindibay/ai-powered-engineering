@@ -5,6 +5,7 @@ import pytest
 
 from pages import ResidentHome
 from support.money import api_amount
+from support.flutter import by_id, text_of
 
 
 @pytest.mark.smoke
@@ -71,9 +72,12 @@ def test_account_movements_itemise_principal_and_penalty(login_as, page, builder
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-04")
-@pytest.mark.xfail(strict=True, reason="GAP (STORY-02-05): announcements cannot be created (no backend route), "
-                   "so no site announcement can reach the resident dashboard")
-def test_site_announcement_reaches_the_resident(api, actors):
+def test_site_announcement_reaches_the_resident(api, actors, login_as, page):
     manager = api.login(**actors["manager"])
     api.call("POST", "/api/v1/announcements", manager.token,
              body={"site_id": manager.user["site_id"], "title": "Planlı Su Kesintisi", "body": "Salı 10:00-14:00"})
+    login_as("homeowner")
+    ResidentHome(page).wait()
+    by_id(page, "resident_action_announcements").click()
+    assert "Planlı Su Kesintisi" in text_of(by_id(page, "site_announcement_title"))
+    assert "Salı 10:00-14:00" in text_of(by_id(page, "site_announcement_body"))

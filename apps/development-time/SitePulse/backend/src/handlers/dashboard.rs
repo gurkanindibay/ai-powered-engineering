@@ -351,16 +351,34 @@ pub async fn get_resident_dashboard(
         }
     }
 
+    let site_announcement = inner
+        .finance
+        .notifications
+        .iter()
+        .filter(|notification| {
+            crate::auth::same_id(&notification.site_id, &unit.site_id)
+                && notification.category == "ANNOUNCEMENT"
+                && notification.recipient_ref == format!("site:{}:all", unit.site_id)
+        })
+        .max_by_key(|notification| notification.created_at);
+    let announcement_title = site_announcement
+        .map(|notification| notification.subject.clone())
+        .unwrap_or_else(|| "Planlı Su Kesintisi Hakkında".to_string());
+    let announcement_content = site_announcement
+        .map(|notification| notification.body.clone())
+        .unwrap_or_else(|| {
+            "İSKİ ana hat yenilemesi sebebiyle 18 Eylül 10:00 - 14:00 arası su kesilecektir."
+                .to_string()
+        });
+
     let response = ResidentDashboardDto {
         unit_id: unit.id,
         site_title,
         total_debt,
         is_overdue,
         dues: dues_dtos,
-        announcement_title: "Planlı Su Kesintisi Hakkında".to_string(),
-        announcement_content:
-            "İSKİ ana hat yenilemesi sebebiyle 18 Eylül 10:00 - 14:00 arası su kesilecektir."
-                .to_string(),
+        announcement_title,
+        announcement_content,
         virtual_iban: unit.virtual_iban,
         advance_payment,
         transactions,

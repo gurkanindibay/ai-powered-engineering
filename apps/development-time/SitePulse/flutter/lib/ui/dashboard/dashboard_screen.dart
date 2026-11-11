@@ -10,6 +10,7 @@ import '../components/app_fullscreen_page.dart';
 import '../components/dues_management_view.dart';
 import '../components/hero_balance_card.dart';
 import '../components/manager_cockpit_view.dart';
+import '../components/announcement_composer_page.dart';
 import '../components/payment_checkout_dialog.dart';
 import '../components/profile_role_sheet.dart';
 import '../components/resident_actions_row.dart';
@@ -505,6 +506,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ManagerCockpitView(
                 controller: widget.controller,
                 onAddResidentTap: _showAddResidentDialog,
+                onCreateAnnouncementTap: _showCreateAnnouncementPage,
                 onManageHouseTypesTap: _showManageHouseTypesDialog,
                 onManageHomeOwnersTap: () => _selectTab(2),
                 onNavigateToDuesTab: () => _selectTab(1),
@@ -5606,31 +5608,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         child: Column(
           children: [
-            _buildAnnouncementItem(
-              tag: 'Planlı Bakım',
-              tagColor: AppColors.accentOrange,
-              title: 'A ve B Blok Asansör Periyodik Muayenesi',
-              date: '28 Eylül 2026 • 10:00 - 14:00',
-              desc: 'TMMOB akredite muayene kuruluşu tarafından yıllık periyodik kontroller yapılacaktır. Bakım esnasında asansörler kısa süreli servis dışı kalacaktır.',
-            ),
-            const SizedBox(height: 12),
-            _buildAnnouncementItem(
-              tag: 'Genel Kurul',
+          testId('site_announcement', _buildAnnouncementItem(
+              tag: 'Site Duyurusu',
               tagColor: AppColors.accentCyan,
-              title: 'Olağan Kat Malikleri Genel Kurul Toplantısı',
-              date: '15 Ekim 2026 • 19:30',
-              desc: '${widget.controller.siteName.isNotEmpty ? widget.controller.siteName : 'Site'} 2026-2027 dönemi tahmini işletme bütçesi, aidat artış oranı ve yönetim kurulu seçimi toplantı salonunda gerçekleştirilecektir.',
-            ),
-            const SizedBox(height: 12),
-            _buildAnnouncementItem(
-              tag: 'Bilgilendirme',
-              tagColor: AppColors.accentGreen,
-              title: 'Merkezi Isıtma & Boyler Kazanı Kış Bakımı Tamamlandı',
-              date: '24 Eylül 2026',
-              desc: 'Kazan dairesi brülör ve sirkülasyon pompaları kış sezonuna hazır hale getirilmiştir.',
-            ),
+              title: widget.controller.announcementTitle,
+              date: 'Güncel',
+              desc: widget.controller.announcementContent,
+            )),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showCreateAnnouncementPage() {
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => AnnouncementComposerPage(
+        onSubmit: widget.controller.createAnnouncement,
       ),
     );
   }
@@ -5679,15 +5674,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
+          testId('site_announcement_title', Text(
             title,
             style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13, fontWeight: FontWeight.bold),
-          ),
+          )),
           const SizedBox(height: 6),
-          Text(
+          testId('site_announcement_body', Text(
             desc,
             style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12, height: 1.35),
-          ),
+          )),
         ],
       ),
     );

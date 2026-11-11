@@ -212,6 +212,11 @@ class DashboardController extends ChangeNotifier {
   UnitInviteInfo? _unitInviteInfo;
   UnitInviteInfo? get unitInviteInfo => _unitInviteInfo;
 
+  String _announcementTitle = 'Henüz site duyurusu yok';
+  String _announcementContent = 'Yönetim bir duyuru paylaştığında burada görüntülenecek.';
+  String get announcementTitle => _announcementTitle;
+  String get announcementContent => _announcementContent;
+
   // Manager state
   ComplexCollectionSummary _collectionSummary = ComplexCollectionSummary();
   ComplexCollectionSummary get collectionSummary => _collectionSummary;
@@ -872,6 +877,8 @@ class DashboardController extends ChangeNotifier {
         final viban = data['virtual_iban'] as String?;
         final advance = readDecimal(data, 'advance_payment');
         final totalDebt = readDecimal(data, 'total_debt');
+        _announcementTitle = data['announcement_title'] as String? ?? _announcementTitle;
+        _announcementContent = data['announcement_content'] as String? ?? _announcementContent;
 
         _activeUnit = _activeUnit.copyWith(
           virtualIban: viban ?? _activeUnit.virtualIban,

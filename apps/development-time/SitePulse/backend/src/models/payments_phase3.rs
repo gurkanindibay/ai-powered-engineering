@@ -30,7 +30,7 @@ pub const NOTIFY_SENT: &str = "SENT";
 pub const NOTIFY_BLOCKED: &str = "BLOCKED";
 pub const NOTIFY_FAILED: &str = "FAILED";
 
-pub const NOTIFICATION_CATEGORIES: [&str; 8] = [
+pub const NOTIFICATION_CATEGORIES: [&str; 9] = [
     "DEBT_REMINDER",
     "DEBT_NOTICE",
     "PAYMENT",
@@ -39,6 +39,7 @@ pub const NOTIFICATION_CATEGORIES: [&str; 8] = [
     "BUDGET",
     "COLLECTION",
     "SYSTEM",
+    "ANNOUNCEMENT",
 ];
 
 pub const REQUEST_PENDING: &str = "PENDING";
