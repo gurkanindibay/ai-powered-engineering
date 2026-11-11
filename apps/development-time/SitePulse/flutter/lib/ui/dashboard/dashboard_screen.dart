@@ -550,6 +550,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         isOffline: widget.controller.isOffline,
         advancePayment: unit.advancePayment,
         virtualIban: unit.virtualIban,
+        capitalDues: isOwner ? widget.controller.capitalDues : const [],
         onPayPressed: () => _showPaymentDialog(dues),
         onDetailPressed: () => _showDuesDetailDialog(dues),
       ),
