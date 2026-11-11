@@ -552,6 +552,13 @@ impl AuthService {
         )
         .await
         .map_err(|_| "Site is unavailable")?;
+        tx.query_opt(
+            "SELECT id FROM units WHERE id = $1 AND site_id = $2 AND deleted_at IS NULL FOR UPDATE",
+            &[&unit, &site],
+        )
+        .await
+        .map_err(|_| "Household storage unavailable")?
+        .ok_or("The invited unit is unavailable")?;
         let person:i64=tx.query_one("INSERT INTO persons(full_name,email,phone,person_type,site_id) VALUES ($1,$2,$3,'HOME_RESIDENT',$4) RETURNING id",&[&user.full_name,&user.email,&user.phone,&site]).await.map_err(|_|"This identity cannot be registered; ask your site manager for assistance")?.get(0);
         let id:i64=tx.query_one("INSERT INTO users(site_id,person_id,email,password_hash,role,must_change_password,auth_provider,google_sub,avatar_url) VALUES ($1,$2,$3,$4,'HOME_RESIDENT',$5,$6,$7,$8) RETURNING id",&[&site,&person,&user.email,&user.password_hash,&user.must_change_password,&user.auth_provider,&user.google_sub,&user.avatar_url]).await.map_err(|_|"This identity cannot be registered")?.get(0);
         let occupancy=tx.query_opt("SELECT id FROM unit_occupancies WHERE unit_id=$1 AND is_active AND end_date IS NULL ORDER BY start_date DESC,id DESC LIMIT 1 FOR UPDATE",&[&unit]).await.map_err(|_|"Household storage unavailable")?;
