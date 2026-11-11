@@ -83,8 +83,9 @@ The workspace is strictly partitioned into two paradigms:
    - Never force-remove a dirty worktree. Preserve any uncommitted or untracked work by committing and pushing it, or by resolving it, before cleanup.
 
 12. **Wait for PR Test Results Before Completing a Task (All Agents)**:
-   - Applies to every agent (Claude, Antigravity/Gemini, Codex, Copilot, or any other) that opens a PR in this repository.
-   - Opening a PR does not complete the task. After pushing, wait for the PR's CI checks (`.github/workflows/`) to finish: `gh pr checks <pr> --watch` (or `gh pr checks <pr>` until no check is pending).
+   - Applies to every agent (Claude, Antigravity/Gemini, Codex, Copilot, or any other) working in this repository.
+   - **Every task is finalized by opening a PR against `master`.** Never leave finished or partial work only on a local or pushed branch; work that is not in a PR is not delivered. If the task cannot be finished, still push and open a draft PR (`gh pr create --draft`) that states what is done and what remains.
+   - Opening a PR does not complete the task on its own. After pushing, wait for the PR's CI checks (`.github/workflows/`) to finish: `gh pr checks <pr> --watch` (or `gh pr checks <pr>` until no check is pending).
    - **If any check fails**, the task is still yours: read the failing log (`gh run view <run-id> --log-failed | tail -80`), fix the cause in the same worktree and branch, run the relevant local suite (rule 3), push, and wait for the checks again. Repeat until every check passes.
    - Never report a task as complete, and never remove its worktree, while a check is failing or still running. Do not skip, disable, or weaken tests or workflows to make a check pass.
    - If a failure is unrelated to your change (for example, also failing on `master`, or an infrastructure outage), do not paper over it: report it with the failing check name and log excerpt, and leave the task open for the user to decide.
