@@ -960,7 +960,16 @@ class DashboardController extends ChangeNotifier {
         if (list != null) {
           final liveItems = list.map((item) => ReconciliationQueueItem.fromJson(item as Map<String, dynamic>)).toList();
           if (!isTestMode) {
+            final localUnmatched = _reconciliationQueue
+                .where((item) => item.status == 'ESLESTIRILEMEDI')
+                .toList();
             _reconciliationQueue = liveItems;
+            for (final item in localUnmatched) {
+              final exists = _reconciliationQueue.any((liveItem) =>
+                  liveItem.matchId == item.matchId ||
+                  liveItem.transaction.transactionId == item.transaction.transactionId);
+              if (!exists) _reconciliationQueue.add(item);
+            }
             notifyListeners();
           } else {
             bool added = false;
