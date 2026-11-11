@@ -1077,6 +1077,11 @@ class DashboardController extends ChangeNotifier {
               isPaid: item['is_paid'] as bool? ?? false,
               paidDateStr: item['paid_date_str'] as String?,
               houseType: item['house_type'] as String?,
+              registeredPayerNames:
+                  (item['registered_payer_names'] as List<dynamic>?)
+                      ?.map((name) => name.toString())
+                      .toList() ??
+                  const [],
             ));
           }
           _flatsList = list;

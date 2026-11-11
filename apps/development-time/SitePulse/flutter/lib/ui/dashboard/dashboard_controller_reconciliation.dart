@@ -316,8 +316,12 @@ extension DashboardControllerReconciliation on DashboardController {
       final normSender = explicitSender != null ? normalizeTr(explicitSender) : '';
 
       for (final f in _flatsList) {
-        final normName = normalizeTr(f.residentName);
-        if ((normSender.isNotEmpty && normSender.contains(normName)) || normDesc.contains(normName)) {
+        final payerNames = [f.residentName, ...f.registeredPayerNames]
+            .map(normalizeTr)
+            .where((name) => name.isNotEmpty);
+        if (payerNames.any((name) =>
+            (normSender.isNotEmpty && normSender.contains(name)) ||
+            normDesc.contains(name))) {
           candidateFlat = f;
           matchedBlock = f.block;
           matchedUnitNo = f.unitNo;

@@ -156,9 +156,6 @@ def test_empty_approval_queue_shows_zero(login_as, page):
 @pytest.mark.edge
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-06")
-@pytest.mark.xfail(strict=True, reason="BUG (STORY-07-02): a payer-name alias saved from the unit matching criteria card "
-                   "(stored in unit_payer_names) is ignored when an uploaded statement is matched; the transfer stays "
-                   "unmatched")
 def test_payer_name_alias_auto_matches_the_transfer(login_as, login_page, page, api, actors, tmp_path):
     homeowner = api.login(**actors["homeowner"])
     api.call("PUT", f"/api/v1/residents/{homeowner.user['unit_id']}/matching-criteria/payer-names", homeowner.token,
