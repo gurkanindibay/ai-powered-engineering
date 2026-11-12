@@ -278,6 +278,12 @@ NEGATIVE_CASES += [
 
 # (name, statement, assertion query that must return 't')
 POSITIVE_CASES = [
+    ("deleted site slug can be reused (V29)",
+     "INSERT INTO sites (name, slug) VALUES ('Deleted tenant', 'reusable-site-slug');"
+     " UPDATE sites SET deleted_at = CURRENT_TIMESTAMP, status = 'DELETED' WHERE slug = 'reusable-site-slug';"
+     " INSERT INTO sites (name, slug) VALUES ('Replacement tenant', 'reusable-site-slug')",
+     "SELECT count(*) = 2 AND count(*) FILTER (WHERE deleted_at IS NULL) = 1"
+     " FROM sites WHERE slug = 'reusable-site-slug'"),
     ("audit projection removes credentials and preserves decimal amounts",
      "SELECT 1",
      "SELECT sp_audit_projection('{\"password_hash\":\"SECRET\",\"token\":\"SECRET\",\"status\":\"ACTIVE\",\"amount\":12.34}'::jsonb) = '{\"status\":\"ACTIVE\",\"amount\":\"12.34\"}'::jsonb"),
