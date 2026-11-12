@@ -113,7 +113,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Check for auth message
     if (widget.controller.authMessage != null) {
-      SpToast.info(context, widget.controller.authMessage!);
+      final message = widget.controller.authMessage!;
+      SpToast.show(context, message, inferToastKind(message: message));
       widget.controller.clearAuthMessage();
     }
 
@@ -7596,14 +7597,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Navigator.pop(ctx);
                             }
                             widget.controller.fetchSaasSites();
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                appSnackBar(
-                                  content: Text('$siteName sitesi başarıyla veritabanına kaydedildi.'),
-                                  backgroundColor: AppColors.successFill,
-                                ),
-                              );
-                            }
                           } else {
                             setDialogState(() {
                               isSaving = false;
@@ -8047,13 +8040,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ).then((confirmed) {
       if (confirmed == true && mounted) {
         widget.controller.deleteSite(site.id);
-        ScaffoldMessenger.of(context).showSnackBar(
-          appSnackBar(
-            content: Text('${site.name} başarıyla silindi.'),
-            backgroundColor: AppColors.successFill,
-            duration: const Duration(seconds: 3),
-          ),
-        );
       }
     });
   }
