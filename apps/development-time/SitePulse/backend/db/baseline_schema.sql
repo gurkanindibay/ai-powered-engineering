@@ -1895,11 +1895,10 @@ ALTER TABLE ONLY public.sites
 
 
 --
--- Name: sites sites_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: uq_sites_active_slug; Type: INDEX; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.sites
-    ADD CONSTRAINT sites_slug_key UNIQUE (slug);
+CREATE UNIQUE INDEX uq_sites_active_slug ON public.sites USING btree (slug) WHERE (deleted_at IS NULL);
 
 
 --

@@ -57,6 +57,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(26, "V26__saas_site_onboarding_scope.sql"),
     migration!(27, "V27__seed_initial_owner_occupancies.sql"),
     migration!(28, "V28__site_announcements.sql"),
+    migration!(29, "V29__allow_reuse_of_deleted_site_slugs.sql"),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.

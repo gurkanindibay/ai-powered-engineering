@@ -662,7 +662,7 @@ pub async fn provision_site_units(
                         r#"
                         INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
                         VALUES ($1, $2, $3, 'ACTIVE', 'PREMIUM', $4)
-                        ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+                        ON CONFLICT (slug) WHERE deleted_at IS NULL DO UPDATE SET name = EXCLUDED.name
                         RETURNING id
                         "#,
                         &[&s_name, &"Kadıköy, İstanbul", &slug, &license_end],
