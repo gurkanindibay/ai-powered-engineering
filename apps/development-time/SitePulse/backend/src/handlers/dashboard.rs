@@ -2,6 +2,17 @@
 
 use super::*;
 
+fn site_ids_match(left: &str, right: &str) -> bool {
+    left == right
+        || matches!(
+            (
+                crate::db::parse_id_to_i64(left),
+                crate::db::parse_id_to_i64(right)
+            ),
+            (Some(left_id), Some(right_id)) if left_id == right_id
+        )
+}
+
 fn overdue_days(due_date: chrono::NaiveDate, today: chrono::NaiveDate, is_paid: bool) -> i32 {
     if is_paid {
         return 0;
@@ -455,10 +466,7 @@ pub async fn get_site_overview(
         inner
             .sites
             .iter()
-            .find(|s| {
-                &s.id == s_id
-                    || crate::db::parse_id_to_i64(&s.id) == crate::db::parse_id_to_i64(s_id)
-            })
+            .find(|s| site_ids_match(&s.id, s_id))
             .cloned()
     } else {
         inner
@@ -468,21 +476,16 @@ pub async fn get_site_overview(
                 inner
                     .units
                     .iter()
-                    .filter(|u| {
-                        u.site_id == s.id
-                            || crate::db::parse_id_to_i64(&u.site_id)
-                                == crate::db::parse_id_to_i64(&s.id)
-                    })
+                    .filter(|u| site_ids_match(&u.site_id, &s.id))
                     .count()
                     >= 12
             })
             .or_else(|| {
                 inner.sites.iter().find(|s| {
-                    inner.units.iter().any(|u| {
-                        u.site_id == s.id
-                            || crate::db::parse_id_to_i64(&u.site_id)
-                                == crate::db::parse_id_to_i64(&s.id)
-                    })
+                    inner
+                        .units
+                        .iter()
+                        .any(|u| site_ids_match(&u.site_id, &s.id))
                 })
             })
             .or_else(|| inner.sites.first())
@@ -498,10 +501,7 @@ pub async fn get_site_overview(
         .users
         .iter()
         .find(|u| {
-            (!site_id.is_empty()
-                && (u.site_id == site_id
-                    || crate::db::parse_id_to_i64(&u.site_id)
-                        == crate::db::parse_id_to_i64(&site_id)))
+            (!site_id.is_empty() && site_ids_match(&u.site_id, &site_id))
                 && (u.role == Role::SiteManager
                     || u.email.contains("yonetici")
                     || u.email.contains("manager"))
@@ -514,18 +514,12 @@ pub async fn get_site_overview(
     let site_unit_ids: Vec<String> = inner
         .units
         .iter()
-        .filter(|u| {
-            u.site_id == site_id
-                || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&site_id)
-        })
+        .filter(|u| site_ids_match(&u.site_id, &site_id))
         .map(|u| u.id.clone())
         .collect();
 
     for p in &inner.dues_periods {
-        if (p.site_id == site_id
-            || crate::db::parse_id_to_i64(&p.site_id) == crate::db::parse_id_to_i64(&site_id))
-            && !available_periods.contains(&p.period_name)
-        {
+        if site_ids_match(&p.site_id, &site_id) && !available_periods.contains(&p.period_name) {
             available_periods.push(p.period_name.clone());
         }
     }
@@ -580,11 +574,7 @@ pub async fn get_site_overview(
             let count = inner
                 .units
                 .iter()
-                .filter(|u| {
-                    u.site_id == s.id
-                        || crate::db::parse_id_to_i64(&u.site_id)
-                            == crate::db::parse_id_to_i64(&s.id)
-                })
+                .filter(|u| site_ids_match(&u.site_id, &s.id))
                 .count();
             available_sites.push(crate::models::SiteSummaryBriefDto {
                 id: s.id.clone(),
@@ -622,17 +612,8 @@ pub async fn get_site_overview(
         };
 
         for u in &inner.units {
-            let matches_site = u.site_id == site_id
-                || crate::db::parse_id_to_i64(&u.site_id) == crate::db::parse_id_to_i64(&site_id);
+            let matches_site = site_ids_match(&u.site_id, &site_id);
             if matches_site {
-                let clean_blk = normalize_block(&u.block_id);
-                if seen_units.insert((clean_blk, u.unit_number)) {
-                    deduped.push(u.clone());
-                }
-            }
-        }
-        if deduped.is_empty() {
-            for u in &inner.units {
                 let clean_blk = normalize_block(&u.block_id);
                 if seen_units.insert((clean_blk, u.unit_number)) {
                     deduped.push(u.clone());
@@ -813,7 +794,7 @@ pub async fn get_site_overview(
 
 #[cfg(test)]
 mod tests {
-    use super::{collection_amounts, overdue_days};
+    use super::{collection_amounts, overdue_days, site_ids_match};
     use chrono::NaiveDate;
     use rust_decimal::Decimal;
 
@@ -840,6 +821,13 @@ mod tests {
 
         assert_eq!(billed, Decimal::from(1400));
         assert_eq!(collected, Decimal::from(1400));
+    }
+
+    #[test]
+    fn site_id_matching_does_not_treat_unparseable_ids_as_equal() {
+        assert!(site_ids_match("site-1", "site-1"));
+        assert!(!site_ids_match("site-alpha", "site-beta"));
+        assert!(site_ids_match("site-1", "1"));
     }
 
     #[test]

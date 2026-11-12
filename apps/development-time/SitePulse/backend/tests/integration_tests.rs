@@ -2614,6 +2614,20 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
             tax_id: None,
             tax_office: None,
         });
+        inner
+            .units
+            .push(sitepulse_backend::models::IndependentUnit {
+                id: "unit-other-site".to_string(),
+                site_id: "site-other".to_string(),
+                block_id: "A Blok".to_string(),
+                unit_number: 14,
+                floor: 4,
+                land_share: 1,
+                owner_user_id: None,
+                tenant_user_id: None,
+                virtual_iban: None,
+                house_type: None,
+            });
     }
 
     let zero_units_resp = sitepulse_backend::handlers::get_site_overview(
@@ -2628,6 +2642,12 @@ async fn when_zero_data_for_site_dues_and_homeowner_then_guidance_provided() {
     .into_response();
 
     assert_eq!(zero_units_resp.status(), axum::http::StatusCode::OK);
+    let zero_units_body = axum::body::to_bytes(zero_units_resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let zero_units_json: serde_json::Value = serde_json::from_slice(&zero_units_body).unwrap();
+    assert_eq!(zero_units_json["summary"]["total_units_count"], 0);
+    assert_eq!(zero_units_json["flats"].as_array().unwrap().len(), 0);
 
     // 3. Test Site & Units exist, but Zero Periodic Dues
     {
