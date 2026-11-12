@@ -31,6 +31,7 @@ CROSS JOIN (
         ('4+1', 2200.00::NUMERIC(15,2), '4 Oda 1 Salon'),
         ('Dublex', 2500.00::NUMERIC(15,2), 'Çatı Dubleks / Bahçe Katı')
 ) AS t(type_name, dues_amount, description)
+WHERE s.deleted_at IS NULL
 ON CONFLICT (site_id, type_name) DO NOTHING;
 
 -- 2. Test Blocks (Auto-Increment Identity id, site resolved dynamically via slug)
@@ -42,7 +43,7 @@ CROSS JOIN (
         ('A Blok', 12),
         ('B Blok', 10)
 ) AS b(block_name, total_floors)
-WHERE s.slug = 'begonya-sitesi'
+WHERE s.slug = 'begonya-sitesi' AND s.deleted_at IS NULL
 ON CONFLICT (site_id, block_name) DO UPDATE
 SET total_floors = EXCLUDED.total_floors;
 
@@ -57,8 +58,8 @@ FROM (VALUES
     ('98765432109', 'Zeynep Kaya', '+90 542 333 44 55', 'zeynep@example.com', 'HOME_RESIDENT'),
     ('44444444444', 'Mehmet Öz', '+90 533 222 33 44', 'mehmet.oz@begonya.com', 'HOME_OWNER')
 ) AS p(national_id, full_name, phone, email, person_type)
-JOIN sites s ON s.slug = 'begonya-sitesi'
-ON CONFLICT (site_id, lower(email)) WHERE email IS NOT NULL DO UPDATE
+JOIN sites s ON s.slug = 'begonya-sitesi' AND s.deleted_at IS NULL
+ON CONFLICT (site_id, lower(email)) WHERE email IS NOT NULL AND deleted_at IS NULL DO UPDATE
 SET full_name = EXCLUDED.full_name,
     phone = EXCLUDED.phone,
     person_type = EXCLUDED.person_type;
@@ -77,9 +78,9 @@ FROM (
         ('begonya-sitesi', 'ahmet.yilmaz@begonya.com', '$argon2id$v=19$m=19456,t=2,p=1$YsMeFsEB5mFZyolRkMHQdg$B+e2RQqZ4RhmRJm27iab3Oam+ZiatTZFjdxUzZfNVag', 'HOME_OWNER', FALSE),
         ('begonya-sitesi', 'mehmet.oz@begonya.com', '$argon2id$v=19$m=19456,t=2,p=1$yhcA3VWK507NdmDfi0k1aQ$qRbHm998tv7yn0wexSHEyOZ73qfZqiuCIY4zz8oHAow', 'HOME_OWNER', FALSE)
 ) AS u(site_slug, email, password_hash, role, must_change_password)
-JOIN sites s ON s.slug = u.site_slug
-JOIN persons p ON p.email = u.email AND p.site_id = s.id
-ON CONFLICT (email) DO UPDATE
+JOIN sites s ON s.slug = u.site_slug AND s.deleted_at IS NULL
+JOIN persons p ON LOWER(p.email) = LOWER(u.email) AND p.site_id = s.id AND p.deleted_at IS NULL
+ON CONFLICT (lower(email)) WHERE is_active DO UPDATE
 SET site_id = EXCLUDED.site_id,
     person_id = EXCLUDED.person_id,
     password_hash = EXCLUDED.password_hash,
@@ -102,9 +103,9 @@ FROM (
         ('begonya-sitesi', 'A Blok', 14, 4, 24, 'ahmet.yilmaz@begonya.com', 'TR620020500009863791600001'),
         ('begonya-sitesi', 'B Blok', 3, 1, 18, 'mehmet.oz@begonya.com', 'TR620020500009863791600002')
 ) AS u(site_slug, block_name, unit_number, floor, land_share, owner_email, virtual_iban)
-JOIN sites s ON s.slug = u.site_slug
+JOIN sites s ON s.slug = u.site_slug AND s.deleted_at IS NULL
 JOIN blocks b ON b.site_id = s.id AND b.block_name = u.block_name
-LEFT JOIN persons p_owner ON p_owner.email = u.owner_email AND p_owner.site_id = s.id
+LEFT JOIN persons p_owner ON LOWER(p_owner.email) = LOWER(u.owner_email) AND p_owner.site_id = s.id AND p_owner.deleted_at IS NULL
 ON CONFLICT (block_id, unit_number) DO UPDATE
 SET floor = EXCLUDED.floor,
     land_share = EXCLUDED.land_share,
@@ -124,8 +125,8 @@ SELECT
     TRUE,
     u.id
 FROM sites s
-JOIN users u ON u.email = 'mehmet.demir@begonya.com'
-WHERE s.slug = 'begonya-sitesi'
+JOIN users u ON LOWER(u.email) = 'mehmet.demir@begonya.com' AND u.site_id = s.id AND u.is_active
+WHERE s.slug = 'begonya-sitesi' AND s.deleted_at IS NULL
 ON CONFLICT (site_id, account_type) WHERE is_active = true DO UPDATE
 SET iban = EXCLUDED.iban,
     account_holder = EXCLUDED.account_holder,

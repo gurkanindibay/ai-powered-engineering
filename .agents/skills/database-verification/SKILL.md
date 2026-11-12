@@ -73,13 +73,13 @@ The primary database verification tool is a Python CLI located at:
    ```bash
    ./scripts/schema_integrity_check.py          # human readable
    ./scripts/schema_integrity_check.py --json   # CI
-   ./scripts/schema_integrity_check.py --sync   # regenerate migrations/ from db/init/
    ```
-   Replays `backend/db/init/00-*.sql` and `backend/migrations/V*.sql` into throwaway
-   databases and asserts both produce the same schema and that the integrity
-   constraints reject invalid data. `backend/db/init` is the single editable source for
-   schema AND seed data — the Rust backend `include_str!`s the same files at startup
-   (see `backend/src/db.rs`), so there is no duplicated schema/seed in code.
+   Replays the append-only `backend/migrations/V*.sql` into throwaway databases,
+   uses per-process scratch database names, verifies constraints and the upgrade path, and loads `backend/db/seed/` against the
+   current indexes. Repeat-seeding checks prove identity IDs remain stable and archived
+   sites/people and inactive accounts remain unchanged when identifiers are reused.
+   Migrations are the schema source; do not edit released migrations or regenerate them
+   from seeds. Add regression checks to this gate rather than writing scratch seed SQL.
 
 ## Environment Details
 - **Docker Container:** `sitepulse-postgres`
