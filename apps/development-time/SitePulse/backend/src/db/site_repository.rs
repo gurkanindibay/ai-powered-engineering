@@ -49,7 +49,7 @@ pub async fn save_site(
                     r#"
                     INSERT INTO sites (name, address, slug, status, plan_type, license_end_date, tax_id, tax_office)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    ON CONFLICT (slug) DO UPDATE SET
+                    ON CONFLICT (slug) WHERE deleted_at IS NULL DO UPDATE SET
                         name = EXCLUDED.name,
                         address = EXCLUDED.address,
                         status = EXCLUDED.status,
