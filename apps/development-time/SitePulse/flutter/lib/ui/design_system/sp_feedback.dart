@@ -52,7 +52,13 @@ SnackBar spSnackBar({
         ToastKind.warning => const Duration(seconds: 6),
         ToastKind.error => const Duration(days: 1),
       };
-  final message = content is Text ? content.data : null;
+  final rawMessage = content is Text ? content.data : null;
+  final message = kind == ToastKind.error && rawMessage != null
+      ? AppStrings.localizeBackendMessage(rawMessage)
+      : rawMessage;
+  final resolvedContent = message != rawMessage && content is Text
+      ? Text(message!, style: content.style)
+      : content;
   return SnackBar(
     backgroundColor: kind.fill,
     duration: resolvedDuration,
@@ -78,7 +84,7 @@ SnackBar spSnackBar({
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
-                child: content,
+                child: resolvedContent,
               ),
             ),
           ],

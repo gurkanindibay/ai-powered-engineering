@@ -342,7 +342,7 @@ impl AuthService {
             if let Ok(client) = pool.get().await {
                 if let Ok(Some(row)) = client
                     .query_opt(
-                        "SELECT id FROM users WHERE LOWER(email) = $1",
+                        "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                         &[&crate::domain::email::NormalizedEmail::normalize(
                             &user.email,
                         )],
@@ -447,7 +447,7 @@ impl AuthService {
             if let Ok(client) = pool.get().await {
                 if let Ok(Some(row)) = client
                     .query_opt(
-                        "SELECT id FROM users WHERE LOWER(email) = $1",
+                        "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                         &[&crate::domain::email::NormalizedEmail::normalize(
                             &new_user.email,
                         )],
@@ -659,7 +659,7 @@ impl AuthService {
             let client = pool.get().await.map_err(|e| e.to_string())?;
             client
                 .execute(
-                    "UPDATE users SET password_hash = $1, must_change_password = false WHERE LOWER(email) = $2",
+                    "UPDATE users SET password_hash = $1, must_change_password = false WHERE LOWER(email) = $2 AND is_active",
                     &[&new_hash, &email_norm],
                 )
                 .await

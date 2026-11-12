@@ -719,6 +719,19 @@ async fn when_deleting_action_free_site_then_succeeds_and_removes_site() {
     // Verify it is no longer in the site list
     let all_sites = service.get_all_sites().await;
     assert!(!all_sites.iter().any(|s| s.site_id == site_id));
+
+    service
+        .register_site(RegisterSiteRequest {
+            site_name: "Nilüfer Yeni Konutları".to_string(),
+            address: "Nilüfer, Bursa".to_string(),
+            plan_type: Some("STANDARD".to_string()),
+            site_admin_full_name: "Deniz Yılmaz".to_string(),
+            site_admin_email: "deniz@nilufer.com".to_string(),
+            site_admin_phone: "+90 532 999 1122".to_string(),
+            blocks: None,
+        })
+        .await
+        .expect("a soft-deleted site's manager email must be reusable");
 }
 
 #[tokio::test]
@@ -2956,6 +2969,30 @@ async fn when_managing_home_owners_then_can_delete_home_owner() {
     assert!(!owners
         .iter()
         .any(|o| o.unit_id == created.unit_id || o.email == "silinecek@sitepulse.io"));
+
+    let replacement = service
+        .register_home_owner(
+            "site-1",
+            RegisterHomeOwnerRequest {
+                block: "A Blok".to_string(),
+                unit_no: 89,
+                floor: 9,
+                owner_full_name: "Yeni Malik".to_string(),
+                email: "silinecek@sitepulse.io".to_string(),
+                phone: "05554443322".to_string(),
+                tenant_full_name: None,
+                tenant_email: None,
+                tenant_phone: None,
+                land_share: None,
+                monthly_dues: Some(rust_decimal::Decimal::new(1400, 0)),
+                house_type: Some("2+1".to_string()),
+                is_resident: true,
+                role: None,
+            },
+        )
+        .await
+        .expect("a deleted unit's resident email must be reusable");
+    assert_eq!(replacement.email, "silinecek@sitepulse.io");
 }
 
 #[tokio::test]

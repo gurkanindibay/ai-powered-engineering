@@ -401,7 +401,7 @@ impl PersonImportService {
                 // Login emails are unique across the platform, as registration requires.
                 let login_emails = client
                     .query(
-                        "SELECT lower(email) FROM users WHERE lower(email) = ANY($1)",
+                        "SELECT lower(email) FROM users WHERE is_active AND lower(email) = ANY($1)",
                         &[&emails],
                     )
                     .await
@@ -411,7 +411,7 @@ impl PersonImportService {
                     .collect();
                 let people = client
                     .query(
-                        "SELECT full_name, COALESCE(email, ''), COALESCE(phone, '') FROM persons WHERE site_id = $1",
+                        "SELECT full_name, COALESCE(email, ''), COALESCE(phone, '') FROM persons WHERE site_id = $1 AND deleted_at IS NULL",
                         &[&site],
                     )
                     .await

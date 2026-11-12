@@ -30,6 +30,13 @@ class AppStrings {
 
   /// Returns a user-friendly Turkish message for standard backend error codes.
   static String localizedErrorMessage(String? code, {String? fallback}) {
+    if (code == 'EMAIL_ALREADY_EXISTS' || code == 'EMAIL_NOT_AVAILABLE') {
+      return 'Bu e-posta adresi başka bir hesapta kullanılıyor.';
+    }
+    if (fallback != null) {
+      final localized = localizeBackendMessage(fallback);
+      if (localized != fallback) return localized;
+    }
     if (code == null || code.isEmpty) {
       return fallback ?? 'Bir hata oluştu.';
     }
@@ -58,5 +65,28 @@ class AppStrings {
       'TIMEOUT' => 'İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.',
       _ => fallback ?? 'İşlem gerçekleştirilemedi ($code).',
     };
+  }
+
+  /// Localizes known English database and service messages before they reach the UI.
+  static String localizeBackendMessage(String message) {
+    final normalized = message.toLowerCase();
+    if (normalized.contains(
+          'an account with this email address already exists',
+        ) ||
+        normalized.contains(
+          'this email address cannot be used for a new account',
+        ) ||
+        normalized.contains('email_already_exists') ||
+        normalized.contains('email_not_available') ||
+        normalized.contains('uq_users_active_email_lower') ||
+        normalized.contains('uq_users_email_lower') ||
+        normalized.contains('users_email_key') ||
+        normalized.contains('uq_persons_site_email')) {
+      return 'Bu e-posta adresi başka bir hesapta kullanılıyor.';
+    }
+    if (normalized.contains('uq_persons_site_national_id_hash')) {
+      return 'Bu kimlik numarası başka bir kişi kaydında kullanılıyor.';
+    }
+    return message;
   }
 }

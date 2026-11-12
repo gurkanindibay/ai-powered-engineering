@@ -99,6 +99,19 @@ def test_resident_without_history_can_be_deleted(login_as, page, stack):
     page.wait_for_timeout(1_000)  # the delete call must finish before the database check
     assert stack.sql(f"SELECT count(*) FROM units WHERE id = {int(unit_id)} AND deleted_at IS NULL;") == "0"
 
+    before = set(ResidentsTab(page).open().unit_card_ids())
+    ResidentsTab(page).start_add().fill(
+        unit_no="26", full_name="Fatma Şahin", email="fatma.sahin@e2e.test", phone="05321234567").save()
+    page.wait_for_function(
+        "n => document.querySelectorAll('[flt-semantics-identifier^=\"delete_ho_\"]').length > n",
+        arg=len(before), timeout=15_000)
+    assert stack.sql(
+        "SELECT count(*) FROM persons WHERE site_id = 1 AND lower(email) = 'fatma.sahin@e2e.test' AND deleted_at IS NULL;"
+    ) == "1"
+    assert stack.sql(
+        "SELECT count(*) FROM users WHERE lower(email) = 'fatma.sahin@e2e.test' AND is_active;"
+    ) == "1"
+
 
 @pytest.mark.core
 @pytest.mark.role_manager
