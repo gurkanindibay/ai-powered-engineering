@@ -674,6 +674,7 @@ extension DashboardControllerAuth on DashboardController {
       temporaryPassword: tempPassword,
       planType: planType,
     );
+    _authMessage = '$name sitesi başarıyla kaydedildi.';
     notify();
     return true;
   }

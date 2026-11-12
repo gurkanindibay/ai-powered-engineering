@@ -80,6 +80,7 @@ void main() {
       expect(creds?.siteName, 'Nilüfer Vadisi');
       expect(creds?.adminEmail, 'serdar@nilufervadisi.com');
       expect(creds!.temporaryPassword.startsWith('SP-'), isTrue);
+      expect(controller.authMessage, contains('başarıyla kaydedildi'));
     });
 
     test('when updating site information, then persists updated values and notifies listeners', () async {
@@ -192,6 +193,7 @@ void main() {
       final success = controller.deleteSite('site-3');
       expect(success, isTrue);
       expect(controller.saasSites.any((s) => s.id == 'site-3'), isFalse);
+      expect(controller.authMessage, contains('başarıyla silindi'));
     });
 
     test('when delete site with active units or dues, then rejects deletion and preserves site', () {
