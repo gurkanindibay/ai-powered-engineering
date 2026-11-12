@@ -22,6 +22,7 @@ extension DashboardControllerAuth on DashboardController {
     _userSession = _userSession.copyWith(permissions: const []);
     _isAuthenticated = false;
     _authMessage = null;
+    _lastSiteRegistrationError = null;
     _provisionedCredentials = null;
     _provisionedHomeOwner = null;
     _clearSessionAndSiteData();
@@ -61,6 +62,7 @@ extension DashboardControllerAuth on DashboardController {
     _provisionedCredentials = null;
     _provisionedHomeOwner = null;
     _authMessage = null;
+    _lastSiteRegistrationError = null;
     notify();
   }
 
@@ -569,6 +571,7 @@ extension DashboardControllerAuth on DashboardController {
     String planType = 'STANDARD',
     List<String>? blocks,
   }) async {
+    _lastSiteRegistrationError = null;
     final siteBlocks = (blocks != null && blocks.isNotEmpty) ? blocks : ['A Blok', 'B Blok'];
     final tempPassword = 'SP-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}-PASS';
 
@@ -622,18 +625,19 @@ extension DashboardControllerAuth on DashboardController {
           notify();
           return true;
         } else {
-          final errorBody = utf8.decode(response.bodyBytes);
-          _authMessage = extractErrorMessage(
+          _lastSiteRegistrationError = extractErrorMessage(
             response,
             fallback: 'Site kaydı başarısız oldu (HTTP ${response.statusCode})',
           );
-          debugPrint('registerNewSite error: ${response.statusCode} - $errorBody');
+          _authMessage = _lastSiteRegistrationError;
+          AppLogger.warn('Site registration was refused', tag: 'Sites', context: {'status_code': response.statusCode});
           notify();
           return false;
         }
       } catch (e) {
-        debugPrint('registerNewSite remote error: $e');
-        _authMessage = 'Bağlantı hatası: Sunucuya ulaşılamadı ($e)';
+        AppLogger.warn('Site registration did not reach the server', tag: 'Sites');
+        _lastSiteRegistrationError = 'Bağlantı hatası: Sunucuya ulaşılamadı.';
+        _authMessage = _lastSiteRegistrationError;
         notify();
         return false;
       }

@@ -327,8 +327,8 @@ impl SiteAdminService {
 
         let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
 
-        // 1. Check in-memory state for duplicate email first
-        {
+        // PostgreSQL owns active identity availability; cached people can outlive archival.
+        if self.state.pool.is_none() {
             let inner = self.state.inner.read().await;
             if inner
                 .users

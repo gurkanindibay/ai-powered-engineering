@@ -38,10 +38,11 @@ impl SaasTenantService {
 
         let (slug, plan, license_end, blocks_list) = {
             let inner = self.state.inner.read().await;
-            if inner
-                .users
-                .iter()
-                .any(|u| crate::domain::email::same_email(&u.email, &email_norm))
+            if self.state.pool.is_none()
+                && inner
+                    .users
+                    .iter()
+                    .any(|u| crate::domain::email::same_email(&u.email, &email_norm))
             {
                 return Err(format!(
                     "An account with this email address already exists (zaten mevcut): {}",

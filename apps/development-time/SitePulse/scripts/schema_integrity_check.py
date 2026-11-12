@@ -55,6 +55,41 @@ FROM pg_indexes WHERE schemaname = 'public'
 ORDER BY 1
 """
 
+# Identity rows must be stable on reseed, including archived duplicates of active keys.
+SEED_IDENTITY_SNAPSHOT = """
+SELECT jsonb_build_object(
+    'identities', jsonb_agg(identity ORDER BY table_name),
+    'archived_sites', (SELECT jsonb_agg(s ORDER BY id) FROM sites s WHERE deleted_at IS NOT NULL),
+    'archived_persons', (SELECT jsonb_agg(p ORDER BY id) FROM persons p WHERE deleted_at IS NOT NULL),
+    'inactive_users', (SELECT jsonb_agg(u ORDER BY id) FROM users u WHERE NOT is_active)
+) AS identities
+FROM (
+    SELECT 'sites' AS table_name, ARRAY(SELECT id FROM sites ORDER BY id) AS ids
+    UNION ALL SELECT 'blocks', ARRAY(SELECT id FROM blocks ORDER BY id)
+    UNION ALL SELECT 'house_types', ARRAY(SELECT id FROM house_types ORDER BY id)
+    UNION ALL SELECT 'persons', ARRAY(SELECT id FROM persons ORDER BY id)
+    UNION ALL SELECT 'users', ARRAY(SELECT id FROM users ORDER BY id)
+    UNION ALL SELECT 'units', ARRAY(SELECT id FROM units ORDER BY id)
+    UNION ALL SELECT 'site_bank_accounts', ARRAY(SELECT id FROM site_bank_accounts ORDER BY id)
+) AS identity
+"""
+
+ARCHIVED_SEED_IDENTITIES = """
+INSERT INTO sites (name, address, slug, deleted_at)
+SELECT 'Archived seed site', address, slug, now()
+FROM sites WHERE slug = 'begonya-sitesi' AND deleted_at IS NULL;
+INSERT INTO persons (site_id, full_name, email, person_type, deleted_at)
+SELECT site_id, 'Archived seed person', email, person_type, now()
+FROM persons WHERE email = 'ahmet.yilmaz@begonya.com' AND deleted_at IS NULL;
+INSERT INTO users (site_id, person_id, email, password_hash, role, is_active)
+SELECT p.site_id, p.id, p.email, 'archived-seed-password', 'HOME_OWNER', FALSE
+FROM persons p WHERE p.full_name = 'Archived seed person';
+INSERT INTO users (site_id, email, password_hash, role, is_active)
+SELECT id, 'mehmet.demir@begonya.com', 'archived-manager-password', 'SITE_MANAGER', FALSE
+FROM sites WHERE slug = 'begonya-sitesi' AND deleted_at IS NOT NULL;
+"""
+
+
 NEGATIVE_CASES = [
     (
         "person_type domain",
@@ -427,17 +462,49 @@ def migrations() -> list[pathlib.Path]:
     return files
 
 
+def check_seed_replay(db: str, seed_files: list[pathlib.Path]) -> list[dict]:
+    """Exercise real seed SQL against current indexes without retaining fixture changes."""
+    findings = []
+    seeds = "\n".join(path.read_text() for path in seed_files)
+    for name, setup in [
+        ("seed: repeated load preserves identity rows", ""),
+        ("seed: email case changes reuse existing people and accounts",
+         "UPDATE persons SET email = UPPER(email) WHERE deleted_at IS NULL; "
+         "UPDATE users SET email = UPPER(email), password_hash = 'seed-case-marker' WHERE is_active;"),
+        ("seed: archived identities stay unchanged and unreferenced", ARCHIVED_SEED_IDENTITIES),
+    ]:
+        sql = (
+            "BEGIN;\n" + setup
+            + "CREATE TEMP TABLE seed_identity_snapshot AS " + SEED_IDENTITY_SNAPSHOT + ";\n"
+            + seeds
+            + "\nSELECT identities = (" + SEED_IDENTITY_SNAPSHOT + ") "
+            "AND NOT EXISTS (SELECT 1 FROM users u JOIN persons p ON p.id = u.person_id "
+            "WHERE u.is_active AND p.deleted_at IS NOT NULL) "
+            "AND NOT EXISTS (SELECT 1 FROM users WHERE password_hash = 'seed-case-marker') "
+            "AND NOT EXISTS (SELECT 1 FROM units u JOIN persons p ON p.id = u.owner_person_id "
+            "WHERE u.deleted_at IS NULL AND p.deleted_at IS NOT NULL) "
+            "FROM seed_identity_snapshot;\nROLLBACK;"
+        )
+        result = psql(db, sql)
+        ok = result.returncode == 0 and result.stdout.strip() == "t"
+        detail = [] if ok else [result.stderr.strip() or f"returned {result.stdout.strip()!r}"]
+        findings.append({"check": name, "ok": ok, "detail": detail})
+    return findings
+
+
 def check() -> dict:
     findings: list[dict] = []
     files = migrations()
-    fresh, upgraded = "sitepulse_check_fresh", "sitepulse_check_upgrade"
+    fresh, upgraded = f"sitepulse_check_fresh_{os.getpid()}", f"sitepulse_check_upgrade_{os.getpid()}"
     recreate(fresh)
     recreate(upgraded)
     try:
         # 1. Fresh install + constraint behaviour.
         replay(fresh, files)
         fresh_schema = schema_of(fresh)
-        replay(fresh, sorted(SEED_DIR.glob("0[12]-*.sql")))
+        seed_files = sorted(SEED_DIR.glob("0[12]-*.sql"))
+        replay(fresh, seed_files)
+        findings.extend(check_seed_replay(fresh, seed_files))
         for name, sql in NEGATIVE_CASES:
             result = psql(fresh, f"BEGIN; {sql}; ROLLBACK;")
             findings.append({"check": f"rejects: {name}", "ok": result.returncode != 0,

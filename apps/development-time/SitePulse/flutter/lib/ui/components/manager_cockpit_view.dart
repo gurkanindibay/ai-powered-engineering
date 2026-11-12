@@ -1,3 +1,4 @@
+import '../design_system/sp_page_header.dart';
 import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import 'package:decimal/decimal.dart';
@@ -43,124 +44,52 @@ class ManagerCockpitView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 0. Managed Site Banner & Multi-Site Switcher
-        Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.accentCyan.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.apartment,
-                  color: AppColors.accentCyan,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            controller.userSession.siteName,
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+        SpPageHeader(
+          title: 'Yönetim Paneli',
+          icon: Icons.apartment,
+          subtitle:
+              '${controller.userSession.siteName} • ${controller.currentManagedSite?.totalUnits ?? controller.flatsList.length} Daire',
+          actions: [
+            if (controller.managedSitesList.length > 1)
+              PopupMenuButton<String>(
+                tooltip: 'Site Değiştir',
+                icon: const Icon(Icons.swap_horiz, color: AppColors.accentCyan),
+                onSelected: (siteId) {
+                  controller.changeManagedSite(siteId);
+                },
+                itemBuilder: (context) {
+                  return controller.managedSitesList.map((site) {
+                    return PopupMenuItem<String>(
+                      value: site.id,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.apartment,
+                            size: 16,
+                            color: site.id == controller.currentManagedSite?.id
+                                ? AppColors.accentCyan
+                                : AppColors.textSecondary(context),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.accentCyan.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '${controller.currentManagedSite?.totalUnits ?? controller.flatsList.length} Daire',
-                            style: TextStyle(
-                              color: AppColors.primaryText(context),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      controller.currentManagedSite?.address.isNotEmpty == true
-                          ? controller.currentManagedSite!.address
-                          : 'Yönetilen Site',
-                      style: TextStyle(
-                        color: AppColors.textSecondary(context),
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              if (controller.managedSitesList.length > 1) ...[
-                PopupMenuButton<String>(
-                  tooltip: 'Site Değiştir',
-                  icon: const Icon(Icons.swap_horiz, color: AppColors.accentCyan),
-                  onSelected: (siteId) {
-                    controller.changeManagedSite(siteId);
-                  },
-                  itemBuilder: (context) {
-                    return controller.managedSitesList.map((site) {
-                      return PopupMenuItem<String>(
-                        value: site.id,
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.apartment,
-                              size: 16,
-                              color: site.id == controller.currentManagedSite?.id
-                                  ? AppColors.accentCyan
-                                  : AppColors.textSecondary(context),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                site.name,
-                                style: TextStyle(
-                                  fontWeight: site.id == controller.currentManagedSite?.id
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              site.name,
+                              style: TextStyle(
+                                fontWeight: site.id == controller.currentManagedSite?.id
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
                               ),
                             ),
-                          ],
-                        ),
-                      );
-                    }).toList();
-                  },
-                ),
-              ],
-            ],
-          ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList();
+                },
+              ),
+          ],
         ),
+        const SizedBox(height: AppSpacing.lg),
         // 1. Tahsilat Özeti Card
         Container(
           decoration: BoxDecoration(

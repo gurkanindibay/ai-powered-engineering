@@ -33,6 +33,7 @@ Release 1 introduces dual operational roles:
 - **When** the dashboard loads,
 - **Then** calculate KMK statutory penalty ($\text{Penalty} = 1.400 \times 0.05 \times \frac{10}{30} = ₺23,33$),
 - **And** display total payable as **₺1.423,33**,
+- **And** return `days_overdue` for each dues item using the same server calculation date as its penalty; the client displays this day count without recalculating it from the device timezone.
 - **And** render quick actions: `Aidat Öde`, `Dekontlar`, `Arıza Bildir`, `Yönetimle İletişim`.
 - **And** ensure `Sayaç Gir` and `Rezervasyon` are NOT displayed in Release 1.
 

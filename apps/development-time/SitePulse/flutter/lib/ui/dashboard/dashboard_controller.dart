@@ -212,6 +212,8 @@ class DashboardController extends ChangeNotifier {
 
   String? _authMessage;
   String? get authMessage => _authMessage;
+  String? _lastSiteRegistrationError;
+  String? get lastSiteRegistrationError => _lastSiteRegistrationError;
 
   // Theme: follows the system until the user picks one; the choice is saved.
   static const themePreferenceKey = 'theme_mode';
@@ -988,12 +990,12 @@ class DashboardController extends ChangeNotifier {
             final dueDate =
                 DateTime.tryParse(item['due_date']?.toString() ?? '') ??
                     DateTime.now();
-            final today = DateTime.now();
+            final today = DateTime.now().toUtc();
             final daysOverdue = isItemPaid
                 ? 0
-                : DateTime(today.year, today.month, today.day)
+                : (item['days_overdue'] as num?)?.toInt() ?? DateTime.utc(today.year, today.month, today.day)
                     .difference(
-                      DateTime(dueDate.year, dueDate.month, dueDate.day),
+                      DateTime.utc(dueDate.year, dueDate.month, dueDate.day),
                     )
                     .inDays
                     .clamp(0, 1 << 31)

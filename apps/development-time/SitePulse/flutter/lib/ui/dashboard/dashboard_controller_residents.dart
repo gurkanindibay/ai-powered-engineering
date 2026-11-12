@@ -124,7 +124,7 @@ extension DashboardControllerResidents on DashboardController {
       } on ApiException catch (e) {
         _lastHomeOwnerError = e.statusCode >= 500
             ? 'Sakin kaydedilemedi. Lütfen tekrar deneyin. (Referans: ${e.traceId ?? '-'})'
-            : e.message;
+            : AppStrings.localizedErrorMessage(e.code, fallback: e.message);
         _authMessage = _lastHomeOwnerError;
       } catch (e) {
         AppLogger.warn('Home owner registration did not reach the server', tag: 'Residents');
@@ -466,7 +466,7 @@ extension DashboardControllerResidents on DashboardController {
           _homeOwnerUpdateNeedsStepUp = e.code == 'STEP_UP_REQUIRED';
           _lastHomeOwnerError = e.statusCode >= 500
               ? 'Değişiklik kaydedilemedi. Lütfen tekrar deneyin. (Referans: ${e.traceId ?? '-'})'
-              : e.message;
+              : AppStrings.localizedErrorMessage(e.code, fallback: e.message);
           notify();
           return false;
         }
