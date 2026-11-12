@@ -31,7 +31,7 @@ pub async fn save_user(
     } else {
         let p_row = client
             .query_opt(
-                "SELECT id FROM persons WHERE site_id IS NOT DISTINCT FROM $2 AND LOWER(email) = $1",
+                "SELECT id FROM persons WHERE site_id IS NOT DISTINCT FROM $2 AND LOWER(email) = $1 AND deleted_at IS NULL",
                 &[&email, &site_id_num],
             )
             .await?;
@@ -80,7 +80,7 @@ pub async fn save_user(
                 google_sub = COALESCE($7, google_sub),
                 avatar_url = COALESCE($8, avatar_url),
                 person_id = COALESCE($9, person_id)
-            WHERE LOWER(email) = $2
+            WHERE LOWER(email) = $2 AND is_active
             "#,
             &[
                 &site_id_num,
@@ -207,7 +207,7 @@ pub async fn ensure_bootstrap_admin(
     // Platform people have no site; persons are unique per site, so look up before inserting.
     let existing = client
         .query_opt(
-            "SELECT id FROM persons WHERE site_id IS NULL AND lower(email) = $1",
+            "SELECT id FROM persons WHERE site_id IS NULL AND lower(email) = $1 AND deleted_at IS NULL",
             &[&email],
         )
         .await?;
@@ -257,7 +257,7 @@ pub async fn get_user_by_email(
             "SELECT u.id, u.site_id, COALESCE(p.full_name, ''), u.email, COALESCE(p.phone, ''), u.password_hash, u.role, u.must_change_password, u.auth_provider, u.google_sub, u.avatar_url, u.created_at, u.person_id
              FROM users u
              LEFT JOIN persons p ON u.person_id = p.id
-             WHERE LOWER(u.email) = $1 LIMIT 1",
+             WHERE LOWER(u.email) = $1 AND u.is_active LIMIT 1",
             &[&email_norm],
         )
         .await?;

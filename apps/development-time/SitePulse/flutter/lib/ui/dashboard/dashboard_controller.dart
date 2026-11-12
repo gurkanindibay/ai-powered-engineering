@@ -46,9 +46,9 @@ class DashboardController extends ChangeNotifier {
           final serverMsg = err['message']?.toString();
           return AppStrings.localizedErrorMessage(code, fallback: serverMsg ?? fallback);
         } else if (decoded['error'] is String) {
-          return decoded['error'] as String;
+          return AppStrings.localizeBackendMessage(decoded['error'] as String);
         } else if (decoded['message'] != null) {
-          return decoded['message'].toString();
+          return AppStrings.localizeBackendMessage(decoded['message'].toString());
         }
       }
     } catch (_) {
@@ -56,7 +56,7 @@ class DashboardController extends ChangeNotifier {
     }
     final trimmed = bodyText.trim();
     if (trimmed.isNotEmpty && !trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-      return trimmed;
+      return AppStrings.localizeBackendMessage(trimmed);
     }
     return fallback ?? 'İşlem başarısız oldu (HTTP ${response.statusCode})';
   }

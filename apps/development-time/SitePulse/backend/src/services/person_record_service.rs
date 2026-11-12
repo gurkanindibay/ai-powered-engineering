@@ -276,7 +276,7 @@ impl PersonRecordService {
                 "SELECT p.national_id_masked, p.preferred_channel, p.preferred_language, \
                         p.emergency_contact_name, p.emergency_contact_phone, \
                         (SELECT u.id::text FROM users u WHERE u.person_id = p.id AND u.is_active LIMIT 1) \
-                 FROM persons p WHERE p.id = $1 AND p.site_id = $2",
+                 FROM persons p WHERE p.id = $1 AND p.site_id = $2 AND p.deleted_at IS NULL",
                 &[&person_id, &site],
             )
             .await
@@ -347,7 +347,7 @@ impl PersonRecordService {
         let updated = match &digits {
             Some(d) => tx
                 .query_opt(
-                    "UPDATE persons SET national_id = $1 WHERE id = $2 AND site_id = $3 RETURNING national_id_masked",
+                    "UPDATE persons SET national_id = $1 WHERE id = $2 AND site_id = $3 AND deleted_at IS NULL RETURNING national_id_masked",
                     &[d, &person_id, &site],
                 )
                 .await
@@ -361,7 +361,7 @@ impl PersonRecordService {
             None => tx
                 .query_opt(
                     "UPDATE persons SET national_id_hash = NULL, national_id_masked = NULL \
-                     WHERE id = $1 AND site_id = $2 RETURNING national_id_masked",
+                     WHERE id = $1 AND site_id = $2 AND deleted_at IS NULL RETURNING national_id_masked",
                     &[&person_id, &site],
                 )
                 .await
@@ -465,7 +465,7 @@ impl PersonRecordService {
         let rows = client
             .query(
                 "SELECT id, full_name, COALESCE(email, ''), COALESCE(phone, ''), national_id_hash \
-                 FROM persons WHERE site_id = $1",
+                 FROM persons WHERE site_id = $1 AND deleted_at IS NULL",
                 &[&site],
             )
             .await

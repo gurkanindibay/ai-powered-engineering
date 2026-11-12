@@ -84,13 +84,38 @@ pub async fn save_site(
 /// Marks a site deleted (soft delete); financial history is never removed.
 pub async fn soft_delete_site(pool: &Pool, site_id: &str) -> DbResult<()> {
     let id = require_id("site", site_id)?;
-    let client = pool.get().await?;
-    let n = client
-        .execute("UPDATE sites SET status = 'DELETED', deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL", &[&id])
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    let deleted = tx
+        .query_opt(
+            "UPDATE sites SET status = 'DELETED', deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL RETURNING id",
+            &[&id],
+        )
         .await?;
-    if n == 0 {
+    if deleted.is_none() {
         return Err(format!("Site {} not found", site_id).into());
     }
+    tx.execute(
+        "UPDATE users SET is_active = FALSE, auth_version = auth_version + 1 WHERE site_id = $1 AND is_active",
+        &[&id],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE auth_sessions SET revoked_at = COALESCE(revoked_at, now()) WHERE revoked_at IS NULL AND user_id IN (SELECT id FROM users WHERE site_id = $1)",
+        &[&id],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE account_activations SET used_at = COALESCE(used_at, now()) WHERE used_at IS NULL AND user_id IN (SELECT id FROM users WHERE site_id = $1)",
+        &[&id],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE persons SET deleted_at = now() WHERE site_id = $1 AND deleted_at IS NULL",
+        &[&id],
+    )
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -156,9 +181,21 @@ pub async fn create_site_with_manager_and_blocks(
     password_hash: &str,
     block_names: &[String],
 ) -> DbResult<CreatedSiteRegistration> {
-    let client = pool.get().await?;
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    let normalized_email = crate::domain::email::NormalizedEmail::normalize(admin_email);
+    if tx
+        .query_opt(
+            "SELECT 1 FROM users WHERE LOWER(email) = $1 AND is_active",
+            &[&normalized_email],
+        )
+        .await?
+        .is_some()
+    {
+        return Err("An account with this email address already exists".into());
+    }
 
-    let site_row = client
+    let site_row = tx
         .query_one(
             r#"
             INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
@@ -171,7 +208,7 @@ pub async fn create_site_with_manager_and_blocks(
     let numeric_site: i64 = site_row.get(0);
     let s_id = numeric_site.to_string();
 
-    let person_row = client
+    let person_row = tx
         .query_one(
             r#"
             INSERT INTO persons (full_name, phone, email, person_type, site_id)
@@ -183,7 +220,7 @@ pub async fn create_site_with_manager_and_blocks(
         .await?;
     let p_id: i64 = person_row.get(0);
 
-    let user_row = client
+    let user_row = tx
         .query_one(
             r#"
             INSERT INTO users (site_id, email, password_hash, role, must_change_password, person_id)
@@ -198,7 +235,7 @@ pub async fn create_site_with_manager_and_blocks(
 
     let mut created_blocks = Vec::new();
     for bname in block_names {
-        let block_row = client
+        let block_row = tx
             .query_one(
                 "INSERT INTO blocks (site_id, block_name, total_floors) VALUES ($1, $2, 10) RETURNING id",
                 &[&numeric_site, bname],
@@ -213,6 +250,7 @@ pub async fn create_site_with_manager_and_blocks(
         });
     }
 
+    tx.commit().await?;
     Ok(CreatedSiteRegistration {
         site_id: s_id,
         user_id: u_id,
@@ -255,7 +293,7 @@ pub async fn fetch_all_saas_site_summaries(pool: &Pool) -> DbResult<Vec<SaasSite
                 "SELECT COALESCE(p.full_name, 'Site Manager'), u.email, COALESCE(p.phone, '-')
                  FROM users u
                  LEFT JOIN persons p ON u.person_id = p.id
-                 WHERE (u.site_id = $1 OR u.site_id::text = $2) AND u.role = 'SITE_MANAGER' ORDER BY u.id ASC LIMIT 1",
+                 WHERE (u.site_id = $1 OR u.site_id::text = $2) AND u.role = 'SITE_MANAGER' AND u.is_active ORDER BY u.id ASC LIMIT 1",
                 &[&id, &id.to_string()],
             )
             .await

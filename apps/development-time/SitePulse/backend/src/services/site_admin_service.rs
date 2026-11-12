@@ -136,7 +136,7 @@ async fn stage_person_email_change<C: deadpool_postgres::GenericClient>(
     }
     let taken_in_site = client
         .query_opt(
-            "SELECT 1 FROM persons WHERE site_id = $1 AND lower(email) = $2 AND id <> $3",
+            "SELECT 1 FROM persons WHERE site_id = $1 AND lower(email) = $2 AND id <> $3 AND deleted_at IS NULL",
             &[&site, &new_email, &person_id],
         )
         .await
@@ -161,7 +161,7 @@ async fn stage_person_email_change<C: deadpool_postgres::GenericClient>(
             }
             let taken = client
                 .query_opt(
-                    "SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2",
+                    "SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2 AND is_active",
                     &[&new_email, &user_id],
                 )
                 .await
@@ -427,7 +427,7 @@ impl SiteAdminService {
             // Check duplicate email in DB
             let existing_user = client
                 .query_opt(
-                    "SELECT id FROM users WHERE LOWER(email) = $1",
+                    "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                     &[&email_norm],
                 )
                 .await
@@ -467,7 +467,7 @@ impl SiteAdminService {
             // S1: a person is matched only inside this site.
             let existing_person = client
                 .query_opt(
-                    "SELECT id FROM persons WHERE site_id = $2 AND LOWER(email) = $1",
+                    "SELECT id FROM persons WHERE site_id = $2 AND LOWER(email) = $1 AND deleted_at IS NULL",
                     &[&email_norm, &site_numeric_id],
                 )
                 .await
@@ -539,7 +539,7 @@ impl SiteAdminService {
                 let existing_t_person = if !t_email_norm.is_empty() {
                     client
                         .query_opt(
-                            "SELECT id FROM persons WHERE site_id = $2 AND LOWER(email) = $1",
+                            "SELECT id FROM persons WHERE site_id = $2 AND LOWER(email) = $1 AND deleted_at IS NULL",
                             &[&t_email_norm, &site_numeric_id],
                         )
                         .await
@@ -566,7 +566,7 @@ impl SiteAdminService {
                 if !t_email_norm.is_empty() {
                     let existing_t_user = client
                         .query_opt(
-                            "SELECT id FROM users WHERE LOWER(email) = $1",
+                            "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                             &[&t_email_norm],
                         )
                         .await
@@ -1781,7 +1781,7 @@ impl SiteAdminService {
                             } else {
                                 client
                                     .query_opt(
-                                        "SELECT id FROM persons WHERE site_id = $1 AND lower(email) = $2",
+                                        "SELECT id FROM persons WHERE site_id = $1 AND lower(email) = $2 AND deleted_at IS NULL",
                                         &[&site_numeric, &t_email],
                                     )
                                     .await
@@ -2080,7 +2080,19 @@ impl SiteAdminService {
 
             if let Some(u_row) = unit_row_opt {
                 let u_id: i64 = u_row.get(0);
-                let p_id: Option<i64> = u_row.get(1);
+                let related_people = tx
+                    .query(
+                        "SELECT person_id FROM (SELECT owner_person_id AS person_id FROM units WHERE id = $1 UNION SELECT tenant_person_id FROM units WHERE id = $1 UNION SELECT person_id FROM unit_occupancies WHERE unit_id = $1 UNION SELECT m.person_id FROM occupancy_members m JOIN unit_occupancies o ON o.id = m.occupancy_id WHERE o.unit_id = $1 UNION SELECT person_id FROM unit_ownerships WHERE unit_id = $1) related WHERE person_id IS NOT NULL",
+                        &[&u_row.get::<_, i64>(0)],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let person_ids: Vec<i64> = related_people
+                    .into_iter()
+                    .map(|row| row.get(0))
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect();
 
                 // Zero data loss: a unit with financial history (any payment, receipt,
                 // advance movement, paid due or matured receivable) is never removed; the
@@ -2123,29 +2135,36 @@ impl SiteAdminService {
                     &[&u_id],
                 ).await.map_err(|e| e.to_string())?;
 
-                if let Some(person_id) = p_id {
-                    tx.execute(
-                        "UPDATE unit_occupancies SET is_active = FALSE, end_date = CURRENT_DATE WHERE unit_id = $1 AND person_id = $2 AND is_active = TRUE",
-                        &[&u_id, &person_id],
-                    ).await.map_err(|e| e.to_string())?;
-
+                for person_id in person_ids {
                     let other_units: i64 = tx
-                        .query_one("SELECT COUNT(*) FROM units WHERE owner_person_id = $1 OR tenant_person_id = $1", &[&person_id])
+                        .query_one(
+                            "SELECT COUNT(*) FROM units u WHERE u.deleted_at IS NULL AND (u.owner_person_id = $1 OR u.tenant_person_id = $1 OR EXISTS (SELECT 1 FROM unit_ownerships o WHERE o.unit_id = u.id AND o.person_id = $1 AND o.is_active))",
+                            &[&person_id],
+                        )
                         .await
-                        .map(|r| r.get::<_, i64>(0))
-                        .unwrap_or(0);
+                        .map_err(|e| e.to_string())?
+                        .get(0);
                     let other_occ: i64 = tx
-                        .query_one("SELECT COUNT(*) FROM unit_occupancies WHERE person_id = $1 AND is_active = TRUE", &[&person_id])
+                        .query_one(
+                            "SELECT COUNT(*) FROM unit_occupancies o JOIN units u ON u.id = o.unit_id WHERE o.person_id = $1 AND o.is_active AND o.end_date IS NULL AND u.deleted_at IS NULL",
+                            &[&person_id],
+                        )
                         .await
-                        .map(|r| r.get::<_, i64>(0))
-                        .unwrap_or(0);
+                        .map_err(|e| e.to_string())?
+                        .get(0);
+                    let other_members: i64 = tx
+                        .query_one(
+                            "SELECT COUNT(*) FROM occupancy_members m JOIN unit_occupancies o ON o.id = m.occupancy_id AND o.is_active AND o.end_date IS NULL JOIN units u ON u.id = o.unit_id AND u.deleted_at IS NULL WHERE m.person_id = $1",
+                            &[&person_id],
+                        )
+                        .await
+                        .map_err(|e| e.to_string())?
+                        .get(0);
 
-                    if other_units == 0 && other_occ == 0 {
-                        // The login account goes; the person stays, because the closed
-                        // ownership/occupancy history references it (zero data loss).
-                        // S9: the account is deactivated, not deleted, so its audit trail and
-                        // KVKK retention survive; deactivation also ends every session.
-                        tx.execute("UPDATE users SET is_active = false WHERE site_id = $1 AND person_id = $2", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
+                    if other_units == 0 && other_occ == 0 && other_members == 0 {
+                        // Keep historical references while releasing the retired person's identifiers.
+                        tx.execute("UPDATE users SET is_active = false, auth_version = auth_version + 1 WHERE site_id = $1 AND person_id = $2 AND is_active", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
+                        tx.execute("UPDATE persons SET deleted_at = now() WHERE site_id = $1 AND id = $2 AND deleted_at IS NULL", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
                         tx.execute("UPDATE auth_sessions SET revoked_at = now() WHERE revoked_at IS NULL AND user_id IN (SELECT id FROM users WHERE site_id = $1 AND person_id = $2)", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
                         tx.execute("UPDATE account_activations SET used_at = now() WHERE used_at IS NULL AND user_id IN (SELECT id FROM users WHERE site_id = $1 AND person_id = $2)", &[&site_numeric, &person_id]).await.map_err(|e| e.to_string())?;
                     }
@@ -2171,6 +2190,11 @@ impl SiteAdminService {
                         || u.owner_user_id
                             .as_ref()
                             .and_then(|uid| crate::db::parse_id_to_i64(uid))
+                            == id_numeric
+                        || u.tenant_user_id.as_deref() == Some(unit_or_user_id)
+                        || u.tenant_user_id
+                            .as_ref()
+                            .and_then(|uid| crate::db::parse_id_to_i64(uid))
                             == id_numeric)
             })
             .cloned()
@@ -2193,9 +2217,46 @@ impl SiteAdminService {
                     return Err(UNIT_HAS_FINANCIAL_HISTORY.to_string());
                 }
             }
-            let target_owner_uids: Vec<String> = target_units
+            let target_user_ids: std::collections::BTreeSet<String> = target_units
                 .iter()
-                .filter_map(|u| u.owner_user_id.clone())
+                .flat_map(|u| [u.owner_user_id.clone(), u.tenant_user_id.clone()])
+                .flatten()
+                .collect();
+            let target_members: Vec<UnitMemberDto> = target_unit_ids
+                .iter()
+                .filter_map(|unit_id| inner.unit_members.get(unit_id))
+                .flatten()
+                .cloned()
+                .collect();
+            let target_user_ids: std::collections::BTreeSet<String> = target_user_ids
+                .into_iter()
+                .chain(
+                    target_members
+                        .iter()
+                        .filter_map(|m| m.resident_user_id.map(|id| id.to_string())),
+                )
+                .collect();
+            let target_person_ids: std::collections::BTreeSet<i64> = inner
+                .users
+                .iter()
+                .filter(|u| target_user_ids.contains(&u.id))
+                .filter_map(|u| u.person_id)
+                .chain(target_members.iter().filter_map(|m| m.person_id))
+                .collect();
+            let target_emails: std::collections::BTreeSet<String> = inner
+                .users
+                .iter()
+                .filter(|u| {
+                    target_user_ids.contains(&u.id)
+                        || u.person_id
+                            .is_some_and(|id| target_person_ids.contains(&id))
+                })
+                .map(|u| crate::domain::email::NormalizedEmail::normalize(&u.email))
+                .chain(
+                    target_members
+                        .iter()
+                        .map(|m| crate::domain::email::NormalizedEmail::normalize(&m.email)),
+                )
                 .collect();
 
             // Clear matching units for this site
@@ -2219,16 +2280,62 @@ impl SiteAdminService {
                 inner.unit_invite_tokens.remove(u_id);
             }
 
-            // Remove users if not owning other units
-            for owner_uid in &target_owner_uids {
-                let owns_other = inner
-                    .units
-                    .iter()
-                    .any(|u| u.owner_user_id.as_deref() == Some(owner_uid));
-                if !owns_other {
-                    inner.users.retain(|u| &u.id != owner_uid);
-                }
-            }
+            let active_user_ids: std::collections::BTreeSet<String> = inner
+                .units
+                .iter()
+                .flat_map(|u| [u.owner_user_id.clone(), u.tenant_user_id.clone()])
+                .flatten()
+                .chain(
+                    inner
+                        .unit_members
+                        .values()
+                        .flatten()
+                        .filter_map(|m| m.resident_user_id.map(|id| id.to_string())),
+                )
+                .collect();
+            let active_person_ids: std::collections::BTreeSet<i64> = inner
+                .users
+                .iter()
+                .filter(|u| active_user_ids.contains(&u.id))
+                .filter_map(|u| u.person_id)
+                .chain(
+                    inner
+                        .unit_members
+                        .values()
+                        .flatten()
+                        .filter_map(|m| m.person_id),
+                )
+                .collect();
+            let active_emails: std::collections::BTreeSet<String> = inner
+                .users
+                .iter()
+                .filter(|u| {
+                    active_user_ids.contains(&u.id)
+                        || u.person_id
+                            .is_some_and(|id| active_person_ids.contains(&id))
+                })
+                .map(|u| crate::domain::email::NormalizedEmail::normalize(&u.email))
+                .chain(
+                    inner
+                        .unit_members
+                        .values()
+                        .flatten()
+                        .map(|m| crate::domain::email::NormalizedEmail::normalize(&m.email)),
+                )
+                .collect();
+            inner.users.retain(|u| {
+                let is_archived_identity = target_user_ids.contains(&u.id)
+                    || u.person_id
+                        .is_some_and(|id| target_person_ids.contains(&id))
+                    || target_emails
+                        .contains(&crate::domain::email::NormalizedEmail::normalize(&u.email));
+                !is_archived_identity
+                    || active_user_ids.contains(&u.id)
+                    || u.person_id
+                        .is_some_and(|id| active_person_ids.contains(&id))
+                    || active_emails
+                        .contains(&crate::domain::email::NormalizedEmail::normalize(&u.email))
+            });
             Ok(())
         } else {
             // Also check if id is a user
@@ -2955,7 +3062,7 @@ impl SiteAdminService {
                 let person_id: i64 = if let Some(pid) = req.person_id {
                     client
                         .query_opt(
-                            "SELECT id FROM persons WHERE id = $1 AND site_id = $2",
+                            "SELECT id FROM persons WHERE id = $1 AND site_id = $2 AND deleted_at IS NULL",
                             &[&pid, &site_numeric],
                         )
                         .await
@@ -2966,7 +3073,7 @@ impl SiteAdminService {
                     let clean_email = crate::domain::email::NormalizedEmail::normalize(email);
                     let existing = client
                         .query_opt(
-                            "SELECT id FROM persons WHERE site_id = $2 AND LOWER(email) = $1",
+                            "SELECT id FROM persons WHERE site_id = $2 AND LOWER(email) = $1 AND deleted_at IS NULL",
                             &[&clean_email, &site_numeric],
                         )
                         .await
