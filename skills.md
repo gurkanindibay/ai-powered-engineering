@@ -223,7 +223,7 @@ Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/
 ./scripts/flutter_reuse_inventory.py --json
 ```
 
-The full catalogue and the promotion procedure are in the [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md) skill. Shared Flutter components that the rules point to live in `flutter/lib/ui/design_system/` (`SpTone`, `SpMetricValue`/`SpIconMetric`, `SpGuidanceCard`, `SpStatusBadge`, `SpFilterChip`, `SpMoneyFormField`/`MoneyInput`, `SpIbanCopyRow`/`spCopyToClipboard`), `ui/components/sp_dialog_pages.dart` (`showSpSelection<T>`), `ui/residents/resident_directory.dart` (`ResidentSummary`, `matchesResidentFilters`, `ResidentOccupancyStats`) and `domain/formatting/json_decimal.dart` (`readDecimal`).
+The full catalogue and the promotion procedure are in the [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md) skill. Shared Flutter components that the rules point to live in `flutter/lib/ui/design_system/` (`SpPageHeader`, `SpTone`, `SpMetricValue`/`SpIconMetric`, `SpGuidanceCard`, `SpStatusBadge`, `SpFilterChip`, `SpMoneyFormField`/`MoneyInput`, `SpIbanCopyRow`/`spCopyToClipboard`), `ui/components/sp_dialog_pages.dart` (`showSpSelection<T>`), `ui/residents/resident_directory.dart` (`ResidentSummary`, `matchesResidentFilters`, `ResidentOccupancyStats`) and `domain/formatting/json_decimal.dart` (`readDecimal`).
 
 ## 5b-4. GUI Traceability (`gui_traceability.py`)
 

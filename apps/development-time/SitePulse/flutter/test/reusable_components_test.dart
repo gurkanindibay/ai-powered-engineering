@@ -18,6 +18,8 @@ import 'package:sitepulse/ui/design_system/sp_clipboard.dart';
 import 'package:sitepulse/ui/design_system/sp_filter_chip.dart';
 import 'package:sitepulse/ui/design_system/sp_guidance_card.dart';
 import 'package:sitepulse/ui/design_system/sp_metric.dart';
+import 'package:sitepulse/ui/design_system/sp_page_header.dart';
+import 'package:sitepulse/ui/components/app_fullscreen_page.dart';
 import 'package:sitepulse/ui/design_system/sp_money_field.dart';
 import 'package:sitepulse/ui/design_system/sp_status_badge.dart';
 import 'package:sitepulse/ui/design_system/sp_tone.dart';
@@ -82,6 +84,46 @@ List<String> _captureClipboard(WidgetTester tester, {bool fail = false}) {
 }
 
 void main() {
+  for (final theme in [AppTheme.light(), AppTheme.dark()]) {
+    for (final width in [320.0, 1200.0]) {
+      testWidgets('page header wraps actions at $width in ${theme.brightness}', (tester) async {
+        tester.view.physicalSize = Size(width, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        var calls = 0;
+        await _pump(tester, SpPageHeader(
+          title: 'Owners and residents management',
+          subtitle: 'A long site name and occupancy summary',
+          icon: Icons.people_outline,
+          actions: [
+            TextButton(onPressed: () => calls++, child: const Text('Add resident')),
+            TextButton(onPressed: () {}, child: const Text('Housing types and rates')),
+          ],
+        ), theme: theme, textScale: 2);
+        expect(find.text('Owners and residents management'), findsOneWidget);
+        expect(find.text('A long site name and occupancy summary'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('Add resident'));
+        expect(calls, 1);
+      });
+    }
+  }
+
+  for (final scrollable in [true, false]) {
+    testWidgets('fullscreen content begins at the top, scrollable=$scrollable', (tester) async {
+      await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: AppFullscreenPage(
+        title: 'Details',
+        isScrollable: scrollable,
+        child: const SizedBox(height: 40, width: 200, child: Text('Short content')),
+      )));
+      final appBarBottom = tester.getBottomLeft(find.byType(AppBar)).dy;
+      expect(tester.getTopLeft(find.text('Short content')).dy,
+        closeTo(appBarBottom + AppSpacing.screenGutter, 1));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   group('MoneyFormatter.tryParse (the single amount-input rule)', () {
     test('accepts Turkish grouping, plain comma or dot decimals and the lira symbol', () {
       expect(MoneyFormatter.tryParse('1.423,33'), Decimal.parse('1423.33'));

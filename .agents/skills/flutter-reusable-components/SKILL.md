@@ -45,6 +45,13 @@ Paths below are relative to `apps/development-time/SitePulse/flutter/lib/`.
 | `AppColors.accentCyan` / `Colors.blue` | `SpTone.info` |
 | `AppColors.accentPurple` / `Colors.indigo` | `SpTone.accent` |
 
+### Module headers: `SpPageHeader` (`ui/design_system/sp_page_header.dart`)
+`SpPageHeader(title:, icon:, subtitle:, actions:)` is the full-width bordered module identity
+card. Titles wrap; actions wrap beneath the title. Place it after any context switcher and before
+section navigation, summaries and filters. The page layout contract and screen audit are in
+[docs/page-layout-standard.md](../../../docs/page-layout-standard.md). Dedicated full-screen flows
+use `AppFullscreenPage` with its AppBar title, top-aligned body and sticky bottom actions.
+
 ### Metrics: `SpMetricValue`, `SpIconMetric` (`ui/design_system/sp_metric.dart`)
 - `SpMetricValue(label:, value:, tone:)`: a label above a bold value (summary rows).
 - `SpIconMetric(label:, value:, icon:, tone:, dense:)`: an icon, a value and a centred label.

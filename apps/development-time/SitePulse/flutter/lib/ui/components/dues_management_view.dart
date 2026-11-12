@@ -1,3 +1,4 @@
+import '../design_system/sp_page_header.dart';
 import '../../testing/test_id.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
@@ -625,29 +626,107 @@ class _DuesManagementViewState extends State<DuesManagementView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 0. Site Management Title
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Row(
-            children: [
-              const Icon(Icons.apartment, size: 20, color: AppColors.accentCyan),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  widget.controller.userSession.siteName.isNotEmpty
-                      ? '${widget.controller.userSession.siteName} • Aidat ve Tahsilat Yönetimi'
-                      : 'Aidat ve Tahsilat Yönetimi',
-                  style: TextStyle(
-                    color: AppColors.textPrimary(context),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+        SpPageHeader(
+          title: 'Aidat ve Tahsilat Yönetimi',
+          icon: Icons.account_balance_wallet_outlined,
+          subtitle: widget.controller.userSession.siteName,
+          actions: [
+            testId(
+              'btn_open_accrual_dialog',
+              ElevatedButton.icon(
+                onPressed: _showAccrueDuesDialog,
+                icon: const Icon(Icons.event_repeat, size: 14),
+                label: const Text('Toplu Aidat Tahakkuku', style: TextStyle(fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.successFill,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
-            ],
-          ),
+            ),
+            testId(
+              'btn_open_bank_import',
+              ElevatedButton.icon(
+                onPressed: _showImportOptionsDialog,
+                icon: const Icon(Icons.upload_file, size: 14),
+                label: const Text('Excel / Ekstre Yükle', style: TextStyle(fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryFill,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            testId(
+              'action_payment_tracking',
+              ElevatedButton.icon(
+                key: const Key('action_payment_tracking'),
+                onPressed: () {
+                  setState(() => _activeSegment = 1);
+                  widget.controller.fetchPaymentStream();
+                },
+                icon: const Icon(Icons.account_balance_wallet, size: 14),
+                label: const Text('Tahsilat & Kasa Takibi', style: TextStyle(fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            testId(
+              'btn_dues_more_actions',
+              PopupMenuButton<String>(
+                tooltip: 'Diğer Kasa İşlemleri',
+                icon: const Icon(Icons.more_vert, size: 20),
+                onSelected: (val) {
+                  if (val == 'manual_cash') {
+                    PaymentTrackingPage.openRecordManualPayment(
+                      context,
+                      controller: widget.controller,
+                      onSaved: () => setState(() {}),
+                    );
+                  } else if (val == 'virman') {
+                    PaymentTrackingPage.openInterLedgerTransfer(
+                      context,
+                      controller: widget.controller,
+                      onCompleted: () => setState(() {}),
+                    );
+                  }
+                },
+                itemBuilder: (ctx) => [
+                  const PopupMenuItem(
+                    value: 'manual_cash',
+                    child: Row(
+                      children: [
+                        Icon(Icons.payments_outlined, size: 16, color: AppColors.accentGreen),
+                        SizedBox(width: 8),
+                        Text('Nakit / Manuel Tahsilat', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'virman',
+                    child: testId(
+                      'menu_item_virman',
+                      const Row(
+                        children: [
+                          Icon(Icons.swap_horiz, size: 16, color: Colors.indigo),
+                          SizedBox(width: 8),
+                          Text('Virman (Aidat ⇄ Demirbaş)', style: TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
+        const SizedBox(height: AppSpacing.lg),
         if (widget.controller.userSession.siteName.isEmpty && widget.controller.currentManagedSite == null) ...[
           Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -671,6 +750,38 @@ class _DuesManagementViewState extends State<DuesManagementView> {
             ),
           ),
         ],
+        // 3. Segmented Navigation: 4 Segments (Daire Borçları, Canlı Kasa, Borç Yaşlandırma, Banka Eşleşmeyenler)
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border(context)),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= AppBreakpoints.medium ? 5 : 2;
+              final tabWidth = (constraints.maxWidth - AppSpacing.xs * (columns - 1)) / columns;
+              return Wrap(
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  SizedBox(width: tabWidth, child: _buildSegmentTab(0, 'Daire Aidat Durumları')),
+                  SizedBox(width: tabWidth, child: _buildSegmentTab(1, 'Canlı Kasa')),
+                  SizedBox(width: tabWidth, child: _buildSegmentTab(2, 'Yaşlandırma')),
+                  SizedBox(
+                    width: tabWidth,
+                    child: _buildSegmentTab(3, 'Eşleşmeyenler', count: unmatchedItems.length),
+                  ),
+                  SizedBox(width: tabWidth, child: _buildSegmentTab(4, 'Demirbaş & Yatırım')),
+                ],
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: AppSpacing.lg),
+
         // 1. Header: Month Selector & Upload Button
         Wrap(
           alignment: WrapAlignment.spaceBetween,
@@ -694,7 +805,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                     visualDensity: VisualDensity.compact,
                     onPressed: _prevMonth,
                   ),
-                  PopupMenuButton<String>(
+                  Expanded(child: PopupMenuButton<String>(
                     initialValue: selectedMonth.isNotEmpty ? selectedMonth : null,
                     onSelected: (m) {
                       if (m.isNotEmpty) {
@@ -724,20 +835,20 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                         children: [
                           const Icon(Icons.calendar_month_outlined, size: 16, color: AppColors.accentCyan),
                           const SizedBox(width: 6),
-                          Text(
+                          Flexible(child: Text(
                             selectedMonth.isNotEmpty ? selectedMonth : 'Henüz Aidat Dönemi Yok',
                             style: TextStyle(
                               color: AppColors.textPrimary(context),
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
                             ),
-                          ),
+                          )),
                           const SizedBox(width: 4),
                           const Icon(Icons.arrow_drop_down, size: 18),
                         ],
                       ),
                     ),
-                  ),
+                  )),
                   IconButton(
                     tooltip: 'Sonraki ay',
                     icon: const Icon(Icons.chevron_right, size: 20),
@@ -748,92 +859,6 @@ class _DuesManagementViewState extends State<DuesManagementView> {
               ),
             ),
 
-            // Action Buttons: Accrue Dues, Import Bank File, Payment Tracking & More Menu
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                testId('btn_open_accrual_dialog', ElevatedButton.icon(
-                  onPressed: _showAccrueDuesDialog,
-                  icon: const Icon(Icons.event_repeat, size: 14),
-                  label: const Text('Toplu Aidat Tahakkuku', style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.successFill,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                )),
-                testId('btn_open_bank_import', ElevatedButton.icon(
-                  onPressed: _showImportOptionsDialog,
-                  icon: const Icon(Icons.upload_file, size: 14),
-                  label: const Text('Excel / Ekstre Yükle', style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryFill,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                )),
-                testId('action_payment_tracking', ElevatedButton.icon(
-                  key: const Key('action_payment_tracking'),
-                  onPressed: () {
-                    setState(() => _activeSegment = 1);
-                    widget.controller.fetchPaymentStream();
-                  },
-                  icon: const Icon(Icons.account_balance_wallet, size: 14),
-                  label: const Text('Tahsilat & Kasa Takibi', style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                )),
-                testId('btn_dues_more_actions', PopupMenuButton<String>(
-                  tooltip: 'Diğer Kasa İşlemleri',
-                  icon: const Icon(Icons.more_vert, size: 20),
-                  onSelected: (val) {
-                    if (val == 'manual_cash') {
-                      PaymentTrackingPage.openRecordManualPayment(
-                        context,
-                        controller: widget.controller,
-                        onSaved: () => setState(() {}),
-                      );
-                    } else if (val == 'virman') {
-                      PaymentTrackingPage.openInterLedgerTransfer(
-                        context,
-                        controller: widget.controller,
-                        onCompleted: () => setState(() {}),
-                      );
-                    }
-                  },
-                  itemBuilder: (ctx) => [
-                    const PopupMenuItem(
-                      value: 'manual_cash',
-                      child: Row(
-                        children: [
-                          Icon(Icons.payments_outlined, size: 16, color: AppColors.accentGreen),
-                          SizedBox(width: 8),
-                          Text('Nakit / Manuel Tahsilat', style: TextStyle(fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'virman',
-                      child: testId('menu_item_virman', const Row(
-                        children: [
-                          Icon(Icons.swap_horiz, size: 16, color: Colors.indigo),
-                          SizedBox(width: 8),
-                          Text('Virman (Aidat ⇄ Demirbaş)', style: TextStyle(fontSize: 12)),
-                        ],
-                      )),
-                    ),
-                  ],
-                )),
-              ],
-            ),
           ],
         ),
 
@@ -883,9 +908,10 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 ],
               ),
               const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
                 children: [
                   Text(
                     formatTry(summary.totalCollected),
@@ -909,9 +935,10 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                 ),
               ),
               const SizedBox(height: 14),
-              // 4 Person/Count Metrics Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Summary metrics wrap when the available width is compact.
+              Wrap(
+                spacing: AppSpacing.xl,
+                runSpacing: AppSpacing.md,
                 children: [
                   SpMetricValue(label: AppStrings.totalUnits, value: '${summary.totalUnitsCount}'),
                   SpMetricValue(label: 'Ödeyen Kişi', value: '${summary.paidUnitsCount} Daire', tone: SpTone.success),
@@ -924,31 +951,6 @@ class _DuesManagementViewState extends State<DuesManagementView> {
         ),
 
         const SizedBox(height: 18),
-
-        // 3. Segmented Navigation: 4 Segments (Daire Borçları, Canlı Kasa, Borç Yaşlandırma, Banka Eşleşmeyenler)
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border(context)),
-          ),
-          child: Row(
-            children: [
-              Expanded(child: _buildSegmentTab(0, 'Daire Aidat Durumları')),
-              const SizedBox(width: 4),
-              Expanded(child: _buildSegmentTab(1, 'Canlı Kasa')),
-              const SizedBox(width: 4),
-              Expanded(child: _buildSegmentTab(2, '⏳ Yaşlandırma')),
-              const SizedBox(width: 4),
-              Expanded(child: _buildSegmentTab(3, 'Eşleşmeyenler', count: unmatchedItems.length)),
-              const SizedBox(width: 4),
-              Expanded(child: _buildSegmentTab(4, 'Demirbaş & Yatırım')),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 14),
 
         // 4. Alert Banner if not in Segment 3 and Unmatched Items Exist
         if (_activeSegment != 3 && unmatchedItems.isNotEmpty) ...[
@@ -1029,7 +1031,6 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 ),
-                overflow: TextOverflow.ellipsis,
               ),
             ),
             if (count > 0) ...[
@@ -1105,8 +1106,10 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           )),
         ),
 
-        // Filter Chips & Search Bar
-        Row(
+        // Filter chips wrap before the search field.
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
           children: [
             _buildFilterChip('Tümü ($totalCount)', 'ALL', currentFilter),
             const SizedBox(width: 6),

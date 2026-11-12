@@ -1,3 +1,4 @@
+import '../design_system/sp_page_header.dart';
 import '../payments/finance_hub_page.dart';
 import '../../testing/test_id.dart';
 import 'dart:async';
@@ -370,6 +371,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (widget.controller.isOffline) _buildOfflineBanner(),
+                if (widget.controller.userRole == UserRole.siteManager)
+                  _buildSiteManagerPathSwitcher(),
                 _buildCurrentTabContent(isHomeRole),
               ],
             ),
@@ -498,12 +501,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final currentPath = widget.controller.siteAdminPath;
         if (currentPath == SiteAdminActivePath.myFlatOwner) {
           // A manager viewing their own flat sees exactly the owner's home.
-          return _buildResidentHome(isOwner: true, header: _buildSiteManagerPathSwitcher());
+          return _buildResidentHome(isOwner: true);
         } else {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSiteManagerPathSwitcher(),
               ManagerCockpitView(
                 controller: widget.controller,
                 onAddResidentTap: _showAddResidentDialog,
@@ -517,7 +519,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         }
       case UserRole.auditor:
-        return const FinanceHubView(readOnly: true);
+        return const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SpPageHeader(title: 'Finans Masası', icon: Icons.account_balance_outlined),
+            SizedBox(height: AppSpacing.lg),
+            FinanceHubView(readOnly: true),
+          ],
+        );
       case UserRole.saasAdmin:
         return SaasAdminView(
           controller: widget.controller,
@@ -531,13 +540,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   /// Resident / owner home: balance and how to pay first, then activity and household.
   /// Wide screens (>= 840 dp) use two columns so the page is not one stretched phone column.
-  Widget _buildResidentHome({required bool isOwner, Widget? header}) {
+  Widget _buildResidentHome({required bool isOwner}) {
     final hasNoUnit = widget.controller.activeUnit.id.isEmpty;
     if (hasNoUnit) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ?header,
+          SpPageHeader(
+            title: isOwner ? 'Dairem' : 'Sakin Paneli',
+            icon: Icons.home_outlined,
+            subtitle: widget.controller.userSession.siteName,
+          ),
+          const SizedBox(height: AppSpacing.lg),
           _buildNoHomeownerGuidanceCard(),
           const SizedBox(height: 18),
           _buildAccountActivitySection(),
@@ -582,7 +596,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ?header,
+              SpPageHeader(
+                title: isOwner ? 'Dairem' : 'Sakin Paneli',
+                icon: Icons.home_outlined,
+                subtitle: widget.controller.userSession.siteName,
+              ),
+              const SizedBox(height: AppSpacing.lg),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -596,7 +615,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [?header, ...primary, const SizedBox(height: 18), ...secondary],
+          children: [
+            SpPageHeader(
+              title: isOwner ? 'Dairem' : 'Sakin Paneli',
+              icon: Icons.home_outlined,
+              subtitle: widget.controller.userSession.siteName,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            ...primary,
+            const SizedBox(height: 18),
+            ...secondary,
+          ],
         );
       },
     );
@@ -619,11 +648,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Dairem & Hane Bilgileri',
-            style: TextStyle(color: AppColors.textPrimary(context), fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
+          const SpPageHeader(title: 'Dairem & Hane Bilgileri', icon: Icons.home_outlined),
+          const SizedBox(height: AppSpacing.lg),
           _buildMyUnitHouseholdCard(),
           const SizedBox(height: 16),
           VirtualIbanCard(
@@ -640,12 +666,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSiteManagerPathSwitcher(),
-            Text(
-              'Dairem & Hane Bilgileri',
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
+            const SpPageHeader(title: 'Dairem & Hane Bilgileri', icon: Icons.home_outlined),
+            const SizedBox(height: AppSpacing.lg),
             _buildMyUnitHouseholdCard(),
             const SizedBox(height: 16),
             VirtualIbanCard(
@@ -671,7 +693,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHomeOwnersManagementView() {
-    final isDark = AppColors.isDark(context);
     final homeOwners = widget.controller.homeOwners;
     final isLoading = widget.controller.isLoadingHomeOwners;
 
@@ -694,110 +715,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSiteManagerPathSwitcher(),
 
-        // Header Card
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border(context)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.accentCyan.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.people_alt_outlined, color: AppColors.accentCyan, size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Kat Malikleri & Sakinler Yönetimi',
-                          style: TextStyle(
-                            color: AppColors.textPrimary(context),
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          '${widget.controller.userSession.siteName} • Toplam $totalCount bağımsız bölüm (${homeOwners.length} kayıtlı)',
-                          style: TextStyle(
-                            color: AppColors.textSecondary(context),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  testId('open_owners_residents_module', OutlinedButton.icon(
-                    key: const Key('open_owners_residents_module'),
-                    onPressed: () {
-                      AppFullscreenPage.push(
-                        context: context,
-                        builder: (_) => OwnersResidentsModulePage(controller: widget.controller),
-                      );
-                    },
-                    icon: const Icon(Icons.fullscreen, size: 16),
-                    label: const Text('Tam Ekran Modu', style: TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.accentCyan,
-                      side: const BorderSide(color: AppColors.accentCyan),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      minimumSize: const Size(0, 30),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  )),
-                ],
+        SpPageHeader(
+          title: 'Kat Malikleri & Sakinler Yönetimi',
+          icon: Icons.people_alt_outlined,
+          subtitle:
+              '${widget.controller.userSession.siteName} • Toplam $totalCount bağımsız bölüm (${homeOwners.length} kayıtlı)',
+          actions: [
+            testId(
+              'add_resident_btn',
+              ElevatedButton.icon(
+                key: const Key('add_resident_btn'),
+                onPressed: _showAddResidentDialog,
+                icon: const Icon(Icons.person_add_outlined, size: 15),
+                label: const Text('Yeni Sakin Ekle', style: TextStyle(fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryFill,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  minimumSize: const Size(0, 30),
+                ),
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  testId('add_resident_btn', ElevatedButton.icon(
-                    key: const Key('add_resident_btn'),
-                    onPressed: _showAddResidentDialog,
-                    icon: const Icon(Icons.person_add_outlined, size: 15),
-                    label: const Text('Yeni Sakin Ekle', style: TextStyle(fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryFill,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      minimumSize: const Size(0, 30),
-                    ),
-                  )),
-                  OutlinedButton.icon(
-                    onPressed: _showManageHouseTypesDialog,
-                    icon: const Icon(Icons.home_work_outlined, size: 15),
-                    label: const Text('Konut Tipleri & Tarifeler', style: TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.accentPurple,
-                      side: const BorderSide(color: AppColors.accentPurple),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      minimumSize: const Size(0, 30),
-                    ),
-                  ),
-                ],
+            ),
+            OutlinedButton.icon(
+              onPressed: _showManageHouseTypesDialog,
+              icon: const Icon(Icons.home_work_outlined, size: 15),
+              label: const Text('Konut Tipleri & Tarifeler', style: TextStyle(fontSize: 12)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.accentPurple,
+                side: const BorderSide(color: AppColors.accentPurple),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: const Size(0, 30),
               ),
-            ],
-          ),
+            ),
+            testId(
+              'open_owners_residents_module',
+              OutlinedButton.icon(
+                key: const Key('open_owners_residents_module'),
+                onPressed: () {
+                  AppFullscreenPage.push(
+                    context: context,
+                    builder: (_) => OwnersResidentsModulePage(controller: widget.controller),
+                  );
+                },
+                icon: const Icon(Icons.fullscreen, size: 16),
+                label: const Text('Tam Ekran Modu', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.accentCyan,
+                  side: const BorderSide(color: AppColors.accentCyan),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  minimumSize: const Size(0, 30),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+          ],
         ),
-
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.lg),
 
         // Live KPI Metrics Bar
         ResidentSummary(stats: stats, dense: true),
@@ -971,7 +947,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               border: Border(bottom: BorderSide(color: AppColors.border(context).withOpacity(0.6))),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 // Unit Badge / Door Avatar
@@ -1074,8 +1052,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ],
                 ),
-                const SizedBox(width: 10),
-                // Unit-Level Action Buttons inside Header
+              ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: [
+                // Unit-level actions wrap below the unit identity.
                 testId('history_ho_${ho.unitId}', IconButton(
                   key: Key('history_ho_${ho.unitId}'),
                   icon: const Icon(Icons.history, size: 18, color: AppColors.accentCyan),
@@ -1138,6 +1122,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
+              ],
+              ),
               ],
             ),
           ),
@@ -1221,10 +1207,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             children: [
                               Icon(Icons.email_outlined, size: 12, color: AppColors.textSecondary(context)),
                               const SizedBox(width: 4),
-                              Text(
+                              Flexible(child: Text(
                                 ho.activeResponsibleEmail.isNotEmpty ? ho.activeResponsibleEmail : 'E-posta Yok',
                                 style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                              ),
+                              )),
                             ],
                           ),
                         ],
@@ -1633,10 +1619,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               children: [
                                                 Icon(Icons.email_outlined, size: 12, color: AppColors.textSecondary(context)),
                                                 const SizedBox(width: 4),
-                                                Text(
+                                                Flexible(child: Text(
                                                   ho.email.isNotEmpty ? ho.email : 'E-posta Yok',
                                                   style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                                                ),
+                                                )),
                                               ],
                                             ),
                                           ],
@@ -1778,10 +1764,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             children: [
                                               Icon(Icons.email_outlined, size: 12, color: AppColors.textSecondary(context)),
                                               const SizedBox(width: 4),
-                                              Text(
+                                              Flexible(child: Text(
                                                 ho.email.isNotEmpty ? ho.email : 'E-posta Yok',
                                                 style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                                              ),
+                                              )),
                                             ],
                                           ),
                                         ],
