@@ -7586,7 +7586,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           } else {
                             setDialogState(() {
                               isSaving = false;
-                              localError = widget.controller.authMessage ?? 'Site kaydedilemedi. Lütfen bilgileri kontrol ediniz.';
+                              localError = widget.controller.lastSiteRegistrationError ?? 'Site kaydedilemedi. Lütfen bilgileri kontrol ediniz.';
                             });
                           }
                         } catch (e) {

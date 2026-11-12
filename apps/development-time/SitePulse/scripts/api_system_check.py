@@ -1029,7 +1029,7 @@ def check_person_tenant_isolation(ctx: Context) -> Tuple[bool, str]:
 
 
 def check_person_activation_lifecycle(ctx: Context) -> Tuple[bool, str]:
-    """S2/S3/S5/S9: activation links, confirmed email change and deactivation instead of deletion."""
+    """S2/S3/S5/S9: activation, staged email change, archival and immediate identity reuse."""
     db, base = ctx.backend.db_name, ctx.backend.base
     suffix = str(time.time_ns())[-9:]
     email = f"activate-{suffix}@example.com"
@@ -1062,11 +1062,16 @@ def check_person_activation_lifecycle(ctx: Context) -> Tuple[bool, str]:
     # S9: archiving deactivates the account instead of deleting it.
     removed = http("DELETE", base + f"/api/v1/site-admin/home-owners/{unit}", token=ctx.manager)[0]
     kept = ctx.psql.run(db, f"SELECT is_active::text FROM users WHERE email='{email}';")
+    # Reusing the retired identity must work before any read-model reload or restart.
+    replacement, _ = http("POST", base + "/api/v1/site-admin/home-owners", token=ctx.manager,
+                          body=_owner_body(800 + int(suffix[-2:]), email, "Replacement Owner"))
+    active_accounts = ctx.psql.run(db, f"SELECT count(*) FROM users WHERE lower(email)='{email}' AND is_active;")
+    archived_people = ctx.psql.run(db, f"SELECT count(*) FROM persons WHERE lower(email)='{email}' AND deleted_at IS NOT NULL;")
     ok = (no_password and sent and blocked == 401 and activated == 204 and reused == 400 and logged_in == 200
-          and resend_active == 409 and pending and still_old and removed == 204 and kept == "false")
+          and resend_active == 409 and pending and still_old and removed == 204 and kept == "false" and replacement == 201 and active_accounts == "1" and archived_people == "1")
     return ok, (f"no password {no_password}, sent {sent}, pre-activation login {blocked}, activate {activated}, reuse {reused}, "
                 f"login {logged_in}, resend on active {resend_active}, email change pending {pending} old kept {still_old}, "
-                f"archive {removed} account kept inactive {kept}")
+                f"archive {removed} account kept inactive {kept}, replacement {replacement}, active accounts {active_accounts}, archived people {archived_people}")
 
 
 def check_person_directory_and_export(ctx: Context) -> Tuple[bool, str]:

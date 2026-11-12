@@ -891,6 +891,9 @@ pub struct DuesSummaryDto {
     pub delay_penalty: Decimal,
     pub total_amount: Decimal,
     pub due_date: String,
+    /// Uses the same calculation date as the returned delay penalty.
+    #[serde(default)]
+    pub days_overdue: i32,
     pub status: String,
 }
 
