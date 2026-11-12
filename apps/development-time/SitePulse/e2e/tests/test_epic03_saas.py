@@ -3,6 +3,7 @@ import pytest
 
 from pages import SaasAdmin
 from support.api import ApiError
+from support.flutter import by_id
 
 
 @pytest.mark.smoke
@@ -140,10 +141,23 @@ def test_empty_site_can_be_deleted(api, saas_ready, login_page, page, actors, st
     portfolio = SaasAdmin(page).wait()
     assert site_id in portfolio.site_ids()
 
+    portfolio.open_add_site().fill(
+        "Duplicate Site", "İstanbul", "Kadıköy", "A Blok", "Yeni Yönetici",
+        "silinecek@e2e.test", "+90 532 000 0000")
+    by_id(page, "btn_save_new_site").click()
+    page.get_by_text("Bu e-posta adresi başka bir hesapta kullanılıyor.", exact=True).wait_for(timeout=15_000)
+    page.get_by_text("Vazgeç", exact=True).last.click()
+
     portfolio.delete_site(site_id)
 
     page.locator(f'[flt-semantics-identifier="btn_edit_site_{site_id}"]').wait_for(state="detached", timeout=15_000)
     assert stack.sql(f"SELECT count(*) FROM sites WHERE id = {int(site_id)} AND status <> 'DELETED';") == "0"
+
+    replacement = api.create_site(saas_ready, "Yeni Site", "silinecek@e2e.test")
+    assert str(replacement["site_id"]) != site_id
+    assert stack.sql(
+        "SELECT count(*) FROM users WHERE lower(email) = 'silinecek@e2e.test' AND is_active;"
+    ) == "1"
 
 
 @pytest.mark.core

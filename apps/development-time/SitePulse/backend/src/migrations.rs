@@ -58,6 +58,10 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(27, "V27__seed_initial_owner_occupancies.sql"),
     migration!(28, "V28__site_announcements.sql"),
     migration!(29, "V29__allow_reuse_of_deleted_site_slugs.sql"),
+    migration!(
+        30,
+        "V30__release_identity_uniqueness_for_archived_records.sql"
+    ),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.

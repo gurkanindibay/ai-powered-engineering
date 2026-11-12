@@ -68,7 +68,8 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
     {
         let rows = client.query("SELECT u.id, u.site_id, COALESCE(p.full_name, ''), u.email, COALESCE(p.phone, ''), u.password_hash, u.role, u.must_change_password, u.auth_provider, u.google_sub, u.avatar_url, u.created_at, u.person_id
              FROM users u
-             LEFT JOIN persons p ON u.person_id = p.id",
+             LEFT JOIN persons p ON u.person_id = p.id
+             WHERE u.is_active AND (u.site_id IS NULL OR EXISTS (SELECT 1 FROM sites s WHERE s.id = u.site_id AND s.deleted_at IS NULL))",
             &[],).await?;
         for row in rows {
             let id: i64 = row.get(0);
@@ -119,7 +120,8 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
             .query(
                 // F6: the current role is derived from what the person holds now (V23).
                 "SELECT p.id, p.full_name, p.email, p.phone, r.derived_role, COALESCE(p.site_id::text, '') \
-                 FROM persons p JOIN v_person_roles r ON r.person_id = p.id",
+                 FROM persons p JOIN v_person_roles r ON r.person_id = p.id \
+                 WHERE p.deleted_at IS NULL AND (p.site_id IS NULL OR EXISTS (SELECT 1 FROM sites s WHERE s.id = p.site_id AND s.deleted_at IS NULL))",
                 &[],
             )
             .await?;

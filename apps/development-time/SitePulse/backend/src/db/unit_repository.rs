@@ -59,7 +59,10 @@ pub async fn save_unit(
     let owner_id_num = unit.owner_user_id.as_deref().and_then(parse_id_to_i64);
     let effective_owner_id = if let Some(oid) = owner_id_num {
         let exists = client
-            .query_opt("SELECT id FROM persons WHERE id = $1", &[&oid])
+            .query_opt(
+                "SELECT id FROM persons WHERE id = $1 AND deleted_at IS NULL",
+                &[&oid],
+            )
             .await?
             .is_some();
         if exists {
@@ -87,7 +90,10 @@ pub async fn save_unit(
     let tenant_id_num = unit.tenant_user_id.as_deref().and_then(parse_id_to_i64);
     let effective_tenant_id = if let Some(tid) = tenant_id_num {
         let exists = client
-            .query_opt("SELECT id FROM persons WHERE id = $1", &[&tid])
+            .query_opt(
+                "SELECT id FROM persons WHERE id = $1 AND deleted_at IS NULL",
+                &[&tid],
+            )
             .await?
             .is_some();
         if exists {
@@ -183,15 +189,14 @@ pub async fn save_unit_member(
     let normalized_email = crate::domain::email::NormalizedEmail::normalize(email);
     // S1: a household member is the unit's site's person; an address is matched only in that site.
     let site_id: Option<i64> = unit.get(2);
-    let existing_person =
-        if normalized_email.is_empty() {
-            None
-        } else {
-            client.query_opt(
-            "SELECT id FROM persons WHERE site_id IS NOT DISTINCT FROM $1 AND lower(email)=$2",
+    let existing_person = if normalized_email.is_empty() {
+        None
+    } else {
+        client.query_opt(
+            "SELECT id FROM persons WHERE site_id IS NOT DISTINCT FROM $1 AND lower(email)=$2 AND deleted_at IS NULL",
             &[&site_id,&normalized_email],
         ).await?
-        };
+    };
     let person_id: i64 = match existing_person {
         Some(row) => row.get(0),
         None => client.query_one(
@@ -315,7 +320,7 @@ pub async fn transfer_unit_ownership_db(
     let old_owner_start_date: chrono::NaiveDate = unit.get("ownership_start_date");
     let new_person_id: Option<i64> = tx
         .query_opt(
-            "SELECT person_id FROM users WHERE LOWER(email) = $1",
+            "SELECT person_id FROM users WHERE LOWER(email) = $1 AND is_active",
             &[&crate::domain::email::NormalizedEmail::normalize(
                 &new_user.email,
             )],
