@@ -265,19 +265,21 @@ class AppFullscreenPage extends StatelessWidget {
       body: SafeArea(
         child: isScrollable
             ? SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Center(
+                padding: const EdgeInsets.all(AppSpacing.screenGutter),
+                child: Align(
+                  alignment: Alignment.topCenter,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: maxWidth),
                     child: child,
                   ),
                 ),
               )
-            : Center(
+            : Align(
+                alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: maxWidth),
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(AppSpacing.screenGutter),
                     child: child,
                   ),
                 ),

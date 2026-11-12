@@ -1,3 +1,4 @@
+import '../design_system/sp_page_header.dart';
 import '../../testing/test_id.dart';
 import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
@@ -34,6 +35,8 @@ class SaasAdminView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const SpPageHeader(title: 'Platform Yönetimi', icon: Icons.domain_outlined),
+        const SizedBox(height: AppSpacing.lg),
         // 1. SaaS Global Metrics Header Card
         Container(
           decoration: BoxDecoration(

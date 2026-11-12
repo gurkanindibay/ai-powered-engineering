@@ -46,7 +46,7 @@ void main() {
         headers: {'content-type': 'application/json; charset=utf-8'},
       );
 
-  test('a refused registration changes nothing locally and shows the server reason', () async {
+  test('a refused registration changes nothing locally and localizes the server reason', () async {
     ApiClient.transport = MockClient((request) async {
       if (request.method == 'POST') {
         return envelope(409, 'CONFLICT', 'This email address cannot be used for a new account. Check it or contact support.');
@@ -58,7 +58,7 @@ void main() {
     expect(controller.flatsList.length, before);
     expect(controller.homeOwners.any((h) => h.ownerFullName == 'Ece Yalın'), isFalse);
     expect(controller.provisionedHomeOwner, isNull);
-    expect(controller.lastHomeOwnerError, contains('cannot be used'));
+    expect(controller.lastHomeOwnerError, 'Bu e-posta adresi başka bir hesapta kullanılıyor.');
     expect(controller.isRegisteringHomeOwner, isFalse);
   });
 

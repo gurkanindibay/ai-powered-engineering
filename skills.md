@@ -52,6 +52,7 @@ This document lists the available skills and custom tools available to AI agents
 - **Negative cases (V16 payment ledger):** receipts, allocations, advance ledger and idempotency keys are append-only; a `SETTLED` entry needs a receipt; one entry per receipt; entry amount/unit/channel/date are immutable; only `UNMATCHED -> SETTLED` (with receipt) and `SETTLED -> REVERSED` transitions; penalty accrual date not before the due date.
 - **Negative cases (V17 / SPEC-006):** a reversal receipt names its original and a receipt is reversed at most once; a contra entry needs a reason and its reversal columns are immutable; `SETTLED -> REVERSED` needs a contra entry; a receipt with advance names the advance debtor; site tax id is 10/11 digits; one webhook claim per (bank account, transaction) and the payload hash is SHA-256 hex; one English reconciliation vocabulary; a bank account with statement history cannot be deleted; `PAID` iff fully paid; `payer_role` has no default.
 - **Positive cases:** national ids never stored in clear text, unit owner follows the ownership history, an `UNMATCHED` entry settles in place, payer identity resolves from the ownership history, the purge switch lifts the ledger guard for one transaction only, a full SQL reversal keeps the drift views clean, TAH and IAD series number independently, the same transaction id is accepted for another account/site, `v_dues_effective_status` derives `OVERDUE`, `v_integrity_violations` empty on seed data.
+- **Seed replay:** repeated seed loads preserve identity IDs (including mixed-case emails); archived sites/people and inactive users with reused slugs/emails remain unchanged, with no active links to archived people. Runs in rolled-back transactions on scratch databases named per process, allowing concurrent gate runs.
 - **Upgrade path:** existing rows survive V8+ (incl. legacy `IDEMPOTENCY:<key>` receipt references copied into `payment_idempotency_keys` and PascalCase reconciliation statuses translated); the upgraded schema has no drift from a fresh install.
 
 ### Quick Usage Examples:
@@ -176,6 +177,8 @@ Uses `psql` when on PATH, otherwise `docker exec <--pg-container> psql`.
 
 SPEC-008 checks also verify durable household membership and rollback (`household_members_persisted`), session rotation/replay/logout (`security_session_lifecycle`), payment rollback on audit failure (`transactional_audit`), non-owner RLS and immutable evidence (`audit_scope_and_privileges`), database-only registration review (`registration_repository_scope`), second-approver support access (`support_grant_lifecycle`), and concurrent invitation consumption with identity/membership rollback (`invitation_atomic_registration`). The method/template inventory is parsed from the router registry. GUI bundles are rebuilt when source, dependencies, assets, or the API origin change; fixture resets preserve audit evidence.
 
+- **Identity reuse:** `person_activation_lifecycle` checks immediate re-registration after archival, one active account, and preserved person history without a backend restart.
+
 ## 5b-2. GUI End-to-End Suite (`gui_e2e.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/gui_e2e.py](file:///apps/development-time/SitePulse/scripts/gui_e2e.py) (symlinked to `scripts/gui_e2e.py`)
@@ -223,7 +226,7 @@ Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/
 ./scripts/flutter_reuse_inventory.py --json
 ```
 
-The full catalogue and the promotion procedure are in the [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md) skill. Shared Flutter components that the rules point to live in `flutter/lib/ui/design_system/` (`SpTone`, `SpMetricValue`/`SpIconMetric`, `SpGuidanceCard`, `SpStatusBadge`, `SpFilterChip`, `SpMoneyFormField`/`MoneyInput`, `SpIbanCopyRow`/`spCopyToClipboard`), `ui/components/sp_dialog_pages.dart` (`showSpSelection<T>`), `ui/residents/resident_directory.dart` (`ResidentSummary`, `matchesResidentFilters`, `ResidentOccupancyStats`) and `domain/formatting/json_decimal.dart` (`readDecimal`).
+The full catalogue and the promotion procedure are in the [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md) skill. Shared Flutter components that the rules point to live in `flutter/lib/ui/design_system/` (`SpPageHeader`, `SpTone`, `SpMetricValue`/`SpIconMetric`, `SpGuidanceCard`, `SpStatusBadge`, `SpFilterChip`, `SpMoneyFormField`/`MoneyInput`, `SpIbanCopyRow`/`spCopyToClipboard`), `ui/components/sp_dialog_pages.dart` (`showSpSelection<T>`), `ui/residents/resident_directory.dart` (`ResidentSummary`, `matchesResidentFilters`, `ResidentOccupancyStats`) and `domain/formatting/json_decimal.dart` (`readDecimal`).
 
 ## 5b-4. GUI Traceability (`gui_traceability.py`)
 

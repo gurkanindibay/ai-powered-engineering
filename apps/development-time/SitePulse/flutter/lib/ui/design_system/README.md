@@ -11,6 +11,7 @@ That skill is mandatory for SitePulse Flutter work through
 | File | Use it for |
 | --- | --- |
 | `sp_tone.dart` | `SpTone` colour roles (text-safe in both themes, via `StatusColors`) |
+| `sp_page_header.dart` | `SpPageHeader`: boxed module title, subtitle and wrapping actions |
 | `sp_metric.dart` | `SpMetricValue`, `SpIconMetric`: label/value figures |
 | `sp_guidance_card.dart` | `SpGuidanceCard`: empty states and first-run guidance |
 | `sp_status_badge.dart` | `SpStatusBadge`: status and bucket pills |

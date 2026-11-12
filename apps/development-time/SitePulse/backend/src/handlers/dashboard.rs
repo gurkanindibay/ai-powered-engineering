@@ -252,6 +252,7 @@ pub async fn get_resident_dashboard(
                     delay_penalty: Decimal::ZERO,
                     total_amount: d.total_amount,
                     due_date: d.due_date.to_string(),
+                    days_overdue: 0,
                     status: "PAID".to_string(),
                 }
             } else {
@@ -263,6 +264,7 @@ pub async fn get_resident_dashboard(
                     delay_penalty: evaluated.delay_penalty,
                     total_amount: evaluated.total_amount,
                     due_date: evaluated.due_date.to_string(),
+                    days_overdue: overdue_days(evaluated.due_date, today, false),
                     status: format!("{:?}", evaluated.status).to_uppercase(),
                 }
             }

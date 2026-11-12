@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'package:sitepulse/domain/services/api_client.dart';
 import 'package:sitepulse/domain/services/payments_phase2_api.dart';
 import 'package:sitepulse/l10n/app_strings.dart';
@@ -13,6 +15,96 @@ import 'package:sitepulse/ui/design_system/sp_error_state.dart';
 import 'package:sitepulse/ui/design_system/sp_feedback.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  for (final response in [
+    http.Response('An account with this email address already exists', 400),
+    http.Response(
+      jsonEncode({
+        'error': {
+          'code': 'EMAIL_NOT_AVAILABLE',
+          'message': 'Address unavailable',
+        },
+      }),
+      409,
+    ),
+  ]) {
+    test(
+      'site form retains localized error after toast consumption (${response.statusCode})',
+      () async {
+        final previousTransport = ApiClient.transport;
+        var calls = 0;
+        final transport = MockClient((request) async {
+          if (request.method != 'POST' ||
+              request.url.path != '/api/v1/saas/sites') {
+            return http.Response('[]', 200);
+          }
+          calls++;
+          return calls == 1
+              ? response
+              : http.Response(
+                  jsonEncode({
+                    'site_id': 'site-9',
+                    'temporary_password': 'test-password',
+                  }),
+                  201,
+                );
+        });
+        ApiClient.transport = transport;
+        final controller = DashboardController();
+        addTearDown(() {
+          controller.dispose();
+          ApiClient.transport = previousTransport;
+          transport.close();
+        });
+        controller.addListener(() {
+          if (controller.authMessage != null) controller.clearAuthMessage();
+        });
+        Future<bool> register() => controller.registerNewSite(
+          name: 'Test Site',
+          city: 'Test City',
+          address: 'Test Street',
+          adminName: 'Site Manager',
+          adminEmail: 'manager@example.test',
+          adminPhone: '05321234567',
+        );
+        expect(await register(), isFalse);
+        expect(controller.authMessage, isNull);
+        expect(
+          controller.lastSiteRegistrationError,
+          'Bu e-posta adresi başka bir hesapta kullanılıyor.',
+        );
+        expect(await register(), isTrue);
+        expect(controller.lastSiteRegistrationError, isNull);
+      },
+    );
+  }
+
+  test('resident details use the server day count rather than the device calendar', () async {
+    final previousTransport = ApiClient.transport;
+    final transport = MockClient((request) async {
+      if (request.url.path.endsWith('/dashboard')) {
+        return http.Response(jsonEncode({
+          'total_debt': '1423.33', 'is_overdue': true,
+          'dues': [{
+            'id': 'due-1', 'period': 'Test period', 'principal_amount': '1400.00',
+            'delay_penalty': '23.33', 'total_amount': '1423.33',
+            'due_date': '2000-01-01', 'status': 'OVERDUE', 'days_overdue': 10,
+          }],
+        }), 200);
+      }
+      return http.Response('{}', 200);
+    });
+    ApiClient.transport = transport;
+    final controller = DashboardController();
+    addTearDown(() {
+      controller.dispose();
+      ApiClient.transport = previousTransport;
+      transport.close();
+    });
+    await controller.fetchResidentDashboard('unit-1');
+    expect(controller.primaryDues.daysOverdue, 10);
+    expect(controller.primaryDues.delayPenalty.toString(), '23.33');
+  });
   group('Standardized Error Management - Flutter Tests', () {
     test('ApiException correctly identifies error categories and details', () {
       final notFound = ApiException(
