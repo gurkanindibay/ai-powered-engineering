@@ -1,5 +1,6 @@
 @Tags(['core'])
 library;
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -144,6 +145,27 @@ void main() {
         );
       },
     );
+
+    test('duplicate identity errors are localized for code and plain-text responses', () {
+      const expected = 'Bu e-posta adresi başka bir hesapta kullanılıyor.';
+      expect(
+        AppStrings.localizedErrorMessage('EMAIL_ALREADY_EXISTS'),
+        expected,
+      );
+      expect(
+        AppStrings.localizedErrorMessage(
+          null,
+          fallback: 'An account with this email address already exists: resident@example.test',
+        ),
+        expected,
+      );
+      expect(
+        AppStrings.localizeBackendMessage(
+          'duplicate key value violates unique constraint "uq_users_active_email_lower"',
+        ),
+        expected,
+      );
+    });
 
     testWidgets('SpErrorState displays message and calls retry callback', (
       tester,

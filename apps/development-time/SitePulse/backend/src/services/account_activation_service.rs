@@ -511,7 +511,7 @@ impl AccountActivationService {
         let new_email = new_email.ok_or(ActivationError::InvalidToken)?;
         let taken = tx
             .query_opt(
-                "SELECT 1 FROM users WHERE lower(email) = lower($1) AND id <> $2",
+                "SELECT 1 FROM users WHERE lower(email) = lower($1) AND id <> $2 AND is_active",
                 &[&new_email, &user_id],
             )
             .await

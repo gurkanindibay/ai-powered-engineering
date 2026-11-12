@@ -236,7 +236,7 @@ impl HomeResidentInvitationService {
             if let Ok(client) = pool.get().await {
                 if let Ok(Some(row)) = client
                     .query_opt(
-                        "SELECT id FROM users WHERE LOWER(email) = $1",
+                        "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
                         &[&email_norm],
                     )
                     .await
