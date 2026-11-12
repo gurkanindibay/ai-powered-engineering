@@ -1,14 +1,12 @@
-# SitePulse CI: runs every verification gate against a real PostgreSQL service.
+# SitePulse CI: manually run verification gates against a real PostgreSQL service.
 # Task status is changed only here (`harness_cli.py verify --record` requires CI=true).
 # Branch protection for master (require this workflow) is a repository setting.
 name: SitePulse CI
 
 on:
-  pull_request:
-    paths: ["apps/development-time/SitePulse/**", ".github/workflows/sitepulse-ci.yml"]
-  push:
-    branches: [master]
-    paths: ["apps/development-time/SitePulse/**", ".github/workflows/sitepulse-ci.yml"]
+  # Automatic runs are disabled to avoid GitHub Actions credit usage.
+  # Run this workflow manually from the Actions tab when credits are available.
+  workflow_dispatch:
 
 defaults:
   run:
