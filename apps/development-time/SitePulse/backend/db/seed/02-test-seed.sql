@@ -12,7 +12,7 @@ INSERT INTO sites (name, address, slug, status, plan_type, license_end_date)
 VALUES 
     ('Begonya Sitesi', 'Ataşehir, Begonya Sok. No:14, İstanbul', 'begonya-sitesi', 'ACTIVE', 'PREMIUM', '2027-09-01'),
     ('Kardelen Rezidans', 'Çankaya, Kardelen Cad. No:8, Ankara', 'kardelen-rezidans', 'ACTIVE', 'STANDARD', '2027-10-15')
-ON CONFLICT (slug) DO UPDATE
+ON CONFLICT (slug) WHERE deleted_at IS NULL DO UPDATE
 SET name = EXCLUDED.name,
     address = EXCLUDED.address,
     status = EXCLUDED.status,
