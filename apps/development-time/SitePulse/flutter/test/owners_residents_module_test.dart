@@ -215,6 +215,9 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
+      expect(find.byKey(const Key('module_add_resident_to_unit-rented-kpi')), findsOneWidget);
+      expect(find.byKey(const Key('module_quick_add_resident_unit-rented-kpi')), findsNothing);
+
       // Find + Hane Sakini button
       final addMemberBtn = find.byKey(const Key('module_add_resident_to_unit-rented-kpi'));
       await tester.ensureVisible(addMemberBtn);
@@ -247,6 +250,37 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Daire Sakin & İkamet Tarihçesi'), findsOneWidget);
+    });
+
+    testWidgets('OwnersResidentsModulePage keeps move-in action with the occupancy that needs it', (tester) async {
+      final ownerOccupiedUnit = HomeOwnerItem(
+        unitId: 'unit-owner-context',
+        siteId: 'site-1',
+        block: 'A',
+        unitNo: 51,
+        floor: 4,
+        ownerFullName: 'Seda Malik',
+        email: 'seda@example.com',
+        phone: '0532 222 33 44',
+        occupancyStatus: 'OWNER_OCCUPIED',
+        landShare: '1/24',
+        monthlyDues: Decimal.parse('1400.00'),
+        houseType: '2+1',
+        isResident: true,
+        mustChangePassword: false,
+        createdAt: DateTime.now(),
+      );
+      controller.homeOwners.insert(0, ownerOccupiedUnit);
+
+      await tester.pumpWidget(MaterialApp(
+        home: OwnersResidentsModulePage(controller: controller),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('module_add_tenant_unit-owner-context')), findsOneWidget);
+      expect(find.byKey(const Key('module_quick_move_in_unit-owner-context')), findsNothing);
+      expect(find.byKey(const Key('module_add_resident_to_unit-owner-context')), findsOneWidget);
+      expect(find.byKey(const Key('module_quick_add_resident_unit-owner-context')), findsNothing);
     });
 
     testWidgets('OwnersResidentsModulePage allows defining Kat Maliki (Owner) vs Kiracı (Renter) when adding new resident', (tester) async {
@@ -381,6 +415,7 @@ void main() {
 
       // Find move-in button on vacant unit card
       final moveInBtn = find.byKey(const Key('module_move_in_unit-vacant-test'));
+      expect(find.byKey(const Key('module_quick_move_in_unit-vacant-test')), findsNothing);
       await tester.ensureVisible(moveInBtn);
       await tester.pumpAndSettle();
       await tester.tap(moveInBtn);
