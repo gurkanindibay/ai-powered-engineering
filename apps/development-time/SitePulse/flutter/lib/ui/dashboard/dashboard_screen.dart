@@ -4260,7 +4260,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     SpGuidanceCard(
                       icon: Icons.home_work_outlined,
                       title: 'Konut tipi tanımlanmamış',
-                      message: 'Bu daireye tip ve aylık aidat atamak için önce konut tipi ekleyin.',
+                      message: 'Eklemek veya düzenlemek için Konut Tipleri & Tarifeler ekranını açın.',
                       tone: SpTone.warning,
                       action: testId('edit_resident_add_house_type', OutlinedButton.icon(
                         key: const Key('edit_resident_add_house_type'),
@@ -4276,7 +4276,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           });
                         },
                         icon: const Icon(Icons.add),
-                        label: const Text('Konut Tipi Ekle'),
+                        label: const Text('Konut Tipleri & Tarifeler'),
                       )),
                     ),
                     const SizedBox(height: 14),
@@ -6440,7 +6440,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Expanded(
                               child: currentHouseTypes.isEmpty
                                   ? Text(
-                                      'Önce konut tipi ekleyin',
+                                      'Konut tipi yok. Eklemek için:',
                                       style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                                     )
                                   : DropdownButtonFormField<String>(
@@ -6504,7 +6504,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               child: const Text(
-                                '+ Tarifeler',
+                                'Konut Tipleri & Tarifeler',
                                 style: TextStyle(color: AppColors.accentPurple, fontSize: 12, fontWeight: FontWeight.bold),
                               ),
                             ),
