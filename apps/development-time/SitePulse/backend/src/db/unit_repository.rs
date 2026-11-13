@@ -173,19 +173,11 @@ pub async fn save_unit_member(
         "SELECT id FROM unit_occupancies WHERE unit_id=$1 AND is_active AND end_date IS NULL ORDER BY id DESC LIMIT 1",
         &[&u_num],
     ).await?;
-    let occupancy_id: i64 = if let Some(row) = existing {
-        row.get(0)
-    } else {
-        let owner: Option<i64> = unit.get(0);
-        let tenant: Option<i64> = unit.get(1);
-        let occupant = tenant
-            .or(owner)
-            .ok_or_else(|| "Unit has no current occupant".to_string())?;
-        client.query_one(
-            "INSERT INTO unit_occupancies(unit_id,person_id,occupancy_type) VALUES ($1,$2,$3) RETURNING id",
-            &[&u_num,&occupant,&if tenant.is_some() { "TENANT" } else { "OWNER" }],
-        ).await?.get(0)
-    };
+    // Invariant 6 (EPIC-08 §3.4): a member joins the active occupancy; adding
+    // one never opens a session, which only a move-in or registration does.
+    let occupancy_id: i64 = existing
+        .map(|row| row.get(0))
+        .ok_or_else(|| "Unit has no current occupant".to_string())?;
     let normalized_email = crate::domain::email::NormalizedEmail::normalize(email);
     // S1: a household member is the unit's site's person; an address is matched only in that site.
     let site_id: Option<i64> = unit.get(2);
@@ -290,117 +282,150 @@ pub async fn save_unit_payer_names(
     Ok(())
 }
 
+/// Options of a title deed transfer (T6, STORY-08-05 and 08-09).
+#[derive(Debug, Clone)]
+pub struct TitleTransfer<'a> {
+    pub unit_id: &'a str,
+    pub site_id: &'a str,
+    /// Created (with its person) when `buyer_person_id` is not given.
+    pub new_user: &'a User,
+    pub buyer_person_id: Option<i64>,
+    pub new_owner_moves_in: bool,
+    pub transfer_date: chrono::NaiveDate,
+    pub today: chrono::NaiveDate,
+    pub notes: Option<&'a str>,
+}
+
+/// Closes the old ownership, opens the new one and applies the occupancy
+/// effect of the transfer in one transaction (§3.3 T6). Returns the exit
+/// balance of the occupancy session the transfer closed, if any.
 pub async fn transfer_unit_ownership_db(
     pool: &Pool,
-    unit_id: &str,
-    site_id: &str,
-    new_user: &User,
-    transfer_date: chrono::NaiveDate,
-    exit_balance: Decimal,
-    notes: Option<&str>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let unit_id_num = require_id("unit", unit_id)?;
-    let site_id_num = require_id("site", site_id)?;
+    transfer: &TitleTransfer<'_>,
+) -> Result<Option<Decimal>, crate::db::occupancy_repository::OccupancyError> {
+    use crate::db::occupancy_repository::{self as occupancy, OccupancyError, TransitionInput};
+    use crate::domain::unit_state::{self, Command, SessionRole};
 
-    // 1. Ensure new user is saved and person is created
-    save_user(pool, new_user).await?;
+    let storage =
+        |e: Box<dyn std::error::Error + Send + Sync>| OccupancyError::Storage(e.to_string());
+    let unit_id_num =
+        require_id("unit", transfer.unit_id).map_err(|_| OccupancyError::UnitNotFound)?;
+    let site_id_num =
+        require_id("site", transfer.site_id).map_err(|_| OccupancyError::UnitNotFound)?;
 
-    // 2. All ownership changes commit together or not at all.
-    let mut client = pool.get().await?;
+    // 1. A new buyer gets an account and a person record first.
+    if transfer.buyer_person_id.is_none() {
+        save_user(pool, transfer.new_user).await.map_err(storage)?;
+    }
+
+    // 2. All ownership and occupancy changes commit together or not at all.
+    let mut client = pool
+        .get()
+        .await
+        .map_err(|e| OccupancyError::Storage(e.to_string()))?;
     let tx = client.transaction().await?;
-    crate::db::tx_bind_tenant(&tx, site_id_num).await?;
-    let unit = tx
-        .query_opt(
-            "SELECT id, owner_person_id, created_at::date AS ownership_start_date FROM units WHERE id = $1 AND site_id = $2 FOR UPDATE",
-            &[&unit_id_num, &site_id_num],
-        )
-        .await?
-        .ok_or("unit does not belong to the requested site")?;
-    let old_person_id: Option<i64> = unit.get("owner_person_id");
-    let old_owner_start_date: chrono::NaiveDate = unit.get("ownership_start_date");
-    let new_person_id: Option<i64> = tx
-        .query_opt(
-            "SELECT person_id FROM users WHERE LOWER(email) = $1 AND is_active",
-            &[&crate::domain::email::NormalizedEmail::normalize(
-                &new_user.email,
-            )],
-        )
-        .await?
-        .and_then(|r| r.get(0));
-
-    // 3. Deactivate old ownership in unit_ownerships
-    let closed_ownerships = if let Some(old_person_id) = old_person_id {
-        tx.execute(
-            "UPDATE unit_ownerships SET is_active = false, end_date = $3 WHERE unit_id = $1 AND person_id = $2 AND is_active = true",
-            &[&unit_id_num, &old_person_id, &transfer_date],
-        )
-        .await?
-    } else {
-        0
+    crate::db::tx_bind_tenant(&tx, site_id_num)
+        .await
+        .map_err(storage)?;
+    let snapshot = occupancy::lock_unit_snapshot(&tx, site_id_num, unit_id_num).await?;
+    let buyer: i64 = match transfer.buyer_person_id {
+        Some(person_id) => tx
+            .query_opt(
+                "SELECT id FROM persons WHERE id = $1 AND site_id = $2 AND deleted_at IS NULL",
+                &[&person_id, &site_id_num],
+            )
+            .await?
+            .map(|r| r.get(0))
+            .ok_or(OccupancyError::PersonNotFound)?,
+        None => tx
+            .query_opt(
+                "SELECT person_id FROM users WHERE LOWER(email) = $1 AND is_active AND person_id IS NOT NULL",
+                &[&crate::domain::email::NormalizedEmail::normalize(
+                    &transfer.new_user.email,
+                )],
+            )
+            .await?
+            .map(|r| r.get(0))
+            .ok_or(OccupancyError::PersonNotFound)?,
     };
-    tx.execute(
-        "UPDATE unit_ownerships SET is_active = false, end_date = $2 WHERE unit_id = $1 AND is_active = true",
-        &[&unit_id_num, &transfer_date],
-    )
-    .await?;
+    if snapshot.is_owner(buyer) {
+        return Err(OccupancyError::BuyerIsOwner);
+    }
+    let buyer_is_tenant = snapshot
+        .session
+        .as_ref()
+        .is_some_and(|s| s.role == SessionRole::Tenant && s.person_id == buyer);
+    let plan = unit_state::plan(
+        snapshot.state,
+        Command::TitleTransfer {
+            buyer_is_tenant,
+            new_owner_moves_in: transfer.new_owner_moves_in,
+        },
+    )?;
+    let closing_start = plan
+        .closes
+        .and(snapshot.session.as_ref())
+        .map(|s| s.start_date);
+    unit_state::validate_effective_date(transfer.transfer_date, transfer.today, closing_start)?;
+
+    // 3. Close every active ownership; an owner known only from the unit
+    //    column (no ownership history) is archived so the history is complete.
+    let closed_ownerships = tx
+        .execute(
+            "UPDATE unit_ownerships SET is_active = false, end_date = $2 WHERE unit_id = $1 AND is_active = true",
+            &[&unit_id_num, &transfer.transfer_date],
+        )
+        .await?;
     if closed_ownerships == 0 {
-        if let Some(old_person_id) = old_person_id.filter(|person_id| *person_id > 0) {
+        for owner in &snapshot.owners {
             tx.execute(
                 r#"
-            INSERT INTO unit_ownerships (
-                unit_id, person_id, share_percentage, start_date, end_date, is_active, created_at
-            )
-            VALUES ($1, $2, 100.00, $3, $4, false, CURRENT_TIMESTAMP)
-            ON CONFLICT DO NOTHING
-            "#,
-                &[
-                    &unit_id_num,
-                    &old_person_id,
-                    &old_owner_start_date,
-                    &transfer_date,
-                ],
+                INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, end_date, is_active, created_at)
+                VALUES ($1, $2, 100.00, LEAST($3::date, $4::date), $4, false, CURRENT_TIMESTAMP)
+                ON CONFLICT DO NOTHING
+                "#,
+                &[&unit_id_num, &owner.person_id, &owner.start_date, &transfer.transfer_date],
             )
             .await?;
         }
     }
 
-    // 4. Insert new ownership
-    if let Some(pid) = new_person_id {
-        tx
-            .execute(
-                r#"
-                INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, is_active, created_at)
-                VALUES ($1, $2, 100.00, $3, true, CURRENT_TIMESTAMP)
-                "#,
-                &[&unit_id_num, &pid, &transfer_date],
-            )
-            .await?;
+    // 4. Open the new ownership (the owner column follows by trigger, V15).
+    tx.execute(
+        r#"
+        INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, is_active, created_at)
+        VALUES ($1, $2, 100.00, $3, true, CURRENT_TIMESTAMP)
+        "#,
+        &[&unit_id_num, &buyer, &transfer.transfer_date],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE units SET owner_person_id = $2 WHERE id = $1",
+        &[&unit_id_num, &buyer],
+    )
+    .await?;
 
-        // 5. Deactivate old owner occupancy if active
-        tx.execute(
-            r#"
-                UPDATE unit_occupancies
-                SET is_active = false, end_date = $2, exit_balance = $3, notes = COALESCE($4, notes)
-                WHERE unit_id = $1 AND is_active = true AND occupancy_type = 'OWNER'
-                "#,
-            &[&unit_id_num, &transfer_date, &exit_balance, &notes],
-        )
-        .await?;
+    // 5. Occupancy effect: close the old owner's or the buying tenant's
+    //    session, and open the buyer's when they move in.
+    let input = TransitionInput {
+        effective_date: transfer.transfer_date,
+        today: transfer.today,
+        tenant_person_id: None,
+        owner_person_id: None,
+        new_owner_person_id: Some(buyer),
+        notes: transfer.notes.map(str::to_string),
+    };
+    let incoming = plan.opens.map(|_| buyer);
+    let outcome = occupancy::execute_plan(&tx, &snapshot, plan, incoming, &input).await?;
 
-        // 6. Update units owner
-        tx.execute(
-            "UPDATE units SET owner_person_id = $2 WHERE id = $1",
-            &[&unit_id_num, &pid],
-        )
-        .await?;
-    }
-
-    info!(
-        "Transferred ownership for unit {} to user {} in PostgreSQL",
-        unit_id, new_user.email
-    );
     tx.commit().await?;
-    Ok(())
+    info!(
+        unit_id = unit_id_num,
+        from = %outcome.plan.from.label(),
+        to = %outcome.plan.to.label(),
+        "Transferred unit ownership in PostgreSQL"
+    );
+    Ok(outcome.closed.map(|c| c.exit_balance))
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

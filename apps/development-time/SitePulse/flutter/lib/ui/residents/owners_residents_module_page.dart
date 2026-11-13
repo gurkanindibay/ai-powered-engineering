@@ -3,6 +3,7 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
+import '../../domain/models/unit_state.dart';
 import '../components/app_fullscreen_page.dart';
 import '../components/step_up_prompt.dart';
 import '../../domain/models/household_relationship.dart';

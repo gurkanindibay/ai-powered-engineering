@@ -1,8 +1,8 @@
 # Unit State & Transition Analysis
 
 > **Scope:** EPIC-08 (Unit Occupancy Lifecycle), with effects on EPIC-04 (registration approval) and EPIC-09 (move-out settlement).
-> **Status:** Analysis only. Nothing in this document is implemented. The normative model is in
-> [EPIC-08 §3](../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md#3-unit-state-model-normative); this document explains why it looks that way and what the current code does instead.
+> **Status:** Implemented (see §9). The normative model is in
+> [EPIC-08 §3](../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md#3-unit-state-model-normative); this document explains why it looks that way, what the code did before (§5), and how each gap was closed (§9).
 > **Date:** 2026-11-13
 
 ---
@@ -171,3 +171,24 @@ The product owner confirmed all six on 2026-11-14. The requirements are written 
 | Backend | One occupancy transition service with the commands in §4, used by move-in, move-out, title transfer, owner edit and registration approval. Move-in request loses free-format fields when the role is `OWNER`. |
 | Flutter | Vacant unit card offers two actions: "Kiracı Girişi" (form) and "Kat Maliki Taşınsın" (confirmation showing the owner on record, no form). Actions shown per state follow the transition table. |
 | Tests | One test per row of the transition table, one per illegal command, and the e2e flow tenant-out then owner-in asserting the owner is unchanged. |
+
+## 9. Implementation
+
+Every gap in §5 is closed by one guarded state machine that all entry points share.
+
+| Layer | Where | What it does |
+| :--- | :--- | :--- |
+| Domain | `backend/src/domain/unit_state.rs` | Pure transition table (§4): `plan(state, command)` returns the session to close, the session to open and the resulting state, or an error naming the current state. `allowed_commands(state)` drives the UI. `validate_effective_date` rejects future dates and dates before the session being closed. |
+| Executor | `backend/src/db/occupancy_repository.rs` | Locks the unit row, reads the state from `unit_ownerships` and `unit_occupancies`, applies the plan, computes the per-person exit balance and writes an `occupancy_transitions` audit row. It runs inside the caller's transaction. |
+| Service and API | `backend/src/services/occupancy_service.rs`, `handlers/site_admin.rs` | `POST /units/:id/occupancy-transitions` (T2 to T5, C1 to C3) and `GET /units/:id/occupancy-state`. The existing `/move-in` and `/move-out` endpoints map onto the same commands. An illegal command returns 409; invalid input returns 400. |
+| Other entry points | `register_home_owner`, `update_home_owner`, `approve_registration`, `transfer_unit_ownership_db` | Registration is T1 (+T2) and never replaces an owner on record. The owner edit dialog uses T4, C2 and C3. Approval is T1 or T2, otherwise 409. Title transfer applies the T6 table, including "new owner moves in" and "the tenant buys". Adding a household member no longer opens a session. |
+| Database | `backend/migrations/V31__unit_state_model.sql` | `occupancy_status` is derived by trigger from the active session. A deferred constraint trigger requires an `OWNER` session to belong to an owner and a `TENANT` session not to. `occupancy_transitions` is an append-only audit table with RLS, and `v_unit_state_drift` reports what still disagrees. One-time reconciliation: ownership rows are backfilled for owners recorded only on `units`, `owner_person_id` follows the active ownership, and V27 sessions on units recorded `VACANT` are closed on their start date. |
+| Flutter | `lib/domain/models/unit_state.dart`, `owners_residents_*`, `dashboard_screen.dart` | A vacant unit shows "Kiracı Girişi" (tenant form, no role switch) and "Kat Maliki Taşınsın" (a confirmation naming the owner on record; with several owners the manager picks one). Owner-occupied units offer "Kiraya Ver" (C2); tenant-occupied units offer "Kiracı Değişikliği" (C1) and "Kat Maliki Geri Alsın" (C3). The transfer dialog offers "new owner moves in" for owner-occupied units. |
+| Tests | `domain::unit_state` unit tests, `tests/db_occupancy_transitions_tests.rs` (gate `rust-db-test`), `test/unit_state_test.dart`, `test/owners_residents_module_test.dart` | One case per transition row and per illegal command, plus the end-to-end flow (tenant moves out, owner moves in, owner unchanged) and per-person exit balance, derived status, owner-session check, append-only audit and approval guard. |
+
+Two deliberate deviations:
+
+- A tenant on a unit without an owner on record (`UNOWNED` + `TENANT_OCCUPIED`, forbidden by A2) still exists in legacy data. The only command accepted there is the tenant moving out, which is the way out of that state. `v_unit_state_drift` lists such units as `TENANT_WITHOUT_OWNER`.
+- Archiving a unit (`delete_home_owner`) still closes its sessions. That path only runs for units with no financial history, so the exit balance is zero.
+
+Exit balance per person (G5): unpaid, non-cancelled liabilities of the unit that are linked to the person (`liable_person_id`) or to the session (`occupancy_id`). For legacy rows with neither link, it counts those of the session's role that fell due within the person's period. A tenant's balance excludes capital dues.

@@ -346,6 +346,7 @@ pub(crate) async fn purge_site_rows(
         "dues_liabilities WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
         // Budget lines, shares, service records and objections cascade with the budget.
         "operating_budgets WHERE site_id = $1",
+        "occupancy_transitions WHERE site_id = $1",
         "occupancy_members WHERE occupancy_id IN (SELECT o.id FROM unit_occupancies o JOIN units u ON u.id = o.unit_id WHERE u.site_id = $1)",
         "unit_occupancies WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
         "unit_ownerships WHERE unit_id IN (SELECT id FROM units WHERE site_id = $1)",
