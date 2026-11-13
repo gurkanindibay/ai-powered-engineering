@@ -493,6 +493,29 @@ extension _Registration on _OwnersResidentsModulePageState {
                               if (val != null) setDlgState(() => selectedHouseType = val);
                             },
                           )),
+                        ] else ...[
+                          const SizedBox(height: 10),
+                          SpGuidanceCard(
+                            icon: Icons.home_work_outlined,
+                            title: 'Konut tipi ekleyin',
+                            message: 'Daire kaydına devam etmek için önce konut tipi ve aidat tarifesi tanımlayın.',
+                            tone: SpTone.warning,
+                            action: testId('module_add_house_type', TextButton.icon(
+                              key: const Key('module_add_house_type'),
+                              onPressed: () async {
+                                await showManageHouseTypesFullscreen(context, widget.controller);
+                                if (!context.mounted) return;
+                                setDlgState(() {
+                                  final updatedTypes = widget.controller.houseTypes;
+                                  if (updatedTypes.isNotEmpty) {
+                                    selectedHouseType = updatedTypes.first.typeName;
+                                  }
+                                });
+                              },
+                              icon: const Icon(Icons.add),
+                              label: const Text('Konut Tipi Ekle'),
+                            )),
+                          ),
                         ],
                       ],
                     ),
