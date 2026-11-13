@@ -673,44 +673,25 @@ extension _UnitCard on _OwnersResidentsModulePageState {
 
                 const SizedBox(height: 12),
 
-                // 5. UNIT QUICK ACTIONS ROW
+                // Keep unit tools here; occupied rentals can also start a replacement move-in.
                 Wrap(
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    testId('module_quick_add_resident_${ho.unitId}', OutlinedButton.icon(
-                      key: Key('module_quick_add_resident_${ho.unitId}'),
-                      onPressed: () => _openAddHouseholdMember(ho),
-                      icon: const Icon(Icons.family_restroom, size: 13, color: AppColors.accentPurple),
-                      label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 12)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.accentPurple,
-                        side: const BorderSide(color: AppColors.accentPurple),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        minimumSize: const Size(0, 30),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    )),
-                    testId('module_quick_move_in_${ho.unitId}', OutlinedButton.icon(
-                      key: Key('module_quick_move_in_${ho.unitId}'),
-                      onPressed: () => _openMoveIn(ho),
-                      icon: const Icon(Icons.key, size: 13, color: AppColors.accentGreen),
-                      label: Text(
-                        ho.isVacant
-                            ? 'Yeni Kiracı / Sakin Girişi'
-                            : ho.isTenantOccupied
-                                ? 'Yeni Kiracı Girişi (Move-In)'
-                                : 'Kiracı Tanımla (Move-In)',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.accentGreen,
-                        side: const BorderSide(color: AppColors.accentGreen),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        minimumSize: const Size(0, 30),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    )),
+                    if (isTenant)
+                      testId('module_quick_move_in_${ho.unitId}', OutlinedButton.icon(
+                        key: Key('module_quick_move_in_${ho.unitId}'),
+                        onPressed: () => _openMoveIn(ho),
+                        icon: const Icon(Icons.key, size: 13, color: AppColors.accentGreen),
+                        label: const Text('Yeni Kiracı Girişi', style: TextStyle(fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.accentGreen,
+                          side: const BorderSide(color: AppColors.accentGreen),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          minimumSize: const Size(0, 30),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      )),
                     testId('module_history_ho_${ho.unitId}', OutlinedButton.icon(
                       key: Key('module_history_ho_${ho.unitId}'),
                       onPressed: () => _openUnitHistory(ho),
