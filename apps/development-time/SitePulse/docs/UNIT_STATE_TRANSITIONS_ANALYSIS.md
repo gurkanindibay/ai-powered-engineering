@@ -51,7 +51,7 @@ Capital dues go to the owner in every state.
 
 | | `VACANT` | `OWNER_OCCUPIED` | `TENANT_OCCUPIED` |
 | :--- | :---: | :---: | :---: |
-| `UNOWNED` | valid (initial state) | impossible | not allowed (assumption A2) |
+| `UNOWNED` | valid (initial state) | impossible | not allowed (decision A2) |
 | `OWNED` | valid | valid | valid |
 
 A unit can also be **archived** (`units.deleted_at`). That is a terminal state reachable only from `VACANT`, and it is outside this analysis beyond that precondition.
@@ -150,11 +150,11 @@ Made in [EPIC-08](../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-
 
 EPIC-08 goes from 5 stories (all completed) to 10 stories (5 completed, 5 pending).
 
-## 7. Assumptions to confirm
+## 7. Confirmed decisions
 
-The requirements were written with these defaults. Each one changes a story if the answer is different.
+The product owner confirmed all six on 2026-11-14. The requirements are written to them.
 
-| # | Question | Default taken |
+| # | Question | Decision |
 | :-- | :--- | :--- |
 | A1 | A unit can have several owners (`unit_ownerships.share_percentage`). Which one moves in? | The manager picks one of the active owners. With a single owner there is nothing to pick. |
 | A2 | Can a tenant move into a unit that has no owner on record? | No. An owner must be registered first, because vacant-period and capital dues need a debtor. |
