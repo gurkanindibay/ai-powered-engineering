@@ -456,6 +456,8 @@ class _DuesManagementViewState extends State<DuesManagementView> {
   Future<void> _showAccrueDuesDialog() async {
     String selectedMonth = widget.controller.selectedDuesMonth;
     if (selectedMonth.isEmpty) selectedMonth = _formatTurkishMonth(DateTime.now());
+    final initialPeriod = _parseTurkishMonth(selectedMonth);
+    DateTime selectedDueDate = DateTime(initialPeriod.year, initialPeriod.month, 15);
     final isDark = AppColors.isDark(context);
 
     await showSpPage(
@@ -524,7 +526,12 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                                   labelOf: _formatTurkishMonth,
                                   idOf: (month) => 'accrual_month_${month.year}_${month.month}',
                                 );
-                                if (choice != null) setDialogState(() => selectedMonth = _formatTurkishMonth(choice));
+                                if (choice != null) {
+                                  setDialogState(() {
+                                    selectedMonth = _formatTurkishMonth(choice);
+                                    selectedDueDate = DateTime(choice.year, choice.month, 15);
+                                  });
+                                }
                               },
                               icon: const Icon(Icons.calendar_month_outlined, size: 18),
                               label: Text(selectedMonth, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -544,9 +551,23 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Flexible(child: Text('Son Ödeme Tarihi:', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13))),
-                            Flexible(child: Text(
-                              '15.${_parseTurkishMonth(selectedMonth).month.toString().padLeft(2, '0')}.${_parseTurkishMonth(selectedMonth).year}',
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
+                            testId('accrual_dialog_due_date', TextButton.icon(
+                              onPressed: isSubmitting ? null : () async {
+                                final choice = await showDatePicker(
+                                  context: dialogCtx,
+                                  initialDate: selectedDueDate,
+                                  firstDate: DateTime(2000),
+                                  lastDate: DateTime(2100),
+                                  helpText: 'Son ödeme tarihini seçin',
+                                );
+                                if (choice != null) setDialogState(() => selectedDueDate = choice);
+                              },
+                              icon: const Icon(Icons.event_outlined, size: 18),
+                              label: Text(
+                                '${selectedDueDate.day.toString().padLeft(2, '0')}.${selectedDueDate.month.toString().padLeft(2, '0')}.${selectedDueDate.year}',
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                              ),
+                            )),
                           ],
                         ),
                       ],
@@ -597,7 +618,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                           setDialogState(() => isSubmitting = true);
                           final result = await widget.controller.accrueMonthlyDues(
                             period: selectedMonth,
-                            dueDate: DateTime(_parseTurkishMonth(selectedMonth).year, _parseTurkishMonth(selectedMonth).month, 15),
+                            dueDate: selectedDueDate,
                           );
                           if (mounted) {
                             Navigator.pop(dialogCtx);
