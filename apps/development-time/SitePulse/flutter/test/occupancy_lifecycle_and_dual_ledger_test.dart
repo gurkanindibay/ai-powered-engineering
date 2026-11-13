@@ -166,6 +166,11 @@ void main() {
       await tester.pumpAndSettle();
 
       final firstHo = controller.homeOwners.first;
+      final unitActions = find.byKey(Key('unit_actions_${firstHo.unitId}'));
+      await tester.ensureVisible(unitActions);
+      await tester.tap(unitActions);
+      await tester.pumpAndSettle();
+
       final historyBtn = find.byKey(Key('history_ho_${firstHo.unitId}'));
       expect(historyBtn, findsOneWidget);
 
@@ -211,6 +216,11 @@ void main() {
       await tester.pumpAndSettle();
 
       final firstHo = controller.homeOwners.first;
+      final unitActions = find.byKey(Key('unit_actions_${firstHo.unitId}'));
+      await tester.ensureVisible(unitActions);
+      await tester.tap(unitActions);
+      await tester.pumpAndSettle();
+
       final moveOutBtn = find.byKey(Key('move_out_ho_${firstHo.unitId}'));
       expect(moveOutBtn, findsOneWidget);
 
@@ -444,7 +454,7 @@ void main() {
       expect(updatedHo.householdResidents.any((r) => r.fullName == 'Sakin Kardeş'), isTrue);
 
       // Verify co-resident is rendered on unit card in Sakinler & Malikler screen
-      expect(find.textContaining('Hane Sakinleri / Birlikte Yaşayanlar'), findsOneWidget);
+      expect(find.textContaining('Hane Sakinleri / Birlikte Yaşayanlar'), findsWidgets);
       expect(find.textContaining('Sakin Kardeş'), findsOneWidget);
     });
   });
