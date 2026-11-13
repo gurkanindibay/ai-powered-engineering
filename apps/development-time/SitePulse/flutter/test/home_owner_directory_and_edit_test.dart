@@ -179,6 +179,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Find the delete icon button for this homeowner
+      final unitActions = find.byKey(Key('unit_actions_${target.unitId}'));
+      await tester.ensureVisible(unitActions);
+      await tester.tap(unitActions);
+      await tester.pumpAndSettle();
+
       final deleteBtn = find.byKey(Key('delete_ho_${target.unitId}'));
       expect(deleteBtn, findsOneWidget);
 
@@ -380,8 +385,11 @@ void main() {
       expect(find.text('Canan Can'), findsOneWidget);
       expect(find.textContaining('Yeni Ev Sahibi 2'), findsOneWidget);
 
-      // Tap Düzenle on this card
-      final editBtn = find.text('Düzenle').first;
+      final unitActions = find.byKey(Key('unit_actions_${tenantUnit.unitId}'));
+      await tester.ensureVisible(unitActions);
+      await tester.tap(unitActions);
+      await tester.pumpAndSettle();
+      final editBtn = find.byKey(Key('edit_unit_${tenantUnit.unitId}'));
       await tester.ensureVisible(editBtn);
       await tester.pumpAndSettle();
       await tester.tap(editBtn);
@@ -440,6 +448,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap delete on this unit
+      final unitActions = find.byKey(Key('unit_actions_unit-ui-tenant-delete-test'));
+      await tester.ensureVisible(unitActions);
+      await tester.tap(unitActions);
+      await tester.pumpAndSettle();
+
       final deleteBtn = find.byKey(const Key('delete_ho_unit-ui-tenant-delete-test'));
       await tester.ensureVisible(deleteBtn);
       await tester.pumpAndSettle();
@@ -611,15 +624,18 @@ void main() {
       expect(find.textContaining('Murat Ay'), findsWidgets);
       expect(find.textContaining('Ayşe Ay'), findsOneWidget);
 
-      // Verify resident add action buttons are visible on the owner-occupied unit card
+      expect(find.byKey(const Key('unit_actions_unit-owner-res-test')), findsOneWidget);
+      expect(find.byKey(const Key('delete_ho_unit-owner-res-test')), findsNothing);
+
+      // Household actions appear only in the household section.
       final cardAddMemberBtn = find.byKey(const Key('add_resident_to_unit-owner-res-test'));
       expect(cardAddMemberBtn, findsOneWidget);
 
       final quickAddResidentBtn = find.byKey(const Key('quick_add_resident_unit-owner-res-test'));
-      expect(quickAddResidentBtn, findsOneWidget);
+      expect(quickAddResidentBtn, findsNothing);
 
       final sectionAAddResidentBtn = find.byKey(const Key('add_resident_member_to_unit-owner-res-test'));
-      expect(sectionAAddResidentBtn, findsOneWidget);
+      expect(sectionAAddResidentBtn, findsNothing);
 
       // Tap + Sakin Ekle in Section C to add a new resident
       await tester.ensureVisible(cardAddMemberBtn);

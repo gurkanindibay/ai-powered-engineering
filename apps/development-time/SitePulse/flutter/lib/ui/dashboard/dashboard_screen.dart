@@ -1055,75 +1055,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
               ),
               const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.xs,
-                runSpacing: AppSpacing.xs,
-                children: [
-                // Unit-level actions wrap below the unit identity.
-                testId('history_ho_${ho.unitId}', IconButton(
-                  key: Key('history_ho_${ho.unitId}'),
-                  icon: const Icon(Icons.history, size: 18, color: AppColors.accentCyan),
-                  tooltip: 'Daire İkamet & Sakin Tarihçesi',
-                  padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(),
-                  onPressed: () => _showUnitOccupancyHistoryDialog(ho),
-                )),
-                const SizedBox(width: 4),
-                // The unit's account statement: aging per debtor, receipts as PDF (STORY-09-03).
-                testId('btn_statement_${ho.unitId}', IconButton(
-                  key: Key('btn_statement_${ho.unitId}'),
-                  icon: const Icon(Icons.account_balance_wallet_outlined, size: 18, color: AppColors.accentCyan),
-                  tooltip: 'Hesap Ekstresi',
-                  padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(),
-                  onPressed: () => AppFullscreenPage.push(
-                    context: context,
-                    builder: (ctx) => ResidentStatementPage(unitId: ho.unitId, subtitle: '${ho.block} Blok D:${ho.unitNo}'),
-                  ),
-                )),
-                const SizedBox(width: 4),
-                if (!isVacant)
-                  testId('move_out_ho_${ho.unitId}', IconButton(
-                    key: Key('move_out_ho_${ho.unitId}'),
-                    icon: const Icon(Icons.logout_outlined, size: 18, color: AppColors.accentOrange),
-                    tooltip: 'Sakin Ayrılışı (Move-Out)',
-                    padding: const EdgeInsets.all(4),
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _showMoveOutDialog(ho),
-                  ))
-                else
-                  testId('move_in_ho_${ho.unitId}', IconButton(
-                    key: Key('move_in_ho_${ho.unitId}'),
-                    icon: const Icon(Icons.person_add_alt, size: 18, color: AppColors.accentGreen),
-                    tooltip: 'Yeni Sakin / Giriş (Move-In)',
-                    padding: const EdgeInsets.all(4),
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _showMoveInDialog(ho),
-                  )),
-                const SizedBox(width: 4),
-                testId('delete_ho_${ho.unitId}', IconButton(
-                  key: Key('delete_ho_${ho.unitId}'),
-                  icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.accentRed),
-                  tooltip: 'Kat Malikini Sil',
-                  padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(),
-                  onPressed: () => _confirmDeleteHomeOwner(ho),
-                )),
-                const SizedBox(width: 6),
-                OutlinedButton.icon(
-                  onPressed: () => _showEditHomeOwnerDialog(ho),
-                  icon: const Icon(Icons.edit_outlined, size: 13),
-                  label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentCyan,
-                    side: const BorderSide(color: AppColors.accentCyan),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: const Size(0, 30),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ],
-              ),
+              testId('unit_actions_${ho.unitId}', TextButton.icon(
+                key: Key('unit_actions_${ho.unitId}'),
+                onPressed: () => _showUnitActions(ho),
+                icon: const Icon(Icons.more_horiz),
+                label: const Text('Daire İşlemleri'),
+              )),
               ],
             ),
           ),
@@ -1414,23 +1351,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     key: Key('edit_residents_${ho.unitId}'),
                                     onPressed: () => _showEditHomeOwnerDialog(ho, initialTab: 0),
                                     icon: const Icon(Icons.edit_outlined, size: 12),
-                                    label: const Text('Sakinleri Düzenle', style: TextStyle(fontSize: 12)),
+                                    label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: AppColors.accentGreen,
                                       side: const BorderSide(color: AppColors.accentGreen),
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      minimumSize: const Size(0, 28),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
-                                  )),
-                                  testId('move_out_resident_${ho.unitId}', OutlinedButton.icon(
-                                    key: Key('move_out_resident_${ho.unitId}'),
-                                    onPressed: () => _showMoveOutDialog(ho),
-                                    icon: const Icon(Icons.logout, size: 12),
-                                    label: const Text('Tahliye (Move-Out)', style: TextStyle(fontSize: 12)),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: AppColors.accentOrange,
-                                      side: const BorderSide(color: AppColors.accentOrange),
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                       minimumSize: const Size(0, 28),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1650,19 +1574,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                     ),
                                   )),
-                                  testId('module_transfer_ownership_${ho.unitId}', OutlinedButton.icon(
-                                    key: Key('module_transfer_ownership_${ho.unitId}'),
-                                    onPressed: () => _showTransferOwnershipDialog(ho),
-                                    icon: const Icon(Icons.real_estate_agent, size: 12),
-                                    label: const Text('Mülk Devri (Satış)', style: TextStyle(fontSize: 12)),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: AppColors.accentGreen,
-                                      side: const BorderSide(color: AppColors.accentGreen),
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      minimumSize: const Size(0, 28),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
-                                  )),
                                 ],
                               ),
                             ],
@@ -1781,52 +1692,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             key: Key('edit_residents_${ho.unitId}'),
                                             onPressed: () => _showEditHomeOwnerDialog(ho, initialTab: 0),
                                             icon: const Icon(Icons.edit_outlined, size: 12),
-                                            label: const Text('Sakinleri Düzenle', style: TextStyle(fontSize: 12)),
+                                            label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: AppColors.accentCyan,
                                               side: const BorderSide(color: AppColors.accentCyan),
-                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                              minimumSize: const Size(0, 28),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                            ),
-                                          )),
-                                          testId('add_resident_member_to_${ho.unitId}', OutlinedButton.icon(
-                                            key: Key('add_resident_member_to_${ho.unitId}'),
-                                            onPressed: () => _showAddHouseholdMemberDialog(ho),
-                                            icon: const Icon(Icons.person_add_alt_1, size: 12),
-                                            label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 12)),
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: AppColors.accentPurple,
-                                              side: const BorderSide(color: AppColors.accentPurple),
-                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                              minimumSize: const Size(0, 28),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                            ),
-                                          )),
-                                          testId('move_in_resident_to_${ho.unitId}', OutlinedButton.icon(
-                                            key: Key('move_in_resident_to_${ho.unitId}'),
-                                            onPressed: () => _showMoveInDialog(ho),
-                                            icon: const Icon(Icons.key, size: 12),
-                                            label: Text(
-                                              isTenant ? 'Yeni Kiracı Girişi (Move-In)' : 'Kiracı Tanımla (Move-In)',
-                                              style: const TextStyle(fontSize: 12),
-                                            ),
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: AppColors.accentGreen,
-                                              side: const BorderSide(color: AppColors.accentGreen),
-                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                              minimumSize: const Size(0, 28),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                            ),
-                                          )),
-                                          testId('move_out_resident_${ho.unitId}', OutlinedButton.icon(
-                                            key: Key('move_out_resident_${ho.unitId}'),
-                                            onPressed: () => _showMoveOutDialog(ho),
-                                            icon: const Icon(Icons.logout, size: 12),
-                                            label: const Text('Sakin Ayrılışı (Move-Out)', style: TextStyle(fontSize: 12)),
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: AppColors.accentOrange,
-                                              side: const BorderSide(color: AppColors.accentOrange),
                                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                               minimumSize: const Size(0, 28),
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1917,7 +1786,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
 
                     // SECTION C: HANE SAKİNLERİ / BİRLİKTE YAŞAYANLAR
-                    if (ho.householdResidents.isNotEmpty) ...[
+                    if (!isVacant || ho.householdResidents.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Container(
                       padding: const EdgeInsets.all(12),
@@ -2013,106 +1882,66 @@ class _DashboardScreenState extends State<DashboardScreen> {
               },
             ),
 
-            const SizedBox(height: 12),
-
-            // UNIT QUICK ACTIONS ROW
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                testId('quick_add_resident_${ho.unitId}', OutlinedButton.icon(
-                  key: Key('quick_add_resident_${ho.unitId}'),
-                  onPressed: () => _showAddHouseholdMemberDialog(ho),
-                  icon: const Icon(Icons.family_restroom, size: 13, color: AppColors.accentPurple),
-                  label: const Text('+ Hane Sakini Ekle', style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentPurple,
-                    side: const BorderSide(color: AppColors.accentPurple),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    minimumSize: const Size(0, 30),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                )),
-                testId('quick_move_in_${ho.unitId}', OutlinedButton.icon(
-                  key: Key('quick_move_in_${ho.unitId}'),
-                  onPressed: () => _showMoveInDialog(ho),
-                  icon: const Icon(Icons.key, size: 13, color: AppColors.accentGreen),
-                  label: Text(
-                    ho.isVacant
-                        ? 'Yeni Kiracı / Sakin Girişi'
-                        : isTenant
-                            ? 'Yeni Kiracı Girişi (Move-In)'
-                            : 'Kiracı Tanımla (Move-In)',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentGreen,
-                    side: const BorderSide(color: AppColors.accentGreen),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    minimumSize: const Size(0, 30),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                )),
-                testId('module_history_ho_${ho.unitId}', OutlinedButton.icon(
-                  key: Key('module_history_ho_${ho.unitId}'),
-                  onPressed: () => _showUnitOccupancyHistoryDialog(ho),
-                  icon: const Icon(Icons.history, size: 13, color: AppColors.accentCyan),
-                  label: const Text('Daire Tarihçesi', style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentCyan,
-                    side: const BorderSide(color: AppColors.accentCyan),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    minimumSize: const Size(0, 30),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                )),
-                testId('module_iban_ho_${ho.unitId}', OutlinedButton.icon(
-                  key: Key('module_iban_ho_${ho.unitId}'),
-                  onPressed: () => _showVirtualIbanDetailsDialog(ho),
-                  icon: const Icon(Icons.account_balance, size: 13, color: AppColors.accentPurple),
-                  label: const Text('Sanal IBAN', style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentPurple,
-                    side: const BorderSide(color: AppColors.accentPurple),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    minimumSize: const Size(0, 30),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                )),
-                testId('transfer_ownership_${ho.unitId}', OutlinedButton.icon(
-                  key: Key('transfer_ownership_${ho.unitId}'),
-                  onPressed: () => _showTransferOwnershipDialog(ho),
-                  icon: const Icon(Icons.real_estate_agent, size: 13, color: AppColors.accentGreen),
-                  label: const Text('Mülk Devri', style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentGreen,
-                    side: const BorderSide(color: AppColors.accentGreen),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    minimumSize: const Size(0, 30),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                )),
-                testId('module_delete_ho_${ho.unitId}', OutlinedButton.icon(
-                  key: Key('module_delete_ho_${ho.unitId}'),
-                  onPressed: () => _confirmDeleteHomeOwner(ho),
-                  icon: const Icon(Icons.delete_outline, size: 13, color: AppColors.accentRed),
-                  label: const Text(AppStrings.delete, style: TextStyle(fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentRed,
-                    side: const BorderSide(color: AppColors.accentRed),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    minimumSize: const Size(0, 30),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                )),
-              ],
-            ),
           ],
         ),
       ),
     ],
   ),
 );
+  }
+
+  Future<void> _showUnitActions(HomeOwnerItem unit) async {
+    final actions = <String, String>{
+      'edit': 'Daire ve malik bilgilerini düzenle',
+      if (!unit.isVacant) ...{
+        'move_in': unit.isTenantOccupied ? 'Yeni kiracı girişi' : 'Kiracı tanımla',
+        'move_out': 'Sakin ayrılışı',
+      },
+      'history': 'Daire tarihçesi',
+      'statement': 'Hesap ekstresi',
+      'iban': 'Sanal IBAN',
+      'transfer': 'Mülk devri',
+      'delete': 'Daire kaydını sil',
+    };
+    final ids = <String, String>{
+      'edit': 'edit_unit_${unit.unitId}',
+      'move_in': 'move_in_ho_${unit.unitId}',
+      'move_out': 'move_out_ho_${unit.unitId}',
+      'history': 'history_ho_${unit.unitId}',
+      'statement': 'btn_statement_${unit.unitId}',
+      'iban': 'module_iban_ho_${unit.unitId}',
+      'transfer': 'transfer_ownership_${unit.unitId}',
+      'delete': 'delete_ho_${unit.unitId}',
+    };
+    final action = await showSpSelection<String>(
+      context: context,
+      title: '${unit.block} • Daire ${unit.unitNo} İşlemleri',
+      options: actions.keys.toList(),
+      labelOf: (value) => actions[value]!,
+      idOf: (value) => ids[value]!,
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'edit':
+        _showEditHomeOwnerDialog(unit, initialTab: 2);
+      case 'move_in':
+        _showMoveInDialog(unit);
+      case 'move_out':
+        _showMoveOutDialog(unit);
+      case 'history':
+        _showUnitOccupancyHistoryDialog(unit);
+      case 'statement':
+        AppFullscreenPage.push(
+          context: context,
+          builder: (_) => ResidentStatementPage(unitId: unit.unitId, subtitle: '${unit.block} Blok D:${unit.unitNo}'),
+        );
+      case 'iban':
+        _showVirtualIbanDetailsDialog(unit);
+      case 'transfer':
+        _showTransferOwnershipDialog(unit);
+      case 'delete':
+        _confirmDeleteHomeOwner(unit);
+    }
   }
 
   void _showUnitOccupancyHistoryDialog(HomeOwnerItem resident) {
