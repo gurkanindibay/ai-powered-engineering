@@ -126,6 +126,12 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | GUI-08-06 | 08-05/09-07 | Manager | P1 | seed (+ optional tenant) | Transfer ownership of A Blok D:14 to "Selim Evsahibi" → new owner shown, tenant unchanged, the old owner's history kept with closing balance | `module_transfer_ownership_*`, `module_transfer_new_owner_*_input`, `module_confirm_transfer_ownership_btn` | ✅ |
 | GUI-08-07 | 08-02 | Manager | P2 | seed | Search the residents module by name and unit | `module_search_input` | ✅ |
 | GUI-08-08 | 08-03 | Manager | P2 | ui:GUI-08-01 | Remove the tenant only (owner kept) | `remove_tenant_only_button` | ✅ |
+| GUI-08-09 | 08-06 | Manager | P0 | ui:GUI-08-04 (tenant moved out, unit vacant) | Vacant unit → owner move-in → the confirmation names the owner on record and has no person fields → confirm → unit owner-occupied, owner unchanged. DB check: active `OWNER` occupancy for the owner, no change in `unit_ownerships` | to be defined with the UI | ❌ not built (story pending) |
+| GUI-08-10 | 08-06 | Manager | P1 | seed (vacant unit) | Vacant unit shows two separate actions, tenant move-in (person form) and owner move-in (confirmation). The tenant form has no role switch | to be defined with the UI | ❌ not built (story pending) |
+| GUI-08-11 | 08-07 | Manager | P0 | seed | Each unit card shows only the actions legal for its state: no move-out on a vacant unit, no plain move-in on an occupied unit. API check: the illegal command is rejected and nothing changes | to be defined with the UI | ❌ not built (story pending) |
+| GUI-08-12 | 08-08 | Manager | P1 | ui:GUI-08-01 + `overdue_dues(tenant, 1500.00)` | Replace the tenant → the previous tenant's history entry shows "Left with ₺1.500,00", the new tenant is active. Then "owner takes the unit back" → unit owner-occupied, owner unchanged | to be defined with the UI | ❌ not built (story pending) |
+| GUI-08-13 | 08-09 | Manager | P1 | seed (owner-occupied unit) | Transfer ownership of an owner-occupied unit → unit vacant with the new owner. Repeat with "new owner moves in" → owner-occupied by the new owner | to be defined with the UI | ❌ not built (story pending) |
+| GUI-08-14 | 08-10 | Manager | P1 | seed + vacant-period owner dues + tenant dues | Move-out → the exit balance in history equals the tenant's own unpaid dues, not the unit total. A move-out date before the session start is rejected with a message | to be defined with the UI | ❌ not built (story pending) |
 
 ### EPIC-09 Payment Tracking & Treasury
 | ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |
@@ -207,12 +213,12 @@ Each builder calls real backend endpoints (no direct SQL writes), returns the id
 | EPIC-05 | 6 | — | — | 6 |
 | EPIC-06 | 5 | 5 | 06-03 (button only) | — |
 | EPIC-07 | 7 | 7 | — | — |
-| EPIC-08 | 5 | 5 | — | — |
+| EPIC-08 | 10 | 10 | 08-06 to 08-10 (planned, UI not built) | — |
 | EPIC-09 | 7 | 7 | 09-03 (wording) | — |
 | EPIC-10 | 7 | 7 | 10-06 tenant (UI not found) | — |
-| **Total** | **62** | **53** | **6** | **9** |
+| **Total** | **67** | **58** | **11** | **9** |
 
-**Scenarios:** 83 (P0: 21, P1: 46, P2: 16) including cross-cutting. Story traceability was checked by script: all 62 `STORY-*` ids in `.specify/requirements` map to a scenario or a written exclusion.
+**Scenarios:** 89 (P0: 23, P1: 50, P2: 16) including cross-cutting. Story traceability was checked by script: all 67 `STORY-*` ids in `.specify/requirements` map to a scenario or a written exclusion.
 
 **Product gaps confirmed in Phase 1** (code and API checked; tests are written as `xfail(reason="UI gap")`):
 - GUI-02-06: payment reminder / direct message (STORY-02-04)
