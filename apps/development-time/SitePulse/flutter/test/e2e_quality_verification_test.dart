@@ -449,9 +449,10 @@ void main() {
       await tester.tap(duesTab);
       await tester.pumpAndSettle();
 
-      // Verify zero-data guidance card
-      expect(find.text('Henüz Aidat Dönemi Oluşturulmadı'), findsOneWidget);
-      expect(find.text('İlk Aidat Dönemini Başlat'), findsOneWidget);
+      // Accrual must wait until the site has independent units.
+      expect(find.text('Kayıtlı Daire ve Kat Maliki Bulunmuyor'), findsOneWidget);
+      expect(find.text('Henüz Aidat Dönemi Oluşturulmadı'), findsNothing);
+      expect(find.text('İlk Aidat Dönemini Başlat'), findsNothing);
 
       // 2. Graceful recovery: set months and flats
       controller.setAvailableDuesMonthsForTesting(['Ekim 2026']);
