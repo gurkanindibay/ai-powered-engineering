@@ -623,13 +623,18 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                           if (mounted) {
                             Navigator.pop(dialogCtx);
                             final alreadyAccrued = result['already_accrued'] == true;
+                            final failed = result['success'] == false;
                             final msg = result['message'] as String? ?? '';
                             ScaffoldMessenger.of(context).showSnackBar(
                               appSnackBar(
                                 content: testId('snackbar_accrual_result', Row(
                                   children: [
                                     Icon(
-                                      alreadyAccrued ? Icons.info_outline : Icons.check_circle,
+                                      failed
+                                          ? Icons.error_outline
+                                          : alreadyAccrued
+                                              ? Icons.info_outline
+                                              : Icons.check_circle,
                                       color: Colors.white,
                                     ),
                                     const SizedBox(width: 10),
@@ -641,8 +646,11 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                                     ),
                                   ],
                                 )),
-                                backgroundColor:
-                                    alreadyAccrued ? AppColors.accentOrange : AppColors.accentGreen,
+                                backgroundColor: failed
+                                    ? AppColors.accentRed
+                                    : alreadyAccrued
+                                        ? AppColors.accentOrange
+                                        : AppColors.accentGreen,
                                 duration: const Duration(seconds: 4),
                               ),
                             );
@@ -691,7 +699,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
             testId(
               'btn_open_accrual_dialog',
               ElevatedButton.icon(
-                onPressed: _showAccrueDuesDialog,
+                onPressed: widget.controller.flatsList.isEmpty ? null : _showAccrueDuesDialog,
                 icon: const Icon(Icons.event_repeat, size: 14),
                 label: const Text('Toplu Aidat Tahakkuku', style: TextStyle(fontSize: 12)),
                 style: ElevatedButton.styleFrom(
@@ -1234,6 +1242,17 @@ class _DuesManagementViewState extends State<DuesManagementView> {
       );
     }
 
+    if (hasNoFlats) {
+      return const SpGuidanceCard(
+        icon: Icons.people_outline,
+        tone: SpTone.warning,
+        prominent: true,
+        title: 'Kayıtlı Daire ve Kat Maliki Bulunmuyor',
+        message: 'Aidat tahakkuku yapabilmek ve Sanal IBAN tahsis edebilmek için sitenize blok, bağımsız bölüm ve kat maliki tanımlamanız gerekmektedir.',
+        tip: 'Yönetici kokpitinden sakin davet bağlantısı oluşturarak veya manuel ekleme yaparak başlayabilirsiniz.',
+      );
+    }
+
     if (hasNoPeriods) {
       return SpGuidanceCard(
         icon: Icons.calendar_today_outlined,
@@ -1254,17 +1273,6 @@ class _DuesManagementViewState extends State<DuesManagementView> {
           ),
         ),
         tip: 'KMK Madde 20 uyarınca vadesinde ödenmeyen aidatlara aylık %5 gecikme tazminatı uygulanır.',
-      );
-    }
-
-    if (hasNoFlats) {
-      return const SpGuidanceCard(
-        icon: Icons.people_outline,
-        tone: SpTone.warning,
-        prominent: true,
-        title: 'Kayıtlı Daire ve Kat Maliki Bulunmuyor',
-        message: 'Aidat tahakkuku yapabilmek ve Sanal IBAN tahsis edebilmek için sitenize blok, bağımsız bölüm ve kat maliki tanımlamanız gerekmektedir.',
-        tip: 'Yönetici kokpitinden sakin davet bağlantısı oluşturarak veya manuel ekleme yaparak başlayabilirsiniz.',
       );
     }
 
