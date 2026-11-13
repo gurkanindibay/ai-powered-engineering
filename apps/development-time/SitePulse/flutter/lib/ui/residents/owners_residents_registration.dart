@@ -497,8 +497,8 @@ extension _Registration on _OwnersResidentsModulePageState {
                           const SizedBox(height: 10),
                           SpGuidanceCard(
                             icon: Icons.home_work_outlined,
-                            title: 'Konut tipi ekleyin',
-                            message: 'Daire kaydına devam etmek için önce konut tipi ve aidat tarifesi tanımlayın.',
+                            title: 'Konut tipi tanımlanmamış',
+                            message: 'Eklemek veya düzenlemek için Konut Tipleri & Tarifeler ekranını açın.',
                             tone: SpTone.warning,
                             action: testId('module_add_house_type', TextButton.icon(
                               key: const Key('module_add_house_type'),
@@ -513,7 +513,7 @@ extension _Registration on _OwnersResidentsModulePageState {
                                 });
                               },
                               icon: const Icon(Icons.add),
-                              label: const Text('Konut Tipi Ekle'),
+                              label: const Text('Konut Tipleri & Tarifeler'),
                             )),
                           ),
                         ],
