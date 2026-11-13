@@ -153,6 +153,9 @@ pub async fn save_unit(
     Ok(())
 }
 
+/// Raised when a household member is added to a unit without an active occupancy.
+pub const NO_CURRENT_OCCUPANT: &str = "Unit has no current occupant";
+
 pub async fn save_unit_member(
     pool: &Pool,
     unit_id: &str,
@@ -177,7 +180,7 @@ pub async fn save_unit_member(
     // one never opens a session, which only a move-in or registration does.
     let occupancy_id: i64 = existing
         .map(|row| row.get(0))
-        .ok_or_else(|| "Unit has no current occupant".to_string())?;
+        .ok_or_else(|| NO_CURRENT_OCCUPANT.to_string())?;
     let normalized_email = crate::domain::email::NormalizedEmail::normalize(email);
     // S1: a household member is the unit's site's person; an address is matched only in that site.
     let site_id: Option<i64> = unit.get(2);

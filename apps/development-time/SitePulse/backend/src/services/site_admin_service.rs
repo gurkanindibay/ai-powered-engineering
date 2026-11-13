@@ -69,6 +69,9 @@ pub const PERSON_NOT_FOUND: &str = "Person not found";
 
 /// The unit is not in this site (or does not exist); never answered with invented data.
 pub const UNIT_NOT_FOUND: &str = "Unit not found";
+/// A household member joins the active occupancy; a vacant unit has none.
+pub const NO_HOUSEHOLD_TO_JOIN: &str =
+    "The unit is vacant; move a tenant or the owner in before adding household members";
 
 /// A login email change staged until the new address confirms it.
 struct PendingEmailChange {
@@ -2010,11 +2013,11 @@ impl SiteAdminService {
                     &[&u_id],
                 ).await.map_err(|e| e.to_string())?;
                 tx.execute(
-                    "UPDATE unit_occupancies SET is_active = FALSE, end_date = CURRENT_DATE WHERE unit_id = $1 AND is_active = TRUE",
+                    "UPDATE unit_occupancies SET is_active = FALSE, end_date = GREATEST(start_date, CURRENT_DATE) WHERE unit_id = $1 AND is_active = TRUE",
                     &[&u_id],
                 ).await.map_err(|e| e.to_string())?;
                 tx.execute(
-                    "UPDATE unit_ownerships SET is_active = FALSE, end_date = CURRENT_DATE WHERE unit_id = $1 AND is_active = TRUE",
+                    "UPDATE unit_ownerships SET is_active = FALSE, end_date = GREATEST(start_date, CURRENT_DATE) WHERE unit_id = $1 AND is_active = TRUE",
                     &[&u_id],
                 ).await.map_err(|e| e.to_string())?;
                 tx.execute(
@@ -2284,7 +2287,14 @@ impl SiteAdminService {
                 email,
             )
             .await
-            .map_err(|_| "Household storage unavailable".to_string())?,
+            .map_err(|e| {
+                // A vacant unit has no household to join (EPIC-08 invariant 6).
+                if e.to_string() == crate::db::NO_CURRENT_OCCUPANT {
+                    NO_HOUSEHOLD_TO_JOIN.to_string()
+                } else {
+                    "Household storage unavailable".to_string()
+                }
+            })?,
             None => 0,
         };
 

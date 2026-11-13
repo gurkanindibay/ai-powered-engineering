@@ -199,6 +199,12 @@ async fn command(
     .await
 }
 
+/// The seeded owner lives in the unit; T5 leaves it vacant with the owner kept.
+async fn vacate(app: &Router, token: &str, site: i64, unit: i64) {
+    let (status, body) = command(app, token, site, unit, json!({ "command": "MOVE_OUT" })).await;
+    assert_eq!(status, StatusCode::OK, "owner move-out: {body}");
+}
+
 async fn tenant_move_in(
     app: &Router,
     token: &str,
@@ -226,10 +232,11 @@ async fn when_tenant_leaves_and_owner_moves_in_then_owner_is_unchanged() {
     let site = t.site().await;
     let (unit, owner) = t.unit_and_owner().await;
     let (app, token) = t.app().await;
+    vacate(&app, &token, site, unit).await;
     let ownerships = t
         .text(&format!("SELECT COALESCE(string_agg(id || ':' || person_id || ':' || is_active, ',' ORDER BY id), '') FROM unit_ownerships WHERE unit_id = {unit}"))
         .await;
-    assert_eq!(t.status(unit).await, "VACANT", "seeded unit starts vacant");
+    assert_eq!(t.status(unit).await, "VACANT", "the owner moved out");
 
     // T2: a tenant moves in; the owner stays the owner.
     let opened = tenant_move_in(
@@ -298,7 +305,7 @@ async fn when_tenant_leaves_and_owner_moves_in_then_owner_is_unchanged() {
     assert_eq!(
         t.text(&format!("SELECT string_agg(command || ':' || from_occupancy || '>' || to_occupancy, ',' ORDER BY id) FROM occupancy_transitions WHERE unit_id = {unit}"))
             .await,
-        "TENANT_MOVE_IN:VACANT>TENANT_OCCUPIED,MOVE_OUT:TENANT_OCCUPIED>VACANT,OWNER_MOVE_IN:VACANT>OWNER_OCCUPIED",
+        "MOVE_OUT:OWNER_OCCUPIED>VACANT,TENANT_MOVE_IN:VACANT>TENANT_OCCUPIED,MOVE_OUT:TENANT_OCCUPIED>VACANT,OWNER_MOVE_IN:VACANT>OWNER_OCCUPIED",
         "every transition is audited"
     );
     // T5: the owner moves out and keeps the deed.
@@ -322,6 +329,7 @@ async fn when_owner_move_in_names_someone_else_then_it_is_rejected() {
     let site = t.site().await;
     let (unit, _) = t.unit_and_owner().await;
     let (app, token) = t.app().await;
+    vacate(&app, &token, site, unit).await;
     let before = t.fingerprint(unit).await;
 
     let (status, body) = send(
@@ -362,6 +370,7 @@ async fn when_command_is_illegal_for_the_state_then_nothing_changes() {
     let site = t.site().await;
     let (unit, _) = t.unit_and_owner().await;
     let (app, token) = t.app().await;
+    vacate(&app, &token, site, unit).await;
     let tenant_body = |n: &str| json!({ "command": "TENANT_MOVE_IN", "full_name": n, "email": format!("{n}@x.test") });
 
     // VACANT: move-out.
@@ -436,6 +445,7 @@ async fn when_tenant_is_replaced_then_outgoing_tenant_is_settled() {
     let site = t.site().await;
     let (unit, owner) = t.unit_and_owner().await;
     let (app, token) = t.app().await;
+    vacate(&app, &token, site, unit).await;
     let opened = tenant_move_in(&app, &token, site, unit, "Zeynep Kaya", "zeynep@x.test").await;
     let session = opened["id"].as_i64().expect("session");
     let tenant = opened["person_id"].as_i64().expect("tenant");
@@ -542,16 +552,8 @@ async fn when_title_is_transferred_then_occupancy_follows_the_state_table() {
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    // OWNER_OCCUPIED -> VACANT by default; the old owner's session closes.
-    let (status, _) = command(
-        &app,
-        &token,
-        site,
-        unit,
-        json!({ "command": "OWNER_MOVE_IN" }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
+    // OWNER_OCCUPIED (seeded) -> VACANT by default; the old owner's session closes.
+    assert_eq!(t.status(unit).await, "OWNER_OCCUPIED");
     let (status, body) = transfer(json!({ "unit_id": unit.to_string(), "new_owner_name": "Selim Evsahibi", "new_owner_email": "selim@x.test" })).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(t.status(unit).await, "VACANT");
@@ -646,6 +648,11 @@ async fn when_status_or_sessions_are_written_by_hand_then_the_model_holds() {
         "UPDATE units SET occupancy_status = 'TENANT_OCCUPIED' WHERE id = {unit}"
     ))
     .await;
+    assert_eq!(t.status(unit).await, "OWNER_OCCUPIED");
+    t.exec(&format!(
+        "UPDATE unit_occupancies SET is_active = FALSE, end_date = start_date WHERE unit_id = {unit} AND is_active"
+    ))
+    .await;
     assert_eq!(t.status(unit).await, "VACANT");
     assert_eq!(
         t.int(&format!(
@@ -688,6 +695,7 @@ async fn when_state_is_read_then_allowed_commands_follow_the_table() {
     let site = t.site().await;
     let (unit, owner) = t.unit_and_owner().await;
     let (app, token) = t.app().await;
+    vacate(&app, &token, site, unit).await;
     let (status, body) = send(
         &app,
         "GET",
@@ -714,6 +722,7 @@ async fn when_registration_is_approved_on_an_occupied_unit_then_it_is_rejected()
     let site = t.site().await;
     let (unit, _) = t.unit_and_owner().await;
     let (app, token) = t.app().await;
+    vacate(&app, &token, site, unit).await;
     let opened = tenant_move_in(&app, &token, site, unit, "Selin Demir", "selin@x.test").await;
     t.exec(&format!(
         "INSERT INTO pending_registrations (request_id, site_id, block, unit_no, floor, full_name, email, phone, is_resident, status, submitted_at)
@@ -739,5 +748,48 @@ async fn when_registration_is_approved_on_an_occupied_unit_then_it_is_rejected()
         opened["person_id"].as_i64().unwrap_or_default(),
         "Selin Demir remains the active tenant"
     );
+    t.drop_db().await;
+}
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn when_an_owner_is_registered_then_t1_records_ownership_and_the_unit_can_be_archived() {
+    let t = TestDb::create("register").await;
+    let site = t.site().await;
+    let (app, token) = t.app().await;
+    let (status, body) = send(
+        &app,
+        "POST",
+        &format!("/api/v1/site-admin/home-owners?site_id={site}"),
+        Some(&token),
+        Some(json!({
+            "block": "C", "unit_no": 701, "floor": 7, "owner_full_name": "Kayıt Malik",
+            "email": "kayit.malik@x.test", "phone": "05321112233", "is_resident": true
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let unit: i64 = body["unit_id"]
+        .as_str()
+        .and_then(|u| u.parse().ok())
+        .expect("unit id");
+    assert_eq!(t.status(unit).await, "OWNER_OCCUPIED");
+    assert_eq!(
+        t.int(&format!(
+            "SELECT count(*) FROM unit_ownerships WHERE unit_id = {unit} AND is_active"
+        ))
+        .await,
+        1,
+        "T1 opens the ownership"
+    );
+    let (status, body) = send(
+        &app,
+        "DELETE",
+        &format!("/api/v1/site-admin/home-owners/{unit}?site_id={site}"),
+        Some(&token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
     t.drop_db().await;
 }
