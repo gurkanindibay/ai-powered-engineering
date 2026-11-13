@@ -20,7 +20,7 @@ void main() {
       controller = DashboardController(startAuthenticated: true);
     });
 
-    testWidgets('DuesManagementView displays guidance when no periodic payment / dues months exist', (tester) async {
+    testWidgets('DuesManagementView requires units before starting the first dues period', (tester) async {
       controller.loadZeroDataFixtures(role: UserRole.siteManager);
       controller.setAvailableDuesMonthsForTesting([]);
 
@@ -35,11 +35,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verify guidance for zero periodic payment
-      expect(find.text('Henüz Aidat Dönemi Oluşturulmadı'), findsOneWidget);
-      expect(find.textContaining('Bu sitede henüz aktif veya geçmiş bir aidat tahakkuku bulunmuyor'), findsOneWidget);
-      expect(find.text('İlk Aidat Dönemini Başlat'), findsOneWidget);
-      expect(find.textContaining('KMK Madde 20 uyarınca'), findsOneWidget);
+      expect(find.text('Kayıtlı Daire ve Kat Maliki Bulunmuyor'), findsOneWidget);
+      expect(find.text('İlk Aidat Dönemini Başlat'), findsNothing);
+      final accrualButton = tester.widget<ElevatedButton>(
+        find.ancestor(
+          of: find.text('Toplu Aidat Tahakkuku'),
+          matching: find.byType(ElevatedButton),
+        ),
+      );
+      expect(accrualButton.onPressed, isNull);
     });
 
     testWidgets('DuesManagementView displays guidance when no homeowner / units exist in site', (tester) async {
