@@ -510,16 +510,6 @@ class DashboardController extends ChangeNotifier {
         debugPrint('fetchHouseTypes error: $e');
       }
     }
-    if (_houseTypes.isEmpty) {
-      _houseTypes = [
-        HouseTypeTariff(id: '1', siteId: effectiveSiteId, typeName: '1+1', duesAmount: Decimal.parse('1000.00'), description: '1 Oda 1 Salon'),
-        HouseTypeTariff(id: '2', siteId: effectiveSiteId, typeName: '2+1', duesAmount: Decimal.parse('1400.00'), description: '2 Oda 1 Salon'),
-        HouseTypeTariff(id: '3', siteId: effectiveSiteId, typeName: '3+1', duesAmount: Decimal.parse('1800.00'), description: '3 Oda 1 Salon'),
-        HouseTypeTariff(id: '4', siteId: effectiveSiteId, typeName: '4+1', duesAmount: Decimal.parse('2200.00'), description: '4 Oda 1 Salon'),
-        HouseTypeTariff(id: '5', siteId: effectiveSiteId, typeName: 'Dublex', duesAmount: Decimal.parse('2500.00'), description: 'Çatı Dubleks / Bahçe Katı'),
-      ];
-      notifyListeners();
-    }
   }
 
   Future<bool> saveHouseType({
