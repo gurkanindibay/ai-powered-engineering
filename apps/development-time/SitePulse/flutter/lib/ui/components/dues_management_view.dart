@@ -515,7 +515,7 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                             testId('accrual_dialog_period', TextButton.icon(
                               onPressed: isSubmitting ? null : () async {
                                 final now = DateTime.now();
-                                final options = List<DateTime>.generate(37, (index) => DateTime(now.year, now.month - 24 + index));
+                                final options = List<DateTime>.generate(13, (index) => DateTime(now.year, now.month - 6 + index));
                                 final choice = await showSpSelection<DateTime>(
                                   context: dialogCtx,
                                   title: 'Tahakkuk Dönemi Seçin',
