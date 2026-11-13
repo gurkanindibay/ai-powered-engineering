@@ -3328,6 +3328,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final currentHouseTypes = widget.controller.houseTypes;
           return AppFullscreenPage(
             title: 'Sakin Bilgilerini Düzenle',
             subtitle: '${resident.block} Daire ${resident.unitNo} • ${isTenant ? 'Kiracılı Daire' : 'Malik İkameti'}',
@@ -3445,7 +3446,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                           try {
                             final messenger = ScaffoldMessenger.of(this.context);
-                            final selectedTariff = houseTypes.where((ht) => ht.typeName == selectedHouseType).firstOrNull;
+                            final selectedTariff = widget.controller.houseTypes
+                                .where((ht) => ht.typeName == selectedHouseType)
+                                .firstOrNull;
                             final dues = selectedTariff?.duesAmount ?? (MoneyFormatter.tryParse(duesCtrl.text) ?? resident.monthlyDues);
                             final success = await widget.controller.updateHomeOwner(
                               unitId: resident.unitId,
@@ -4226,11 +4229,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
 
                   // House Type
-                  if (houseTypes.isNotEmpty) ...[
+                  if (currentHouseTypes.isNotEmpty) ...[
                     Text('Konut Tipi (Daire Tipi)', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
-                      value: houseTypes.any((ht) => ht.typeName == selectedHouseType)
+                      value: currentHouseTypes.any((ht) => ht.typeName == selectedHouseType)
                           ? selectedHouseType
                           : null,
                       decoration: InputDecoration(
@@ -4238,7 +4241,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
                       hint: const Text('Konut Tipi Seçiniz'),
-                      items: houseTypes.map((ht) {
+                      items: currentHouseTypes.map((ht) {
                         return DropdownMenuItem<String>(
                           value: ht.typeName,
                           child: Text('${ht.typeName} (${formatTry(ht.duesAmount)})'),
@@ -4247,10 +4250,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onChanged: (val) {
                         setDialogState(() {
                           selectedHouseType = val;
-                          final match = houseTypes.firstWhere((ht) => ht.typeName == val);
+                          final match = currentHouseTypes.firstWhere((ht) => ht.typeName == val);
                           duesCtrl.text = match.duesAmount.toStringAsFixed(2);
                         });
                       },
+                    ),
+                    const SizedBox(height: 14),
+                  ] else ...[
+                    SpGuidanceCard(
+                      icon: Icons.home_work_outlined,
+                      title: 'Konut tipi tanımlanmamış',
+                      message: 'Bu daireye tip ve aylık aidat atamak için önce konut tipi ekleyin.',
+                      tone: SpTone.warning,
+                      action: testId('edit_resident_add_house_type', OutlinedButton.icon(
+                        key: const Key('edit_resident_add_house_type'),
+                        onPressed: () async {
+                          await _showManageHouseTypesDialog();
+                          if (!context.mounted) return;
+                          setDialogState(() {
+                            final updatedTypes = widget.controller.houseTypes;
+                            if (updatedTypes.isNotEmpty) {
+                              selectedHouseType = updatedTypes.first.typeName;
+                              duesCtrl.text = updatedTypes.first.duesAmount.toStringAsFixed(2);
+                            }
+                          });
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Konut Tipi Ekle'),
+                      )),
                     ),
                     const SizedBox(height: 14),
                   ],
@@ -5960,7 +5987,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Default to first house type if available (e.g. 2+1 or 3+1)
     final houseTypes = widget.controller.houseTypes;
-    String? selectedHouseType = houseTypes.isNotEmpty ? houseTypes.first.typeName : '2+1';
+    String? selectedHouseType = houseTypes.isNotEmpty ? houseTypes.first.typeName : null;
     String selectedRole = 'OWNER';
     bool isResidentOwner = true;
     String ownerNotResidentOccupancy = 'VACANT'; // 'VACANT' or 'TENANT'
@@ -6411,7 +6438,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Row(
                           children: [
                             Expanded(
-                              child: DropdownButtonFormField<String>(
+                              child: currentHouseTypes.isEmpty
+                                  ? Text(
+                                      'Önce konut tipi ekleyin',
+                                      style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                                    )
+                                  : DropdownButtonFormField<String>(
                                 value: currentHouseTypes.any((t) => t.typeName == selectedHouseType)
                                     ? selectedHouseType
                                     : (currentHouseTypes.isNotEmpty ? currentHouseTypes.first.typeName : null),
