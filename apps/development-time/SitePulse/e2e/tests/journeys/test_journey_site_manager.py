@@ -38,7 +38,7 @@ def test_site_manager_journey(journey, first_sign_in, sign_in_again, page, api, 
         residents.start_add().fill(unit_no="25", full_name="Fatma Şahin", email="fatma.sahin@e2e.test",
                                    phone="05321234567").save()
         page.wait_for_function(
-            "n => document.querySelectorAll('[flt-semantics-identifier^=\"delete_ho_\"]').length > n",
+            "n => document.querySelectorAll('[flt-semantics-identifier^=\"unit_actions_\"], [flt-semantics-identifier^=\"delete_ho_\"]').length > n",
             arg=before, timeout=15_000)
         assert stack.sql("SELECT count(*) FROM persons WHERE email = 'fatma.sahin@e2e.test';") == "1"
 
