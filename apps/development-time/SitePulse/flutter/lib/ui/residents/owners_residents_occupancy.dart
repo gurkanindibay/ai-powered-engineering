@@ -438,15 +438,34 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                           setDlgState(() => isSubmitting = true);
                           try {
                             final messenger = ScaffoldMessenger.of(this.context);
-                            final res = await widget.controller.transferUnitOwnership(
-                              unitId: ho.unitId,
-                              newOwnerName: newName,
-                              newOwnerPhone: phoneCtrl.text.trim(),
-                              newOwnerEmail: emailCtrl.text.trim(),
-                              notes: notesCtrl.text.trim(),
-                              newOwnerMovesIn: ho.isOwnerOccupied && newOwnerMovesIn,
-                            );
-                            if (res != null && ctx.mounted) {
+                            Future<Map<String, dynamic>?> submit() => widget.controller.transferUnitOwnership(
+                                  unitId: ho.unitId,
+                                  newOwnerName: newName,
+                                  newOwnerPhone: phoneCtrl.text.trim(),
+                                  newOwnerEmail: emailCtrl.text.trim(),
+                                  notes: notesCtrl.text.trim(),
+                                  newOwnerMovesIn: ho.isOwnerOccupied && newOwnerMovesIn,
+                                );
+                            var res = await submit();
+                            // Ownership transfer is a sensitive action: verify the manager's
+                            // password, then retry the same request once.
+                            if (res?['needs_step_up'] == true && ctx.mounted) {
+                              final verified = await showStepUpPrompt(
+                                ctx,
+                                reason: 'Mülk malikini değiştiriyorsunuz. Devam etmek için kendi şifrenizi doğrulayın.',
+                              );
+                              if (verified) res = await submit();
+                            }
+                            if (res != null && res['success'] == false && ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                appSnackBar(
+                                  content: Text(res['needs_step_up'] == true
+                                      ? 'Şifre doğrulaması gerekli. Devir yapılmadı.'
+                                      : 'Hata: ${res['message']}'),
+                                  backgroundColor: AppColors.dangerFill,
+                                ),
+                              );
+                            } else if (res != null && ctx.mounted) {
                               Navigator.pop(ctx);
                               messenger.showSnackBar(
                                 appSnackBar(

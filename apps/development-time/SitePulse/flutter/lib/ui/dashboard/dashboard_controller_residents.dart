@@ -1437,7 +1437,13 @@ extension DashboardControllerResidents on DashboardController {
           await fetchHomeOwners(siteId: effectiveSiteId);
           return res;
         } else {
-          return {'success': false, 'message': utf8.decode(response.bodyBytes)};
+          final body = utf8.decode(response.bodyBytes);
+          // The server asks for a recent password check before moving ownership.
+          return {
+            'success': false,
+            'needs_step_up': response.statusCode == 403 && body.contains('STEP_UP_REQUIRED'),
+            'message': body,
+          };
         }
       } catch (e) {
         debugPrint('transferUnitOwnership error: $e');
