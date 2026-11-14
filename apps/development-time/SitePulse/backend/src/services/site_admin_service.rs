@@ -483,14 +483,17 @@ impl SiteAdminService {
             person_numeric_id = if let Some(row) = existing_person {
                 row.get(0)
             } else {
-                let row = client
-                    .query_one(
-                        "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-                        &[&request.owner_full_name, &request.phone, &email_norm, &person_type, &site_numeric_id],
-                    )
-                    .await
-                    .map_err(|e| format!("Failed to insert person: {}", e))?;
-                row.get(0)
+                crate::db::person_repository::resolve_new_site_person(
+                    &client,
+                    &request.owner_full_name,
+                    Some(&request.phone),
+                    Some(&email_norm),
+                    person_type,
+                    site_numeric_id,
+                    true,
+                )
+                .await
+                .map_err(|e| format!("Failed to insert person: {}", e))?
             };
 
             // Insert user
@@ -558,14 +561,17 @@ impl SiteAdminService {
                 let t_pid: i64 = if let Some(row) = existing_t_person {
                     row.get(0)
                 } else {
-                    let row = client
-                        .query_one(
-                            "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, NULLIF($3, ''), 'HOME_RESIDENT', $4) RETURNING id",
-                            &[&t_name, &t_phone, &t_email_norm, &site_numeric_id],
-                        )
-                        .await
-                        .map_err(|e| format!("Failed to insert tenant person: {}", e))?;
-                    row.get(0)
+                    crate::db::person_repository::resolve_new_site_person(
+                        &client,
+                        t_name,
+                        Some(t_phone),
+                        Some(&t_email_norm),
+                        "HOME_RESIDENT",
+                        site_numeric_id,
+                        true,
+                    )
+                    .await
+                    .map_err(|e| format!("Failed to insert tenant person: {}", e))?
                 };
                 explicit_tenant_person_id = Some(t_pid);
                 explicit_tenant_pid = Some(t_pid);
@@ -1687,14 +1693,17 @@ impl SiteAdminService {
                             };
                             let new_t_id: i64 = match existing {
                                 Some(row) => row.get(0),
-                                None => client
-                                    .query_one(
-                                        "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, NULLIF($3, ''), 'HOME_RESIDENT', $4) RETURNING id",
-                                        &[&t_name, &t_phone, &t_email, &site_numeric],
-                                    )
-                                    .await
-                                    .map_err(|e| format!("Failed to save tenant: {}", e))?
-                                    .get(0),
+                                None => crate::db::person_repository::resolve_new_site_person(
+                                    &client,
+                                    t_name,
+                                    Some(&t_phone),
+                                    Some(&t_email),
+                                    "HOME_RESIDENT",
+                                    site_numeric,
+                                    true,
+                                )
+                                .await
+                                .map_err(|e| format!("Failed to save tenant: {}", e))?,
                             };
                             {
                                 // T2 on a vacant unit, C2 when the owner lives there.
