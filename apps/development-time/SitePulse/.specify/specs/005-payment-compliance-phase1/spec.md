@@ -5,7 +5,7 @@
 > **Domain:** Treasury & Billing Context — payment ingestion and allocation
 > **Target Roles:** Site Manager, System (bank webhook), Resident (indirectly: receipts)
 > **Governance:** KMK Art. 20 (delay penalty), TBK Art. 100 (partial payment), TBK Art. 101–102 (payer designation), TBK Art. 103 (right to a receipt)
-> **Source analysis:** `docs/PAYMENTS_MANAGEMENT_STRUCTURE_REPORT.md` §3.1, §3.3, §3.6 and `docs/PAYMENTS_REGULATORY_AND_MARKET_EVALUATION.md` F2, F3, F4
+> **Source analysis:** `docs/payments/PAYMENTS_MANAGEMENT_STRUCTURE_REPORT.md` §3.1, §3.3, §3.6 and `docs/payments/PAYMENTS_REGULATORY_AND_MARKET_EVALUATION.md` F2, F3, F4
 
 ---
 
@@ -95,4 +95,4 @@ Scenario: Debt aging uses outstanding amounts and the liability's debtor
 ```
 
 ## 4. Out of scope (next increments)
-Reversals and refunds, tenant→owner virman source/target, receipt PDF/QR, an atomic ownership transfer, the işletme projesi (operating budget), and card payments through a licensed provider. See `docs/PAYMENTS_REGULATORY_AND_MARKET_EVALUATION.md` §5.
+Reversals and refunds, tenant→owner virman source/target, receipt PDF/QR, an atomic ownership transfer, the işletme projesi (operating budget), and card payments through a licensed provider. See `docs/payments/PAYMENTS_REGULATORY_AND_MARKET_EVALUATION.md` §5.

@@ -2,7 +2,7 @@
 """Bidirectional Requirements Traceability Matrix (RTM) Validator.
 
 Validates forward and backward traceability across:
-- docs/cmmi-pipeline/traceability-matrix.md (RTM Table)
+- docs/engineering-process/cmmi-pipeline/traceability-matrix.md (RTM Table)
 - apps/development-time/SitePulse/.specify/tasks/task-dag.json
 - Implementation source files and test suites on disk.
 """
@@ -33,7 +33,10 @@ class RtmValidator:
         else:
             self.workspace_root = workspace_root
 
-        self.rtm_file = self.workspace_root / "docs" / "cmmi-pipeline" / "traceability-matrix.md"
+        self.rtm_file = (
+            self.workspace_root / "apps" / "development-time" / "SitePulse" / "docs"
+            / "engineering-process" / "cmmi-pipeline" / "traceability-matrix.md"
+        )
         self.dag_file = (
             self.workspace_root
             / "apps"

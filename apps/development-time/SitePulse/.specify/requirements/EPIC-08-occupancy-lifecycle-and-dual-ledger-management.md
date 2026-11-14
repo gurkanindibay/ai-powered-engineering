@@ -31,7 +31,7 @@ Establishes strict domain and financial separation between property owners and t
 
 ## 3. Unit State Model (Normative)
 
-Rationale, current gaps and confirmed decisions: [docs/UNIT_STATE_TRANSITIONS_ANALYSIS.md](../../docs/UNIT_STATE_TRANSITIONS_ANALYSIS.md).
+Rationale, current gaps and confirmed decisions: [docs/architecture/UNIT_STATE_TRANSITIONS_ANALYSIS.md](../../docs/architecture/UNIT_STATE_TRANSITIONS_ANALYSIS.md).
 
 ### 3.1 Two independent dimensions
 

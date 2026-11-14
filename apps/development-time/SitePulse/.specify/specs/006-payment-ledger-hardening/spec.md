@@ -6,7 +6,7 @@
 > **Target Roles:** Site Manager, SaaS Admin (site tax details), System (bank webhook, daily jobs)
 > **Governance:** KMK Art. 20/22 (dues, tenant paying owner's capital dues), TBK Art. 103 (receipt), TBK Art. 314 (rent offset)
 > **Depends on:** SPEC-005 / migration V16 (single ingestion path, append-only ledger)
-> **Source analysis:** `docs/PAYMENTS_DATABASE_DESIGN_REVIEW.md` §4 (O-1 … O-11), `docs/PAYMENTS_MANAGEMENT_STRUCTURE_REPORT.md` §3.3, §3.4, §3.11
+> **Source analysis:** `docs/database/PAYMENTS_DATABASE_DESIGN_REVIEW.md` §4 (O-1 … O-11), `docs/payments/PAYMENTS_MANAGEMENT_STRUCTURE_REPORT.md` §3.3, §3.4, §3.11
 > **Schema:** migration `V17__payment_ledger_hardening.sql`
 
 ---

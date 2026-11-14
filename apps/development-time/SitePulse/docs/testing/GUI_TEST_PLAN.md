@@ -386,7 +386,7 @@ New ids: `hero_detail_button`, `penalty_days`, `penalty_formula`, `aging_bucket_
 
 Phase 4 (gate, lint, traceability) is done; see GUI_AUTOMATION_PLAN.md. Per-story GUI status: `COMPLETION_STATUS.md`, section "GUI end-to-end coverage".
 
-## 11. UX/UI remediation (2026-11-07, `docs/UX_UI_EVALUATION_REPORT.md`)
+## 11. UX/UI remediation (2026-11-07, `docs/ux/UX_UI_EVALUATION_REPORT.md`)
 
 The UI changes from the UX report changed what some tests look for. The suite was updated with them:
 

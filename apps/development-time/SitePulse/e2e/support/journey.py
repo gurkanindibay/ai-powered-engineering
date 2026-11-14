@@ -1,4 +1,4 @@
-"""Building blocks for per-role user journey tests (tests/journeys, docs/GUI_TEST_PLAN.md §9).
+"""Building blocks for per-role user journey tests (tests/journeys, docs/testing/GUI_TEST_PLAN.md §9).
 
 A journey is one test that walks a single user from their first sign-in with a
 temporary password through everything that role does, and ends signed out.
