@@ -1,0 +1,86 @@
+{
+  "task_id": "task-37",
+  "passed": true,
+  "started_at": "2026-11-14T22:50:13.076853+00:00",
+  "finished_at": "2026-11-14T22:51:05.323675+00:00",
+  "gates": [
+    {
+      "name": "rust-build",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo build --all-targets --locked",
+      "duration_s": 0.4189289719797671
+    },
+    {
+      "name": "rust-clippy",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo clippy --all-targets --locked -- -D warnings",
+      "duration_s": 0.39778351999120787
+    },
+    {
+      "name": "flutter-analyze",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter analyze --no-fatal-infos --no-fatal-warnings",
+      "duration_s": 7.5028421839815564
+    },
+    {
+      "name": "test-run-recorded",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/feature_traceability.py --json check --require-run",
+      "duration_s": 0.15391953603830189
+    },
+    {
+      "name": "flutter-test",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter test",
+      "duration_s": 41.46190972201293
+    },
+    {
+      "name": "flutter-reuse",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/flutter_reuse_inventory.py --check --json",
+      "duration_s": 0.8384905369603075
+    },
+    {
+      "name": "ui-style-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/ui_style_lint.py --json",
+      "duration_s": 0.4446092449943535
+    },
+    {
+      "name": "testid-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/testid_lint.py --json",
+      "duration_s": 0.11844649905106053
+    },
+    {
+      "name": "logging-standards-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/logging_standards_lint.py --json",
+      "duration_s": 0.7820403790101409
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "id": "scenario:SC-12-04-01",
+      "name": "scenario:SC-12-04-01",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/feature_traceability.py --json report",
+      "duration_s": 0.12217698100721464
+    }
+  ],
+  "gates_evaluated": 10,
+  "diagnostics": [],
+  "commit": "3b7551a22cf2c603be5ace63adf4ad650a332355",
+  "dirty": true,
+  "attempts": 0
+}
