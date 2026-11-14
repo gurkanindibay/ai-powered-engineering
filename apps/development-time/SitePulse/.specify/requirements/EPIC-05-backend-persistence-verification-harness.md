@@ -132,7 +132,7 @@ Executable scenarios: [`STORY-05-05-unified-test-runner.feature`](../features/EP
   ```
 - **Implementation Artifacts:**
   - `apps/development-time/SitePulse/harness/rtm_validator.py`
-  - `docs/cmmi-pipeline/traceability-matrix.md`
+  - `docs/engineering-process/cmmi-pipeline/traceability-matrix.md`
 - **Verification & Tests:**
   - `test_rtm_validator_bidirectional_consistency`
 

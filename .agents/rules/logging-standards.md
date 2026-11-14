@@ -8,7 +8,7 @@ globs: apps/development-time/SitePulse/**, **/*.rs, **/*.dart
 When authoring, reviewing, or modifying code in this workspace:
 
 ## 1. Authoritative Reference
-- Follow the master specification in [docs/LOGGING_STANDARDS.md](file:///docs/LOGGING_STANDARDS.md).
+- Follow the master specification in [apps/development-time/SitePulse/docs/standards/LOGGING_STANDARDS.md](file:///apps/development-time/SitePulse/docs/standards/LOGGING_STANDARDS.md).
 - Logging compliance is verified mechanically by `scripts/logging_standards_lint.py` (gate `logging-standards-lint`).
 
 ## 2. Core Agent Obligations

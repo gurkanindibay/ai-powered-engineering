@@ -6,7 +6,7 @@ Status: proposed design for review; application implementation is outside this c
 
 Unified with the person card proposal in [OWNERS_RESIDENTS_UNIFIED_DESIGN.md](OWNERS_RESIDENTS_UNIFIED_DESIGN.md). Develop from that document; this one is kept as the source of the directory design.
 
-Companion: [mobile design preview](ux-reference/mobile_unit_directory_preview.html) · [responsive draft](ux-reference/compact_unit_directory.html)
+Companion: [mobile design preview](../ux/ux-reference/mobile_unit_directory_preview.html) · [responsive draft](../ux/ux-reference/compact_unit_directory.html)
 
 ## Recommendation
 
@@ -18,11 +18,11 @@ This analysis inspects the application source carried by master at `3f0c8db`. No
 
 | Observed source | Finding | Design implication |
 | --- | --- | --- |
-| [Module page](../flutter/lib/ui/residents/owners_residents_module_page.dart) | Summary, search, occupancy chips and block chips precede the directory; every matching unit is expanded using `filtered.map`. | Reduce repeated content and build only visible/page items. Keep a short toolbar reachable while scrolling. |
-| [Unit card](../flutter/lib/ui/residents/owners_residents_unit_card.dart) | Each card includes metadata, monthly dues, responsible-person spotlight, contact details, resident/owner tabs, household content and management actions. | Separate finding a unit from operating on it. Contact and lifecycle controls belong in detail. |
-| [Fullscreen page](../flutter/lib/ui/components/app_fullscreen_page.dart) | Default content width is 640 px; full-screen navigation is established. | Explicitly widen the desktop directory; do not place a wide table inside the existing narrow container. Reuse full-screen navigation for detail. |
-| [Directory helpers](../flutter/lib/ui/residents/resident_directory.dart) | Search already covers owner, tenant, responsible person, household names and contacts, unit and block. Occupancy and block filters already exist. | Preserve this search coverage. Show why a hidden household/contact result matched. |
-| [Unit-state model](../flutter/lib/domain/models/unit_state.dart) and [EPIC-08](../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md) | Ownership and occupancy are independent; permitted commands depend on state. | Keep owner, occupant and primary contact distinct. Vacancy must never imply missing ownership. |
+| [Module page](../../flutter/lib/ui/residents/owners_residents_module_page.dart) | Summary, search, occupancy chips and block chips precede the directory; every matching unit is expanded using `filtered.map`. | Reduce repeated content and build only visible/page items. Keep a short toolbar reachable while scrolling. |
+| [Unit card](../../flutter/lib/ui/residents/owners_residents_unit_card.dart) | Each card includes metadata, monthly dues, responsible-person spotlight, contact details, resident/owner tabs, household content and management actions. | Separate finding a unit from operating on it. Contact and lifecycle controls belong in detail. |
+| [Fullscreen page](../../flutter/lib/ui/components/app_fullscreen_page.dart) | Default content width is 640 px; full-screen navigation is established. | Explicitly widen the desktop directory; do not place a wide table inside the existing narrow container. Reuse full-screen navigation for detail. |
+| [Directory helpers](../../flutter/lib/ui/residents/resident_directory.dart) | Search already covers owner, tenant, responsible person, household names and contacts, unit and block. Occupancy and block filters already exist. | Preserve this search coverage. Show why a hidden household/contact result matched. |
+| [Unit-state model](../../flutter/lib/domain/models/unit_state.dart) and [EPIC-08](../../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md) | Ownership and occupancy are independent; permitted commands depend on state. | Keep owner, occupant and primary contact distinct. Vacancy must never imply missing ownership. |
 
 The primary failure is information density: the interface repeats the complete operational workspace before the manager has chosen a unit. A smaller font or a multicolumn card grid would still repeat the same controls and would make cross-unit comparison harder.
 

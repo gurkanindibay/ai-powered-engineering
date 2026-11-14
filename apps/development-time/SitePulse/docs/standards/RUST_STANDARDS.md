@@ -207,7 +207,7 @@ python3 scripts/run_tests.py --only rust-build,rust-clippy,rust-test,money-fixtu
 - **Review Gate:** The Architect has veto power over any implementation introducing `f32`/`f64` in domain logic, unprincipled mutex locking, or leaking database models to the API boundary.
 
 ### 9.2 Binding to Developer Agent (Maker)
-- **Mandatory Reference:** The Developer must read `docs/RUST_STANDARDS.md` and consult [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md) for detailed rule references.
+- **Mandatory Reference:** The Developer must read `apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md` and consult [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md) for detailed rule references.
 - **Zero-Warning Obligation:** Code must compile with zero errors and zero Clippy warnings (`-D warnings`).
 - **Borrowing First:** Implement borrowing (`&str`, `&[T]`) instead of cloning. Avoid unnecessary heap allocations.
 - **Zero Panic Rule:** Zero occurrences of `.unwrap()` in production paths.

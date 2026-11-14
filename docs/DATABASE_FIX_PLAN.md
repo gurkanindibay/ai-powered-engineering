@@ -1,1 +1,0 @@
-../apps/development-time/SitePulse/docs/DATABASE_FIX_PLAN.md

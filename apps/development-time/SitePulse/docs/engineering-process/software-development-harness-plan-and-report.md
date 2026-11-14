@@ -175,7 +175,7 @@ This review inspected the original report, the routing script, orchestration ski
 
 ## 11. Implementation update (2026-11-08)
 
-The implementation is available in `scripts/development_harness.py` and `scripts/engineering_harness/`. Setup, protocol details, deployment prerequisites and supported boundaries are in [the operating guide](../engineering-harness.md).
+The implementation is available in `scripts/development_harness.py` and `scripts/engineering_harness/`. Setup, protocol details, deployment prerequisites and supported boundaries are in [the operating guide](engineering-harness.md).
 
 | Area | Delivered | Remaining qualification / follow-on |
 | --- | --- | --- |
