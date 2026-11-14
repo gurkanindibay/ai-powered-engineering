@@ -22,6 +22,18 @@ const allBlocksFilter = 'ALL';
 String normalizeBlockCode(String block) =>
     block.toUpperCase().replaceAll('BLOK', '').replaceAll(RegExp(r'[^A-Z0-9]'), '').trim();
 
+/// Folds Turkish letters and repeated whitespace for directory search.
+String foldDirectoryText(String value) => value
+    .toLowerCase()
+    .replaceAll('ı', 'i')
+    .replaceAll('ç', 'c')
+    .replaceAll('ğ', 'g')
+    .replaceAll('ö', 'o')
+    .replaceAll('ş', 's')
+    .replaceAll('ü', 'u')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();
+
 /// Distinct non-empty block names, case-insensitively de-duplicated, in
 /// their original order.
 List<String> distinctBlocks(Iterable<String> blocks) {
@@ -32,6 +44,14 @@ List<String> distinctBlocks(Iterable<String> blocks) {
     if (t.isNotEmpty && seen.add(t.toLowerCase())) result.add(t);
   }
   return result;
+}
+
+/// Sorts units by normalized block and integer unit number.
+int compareUnitDirectoryItems(HomeOwnerItem first, HomeOwnerItem second, {bool descending = false}) {
+  final blockOrder = normalizeBlockCode(first.block).compareTo(normalizeBlockCode(second.block));
+  final unitOrder = first.unitNo.compareTo(second.unitNo);
+  final order = blockOrder != 0 ? blockOrder : unitOrder != 0 ? unitOrder : first.floor.compareTo(second.floor);
+  return descending ? -order : order;
 }
 
 /// Whether [ho] passes the block, occupancy and free-text filters.
@@ -57,8 +77,13 @@ bool matchesResidentFilters(
   }
   if (query.isEmpty) return true;
 
-  final q = query.toLowerCase();
-  bool has(String? value) => (value ?? '').toLowerCase().contains(q);
+  final q = foldDirectoryText(query);
+  final queryDigits = query.replaceAll(RegExp(r'[^0-9]'), '');
+  bool has(String? value) {
+    final text = value ?? '';
+    return foldDirectoryText(text).contains(q) ||
+        (queryDigits.length >= 3 && text.replaceAll(RegExp(r'[^0-9]'), '').contains(queryDigits));
+  }
   return has(ho.ownerFullName) ||
       has(ho.tenantFullName) ||
       has(ho.activeResponsibleResidentName) ||

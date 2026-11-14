@@ -75,6 +75,14 @@ code; the badge never infers a state from its wording. When two states share a t
 automation `testId`. Filter state stays in the caller. A raw `FilterChip(` fails the
 `filter-chip` rule.
 
+### Directory layout: `SpDirectoryScaffold<T>` (`ui/residents/sp_directory_scaffold.dart`)
+Use for large client-side directories that need a scrollable filter header, lazy row rendering, page density
+(25/50/100), pager controls and restoration of page state. Callers retain domain search, filters and sorting,
+then pass the current result list and a stable `resultKey`; changes to that key reset the page and scroll offset.
+Rows use `ListView.builder`, and the scaffold requires a bounded vertical parent. Keep row content in a separate
+compact widget with responsive layouts and distinct actions. Cover page changes, density, restoration, narrow
+widths and large input lists in widget tests; keep a smoke test in `test/reusable_components_test.dart`.
+
 ### Choosing from a list: `showSpSelection<T>` (`ui/components/sp_dialog_pages.dart`)
 ```dart
 final choice = await showSpSelection<String>(

@@ -214,7 +214,7 @@
         "task-07"
       ],
       "spec_ref": "SPEC-003",
-      "description": "Provision ISO 7064 MOD-97-10 validated Virtual IBANs (Kuveyt T\u00fcrk Sandbox) and real-time incoming transfer webhook settlement with HMAC signature and idempotency guard.",
+      "description": "Provision ISO 7064 MOD-97-10 validated Virtual IBANs (Kuveyt Türk Sandbox) and real-time incoming transfer webhook settlement with HMAC signature and idempotency guard.",
       "gates": [],
       "acceptance_tests": [
         "rust:integration_tests::when_unit_created_then_generates_unique_sanal_iban",
@@ -554,7 +554,7 @@
     },
     {
       "id": "task-28",
-      "name": "Payments Phase 2: Virman Reversal, Resident Statement, Receipt PDF, Card Payments via Provider, \u0130\u015fletme Projesi",
+      "name": "Payments Phase 2: Virman Reversal, Resident Statement, Receipt PDF, Card Payments via Provider, İşletme Projesi",
       "module": "full-stack",
       "status": "UNVERIFIED",
       "depends_on": [
@@ -618,7 +618,10 @@
       "depends_on": [],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#delivery-plan",
       "description": "Step 0: add a reusable person integrity report for site-less people, unlinked household members, multiple active logins, unmatched primary contacts and likely duplicates; record current directory density and manager task times before setting constraints or claiming improvements.",
-      "gates": ["schema-integrity", "harness-selftest"],
+      "gates": [
+        "schema-integrity",
+        "harness-selftest"
+      ],
       "attempts": 0,
       "evidence": ".specify/evidence/task-30.json"
     },
@@ -627,10 +630,19 @@
       "name": "Centralize person writes and duplicate resolution",
       "module": "backend-rust",
       "status": "COMPLETED",
-      "depends_on": ["task-30"],
+      "depends_on": [
+        "task-30"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#backend-design",
       "description": "A1: introduce person_repository and transactional PersonService::resolve; move all person inserts to the repository; enforce hard and soft duplicate rules and add a lint rule barring other inserts. Preserve existing API contracts. Cover existing and new references, site isolation and concurrent insert races.",
-      "gates": ["rust-build", "rust-clippy", "rust-test", "rust-standards-lint", "tenant-lint", "logging-standards-lint"],
+      "gates": [
+        "rust-build",
+        "rust-clippy",
+        "rust-test",
+        "rust-standards-lint",
+        "tenant-lint",
+        "logging-standards-lint"
+      ],
       "attempts": 0,
       "evidence": ".specify/evidence/task-31.json"
     },
@@ -639,10 +651,17 @@
       "name": "Add person and primary contact schema foundations",
       "module": "postgres-db",
       "status": "COMPLETED",
-      "depends_on": ["task-30"],
+      "depends_on": [
+        "task-30"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#schema-changes-proposed-migration-v33",
       "description": "A2: migrate normalized person search keys, version, merge tombstone and primary contact person reference; backfill safely and add person, unit and relationship views. Add integrity checks; apply uniqueness and non-null constraints only after the measured data passes their preconditions.",
-      "gates": ["schema-integrity", "rust-db-test", "tenant-lint", "logging-standards-lint"],
+      "gates": [
+        "schema-integrity",
+        "rust-db-test",
+        "tenant-lint",
+        "logging-standards-lint"
+      ],
       "attempts": 0,
       "evidence": ".specify/evidence/task-32.json"
     },
@@ -651,32 +670,73 @@
       "name": "Expose person card API and reference-based commands",
       "module": "backend-rust",
       "status": "UNVERIFIED",
-      "depends_on": ["task-31", "task-32", "task-40"],
+      "depends_on": [
+        "task-31",
+        "task-32",
+        "task-40"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#endpoints",
       "description": "A3b: implement the person search, create, edit and login endpoints published by the task-40 contract; accept PersonRef in unit, occupancy, ownership, household and registration commands while retaining legacy request fields for one release; select primary contact by person_id; extend tenant isolation coverage.",
-      "gates": ["rust-build", "rust-clippy", "rust-test", "api-system", "schema-integrity", "tenant-lint", "logging-standards-lint"],
+      "gates": [
+        "rust-build",
+        "rust-clippy",
+        "rust-test",
+        "api-system",
+        "schema-integrity",
+        "tenant-lint",
+        "logging-standards-lint"
+      ],
       "attempts": 0
     },
     {
       "id": "task-34",
       "name": "Build shared directory scaffold and compact unit list",
       "module": "flutter-ui",
-      "status": "UNVERIFIED",
-      "depends_on": ["task-30"],
+      "status": "COMPLETED",
+      "depends_on": [
+        "task-30"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#frontend-design",
       "description": "B1: build the reusable directory scaffold and unit rows with search, filters, natural sort, paging, density, responsive layouts and restored state; benchmark 1,000 and 10,000 units before choosing server paging.",
-      "gates": ["flutter-analyze", "flutter-test", "flutter-reuse", "ui-style-lint", "testid-lint", "logging-standards-lint"],
-      "attempts": 0
+      "gates": [
+        "flutter-analyze",
+        "flutter-test",
+        "flutter-reuse",
+        "ui-style-lint",
+        "testid-lint",
+        "logging-standards-lint"
+      ],
+      "attempts": 0,
+      "acceptance_tests": [
+        "scenario:SC-12-02-05",
+        "scenario:SC-12-02-06",
+        "scenario:SC-12-02-07",
+        "flutter:test/sp_directory_scaffold_test.dart",
+        "flutter:test/resident_directory_test.dart",
+        "flutter:test/unit_directory_row_test.dart",
+        "flutter:test/owners_residents_module_test.dart",
+        "flutter:test/unit_directory_benchmark_test.dart"
+      ],
+      "evidence": ".specify/evidence/task-34.json"
     },
     {
       "id": "task-35",
       "name": "Build actions-first unit workspace and action pages",
       "module": "flutter-ui",
       "status": "UNVERIFIED",
-      "depends_on": ["task-30"],
+      "depends_on": [
+        "task-30"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#unit-workspace",
       "description": "B2: add the unit workspace with separate actions and information modes, using server allowed_commands and full-screen action pages; preserve current workflows, history and separate ledgers. Opened from the existing unit card; wiring it to the task-34 directory rows is task-41.",
-      "gates": ["flutter-analyze", "flutter-test", "flutter-reuse", "ui-style-lint", "testid-lint", "logging-standards-lint"],
+      "gates": [
+        "flutter-analyze",
+        "flutter-test",
+        "flutter-reuse",
+        "ui-style-lint",
+        "testid-lint",
+        "logging-standards-lint"
+      ],
       "attempts": 0
     },
     {
@@ -684,10 +744,19 @@
       "name": "Build person field, picker, form and card components",
       "module": "flutter-ui",
       "status": "UNVERIFIED",
-      "depends_on": ["task-40"],
+      "depends_on": [
+        "task-40"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#choosing-or-creating-a-person",
       "description": "C1a: add the Dart PersonRef model and person repository interface from the task-40 contract, SpPersonField, the full-screen searchable picker (beyond the first 100 people), SpPersonForm and SpPersonCard, tested against a fake repository; show duplicate and role eligibility reasons. Replacing inline inputs in action pages is task-42.",
-      "gates": ["flutter-analyze", "flutter-test", "flutter-reuse", "ui-style-lint", "testid-lint", "logging-standards-lint"],
+      "gates": [
+        "flutter-analyze",
+        "flutter-test",
+        "flutter-reuse",
+        "ui-style-lint",
+        "testid-lint",
+        "logging-standards-lint"
+      ],
       "attempts": 0
     },
     {
@@ -695,10 +764,19 @@
       "name": "Move people list onto the shared directory scaffold",
       "module": "flutter-ui",
       "status": "UNVERIFIED",
-      "depends_on": ["task-34"],
+      "depends_on": [
+        "task-34"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#people-list-and-person-card",
       "description": "C2a: move the people list to the task-34 shared scaffold with search, filters, paging and restored list state, keeping the existing person profile page. Expanded person card and cross-navigation are task-43.",
-      "gates": ["flutter-analyze", "flutter-test", "flutter-reuse", "ui-style-lint", "testid-lint", "logging-standards-lint"],
+      "gates": [
+        "flutter-analyze",
+        "flutter-test",
+        "flutter-reuse",
+        "ui-style-lint",
+        "testid-lint",
+        "logging-standards-lint"
+      ],
       "attempts": 0
     },
     {
@@ -706,10 +784,22 @@
       "name": "Merge person cards on the server",
       "module": "backend-rust",
       "status": "UNVERIFIED",
-      "depends_on": ["task-32", "task-33"],
+      "depends_on": [
+        "task-32",
+        "task-33"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#delivery-plan",
       "description": "D1: implement the step-up protected merge service and endpoint without rewriting ledger rows, reject conflicting unit roles and resolve merge tombstones in readers; cover tenant isolation and concurrent merges. Merge UI and directory paging are task-44.",
-      "gates": ["rust-build", "rust-clippy", "rust-test", "rust-db-test", "api-system", "schema-integrity", "tenant-lint", "logging-standards-lint"],
+      "gates": [
+        "rust-build",
+        "rust-clippy",
+        "rust-test",
+        "rust-db-test",
+        "api-system",
+        "schema-integrity",
+        "tenant-lint",
+        "logging-standards-lint"
+      ],
       "attempts": 0
     },
     {
@@ -717,10 +807,26 @@
       "name": "Retire copied person data and legacy request fields",
       "module": "full-stack",
       "status": "UNVERIFIED",
-      "depends_on": ["task-42", "task-43", "task-44"],
+      "depends_on": [
+        "task-42",
+        "task-43",
+        "task-44"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#delivery-plan",
       "description": "E: after the compatibility release, remove inline person fields from requests and copied occupancy member and primary contact data; make person_type nullable for role-free cards and verify history and financial ledger integrity.",
-      "gates": ["rust-build", "rust-clippy", "rust-test", "rust-db-test", "api-system", "flutter-analyze", "flutter-test", "schema-integrity", "flutter-reuse", "tenant-lint", "logging-standards-lint"],
+      "gates": [
+        "rust-build",
+        "rust-clippy",
+        "rust-test",
+        "rust-db-test",
+        "api-system",
+        "flutter-analyze",
+        "flutter-test",
+        "schema-integrity",
+        "flutter-reuse",
+        "tenant-lint",
+        "logging-standards-lint"
+      ],
       "attempts": 0
     },
     {
@@ -728,10 +834,19 @@
       "name": "Publish person API contract",
       "module": "backend-rust",
       "status": "COMPLETED",
-      "depends_on": ["task-31"],
+      "depends_on": [
+        "task-31"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#endpoints",
       "description": "A3a: define the PersonRef, person card, person search and person create/edit request and response DTOs with utoipa schemas and register them as components in the generated OpenAPI document, following the design Endpoints section; routes and handlers land in task-33. Unblocks the Flutter components (task-36) and the backend implementation (task-33).",
-      "gates": ["rust-build", "rust-clippy", "rust-test", "rust-standards-lint", "api-system", "logging-standards-lint"],
+      "gates": [
+        "rust-build",
+        "rust-clippy",
+        "rust-test",
+        "rust-standards-lint",
+        "api-system",
+        "logging-standards-lint"
+      ],
       "attempts": 0,
       "evidence": ".specify/evidence/task-40.json"
     },
@@ -740,10 +855,20 @@
       "name": "Open unit workspace from directory rows",
       "module": "flutter-ui",
       "status": "UNVERIFIED",
-      "depends_on": ["task-34", "task-35"],
+      "depends_on": [
+        "task-34",
+        "task-35"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#unit-workspace",
       "description": "B3: wire the task-34 compact unit rows to the task-35 workspace so every row reaches actions in one tap and the information mode separately; restore list state, scroll position and focus on return at phone and desktop widths.",
-      "gates": ["flutter-analyze", "flutter-test", "flutter-reuse", "ui-style-lint", "testid-lint", "logging-standards-lint"],
+      "gates": [
+        "flutter-analyze",
+        "flutter-test",
+        "flutter-reuse",
+        "ui-style-lint",
+        "testid-lint",
+        "logging-standards-lint"
+      ],
       "attempts": 0
     },
     {
@@ -751,10 +876,22 @@
       "name": "Replace inline person inputs in unit actions",
       "module": "full-stack",
       "status": "UNVERIFIED",
-      "depends_on": ["task-33", "task-35", "task-36"],
+      "depends_on": [
+        "task-33",
+        "task-35",
+        "task-36"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#choosing-or-creating-a-person",
       "description": "C1b: connect the task-36 components to the task-33 API and replace inline person inputs in move-in, title transfer, household, primary contact, registration and unit edit; action pages keep no person text inputs.",
-      "gates": ["flutter-analyze", "flutter-test", "flutter-reuse", "ui-style-lint", "testid-lint", "api-system", "logging-standards-lint"],
+      "gates": [
+        "flutter-analyze",
+        "flutter-test",
+        "flutter-reuse",
+        "ui-style-lint",
+        "testid-lint",
+        "api-system",
+        "logging-standards-lint"
+      ],
       "attempts": 0
     },
     {
@@ -762,10 +899,22 @@
       "name": "Expand person card and cross-navigation",
       "module": "flutter-ui",
       "status": "UNVERIFIED",
-      "depends_on": ["task-33", "task-36", "task-37", "task-41"],
+      "depends_on": [
+        "task-33",
+        "task-36",
+        "task-37",
+        "task-41"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#people-list-and-person-card",
       "description": "C2b: expand the person card with edit, login, units and allowed role actions; add unit selection for person-first actions and cross-links from unit tabs; unit to person to unit navigation retains list state and focus, and card edits update every visible unit role.",
-      "gates": ["flutter-analyze", "flutter-test", "flutter-reuse", "ui-style-lint", "testid-lint", "logging-standards-lint"],
+      "gates": [
+        "flutter-analyze",
+        "flutter-test",
+        "flutter-reuse",
+        "ui-style-lint",
+        "testid-lint",
+        "logging-standards-lint"
+      ],
       "attempts": 0
     },
     {
@@ -773,10 +922,24 @@
       "name": "Add merge UI and scale directory search",
       "module": "full-stack",
       "status": "UNVERIFIED",
-      "depends_on": ["task-38", "task-43"],
+      "depends_on": [
+        "task-38",
+        "task-43"
+      ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#delivery-plan",
       "description": "D2: add the step-up merge flow to the person card using the task-38 endpoint; add the server unit directory endpoint and client paging only if the task-34 benchmark at 1,000 and 10,000 units requires it.",
-      "gates": ["rust-build", "rust-clippy", "rust-test", "api-system", "flutter-analyze", "flutter-test", "flutter-reuse", "testid-lint", "tenant-lint", "logging-standards-lint"],
+      "gates": [
+        "rust-build",
+        "rust-clippy",
+        "rust-test",
+        "api-system",
+        "flutter-analyze",
+        "flutter-test",
+        "flutter-reuse",
+        "testid-lint",
+        "tenant-lint",
+        "logging-standards-lint"
+      ],
       "attempts": 0
     }
   ],

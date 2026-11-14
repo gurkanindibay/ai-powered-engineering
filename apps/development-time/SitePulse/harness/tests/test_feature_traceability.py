@@ -47,7 +47,10 @@ def _workspace(tmp: str, feature: str = FEATURE, second_story: bool = True) -> P
             "  Scenario: Linked\n    Given a thing\n", encoding="utf-8")
     (root / "backend" / "tests").mkdir(parents=True)
     (root / "backend" / "tests" / "demo.rs").write_text(
-        "#[test]\n// covers: SC-42-02-01\nfn when_linked_then_listed() {}\n", encoding="utf-8")
+        "#[test]\nfn unrelated_backend_test() {}\n", encoding="utf-8")
+    (root / "e2e" / "tests").mkdir(parents=True)
+    (root / "e2e" / "tests" / "demo.py").write_text(
+        "# covers: SC-42-02-01\ndef test_when_linked_then_listed(): pass\n", encoding="utf-8")
     return root
 
 
@@ -76,7 +79,7 @@ class CatalogueTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             catalogue = ft.load_catalogue(_workspace(tmp))
             self.assertEqual(ft.check(catalogue), [])
-            self.assertEqual(catalogue.links["SC-42-02-01"][0]["test"], "when_linked_then_listed")
+            self.assertEqual(catalogue.links["SC-42-02-01"][0]["test"], "test_when_linked_then_listed")
 
     def test_story_without_scenario_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -99,12 +102,22 @@ class CatalogueTests(unittest.TestCase):
     def test_linked_scenario_without_a_covering_test_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = _workspace(tmp)
-            (root / "backend" / "tests" / "demo.rs").write_text("fn nothing() {}\n", encoding="utf-8")
+            (root / "e2e" / "tests" / "demo.py").write_text("def test_nothing(): pass\n", encoding="utf-8")
             problems = ft.check(ft.load_catalogue(root))
         self.assertTrue(any("is @linked but no test declares" in p for p in problems), problems)
 
 
 class ReportTests(unittest.TestCase):
+    def test_latest_linked_record_supersedes_unlinked_gui_failure(self):
+        old = {"key": "tests/test_p2_edge.py::test_residents", "scenario": "", "gui_ids": ["GUI-08-07"],
+               "status": "FAIL", "id": "GUI-08-07"}
+        new = {"key": "SC-12-02-07", "scenario": "SC-12-02-07", "gui_ids": ["GUI-08-07"],
+               "status": "PASS", "id": "SC-12-02-07"}
+        latest = ft.latest_execution_rows([{"scenarios": [new]}, {"scenarios": [old]}])
+        self.assertEqual(latest["gui:GUI-08-07"]["status"], "PASS")
+        self.assertEqual(latest["SC-12-02-07"]["status"], "PASS")
+        self.assertFalse(any(row["status"] == "FAIL" for row in latest.values()))
+
     def test_latest_run_wins_and_story_takes_the_worst_status(self):
         failed_steps = [{"keyword": "Given", "text": "a thing", "status": "PASS", "duration_s": 0.1},
                         {"keyword": "Then", "text": "it works", "status": "FAIL", "duration_s": 0.2}]
@@ -258,11 +271,14 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(selection["scenarios"], ["SC-42-01-01", "SC-42-02-01"])
             self.assertIn("no test run is recorded for branch task-1", check()[0][0])
             store.write("runs/2026/a.jsonl", json.dumps(run("FAIL", 1)) + "\n", "")
+            legacy = {**run("FAIL", 1), "scenario": "", "gui_ids": ["GUI-42-01"], "test": "old-node-id"}
+            store.write("runs/2026/a2.jsonl", json.dumps(legacy) + "\n", "")
             problems = check()[0]
-            self.assertIn("fails for: SC-42-01-01", problems[0])
+            self.assertIn("SC-42-01-01", problems[0])
             self.assertIn("never executed on it: SC-42-02-01", problems[1])
             # Two targeted runs together satisfy the rule: the newest execution of each test counts.
-            store.write("runs/2026/b.jsonl", json.dumps(run("PASS", 2)) + "\n", "")
+            linked_pass = {**run("PASS", 2), "gui_ids": ["GUI-42-01"], "test": "new-node-id"}
+            store.write("runs/2026/b.jsonl", json.dumps(linked_pass) + "\n", "")
             store.write("runs/2026/c.jsonl", json.dumps({**run("PASS", 3), "scenario": "SC-42-02-01", "story": "STORY-42-02"}) + "\n", "")
             problems, note = check()
             self.assertEqual(problems, [])
