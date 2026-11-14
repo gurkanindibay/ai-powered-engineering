@@ -74,6 +74,16 @@ def summarize_junit(path: Path) -> dict:
     return {k: int(suite.get(k, 0)) for k in ("tests", "failures", "errors", "skipped")} | {"cases": cases}
 
 
+def record_history() -> dict:
+    """Append this run's scenario executions to the test history (scripts/feature_traceability.py)."""
+    proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "feature_traceability.py"), "--json", "record"],
+                          capture_output=True, text=True)
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return {"error": (proc.stderr or proc.stdout).strip()[-500:]}
+
+
 def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     junit = ARTIFACTS / "junit.xml"
@@ -98,10 +108,11 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
     proc = subprocess.run(argv, cwd=E2E, env=env,
                           stdout=subprocess.PIPE if args.json else None, stderr=subprocess.STDOUT if args.json else None,
                           text=True)
+    history = None if args.no_history else record_history()
     if args.json:
         summary = summarize_junit(junit)
         summary.update({"exit_code": proc.returncode, "seconds": round(time.time() - started, 1),
-                        "artifacts": str(ARTIFACTS)})
+                        "artifacts": str(ARTIFACTS), "history": history})
         if proc.returncode not in (0, 1):
             summary["output_tail"] = (proc.stdout or "")[-3000:]
         print(json.dumps(summary, indent=2))
@@ -148,6 +159,8 @@ def main() -> int:
     ap.add_argument("-k", "--keyword", help="pytest -k expression")
     ap.add_argument("--rebuild", action="store_true", help="rebuild the E2E web bundle first")
     ap.add_argument("--json", action="store_true", help="print a JSON summary instead of pytest output")
+    ap.add_argument("--no-history", action="store_true",
+                    help="do not append this run to the test history (git branch test-history)")
     args, passthrough = ap.parse_known_args()
     if args.browser != "chromium":
         args.browser_channel = ""
