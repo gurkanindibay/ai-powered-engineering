@@ -217,6 +217,9 @@ def test_remove_tenant_only_keeps_the_owner(login_as, page, api, actors, stack):
     # retry only while the database shows no change, so the action is never applied twice.
     calls: list[str] = []
     for _ in range(2):
+        btn = by_id(page, f"unit_actions_{b3}")
+        if btn.count() > 0:
+            btn.click()
         by_id(page, f"delete_ho_{b3}").click()
         button = by_id(page, "remove_tenant_only_button")
         button.wait_for(timeout=10_000)
@@ -232,9 +235,10 @@ def test_remove_tenant_only_keeps_the_owner(login_as, page, api, actors, stack):
         if stack.wait_sql(query, f"{owner}|", timeout_s=5) == f"{owner}|":
             break
 
+    cards = sorted(set(page.eval_on_selector_all('[flt-semantics-identifier^="unit_actions_"], [flt-semantics-identifier^="delete_ho_"]', 'els => els.map(e => e.getAttribute("flt-semantics-identifier"))')))
     assert stack.sql(query) == f"{owner}|", (
         f"tenant still set; PUT calls: {calls}; occupancies: {stack.sql(f'SELECT id, occupancy_type, is_active FROM unit_occupancies WHERE unit_id = {int(b3)};')!r}; "
-        f"cards: {sorted(set(page.eval_on_selector_all('[flt-semantics-identifier^="delete_ho_"]', 'els => els.map(e => e.getAttribute("flt-semantics-identifier"))')))}")
+        f"cards: {cards}")
     assert stack.sql(f"SELECT is_active FROM unit_occupancies WHERE unit_id = {int(b3)} "
                      "AND occupancy_type = 'TENANT';") == "f"
 

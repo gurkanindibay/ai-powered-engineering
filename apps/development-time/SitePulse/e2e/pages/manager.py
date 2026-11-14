@@ -49,10 +49,15 @@ class ResidentsTab:
         return self
 
     def unit_card_ids(self) -> list[str]:
-        """Home-owner ids that have a card (from delete_ho_<id>)."""
-        return [i.removeprefix("delete_ho_") for i in self.page.eval_on_selector_all(
-            '[flt-semantics-identifier^="delete_ho_"]',
+        """Home-owner ids that have a card (from unit_actions_<id> or delete_ho_<id>)."""
+        ids = [i.removeprefix("unit_actions_") for i in self.page.eval_on_selector_all(
+            '[flt-semantics-identifier^="unit_actions_"]',
             "els => els.map(e => e.getAttribute('flt-semantics-identifier'))")]
+        if not ids:
+            ids = [i.removeprefix("delete_ho_") for i in self.page.eval_on_selector_all(
+                '[flt-semantics-identifier^="delete_ho_"]',
+                "els => els.map(e => e.getAttribute('flt-semantics-identifier'))")]
+        return ids
 
     def start_add(self) -> "AddResidentForm":
         by_id(self.page, "add_resident_btn").click()
@@ -233,7 +238,12 @@ class Occupancy:
         self.page = page
 
     def move_in(self, unit_id: str, full_name: str, email: str, phone: str) -> None:
-        by_id(self.page, f"move_in_resident_to_{unit_id}").click()
+        btn = by_id(self.page, f"unit_actions_{unit_id}")
+        if btn.count() > 0:
+            btn.click()
+            by_id(self.page, f"move_in_ho_{unit_id}").click()
+        else:
+            by_id(self.page, f"move_in_resident_to_{unit_id}").click()
         by_id(self.page, "move_in_name_field").wait_for(timeout=10_000)  # role defaults to TENANT
         fill(self.page, "move_in_name_field", full_name)
         fill(self.page, "move_in_email_field", email)
@@ -242,6 +252,11 @@ class Occupancy:
         by_id(self.page, "btn_confirm_move_in").wait_for(state="detached", timeout=15_000)
 
     def move_out(self, unit_id: str) -> None:
-        by_id(self.page, f"move_out_resident_{unit_id}").click()
+        btn = by_id(self.page, f"unit_actions_{unit_id}")
+        if btn.count() > 0:
+            btn.click()
+            by_id(self.page, f"move_out_ho_{unit_id}").click()
+        else:
+            by_id(self.page, f"move_out_resident_{unit_id}").click()
         by_id(self.page, "btn_confirm_move_out").click()
         by_id(self.page, "btn_confirm_move_out").wait_for(state="detached", timeout=15_000)
