@@ -78,3 +78,24 @@ pub async fn save_by_person(
     tx.commit().await?;
     Ok((count == 1).then_some(contact))
 }
+
+/// Clears the unit's primary contact when that person no longer holds an active
+/// relation to the unit (owner, occupant or household member). Call it inside
+/// the transaction that ended the relation.
+pub async fn clear_stale_primary_contact<C: deadpool_postgres::GenericClient>(
+    client: &C,
+    unit_id: i64,
+) -> Result<(), tokio_postgres::Error> {
+    client
+        .execute(
+            "UPDATE units u SET primary_contact_person_id = NULL, primary_responsible_contact = NULL \
+             WHERE u.id = $1 AND u.primary_contact_person_id IS NOT NULL \
+             AND u.primary_contact_person_id IS DISTINCT FROM u.owner_person_id \
+             AND u.primary_contact_person_id IS DISTINCT FROM u.tenant_person_id \
+             AND NOT EXISTS (SELECT 1 FROM v_person_unit_relations r \
+                 WHERE r.unit_id = u.id AND r.person_id = u.primary_contact_person_id AND r.active)",
+            &[&unit_id],
+        )
+        .await?;
+    Ok(())
+}

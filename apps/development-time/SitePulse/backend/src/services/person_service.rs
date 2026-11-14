@@ -385,6 +385,23 @@ impl PersonService {
         Ok(PersonCardResponse { card, units })
     }
 
+    /// Checks a reference without keeping anything: an existing card must be usable,
+    /// a new card must pass validation and the duplicate rules. Lets a caller return
+    /// the coded error before a long operation resolves the reference for real.
+    ///
+    /// # Errors
+    /// The same errors as [`resolve_person_ref`].
+    pub async fn preflight(&self, site: i64, person: &PersonRef) -> Result<(), PersonApiError> {
+        let mut client = self.pool()?.get().await.map_err(storage)?;
+        let tx = client.transaction().await.map_err(storage)?;
+        crate::db::tx_bind_tenant(&tx, site)
+            .await
+            .map_err(storage)?;
+        resolve_person_ref(&tx, site, person).await?;
+        // Dropping the transaction rolls the probe back.
+        Ok(())
+    }
+
     /// Opens a login for the person (or re-sends the activation link while it is
     /// still pending). Needs an email; no password is ever issued.
     ///

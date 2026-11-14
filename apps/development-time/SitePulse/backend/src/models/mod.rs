@@ -1094,8 +1094,21 @@ pub struct RegisterHomeOwnerRequest {
     pub block: String,
     pub unit_no: i32,
     pub floor: i32,
+    /// Preferred: the owner as an existing card or a new one. Needs an email and
+    /// phone on the card; replaces the `owner_full_name`, `email` and `phone` fields.
+    #[serde(default)]
+    pub owner: Option<PersonRef>,
+    /// Preferred: the tenant as an existing card or a new one.
+    #[serde(default)]
+    pub tenant: Option<PersonRef>,
+    /// Household members joining the registered unit's occupancy.
+    #[serde(default)]
+    pub members: Vec<RegisterMemberRef>,
+    #[serde(default)]
     pub owner_full_name: String,
+    #[serde(default)]
     pub email: String,
+    #[serde(default)]
     pub phone: String,
     #[serde(default)]
     pub tenant_full_name: Option<String>,
@@ -1110,6 +1123,14 @@ pub struct RegisterHomeOwnerRequest {
     pub is_resident: bool,
     #[serde(default)]
     pub role: Option<String>,
+}
+
+/// A household member given by person reference when a unit is registered.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterMemberRef {
+    pub person: PersonRef,
+    #[serde(default)]
+    pub relationship: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -12,6 +12,9 @@ use sitepulse_backend::state::AppState;
 
 fn owner_request(unit_no: i32, email: &str) -> RegisterHomeOwnerRequest {
     RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "A Blok".to_string(),
         unit_no,
         floor: 2,

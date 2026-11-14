@@ -303,6 +303,10 @@ impl SiteAdminService {
         if site_id.trim().is_empty() {
             return Err("Site ID cannot be empty".to_string());
         }
+        let mut request = request;
+        prefill_person_refs(&self.state, site_id, &mut request)
+            .await
+            .map_err(|e| e.to_string())?;
         if request.owner_full_name.trim().is_empty() {
             return Err("Home owner name cannot be empty".to_string());
         }
@@ -431,17 +435,37 @@ impl SiteAdminService {
                 .await
                 .map_err(|e| format!("Transaction error: {}", e))?;
 
-            // Check duplicate email in DB
+            // The owner reference is resolved in this transaction, so the card and the
+            // registration commit or roll back together.
+            let owner_ref_pid: Option<i64> = match &request.owner {
+                Some(reference) => Some(
+                    crate::services::person_service::resolve_person_ref(
+                        &client,
+                        site_numeric_id,
+                        reference,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?,
+                ),
+                None => None,
+            };
+
+            // Check duplicate email in DB. An owner card that already has this login
+            // keeps it: registering another unit must not need a second account.
             let existing_user = client
                 .query_opt(
-                    "SELECT id FROM users WHERE LOWER(email) = $1 AND is_active",
+                    "SELECT id, person_id FROM users WHERE LOWER(email) = $1 AND is_active",
                     &[&email_norm],
                 )
                 .await
                 .map_err(|e| format!("DB query error: {}", e))?;
-            if existing_user.is_some() {
-                return Err(EMAIL_NOT_AVAILABLE.to_string());
-            }
+            let reused_user_id: Option<i64> = match (&existing_user, owner_ref_pid) {
+                (Some(row), Some(pid)) if row.get::<_, Option<i64>>(1) == Some(pid) => {
+                    Some(row.get(0))
+                }
+                (Some(_), _) => return Err(EMAIL_NOT_AVAILABLE.to_string()),
+                (None, _) => None,
+            };
 
             // Find or create block
             let existing_block = client
@@ -480,7 +504,9 @@ impl SiteAdminService {
                 .await
                 .map_err(|e| format!("DB query error: {}", e))?;
 
-            person_numeric_id = if let Some(row) = existing_person {
+            person_numeric_id = if let Some(pid) = owner_ref_pid {
+                pid
+            } else if let Some(row) = existing_person {
                 row.get(0)
             } else {
                 crate::db::person_repository::resolve_new_site_person(
@@ -497,12 +523,15 @@ impl SiteAdminService {
             };
 
             // Insert user
-            let user_role_str = if is_tenant || is_resident_only {
-                "HOME_RESIDENT"
+            if let Some(existing_login) = reused_user_id {
+                user_numeric_id = existing_login;
             } else {
-                "HOME_OWNER"
-            };
-            let user_row = client
+                let user_role_str = if is_tenant || is_resident_only {
+                    "HOME_RESIDENT"
+                } else {
+                    "HOME_OWNER"
+                };
+                let user_row = client
                 .query_one(
                     r#"
                     INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password)
@@ -518,23 +547,24 @@ impl SiteAdminService {
                 )
                 .await
                 .map_err(|e| format!("Failed to insert user: {}", e))?;
-            user_numeric_id = user_row.get(0);
-            // S2/S3: no password is issued; the person sets one through their own link.
-            let issued = activation::issue_in(
-                &client,
-                user_numeric_id,
-                Some(site_numeric_id),
-                ActivationPurpose::Activate,
-                None,
-            )
-            .await
-            .map_err(|e| e.to_string())?;
-            pending_activations.push((
-                user_numeric_id,
-                request.owner_full_name.clone(),
-                email_norm.clone(),
-                issued,
-            ));
+                user_numeric_id = user_row.get(0);
+                // S2/S3: no password is issued; the person sets one through their own link.
+                let issued = activation::issue_in(
+                    &client,
+                    user_numeric_id,
+                    Some(site_numeric_id),
+                    ActivationPurpose::Activate,
+                    None,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+                pending_activations.push((
+                    user_numeric_id,
+                    request.owner_full_name.clone(),
+                    email_norm.clone(),
+                    issued,
+                ));
+            }
 
             // Handle optional explicit tenant when registered together with owner
             let mut explicit_tenant_person_id: Option<i64> = None;
@@ -558,7 +588,21 @@ impl SiteAdminService {
                     None
                 };
 
-                let t_pid: i64 = if let Some(row) = existing_t_person {
+                let tenant_ref_pid: Option<i64> = match &request.tenant {
+                    Some(reference) => Some(
+                        crate::services::person_service::resolve_person_ref(
+                            &client,
+                            site_numeric_id,
+                            reference,
+                        )
+                        .await
+                        .map_err(|e| e.to_string())?,
+                    ),
+                    None => None,
+                };
+                let t_pid: i64 = if let Some(pid) = tenant_ref_pid {
+                    pid
+                } else if let Some(row) = existing_t_person {
                     row.get(0)
                 } else {
                     crate::db::person_repository::resolve_new_site_person(
@@ -766,6 +810,43 @@ impl SiteAdminService {
                     )
                     .await
                     .map_err(|e| e.to_string())?;
+            }
+
+            // Household members given by reference join the unit's active occupancy.
+            for member in &request.members {
+                let relationship =
+                    crate::domain::household_relationship::HouseholdRelationship::from_input(
+                        member.relationship.as_deref().unwrap_or("OTHER"),
+                    )
+                    .ok_or_else(|| {
+                        crate::domain::household_relationship::UNKNOWN_RELATIONSHIP.to_string()
+                    })?
+                    .as_str();
+                let member_pid = crate::services::person_service::resolve_person_ref(
+                    &client,
+                    site_numeric_id,
+                    &member.person,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+                let joined = client
+                    .execute(
+                        r#"
+                        INSERT INTO occupancy_members (occupancy_id, person_id, full_name, relationship, phone, email, is_emergency_contact)
+                        SELECT uo.id, p.id, p.full_name, $3, COALESCE(p.phone, ''), COALESCE(p.email, ''), false
+                        FROM unit_occupancies uo JOIN persons p ON p.id = $2
+                        WHERE uo.unit_id = $1 AND uo.is_active AND uo.end_date IS NULL
+                        ORDER BY uo.id DESC LIMIT 1
+                        ON CONFLICT (occupancy_id, person_id) WHERE person_id IS NOT NULL
+                        DO UPDATE SET relationship = EXCLUDED.relationship
+                        "#,
+                        &[&unit_numeric_id, &member_pid, &relationship],
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if joined == 0 {
+                    return Err(NO_HOUSEHOLD_TO_JOIN.to_string());
+                }
             }
 
             // Insert due liability if dues > 0 and NOT co-resident
@@ -2376,6 +2457,12 @@ impl SiteAdminService {
                     "DELETE FROM occupancy_members WHERE id = $1 AND occupancy_id IN (SELECT id FROM unit_occupancies WHERE unit_id = $2)",
                     &[&member_id, &unit_id_num],
                 ).await.map_err(|e| e.to_string())?;
+                crate::db::responsible_contact_repository::clear_stale_primary_contact(
+                    &client,
+                    unit_id_num,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
             }
         }
 
@@ -3068,4 +3155,50 @@ fn edit_transition_input(
         new_owner_person_id: None,
         notes: None,
     }
+}
+
+/// Copies the contact data of `owner` and `tenant` references into the legacy
+/// request fields, so validation and the in-memory projection see one shape. The
+/// references themselves are resolved later, inside the registration transaction.
+async fn prefill_person_refs(
+    state: &crate::state::AppState,
+    site_id: &str,
+    request: &mut RegisterHomeOwnerRequest,
+) -> Result<(), crate::services::person_service::PersonApiError> {
+    use crate::models::PersonRef;
+    use crate::services::person_service::PersonApiError;
+    if request.owner.is_none() && request.tenant.is_none() && request.members.is_empty() {
+        return Ok(());
+    }
+    if state.pool.is_none() {
+        return Err(PersonApiError::Unavailable);
+    }
+    let site = crate::db::parse_id_to_i64(site_id)
+        .ok_or_else(|| PersonApiError::Validation("Site ID is not valid".into()))?;
+    let people = crate::services::person_service::PersonService::new(state);
+    let contact = |reference: PersonRef| {
+        let people = &people;
+        async move {
+            match reference {
+                PersonRef::Existing { person_id } => people
+                    .card(site, person_id)
+                    .await
+                    .map(|c| (c.card.full_name, c.card.email, c.card.phone)),
+                PersonRef::New { card, .. } => Ok((card.full_name, card.email, card.phone)),
+            }
+        }
+    };
+    if let Some(owner) = request.owner.clone() {
+        let (name, email, phone) = contact(owner).await?;
+        request.owner_full_name = name;
+        request.email = email.unwrap_or_default();
+        request.phone = phone.unwrap_or_default();
+    }
+    if let Some(tenant) = request.tenant.clone() {
+        let (name, email, phone) = contact(tenant).await?;
+        request.tenant_full_name = Some(name);
+        request.tenant_email = email;
+        request.tenant_phone = phone;
+    }
+    Ok(())
 }

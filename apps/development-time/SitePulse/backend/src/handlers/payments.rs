@@ -712,7 +712,7 @@ pub async fn transfer_unit_ownership(
     scope: crate::tenancy::TenantScope,
     Path(unit_id): Path<String>,
     Json(mut payload): Json<crate::models::TransferOwnershipRequest>,
-) -> Result<Json<crate::models::TransferOwnershipResponse>, (StatusCode, String)> {
+) -> Result<Json<crate::models::TransferOwnershipResponse>, crate::error::AppError> {
     // A site-scoped manager must use the site from their authenticated scope;
     // a stale client selection must not block an operation on an authorized unit.
     if let Some(site_id) = scope.own_site() {
@@ -727,62 +727,54 @@ pub async fn transfer_unit_ownership(
         .transfer_ownership(payload)
         .await
         .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(|e| (StatusCode::BAD_REQUEST, e).into())
 }
 
-/// Maps `new_owner` onto the legacy buyer fields: an existing card is read from the
-/// site, a new card supplies the inline fields.
+/// Maps `new_owner` onto the legacy buyer fields. A new card is created first, so
+/// the duplicate rules and `confirm_distinct` apply; an existing card is read from
+/// the site. The buyer is then always identified by `new_owner_person_id`.
 async fn apply_new_owner_ref(
     state: &AppState,
     payload: &mut crate::models::TransferOwnershipRequest,
-) -> Result<(), (StatusCode, String)> {
-    use crate::models::PersonRef;
+) -> Result<(), crate::error::AppError> {
+    use crate::models::{CreatePersonRequest, PersonRef};
     let Some(reference) = payload.new_owner.clone() else {
         return Ok(());
     };
-    match reference {
-        PersonRef::New { card, .. } => {
-            payload.new_owner_person_id = None;
-            payload.new_owner_name = card.full_name;
-            payload.new_owner_phone = card.phone;
-            payload.new_owner_email = card.email;
-            payload.new_owner_national_id = card.national_id;
-        }
-        PersonRef::Existing { person_id } => {
-            let pool = state.pool.as_ref().ok_or((
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Person records need the database".to_string(),
-            ))?;
-            let site = payload
-                .site_id
-                .as_deref()
-                .and_then(crate::db::parse_id_to_i64)
-                .ok_or((StatusCode::BAD_REQUEST, "Site is not valid".to_string()))?;
-            let client = pool.get().await.map_err(|_| {
-                (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "Storage unavailable".to_string(),
-                )
-            })?;
-            let row = client
-                .query_opt(
-                    "SELECT full_name, phone, email FROM persons WHERE id = $1 AND site_id = $2 \
-                     AND deleted_at IS NULL AND merged_into_person_id IS NULL",
-                    &[&person_id, &site],
+    let site = payload
+        .site_id
+        .as_deref()
+        .and_then(crate::db::parse_id_to_i64)
+        .ok_or_else(|| crate::error::AppError::validation("Site is not valid"))?;
+    let service = crate::services::person_service::PersonService::new(state);
+    let person_id = match reference {
+        PersonRef::Existing { person_id } => person_id,
+        PersonRef::New {
+            card,
+            confirm_distinct,
+        } => {
+            service
+                .create(
+                    site,
+                    &CreatePersonRequest {
+                        card,
+                        confirm_distinct,
+                    },
                 )
                 .await
-                .map_err(|_| {
-                    (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "Storage unavailable".to_string(),
-                    )
-                })?
-                .ok_or((StatusCode::NOT_FOUND, "Person not found".to_string()))?;
-            payload.new_owner_person_id = Some(person_id);
-            payload.new_owner_name = row.get(0);
-            payload.new_owner_phone = row.get(1);
-            payload.new_owner_email = row.get(2);
+                .map_err(super::site_admin::person_api_error)?
+                .card
+                .person_id
         }
-    }
+    };
+    let card = service
+        .card(site, person_id)
+        .await
+        .map_err(super::site_admin::person_api_error)?
+        .card;
+    payload.new_owner_person_id = Some(person_id);
+    payload.new_owner_name = card.full_name;
+    payload.new_owner_phone = card.phone;
+    payload.new_owner_email = card.email;
     Ok(())
 }

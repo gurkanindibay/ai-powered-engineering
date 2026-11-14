@@ -88,12 +88,40 @@ pub async fn register_home_owner(
     Json(payload): Json<RegisterHomeOwnerRequest>,
 ) -> Result<(StatusCode, Json<HomeOwnerResponse>), AppError> {
     let site_id = scope.pinned(q.site_id)?;
+    preflight_person_refs(&state, &site_id, &payload).await?;
     let service = SiteAdminService::new(state);
     service
         .register_home_owner(&site_id, payload)
         .await
         .map(|res| (StatusCode::CREATED, Json(res)))
         .map_err(person_error)
+}
+
+/// Rejects unusable person references with their coded errors (duplicates, taken
+/// identity) before the registration transaction resolves them for real.
+async fn preflight_person_refs(
+    state: &AppState,
+    site_id: &str,
+    payload: &RegisterHomeOwnerRequest,
+) -> Result<(), AppError> {
+    let references: Vec<&crate::models::PersonRef> = payload
+        .owner
+        .iter()
+        .chain(payload.tenant.iter())
+        .chain(payload.members.iter().map(|m| &m.person))
+        .collect();
+    if references.is_empty() || state.pool.is_none() {
+        return Ok(());
+    }
+    let site = site_number(site_id)?;
+    let people = crate::services::person_service::PersonService::new(state);
+    for reference in references {
+        people
+            .preflight(site, reference)
+            .await
+            .map_err(person_api_error)?;
+    }
+    Ok(())
 }
 
 pub async fn get_home_owners(

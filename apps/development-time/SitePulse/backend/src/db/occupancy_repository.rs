@@ -340,6 +340,8 @@ pub async fn execute_plan(
         opened.as_ref(),
     )
     .await?;
+    super::responsible_contact_repository::clear_stale_primary_contact(tx, snapshot.unit_id)
+        .await?;
     Ok(TransitionOutcome {
         plan,
         closed,

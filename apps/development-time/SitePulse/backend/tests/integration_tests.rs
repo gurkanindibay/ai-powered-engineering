@@ -342,6 +342,9 @@ async fn when_registering_home_owner_then_sends_activation_instead_of_a_password
     let service = SiteAdminService::new(state);
 
     let req = RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "A Blok".to_string(),
         unit_no: 22,
         floor: 6,
@@ -373,6 +376,9 @@ async fn when_duplicate_email_for_home_owner_then_throws_exception() {
     let service = SiteAdminService::new(state);
 
     let req = RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "A Blok".to_string(),
         unit_no: 14,
         floor: 4,
@@ -2714,6 +2720,9 @@ async fn when_invalid_email_or_phone_then_registration_rejected_with_validation_
 
     // 1. Invalid email (no @ or domain)
     let invalid_email_req = RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "A Blok".to_string(),
         unit_no: 5,
         floor: 2,
@@ -2737,6 +2746,9 @@ async fn when_invalid_email_or_phone_then_registration_rejected_with_validation_
 
     // 2. Invalid phone (too short or letters)
     let invalid_phone_req = RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "A Blok".to_string(),
         unit_no: 6,
         floor: 2,
@@ -2766,6 +2778,9 @@ async fn when_house_type_selected_then_sets_monthly_dues_from_tariff() {
 
     // House type 3+1 has tariff 1800.00 TL in defaults
     let req = RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "B Blok".to_string(),
         unit_no: 9,
         floor: 3,
@@ -2961,6 +2976,9 @@ async fn when_managing_home_owners_then_can_delete_home_owner() {
 
     // 1. Register a test home owner to delete
     let reg_req = RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "A Blok".to_string(),
         unit_no: 88,
         floor: 9,
@@ -3006,6 +3024,9 @@ async fn when_managing_home_owners_then_can_delete_home_owner() {
         .register_home_owner(
             "site-1",
             RegisterHomeOwnerRequest {
+                owner: None,
+                tenant: None,
+                members: Vec::new(),
                 block: "A Blok".to_string(),
                 unit_no: 89,
                 floor: 9,
@@ -3034,6 +3055,9 @@ async fn when_managing_occupancy_lifecycle_then_can_move_out_and_move_in_without
 
     // 1. Create a unit with an initial owner
     let reg_req = RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "A Blok".to_string(),
         unit_no: 88,
         floor: 5,
@@ -3104,6 +3128,9 @@ async fn when_registering_new_owner_or_tenant_to_existing_unit_then_archives_pre
 
     // 1. Register initial owner
     let req1 = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "C Blok".to_string(),
         unit_no: 10,
         floor: 2,
@@ -3132,6 +3159,9 @@ async fn when_registering_new_owner_or_tenant_to_existing_unit_then_archives_pre
 
     // 2. Register a new tenant to the same unit
     let req2 = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "C Blok".to_string(),
         unit_no: 10,
         floor: 2,
@@ -3207,6 +3237,9 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
 
     // 1. Register owner for unit 14
     let owner_req = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "A Blok".to_string(),
         unit_no: 14,
         floor: 4,
@@ -3229,6 +3262,9 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
 
     // 2. Register tenant (primary contact living there)
     let tenant_req = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "A Blok".to_string(),
         unit_no: 14,
         floor: 4,
@@ -3251,6 +3287,9 @@ async fn when_registering_co_resident_then_attached_to_household_and_does_not_al
 
     // 3. Register co-resident (Ev Sakini) to unit 14
     let resident_req = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "A Blok".to_string(),
         unit_no: 14,
         floor: 4,
@@ -3318,6 +3357,9 @@ async fn when_tenant_moves_out_then_household_members_are_archived_and_cleared_f
 
     // 1. Register tenant
     let tenant_req = sitepulse_backend::models::RegisterHomeOwnerRequest {
+        owner: None,
+        tenant: None,
+        members: Vec::new(),
         block: "B Blok".to_string(),
         unit_no: 25,
         floor: 3,

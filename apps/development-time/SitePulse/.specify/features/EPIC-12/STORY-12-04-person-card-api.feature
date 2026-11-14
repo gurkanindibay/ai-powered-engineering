@@ -2,7 +2,7 @@
 Feature: Person card API and reference-based commands
   @SC-12-04-01
   @layer:db
-  @pending
+  @linked
   Scenario: Search offers people with role eligibility for the unit
     Given a site manager and a unit with an owner and a household member
     When the manager searches people for the tenant role on that unit
@@ -11,7 +11,7 @@ Feature: Person card API and reference-based commands
 
   @SC-12-04-02
   @layer:db
-  @pending
+  @linked
   Scenario: Creating a card reports possible duplicates unless confirmed
     Given a person with a phone number exists in the site
     When the manager creates a card with the same phone number
@@ -20,7 +20,7 @@ Feature: Person card API and reference-based commands
 
   @SC-12-04-03
   @layer:db
-  @pending
+  @linked
   Scenario: Editing a card needs the current version
     Given a person card at version 3
     When the manager edits it with version 2
@@ -28,7 +28,7 @@ Feature: Person card API and reference-based commands
 
   @SC-12-04-04
   @layer:db
-  @pending
+  @linked
   Scenario: Actions accept an existing person or a new card
     Given a unit with an active occupancy
     When the manager adds a household member by person reference
@@ -36,7 +36,7 @@ Feature: Person card API and reference-based commands
 
   @SC-12-04-05
   @layer:db
-  @pending
+  @linked
   Scenario: The primary contact is selected by person
     Given a unit whose household includes a person
     When the manager selects that person as primary contact
