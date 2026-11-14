@@ -86,6 +86,11 @@ class FakeBackend:
             return Execution(0, "Ran 0 tests\nOK", "completed", 1)
         if self.mode == "fail_once" and self.gate_runs == 1:
             return Execution(1, "Ran 2 tests\nFAILED", "completed", 1)
+        if self.mode == "capture":
+            records = kwargs["workspace"] / "records" / "runs"
+            records.mkdir(parents=True, exist_ok=True)
+            (records / "run-1.jsonl").write_text('{"scenario": "SC-01-01-01", "status": "PASS"}\n')
+            (kwargs["workspace"] / "elsewhere.txt").write_text("not captured\n")
         if self.mode == "mutate_gate":
             (kwargs["workspace"] / "src" / "value.py").write_text("VALUE = 999\n")
         return Execution(0, "Ran 2 tests\nOK", "completed", 1)

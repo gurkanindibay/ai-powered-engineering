@@ -29,6 +29,7 @@ def test_manager_adds_owner_resident(login_as, page, stack):
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-10-01")
+@pytest.mark.covers("SC-10-07-01")
 def test_capital_segment_offers_project_creation(login_as, page):
     login_as("manager")
     ManagerCockpit(page).wait()
