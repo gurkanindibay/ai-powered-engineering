@@ -92,7 +92,7 @@ Nothing in either proposal has to be dropped.
 2. **Actions first.** On every screen size the action list is one tap from the row.
 3. **A person is who; a role is what they hold.** Roles are never typed into the card.
 4. **Reference, do not copy.** Workflows send a person reference. Tables store `person_id`.
-5. **Search before create.** Creating is always possible, never the first thing offered.
+5. **Search before create.** Creating is always possible and always visible, but the search box comes first and every new card is checked for duplicates.
 6. **The server decides.** Allowed actions, role eligibility and duplicates come from the server; the client explains them.
 7. **Edits are global and say so.** Changing a card states how many units it affects.
 8. **Returning restores.** Query, filters, sort, page, scroll and focus survive every round trip.
@@ -382,7 +382,7 @@ All are registered in the `flutter-reusable-components` skill. `scripts/flutter_
 1. The field opens a picker with one search box. With no text it lists people recently used by this manager.
 2. Typing searches name, phone, email and unit label. A row shows name, contact, role badges and units.
 3. A person who cannot take the role is listed, disabled, with the reason. Hiding them would lead to a duplicate.
-4. The last row is always "create a new person". The search text is carried into the form: text with `@` fills email, digits fill phone, anything else fills the name.
+4. A "create a new person" row sits directly under the search box, above the results, so it is always visible without scrolling. It is not placed after the results, where a long list pushes it off the screen. The search text is carried into the form: text with `@` fills email, digits fill phone, anything else fills the name.
 5. Candidates appear under the form while it is filled. Same email: creation is blocked and "use this person" is offered. Same phone or similar name: use the existing person, or tick "this is a different person".
 6. After choosing, the field shows the compact card and the consequence, for example whether a login invitation will be sent. The invitation is a visible choice.
 

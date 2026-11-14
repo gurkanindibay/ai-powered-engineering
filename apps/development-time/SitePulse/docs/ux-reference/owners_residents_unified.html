@@ -92,7 +92,7 @@ tr.clickable{cursor:pointer}tr.clickable:hover{background:var(--card)}
 button.row:hover{background:var(--card)}
 .row[aria-disabled=true]{cursor:not-allowed}.row[aria-disabled=true] .avatar,.row[aria-disabled=true] strong{opacity:.55}
 .reason{display:block;color:var(--amber);font-size:12.5px}
-.newrow{color:var(--brand);font-weight:600}
+.newrow,.newrow:first-child{color:var(--brand);font-weight:600;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--card)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 12px}
 .chips button{min-height:36px;padding:4px 12px;border-radius:999px}
 .chips button[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:var(--onbrand)}
@@ -365,12 +365,12 @@ V.action=()=>{const a=A[D.act],u=unitById(D.unitId);let h=`<h1 tabindex="-1">${a
  return h+`<div class="actions">${can?`<button class="primary" data-apply>${a.l} · Onayla</button>`:''}<button data-back>Vazgeç</button></div></div>`};
 
 /* ---------- pickers and person form: further levels of the same stack ---------- */
-V.picker=r=>`<h1 tabindex="-1">${esc(D.pick.title)}</h1><div class="panel flush"><div style="padding:14px 16px"><label>Kişi ara<input id="kq" type="search" placeholder="Ad, telefon, e-posta veya daire" autocomplete="off" value="${esc(D.pick.q||'')}"></label><p class="muted small" id="khint" style="margin:8px 0 0"></p></div><div id="klist"></div></div>`;
+V.picker=r=>`<h1 tabindex="-1">${esc(D.pick.title)}</h1><div class="panel flush"><div style="padding:14px 16px"><label>Kişi ara<input id="kq" type="search" placeholder="Ad, telefon, e-posta veya daire" autocomplete="off" value="${esc(D.pick.q||'')}"></label></div><div id="knew"></div><p class="muted small" id="khint" style="margin:0;padding:10px 16px 6px"></p><div id="klist"></div></div>`;
 AFTER.picker=()=>{renderPicker();$('kq').focus()};
 function renderPicker(){const {ctx}=D.pick,u=unitById(D.unitId),q=$('kq').value,found=searchPeople(q),list=(found||P.slice(0,6)).slice(0,30);D.pick.q=q;
  $('khint').textContent=found?`${found.length} sonuç`:'Son kullanılan kişiler';
- $('klist').innerHTML=list.map(p=>{const why=elig(ctx,u,p),more=info(ctx,u,p);return personRow(p,why?'aria-disabled="true"':`data-use="${p.id}"`,why||more?`<span class="reason">${esc(why||more)}</span>`:'')}).join('')
-  +`<button class="row newrow" data-newperson>＋ ${q.trim()?`“${esc(q.trim())}” için yeni kişi oluştur`:'Yeni kişi oluştur'}</button>`}
+ $('klist').innerHTML=list.map(p=>{const why=elig(ctx,u,p),more=info(ctx,u,p);return personRow(p,why?'aria-disabled="true"':`data-use="${p.id}"`,why||more?`<span class="reason">${esc(why||more)}</span>`:'')}).join('')||'<div class="empty muted">Eşleşen kişi yok. Yukarıdan yeni kişi oluşturabilirsiniz.</div>';
+ $('knew').innerHTML=`<button class="row newrow" data-newperson data-fk="newperson">＋ ${q.trim()?`“${esc(q.trim())}” için yeni kişi oluştur`:'Yeni kişi oluştur'}</button>`}
 V.unitpicker=()=>`<h1 tabindex="-1">Daire seç</h1><p class="muted">${esc(byId(D.slots.person).name)} · ${A[D.act].l}</p><div class="panel flush"><div style="padding:14px 16px"><label>Daire ara<input id="xq" type="search" placeholder="Daire, sakin veya malik" autocomplete="off"></label></div><div id="xlist"></div></div>`;
 AFTER.unitpicker=()=>{renderUnitPicker();$('xq').focus()};
 function renderUnitPicker(){const p=byId(D.slots.person),q=$('xq').value;
