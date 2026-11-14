@@ -40,6 +40,9 @@ This epic establishes the identity and security framework for the SitePulse plat
 - **Verification & Tests:**
   - `when_resident_role_then_has_unit_restricted_permissions` (Rust)
 
+
+Executable scenarios: [`STORY-06-01-role-permission-matrix.feature`](../features/EPIC-06/STORY-06-01-role-permission-matrix.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-06-02: Email & Password Registration & Secure Authentication
@@ -61,6 +64,9 @@ This epic establishes the identity and security framework for the SitePulse plat
   - `when_valid_password_registration_then_can_authenticate` (Rust)
   - `when_wrong_password_then_throws_exception` (Rust)
 
+
+Executable scenarios: [`STORY-06-02-email-password-authentication.feature`](../features/EPIC-06/STORY-06-02-email-password-authentication.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-06-03: Google OAuth2 / ID Token Authentication & Account Linking
@@ -81,6 +87,9 @@ This epic establishes the identity and security framework for the SitePulse plat
 - **Verification & Tests:**
   - `when_valid_google_id_token_then_authenticates_and_links_account` (Rust)
 
+
+Executable scenarios: [`STORY-06-03-google-sign-in.feature`](../features/EPIC-06/STORY-06-03-google-sign-in.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-06-04: JWT Token Minting & Claim-Based Authorization
@@ -97,6 +106,9 @@ This epic establishes the identity and security framework for the SitePulse plat
 - **Implementation Artifacts:**
   - `apps/development-time/SitePulse/backend/src/services/auth_service.rs`
   - `apps/development-time/SitePulse/backend/src/models/mod.rs`
+
+
+Executable scenarios: [`STORY-06-04-jwt-claims-and-profile.feature`](../features/EPIC-06/STORY-06-04-jwt-claims-and-profile.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -118,6 +130,9 @@ This epic establishes the identity and security framework for the SitePulse plat
   - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
   - Flutter client integration tests & live verification
+
+
+Executable scenarios: [`STORY-06-05-flutter-login-experience.feature`](../features/EPIC-06/STORY-06-05-flutter-login-experience.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -170,3 +185,5 @@ This epic establishes the identity and security framework for the SitePulse plat
   - `when_password_change_required_then_business_routes_are_blocked` (Rust)
   - `flutter/test/force_password_change_test.dart` (Flutter, every role)
   - e2e `GUI-06-06`, `GUI-03-03`
+
+Executable scenarios: [`STORY-06-06-forced-password-change-gate.feature`](../features/EPIC-06/STORY-06-06-forced-password-change-gate.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).

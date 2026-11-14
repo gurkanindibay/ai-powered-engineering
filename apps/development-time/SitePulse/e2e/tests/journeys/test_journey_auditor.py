@@ -20,6 +20,7 @@ def _create_auditor(stack) -> None:
 
 @pytest.mark.journey
 @pytest.mark.role_auditor
+@pytest.mark.covers("SC-06-06-05")
 @pytest.mark.gui_id("GUI-J-05")
 def test_auditor_journey(journey, first_sign_in, sign_in_again, page, api, stack):
     j = journey("auditor")

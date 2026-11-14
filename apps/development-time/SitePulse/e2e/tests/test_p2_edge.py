@@ -28,6 +28,7 @@ def _plain(text: str) -> Decimal:
 
 @pytest.mark.edge
 @pytest.mark.role_manager
+@pytest.mark.covers("SC-06-02-06")
 @pytest.mark.gui_id("GUI-06-04")
 def test_empty_credentials_are_rejected_without_a_request(login_page, page):
     login_calls: list[str] = []
@@ -48,6 +49,8 @@ def test_empty_credentials_are_rejected_without_a_request(login_page, page):
 
 
 @pytest.mark.edge
+@pytest.mark.covers("SC-06-03-02")
+@pytest.mark.covers("SC-06-05-01")
 @pytest.mark.gui_id("GUI-06-11")
 def test_google_sign_in_redirects_to_the_provider(login_page, page):
     if not os.environ.get("GOOGLE_CLIENT_ID"):
@@ -71,6 +74,7 @@ def test_google_sign_in_redirects_to_the_provider(login_page, page):
 @pytest.mark.edge
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-05")
+@pytest.mark.covers("SC-01-06-01")
 def test_offline_state_shows_a_banner_and_keeps_the_balance(login_as, page, context, builders):
     builders.overdue_dues(principal=Decimal("1400.00"), days_overdue=10)
     login_as("homeowner")
@@ -107,6 +111,7 @@ def test_penalty_detail_shows_days_and_the_penalty_amount(login_as, page, builde
 @pytest.mark.edge
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-04")
+@pytest.mark.covers("SC-02-03-02")
 def test_adding_a_resident_to_an_occupied_unit_warns_and_saves_nothing(login_as, page, stack):
     a14 = _unit_id(stack, "A Blok", 14)
     owner = stack.sql(f"SELECT owner_person_id FROM units WHERE id = {int(a14)};")

@@ -30,6 +30,8 @@ def overdue_payment(api, actors, stack):
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-09-02")
 @pytest.mark.gui_id("GUI-09-04")
+@pytest.mark.covers("SC-09-02-01")
+@pytest.mark.covers("SC-09-04-03")
 def test_receipt_shows_number_and_penalty_principal_advance_split(login_as, page, overdue_payment):
     login_as("manager")
     ManagerCockpit(page).wait()
@@ -51,6 +53,7 @@ def test_receipt_shows_number_and_penalty_principal_advance_split(login_as, page
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-09-04")
+@pytest.mark.covers("SC-09-04-01")
 def test_homeowner_receipt_shows_the_issued_receipt_number(login_as, page, api):
     issued = api.webhook_transfer("TR620020500009863791600001", Decimal("500.00"), "E2E-FAST-RCPT", "AHMET YILMAZ")
     login_as("homeowner")
@@ -63,6 +66,7 @@ def test_homeowner_receipt_shows_the_issued_receipt_number(login_as, page, api):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-09-03")
+@pytest.mark.covers("SC-09-03-01")
 def test_tenant_statement_lists_operational_items_only(login_as, page, api, actors, builders, stack):
     """STORY-09-03: the unit's statement shows each debtor's own items; the tenant's are operational only."""
     b3 = stack.sql("SELECT u.id FROM units u JOIN blocks b ON b.id = u.block_id "
