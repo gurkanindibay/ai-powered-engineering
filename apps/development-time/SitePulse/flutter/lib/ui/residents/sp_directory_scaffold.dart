@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../design_system/sp_tone.dart';
 import '../theme/app_theme.dart';
+import '../../testing/test_id.dart';
 
 /// Shared directory layout with a scrollable header, lazy rows and local paging.
 ///
@@ -16,6 +17,11 @@ class SpDirectoryScaffold<T> extends StatefulWidget {
   final String restorationId;
   final Object? resultKey;
   final String? resultLabel;
+  final int? totalItems;
+  final int pageIndex;
+  final int pageSize;
+  final bool loading;
+  final void Function(int pageIndex, int pageSize)? onPageChanged;
 
   const SpDirectoryScaffold({
     super.key,
@@ -27,6 +33,11 @@ class SpDirectoryScaffold<T> extends StatefulWidget {
     this.initialPageSize = 25,
     this.resultLabel,
     this.resultKey,
+    this.totalItems,
+    this.pageIndex = 0,
+    this.pageSize = 25,
+    this.loading = false,
+    this.onPageChanged,
   });
 
   @override
@@ -50,14 +61,27 @@ class _SpDirectoryScaffoldState<T> extends State<SpDirectoryScaffold<T>>
 
   @override
   void restoreState(RestorationBucket? oldBucket, bool _) {
-    registerForRestoration(_page, 'page');
-    registerForRestoration(_pageSize, 'pageSize');
-    _clampPage();
+    if (widget.onPageChanged == null) {
+      registerForRestoration(_page, 'page');
+      registerForRestoration(_pageSize, 'pageSize');
+      _clampPage();
+    }
   }
 
   @override
   void didUpdateWidget(covariant SpDirectoryScaffold<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.onPageChanged != null) {
+      if (oldWidget.resultKey != widget.resultKey &&
+          _scrollController.hasClients) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.jumpTo(0);
+          }
+        });
+      }
+      return;
+    }
     if (oldWidget.resultKey != widget.resultKey) {
       _page.value = 0;
       if (_scrollController.hasClients) _scrollController.jumpTo(0);
@@ -74,6 +98,11 @@ class _SpDirectoryScaffoldState<T> extends State<SpDirectoryScaffold<T>>
   }
 
   void _changePageSize(int pageSize) {
+    if (widget.onPageChanged case final onChanged?) {
+      if (_scrollController.hasClients) _scrollController.jumpTo(0);
+      onChanged(0, pageSize);
+      return;
+    }
     setState(() {
       _pageSize.value = pageSize;
       _page.value = 0;
@@ -82,6 +111,11 @@ class _SpDirectoryScaffoldState<T> extends State<SpDirectoryScaffold<T>>
   }
 
   void _changePage(int page) {
+    if (widget.onPageChanged case final onChanged?) {
+      if (_scrollController.hasClients) _scrollController.jumpTo(0);
+      onChanged(page, widget.pageSize);
+      return;
+    }
     setState(() => _page.value = page);
     if (_scrollController.hasClients) _scrollController.jumpTo(0);
   }
@@ -89,8 +123,10 @@ class _SpDirectoryScaffoldState<T> extends State<SpDirectoryScaffold<T>>
   @override
   void dispose() {
     _scrollController.dispose();
-    unregisterFromRestoration(_page);
-    unregisterFromRestoration(_pageSize);
+    if (widget.onPageChanged == null) {
+      unregisterFromRestoration(_page);
+      unregisterFromRestoration(_pageSize);
+    }
     _page.dispose();
     _pageSize.dispose();
     super.dispose();
@@ -98,13 +134,17 @@ class _SpDirectoryScaffoldState<T> extends State<SpDirectoryScaffold<T>>
 
   @override
   Widget build(BuildContext context) {
-    final total = widget.items.length;
-    final start = total == 0 ? 0 : _page.value * _pageSize.value;
-    final end = (start + _pageSize.value).clamp(0, total);
-    final pageItems = widget.items.sublist(start, end);
-    final pageCount = total == 0
-        ? 0
-        : (total + _pageSize.value - 1) ~/ _pageSize.value;
+    final externallyPaged = widget.onPageChanged != null;
+    final total = widget.totalItems ?? widget.items.length;
+    final page = externallyPaged ? widget.pageIndex : _page.value;
+    final pageSize = externallyPaged ? widget.pageSize : _pageSize.value;
+    final start = total == 0 ? 0 : page * pageSize;
+    final end = (start + (externallyPaged ? widget.items.length : pageSize))
+        .clamp(0, total);
+    final pageItems = externallyPaged
+        ? widget.items
+        : widget.items.sublist(start, end);
+    final pageCount = total == 0 ? 0 : (total + pageSize - 1) ~/ pageSize;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -113,9 +153,16 @@ class _SpDirectoryScaffoldState<T> extends State<SpDirectoryScaffold<T>>
         const SizedBox(height: AppSpacing.md),
         Expanded(
           child: total == 0
-              ? Center(child: widget.emptyState)
+              ? Center(
+                  child: widget.loading
+                      ? const CircularProgressIndicator(
+                          semanticsLabel: 'Yükleniyor',
+                        )
+                      : widget.emptyState,
+                )
               : ListView.builder(
                   key: PageStorageKey<String>('${widget.restorationId}-rows'),
+                  restorationId: '${widget.restorationId}_rows',
                   controller: _scrollController,
                   itemCount: pageItems.length,
                   itemBuilder: (context, index) => Padding(
@@ -133,9 +180,9 @@ class _SpDirectoryScaffoldState<T> extends State<SpDirectoryScaffold<T>>
           start: total == 0 ? 0 : start + 1,
           end: end,
           total: total,
-          page: _page.value,
+          page: page,
           pageCount: pageCount,
-          pageSize: _pageSize.value,
+          pageSize: pageSize,
           resultLabel: widget.resultLabel,
           onPageSizeChanged: _changePageSize,
           onPageChanged: _changePage,
@@ -193,17 +240,25 @@ class _DirectoryPager extends StatelessWidget {
             if (value != null) onPageSizeChanged(value);
           },
         );
-        final previous = IconButton(
-          tooltip: 'Önceki sayfa',
-          onPressed: page > 0 ? () => onPageChanged(page - 1) : null,
-          icon: const Icon(Icons.chevron_left),
+        final previous = testId(
+          'directory_previous_page_btn',
+          IconButton(
+            tooltip: 'Önceki sayfa',
+            onPressed: page > 0 ? () => onPageChanged(page - 1) : null,
+            icon: const Icon(Icons.chevron_left),
+          ),
+          label: 'Önceki sayfa',
         );
-        final next = IconButton(
-          tooltip: 'Sonraki sayfa',
-          onPressed: page + 1 < pageCount
-              ? () => onPageChanged(page + 1)
-              : null,
-          icon: const Icon(Icons.chevron_right),
+        final next = testId(
+          'directory_next_page_btn',
+          IconButton(
+            tooltip: 'Sonraki sayfa',
+            onPressed: page + 1 < pageCount
+                ? () => onPageChanged(page + 1)
+                : null,
+            icon: const Icon(Icons.chevron_right),
+          ),
+          label: 'Sonraki sayfa',
         );
         return DecoratedBox(
           decoration: BoxDecoration(

@@ -768,7 +768,7 @@
       "id": "task-37",
       "name": "Move people list onto the shared directory scaffold",
       "module": "flutter-ui",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-34"
       ],
@@ -782,7 +782,11 @@
         "testid-lint",
         "logging-standards-lint"
       ],
-      "attempts": 0
+      "acceptance_tests": [
+        "scenario:SC-12-04-01"
+      ],
+      "attempts": 0,
+      "evidence": ".specify/evidence/task-37.json"
     },
     {
       "id": "task-38",

@@ -52,3 +52,16 @@ Executable scenarios: [STORY-12-02-unit-directory.feature](../features/EPIC-12/S
 - **Verification:** fake-repository Flutter tests, Flutter analysis, shared-component reuse, UI style, test ID, and logging standards checks.
 
 Executable scenarios: [STORY-12-03-person-selection.feature](../features/EPIC-12/STORY-12-03-person-selection.feature).
+
+### STORY-12-04: People directory
+- **Status:** IN PROGRESS
+- **Task Ref:** task-37 / GitHub issue #88
+- **Description:** Move the people list onto the shared directory scaffold while keeping the existing person profile page and server-side search, filters and paging.
+- **Acceptance Criteria:**
+  - Search and the existing role and login filters query the server and reset paging.
+  - The shared pager requests the selected server page and page size without loading the whole directory.
+  - Query, filters, page and page size survive app restoration; list scroll state survives opening and returning from a person profile.
+  - The existing profile, import and audited CSV export remain available.
+- **Verification:** targeted Flutter tests, GUI scenarios, Flutter analysis, shared-component reuse, UI style, test ID, and logging standards checks.
+
+Executable scenarios: [STORY-12-04-people-directory.feature](../features/EPIC-12/STORY-12-04-people-directory.feature).
