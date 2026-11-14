@@ -205,15 +205,28 @@ pub async fn save_unit_member(
     let person_id: i64 = match existing_person {
         Some(row) => row.get(0),
         None => {
-            super::person_repository::insert_site_person(
-                &client,
-                full_name,
-                Some(phone),
-                (!normalized_email.is_empty()).then_some(normalized_email.as_str()),
-                "HOME_RESIDENT",
-                site_id,
-            )
-            .await?
+            if let Some(site) = site_id {
+                super::person_repository::resolve_new_site_person(
+                    &client,
+                    full_name,
+                    Some(phone),
+                    (!normalized_email.is_empty()).then_some(normalized_email.as_str()),
+                    "HOME_RESIDENT",
+                    site,
+                    false,
+                )
+                .await?
+            } else {
+                super::person_repository::insert_site_person(
+                    &client,
+                    full_name,
+                    Some(phone),
+                    (!normalized_email.is_empty()).then_some(normalized_email.as_str()),
+                    "HOME_RESIDENT",
+                    None,
+                )
+                .await?
+            }
         }
     };
     let row = client.query_one(

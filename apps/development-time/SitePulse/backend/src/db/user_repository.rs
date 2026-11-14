@@ -8,7 +8,8 @@ pub async fn save_user(
     pool: &Pool,
     user: &User,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut connection = pool.get().await?;
+    let client = connection.transaction().await?;
     let role_str = user.role.as_str();
     let email = crate::domain::email::NormalizedEmail::normalize(&user.email);
     let site_id_num = if user.site_id.is_empty() {
@@ -54,17 +55,28 @@ pub async fn save_user(
                 Role::SiteManager => "SITE_MANAGER",
                 Role::Auditor => "AUDITOR",
             };
-            Some(
-                super::person_repository::insert_site_person_client(
+            Some(if let Some(site_id) = site_id_num {
+                super::person_repository::resolve_new_site_person(
                     &client,
                     &user.full_name,
                     Some(&user.phone),
                     Some(&email),
                     p_type,
-                    site_id_num,
+                    site_id,
+                    false,
                 )
-                .await?,
-            )
+                .await?
+            } else {
+                super::person_repository::insert_site_person(
+                    &client,
+                    &user.full_name,
+                    Some(&user.phone),
+                    Some(&email),
+                    p_type,
+                    None,
+                )
+                .await?
+            })
         } else {
             None
         }
@@ -121,6 +133,7 @@ pub async fn save_user(
             )
             .await?;
     }
+    client.commit().await?;
     Ok(())
 }
 
