@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kişi kartı — Tasarım taslağı</title>
+<style>
+:root{color-scheme:light;--bg:#f4f7fc;--surface:#fff;--card:#f8fafd;--border:#e2e8f0;--text:#0f172a;--muted:#526077;--brand:#0369a1;--brand-soft:#e0f2fe;--green:#047857;--green-soft:#d1fae5;--amber:#92400e;--amber-soft:#fef3c7;--red:#b91c1c;--red-soft:#fee2e2;--purple:#6d28d9;--purple-soft:#ede9fe}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#121317;--surface:#1c1d24;--card:#181920;--border:#383b47;--text:#fff;--muted:#b1b5bd;--brand:#38bdf8;--brand-soft:#163044;--green:#34d399;--green-soft:#0f3328;--amber:#fbbf24;--amber-soft:#3a2c0b;--red:#f87171;--red-soft:#3f1717;--purple:#c4b5fd;--purple-soft:#2a2147}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,sans-serif}
+button,input,select{font:inherit;color:inherit}
+button{min-height:44px;padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer}
+button:hover{border-color:var(--brand)}
+button.primary{background:var(--brand);border-color:var(--brand);color:var(--surface);font-weight:600}
+button.link{min-height:0;padding:0;border:0;background:none;color:var(--brand);text-decoration:underline}
+button:disabled{opacity:.5;cursor:default}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+input,select{width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+input[type=checkbox],input[type=radio]{width:18px;min-height:18px;height:18px;margin:0;accent-color:var(--brand)}
+label{display:block;font-weight:600}
+label>input,label>select{margin-top:4px;font-weight:400}
+h1{font-size:26px;margin:20px 0 4px}h2{font-size:17px;margin:0 0 4px}h3{font-size:14px;margin:0 0 8px}
+p{margin:0 0 8px}
+.muted{color:var(--muted)}.small{font-size:12.5px}
+.demo{padding:8px 16px;background:var(--brand-soft);color:var(--brand);text-align:center;font-size:13px}
+.shell{max-width:1040px;margin:0 auto;padding:16px}
+.topline{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.brand{font-weight:700;font-size:16px}.brand span{color:var(--brand)}
+.scenes{display:flex;gap:4px;margin-top:16px;border-bottom:1px solid var(--border);overflow-x:auto}
+.scenes button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;white-space:nowrap;color:var(--muted)}
+.scenes button[aria-selected=true]{border-bottom-color:var(--brand);color:var(--text);font-weight:600}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:16px}
+.grid2{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;align-items:start}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start}
+.pf{margin-top:14px}
+.pflabel{display:block;font-weight:600;margin-bottom:4px}
+.pick{width:100%;text-align:left;border-style:dashed;color:var(--muted)}
+.pcard{display:flex;gap:12px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--card)}
+.pmain{flex:1;min-width:0;overflow-wrap:anywhere}
+.pmain strong{display:block}
+.pacts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.pacts button{min-height:36px;padding:4px 10px}
+.avatar{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand);font-weight:700}
+.avatar.big{width:64px;height:64px;font-size:22px}
+.badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.badge{padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--brand-soft);color:var(--brand)}
+.badge.owner{background:var(--purple-soft);color:var(--purple)}
+.badge.tenant{background:var(--amber-soft);color:var(--amber)}
+.badge.ok{background:var(--green-soft);color:var(--green)}
+.badge.none{background:var(--card);color:var(--muted);border:1px solid var(--border)}
+.note{margin-top:8px;padding:8px 12px;border-radius:8px;background:var(--card);border:1px solid var(--border);font-size:13px}
+.note.warn{background:var(--amber-soft);color:var(--amber);border-color:transparent}
+.note.bad{background:var(--red-soft);color:var(--red);border-color:transparent}
+.note.good{background:var(--green-soft);color:var(--green);border-color:transparent}
+.check{display:flex;gap:8px;align-items:center;font-weight:400}
+.seg{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.seg label{display:flex;gap:8px;align-items:center;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-weight:400;min-height:44px}
+.summary{margin:0;padding-left:18px}.summary li{margin-bottom:4px}
+.row{display:flex;gap:12px;align-items:center;width:100%;text-align:left;padding:10px 12px;border:0;border-top:1px solid var(--border);border-radius:0;background:none}
+.row:first-child{border-top:0}
+.row:hover{background:var(--card)}
+.row[aria-disabled=true]{cursor:not-allowed}.row[aria-disabled=true] .avatar,.row[aria-disabled=true] strong{opacity:.55}
+.reason{color:var(--amber);font-size:12.5px}
+.newrow{color:var(--brand);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.chips button{min-height:36px;padding:4px 12px;border-radius:999px}
+.chips button[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:var(--surface)}
+.toolbar{display:flex;gap:12px;align-items:end}.toolbar label{flex:1}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-top:1px solid var(--border)}th{font-size:12.5px;color:var(--muted)}
+.cardhead{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.kv{display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 12px;margin:0}.kv dt{color:var(--muted)}.kv dd{margin:0;overflow-wrap:anywhere}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+dialog{width:min(560px,100%);max-height:90vh;padding:0;border:1px solid var(--border);border-radius:14px;background:var(--surface);color:var(--text)}
+dialog::backdrop{background:rgba(15,23,42,.55)}
+.dlghead{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)}
+.dlgbody{padding:16px;overflow:auto}
+.results{margin-top:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.formgrid{display:grid;gap:12px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);max-width:calc(100% - 32px);padding:10px 16px;border-radius:10px;background:var(--text);color:var(--bg);z-index:10}
+.toast:empty{display:none}
+@media(max-width:799px){.grid2,.grid3{grid-template-columns:1fr}.pcard{flex-wrap:wrap}.pacts{width:100%;justify-content:flex-start}.toolbar{flex-direction:column;align-items:stretch}dialog{width:100%;max-width:100%;height:100%;max-height:100%;margin:0;border:0;border-radius:0}h1{font-size:22px}.hidesm{display:none}}
+</style>
+</head>
+<body>
+<div class="demo">Tasarım taslağı · kurgusal kişiler · Gerçek kayıtlar etkilenmez</div>
+<main class="shell">
+<div class="topline"><div class="brand">Site<span>Pulse</span> <span class="muted">/ Yönetim</span></div><button id="reset">Taslağı sıfırla</button></div>
+<nav class="scenes" role="tablist" aria-label="Taslak görünümleri">
+<button role="tab" data-scene="reg" aria-selected="true">Daire kaydı</button>
+<button role="tab" data-scene="ops" aria-selected="false">Daire işlemleri</button>
+<button role="tab" data-scene="people" aria-selected="false">Kişiler</button>
+<button role="tab" data-scene="card" aria-selected="false">Kişi kartı</button>
+</nav>
+
+<section id="s-reg" aria-labelledby="t-reg">
+<h1 id="t-reg">Yeni daire kaydı</h1>
+<p class="muted">Kişi bilgisi bu ekranda yazılmaz. Kişi seçilir ya da kişi kartı olarak bir kez oluşturulur.</p>
+<div class="grid2"><div class="panel" id="regForm"></div><div class="panel" id="regSummary" aria-live="polite"></div></div>
+</section>
+
+<section id="s-ops" hidden aria-labelledby="t-ops">
+<h1 id="t-ops">Daire işlemleri</h1>
+<p class="muted">Kiracı girişi, tapu devri ve hane üyesi ekleme aynı kişi alanını kullanır.</p>
+<div class="grid3" id="opsBody"></div>
+</section>
+
+<section id="s-people" hidden aria-labelledby="t-people">
+<h1 id="t-people">Kişiler</h1>
+<p class="muted">Her kişi bir kez kayıtlıdır. Roller, kişinin dairelerle ilişkisinden gelir.</p>
+<div class="panel">
+<div class="toolbar"><label for="pq">Kişi ara<input id="pq" type="search" placeholder="Ad, telefon, e-posta veya daire" autocomplete="off"></label><button class="primary" id="newPerson">+ Yeni kişi</button></div>
+<div class="chips" id="chips" role="group" aria-label="Rol filtresi"></div>
+<p class="muted small" id="pcount" aria-live="polite"></p>
+<div class="results" id="plist"></div>
+</div>
+</section>
+
+<section id="s-card" hidden aria-labelledby="t-card"><div id="cardBody"></div></section>
+</main>
+
+<dialog id="dlg" aria-labelledby="dlgTitle"><div class="dlghead"><h2 id="dlgTitle"></h2><button id="dlgClose" aria-label="Kapat">✕</button></div><div class="dlgbody" id="dlgBody"></div></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const TODAY='14.11.2026';
+const REL={OWNER:['Kat maliki','owner'],OCC_OWNER:['Malik sakin','ok'],TENANT:['Kiracı','tenant'],MEMBER:['Hane üyesi','']};
+const LOGIN={ACTIVE:['Giriş hesabı etkin','ok'],PENDING:['Etkinleştirme bekliyor','tenant'],NONE:['Giriş hesabı yok','none']};
+const r=(unit,rel,since,active=true,extra='')=>({unit,rel,since,active,extra,end:active?'':'30.06.2026'});
+let P=[
+ {id:1,name:'Ayşe Demir',phone:'0555 000 00 01',email:'ayse.demir@example.test',login:'ACTIVE',tckn:'•••••••••42',rels:[r('A-12','OWNER','01.03.2019'),r('A-12','OCC_OWNER','01.03.2019'),r('D-1','OWNER','15.09.2022')]},
+ {id:2,name:'Mehmet Kaya',phone:'0555 000 00 02',email:'mehmet.kaya@example.test',login:'ACTIVE',tckn:'•••••••••18',rels:[r('B-7','OWNER','10.01.2020'),r('A-3','OWNER','10.01.2020')]},
+ {id:3,name:'Zeynep Arslan',phone:'0555 000 00 03',email:'zeynep.arslan@example.test',login:'PENDING',tckn:'',rels:[r('A-3','TENANT','01.07.2025')]},
+ {id:4,name:'Can Yıldız',phone:'0555 000 00 04',email:'',login:'NONE',tckn:'',rels:[r('D-1','TENANT','01.02.2024')]},
+ {id:5,name:'Deniz Demir',phone:'0555 000 00 01',email:'',login:'NONE',tckn:'',rels:[r('A-12','MEMBER','01.03.2019',true,'Eş')]},
+ {id:6,name:'Elif Şahin',phone:'0555 000 00 06',email:'elif.sahin@example.test',login:'NONE',tckn:'',rels:[]},
+ {id:7,name:'İpek Çelik',phone:'0555 000 00 07',email:'ipek.celik@example.test',login:'ACTIVE',tckn:'',rels:[r('B-7','TENANT','01.08.2024',false)]},
+ {id:8,name:'Burak Öztürk',phone:'',email:'burak.ozturk@example.test',login:'NONE',tckn:'',rels:[r('A-3','MEMBER','01.07.2025',true,'Kardeş')]}
+];
+let nextId=100;
+const SLOT={
+ regOwner:{label:'Kat maliki *',ctx:'owner',unit:'C-4',title:'Kat maliki seç'},
+ regTenant:{label:'Kiracı *',ctx:'tenant',unit:'C-4',title:'Kiracı seç'},
+ moveIn:{label:'Kiracı *',ctx:'tenant',unit:'B-7',title:'B-7 için kiracı seç'},
+ transfer:{label:'Yeni kat maliki *',ctx:'newOwner',unit:'A-12',title:'A-12 için yeni malik seç'},
+ member:{label:'Hane üyesi *',ctx:'member',unit:'A-12',title:'A-12 hanesine kişi ekle'}
+};
+const slots={},invite={};
+let regOcc='owner',regDone=false,cardId=1,filter='all',dlg={};
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const byId=id=>P.find(p=>p.id===id);
+const fold=s=>s.toLocaleLowerCase('tr').replace(/ı/g,'i').replace(/[çğöşü]/g,c=>({ç:'c',ğ:'g',ö:'o',ş:'s',ü:'u'}[c])).replace(/\s+/g,' ').trim();
+const digits=s=>s.replace(/\D/g,'');
+const phoneKey=s=>{const d=digits(s);return d.length>=10?d.slice(-10):''};
+const nameKey=s=>fold(s).split(' ').sort().join(' ');
+const active=p=>p.rels.filter(x=>x.active);
+const has=(p,unit,...rels)=>active(p).some(x=>x.unit===unit&&rels.includes(x.rel));
+const ownersOf=u=>P.filter(p=>has(p,u,'OWNER'));
+const occupantOf=u=>P.find(p=>has(p,u,'OCC_OWNER','TENANT'));
+const initials=n=>n.split(' ').map(w=>w[0]).slice(0,2).join('').toLocaleUpperCase('tr');
+const avatar=(p,big)=>`<span class="avatar${big?' big':''}" aria-hidden="true">${esc(initials(p.name))}</span>`;
+const contact=p=>[p.phone||'Telefon yok',p.email||'E-posta yok'].map(esc).join(' · ');
+function badges(p,withLogin){
+ const kinds=[...new Set(active(p).map(x=>x.rel))];
+ let h=kinds.map(k=>`<span class="badge ${REL[k][1]}">${REL[k][0]} · ${esc(active(p).filter(x=>x.rel===k).map(x=>x.unit).join(', '))}</span>`).join('');
+ if(!kinds.length)h='<span class="badge none">Rolü yok</span>';
+ if(withLogin)h+=`<span class="badge ${LOGIN[p.login][1]}">${LOGIN[p.login][0]}</span>`;
+ return h;
+}
+function toast(msg){$('toast').textContent=msg;clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').textContent='',4000)}
+function lev1(a,b){if(Math.abs(a.length-b.length)>1)return false;let i=0,j=0,e=0;while(i<a.length&&j<b.length){if(a[i]===b[j]){i++;j++;continue}if(++e>1)return false;if(a.length>b.length)i++;else if(a.length<b.length)j++;else{i++;j++}}return e+(a.length-i)+(b.length-j)<=1}
+
+/* Rules the server would own: eligibility and duplicate detection. */
+function eligibility(ctx,unit,p){
+ if(ctx==='tenant'&&has(p,unit,'OWNER'))return 'Bu dairenin maliki. Kiracı olamaz; “Malik oturuyor” seçeneğini kullanın.';
+ if(ctx==='newOwner'&&has(p,unit,'OWNER'))return 'Zaten bu dairenin maliki.';
+ if(ctx==='member'&&has(p,unit,'OCC_OWNER','TENANT','MEMBER'))return 'Zaten bu hanede kayıtlı.';
+ return '';
+}
+function info(ctx,unit,p){
+ if(ctx==='tenant'){const t=active(p).filter(x=>x.rel==='TENANT'&&x.unit!==unit).map(x=>x.unit);if(t.length)return `Şu an ${t.join(', ')} dairesinde kiracı.`}
+ return '';
+}
+function duplicates(name,phone,email,exceptId){
+ const nk=nameKey(name),pk=phoneKey(phone),em=email.trim().toLowerCase();
+ return P.filter(p=>p.id!==exceptId).map(p=>{const reasons=[];
+  if(em&&p.email===em)reasons.push('Aynı e-posta');
+  if(pk&&phoneKey(p.phone)===pk)reasons.push('Aynı telefon');
+  const k=nameKey(p.name);if(nk.length>=4&&(k===nk||lev1(k,nk)))reasons.push('Benzer ad');
+  return {p,reasons,hard:reasons.includes('Aynı e-posta')}}).filter(d=>d.reasons.length);
+}
+function search(q){
+ const fq=fold(q),d=digits(q);
+ if(!fq)return P.slice(0,5);
+ return P.filter(p=>fold(p.name).includes(fq)||p.email.includes(fq)||(d.length>=3&&digits(p.phone).includes(d))||active(p).some(x=>fold(x.unit).includes(fq)))
+  .sort((a,b)=>fold(b.name).startsWith(fq)-fold(a.name).startsWith(fq)||a.name.localeCompare(b.name,'tr'));
+}
+
+/* Person field: the one way a workflow receives a person. */
+function field(slot){
+ const s=SLOT[slot],p=byId(slots[slot]);
+ if(!p)return `<div class="pf"><span class="pflabel">${s.label}</span><button class="pick" data-pick="${slot}">⌕ Kişi seç veya yeni ekle</button></div>`;
+ let note='';
+ const blocked=eligibility(s.ctx,s.unit,p),extra=info(s.ctx,s.unit,p);
+ if(blocked)note+=`<div class="note bad">${esc(blocked)}</div>`;
+ if(extra)note+=`<div class="note warn">${esc(extra)} Yine de seçilebilir.</div>`;
+ if(s.ctx!=='member'){
+  if(p.login==='ACTIVE')note+=`<div class="note">Mevcut giriş hesabı ${s.unit} dairesini de görecek. Yeni hesap açılmaz.</div>`;
+  else if(p.login==='PENDING')note+=`<div class="note">Etkinleştirme daveti daha önce gönderildi.</div>`;
+  else if(p.email)note+=`<div class="note"><label class="check"><input type="checkbox" data-invite="${slot}" ${invite[slot]!==false?'checked':''}> ${esc(p.email)} adresine giriş daveti gönder</label></div>`;
+  else note+=`<div class="note warn">E-posta yok: giriş hesabı açılamaz. Kişi kartına e-posta ekleyebilirsiniz.</div>`;
+ }
+ return `<div class="pf"><span class="pflabel">${s.label}</span><div class="pcard">${avatar(p)}<div class="pmain"><strong>${esc(p.name)}</strong><span class="muted small">${contact(p)}</span><div class="badges">${badges(p)}</div></div><div class="pacts"><button data-pick="${slot}">Değiştir</button><button data-open="${p.id}">Kartı aç</button><button data-clear="${slot}" aria-label="Seçimi kaldır">✕</button></div></div>${note}</div>`;
+}
+
+function renderReg(){
+ $('regSummary').hidden=regDone;
+ if(regDone){$('regForm').innerHTML='<div class="note good">C-4 kaydedildi. Kişiler görünümünde roller güncellendi.</div><p class="muted small" style="margin-top:8px">Yeniden denemek için “Taslağı sıfırla”.</p>';$('regSummary').innerHTML='';return}
+ const o=byId(slots.regOwner),t=byId(slots.regTenant);
+ $('regForm').innerHTML=`<h2>Daire</h2><p class="muted">C Blok · Daire 4 · 2. kat · 3+1 <span class="small">(bu taslakta sabit)</span></p>${field('regOwner')}
+ <div class="pf"><span class="pflabel" id="occl">İkamet durumu</span><div class="seg" role="radiogroup" aria-labelledby="occl">${[['owner','Malik oturuyor'],['tenant','Kiracı oturuyor'],['vacant','Boş']].map(([v,l])=>`<label><input type="radio" name="occ" value="${v}" ${regOcc===v?'checked':''}> ${l}</label>`).join('')}</div></div>
+ ${regOcc==='tenant'?field('regTenant'):''}`;
+ const items=[],errs=[];
+ if(!o)errs.push('Kat maliki seçilmedi.');
+ else{items.push(`${o.isNew?'Yeni kişi kartı':'Mevcut kişi kartı'} kullanılacak: <strong>${esc(o.name)}</strong>${o.isNew?'':' (yeni kayıt açılmaz)'}.`);items.push('C-4 için malik kaydı açılacak.')}
+ if(regOcc==='owner'&&o)items.push(`${esc(o.name)}, malik sakin olarak yerleşecek.`);
+ if(regOcc==='vacant')items.push('Daire boş olarak kaydedilecek.');
+ if(regOcc==='tenant'){
+  if(!t)errs.push('Kiracı seçilmedi.');
+  else if(o&&t.id===o.id)errs.push('Malik ve kiracı aynı kişi olamaz. “Malik oturuyor” seçin.');
+  else items.push(`<strong>${esc(t.name)}</strong>, kiracı olarak yerleşecek.`);
+ }
+ [['regOwner',o],[regOcc==='tenant'?'regTenant':'',t]].forEach(([s,p])=>{if(s&&p&&p.login==='NONE'&&p.email&&invite[s]!==false)items.push(`${esc(p.name)} için giriş daveti gönderilecek.`)});
+ $('regSummary').innerHTML=`<h2>Kaydedince</h2>${items.length?`<ul class="summary">${items.map(i=>`<li>${i}</li>`).join('')}</ul>`:''}${errs.map(e=>`<div class="note warn">${esc(e)}</div>`).join('')}<div class="actions"><button class="primary" id="regSave" ${errs.length?'disabled':''}>Daireyi kaydet</button></div>`;
+}
+
+function renderOps(){
+ const occB=occupantOf('B-7'),occA=occupantOf('A-12');
+ const owners=u=>ownersOf(u).map(p=>esc(p.name)).join(', ')||'Malik kaydı yok';
+ $('opsBody').innerHTML=`
+ <div class="panel"><h2>Kiracı girişi · B-7</h2><p class="muted small">Malik: ${owners('B-7')} · ${occB?'Dolu: '+esc(occB.name):'Boş'}</p>
+ ${occB?'<div class="note">Daire dolu. Yeni giriş için önce çıkış yapılır.</div>':field('moveIn')+'<div class="actions"><button class="primary" data-apply="moveIn">Girişi tamamla</button></div>'}</div>
+ <div class="panel"><h2>Tapu devri · A-12</h2><p class="muted small">Malik: ${owners('A-12')}</p>${field('transfer')}
+ <p class="muted small" style="margin-top:8px">Eski malik dairede oturuyorsa çıkışı devirle birlikte yapılır.</p><div class="actions"><button class="primary" data-apply="transfer">Devri tamamla</button></div></div>
+ <div class="panel"><h2>Hane üyesi · A-12</h2><p class="muted small">Hane sorumlusu: ${occA?esc(occA.name):'Yok (daire boş)'}</p>
+ ${occA?field('member')+'<div class="pf"><label for="relsel">Yakınlık<select id="relsel"><option>Eş</option><option>Çocuk</option><option>Anne / Baba</option><option>Kardeş</option><option>Diğer</option></select></label></div><div class="actions"><button class="primary" data-apply="member">Haneye ekle</button></div>':'<div class="note">Boş daireye hane üyesi eklenmez.</div>'}</div>`;
+}
+
+const FILTERS=[['all','Tümü',()=>true],['OWNER','Malikler',p=>active(p).some(x=>x.rel==='OWNER')],['TENANT','Kiracılar',p=>active(p).some(x=>x.rel==='TENANT')],['MEMBER','Hane üyeleri',p=>active(p).some(x=>x.rel==='MEMBER')],['none','Rolü yok',p=>!active(p).length],['nologin','Giriş hesabı yok',p=>p.login==='NONE']];
+function row(p,attrs,extra=''){return `<button class="row" ${attrs}>${avatar(p)}<span class="pmain"><strong>${esc(p.name)}</strong><span class="muted small">${contact(p)}</span><span class="badges">${badges(p,true)}</span>${extra}</span></button>`}
+function renderPeople(){
+ $('chips').innerHTML=FILTERS.map(([k,l])=>`<button data-filter="${k}" aria-pressed="${filter===k}">${l}</button>`).join('');
+ const q=$('pq').value,f=FILTERS.find(x=>x[0]===filter)[2];
+ const list=(q.trim()?search(q):[...P].sort((a,b)=>a.name.localeCompare(b.name,'tr'))).filter(f);
+ $('pcount').textContent=`${list.length} / ${P.length} kişi`;
+ $('plist').innerHTML=list.map(p=>row(p,`data-open="${p.id}"`)).join('')||'<p class="muted" style="padding:16px;margin:0">Eşleşen kişi yok. Aramayı değiştirin veya yeni kişi ekleyin.</p>';
+}
+
+function renderCard(){
+ const p=byId(cardId);if(!p)return;
+ const rels=[...p.rels].sort((a,b)=>b.active-a.active);
+ const login=p.login==='ACTIVE'?'':p.login==='PENDING'?'<button data-login="resend">Daveti yeniden gönder</button>':p.email?'<button data-login="invite">Giriş daveti gönder</button>':'<span class="muted small">Davet için önce e-posta ekleyin.</span>';
+ $('cardBody').innerHTML=`<button class="link" data-scene="people" style="margin-top:20px">← Kişiler</button>
+ <div class="panel"><div class="cardhead">${avatar(p,true)}<div class="pmain"><h1 id="t-card" style="margin:0">${esc(p.name)}</h1><div class="badges">${badges(p,true)}</div></div><button data-edit="${p.id}">Düzenle</button></div></div>
+ <div class="grid2">
+ <div class="panel"><h2>Daireler ve roller</h2>${rels.length?`<table><thead><tr><th>Daire</th><th>Rol</th><th class="hidesm">Başlangıç</th><th>Durum</th></tr></thead><tbody>${rels.map(x=>`<tr><td><strong>${x.unit}</strong></td><td>${REL[x.rel][0]}${x.extra?' ('+esc(x.extra)+')':''}</td><td class="hidesm">${x.since}</td><td>${x.active?'<span class="badge ok">Sürüyor</span>':'<span class="muted">Bitti · '+x.end+'</span>'}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">Bu kişinin henüz bir rolü yok. Aşağıdan rol verebilirsiniz.</p>'}
+ <h3 style="margin-top:16px">Bu kişiye rol ver</h3><div class="actions"><button data-role="moveIn">Kiracı olarak yerleştir</button><button data-role="transfer">Malik yap (tapu devri)</button><button data-role="member">Haneye ekle</button></div>
+ <p class="muted small" style="margin-top:8px">İşlem ekranı bu kişi seçili olarak açılır; kişi bilgisi yeniden yazılmaz.</p></div>
+ <div><div class="panel" style="margin-top:16px"><h2>İletişim</h2><dl class="kv"><dt>Telefon</dt><dd>${esc(p.phone||'Telefon yok')}</dd><dt>E-posta</dt><dd>${esc(p.email||'E-posta yok')}</dd><dt>Kimlik no</dt><dd>${esc(p.tckn||'Kayıtlı değil')}</dd></dl></div>
+ <div class="panel"><h2>Giriş hesabı</h2><p><span class="badge ${LOGIN[p.login][1]}">${LOGIN[p.login][0]}</span></p>${login}</div></div>
+ </div>`;
+}
+function render(){renderReg();renderOps();renderPeople();renderCard()}
+function show(scene){document.querySelectorAll('[role=tab]').forEach(b=>b.setAttribute('aria-selected',b.dataset.scene===scene));['reg','ops','people','card'].forEach(s=>$('s-'+s).hidden=s!==scene);render();window.scrollTo(0,0)}
+
+/* Picker and form dialog. */
+function openDlg(state){dlg=state;renderDlg();if(!$('dlg').open)$('dlg').showModal()}
+function renderDlg(){
+ if(dlg.mode==='search'){
+  $('dlgTitle').textContent=SLOT[dlg.slot].title;
+  $('dlgBody').innerHTML=`<label for="q">Kişi ara<input id="q" type="search" placeholder="Ad, telefon, e-posta veya daire" autocomplete="off" value="${esc(dlg.q||'')}"></label><p class="muted small" id="qhint" style="margin:8px 0 0"></p><div class="results" id="results"></div>`;
+  renderResults();$('q').focus();return;
+ }
+ const p=byId(dlg.id)||{name:'',phone:'',email:''},edit=dlg.mode==='edit';
+ $('dlgTitle').textContent=edit?'Kişi kartını düzenle':'Yeni kişi kartı';
+ const units=edit?new Set(active(p).map(x=>x.unit)).size:0;
+ $('dlgBody').innerHTML=`<form id="pform" class="formgrid" novalidate>
+ ${edit&&units?`<div class="note warn">Bu değişiklik kişinin ${units} dairesinde ve tüm listelerde görünür.</div>`:''}
+ <label for="fn">Ad Soyad *<input id="fn" autocomplete="off" value="${esc(dlg.pre?.name??p.name)}"></label>
+ <label for="fp">Telefon<input id="fp" inputmode="tel" autocomplete="off" value="${esc(dlg.pre?.phone??p.phone)}"></label>
+ <label for="fe">E-posta<input id="fe" type="email" autocomplete="off" value="${esc(dlg.pre?.email??p.email)}"></label>
+ <p class="muted small" style="margin:0">Rol burada seçilmez. Rol, kişinin bir daireyle ilişkisinden gelir. Giriş daveti için e-posta gerekir.</p>
+ <div id="dupes" aria-live="polite"></div><div id="ferr" class="note bad" role="alert" hidden></div>
+ <div class="actions">${dlg.slot&&!edit?'<button type="button" id="back">← Aramaya dön</button>':''}<button class="primary">${edit?'Kaydet':'Kişiyi oluştur'}</button></div></form>`;
+ renderDupes();$('fn').focus();
+}
+function renderResults(){
+ const s=SLOT[dlg.slot],q=$('q').value,list=search(q);
+ $('qhint').textContent=q.trim()?`${list.length} sonuç`:'Son kullanılan kişiler';
+ $('results').innerHTML=list.map(p=>{const why=eligibility(s.ctx,s.unit,p),more=info(s.ctx,s.unit,p);
+  return row(p,why?'aria-disabled="true"':`data-use="${p.id}"`,why?`<span class="reason">${esc(why)}</span>`:more?`<span class="reason">${esc(more)}</span>`:'')}).join('')
+  +`<button class="row newrow" data-new>＋ ${q.trim()?`“${esc(q.trim())}” için yeni kişi oluştur`:'Yeni kişi oluştur'}</button>`;
+}
+function renderDupes(){
+ const found=duplicates($('fn').value,$('fp').value,$('fe').value,dlg.mode==='edit'?dlg.id:0);
+ dlg.found=found;
+ if(!found.length){$('dupes').innerHTML='';return}
+ const hard=found.some(d=>d.hard);
+ $('dupes').innerHTML=`<div class="note ${hard?'bad':'warn'}"><strong>${hard?'Bu e-posta başka bir kişi kartında kayıtlı.':'Bu kişi zaten kayıtlı olabilir.'}</strong></div><div class="results">${found.map(d=>`<div class="row">${avatar(d.p)}<span class="pmain"><strong>${esc(d.p.name)}</strong><span class="muted small">${contact(d.p)}</span><span class="badges">${d.reasons.map(x=>`<span class="badge tenant">${x}</span>`).join('')}${badges(d.p)}</span></span>${dlg.mode==='edit'?`<button type="button" data-open="${d.p.id}">Kartı aç</button>`:`<button type="button" data-usedupe="${d.p.id}">Bu kişiyi kullan</button>`}</div>`).join('')}</div>${hard?'':'<label class="check" style="margin-top:8px"><input type="checkbox" id="distinct"> Farklı bir kişi olduğunu onaylıyorum</label>'}`;
+}
+function prefill(q){q=q.trim();if(q.includes('@'))return{name:'',phone:'',email:q};if(digits(q).length>=7&&!/[a-zçğıöşü]/i.test(q))return{name:'',phone:q,email:''};return{name:q,phone:'',email:''}}
+function usePerson(id){
+ const p=byId(id);
+ if(dlg.slot){const s=SLOT[dlg.slot],why=eligibility(s.ctx,s.unit,p);if(why){toast(why);return}slots[dlg.slot]=id;delete invite[dlg.slot];toast(`${p.name} seçildi. Yeni kayıt açılmadı.`)}
+ else{cardId=id;show('card')}
+ $('dlg').close();render();
+}
+function saveForm(){
+ const name=$('fn').value.replace(/\s+/g,' ').trim(),phone=$('fp').value.trim(),email=$('fe').value.trim().toLowerCase(),err=[];
+ if(name.length<3)err.push('Ad Soyad gerekli.');
+ if(phone&&digits(phone).length<10)err.push('Telefon en az 10 haneli olmalı.');
+ if(email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))err.push('E-posta biçimi geçersiz.');
+ const found=duplicates(name,phone,email,dlg.mode==='edit'?dlg.id:0);
+ if(found.some(d=>d.hard))err.push('Bu e-posta kullanılıyor. Mevcut kişiyi kullanın veya e-postayı değiştirin.');
+ else if(found.length&&!$('distinct')?.checked)err.push('Benzer kayıt var. Mevcut kişiyi kullanın veya farklı kişi olduğunu onaylayın.');
+ if(err.length){$('ferr').hidden=false;$('ferr').textContent=err.join(' ');return}
+ if(dlg.mode==='edit'){Object.assign(byId(dlg.id),{name,phone,email});toast('Kişi kartı güncellendi.')}
+ else{const p={id:nextId++,name,phone,email,login:'NONE',tckn:'',rels:[],isNew:true};P.push(p);
+  if(dlg.slot){slots[dlg.slot]=p.id;toast(`${name} için kişi kartı oluşturuldu ve seçildi.`)}else{cardId=p.id;toast('Kişi kartı oluşturuldu. Henüz rolü yok.');$('dlg').close();show('card');return}}
+ $('dlg').close();render();
+}
+
+/* Role commands. Each takes a person reference, never person text. */
+function apply(slot){
+ const s=SLOT[slot],p=byId(slots[slot]);
+ if(!p){toast('Önce bir kişi seçin.');return}
+ const why=eligibility(s.ctx,s.unit,p);if(why){toast(why);return}
+ if(slot==='moveIn')p.rels.push(r(s.unit,'TENANT',TODAY));
+ if(slot==='member')p.rels.push(r(s.unit,'MEMBER',TODAY,true,$('relsel').value));
+ if(slot==='transfer'){
+  const leaving=occupantOf(s.unit)&&has(occupantOf(s.unit),s.unit,'OCC_OWNER');
+  P.forEach(x=>x.rels.forEach(y=>{if(y.unit===s.unit&&y.active&&(y.rel==='OWNER'||y.rel==='OCC_OWNER'||(leaving&&y.rel==='MEMBER'))){y.active=false;y.end=TODAY}}));
+  p.rels.push(r(s.unit,'OWNER',TODAY));
+ }
+ if(p.login==='NONE'&&p.email&&invite[slot]!==false&&s.ctx!=='member')p.login='PENDING';
+ delete slots[slot];toast(`${p.name}: ${s.unit} işlemi tamamlandı.`);render();
+}
+function saveReg(){
+ const o=byId(slots.regOwner),t=byId(slots.regTenant);
+ o.rels.push(r('C-4','OWNER',TODAY));if(regOcc==='owner')o.rels.push(r('C-4','OCC_OWNER',TODAY));
+ if(regOcc==='tenant')t.rels.push(r('C-4','TENANT',TODAY));
+ [['regOwner',o],[regOcc==='tenant'?'regTenant':'',t]].forEach(([s,p])=>{if(s&&p.login==='NONE'&&p.email&&invite[s]!==false)p.login='PENDING'});
+ regDone=true;toast('C-4 kaydedildi.');render();
+}
+
+document.addEventListener('click',e=>{
+ const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+ if(d.scene)show(d.scene);
+ else if(d.pick)openDlg({mode:'search',slot:d.pick});
+ else if(d.clear){delete slots[d.clear];render()}
+ else if(d.open){cardId=+d.open;if($('dlg').open)$('dlg').close();show('card')}
+ else if(d.use)usePerson(+d.use);
+ else if(d.usedupe)usePerson(+d.usedupe);
+ else if('new' in d)openDlg({mode:'new',slot:dlg.slot,pre:prefill($('q').value)});
+ else if(d.apply)apply(d.apply);
+ else if(d.filter){filter=d.filter;renderPeople()}
+ else if(d.edit)openDlg({mode:'edit',id:+d.edit});
+ else if(d.role){const s=SLOT[d.role],p=byId(cardId),why=eligibility(s.ctx,s.unit,p);if(why){toast(why);return}slots[d.role]=cardId;show('ops');toast(`${p.name} seçili olarak açıldı.`)}
+ else if(d.login){const p=byId(cardId);p.login='PENDING';toast(`${p.email} adresine davet gönderildi.`);render()}
+ else if(b.id==='regSave')saveReg();
+ else if(b.id==='newPerson')openDlg({mode:'new',pre:prefill($('pq').value)});
+ else if(b.id==='back')openDlg({mode:'search',slot:dlg.slot});
+ else if(b.id==='dlgClose')$('dlg').close();
+ else if(b.id==='reset')location.reload();
+});
+document.addEventListener('input',e=>{
+ const t=e.target;
+ if(t.id==='q')renderResults();
+ else if(t.id==='pq')renderPeople();
+ else if(['fn','fp','fe'].includes(t.id)){$('ferr').hidden=true;renderDupes()}
+ else if(t.name==='occ'){regOcc=t.value;renderReg()}
+ else if(t.dataset.invite){invite[t.dataset.invite]=t.checked;if(t.dataset.invite.startsWith('reg'))renderReg()}
+});
+document.addEventListener('submit',e=>{e.preventDefault();if(e.target.id==='pform')saveForm()});
+render();
+</script>
+</body>
+</html>
