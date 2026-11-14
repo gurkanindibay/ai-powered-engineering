@@ -316,4 +316,10 @@ Execution needs a digest-pinned bridge/toolchain image and operator policy. The 
 2. **Author in Python:** Build with `argparse`, type annotations, structured table output, and `--json` support.
 3. **Persist & Symlink:** Store in project `scripts/` (with workspace root symlinks where appropriate) and set executable permissions.
 4. **Register in Skills:** Keep `skills.md` and `.agents/skills/` up to date so future sessions immediately discover and leverage the tool.
+## 5b-5. Person Integrity Baseline (`person_integrity_report.py`)
+
+- **Executable Script:** `apps/development-time/SitePulse/scripts/person_integrity_report.py`
+- **Purpose:** Read-only baseline for people without a site, household members without a person link, multiple active logins, primary contacts that do not match a person on their unit, likely duplicate person groups, and unit count.
+- **Usage:** `python3 apps/development-time/SitePulse/scripts/person_integrity_report.py [--json]`
+- **Database:** Uses `DATABASE_URL` or `DB_HOST`, `DB_PORT`, `DB_USER`, and `DB_PASS`. Requires `psql` on `PATH`.
 
