@@ -29,6 +29,11 @@ The primary database verification tool is a Python CLI located at:
 - `apps/development-time/SitePulse/scripts/db_verify.py`
 - Root symlink: `scripts/db_verify.py`
 
+For person-card migration preconditions, use `apps/development-time/SitePulse/scripts/person_integrity_report.py`.
+It reports site-less people, unlinked household members, multiple active logins,
+unmatched primary contacts, likely duplicate groups, and unit count without exposing PII.
+Use `--json` for machine-readable output.
+
 ### Available Commands (Python CLI)
 
 1. **Query Database (Tabular):**
