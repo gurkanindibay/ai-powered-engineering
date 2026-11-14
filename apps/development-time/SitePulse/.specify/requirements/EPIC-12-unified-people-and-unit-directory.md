@@ -65,3 +65,15 @@ Executable scenarios: [STORY-12-03-person-selection.feature](../features/EPIC-12
 - **Verification:** targeted Flutter tests, GUI scenarios, Flutter analysis, shared-component reuse, UI style, test ID, and logging standards checks.
 
 Executable scenarios: [STORY-12-04-people-directory.feature](../features/EPIC-12/STORY-12-04-people-directory.feature).
+
+### STORY-12-05: Person card API and reference-based commands
+- **Status:** IN PROGRESS
+- **Task Ref:** task-33 / GitHub issue #84
+- **Description:** Expose scoped person search, role-free create, card read, version-checked edit and login routes, and let unit commands accept a `PersonRef` while legacy request fields remain for one release.
+- **Acceptance Criteria:**
+  - Person routes are limited to the caller's site; search reports role eligibility for a unit.
+  - Duplicates and stale versions return coded 409 responses; a confirmed distinct person is created.
+  - Household, occupancy and registration approval accept an existing or new person; the primary contact is selected by `person_id`.
+- **Verification:** cargo build, clippy, tests, tenant isolation lint, API system checks against PostgreSQL.
+
+Executable scenarios: [STORY-12-05-person-card-api.feature](../features/EPIC-12/STORY-12-05-person-card-api.feature).

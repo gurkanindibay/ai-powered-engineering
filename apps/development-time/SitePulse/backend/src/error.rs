@@ -35,6 +35,10 @@ pub enum AppError {
     #[error("Conflict: {0}")]
     Conflict(String),
 
+    /// A conflict with a stable machine-readable code and structured details.
+    #[error("Conflict: {1}")]
+    CodedConflict(&'static str, String, serde_json::Value),
+
     #[error("Authentication required: {0}")]
     Unauthorized(String),
 
@@ -74,6 +78,14 @@ impl AppError {
 
     pub fn conflict(msg: impl Into<String>) -> Self {
         Self::Conflict(msg.into())
+    }
+
+    pub fn coded_conflict(
+        code: &'static str,
+        msg: impl Into<String>,
+        details: serde_json::Value,
+    ) -> Self {
+        Self::CodedConflict(code, msg.into(), details)
     }
 
     pub fn forbidden(msg: impl Into<String>) -> Self {
@@ -125,6 +137,10 @@ impl IntoResponse for AppError {
             AppError::Conflict(msg) => {
                 tracing::warn!(trace_id = %trace_id, error = %msg, "Conflict rejection");
                 (StatusCode::CONFLICT, "CONFLICT".to_string(), msg, None)
+            }
+            AppError::CodedConflict(code, msg, details) => {
+                tracing::warn!(trace_id = %trace_id, code, "Coded conflict rejection");
+                (StatusCode::CONFLICT, code.to_string(), msg, Some(details))
             }
             AppError::Unauthorized(msg) => {
                 tracing::warn!(trace_id = %trace_id, error = %msg, "Authentication required");

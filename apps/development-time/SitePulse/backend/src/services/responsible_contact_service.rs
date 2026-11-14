@@ -84,6 +84,24 @@ pub async fn select(
         .iter()
         .find(|unit| crate::auth::same_id(&unit.unit_id, unit_id))
         .ok_or(ResponsibleContactError::NotFound)?;
+    if let Some(person_id) = request.person_id {
+        let pool = state
+            .pool
+            .as_ref()
+            .ok_or(ResponsibleContactError::InvalidSelection)?;
+        let site = crate::db::parse_id_to_i64(site_id).ok_or(ResponsibleContactError::NotFound)?;
+        let id =
+            crate::db::parse_id_to_i64(&unit.unit_id).ok_or(ResponsibleContactError::NotFound)?;
+        return crate::db::responsible_contact_repository::save_by_person(
+            pool, site, id, person_id,
+        )
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, site_id, unit_id, "Could not persist responsible contact");
+            ResponsibleContactError::Storage
+        })?
+        .ok_or(ResponsibleContactError::InvalidSelection);
+    }
     let contact = resolve_contact(unit, &request)?;
     if let Some(pool) = &state.pool {
         let site = crate::db::parse_id_to_i64(site_id).ok_or(ResponsibleContactError::NotFound)?;

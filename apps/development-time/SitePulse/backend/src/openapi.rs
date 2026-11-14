@@ -105,7 +105,7 @@ fn add_route_to_paths(paths_map: &mut BTreeMap<String, serde_json::Value>, route
         "responses": standard_responses(&method, route.path, route.policy)
     });
 
-    if method == "post" || method == "put" {
+    if method == "post" || method == "put" || method == "patch" {
         if let Some(req_body) = request_body_for_route(route.path) {
             if let Some(op_map) = operation.as_object_mut() {
                 op_map.insert("requestBody".to_string(), req_body);
@@ -343,6 +343,10 @@ fn request_body_for_route(path: &str) -> Option<serde_json::Value> {
         "RegisterHomeOwnerRequest"
     } else if path == "/api/v1/site-admin/persons/import" {
         "PersonImportPayload"
+    } else if path == "/api/v1/site-admin/persons" {
+        "CreatePersonRequest"
+    } else if path == "/api/v1/site-admin/persons/:person_id" {
+        "UpdatePersonRequest"
     } else if path == "/api/v1/bank/statements/parse" {
         "BankStatementParseRequest"
     } else if path == "/api/v1/payments/record" || path == "/api/v1/payments/record-manual" {

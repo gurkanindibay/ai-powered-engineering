@@ -669,7 +669,7 @@
       "id": "task-33",
       "name": "Expose person card API and reference-based commands",
       "module": "backend-rust",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-31",
         "task-32",

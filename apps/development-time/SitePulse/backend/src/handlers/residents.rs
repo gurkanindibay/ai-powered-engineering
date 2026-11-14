@@ -62,8 +62,14 @@ pub async fn add_unit_member(
     Json(payload): Json<crate::models::AddUnitMemberRequest>,
 ) -> Result<(StatusCode, Json<UnitMemberDto>), AppError> {
     let site_id = scope.pinned(q.site_id)?;
+    let relationship = payload
+        .relationship
+        .clone()
+        .unwrap_or_else(|| "OTHER".to_string());
+    if let Some(person) = &payload.person {
+        return add_unit_member_by_ref(&state, &unit_id, person, &relationship).await;
+    }
     let service = SiteAdminService::new(state);
-    let relationship = payload.relationship.unwrap_or_else(|| "OTHER".to_string());
     service
         .add_unit_member(
             &site_id,
@@ -116,4 +122,49 @@ pub async fn update_unit_member(
         .await
         .map(|_| StatusCode::OK)
         .map_err(person_error)
+}
+
+/// Adds a household member by person reference; the card is resolved in the same
+/// transaction as the membership.
+async fn add_unit_member_by_ref(
+    state: &AppState,
+    unit_id: &str,
+    person: &crate::models::PersonRef,
+    relationship: &str,
+) -> Result<(StatusCode, Json<UnitMemberDto>), AppError> {
+    use crate::services::person_service::PersonApiError;
+    let pool = state
+        .pool
+        .as_ref()
+        .ok_or_else(|| AppError::unavailable("Person records need the database"))?;
+    let code =
+        crate::domain::household_relationship::HouseholdRelationship::from_input(relationship)
+            .ok_or_else(|| {
+                AppError::validation(crate::domain::household_relationship::UNKNOWN_RELATIONSHIP)
+            })?
+            .as_str();
+    let saved = crate::db::save_unit_member_ref(pool, unit_id, person, code)
+        .await
+        .map_err(|error| match error.downcast::<PersonApiError>() {
+            Ok(person_error) => super::site_admin::person_api_error(*person_error),
+            Err(other) if other.to_string() == crate::db::NO_CURRENT_OCCUPANT => {
+                AppError::conflict("The unit has no current household to join")
+            }
+            Err(other) => {
+                tracing::error!(error = %other, "Household member storage failure");
+                AppError::unavailable("Household storage unavailable")
+            }
+        })?;
+    let member = UnitMemberDto {
+        resident_id: saved.member_id.to_string(),
+        full_name: saved.full_name,
+        relationship: code.to_string(),
+        phone: saved.phone,
+        email: saved.email,
+        is_owner: false,
+        occupancy_id: None,
+        person_id: Some(saved.person_id),
+        resident_user_id: None,
+    };
+    Ok((StatusCode::CREATED, Json(member)))
 }

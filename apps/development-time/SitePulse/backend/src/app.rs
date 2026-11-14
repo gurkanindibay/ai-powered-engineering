@@ -8,7 +8,7 @@ use authorization::RoutePolicy::{self, Development, Public, Require, RequireAny,
 use axum::{
     http::{header, HeaderName, HeaderValue, Method},
     middleware,
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -62,6 +62,12 @@ routes! {
     delete "/api/v1/site-admin/home-owners/:id" => handlers::delete_home_owner, Require(PersonManage);
     post "/api/v1/site-admin/home-owners/:id/resend-activation" => handlers::resend_activation, Require(PersonManage);
     get "/api/v1/site-admin/persons" => handlers::list_persons, Require(PersonRead);
+    get "/api/v1/site-admin/persons/search" => handlers::search_people, Require(PersonRead);
+    post "/api/v1/site-admin/persons" => handlers::create_person, Require(PersonManage);
+    get "/api/v1/site-admin/persons/:person_id/card" => handlers::get_person_card, Require(PersonRead);
+    patch "/api/v1/site-admin/persons/:person_id" => handlers::update_person, Require(PersonManage);
+    post "/api/v1/site-admin/persons/:person_id/login" => handlers::open_person_login, Require(PersonManage);
+    delete "/api/v1/site-admin/persons/:person_id/login" => handlers::remove_person_login, Require(PersonManage);
     get "/api/v1/site-admin/persons/export" => handlers::export_persons, Require(PersonExport);
     get "/api/v1/site-admin/persons/:person_id" => handlers::get_person_profile, Require(PersonRead);
     post "/api/v1/site-admin/persons/duplicate-check" => handlers::check_person_duplicates, Require(PersonRead);

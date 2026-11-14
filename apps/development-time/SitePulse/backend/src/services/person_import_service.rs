@@ -325,6 +325,9 @@ pub fn check_rows(
         let request = match (errors.is_empty(), unit_no, floor, is_resident) {
             (true, Some(unit_no), Some(floor), Some(is_resident)) => {
                 Some(RegisterHomeOwnerRequest {
+                    owner: None,
+                    tenant: None,
+                    members: Vec::new(),
                     block: block.clone(),
                     unit_no,
                     floor,

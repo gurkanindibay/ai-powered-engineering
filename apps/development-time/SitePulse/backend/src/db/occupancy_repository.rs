@@ -48,6 +48,8 @@ pub enum OccupancyError {
         "The unit already has an owner on record; a new owner is recorded by a title deed transfer"
     )]
     UnitHasOwner,
+    #[error(transparent)]
+    Person(#[from] crate::services::person_service::PersonApiError),
     #[error("Database error: {0}")]
     Storage(String),
 }
@@ -338,6 +340,8 @@ pub async fn execute_plan(
         opened.as_ref(),
     )
     .await?;
+    super::responsible_contact_repository::clear_stale_primary_contact(tx, snapshot.unit_id)
+        .await?;
     Ok(TransitionOutcome {
         plan,
         closed,

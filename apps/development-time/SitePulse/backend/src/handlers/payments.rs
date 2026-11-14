@@ -712,7 +712,7 @@ pub async fn transfer_unit_ownership(
     scope: crate::tenancy::TenantScope,
     Path(unit_id): Path<String>,
     Json(mut payload): Json<crate::models::TransferOwnershipRequest>,
-) -> Result<Json<crate::models::TransferOwnershipResponse>, (StatusCode, String)> {
+) -> Result<Json<crate::models::TransferOwnershipResponse>, crate::error::AppError> {
     // A site-scoped manager must use the site from their authenticated scope;
     // a stale client selection must not block an operation on an authorized unit.
     if let Some(site_id) = scope.own_site() {
@@ -721,10 +721,60 @@ pub async fn transfer_unit_ownership(
         scope.pin_opt(&mut payload.site_id)?;
     }
     payload.unit_id = unit_id;
+    apply_new_owner_ref(&state, &mut payload).await?;
     let service = crate::services::PaymentTrackingService::new(state);
     service
         .transfer_ownership(payload)
         .await
         .map(Json)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))
+        .map_err(|e| (StatusCode::BAD_REQUEST, e).into())
+}
+
+/// Maps `new_owner` onto the legacy buyer fields. A new card is created first, so
+/// the duplicate rules and `confirm_distinct` apply; an existing card is read from
+/// the site. The buyer is then always identified by `new_owner_person_id`.
+async fn apply_new_owner_ref(
+    state: &AppState,
+    payload: &mut crate::models::TransferOwnershipRequest,
+) -> Result<(), crate::error::AppError> {
+    use crate::models::{CreatePersonRequest, PersonRef};
+    let Some(reference) = payload.new_owner.clone() else {
+        return Ok(());
+    };
+    let site = payload
+        .site_id
+        .as_deref()
+        .and_then(crate::db::parse_id_to_i64)
+        .ok_or_else(|| crate::error::AppError::validation("Site is not valid"))?;
+    let service = crate::services::person_service::PersonService::new(state);
+    let person_id = match reference {
+        PersonRef::Existing { person_id } => person_id,
+        PersonRef::New {
+            card,
+            confirm_distinct,
+        } => {
+            service
+                .create(
+                    site,
+                    &CreatePersonRequest {
+                        card,
+                        confirm_distinct,
+                    },
+                )
+                .await
+                .map_err(super::site_admin::person_api_error)?
+                .card
+                .person_id
+        }
+    };
+    let card = service
+        .card(site, person_id)
+        .await
+        .map_err(super::site_admin::person_api_error)?
+        .card;
+    payload.new_owner_person_id = Some(person_id);
+    payload.new_owner_name = card.full_name;
+    payload.new_owner_phone = card.phone;
+    payload.new_owner_email = card.email;
+    Ok(())
 }
