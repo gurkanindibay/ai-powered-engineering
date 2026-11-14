@@ -560,6 +560,7 @@ extension DashboardControllerResidents on DashboardController {
     String? email,
     String? siteId,
     String? memberId,
+    int? personId,
   }) async {
     final index = _homeOwners.indexWhere((unit) => unit.unitId == unitId);
     if (index == -1) return false;
@@ -576,6 +577,7 @@ extension DashboardControllerResidents on DashboardController {
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
+            if (personId != null) 'person_id': personId,
             'role': role,
             'resident_name': residentName,
             if (memberId != null) 'member_id': memberId,
@@ -810,6 +812,7 @@ extension DashboardControllerResidents on DashboardController {
     required String phone,
     required String email,
     required String relationship,
+    PersonRef? person,
   }) async {
     final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? _activeUnit.unitNumber : '1'));
     final effectiveBlock = block ?? (_activeUnit.block.isNotEmpty ? _activeUnit.block : 'A');
@@ -823,9 +826,10 @@ extension DashboardControllerResidents on DashboardController {
           memberUrl,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
-            'full_name': fullName,
-            'phone': phone,
-            'email': email,
+            if (person != null) 'person': person.toJson(),
+            if (person == null) 'full_name': fullName,
+            if (person == null) 'phone': phone,
+            if (person == null) 'email': email,
             'relationship': relationship,
           }),
         ).timeout(const Duration(seconds: 4));
@@ -886,6 +890,7 @@ extension DashboardControllerResidents on DashboardController {
     String? email,
     String? phone,
     int? ownerPersonId,
+    PersonRef? person,
     String? notes,
   }) async {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
@@ -897,6 +902,7 @@ extension DashboardControllerResidents on DashboardController {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'command': command.code,
+            if (person != null) 'person': person.toJson(),
             'person_id': ?personId,
             'full_name': ?fullName,
             'email': ?email,
@@ -1412,11 +1418,13 @@ extension DashboardControllerResidents on DashboardController {
     String? notes,
     String? siteId,
     bool newOwnerMovesIn = false,
+    PersonRef? newOwner,
   }) async {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
     final payload = {
       // STORY-08-09: an owner-occupied unit becomes vacant unless the new owner moves in.
       'new_owner_moves_in': newOwnerMovesIn,
+      if (newOwner?.personId != null) 'new_owner_person_id': newOwner!.personId,
       'site_id': effectiveSiteId,
       'unit_id': unitId,
       'new_owner_name': newOwnerName,

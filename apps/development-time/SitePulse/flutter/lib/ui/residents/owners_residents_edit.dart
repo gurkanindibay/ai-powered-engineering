@@ -351,9 +351,8 @@ extension _OwnerEdits on _OwnersResidentsModulePageState {
   }
 
   void _openAddHouseholdMember(HomeOwnerItem ho) {
-    final nameCtrl = TextEditingController();
+    PersonRef? person;
     final relationCtrl = TextEditingController(text: HouseholdRelationship.spouse.code);
-    final phoneCtrl = TextEditingController();
     bool setAsPrimary = false;
 
     AppFullscreenPage.push(
@@ -370,23 +369,23 @@ extension _OwnerEdits on _OwnersResidentsModulePageState {
                 testId('module_save_household_btn', ElevatedButton(
                   key: const Key('module_save_household_btn'),
                   onPressed: () async {
-                    final name = nameCtrl.text.trim();
-                    if (name.isEmpty) return;
+                    if (person == null) return;
                     final success = await widget.controller.addHouseholdMember(
                       unitId: ho.unitId,
                       block: ho.block,
                       unitNo: ho.unitNo,
-                      fullName: name,
+                      fullName: '',
                       relationship: relationCtrl.text.trim(),
-                      phone: phoneCtrl.text.trim(),
-                      email: phoneCtrl.text.trim().isNotEmpty ? '${phoneCtrl.text.trim()}@sakin.local' : 'sakin_${ho.unitNo}@example.com',
+                      phone: '',
+                      email: '',
+                      person: person,
                     );
                     if (setAsPrimary && success) {
                       widget.controller.setPrimaryResponsibleResident(
                         unitId: ho.unitId,
-                        residentName: name,
+                        residentName: '',
                         role: 'RESIDENT',
-                        phone: phoneCtrl.text.trim(),
+                        personId: person?.personId,
                       );
                     }
                     if (success && ctx.mounted) {
@@ -403,11 +402,14 @@ extension _OwnerEdits on _OwnersResidentsModulePageState {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  testId('module_member_name_input', TextField(
-                    key: const Key('module_member_name_input'),
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: 'Ad Soyad *', filled: true, border: OutlineInputBorder()),
-                  )),
+                  SpPersonField(
+                    repository: const PersonDirectoryRepository(),
+                    roleContext: 'household',
+                    unitId: ho.unitId,
+                    value: person,
+                    onChanged: (value) => setDlgState(() => person = value),
+                    id: 'module_member_name_input',
+                  ),
                   const SizedBox(height: 12),
                   testId('module_member_relation_input', DropdownButtonFormField<String>(
                     key: const Key('module_member_relation_input'),
@@ -417,12 +419,6 @@ extension _OwnerEdits on _OwnersResidentsModulePageState {
                     decoration: const InputDecoration(labelText: 'Yakınlık Derecesi', filled: true, border: OutlineInputBorder()),
                   )),
                   const SizedBox(height: 12),
-                  testId('module_member_phone_input', TextField(
-                    key: const Key('module_member_phone_input'),
-                    controller: phoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(labelText: 'Telefon', filled: true, border: OutlineInputBorder()),
-                  )),
                   const SizedBox(height: 12),
                   Material(
                     color: Colors.transparent,

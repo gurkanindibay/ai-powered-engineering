@@ -56,10 +56,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
   /// owner rents the unit out). An owner never moves in through this form:
   /// that is [_openOwnerMoveIn], which takes no person data (STORY-08-06).
   void _openMoveIn(HomeOwnerItem ho, {OccupancyCommand command = OccupancyCommand.tenantMoveIn}) {
-    final nameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    PersonSummary? chosen; // U7: an existing person of the site
+    PersonRef? person;
     bool isSaving = false;
 
     final title = switch (command) {
@@ -91,23 +88,16 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                   onPressed: isSaving
                       ? null
                       : () async {
-                          final name = nameCtrl.text.trim();
                           final messenger = ScaffoldMessenger.of(this.context);
-                          final problem = name.isEmpty
-                              ? 'Ad soyad gerekli.'
-                              : (chosen == null ? validatePersonEmail(emailCtrl.text) : null);
-                          if (problem != null) {
-                            messenger.showSnackBar(spSnackBar(kind: ToastKind.warning, content: Text(problem)));
+                          if (person == null) {
+                            messenger.showSnackBar(spSnackBar(kind: ToastKind.warning, content: const Text('İşlem için bir kişi seçin veya oluşturun.')));
                             return;
                           }
                           setDlgState(() => isSaving = true);
                           final result = await widget.controller.applyOccupancyTransition(
                             ho.unitId,
                             command: command,
-                            personId: chosen?.personId,
-                            fullName: name,
-                            phone: phoneCtrl.text.trim(),
-                            email: emailCtrl.text.trim(),
+                            person: person,
                           );
                           if (!ctx.mounted) return;
                           setDlgState(() => isSaving = false);
@@ -131,63 +121,13 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                 children: [
                   Text(settlementNote, style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12)),
                   const SizedBox(height: 16),
-                  testId('module_move_in_pick_existing_btn', OutlinedButton.icon(
-                    key: const Key('module_move_in_pick_existing_btn'),
-                    onPressed: () async {
-                      final messenger = ScaffoldMessenger.of(this.context);
-                      try {
-                        final page = await const PersonDirectoryApi().directory(pageSize: 100);
-                        if (!ctx.mounted) return;
-                        final picked = await showSpSelection<PersonSummary>(
-                          context: ctx,
-                          title: 'Mevcut kişiyi seçin',
-                          options: page.items,
-                          labelOf: (p) => [p.fullName, if (p.email.isNotEmpty) p.email].join(' • '),
-                          idOf: (p) => 'move_in_person_${p.personId}',
-                        );
-                        if (picked == null) return;
-                        setDlgState(() {
-                          chosen = picked;
-                          nameCtrl.text = picked.fullName;
-                          phoneCtrl.text = picked.phone;
-                          emailCtrl.text = picked.email;
-                        });
-                      } catch (_) {
-                        messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: const Text('Kişi listesi yüklenemedi.')));
-                      }
-                    },
-                    icon: const Icon(Icons.person_search_outlined, size: 16),
-                    label: Text(chosen == null ? 'Mevcut kişilerden seç' : 'Seçili: ${chosen!.fullName} (değiştir)'),
-                  )),
-                  if (chosen != null)
-                    TextButton(
-                      onPressed: () => setDlgState(() {
-                        chosen = null;
-                        nameCtrl.clear();
-                        phoneCtrl.clear();
-                        emailCtrl.clear();
-                      }),
-                      child: const Text('Yeni kişi gir'),
-                    ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: nameCtrl,
-                    readOnly: chosen != null,
-                    decoration: const InputDecoration(labelText: 'Kiracı Ad Soyad *', filled: true, border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: phoneCtrl,
-                    readOnly: chosen != null,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(labelText: 'Telefon', filled: true, border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: emailCtrl,
-                    readOnly: chosen != null,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'E-posta', filled: true, border: OutlineInputBorder()),
+                  SpPersonField(
+                    repository: const PersonDirectoryRepository(),
+                    roleContext: 'tenant',
+                    unitId: ho.unitId,
+                    value: person,
+                    onChanged: (value) => setDlgState(() => person = value),
+                    id: 'module_move_in_pick_existing_btn',
                   ),
                 ],
               ),
@@ -405,9 +345,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
   }
 
   void _openTransferOwnership(HomeOwnerItem ho) {
-    final nameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
+    PersonRef? newOwner;
     final notesCtrl = TextEditingController();
     bool isSubmitting = false;
     bool newOwnerMovesIn = false;
@@ -435,16 +373,23 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                   onPressed: isSubmitting
                       ? null
                       : () async {
-                          final newName = nameCtrl.text.trim();
-                          if (newName.isEmpty) {
+                          if (newOwner == null) {
                             ScaffoldMessenger.of(ctx).showSnackBar(
-                              appSnackBar(content: Text('Lütfen yeni malikin adını ve soyadını giriniz.')),
+                              appSnackBar(content: const Text('Yeni kat malikini seçin veya oluşturun.')),
                             );
                             return;
                           }
                           setDlgState(() => isSubmitting = true);
                           try {
                             final messenger = ScaffoldMessenger.of(this.context);
+                            final selected = newOwner!;
+                            final details = selected.personId == null
+                                ? null
+                                : await const PersonDirectoryRepository().getById(selected.personId!);
+                            if (details == null) {
+                              if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(appSnackBar(content: const Text('Kişi kartı yüklenemedi.')));
+                              return;
+                            }
                             // Ownership transfer is a sensitive action: the server asks for a
                             // recent password check, then the same request is retried once.
                             final res = await runWithStepUp(
@@ -452,9 +397,10 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                               reason: 'Mülk malikini değiştiriyorsunuz. Devam etmek için kendi şifrenizi doğrulayın.',
                               action: () => widget.controller.transferUnitOwnership(
                                 unitId: ho.unitId,
-                                newOwnerName: newName,
-                                newOwnerPhone: phoneCtrl.text.trim(),
-                                newOwnerEmail: emailCtrl.text.trim(),
+                                newOwnerName: details.fullName,
+                                newOwnerPhone: details.phone,
+                                newOwnerEmail: details.email,
+                                newOwner: selected,
                                 notes: notesCtrl.text.trim(),
                                 newOwnerMovesIn: ho.isOwnerOccupied && newOwnerMovesIn,
                               ),
@@ -538,37 +484,14 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                     style: TextStyle(color: AppColors.textPrimary(ctx), fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 12),
-                  testId('module_transfer_new_owner_name_input', TextField(
-                    key: const Key('module_transfer_new_owner_name_input'),
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Yeni Kat Maliki Adı Soyadı *',
-                      prefixIcon: Icon(Icons.person, size: 18),
-                      border: OutlineInputBorder(),
-                    ),
-                  )),
-                  const SizedBox(height: 12),
-                  testId('module_transfer_new_owner_phone_input', TextField(
-                    key: const Key('module_transfer_new_owner_phone_input'),
-                    controller: phoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Yeni Kat Maliki Telefon',
-                      prefixIcon: Icon(Icons.phone, size: 18),
-                      border: OutlineInputBorder(),
-                    ),
-                  )),
-                  const SizedBox(height: 12),
-                  testId('module_transfer_new_owner_email_input', TextField(
-                    key: const Key('module_transfer_new_owner_email_input'),
-                    controller: emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Yeni Kat Maliki E-Posta',
-                      prefixIcon: Icon(Icons.email, size: 18),
-                      border: OutlineInputBorder(),
-                    ),
-                  )),
+                  SpPersonField(
+                    repository: const PersonDirectoryRepository(),
+                    roleContext: 'owner',
+                    unitId: ho.unitId,
+                    value: newOwner,
+                    onChanged: (value) => setDlgState(() => newOwner = value),
+                    id: 'module_transfer_new_owner_name_input',
+                  ),
                   const SizedBox(height: 12),
                   testId('module_transfer_notes_input', TextField(
                     key: const Key('module_transfer_notes_input'),

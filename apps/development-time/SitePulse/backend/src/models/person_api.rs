@@ -102,6 +102,7 @@ pub struct PersonSearchQuery {
     pub context: Option<PersonSearchContext>,
     pub unit_id: Option<String>,
     pub limit: Option<i64>,
+    pub page: Option<i64>,
 }
 
 /// Paged scoped person search results.
