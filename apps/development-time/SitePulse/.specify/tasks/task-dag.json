@@ -614,12 +614,13 @@
       "id": "task-30",
       "name": "Measure person integrity and unit directory baseline",
       "module": "full-stack",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#delivery-plan",
       "description": "Step 0: add a reusable person integrity report for site-less people, unlinked household members, multiple active logins, unmatched primary contacts and likely duplicates; record current directory density and manager task times before setting constraints or claiming improvements.",
       "gates": ["schema-integrity", "harness-selftest"],
-      "attempts": 0
+      "attempts": 0,
+      "evidence": ".specify/evidence/task-30.json"
     },
     {
       "id": "task-31",
@@ -636,12 +637,13 @@
       "id": "task-32",
       "name": "Add person and primary contact schema foundations",
       "module": "postgres-db",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": ["task-30"],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#schema-changes-proposed-migration-v33",
       "description": "A2: migrate normalized person search keys, version, merge tombstone and primary contact person reference; backfill safely and add person, unit and relationship views. Add integrity checks; apply uniqueness and non-null constraints only after the measured data passes their preconditions.",
       "gates": ["schema-integrity", "rust-db-test", "tenant-lint", "logging-standards-lint"],
-      "attempts": 0
+      "attempts": 0,
+      "evidence": ".specify/evidence/task-32.json"
     },
     {
       "id": "task-33",

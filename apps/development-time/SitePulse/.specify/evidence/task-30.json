@@ -1,0 +1,28 @@
+{
+  "task_id": "task-30",
+  "passed": true,
+  "started_at": "2026-11-14T18:54:34.039074+00:00",
+  "finished_at": "2026-11-14T18:54:49.302456+00:00",
+  "gates": [
+    {
+      "name": "schema-integrity",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/schema_integrity_check.py --json",
+      "duration_s": 13.360817714012228
+    },
+    {
+      "name": "harness-selftest",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 -m unittest discover -s harness/tests",
+      "duration_s": 1.9023393989773467
+    }
+  ],
+  "acceptance_tests": [],
+  "gates_evaluated": 2,
+  "diagnostics": [],
+  "commit": "dae622550815b00fa6d04fc1c0f706956a57c135",
+  "dirty": true,
+  "attempts": 0
+}
