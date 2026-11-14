@@ -301,6 +301,15 @@ impl PersonDirectoryService {
             return Err(PersonDirectoryError::NotFound);
         };
         let client = pool.get().await.map_err(storage)?;
+        // A merged ID resolves to the card that absorbed it (V34 tombstone).
+        let person_id: i64 = client
+            .query_one(
+                "SELECT COALESCE(sp_canonical_person($1), $1)",
+                &[&person_id],
+            )
+            .await
+            .map_err(storage)?
+            .get(0);
         let person = client
             .query_opt(
                 &format!("{SUMMARY_SELECT} WHERE p.id = $1 AND p.site_id = $2"),
