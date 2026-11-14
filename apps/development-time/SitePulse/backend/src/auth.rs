@@ -751,6 +751,7 @@ pub async fn require_auth(State(state): State<AppState>, mut req: Request, next:
             crate::models::Permission::BankAccountManage
                 | crate::models::Permission::PlatformIntegrationConfigure
         ) && req.method() != Method::GET
+            || template.ends_with("/persons/:person_id/merge")
             || template.ends_with("/transfer-ownership")
             || template.ends_with("/reset-admin-password")
             || template.ends_with("/platform-roles");
