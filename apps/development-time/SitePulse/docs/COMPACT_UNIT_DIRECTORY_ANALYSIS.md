@@ -4,7 +4,7 @@ Date: 14 November 2026
 
 Status: proposed design for review; application implementation is outside this change
 
-Companion: [interactive design draft](ux-reference/compact_unit_directory.html)
+Companion: [mobile design preview](ux-reference/mobile_unit_directory_preview.html) · [responsive draft](ux-reference/compact_unit_directory.html)
 
 ## Recommendation
 
