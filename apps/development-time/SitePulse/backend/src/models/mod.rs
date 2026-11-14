@@ -1228,8 +1228,29 @@ pub struct OccupancyHistoryItem {
     pub created_at: DateTime<Utc>,
 }
 
+/// A unit's selected communication contact, independent of ownership and occupancy.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrimaryResponsibleContact {
+    pub primary_responsible_name: String,
+    pub primary_responsible_role: String,
+    pub primary_responsible_phone: String,
+    pub primary_responsible_email: String,
+    #[serde(default)]
+    pub primary_responsible_member_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelectResponsibleContactRequest {
+    pub role: String,
+    pub resident_name: String,
+    #[serde(default)]
+    pub member_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HomeOwnerResponse {
+    #[serde(default, flatten)]
+    pub primary_responsible: Option<PrimaryResponsibleContact>,
     pub unit_id: String,
     pub site_id: String,
     pub block: String,

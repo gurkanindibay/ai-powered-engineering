@@ -64,3 +64,5 @@ pub use saas_tenant_service::{to_slug, SaasTenantService};
 pub use site_admin_service::SiteAdminService;
 pub use site_bank_account_service::SiteBankAccountService;
 pub use virtual_iban_service::VirtualIbanService;
+
+pub mod responsible_contact_service;

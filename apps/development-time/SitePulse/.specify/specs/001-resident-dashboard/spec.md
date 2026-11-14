@@ -61,6 +61,16 @@ Release 1 introduces dual operational roles:
 
 ---
 
+### Scenario 5: Select the Unit Communication Contact
+- **Given** a manager selects an existing owner, tenant or household member as the unit's responsible contact,
+- **Then** save the designation independently of the owner's identity, the current tenant and financial debtor roles,
+- **And** show the saved person on both resident management screens and retain the designation after a reload,
+- **And** show success only after the server confirms persistence; a rejected or failed save leaves the previous contact unchanged,
+- **And** selecting the current contact explains that the person is already responsible without submitting another change,
+- **And** reject persons outside the unit and all attempts to update a unit belonging to another site.
+
+---
+
 ## 4. Release 1 Non-Goals
 - **Deferred to v2:** Sub-meter heat/water cost allocation ("Sayaç Gir / Pay Ölçer").
 - **Deferred to v2:** Common area booking calendar ("Rezervasyon").
