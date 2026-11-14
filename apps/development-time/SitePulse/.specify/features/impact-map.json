@@ -15,11 +15,11 @@
   "epics": {
     "EPIC-01": {"keywords": ["dues", "aidat", "tariff", "resident_dashboard", "statement"]},
     "EPIC-02": {"keywords": ["manager", "cockpit", "expense", "budget"]},
-    "EPIC-03": {"keywords": ["saas", "site_admin", "tenant", "onboarding", "provision"]},
-    "EPIC-04": {"keywords": ["invitation", "registration", "approval"]},
-    "EPIC-06": {"keywords": ["auth", "login", "password", "permission", "session", "jwt"]},
+    "EPIC-03": {"keywords": ["saas", "site_admin", "tenant", "onboarding", "provision", "person_repository", "site_repository", "db/mod.rs", "impact-map"]},
+    "EPIC-04": {"keywords": ["invitation", "registration", "approval", "person_repository", "db/mod.rs", "impact-map"]},
+    "EPIC-06": {"keywords": ["auth", "login", "password", "permission", "session", "jwt", "person_repository", "user_repository", "db/mod.rs", "impact-map"]},
     "EPIC-07": {"keywords": ["bank", "reconciliation", "virtual_iban", "webhook", "payer_match"]},
-    "EPIC-08": {"keywords": ["occupancy", "lease", "home_owner", "dual_ledger", "residents/"]},
+    "EPIC-08": {"keywords": ["occupancy", "lease", "home_owner", "dual_ledger", "residents/", "person_repository", "unit_repository", "db/mod.rs", "impact-map"]},
     "EPIC-09": {"keywords": ["payment", "receipt", "treasury", "collection", "dunning"]},
     "EPIC-10": {"keywords": ["capital", "disbursement", "virman", "installment"]},
     "EPIC-11": {"keywords": ["payments_phase3", "autopay", "dispute"]}
