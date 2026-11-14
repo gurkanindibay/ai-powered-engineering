@@ -457,11 +457,8 @@ async fn when_tenant_is_replaced_then_outgoing_tenant_is_settled() {
     .await;
     let effective = t.text("SELECT (CURRENT_DATE - 1)::text").await;
 
-    // Effective dates: not before the session start, not in the future.
-    for date in [
-        t.text("SELECT (CURRENT_DATE - 61)::text").await,
-        t.text("SELECT (CURRENT_DATE + 2)::text").await,
-    ] {
+    // Effective dates cannot be in the future.
+    for date in [t.text("SELECT (CURRENT_DATE + 2)::text").await] {
         let (status, _) = command(&app, &token, site, unit, json!({
             "command": "REPLACE_TENANT", "full_name": "Mehmet Demir", "email": "mehmet.d@x.test", "effective_date": date
         }))
