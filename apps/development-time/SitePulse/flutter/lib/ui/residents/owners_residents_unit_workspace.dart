@@ -104,8 +104,13 @@ List<_WorkspaceAction> _workspaceActions(
 
 /// Opens the unit workspace for one unit.
 extension _UnitWorkspace on _OwnersResidentsModulePageState {
-  void _openUnitWorkspace(HomeOwnerItem ho, {UnitWorkspaceMode mode = UnitWorkspaceMode.actions}) {
-    AppFullscreenPage.push<void>(
+  Future<void> _openUnitWorkspace(
+    HomeOwnerItem ho, {
+    UnitWorkspaceMode mode = UnitWorkspaceMode.actions,
+    FocusNode? returnFocusNode,
+  }) async {
+    final prevUnitId = ho.unitId;
+    await AppFullscreenPage.push<void>(
       context: context,
       builder: (_) => _UnitWorkspacePage(
         controller: widget.controller,
@@ -114,6 +119,24 @@ extension _UnitWorkspace on _OwnersResidentsModulePageState {
         actionsFor: _workspaceActionsFor,
       ),
     );
+    if (!mounted) return;
+    _update(() {});
+    final updatedMatches = widget.controller.homeOwners.where((h) => h.unitId == prevUnitId);
+    if (updatedMatches.isNotEmpty) {
+      final updated = updatedMatches.first;
+      if (!matchesResidentFilters(
+        updated,
+        blockFilter: _blockFilter,
+        occupancyFilter: _occupancyFilter,
+        query: _searchQuery,
+      )) {
+        SpToast.info(
+          context,
+          '${updated.block} ${updated.unitNo} güncellendi ve mevcut filtrenin dışına çıktı.',
+        );
+      }
+    }
+    returnFocusNode?.requestFocus();
   }
 
   List<_WorkspaceAction> _workspaceActionsFor(HomeOwnerItem ho) => _workspaceActions(
@@ -207,6 +230,8 @@ class _UnitWorkspacePageState extends State<_UnitWorkspacePage> {
         ],
       );
 
+  int _cardTab = 0;
+
   Widget _identity(BuildContext context, HomeOwnerItem ho) {
     final occupant = ho.isTenantOccupied ? (ho.tenantFullName ?? '') : (ho.isOwnerOccupied ? ho.ownerFullName : '');
     Widget line(String label, String value) => Padding(
@@ -242,9 +267,195 @@ class _UnitWorkspacePageState extends State<_UnitWorkspacePage> {
           line('Sakin', occupant),
           line('Kat Maliki', ho.ownerFullName),
           line('Muhatap', ho.activeResponsibleResidentName),
+          const SizedBox(height: 8),
+          _dualTabSwitcher(context, ho),
         ],
       ),
     ));
+  }
+
+  Widget _dualTabSwitcher(BuildContext context, HomeOwnerItem ho) {
+    final editResidentsAction = widget.actionsFor(ho).where((a) => a.id == 'edit_residents');
+    final editOwnerAction = widget.actionsFor(ho).where((a) => a.id == 'edit_owner');
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.background(context),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border(context).withOpacity(0.6)),
+      ),
+      padding: const EdgeInsets.all(3),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: selectableSemantics(
+                  selected: _cardTab == 0,
+                  child: testId(
+                    'module_tab_residents_${ho.unitId}',
+                    InkWell(
+                      key: Key('module_tab_residents_${ho.unitId}'),
+                      onTap: () => setState(() => _cardTab = 0),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                        decoration: BoxDecoration(
+                          color: _cardTab == 0 ? AppColors.card(context) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: _cardTab == 0 ? Border.all(color: AppColors.accentGreen.withOpacity(0.5)) : null,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.people_alt_outlined, size: 14, color: _cardTab == 0 ? AppColors.accentGreen : AppColors.textSecondary(context)),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                ho.isTenantOccupied
+                                    ? 'Sakinler (${ho.tenantFullName ?? 'Kiracı'})'
+                                    : (ho.isVacant ? 'Sakinler (Boş)' : 'Sakinler (${ho.ownerFullName})'),
+                                style: TextStyle(
+                                  color: _cardTab == 0 ? AppColors.successText(context) : AppColors.textSecondary(context),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: selectableSemantics(
+                  selected: _cardTab == 1,
+                  child: testId(
+                    'module_tab_owner_${ho.unitId}',
+                    InkWell(
+                      key: Key('module_tab_owner_${ho.unitId}'),
+                      onTap: () => setState(() => _cardTab = 1),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                        decoration: BoxDecoration(
+                          color: _cardTab == 1 ? AppColors.card(context) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: _cardTab == 1 ? Border.all(color: AppColors.accentCyan.withOpacity(0.5)) : null,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.vpn_key_outlined, size: 14, color: _cardTab == 1 ? AppColors.accentCyan : AppColors.textSecondary(context)),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'Kat Maliki (${ho.ownerFullName.isNotEmpty ? ho.ownerFullName : 'Ev Sahibi'})',
+                                style: TextStyle(
+                                  color: _cardTab == 1 ? AppColors.primaryText(context) : AppColors.textSecondary(context),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_cardTab == 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        ho.isTenantOccupied
+                            ? 'Birincil Kiracı'
+                            : (ho.isVacant ? 'Boş Daire' : 'Malik Mukim'),
+                        style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        ho.isTenantOccupied
+                            ? (ho.tenantFullName ?? 'Kiracı')
+                            : ho.ownerFullName,
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                if (editResidentsAction.isNotEmpty)
+                  testId(
+                    'module_edit_residents_${ho.unitId}',
+                    OutlinedButton.icon(
+                      key: Key('module_edit_residents_${ho.unitId}'),
+                      onPressed: editResidentsAction.first.onTap,
+                      icon: const Icon(Icons.edit_outlined, size: 11),
+                      label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.accentGreen,
+                        side: const BorderSide(color: AppColors.accentGreen),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        minimumSize: const Size(0, 24),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ] else ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Kat Maliki (Mülk Sahibi)',
+                        style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        ho.ownerFullName.isNotEmpty ? ho.ownerFullName : 'Bilinmeyen Malik',
+                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                if (editOwnerAction.isNotEmpty)
+                  testId(
+                    'module_edit_owner_${ho.unitId}',
+                    OutlinedButton.icon(
+                      key: Key('module_edit_owner_${ho.unitId}'),
+                      onPressed: editOwnerAction.first.onTap,
+                      icon: const Icon(Icons.edit_outlined, size: 11),
+                      label: const Text('Düzenle', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.accentCyan,
+                        side: const BorderSide(color: AppColors.accentCyan),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        minimumSize: const Size(0, 24),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _modeSwitch(BuildContext context, String unitId) {
@@ -322,9 +533,41 @@ class _UnitWorkspacePageState extends State<_UnitWorkspacePage> {
     ));
   }
 
+  static String? _legacyKeyFor(String actionId, String unitId) {
+    switch (actionId) {
+      case 'select_contact':
+        return 'module_set_responsible_$unitId';
+      case 'add_member':
+        return 'module_add_resident_to_$unitId';
+      case 'tenant_move_in':
+        return 'module_move_in_$unitId';
+      case 'replace_tenant':
+        return 'module_quick_move_in_$unitId';
+      case 'owner_move_in':
+        return 'module_owner_move_in_$unitId';
+      case 'owner_rents_out':
+        return 'module_add_tenant_$unitId';
+      case 'owner_takes_back':
+        return 'module_owner_takes_back_$unitId';
+      case 'move_out':
+        return 'module_move_out_$unitId';
+      case 'transfer_ownership':
+        return 'module_transfer_ownership_$unitId';
+      case 'history':
+        return 'module_history_ho_$unitId';
+      case 'iban':
+        return 'module_iban_ho_$unitId';
+      case 'delete':
+        return 'module_delete_ho_$unitId';
+      default:
+        return null;
+    }
+  }
+
   Widget _actionRow(BuildContext context, HomeOwnerItem ho, _WorkspaceAction a) {
     final id = 'workspace_action_${a.id}_${ho.unitId}';
-    return Padding(
+    final legacyKey = _legacyKeyFor(a.id, ho.unitId);
+    final rowWidget = Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: testId(
         id,
@@ -365,6 +608,14 @@ class _UnitWorkspacePageState extends State<_UnitWorkspacePage> {
         ),
       ),
     );
+
+    if (legacyKey != null) {
+      return KeyedSubtree(
+        key: Key(legacyKey),
+        child: rowWidget,
+      );
+    }
+    return rowWidget;
   }
 
   Widget _information(BuildContext context, HomeOwnerItem ho) {
