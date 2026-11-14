@@ -488,6 +488,35 @@ void main() {
       });
     }
 
+    testWidgets('runWithStepUp asks for the password and retries the action once', (tester) async {
+      ApiClient.transport = MockClient((_) async => http.Response('{}', 200));
+      var calls = 0;
+      Map<String, dynamic>? result;
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () async => result = await runWithStepUp(
+              context,
+              reason: 'Ownership transfer',
+              action: () async => ++calls == 1
+                  ? {'success': false, 'needs_step_up': true}
+                  : {'success': true},
+            ),
+            child: const Text('open'),
+          ),
+        )),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ownership transfer'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('step_up_password')), 'Manager-Pass-1');
+      await tester.tap(find.byKey(const Key('btn_step_up_verify')));
+      await tester.pumpAndSettle();
+      expect(calls, 2);
+      expect(result?['success'], isTrue);
+    });
+
     testWidgets('a wrong password keeps the page open and says so', (tester) async {
       ApiClient.transport = MockClient((_) async => http.Response('{}', 401));
       await tester.pumpWidget(MaterialApp(theme: AppTheme.light(), home: const StepUpPromptPage(reason: 'r')));

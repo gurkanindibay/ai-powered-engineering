@@ -445,24 +445,20 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                           setDlgState(() => isSubmitting = true);
                           try {
                             final messenger = ScaffoldMessenger.of(this.context);
-                            Future<Map<String, dynamic>?> submit() => widget.controller.transferUnitOwnership(
-                                  unitId: ho.unitId,
-                                  newOwnerName: newName,
-                                  newOwnerPhone: phoneCtrl.text.trim(),
-                                  newOwnerEmail: emailCtrl.text.trim(),
-                                  notes: notesCtrl.text.trim(),
-                                  newOwnerMovesIn: ho.isOwnerOccupied && newOwnerMovesIn,
-                                );
-                            var res = await submit();
-                            // Ownership transfer is a sensitive action: verify the manager's
-                            // password, then retry the same request once.
-                            if (res?['needs_step_up'] == true && ctx.mounted) {
-                              final verified = await showStepUpPrompt(
-                                ctx,
-                                reason: 'Mülk malikini değiştiriyorsunuz. Devam etmek için kendi şifrenizi doğrulayın.',
-                              );
-                              if (verified) res = await submit();
-                            }
+                            // Ownership transfer is a sensitive action: the server asks for a
+                            // recent password check, then the same request is retried once.
+                            final res = await runWithStepUp(
+                              ctx,
+                              reason: 'Mülk malikini değiştiriyorsunuz. Devam etmek için kendi şifrenizi doğrulayın.',
+                              action: () => widget.controller.transferUnitOwnership(
+                                unitId: ho.unitId,
+                                newOwnerName: newName,
+                                newOwnerPhone: phoneCtrl.text.trim(),
+                                newOwnerEmail: emailCtrl.text.trim(),
+                                notes: notesCtrl.text.trim(),
+                                newOwnerMovesIn: ho.isOwnerOccupied && newOwnerMovesIn,
+                              ),
+                            );
                             if (res != null && res['success'] == false && ctx.mounted) {
                               ScaffoldMessenger.of(ctx).showSnackBar(
                                 appSnackBar(

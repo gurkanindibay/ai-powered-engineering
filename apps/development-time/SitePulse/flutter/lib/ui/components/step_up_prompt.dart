@@ -23,6 +23,20 @@ Future<bool> showStepUpPrompt(BuildContext context, {required String reason}) as
   return verified ?? false;
 }
 
+/// Runs [action]; when its result reports `needs_step_up`, asks for the password
+/// with [showStepUpPrompt] and runs [action] once more. Use it for controller calls
+/// that return a result map instead of throwing `STEP_UP_REQUIRED`.
+Future<Map<String, dynamic>?> runWithStepUp(
+  BuildContext context, {
+  required String reason,
+  required Future<Map<String, dynamic>?> Function() action,
+}) async {
+  final first = await action();
+  if (first?['needs_step_up'] != true || !context.mounted) return first;
+  final verified = await showStepUpPrompt(context, reason: reason);
+  return verified ? action() : first;
+}
+
 class StepUpPromptPage extends StatefulWidget {
   final String reason;
 
