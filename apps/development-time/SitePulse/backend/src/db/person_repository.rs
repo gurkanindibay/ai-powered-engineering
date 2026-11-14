@@ -141,3 +141,33 @@ pub async fn ensure_legacy_person(
         .await?;
     Ok(())
 }
+
+/// Applies a contact edit guarded by the card version. Returns the new version,
+/// or `None` when the card is missing, archived, merged or the version is stale.
+pub async fn update_person_contact(
+    tx: &deadpool_postgres::Transaction<'_>,
+    site_id: i64,
+    person_id: i64,
+    full_name: Option<&str>,
+    phone: Option<&str>,
+    email: Option<&str>,
+    expected_version: i32,
+) -> Result<Option<i32>, tokio_postgres::Error> {
+    let row = tx
+        .query_opt(
+            "UPDATE persons SET full_name = COALESCE($3, full_name), phone = COALESCE($4, phone), \
+             email = COALESCE($5, email), version = version + 1 \
+             WHERE id = $1 AND site_id = $2 AND version = $6 \
+             AND deleted_at IS NULL AND merged_into_person_id IS NULL RETURNING version",
+            &[
+                &person_id,
+                &site_id,
+                &full_name,
+                &phone,
+                &email,
+                &expected_version,
+            ],
+        )
+        .await?;
+    Ok(row.map(|r| r.get(0)))
+}
