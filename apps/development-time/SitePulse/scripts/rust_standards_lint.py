@@ -204,6 +204,9 @@ def lint(backend: Path, baseline_path: Path | None = None, check_fmt: bool = Tru
         if not rel.startswith(HANDLERS_ALLOWED_PREFIX):
             for m in HANDLERS_IMPORT_RE.finditer(code):
                 add("layering", m.start())
+        if rel != "src/db/person_repository.rs":
+            for m in re.finditer(r"\bINSERT\s+INTO\s+persons\b", source, re.IGNORECASE):
+                add("person-insert-location", m.start())
         if rel != "src/domain/email.rs":
             for m in INLINE_EMAIL_RE.finditer(code):
                 add("inline-email", m.start())
