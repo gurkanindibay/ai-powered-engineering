@@ -248,6 +248,7 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ./scripts/feature_traceability.py check --json
 ./scripts/feature_traceability.py report --epic EPIC-10 --steps
 ./scripts/feature_traceability.py history SC-10-01-01 --limit 20
+./scripts/feature_traceability.py html          # e2e/.artifacts/feature-report.html
 ./scripts/feature_traceability.py record --push origin
 ```
 

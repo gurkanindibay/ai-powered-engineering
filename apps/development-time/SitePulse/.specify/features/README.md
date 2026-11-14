@@ -42,5 +42,6 @@ python3 scripts/feature_traceability.py check                      # static gate
 python3 scripts/feature_traceability.py report --epic EPIC-10 --steps
 python3 scripts/feature_traceability.py history SC-10-01-01
 python3 scripts/feature_traceability.py history STORY-10-05 --json
+python3 scripts/feature_traceability.py html                       # visual report: e2e/.artifacts/feature-report.html
 python3 scripts/feature_traceability.py record --push origin       # share the history branch
 ```

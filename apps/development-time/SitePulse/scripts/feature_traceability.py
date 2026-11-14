@@ -20,6 +20,7 @@ Commands
   record                append the last run's executions to the history (--push to share it)
   report                latest status per epic, story and scenario (--steps for step detail)
   history <ID>          runs over time for an SC-, STORY- or EPIC- id
+  html                  the report as one self-contained HTML page (e2e/.artifacts/feature-report.html)
 
 Scenario status: PASS, FAIL, ERROR (setup failed), DEFECT (strict xfail: a known defect),
 SKIPPED, NOT RUN (automated, no execution recorded), PENDING (no automation yet).
@@ -31,12 +32,14 @@ Examples
   python3 scripts/feature_traceability.py report --epic EPIC-10 --steps
   python3 scripts/feature_traceability.py history SC-10-01-01 --limit 20
   python3 scripts/feature_traceability.py history STORY-10-05 --json
+  python3 scripts/feature_traceability.py html --out /tmp/report.html
 
 Exit code: `check` 1 on problems; `report` 1 if a story is FAIL, ERROR or MISSING; otherwise 0.
 """
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -52,6 +55,8 @@ ROOT = Path(__file__).resolve().parent.parent
 REQUIREMENTS = ROOT / ".specify" / "requirements"
 FEATURES = ROOT / ".specify" / "features"
 EXECUTIONS = ROOT / "e2e" / ".artifacts" / "executions.jsonl"
+HTML_REPORT = ROOT / "e2e" / ".artifacts" / "feature-report.html"
+RECENT_RUNS = 30
 LINK_SOURCES = (("backend/tests", "*.rs"), ("flutter/test", "*.dart"), ("e2e/tests", "*.py"))
 DEFAULT_STORE = "git:test-history"
 
@@ -393,6 +398,8 @@ def build_report(catalogue: Catalogue, history: list[dict], epic_filter: str | N
                     "last_run": {k: last.get(k) for k in ("run_id", "started_at", "commit", "branch", "dirty",
                                                            "duration_s", "test", "steps", "error")} if last else None,
                     "failing_step": failing_step(last) if last else "",
+                    "recent": [{"status": r["status"], "started_at": r["started_at"], "commit": r["commit"][:7],
+                                "failing_step": failing_step(r)} for r in runs[-RECENT_RUNS:]],
                     "linked_tests": catalogue.links.get(scenario.id, []),
                 })
             stories.append({"id": story, "title": catalogue.stories[story],
@@ -461,6 +468,112 @@ def print_history(result: dict) -> None:
               f"{entry['status']:<8} {entry['duration_s']:>7.1f}s  {detail}")
 
 
+# ---------------------------------------------------------------- html
+
+HTML_STYLE = """
+:root{--bg:#f6f7f9;--card:#fff;--text:#1c2330;--muted:#667085;--line:#e3e6eb;
+--pass:#1a7f4b;--pass-bg:#e3f4ea;--fail:#b42318;--fail-bg:#fde7e4;--warn:#9a6700;--warn-bg:#fbf0d0;
+--idle:#5b6472;--idle-bg:#e9ecf0;--defect:#6941c6;--defect-bg:#ece6fb}
+@media (prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1a2029;--text:#e6e9ee;--muted:#98a2b3;--line:#2a323e;
+--pass:#5fd38d;--pass-bg:#16382a;--fail:#ff8a7a;--fail-bg:#4a1c17;--warn:#f0c04a;--warn-bg:#40330d;
+--idle:#aab3c0;--idle-bg:#2a323e;--defect:#b9a3f5;--defect-bg:#2f2550}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);
+font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:22px;margin:0 0 4px}.meta{color:var(--muted);font-size:13px;margin-bottom:20px}
+.tiles{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:24px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:104px}
+.tile b{display:block;font-size:24px;font-variant-numeric:tabular-nums}.tile span{font-size:12px;color:var(--muted)}
+details{background:var(--card);border:1px solid var(--line);border-radius:10px;margin:10px 0}
+details details{border-radius:8px;margin:8px 12px;background:transparent}
+summary{cursor:pointer;padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"\\25B8";color:var(--muted);width:10px}details[open]>summary::before{content:"\\25BE"}
+.id{font:600 13px ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap}
+.title{flex:1 1 240px;min-width:0}.epic>summary .title{font-weight:600;font-size:16px}
+.small{color:var(--muted);font-size:12px;white-space:nowrap}
+.badge{font-size:11px;font-weight:700;letter-spacing:.02em;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.PASS{color:var(--pass);background:var(--pass-bg)}.FAIL,.ERROR,.MISSING,.UNDEFINED{color:var(--fail);background:var(--fail-bg)}
+.NOT-RUN{color:var(--warn);background:var(--warn-bg)}.DEFECT{color:var(--defect);background:var(--defect-bg)}
+.PENDING,.SKIPPED,.NOT-MIGRATED{color:var(--idle);background:var(--idle-bg)}
+.strip{display:inline-flex;gap:2px}.strip i{width:8px;height:16px;border-radius:2px;display:inline-block}
+.strip i.PASS{background:var(--pass)}.strip i.FAIL,.strip i.ERROR{background:var(--fail)}
+.strip i.DEFECT{background:var(--defect)}.strip i.SKIPPED{background:var(--idle)}
+.body{padding:0 14px 12px 32px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}td{padding:4px 8px 4px 0;vertical-align:top;border-top:1px solid var(--line)}
+td.num{text-align:right;white-space:nowrap;color:var(--muted);font-variant-numeric:tabular-nums}
+.kw{color:var(--muted);font-weight:600}.note{color:var(--muted);font-size:13px;margin:8px 0 0}
+pre{background:var(--fail-bg);color:var(--fail);padding:10px;border-radius:8px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
+.plain{padding:10px 14px;background:var(--card);border:1px solid var(--line);border-radius:10px;margin:10px 0;
+display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+"""
+
+
+def _badge(status: str) -> str:
+    return f'<span class="badge {status.replace(" ", "-")}">{html.escape(status)}</span>'
+
+
+def _scenario_html(row: dict) -> str:
+    esc = html.escape
+    last = row["last_run"]
+    strip = "".join(f'<i class="{r["status"].replace(" ", "-")}" title="{esc(r["started_at"][:16])} {esc(r["commit"])} '
+                    f'{esc(r["status"])}{" at: " + esc(r["failing_step"]) if r["failing_step"] else ""}"></i>'
+                    for r in row["recent"])
+    when = (f'{esc(last["started_at"][:16].replace("T", " "))} · <code>{esc(last["commit"][:7])}</code>'
+            f'{"*" if last.get("dirty") else ""} · {last["duration_s"]:.1f}s') if last else "never run"
+    rate = f'{row["passed_runs"]}/{row["runs"]} passed' if row["runs"] else ""
+    parts = []
+    if last and last["steps"]:
+        rows = "".join(f'<tr><td>{_badge(s["status"])}</td><td><span class="kw">{esc(s["keyword"])}</span> {esc(s["text"])}'
+                       f'{"<pre>" + esc(s["error"]) + "</pre>" if s.get("error") else ""}</td>'
+                       f'<td class="num">{s["duration_s"]:.2f}s</td></tr>' for s in last["steps"])
+        parts.append(f"<table>{rows}</table>")
+    elif last:
+        parts.append(f'<p class="note">Verified by a linked test, so there is no step detail: <code>{esc(last["test"])}</code></p>')
+    else:
+        parts.append(f'<p class="note">{"Specified, not automated yet." if row["status"] == "PENDING" else "No execution recorded."}'
+                     f' Source: <code>{esc(row["feature_file"])}</code></p>')
+    if last and last.get("error") and not any(s.get("error") for s in last["steps"]):
+        parts.append(f'<pre>{esc(last["error"])}</pre>')
+    if row["linked_tests"]:
+        links = "".join(f'<tr><td>linked test</td><td><code>{esc(l["file"])}:{l["line"]}</code> {esc(l["test"])}</td></tr>'
+                        for l in row["linked_tests"])
+        parts.append(f"<table>{links}</table>")
+    return (f'<details class="scenario"{" open" if row["status"] in ("FAIL", "ERROR") else ""}><summary>'
+            f'<span class="id">{esc(row["id"])}</span>{_badge(row["status"])}<span class="title">{esc(row["name"])}</span>'
+            f'<span class="strip">{strip}</span><span class="small">{rate}</span><span class="small">{when}</span>'
+            f'</summary><div class="body">{"".join(parts)}</div></details>')
+
+
+def render_html(report: dict, generated_at: str, store: str) -> str:
+    """The report as one self-contained page: no scripts, no external resources."""
+    esc = html.escape
+    scenarios = [row for epic in report["epics"] for story in epic["stories"] for row in story["scenarios"]]
+    counts = Counter(row["status"] for row in scenarios)
+    tiles = f'<div class="tile"><b>{len(scenarios)}</b><span>scenarios</span></div>' + "".join(
+        f'<div class="tile"><b>{counts[s]}</b>{_badge(s)}</div>' for s in SCENARIO_ORDER if counts.get(s))
+    blocks = []
+    for epic in sorted(report["epics"], key=lambda e: e["status"] == "NOT MIGRATED"):  # epics with results first
+        if epic["status"] == "NOT MIGRATED":
+            blocks.append(f'<div class="plain"><span class="id">{esc(epic["id"])}</span>{_badge("NOT MIGRATED")}'
+                          f'<span class="title">{esc(epic["title"])}</span>'
+                          f'<span class="small">{epic["story_count"]} stories, no feature files</span></div>')
+            continue
+        stories = "".join(
+            f'<details class="story" open><summary><span class="id">{esc(s["id"])}</span>{_badge(s["status"])}'
+            f'<span class="title">{esc(s["title"])}</span><span class="small">{len(s["scenarios"])} scenarios</span></summary>'
+            f'{"".join(_scenario_html(row) for row in s["scenarios"])}</details>' for s in epic["stories"])
+        blocks.append(f'<details class="epic" open><summary><span class="id">{esc(epic["id"])}</span>{_badge(epic["status"])}'
+                      f'<span class="title">{esc(epic["title"])}</span></summary>{stories}</details>')
+    return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width,initial-scale=1"><title>Feature test report</title>'
+            f'<style>{HTML_STYLE}</style></head><body><main><h1>Feature test report</h1>'
+            f'<div class="meta">Generated {esc(generated_at)} from {esc(store)}. Each bar is one recorded run, oldest to '
+            f'newest; hover for its date and commit. A * after a commit means the tree had uncommitted changes.</div>'
+            f'<div class="tiles">{tiles}</div>{"".join(blocks)}</main></body></html>')
+
+
 # ---------------------------------------------------------------- cli
 
 def main(argv: list[str] | None = None) -> int:
@@ -481,7 +594,11 @@ def main(argv: list[str] | None = None) -> int:
     hist = sub.add_parser("history", help="runs over time for an SC-, STORY- or EPIC- id")
     hist.add_argument("id")
     hist.add_argument("--limit", type=int, default=20)
-    for command in (rep, hist):
+    page = sub.add_parser("html", help="the report as one self-contained HTML page")
+    page.add_argument("--epic")
+    page.add_argument("--story")
+    page.add_argument("--out", type=Path, default=HTML_REPORT)
+    for command in (rep, hist, page):
         command.add_argument("--runs", type=int, default=200, help="how many of the newest runs to read")
     args = parser.parse_args(argv)
 
@@ -519,6 +636,12 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False)) if args.json else print_history(result)
         return 0
     report = build_report(load_catalogue(), history, args.epic, args.story)
+    if args.command == "html":
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(render_html(report, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                                        store.describe()), encoding="utf-8")
+        print(json.dumps({"report": str(args.out)}) if args.json else f"wrote {args.out}")
+        return 0
     print(json.dumps(report, indent=2, ensure_ascii=False)) if args.json else print_report(report, args.steps)
     return 1 if FAILING & set(report["story_status_counts"]) else 0
 
