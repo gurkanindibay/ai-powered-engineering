@@ -28,7 +28,7 @@ class _FakeApi extends PersonDirectoryApi {
 
   @override
   Future<DirectoryPage> directory({String query = '', String? role, String? login, int page = 1, int pageSize = 25}) async {
-    calls.add({'q': query, 'role': role, 'login': login, 'page': '$page'});
+    calls.add({'q': query, 'role': role, 'login': login, 'page': '$page', 'pageSize': '$pageSize'});
     final all = [for (var i = 1; i <= 30; i++) _person(i, 'Kişi $i', login: i.isEven ? PersonLogin.pending : PersonLogin.active)];
     final filtered = all.where((p) => login == null || p.login.code == login).toList();
     final slice = filtered.skip((page - 1) * pageSize).take(pageSize).toList();
@@ -63,6 +63,7 @@ class _FakeApi extends PersonDirectoryApi {
 Widget _host(Widget child) => MaterialApp(theme: AppTheme.light(), home: child);
 
 void main() {
+  // covers: SC-12-03-01
   testWidgets('pages through the directory and filters people waiting for activation', (tester) async {
     final api = _FakeApi();
     await tester.pumpWidget(_host(PeopleDirectoryPage(api: api)));
@@ -70,17 +71,20 @@ void main() {
     expect(find.text('30 kişi'), findsOneWidget);
     expect(find.text('Kişi 1'), findsOneWidget);
 
-    await tester.ensureVisible(find.byKey(const Key('people_load_more_btn')));
+    await tester.ensureVisible(find.byTooltip('Sonraki sayfa'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('people_load_more_btn')));
+    await tester.tap(find.byTooltip('Sonraki sayfa'));
     await tester.pumpAndSettle();
     expect(api.calls.last['page'], '2');
+    expect(api.calls.last['pageSize'], '25');
+    expect(find.text('Kişi 26'), findsOneWidget);
 
     await tester.ensureVisible(find.text('Etkinleştirme bekleyen'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Etkinleştirme bekleyen'));
     await tester.pumpAndSettle();
     expect(api.calls.last['login'], 'PENDING');
+    expect(api.calls.last['page'], '1');
     expect(find.text('15 kişi'), findsOneWidget);
   });
 

@@ -172,6 +172,11 @@ Each journey is one test that follows a single user from the first sign-in with 
 | GUI-J-04 | 04-07/06-01/06-06/08-02 | Resident | P0 | API: owner invite link → resident registration (issued temporary password) | Gate → the flat's balance = API → no invite action, invite API refused → manager pages and API closed → sign in again | `hero_balance_amount`, no `resident_action_invite` | ✅ |
 | GUI-J-05 | 06-01/06-06 | Auditor | P0 | SQL: auditor account (no API issues one) | Gate → ledger rows = API trial balance → read-only (no requests tab, dunning or notice publishing) → manager/resident pages and API closed → sign in again | `finance_tab_*`, `trial_balance_*` | ✅ |
 
+### EPIC-12 Unified People and Unit Directory
+| ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |
+|---|---|---|---|---|---|---|---|
+| GUI-12-01 | 12-03 | Manager | P1 | seed people directory | Search for a person, apply an activation filter, page through results, open a person profile and return → the query, filters and directory position remain available | `people_search_input`, `people_filter_pending`, `people_filter_no_login`, person rows, directory pager | ✅ |
+
 ### Cross-cutting
 | ID | Role | Pri | Steps → Expected | UI |
 |---|---|---|---|---|

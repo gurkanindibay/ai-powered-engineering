@@ -777,6 +777,9 @@
         "testid-lint",
         "logging-standards-lint"
       ],
+      "acceptance_tests": [
+        "scenario:SC-12-03-01"
+      ],
       "attempts": 0
     },
     {

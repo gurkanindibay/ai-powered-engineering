@@ -396,6 +396,31 @@ void main() {
       expect(find.text('1–2 / 2 daire'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('SpDirectoryScaffold requests server pages and page sizes', (tester) async {
+      (int, int)? requestedPage;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SpDirectoryScaffold<String>(
+            restorationId: 'remote_directory',
+            items: List.generate(25, (index) => 'Person ${index + 1}'),
+            totalItems: 30,
+            pageIndex: 0,
+            pageSize: 25,
+            onPageChanged: (page, pageSize) => requestedPage = (page, pageSize),
+            header: const Text('People'),
+            emptyState: const Text('No people'),
+            itemBuilder: (context, item, index) => ListTile(title: Text(item)),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1–25 / 30'), findsOneWidget);
+      await tester.tap(find.byTooltip('Sonraki sayfa'));
+      expect(requestedPage, (1, 25));
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('clipboard', () {
