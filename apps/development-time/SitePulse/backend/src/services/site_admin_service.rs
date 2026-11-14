@@ -483,13 +483,14 @@ impl SiteAdminService {
             person_numeric_id = if let Some(row) = existing_person {
                 row.get(0)
             } else {
-                crate::db::person_repository::insert_site_person(
+                crate::db::person_repository::resolve_new_site_person(
                     &client,
                     &request.owner_full_name,
                     Some(&request.phone),
                     Some(&email_norm),
-                    &person_type,
-                    Some(site_numeric_id),
+                    person_type,
+                    site_numeric_id,
+                    false,
                 )
                 .await
                 .map_err(|e| format!("Failed to insert person: {}", e))?
@@ -560,13 +561,14 @@ impl SiteAdminService {
                 let t_pid: i64 = if let Some(row) = existing_t_person {
                     row.get(0)
                 } else {
-                    crate::db::person_repository::insert_site_person(
+                    crate::db::person_repository::resolve_new_site_person(
                         &client,
-                        &t_name,
-                        Some(&t_phone),
+                        t_name,
+                        Some(t_phone),
                         Some(&t_email_norm),
                         "HOME_RESIDENT",
-                        Some(site_numeric_id),
+                        site_numeric_id,
+                        false,
                     )
                     .await
                     .map_err(|e| format!("Failed to insert tenant person: {}", e))?
@@ -1691,13 +1693,14 @@ impl SiteAdminService {
                             };
                             let new_t_id: i64 = match existing {
                                 Some(row) => row.get(0),
-                                None => crate::db::person_repository::insert_site_person(
+                                None => crate::db::person_repository::resolve_new_site_person(
                                     &client,
-                                    &t_name,
+                                    t_name,
                                     Some(&t_phone),
                                     Some(&t_email),
                                     "HOME_RESIDENT",
-                                    Some(site_numeric),
+                                    site_numeric,
+                                    false,
                                 )
                                 .await
                                 .map_err(|e| format!("Failed to save tenant: {}", e))?,

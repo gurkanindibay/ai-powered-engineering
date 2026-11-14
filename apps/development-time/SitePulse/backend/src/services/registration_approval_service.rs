@@ -222,13 +222,14 @@ impl RegistrationApprovalService {
             } else {
                 Role::HomeOwner
             };
-            let person = crate::db::person_repository::insert_site_person(
+            let person = crate::db::person_repository::resolve_new_site_person(
                 &tx,
                 &name,
                 Some(&phone),
                 Some(&email),
                 role.as_str(),
-                Some(site),
+                site,
+                false,
             )
             .await
             .map_err(|_| SecurityError::Conflict)?;
