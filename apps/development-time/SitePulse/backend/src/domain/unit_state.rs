@@ -254,8 +254,6 @@ pub enum TransitionError {
     MoveInAtTransferNotAllowed,
     #[error("The effective date {date} is in the future")]
     FutureDate { date: NaiveDate },
-    #[error("The effective date {date} is before the start of the current occupancy ({start})")]
-    BeforeSessionStart { date: NaiveDate, start: NaiveDate },
 }
 
 fn illegal(command: Command, state: UnitState) -> TransitionError {
@@ -378,18 +376,12 @@ pub fn allowed_commands(state: UnitState) -> Vec<CommandKind> {
         .collect()
 }
 
-/// An effective date cannot be in the future and cannot be before the start of
-/// the session being closed (STORY-08-10).
-pub fn validate_effective_date(
-    date: NaiveDate,
-    today: NaiveDate,
-    closing_session_start: Option<NaiveDate>,
-) -> Result<(), TransitionError> {
+/// An effective date cannot be in the future. It may precede the recorded start
+/// of the session being closed: a resident is often registered after moving in,
+/// and the closed session then starts no later than the date it ended.
+pub fn validate_effective_date(date: NaiveDate, today: NaiveDate) -> Result<(), TransitionError> {
     if date > today {
         return Err(TransitionError::FutureDate { date });
-    }
-    if let Some(start) = closing_session_start.filter(|start| date < *start) {
-        return Err(TransitionError::BeforeSessionStart { date, start });
     }
     Ok(())
 }
@@ -640,24 +632,14 @@ mod tests {
     }
 
     #[test]
-    fn effective_date_cannot_be_in_the_future_or_before_the_session() {
+    fn effective_date_cannot_be_in_the_future_but_may_precede_the_session() {
         let today = date("2026-11-14");
-        assert_eq!(validate_effective_date(today, today, None), Ok(()));
+        assert_eq!(validate_effective_date(today, today), Ok(()));
+        assert_eq!(validate_effective_date(date("2026-02-15"), today), Ok(()));
         assert_eq!(
-            validate_effective_date(date("2026-03-01"), today, Some(date("2026-03-01"))),
-            Ok(())
-        );
-        assert_eq!(
-            validate_effective_date(date("2026-11-15"), today, None),
+            validate_effective_date(date("2026-11-15"), today),
             Err(TransitionError::FutureDate {
                 date: date("2026-11-15")
-            })
-        );
-        assert_eq!(
-            validate_effective_date(date("2026-02-15"), today, Some(date("2026-03-01"))),
-            Err(TransitionError::BeforeSessionStart {
-                date: date("2026-02-15"),
-                start: date("2026-03-01")
             })
         );
     }
