@@ -1,0 +1,70 @@
+{
+  "task_id": "task-31",
+  "passed": true,
+  "started_at": "2026-11-14T21:38:38.391322+00:00",
+  "finished_at": "2026-11-14T21:40:53.945721+00:00",
+  "gates": [
+    {
+      "name": "rust-build",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo build --all-targets --locked",
+      "duration_s": 70.95050785201602
+    },
+    {
+      "name": "rust-clippy",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo clippy --all-targets --locked -- -D warnings",
+      "duration_s": 48.69442869501654
+    },
+    {
+      "name": "flutter-analyze",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter analyze --no-fatal-infos --no-fatal-warnings",
+      "duration_s": 6.912055779946968
+    },
+    {
+      "name": "test-run-recorded",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/feature_traceability.py --json check --require-run",
+      "duration_s": 0.2321170520153828
+    },
+    {
+      "name": "rust-test",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo test --locked",
+      "duration_s": 6.350653028988745
+    },
+    {
+      "name": "rust-standards-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/rust_standards_lint.py --json",
+      "duration_s": 1.7203199929790571
+    },
+    {
+      "name": "tenant-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/tenant_isolation_lint.py --json",
+      "duration_s": 0.08674757502740249
+    },
+    {
+      "name": "logging-standards-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/logging_standards_lint.py --json",
+      "duration_s": 0.6061803579796106
+    }
+  ],
+  "acceptance_tests": [],
+  "gates_evaluated": 8,
+  "diagnostics": [],
+  "commit": "80dcc7b8143674e5fe9084350162ca3961fde30a",
+  "dirty": true,
+  "attempts": 0
+}
