@@ -66,6 +66,8 @@ routes! {
     post "/api/v1/site-admin/persons" => handlers::create_person, Require(PersonManage);
     get "/api/v1/site-admin/persons/:person_id/card" => handlers::get_person_card, Require(PersonRead);
     patch "/api/v1/site-admin/persons/:person_id" => handlers::update_person, Require(PersonManage);
+    post "/api/v1/site-admin/persons/:person_id/login" => handlers::open_person_login, Require(PersonManage);
+    delete "/api/v1/site-admin/persons/:person_id/login" => handlers::remove_person_login, Require(PersonManage);
     get "/api/v1/site-admin/persons/export" => handlers::export_persons, Require(PersonExport);
     get "/api/v1/site-admin/persons/:person_id" => handlers::get_person_profile, Require(PersonRead);
     post "/api/v1/site-admin/persons/duplicate-check" => handlers::check_person_duplicates, Require(PersonRead);

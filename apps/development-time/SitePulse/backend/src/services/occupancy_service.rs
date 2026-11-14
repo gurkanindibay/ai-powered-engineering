@@ -214,6 +214,9 @@ async fn resolve_tenant(
     site: i64,
     req: &OccupancyTransitionRequest,
 ) -> Result<i64, OccupancyError> {
+    if let Some(person) = &req.person {
+        return Ok(crate::services::person_service::resolve_person_ref(tx, site, person).await?);
+    }
     if let Some(person_id) = req.person_id {
         return tx
             .query_opt(
@@ -269,7 +272,12 @@ async fn resolve_owner_choice(
     site: i64,
     req: &OccupancyTransitionRequest,
 ) -> Result<Option<i64>, OccupancyError> {
-    if let Some(person_id) = req.owner_person_id.or(req.person_id) {
+    let referenced = match &req.person {
+        Some(crate::models::PersonRef::Existing { person_id }) => Some(*person_id),
+        Some(crate::models::PersonRef::New { .. }) => return Err(OccupancyError::NotAnOwner),
+        None => None,
+    };
+    if let Some(person_id) = req.owner_person_id.or(referenced).or(req.person_id) {
         return Ok(Some(person_id));
     }
     let email = req

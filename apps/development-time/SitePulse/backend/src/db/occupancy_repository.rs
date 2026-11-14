@@ -48,6 +48,8 @@ pub enum OccupancyError {
         "The unit already has an owner on record; a new owner is recorded by a title deed transfer"
     )]
     UnitHasOwner,
+    #[error(transparent)]
+    Person(#[from] crate::services::person_service::PersonApiError),
     #[error("Database error: {0}")]
     Storage(String),
 }

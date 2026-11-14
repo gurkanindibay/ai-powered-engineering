@@ -1259,6 +1259,7 @@ impl SiteAdminService {
                 crate::services::responsible_contact_service::resolve_contact(
                     o,
                     &crate::models::SelectResponsibleContactRequest {
+                        person_id: None,
                         role: contact.primary_responsible_role,
                         resident_name: contact.primary_responsible_name,
                         member_id: contact.primary_responsible_member_id,
@@ -2759,6 +2760,7 @@ impl SiteAdminService {
             return self.move_out_in_memory(unit_id, req).await;
         }
         let request = crate::models::OccupancyTransitionRequest {
+            person: None,
             command: crate::domain::unit_state::CommandKind::MoveOut,
             effective_date: parse_effective_date(req.end_date.as_deref())
                 .map_err(|e| e.to_string())?,
@@ -2969,6 +2971,7 @@ pub fn move_in_request(
         DebtorType::Owner => crate::domain::unit_state::CommandKind::OwnerMoveIn,
     };
     Ok(crate::models::OccupancyTransitionRequest {
+        person: None,
         command,
         effective_date: parse_effective_date(req.start_date.as_deref())?,
         person_id: req.person_id,

@@ -166,6 +166,17 @@ impl RegistrationApprovalService {
         ctx: &crate::authorization::AuthzContext,
         request_id: &str,
     ) -> Result<ApprovalResultResponse, crate::authorization::SecurityError> {
+        self.approve_registration_with(ctx, request_id, None).await
+    }
+
+    /// Approves a request, optionally linking it to an existing person card of the
+    /// site instead of creating one.
+    pub async fn approve_registration_with(
+        &self,
+        ctx: &crate::authorization::AuthzContext,
+        request_id: &str,
+        person_id: Option<i64>,
+    ) -> Result<ApprovalResultResponse, crate::authorization::SecurityError> {
         use crate::authorization::SecurityError;
         ctx.require(
             crate::models::Permission::ResidentApprove,
@@ -222,17 +233,41 @@ impl RegistrationApprovalService {
             } else {
                 Role::HomeOwner
             };
-            let person = crate::db::person_repository::resolve_new_site_person(
-                &tx,
-                &name,
-                Some(&phone),
-                Some(&email),
-                role.as_str(),
-                site,
-                true,
-            )
-            .await
-            .map_err(|_| SecurityError::Conflict)?;
+            let person = if let Some(chosen) = person_id {
+                // Link the chosen card; it must belong to this site and have no login yet.
+                let card = tx
+                    .query_opt(
+                        "SELECT id FROM persons WHERE id=$1 AND site_id=$2 AND deleted_at IS NULL AND merged_into_person_id IS NULL FOR UPDATE",
+                        &[&chosen, &site],
+                    )
+                    .await
+                    .map_err(|_| SecurityError::Unavailable)?
+                    .ok_or(SecurityError::NotFound)?;
+                let has_login = tx
+                    .query_opt(
+                        "SELECT 1 FROM users WHERE person_id=$1 AND is_active",
+                        &[&chosen],
+                    )
+                    .await
+                    .map_err(|_| SecurityError::Unavailable)?
+                    .is_some();
+                if has_login {
+                    return Err(SecurityError::Conflict);
+                }
+                card.get::<_, i64>(0)
+            } else {
+                crate::db::person_repository::resolve_new_site_person(
+                    &tx,
+                    &name,
+                    Some(&phone),
+                    Some(&email),
+                    role.as_str(),
+                    site,
+                    true,
+                )
+                .await
+                .map_err(|_| SecurityError::Conflict)?
+            };
             let user_id:i64=tx.query_one("INSERT INTO users(site_id,person_id,email,password_hash,role,must_change_password) VALUES ($1,$2,$3,$4,$5,true) RETURNING id",&[&site,&person,&email,&hash,&role.as_str()]).await.map_err(|_|SecurityError::Conflict)?.get(0);
             let existing=tx.query_opt("SELECT id FROM units WHERE block_id=$1 AND unit_number=$2 AND site_id=$3 FOR UPDATE",&[&block_id,&number,&site]).await.map_err(|_|SecurityError::Unavailable)?;
             let unit_id: i64 = if let Some(row) = existing {
