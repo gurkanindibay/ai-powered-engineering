@@ -1,0 +1,27 @@
+{
+  "comment": "Maps changed files to the epics whose tests must run (scripts/feature_traceability.py affected). A file is checked against full_suite_patterns, then epic keywords (substring of the lower-cased path, or an 'epic10' / 'EPIC-10' in the path), then smoke_only_patterns. A behaviour file that matches nothing triggers the full suite.",
+  "full_suite_patterns": [
+    "^e2e/(support|pages)/",
+    "^e2e/(conftest\\.py|pytest\\.ini|requirements\\.txt)$",
+    "^backend/src/(main|lib|state|migrations|openapi)\\.rs$",
+    "^backend/(migrations/|Cargo\\.(toml|lock)$)",
+    "^flutter/(pubspec\\.(yaml|lock)$|lib/main\\.dart$)"
+  ],
+  "smoke_only_patterns": [
+    "^flutter/lib/ui/(design_system|components|theme|shell)/",
+    "^flutter/test/",
+    "^backend/tests/"
+  ],
+  "epics": {
+    "EPIC-01": {"keywords": ["dues", "aidat", "tariff", "resident_dashboard", "statement"]},
+    "EPIC-02": {"keywords": ["manager", "cockpit", "expense", "budget"]},
+    "EPIC-03": {"keywords": ["saas", "site_admin", "tenant", "onboarding", "provision"]},
+    "EPIC-04": {"keywords": ["invitation", "registration", "approval"]},
+    "EPIC-06": {"keywords": ["auth", "login", "password", "permission", "session", "jwt"]},
+    "EPIC-07": {"keywords": ["bank", "reconciliation", "virtual_iban", "webhook", "payer_match"]},
+    "EPIC-08": {"keywords": ["occupancy", "lease", "home_owner", "dual_ledger", "residents/"]},
+    "EPIC-09": {"keywords": ["payment", "receipt", "treasury", "collection", "dunning"]},
+    "EPIC-10": {"keywords": ["capital", "disbursement", "virman", "installment"]},
+    "EPIC-11": {"keywords": ["payments_phase3", "autopay", "dispute"]}
+  }
+}

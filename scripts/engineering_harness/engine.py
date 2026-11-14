@@ -10,7 +10,7 @@ import uuid
 
 from . import t3
 from .backend import DockerBackend
-from .contracts import canonical, digest, redact, validate_policy, validate_result
+from .contracts import canonical, digest, redact, safe_path, validate_policy, validate_result
 from .routing import BusyError, HarnessError, TIERS, assess, money, plan, route
 from .store import Store, TERMINAL
 from .workspace import Workspace, git
@@ -249,6 +249,7 @@ class Engine:
                                                 timeout=min(gate["timeout"], remaining), cancelled=lambda: self.cancelled(run_id))
                     # Gates are trusted commands but changed tracked source cannot validate a different candidate.
                     changed = self._source_changed(workspace.path, source)
+                    captured = self._captured(workspace.path, source, gate.get("captures", []))
                 count = None
                 if gate["test_pattern"] is not None:
                     matches = list(re.finditer(gate["test_pattern"], execution.output))
@@ -261,7 +262,7 @@ class Engine:
                 gates.append({"id": gate["id"], "status": "infrastructure_error" if infrastructure else ("passed" if passed else "failed"),
                               "command": gate["argv"], "cwd": gate["cwd"], "test_count": count,
                               "duration_ms": execution.duration_ms, "execution_status": execution.status,
-                              "source_changed": changed, "output": execution.output})
+                              "source_changed": changed, "captured": captured, "output": execution.output})
                 self.record(run_id, f"gate-{run['gate_attempts']}-{index}", gates[-1])
             evidence = {"schema_version": 1, "run_id": run_id, "candidate": run["candidate"],
                         "source_revision": run["source_revision"], "policy_hash": digest(run["policy"]),
@@ -297,6 +298,63 @@ class Engine:
             if right.is_symlink() or not right.is_file() or left.read_bytes() != right.read_bytes():
                 return True
         return False
+
+    CAPTURE_FILES, CAPTURE_BYTES = 64, 262144
+
+    @classmethod
+    def _captured(cls, original: Path, copy: Path, prefixes: list[str]) -> dict:
+        """New text files a gate produced under its capture paths (test run records).
+
+        The candidate stays untouched: the files live only in hashed evidence, and
+        `captures` exports them. Files already tracked in the candidate are never captured.
+        """
+        if not prefixes:
+            return {}
+        tracked = set(git(original, "ls-files", "-z", binary=True).decode().split("\x00"))
+        found = {}
+        for prefix in prefixes:
+            root = copy / prefix
+            if root.is_symlink() or not root.is_dir():
+                continue
+            for path in sorted(root.rglob("*")):
+                name = path.relative_to(copy).as_posix()
+                if path.is_dir() or name in tracked:
+                    continue
+                if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(copy.resolve()):
+                    raise HarnessError(f"Gate produced an unsafe capture: {name}")
+                if len(found) >= cls.CAPTURE_FILES or path.stat().st_size > cls.CAPTURE_BYTES:
+                    raise HarnessError("Gate captures exceed the file count or size limit")
+                try:
+                    found[name] = path.read_text(encoding="utf-8")
+                except UnicodeDecodeError as exc:
+                    raise HarnessError(f"Gate capture is not UTF-8 text: {name}") from exc
+        return found
+
+    def captures(self, run_id: str, output: Path | None = None) -> dict:
+        """Files captured by the latest verification; with `output`, written there (never overwriting)."""
+        self.store.run(run_id)
+        if not self.store.audit(run_id):
+            raise HarnessError("Evidence audit failed; captures are not trustworthy")
+        directory = self.store.directory / "evidence" / run_id
+        attempts = sorted((int(p.stem.split("-")[1]), p) for p in directory.glob("verification-*.json"))
+        if not attempts:
+            raise HarnessError("Run has no verification evidence yet")
+        evidence = json.loads(attempts[-1][1].read_text(encoding="utf-8"))
+        files = {name: text for gate in evidence["gates"] for name, text in gate.get("captured", {}).items()}
+        written = []
+        if output is not None:
+            for name, text in files.items():
+                safe_path(name)
+                target = output / name
+                if not target.resolve().is_relative_to(output.resolve()):
+                    raise HarnessError(f"Capture escapes the output directory: {name}")
+                if target.exists():
+                    raise HarnessError(f"Refusing to overwrite an existing file: {name}")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(text, encoding="utf-8")
+                written.append(name)
+        return {"run_id": run_id, "candidate": evidence["candidate"], "verification": attempts[-1][0],
+                "files": sorted(files), "written": sorted(written)}
 
     def cancel(self, run_id: str, status="CANCELLED") -> str:
         run = self.store.run(run_id)

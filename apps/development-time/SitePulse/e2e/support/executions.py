@@ -1,8 +1,12 @@
-"""pytest plugin: one execution record per scenario, written to .artifacts/executions.jsonl.
+"""pytest plugin: one execution record per test, written to .artifacts/executions.jsonl.
 
 A record is produced for
-* every Gherkin scenario run through pytest-bdd (binding "gherkin", with one entry per step), and
-* every plain pytest test that declares `@pytest.mark.covers("SC-xx-yy-nn")` (binding "linked").
+* every Gherkin scenario run through pytest-bdd (binding "gherkin", with one entry per step),
+* every plain pytest test that declares `@pytest.mark.covers("SC-xx-yy-nn")` (binding "linked"), and
+* every other test (binding "unlinked": no scenario yet, attributed to its epic through its GUI id).
+
+Every test also gets an `epic_NN` marker (from its `GUI-NN-…` id or `@EPIC-NN` tag), which is what
+`gui_e2e.py run --affected` selects on.
 
 Scenario tags drive the rest: `@SC-…`, `@STORY-…`, `@EPIC-…` identify the scenario,
 `@GUI-…` becomes the `gui_id` marker, `@layer:<name>` names the test layer, and
@@ -26,6 +30,7 @@ EXECUTIONS = E2E / ".artifacts" / "executions.jsonl"
 SCENARIO_ID = re.compile(r"^SC-(\d{2})-(\d{2})-\d{2}$")
 TRACE_TAG = re.compile(r"^(EPIC-\d{2}|STORY-\d{2}-\d{2}|SC-\d{2}-\d{2}-\d{2})$")
 GUI_TAG = re.compile(r"^GUI-(?:[0-9X]{1,2}|J)-\d{2}$")
+EPIC_OF_GUI = re.compile(r"^GUI-(\d{2})-\d{2}$")
 NOT_EXECUTED = ("pending", "linked")
 MAX_ERROR_CHARS = 2000
 
@@ -69,7 +74,26 @@ def pytest_bdd_apply_tag(tag, function):
     return None  # smoke, core, role_*, pending, linked: ordinary markers
 
 
+def epics_of(item) -> list[str]:
+    """['EPIC-10'] from the test's GUI ids and, for a Gherkin scenario, its @EPIC tag."""
+    found = {f"EPIC-{m.group(1)}" for marker in item.iter_markers("gui_id") if marker.args
+             for m in [EPIC_OF_GUI.match(str(marker.args[0]))] if m}
+    scenario = getattr(getattr(item, "obj", None), "__scenario__", None)
+    if scenario is not None:
+        found |= {t for t in _tags(scenario) if re.fullmatch(r"EPIC-\d{2}", t)}
+    return sorted(found)
+
+
+def pytest_configure(config):
+    for number in range(1, 100):
+        config.addinivalue_line("markers", f"epic_{number:02d}: test belongs to EPIC-{number:02d} (set automatically)")
+
+
+@pytest.hookimpl(tryfirst=True)  # before pytest applies -m, so `-m epic_10` can select
 def pytest_collection_modifyitems(config, items):
+    for item in items:
+        for epic in epics_of(item):
+            item.add_marker(getattr(pytest.mark, f"epic_{epic[5:]}"))
     dropped = [item for item in items if any(item.get_closest_marker(name) for name in NOT_EXECUTED)]
     if dropped:
         config.hook.pytest_deselected(items=dropped)
@@ -134,8 +158,9 @@ def _targets(item) -> list[dict]:
         return [{"scenario": sid, "name": scenario.name, "binding": "gherkin", "layer": layer, "feature_file": rel}
                 for sid in ids]
     ids = sorted({str(m.args[0]) for m in item.iter_markers("covers") if m.args})
-    return [{"scenario": sid, "name": item.name, "binding": "linked", "layer": "gui", "feature_file": ""}
-            for sid in ids if SCENARIO_ID.match(sid)]
+    linked = [{"scenario": sid, "name": item.name, "binding": "linked", "layer": "gui", "feature_file": ""}
+              for sid in ids if SCENARIO_ID.match(sid)]
+    return linked or [{"scenario": "", "name": item.name, "binding": "unlinked", "layer": "gui", "feature_file": ""}]
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -147,8 +172,7 @@ def pytest_runtest_makereport(item, call):
     if report.when != "teardown":
         return
     targets = _targets(item)
-    if not targets:
-        return
+    epics = epics_of(item)
     failed = next((phases[w] for w in ("setup", "call", "teardown") if w in phases and phases[w].failed), None)
     common = {
         "test": item.nodeid,
@@ -160,5 +184,5 @@ def pytest_runtest_makereport(item, call):
     }
     with EXECUTIONS.open("a", encoding="utf-8") as out:
         for target in targets:
-            epic, story = parents_of(target["scenario"])
+            epic, story = parents_of(target["scenario"]) if target["scenario"] else (epics[0] if epics else "", "")
             out.write(json.dumps({"epic": epic, "story": story, **target, **common}, ensure_ascii=False) + "\n")

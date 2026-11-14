@@ -31,6 +31,9 @@ Feature: First story
 '''
 
 
+IMPACT_MAP = '{"full_suite_patterns": ["^e2e/support/"], "smoke_only_patterns": ["^backend/tests/"], "epics": {"EPIC-42": {"keywords": ["widget"]}, "EPIC-43": {"keywords": ["gadget"]}}}'
+
+
 def _workspace(tmp: str, feature: str = FEATURE, second_story: bool = True) -> Path:
     root = Path(tmp)
     (root / ".specify" / "requirements").mkdir(parents=True)
@@ -143,6 +146,9 @@ class ReportTests(unittest.TestCase):
         self.assertEqual([r["run_id"][:8] for r in runs], ["20260103", "20260102", "20260101"])
         latest, second, first = runs
         self.assertEqual((latest["executed"], latest["automated"], latest["not_executed"]), (1, 2, ["SC-42-02-01"]))
+        self.assertEqual(latest["tests"], 1)
+        skipped = ft.build_runs([_record("SC-42-01-01", "PASS", 1), _record("SC-42-02-01", "SKIPPED", 1)], catalogue)
+        self.assertEqual(skipped[0]["status"], "PASS")
         self.assertEqual(latest["changes"], {})  # still failing: neither regressed nor fixed
         self.assertEqual(second["changes"], {"regressed": 1, "fixed": 1})
         self.assertEqual(first["changes"], {"new": 2})
@@ -159,7 +165,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn("- **Result:** FAIL (1 FAIL)", text)
         self.assertIn("- **regressed**: `SC-42-01-01` Works", text)
         self.assertIn("| `SC-42-01-01` | FAIL | regressed |", text)
-        self.assertIn("`SC-42-02-01`", text.split("## Not executed in this run")[1])
+        self.assertIn("`SC-42-02-01`", text.split("## Automated scenarios not executed in this run")[1])
         self.assertEqual(ft.runs_of_task(runs, None, "master"), runs)
         self.assertEqual(ft.runs_of_task(runs, "other-task", "master"), [])
 
@@ -233,20 +239,48 @@ class StoreTests(unittest.TestCase):
             git(repo, "init", "-q", "-b", "master")
             git(repo, "add", "-A")
             git(repo, "commit", "-q", "-m", "base")
+            rules = repo / "impact-map.json"
+            rules.write_text(IMPACT_MAP, encoding="utf-8")
             catalogue, store = ft.load_catalogue(repo), ft.DirStore(repo / "history")
-            self.assertEqual(ft.require_run(catalogue, store, repo)[0], [])  # main branch
+            check = lambda: ft.require_run(catalogue, store, repo, rules)  # noqa: E731
+            self.assertEqual(check()[0], [])  # main branch
             git(repo, "checkout", "-q", "-b", "task-1")
             (repo / "notes.md").write_text("docs only\n", encoding="utf-8")
-            self.assertIn("changes no backend", ft.require_run(catalogue, store, repo)[1])
-            (repo / "backend" / "tests" / "demo.rs").write_text("fn changed() {}\n", encoding="utf-8")
-            problems, _ = ft.require_run(catalogue, store, repo)
-            self.assertIn("no test run is recorded for branch task-1", problems[0])
+            self.assertIn("changes no backend", check()[1])
+            self.assertEqual(ft.affected(catalogue, repo, rules)["mode"], "none")
+
+            # A change that maps to one epic needs that epic's scenarios, not the whole suite.
+            (repo / "backend" / "src").mkdir()
+            (repo / "backend" / "src" / "widget_service.rs").write_text("fn changed() {}\n", encoding="utf-8")
+            selection = ft.affected(catalogue, repo, rules)
+            self.assertEqual((selection["mode"], selection["epics"], selection["marker"]),
+                             ("targeted", ["EPIC-42"], "smoke or epic_42"))
+            self.assertEqual(selection["scenarios"], ["SC-42-01-01", "SC-42-02-01"])
+            self.assertIn("no test run is recorded for branch task-1", check()[0][0])
             store.write("runs/2026/a.jsonl", json.dumps(run("FAIL", 1)) + "\n", "")
-            self.assertIn("has failing scenarios: SC-42-01-01", ft.require_run(catalogue, store, repo)[0][0])
+            problems = check()[0]
+            self.assertIn("fails for: SC-42-01-01", problems[0])
+            self.assertIn("never executed on it: SC-42-02-01", problems[1])
+            # Two targeted runs together satisfy the rule: the newest execution of each test counts.
             store.write("runs/2026/b.jsonl", json.dumps(run("PASS", 2)) + "\n", "")
-            problems, note = ft.require_run(catalogue, store, repo)
+            store.write("runs/2026/c.jsonl", json.dumps({**run("PASS", 3), "scenario": "SC-42-02-01", "story": "STORY-42-02"}) + "\n", "")
+            problems, note = check()
             self.assertEqual(problems, [])
-            self.assertIn("1/2 automated scenarios executed, PASS", note)
+            self.assertIn("required scope: smoke + EPIC-42", note)
+
+            # Test-only and shared-code changes: smoke set only, then the full suite.
+            (repo / "backend" / "src" / "widget_service.rs").unlink()
+            (repo / "backend" / "tests" / "demo.rs").write_text("// covers: SC-42-02-01\nfn changed() {}\n", encoding="utf-8")
+            selection = ft.affected(catalogue, repo, rules)
+            self.assertEqual((selection["mode"], selection["marker"], selection["scenarios"]), ("targeted", "smoke", []))
+            (repo / "e2e" / "support").mkdir(parents=True)
+            (repo / "e2e" / "support" / "api.py").write_text("x = 1\n", encoding="utf-8")
+            self.assertEqual(ft.affected(catalogue, repo, rules)["mode"], "full")
+            (repo / "e2e" / "support" / "api.py").unlink()
+            (repo / "backend" / "src" / "unmapped.rs").write_text("fn x() {}\n", encoding="utf-8")
+            selection = ft.affected(catalogue, repo, rules)
+            self.assertEqual(selection["mode"], "full")
+            self.assertTrue(any("maps to no epic" in reason for reason in selection["reasons"]))
 
     def test_run_metadata_shape(self):
         meta = ft.run_metadata(now=datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc), trigger="ci")

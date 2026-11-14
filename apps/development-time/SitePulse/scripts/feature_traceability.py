@@ -10,7 +10,9 @@ Sources
 * links:      `covers: SC-xx-yy-nn` comments in backend/tests and flutter/test, and
               `@pytest.mark.covers("SC-xx-yy-nn")` in e2e/tests
 * executions: e2e/.artifacts/executions.jsonl, written by e2e/support/executions.py:
-              one record per scenario per run, with a status per Gherkin step
+              one record per executed test per run (a scenario, or a test not yet linked to
+              one), with a status per Gherkin step
+* impact map: .specify/features/impact-map.json: which epics a changed file affects
 * history:    every recorded run, committed with the task that produced it:
               .specify/executions/runs/<year>/<run id>.jsonl      one record per scenario
               .specify/executions/reports/<year>/<run id>.md      the run as a readable report
@@ -21,9 +23,13 @@ Commands
                         unique and consistent, links point at real scenarios;
                         --require-run (gate `test-run-recorded`) also fails when a task branch
                         that changes behaviour (backend, flutter, e2e, features) has no recorded
-                        run, or its latest recorded run has a FAIL or ERROR scenario
+                        run, an affected scenario was never executed on the branch, or the latest
+                        execution of any test on the branch is FAIL or ERROR
+  affected              which tests the changes on this branch call for: full suite, or smoke plus
+                        the affected epics (`gui_e2e.py run --affected` uses it)
   record                append the last run's executions to the history and write its report
-  task-report           the latest run of the current task as markdown (for the PR description)
+  task-report           the "Test report" section for the PR description: gate result, plus the
+                        latest run of the current task
   report                latest status per epic, story and scenario (--steps for step detail)
   history <ID>          runs over time for an SC-, STORY- or EPIC- id
   runs                  one line per recorded run: what executed, what regressed or was fixed
@@ -84,6 +90,8 @@ STORY_ORDER = ["FAIL", "ERROR", "MISSING", "NOT RUN", "DEFECT", "PENDING", "SKIP
 FAILING = {"FAIL", "ERROR", "MISSING"}
 BEHAVIOUR_PATHS = ("backend/", "flutter/lib/", "flutter/test/", "e2e/", ".specify/features/")
 MAIN_BRANCHES = {"master", "main", "HEAD", ""}
+IMPACT_MAP = FEATURES / "impact-map.json"
+EPIC_IN_PATH = re.compile(r"epic[-_]?(\d{2})", re.I)
 
 
 # ---------------------------------------------------------------- catalogue
@@ -485,6 +493,11 @@ def print_history(result: dict) -> None:
               f"{entry['status']:<8} {entry['duration_s']:>7.1f}s  {detail}")
 
 
+def record_key(record: dict) -> str:
+    """Identity of an executed test across runs: its scenario id, or the pytest node id when it has none."""
+    return record.get("scenario") or record.get("test", "")
+
+
 def build_runs(history: list[dict], catalogue: Catalogue, limit: int = 30) -> list[dict]:
     """One entry per recorded run, newest first: what executed, and what changed since each scenario's previous run."""
     names = {s.id: s.name for s in catalogue.scenarios}
@@ -496,23 +509,26 @@ def build_runs(history: list[dict], catalogue: Catalogue, limit: int = 30) -> li
     runs = []
     for run_id, records in grouped.items():
         rows = []
-        for record in sorted(records, key=lambda r: r["scenario"]):
-            before, status = previous.get(record["scenario"]), record["status"]
+        for record in sorted(records, key=record_key):
+            before, status = previous.get(record_key(record)), record["status"]
             change = ("new" if before is None else "regressed" if before == "PASS" and status != "PASS"
                       else "fixed" if before != "PASS" and status == "PASS" else "")
-            rows.append({"id": record["scenario"], "story": record["story"], "status": status, "change": change,
+            rows.append({"id": record["scenario"] or ", ".join(record.get("gui_ids", [])) or "-",
+                         "key": record_key(record), "scenario": record["scenario"], "epic": record.get("epic", ""),
+                         "story": record["story"], "status": status, "change": change,
                          "name": names.get(record["scenario"], record.get("name", "")),
                          "duration_s": record["duration_s"], "failing_step": failing_step(record)})
-        previous.update({row["id"]: row["status"] for row in rows})
-        first, executed = records[0], {row["id"] for row in rows}
+        previous.update({row["key"]: row["status"] for row in rows})
+        first, executed = records[0], {row["scenario"] for row in rows if row["scenario"]}
         runs.append({
             "run_id": run_id, "started_at": first["started_at"], "commit": first["commit"], "branch": first["branch"],
             "dirty": first.get("dirty", False), "trigger": first.get("trigger", ""),
             "task": first.get("task") or first["branch"],
-            "status": worst([row["status"] for row in rows], SCENARIO_ORDER),
+            # A skipped test does not make a run worse than the tests that did run.
+            "status": worst([row["status"] for row in rows if row["status"] != "SKIPPED"] or ["SKIPPED"], SCENARIO_ORDER),
             "counts": dict(Counter(row["status"] for row in rows)),
             "changes": dict(Counter(row["change"] for row in rows if row["change"])),
-            "executed": len(rows), "automated": len(automated),
+            "executed": len(executed), "automated": len(automated), "tests": len(rows),
             "not_executed": [sid for sid in automated if sid not in executed],
             "duration_s": round(sum(row["duration_s"] for row in rows), 1), "scenarios": rows})
     return runs[::-1][:limit]
@@ -524,19 +540,20 @@ def run_markdown(run: dict) -> str:
     lines = [f"# Test run {run['run_id']}", "",
              f"- **Task:** {run['task']}",
              f"- **Result:** {run['status']} ({counts})",
-             f"- **Executed:** {run['executed']} of {run['automated']} automated scenarios in {run['duration_s']:.0f}s",
+             f"- **Executed:** {run['tests']} tests in {run['duration_s']:.0f}s, covering {run['executed']} of "
+             f"{run['automated']} automated scenarios",
              f"- **Commit:** `{run['commit'][:10]}`{' plus uncommitted changes' if run['dirty'] else ''} on `{run['branch']}`",
              f"- **Started:** {run['started_at']} ({run['trigger'] or 'local'})"]
     changed = [row for row in run["scenarios"] if row["change"] in ("regressed", "fixed")]
     if changed:
         lines += ["", "## Changed since the previous execution", ""]
         lines += [f"- **{row['change']}**: `{row['id']}` {row['name']}" for row in changed]
-    lines += ["", "## Scenarios", "", "| Scenario | Status | Change | Time | Name |", "|---|---|---|---|---|"]
+    lines += ["", "## Executed tests", "", "| Scenario / GUI id | Status | Change | Time | Name |", "|---|---|---|---|---|"]
     for row in run["scenarios"]:
         at = f" (failed at: {row['failing_step']})" if row["failing_step"] else ""
         lines.append(f"| `{row['id']}` | {row['status']} | {row['change']} | {row['duration_s']:.1f}s | "
                      f"{(row['name'] + at).replace('|', '/')} |")
-    lines += ["", "## Not executed in this run", "",
+    lines += ["", "## Automated scenarios not executed in this run", "",
               ", ".join(f"`{sid}`" for sid in run["not_executed"]) or "None: every automated scenario was executed."]
     return "\n".join(lines) + "\n"
 
@@ -555,31 +572,91 @@ def changed_behaviour_paths(repo: Path = ROOT) -> list[str] | None:
         return None
     names = _git(["diff", "--name-only", "--relative", merge_base], repo, check_rc=False).splitlines()
     names += _git(["ls-files", "--others", "--exclude-standard"], repo, check_rc=False).splitlines()
-    return sorted({name for name in names if name.startswith(BEHAVIOUR_PATHS)})
+    return sorted({name for name in names if name.startswith(BEHAVIOUR_PATHS)
+                   and (not name.startswith(".specify/features/") or name.endswith((".feature", "impact-map.json")))})
 
 
-def require_run(catalogue: Catalogue, store, repo: Path = ROOT) -> tuple[list[str], str]:
-    """The rule every task must meet (AGENTS.md rule 13). Returns (problems, note on why it passed)."""
+def affected(catalogue: Catalogue, repo: Path = ROOT, impact_map: Path = IMPACT_MAP) -> dict:
+    """Which tests the changes on this branch call for.
+
+    mode "none": no behaviour file changed. "targeted": run the smoke set plus the listed epics.
+    "full": run everything (shared code changed, or a changed file maps to no epic).
+    """
+    automated = [s for s in catalogue.scenarios if s.id and s.mode != "pending"]
+    changed = changed_behaviour_paths(repo)
+    if changed is None:
+        return {"mode": "full", "epics": [], "marker": "", "files": [], "scenarios": sorted(s.id for s in automated),
+                "reasons": ["no main branch to compare with: cannot tell what changed"]}
+    if not changed:
+        return {"mode": "none", "epics": [], "marker": "", "files": [], "scenarios": [],
+                "reasons": ["no backend, flutter, e2e or feature file changed"]}
+    rules = json.loads(impact_map.read_text(encoding="utf-8"))
+    epics: set[str] = set()
+    reasons: list[str] = []
+    full = False
+    for name in changed:
+        low = name.lower()
+        # An epic named in the path (EPIC-10/…, test_epic10_…) is authoritative; keywords are the fallback.
+        hits = {f"EPIC-{m.group(1)}" for m in EPIC_IN_PATH.finditer(name)} or \
+               {epic for epic, spec in rules["epics"].items() if any(k in low for k in spec["keywords"])}
+        if any(re.search(p, name) for p in rules["full_suite_patterns"]):
+            full = True
+            reasons.append(f"{name}: shared code, full suite")
+        elif hits:
+            epics |= hits
+            reasons.append(f"{name}: {', '.join(sorted(hits))}")
+        elif any(re.search(p, name) for p in rules["smoke_only_patterns"]):
+            reasons.append(f"{name}: cross-cutting, smoke set only")
+        else:
+            full = True
+            reasons.append(f"{name}: maps to no epic in impact-map.json, full suite")
+    if full:
+        return {"mode": "full", "epics": [], "marker": "", "files": changed, "reasons": reasons,
+                "scenarios": sorted(s.id for s in automated)}
+    return {"mode": "targeted", "epics": sorted(epics), "files": changed, "reasons": reasons,
+            "marker": " or ".join(["smoke", *(f"epic_{e[5:]}" for e in sorted(epics))]),
+            "scenarios": sorted(s.id for s in automated if parents_of(s.id)[0] in epics)}
+
+
+def require_run(catalogue: Catalogue, store, repo: Path = ROOT, impact_map: Path = IMPACT_MAP) -> tuple[list[str], str]:
+    """The rule every task must meet (AGENTS.md rule 13). Returns (problems, note on why it passed).
+
+    Runs may be targeted: what counts is the latest execution of each test across all runs
+    recorded on the branch, and that every scenario the changes affect was executed.
+    """
     branch = run_metadata(repo)["branch"]
     if branch in MAIN_BRANCHES:
         return [], "not required on the main branch (runs arrive with the merged tasks)"
-    changed = changed_behaviour_paths(repo)
-    if changed is None:
+    if changed_behaviour_paths(repo) is None:
         return [], "not required: no main branch to compare this checkout with"
-    if not changed:
+    selection = affected(catalogue, repo, impact_map)
+    if selection["mode"] == "none":
         return [], "not required: this branch changes no backend, flutter, e2e or feature file"
+    how = "--record" if selection["mode"] == "full" else "--affected --record"
     mine = runs_of_task(build_runs(load_history(store, 10_000), catalogue, limit=10_000), None, branch)
     if not mine:
-        return [f"no test run is recorded for branch {branch}, which changes {len(changed)} behaviour file(s) "
-                f"(e.g. {changed[0]}): run `python3 scripts/gui_e2e.py run --record --task \"<task>\"` "
-                f"and commit .specify/executions"], ""
-    latest = mine[0]
-    failing = [row["id"] for row in latest["scenarios"] if row["status"] in FAILING]
+        return [f"no test run is recorded for branch {branch}, which changes {len(selection['files'])} behaviour "
+                f"file(s) (e.g. {selection['files'][0]}): run `python3 scripts/gui_e2e.py run {how} "
+                f"--task \"<task>\"` and commit .specify/executions"], ""
+    latest: dict[str, dict] = {}
+    for run in reversed(mine):  # oldest first, so the newest execution of each test wins
+        latest.update({row["key"]: row for row in run["scenarios"]})
+    problems = []
+    failing = sorted(row["id"] for row in latest.values() if row["status"] in FAILING)
     if failing:
-        return [f"the latest recorded run of branch {branch} ({latest['run_id']}) has failing scenarios: "
-                f"{', '.join(failing)}. Fix them, run the suite again with --record and commit the new run"], ""
-    return [], (f"run {latest['run_id']} recorded for task '{latest['task']}': "
-                f"{latest['executed']}/{latest['automated']} automated scenarios executed, {latest['status']}")
+        problems.append(f"the latest recorded execution on branch {branch} fails for: {', '.join(failing)}. "
+                        f"Fix them, run again with --record and commit the new run")
+    missing = [sid for sid in selection["scenarios"] if sid not in latest]
+    if missing:
+        scope = "the full suite" if selection["mode"] == "full" else ", ".join(selection["epics"])
+        problems.append(f"the changes on branch {branch} affect {scope}, but these scenarios were never executed "
+                        f"on it: {', '.join(missing)}. Run `python3 scripts/gui_e2e.py run {how} --task \"<task>\"`")
+    if problems:
+        return problems, ""
+    scope = "full suite" if selection["mode"] == "full" else f"smoke + {', '.join(selection['epics']) or 'no epic'}"
+    return [], (f"{len(mine)} run(s) recorded on this branch, latest {mine[0]['run_id']} for task '{mine[0]['task']}'; "
+                f"required scope: {scope}; {len(latest)} tests executed, none failing, "
+                f"{len(selection['scenarios'])} affected scenarios covered")
 
 
 def print_runs(runs: list[dict], detail: bool) -> None:
@@ -587,7 +664,7 @@ def print_runs(runs: list[dict], detail: bool) -> None:
         counts = ", ".join(f"{run['counts'][s]} {s}" for s in SCENARIO_ORDER if s in run["counts"])
         changes = ", ".join(f"{n} {kind}" for kind, n in sorted(run["changes"].items()) if kind != "new")
         print(f"{run['started_at'][:16]}  {run['commit'][:7]}{'*' if run['dirty'] else ' '} {run['status']:<8} "
-              f"{run['executed']}/{run['automated']} executed  {counts}{'  (' + changes + ')' if changes else ''}  "
+              f"{run['tests']} tests, {run['executed']}/{run['automated']} scenarios  {counts}{'  (' + changes + ')' if changes else ''}  "
               f"{run['duration_s']:.0f}s  {run['task']}")
         if detail:
             for row in run["scenarios"]:
@@ -709,7 +786,7 @@ def _run_html(run: dict, is_open: bool) -> str:
     return (f'<details class="run"{" open" if is_open else ""}><summary>'
             f'<span class="id">{esc(run["started_at"][:16].replace("T", " "))}</span>{_badge(run["status"])}'
             f'<span class="title">{esc(run["task"])}</span>{badges}{changes}'
-            f'<span class="small">{run["executed"]}/{run["automated"]} executed</span>'
+            f'<span class="small">{run["tests"]} tests · {run["executed"]}/{run["automated"]} scenarios</span>'
             f'<span class="small"><code>{esc(run["commit"][:7])}</code>{"*" if run["dirty"] else ""} · {run["duration_s"]:.0f}s</span>'
             f'</summary><div class="body"><table>{rows}</table>{missing}</div></details>')
 
@@ -748,7 +825,8 @@ def render_html(report: dict, generated_at: str, store: str, runs: list[dict] | 
     dashboard = ""
     if runs:
         latest = runs[0]
-        tiles = (f'<div class="tile"><b>{latest["executed"]}/{latest["automated"]}</b><span>executed in the latest run</span></div>'
+        tiles = (f'<div class="tile"><b>{latest["tests"]}</b><span>tests in the latest run</span></div>'
+                 f'<div class="tile"><b>{latest["executed"]}/{latest["automated"]}</b><span>executed in the latest run</span></div>'
                  + "".join(f'<div class="tile"><b>{latest["counts"][s]}</b>{_badge(s)}</div>'
                            for s in SCENARIO_ORDER if s in latest["counts"])
                  + "".join(f'<div class="tile"><b>{latest["changes"].get(kind, 0)}</b><span class="chg {kind}">{kind}</span></div>'
@@ -794,6 +872,7 @@ def main(argv: list[str] | None = None) -> int:
     chk = sub.add_parser("check", help="static consistency gate")
     chk.add_argument("--require-run", action="store_true",
                      help="also fail when the current branch has no recorded run in the history")
+    sub.add_parser("affected", help="which tests the changes on this branch call for")
     task_report = sub.add_parser("task-report", help="the latest run of the current task as markdown")
     task_report.add_argument("--task", help="task label (default: runs made on the current branch)")
     rec = sub.add_parser("record", help="append the last run to the history")
@@ -840,6 +919,15 @@ def main(argv: list[str] | None = None) -> int:
                   + (f"\ntest run: {note}" if note else ""))
         return 1 if problems else 0
 
+    if args.command == "affected":
+        selection = affected(load_catalogue())
+        if args.json:
+            print(json.dumps(selection, indent=2))
+        else:
+            scope = {"none": "nothing to run", "full": "full suite"}.get(selection["mode"], f"pytest -m \"{selection.get('marker')}\"")
+            print(f"{selection['mode']}: {scope}")
+            print("\n".join(f"  {reason}" for reason in selection["reasons"][:40]))
+        return 0
     store = open_store(args.store)
     if args.command == "record":
         meta = run_metadata(trigger=args.trigger, task=args.task)
@@ -855,7 +943,7 @@ def main(argv: list[str] | None = None) -> int:
             store.push(args.push)
         result = {"run_id": meta["run_id"], "records": count, "store": store.describe(), "pushed": bool(count and args.push)}
         print(json.dumps(result) if args.json else
-              (f"recorded {count} scenario executions as {meta['run_id']} in {store.describe()}" if count
+              (f"recorded {count} test executions as {meta['run_id']} in {store.describe()}" if count
                else f"nothing to record: {args.executions} has no executions"))
         return 0
 
@@ -870,7 +958,15 @@ def main(argv: list[str] | None = None) -> int:
         if not mine:
             print("no run recorded for this task", file=sys.stderr)
             return 1
-        print(json.dumps(mine[0], indent=2, ensure_ascii=False) if args.json else run_markdown(mine[0]), end="")
+        if args.json:
+            print(json.dumps(mine[0], indent=2, ensure_ascii=False))
+            return 0
+        problems, note = require_run(catalogue, store)
+        body = re.sub(r"(?m)^(#+) ", lambda m: "##" + m.group(1) + " ", run_markdown(mine[0]))
+        print("## Test report\n\n"
+              f"- **Gate `test-run-recorded`:** {'FAILED: ' + ' '.join(problems) if problems else 'passed: ' + note}\n"
+              f"- **Runs recorded for this task:** {len(mine)} (latest below; all under `.specify/executions/reports/`)\n\n"
+              + body, end="")
         return 0
     if args.command == "runs":
         runs = build_runs(history, catalogue, args.limit)
