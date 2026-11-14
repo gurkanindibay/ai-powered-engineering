@@ -4,15 +4,15 @@ Date: 14 November 2026
 
 Status: proposed design for review; application implementation is outside this change
 
-Companion: [interactive design draft](ux-reference/compact_unit_directory.html)
+Companion: [mobile design preview](ux-reference/mobile_unit_directory_preview.html) · [responsive draft](ux-reference/compact_unit_directory.html)
 
 ## Recommendation
 
-Replace the repeated expanded unit cards with a compact directory. Show one scan-friendly row per unit, then open a dedicated full-screen unit page for contact details and management. Keep search, filters, sorting, page and scroll position when returning. On phones, use short stacked rows rather than squeezing a desktop table into the viewport.
+Use a mobile-first unit list with two explicit entries on every compact card: **İşlemler** for the action list and **Detay** for optional information. İşlemler opens the full-screen unit workspace directly on grouped, tappable actions. Details never have to be opened to reach the actions. Keep search, filters, sorting, page, scroll position and focus when returning. Desktop uses the same two entries in a table.
 
 ## Evidence and limits
 
-This analysis inspects the current source on master at `4320ca2`. No screenshot or running application session was supplied; current pixel heights, task times and production performance have not been measured. Proposed dimensions and success criteria below are design targets, not measured improvements. All people and records in the draft are fictional.
+This analysis inspects the application source carried by master at `3f0c8db`. No screenshot or running application session was supplied; current pixel heights, task times and production performance have not been measured. Proposed dimensions and success criteria below are design targets, not measured improvements. All people and records in the draft are fictional.
 
 | Observed source | Finding | Design implication |
 | --- | --- | --- |
@@ -23,6 +23,19 @@ This analysis inspects the current source on master at `4320ca2`. No screenshot 
 | [Unit-state model](../flutter/lib/domain/models/unit_state.dart) and [EPIC-08](../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md) | Ownership and occupancy are independent; permitted commands depend on state. | Keep owner, occupant and primary contact distinct. Vacancy must never imply missing ownership. |
 
 The primary failure is information density: the interface repeats the complete operational workspace before the manager has chosen a unit. A smaller font or a multicolumn card grid would still repeat the same controls and would make cross-unit comparison harder.
+
+## Mobile navigation revision
+
+The first draft placed a read-only action list after the details on phones. That made actions hard to discover and treated mobile as a narrower desktop page. This revision makes the action list a primary destination.
+
+1. **Unit list:** compact identity, occupancy, resident and owner; two full-width-in-column, 48 px minimum targets: İşlemler and Detay. No hidden swipe gestures or icon-only overflow menu.
+2. **İşlemler:** full-screen grouped action rows, approximately 72 px minimum height with a label and short explanation. Actions are grouped under Kişiler, İkamet, Mülkiyet, Daire and Diğer. Show only commands appropriate to the selected unit's state; validate authorization and eligibility in the real application. Destructive deletion is separated at the end.
+3. **Optional details:** Detay opens the information view directly. Within the unit workspace, İşlemler / Daire bilgileri switches between actions and information. Resident, owner and history tabs belong only to the information view.
+4. **Action destination:** tapping an action opens a full-screen preview. The design demonstrates navigation; it does not perform mutations or pretend to save. Daire tarihçesi opens the existing information tab in the draft.
+5. **Thumb navigation:** a persistent bottom return button on unit, action and filter pages, plus a top back button. Browser Back/Forward navigates the same stack; returning restores focus and list position. Reserve space below content so the return bar cannot cover the last action, including at large text sizes.
+6. **Search and filters:** keep search visible in the list. Filtrele opens a dedicated full-screen filter/sort page, with a bottom apply button and cancel/back behavior. Draft filter selections are applied only on confirmation. Applied-filter count remains visible on the list; clear resets search and filters. Global summary collapses to total units on phones to recover vertical space.
+
+The phone layout intentionally spends a small amount of row height on clearly labeled actions. Legible touch targets and predictable navigation take precedence over matching desktop density.
 
 ## Core jobs
 
@@ -37,19 +50,27 @@ The primary failure is information density: the interface repeats the complete o
 
 - Header: “Sakinler & Malikler”, site identity and a link to the existing registration flow. Keep people directory and house types available as secondary navigation.
 - Compact summary: total units and occupied/vacant counts in one line. Avoid a large KPI card stack above the list.
-- Toolbar: search; block select; occupancy select; sort; comfortable/compact density. Changing a filter resets to page 1. A visible clear-filters action also clears search.
+- Toolbar: search and Filtrele on mobile; block select, occupancy select, sort and comfortable/compact density on desktop. Changing a filter resets to page 1. A visible clear-filters action also clears search.
 - Result caption: “1–25 / 240 daire”. Label global summary separately from filtered result counts. Preserve the result count in an accessible live region.
-- Desktop columns: unit, occupancy, current resident, owner, primary contact, open detail. Unit number sorts numerically within naturally ordered blocks; stable unit ID breaks ties. Clicking the header may be added later; the draft uses an explicit sort control.
+- Desktop columns: unit, occupancy, current resident, owner, primary contact, separate İşlemler and Detay buttons. Unit number sorts numerically within naturally ordered blocks; stable unit ID breaks ties. Clicking the header may be added later; the draft uses an explicit sort control.
 - Unit cell: strong block + number; floor and housing type as secondary text. Put full land share, telephone, email, household members, IBAN, history and financial ledgers in detail.
 - Resident cell: tenant name when rented; owner-occupant name when owner occupied; “İkamet eden yok” when vacant. Missing owner becomes “Malik kaydı yok”, never a fabricated person. Missing unit assignment becomes “Daire atanmadı”. Multiple owners show first name + count, with all names in detail when supported by the directory projection.
 - Primary contact cell: resolved responsible person's name and role. Do not infer it from the tenant flag. The same person may legitimately appear in several role columns.
 - No financial total in the default directory. If later requested, add clearly separated operating/capital columns using existing Decimal formatters; monthly dues must not be relabeled as outstanding debt.
 
-### Unit detail
+### Unit workspace: actions first, details optional
 
-Open a full-screen page at every breakpoint, with a clear back action, unit identity and occupancy. Use tabs for overview, residents, owners, financials and history in production. Keep routine edit/contact actions with their section. Show move-in, move-out, tenant replacement, title transfer and deletion only in the relevant detail workflow, governed by permissions and allowed commands; retain existing confirmations and audit history. A narrow drawer or expanding all rows would recreate the density problem and conflict with mobile navigation rules.
+İşlemler opens the full-screen action list with unit identity and current resident/owner context. The initial screen contains the action list itself, rather than a detail panel with actions below it. Detay opens the separate information mode. Both modes share the same unit and back stack.
 
-The review draft includes overview/residents/owners/history tabs and a read-only list of state-appropriate operations. Registration, mutations, ledgers, IBAN and actual history records are intentionally not simulated as functioning business workflows. They must reconnect to existing application flows during implementation.
+| Group | Action entries | Availability |
+| --- | --- | --- |
+| Kişiler | Edit resident, edit/register owner, add household member, select primary contact | Resident/household actions require an active occupancy; primary contact requires a recorded person. |
+| İkamet | Tenant move-in, owner move-in, replace tenant, owner takes back, rent out, move-out | Apply the existing state matrix in EPIC-08 and server permission checks. |
+| Mülkiyet | Title transfer | Requires an owner on record. |
+| Daire | History, virtual IBAN | Existing read workflows; do not fabricate an IBAN or history in the draft. |
+| Diğer | Delete unit | Separate destructive entry; real eligibility and explicit full-screen confirmation remain mandatory. |
+
+On the information side, keep overview/residents/owners/history tabs. Production financials must retain separate operating/capital ledgers. The draft previews all action entries and navigation but does not implement real registration, changes, transfers, deletion, ledgers, bank details or history data. A narrow drawer or expanding every unit into a management form would recreate the density problem.
 
 ### Responsive behavior and accessibility
 
@@ -57,9 +78,9 @@ The review draft includes overview/residents/owners/history tabs and a read-only
 | --- | --- |
 | 1200 px and wider | Full table, maximum content width around 1440 px; 56 px compact or 72 px comfortable row target. |
 | 800–1199 px | Table without the primary-contact column; primary contact remains searchable and available in detail. |
-| Under 800 px | Two-to-three-line unit rows: unit/status, resident, owner; one 44 px minimum detail target. Toolbar wraps; no horizontal table scroll. |
+| Under 800 px | Compact cards: unit/status, resident, owner, then separate 48 px İşlemler and Detay targets. Search stays on the list; filters open full-screen. No horizontal table scroll. |
 
-Comfortable is the default; compact suits mouse/keyboard management. Text scaling may grow rows beyond their nominal height. Labels accompany status colors. Use semantic table headers, labeled controls, visible focus, keyboard-operable detail buttons and tabs, and restore focus to the originating row. Mobile detail and confirmation remain full-screen. Test at 200% text size and 320 px viewport width.
+Comfortable is the default; compact suits mouse/keyboard management. Text scaling may grow rows beyond their nominal height. Labels accompany status colors. Use semantic table headers, labeled controls, visible focus, keyboard-operable action/detail buttons and tabs, and restore focus to the originating row. Mobile detail and confirmation remain full-screen. Test at 200% text size and 320 px viewport width.
 
 ## Scale, state and edge cases
 
@@ -77,7 +98,7 @@ Comfortable is the default; compact suits mouse/keyboard management. Text scalin
 | Smaller existing cards | Quick cosmetic change, but repeated controls and eager rendering remain. |
 | Collapsible cards | Better initial density, but expanded rows create uneven heights and a growing scroll burden. |
 | Grid of unit tiles | Good occupancy overview; weak comparison of resident, owner and responsible person. Could be a separate future view. |
-| Compact directory + full-screen detail | Recommended: stable comparison, predictable height and reuse of existing workflows. |
+| Compact list + full-screen actions and optional details | Recommended: clear action discovery, comfortable touch targets and reuse of existing workflows. |
 
 ## Acceptance criteria for implementation
 
@@ -85,7 +106,7 @@ Comfortable is the default; compact suits mouse/keyboard management. Text scalin
 2. At 320, 390, 768, 1024 and 1440 px, no page-level horizontal overflow or overlapping controls. At 200% text size, content remains reachable and legible.
 3. Search finds owners, tenants, responsible people, household members and normalized contact values; combined filters and clear behavior are predictable.
 4. Unit 2 sorts before 10. Switching filters resets pagination; changing density preserves query and page. Result counters are accurate for zero, one and many results.
-5. Opening a unit and returning restores list state, position and keyboard focus. Missing/stale/deep-linked units have explicit outcomes.
+5. Every mobile unit exposes separate İşlemler and Detay buttons. İşlemler opens actionable rows immediately, without opening details first. Filter cancel preserves applied settings; apply resets pagination. Browser Back/Forward and top/bottom return buttons restore the appropriate view, position and focus. Missing/stale/deep-linked units have explicit outcomes.
 6. Vacant owned units retain their owner; unowned units do not show tenant move-in. State/permission checks, occupancy history, ledgers and destructive confirmations retain current behavior.
 7. On an agreed reference device with 1,000 records, target local filter/sort updates below 200 ms; collect timings rather than infer performance from row height.
 8. Observe managers completing find-person, identify-owner, filter-vacant and return-from-detail tasks against the current screen. Compare task time, mistakes and scrolling before accepting the redesign.
@@ -94,19 +115,17 @@ Comfortable is the default; compact suits mouse/keyboard management. Text scalin
 
 1. Review this draft and validate the column order with managers. Confirm whether primary contact or owner is the more frequent scanning target.
 2. Implement a shared responsive directory row/table using existing theme, status, filter, empty-state and selection components; reuse `resident_directory.dart` and `AppFullscreenPage`. Preserve stable test IDs where possible; revise affected widget/E2E selectors deliberately.
-3. Move existing card content into a dedicated unit-detail page without changing domain behavior. Keep registration, people and house-type entry points reachable.
+3. Move existing card workflows into a dedicated unit workspace with actions as the default entry and information as an optional mode, without changing domain behavior. Keep registration, people and house-type entry points reachable.
 4. Verify directory filtering, sorting, state restoration, keyboard navigation and occupancy workflows; run Flutter reuse, logging and applicable project gates. Benchmark before deciding on server pagination.
 
 ## Draft review guide
 
-Open the companion HTML directly in a browser; it requires no server or network. Try searching “Deniz” (a household member), “İpek”, a unit number, or “DEMO-001”; combine block and occupancy filters; change density and page size; open a unit and return. Resize to a phone width. Demo contact tokens intentionally avoid plausible real phone numbers and email addresses. No data is sent or persisted.
+Open the companion HTML directly in a browser; it requires no server or network. Try searching “Deniz” (a household member), “İpek”, a unit number, or “DEMO-001”; combine block and occupancy filters; open İşlemler and tap an action preview; return using bottom navigation or browser Back; open Detay only when needed. At phone width, use Filtrele to apply or cancel filter and sort selections. Density remains a desktop control. Demo contact tokens intentionally avoid plausible real phone numbers and email addresses. No data is sent or persisted.
 
 This is a design artifact, not a deployed application change. Browser verification and repository checks are reported in the accompanying PR.
 
 ## Draft verification
 
-The standalone draft was exercised in headless Chrome at widths 320, 390, 768, 800, 1024 and 1440 px with no page-level horizontal overflow. At 1440×900, compact mode displayed eight complete rows above the fold, including the review-only banner. This measures the draft only, not the current Flutter page or a production improvement ratio.
+The revised standalone draft was exercised in touch-enabled headless Chrome at widths 320, 390, 430, 768, 800, 1024 and 1440 px with no page-level horizontal overflow. Interaction checks cover actions-first entry, optional direct details, grouped action previews, state-appropriate commands for tenant/owner/vacant/unowned units, browser Back/Forward, return focus, full-screen filter apply/cancel, household search, pagination and numeric ordering. Bottom navigation remains visible, and the final destructive entry can be scrolled above it. Dark mode and a large-text smoke check are included. These are draft checks, not Flutter implementation or real-device usability results.
 
-Interaction checks passed for numeric unit ordering, Turkish-case search, household and demo-contact matches, combined block/occupancy filters, zero-result reset, page size, pagination, unit detail, keyboard tab navigation and return focus/page retention. A separate example makes a household member the primary contact, independently of resident and owner. Dark mode and a large-text smoke check passed; assistive-technology and real-device usability review remain necessary. No browser script errors were observed.
-
-All 91 harness tests and all 15 gates executed by `python3 apps/development-time/SitePulse/scripts/run_tests.py --skip-db --skip-gui --summary` passed. Schema integrity, Rust database tests, API system checks and application GUI E2E were explicitly skipped, not counted as passed. The standalone browser checks above cover the design draft; they do not replace application E2E. The local Graphify code graph was refreshed; its SQL extraction reported a missing optional `tree_sitter_sql` dependency.
+The previous eight-row desktop density result belongs to the first version; the revised design prioritizes mobile action access. Current project gate results are recorded in the accompanying PR. Database and application GUI gates are explicitly skipped when unavailable, never counted as passed.
