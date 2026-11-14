@@ -124,6 +124,12 @@ GATES: Dict[str, List[CommandSpec]] = {
     "api-system": [CommandSpec(["python3", "scripts/api_system_check.py", "--json"], ".", 900)],
     # Every widget Key in flutter/lib/ui must have the same id as a GUI automation testId.
     "testid-lint": [CommandSpec(["python3", "scripts/testid_lint.py", "--json"], ".", 120)],
+    # Epic -> story -> Gherkin scenario catalogue (.specify/features): every story of a migrated
+    # epic has a scenario, scenario ids are unique, `covers` links point at real scenarios.
+    "feature-traceability": [CommandSpec(["python3", "scripts/feature_traceability.py", "--json", "check"], ".", 120)],
+    # AGENTS.md rule 13: a task branch that changes behaviour carries a recorded test run
+    # (.specify/executions) whose latest run has no failing scenario. No-op on the main branch.
+    "test-run-recorded": [CommandSpec(["python3", "scripts/feature_traceability.py", "--json", "check", "--require-run"], ".", 120)],
     # Design-system rules (12 px floor, MoneyFormatter, no emoji icons, ratchet on literal styles).
     "ui-style-lint": [CommandSpec(["python3", "scripts/ui_style_lint.py", "--json"], ".", 120)],
     # Rust standards (docs/RUST_STANDARDS.md 10-16): domain purity, layering, shared rules,
@@ -146,8 +152,9 @@ GATES: Dict[str, List[CommandSpec]] = {
     "gui-e2e": [CommandSpec(["python3", "scripts/gui_e2e.py", "run", "--json"], ".", 3600)],
 }
 
-# Run for every task before its own gates: the code must build and lint cleanly.
-GLOBAL_GATES: List[str] = ["rust-build", "rust-clippy", "flutter-analyze"]
+# Run for every task before its own gates: the code must build and lint cleanly, and the
+# task must have recorded the test run that verifies it.
+GLOBAL_GATES: List[str] = ["rust-build", "rust-clippy", "flutter-analyze", "test-run-recorded"]
 
 
 def run_gate(name: str, root: Path) -> GateResult:
@@ -167,7 +174,8 @@ def run_gate(name: str, root: Path) -> GateResult:
 # Acceptance tests
 # ---------------------------------------------------------------------------
 
-ACCEPTANCE_ID = re.compile(r"^(rust:[A-Za-z0-9_]+::[A-Za-z0-9_:]+|flutter:test/[A-Za-z0-9_/]+\.dart|system:[a-z0-9_]+)$")
+ACCEPTANCE_ID = re.compile(r"^(rust:[A-Za-z0-9_]+::[A-Za-z0-9_:]+|flutter:test/[A-Za-z0-9_/]+\.dart|system:[a-z0-9_]+"
+                           r"|scenario:SC-\d{2}-\d{2}-\d{2})$")
 
 
 def is_valid_acceptance_id(test_id: str) -> bool:
@@ -179,12 +187,15 @@ def run_acceptance_tests(test_ids: Sequence[str], root: Path) -> Dict[str, GateR
     results: Dict[str, GateResult] = {}
     rust: Dict[str, List[str]] = {}
     system: List[str] = []
+    scenarios: List[str] = []
     for tid in test_ids:
         if not is_valid_acceptance_id(tid):
             results[tid] = GateResult(tid, False, [f"Malformed acceptance test id '{tid}'"])
         elif tid.startswith("rust:"):
             target, name = tid[len("rust:"):].split("::", 1)
             rust.setdefault(target, []).append(name)
+        elif tid.startswith("scenario:"):
+            scenarios.append(tid[len("scenario:"):])
         elif tid.startswith("flutter:"):
             results[tid] = run_command(tid, CommandSpec(["flutter", "test", tid[len("flutter:"):]], "flutter", 600), root)
         else:
@@ -207,7 +218,26 @@ def run_acceptance_tests(test_ids: Sequence[str], root: Path) -> Dict[str, GateR
         for c in system:
             ok = per_check.get(c, False)
             results[f"system:{c}"] = GateResult(f"system:{c}", ok, [] if ok else res.diagnostics, res.command, res.duration_s)
+    if scenarios:
+        # A Gherkin scenario (.specify/features) is accepted when its latest recorded execution passed.
+        res = run_command("scenario", CommandSpec(["python3", "scripts/feature_traceability.py", "--json", "report"], ".", 120), root)
+        statuses = _scenario_statuses(res.output)
+        for s in scenarios:
+            status = statuses.get(s)
+            results[f"scenario:{s}"] = GateResult(
+                f"scenario:{s}", status == "PASS",
+                [] if status == "PASS" else [f"{s} is {status or 'not in .specify/features'}; its latest recorded execution must be PASS "
+                                             f"(scripts/gui_e2e.py run --record)"], res.command, res.duration_s)
     return results
+
+
+def _scenario_statuses(output: str) -> Dict[str, str]:
+    """Reads `feature_traceability.py --json report`: {scenario id: latest status}."""
+    try:
+        data = json.loads(output[output.index("{"):])
+    except ValueError:
+        return {}
+    return {row["id"]: row["status"] for epic in data.get("epics", []) for story in epic["stories"] for row in story["scenarios"]}
 
 
 def _rust_tests_reported(output: str, names: Sequence[str]) -> Dict[str, bool]:

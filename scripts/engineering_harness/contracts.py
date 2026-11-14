@@ -74,13 +74,18 @@ def validate_policy(value: dict) -> dict:
         raise HarnessError("At least one trusted verification gate is required")
     gate_ids = set()
     for gate in value["gates"]:
-        if not isinstance(gate, dict) or set(gate) - {"id", "argv", "cwd", "timeout", "test_pattern", "repair_role"} or not {"id", "argv", "cwd", "timeout", "test_pattern"} <= set(gate):
+        if not isinstance(gate, dict) or set(gate) - {"id", "argv", "cwd", "timeout", "test_pattern", "repair_role", "captures"} or not {"id", "argv", "cwd", "timeout", "test_pattern"} <= set(gate):
             raise HarnessError("Gate requires id, argv, cwd, timeout and test_pattern")
         if not isinstance(gate["id"], str) or not re.fullmatch(r"[a-z0-9-]+", gate["id"]) or gate["id"] in gate_ids:
             raise HarnessError("Gate ids must be unique lowercase identifiers")
         if gate.get("repair_role") is not None and gate["repair_role"] not in ("developer", "backend_developer", "frontend_developer"):
             raise HarnessError("Invalid gate repair_role")
         gate_ids.add(gate["id"])
+        # Directories whose new files (e.g. test run records) the controller preserves in evidence.
+        if not isinstance(gate.get("captures", []), list):
+            raise HarnessError("Gate captures must be a list of paths")
+        for path in gate.get("captures", []):
+            safe_path(path)
         if not isinstance(gate["argv"], list) or not gate["argv"] or any(not isinstance(a, str) or not a for a in gate["argv"]):
             raise HarnessError("Gate command must be an argv list")
         if gate["cwd"] != ".":

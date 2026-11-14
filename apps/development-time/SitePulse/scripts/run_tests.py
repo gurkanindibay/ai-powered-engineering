@@ -57,6 +57,7 @@ ORDER = [
     "tenant-lint",
     "lock-lint",
     "testid-lint",
+    "feature-traceability",
     "ui-style-lint",
     "flutter-reuse",
     "logging-standards-lint",
@@ -64,6 +65,7 @@ ORDER = [
     "rust-db-test",
     "api-system",
     "gui-e2e",
+    "test-run-recorded",
 ]
 DB_GATES = {"schema-integrity", "rust-db-test", "api-system", "gui-e2e"}
 GUI_GATES = {"gui-e2e"}

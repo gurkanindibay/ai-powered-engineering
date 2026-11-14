@@ -74,6 +74,7 @@ fn project_request(
 }
 
 #[tokio::test]
+// covers: SC-10-02-01
 async fn when_accruing_installment_then_only_project_site_units_are_charged() {
     let state = state_with_two_sites().await;
     let service = CapitalProjectService::new(state.clone());
@@ -113,6 +114,7 @@ async fn when_accruing_installment_then_only_project_site_units_are_charged() {
 }
 
 #[tokio::test]
+// covers: SC-10-01-01
 async fn when_summarizing_shares_then_matches_accrued_amounts_and_sums_to_budget() {
     let state = state_with_two_sites().await;
     let service = CapitalProjectService::new(state.clone());

@@ -29,6 +29,8 @@ from pages import LoginPage  # noqa: E402
 
 ARTIFACTS = E2E / ".artifacts"
 
+pytest_plugins = ["support.executions", "steps.capital_steps"]
+
 
 def _actors() -> dict:
     real = E2E / "fixtures" / "actors.json"
