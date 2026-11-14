@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sakinler & Malikler — Tasarım taslağı</title>
+<style>
+:root{color-scheme:light;--bg:#f4f7fc;--surface:#fff;--card:#f8fafd;--border:#e2e8f0;--text:#0f172a;--muted:#526077;--brand:#0369a1;--green:#047857;--amber:#92400e;--focus:#0369a1}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,sans-serif}button,input,select{font:inherit}button,a,input,select{touch-action:manipulation}button,select{cursor:pointer}button{min-height:44px;padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)}button:hover{border-color:var(--brand);background:var(--card)}button:disabled{cursor:default;opacity:.5}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--focus);outline-offset:3px}a{color:var(--brand)}[hidden]{display:none!important}.demo{padding:8px 24px;background:#e8f2f9;color:#164568;text-align:center;font-size:12px}.shell{max-width:1440px;margin:auto;padding:28px 36px 40px}.topline{display:flex;align-items:center;justify-content:space-between;gap:16px}.brand{font-weight:700;letter-spacing:-.3px}.brand span{color:var(--brand)}.muted,small{color:var(--muted)}small{display:block;font-size:12px}h1{font-size:28px;line-height:1.2;letter-spacing:-.7px;margin:28px 0 8px}h2{font-size:18px;margin:0 0 18px}h3{font-size:14px;margin:24px 0 8px}p{margin:4px 0}.summary{display:flex;gap:18px;flex-wrap:wrap;margin:24px 0 18px}.summary span{padding-right:18px;border-right:1px solid var(--border)}.summary span:last-child{border:0}.summary strong{font-variant-numeric:tabular-nums}.workspace{border:1px solid var(--border);border-radius:12px;background:var(--surface)}.toolbar{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:minmax(240px,1fr) 150px 180px;gap:12px;padding:18px;background:var(--surface);border-radius:12px 12px 0 0;border-bottom:1px solid var(--border)}label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}input,select{min-height:44px;border:1px solid var(--border);border-radius:7px;padding:9px 12px;color:var(--text);background:var(--surface);width:100%;min-width:0}input::placeholder{color:var(--muted)}.listmeta{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 18px}.listmeta>div{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.listmeta label{flex-direction:row;align-items:center}.listmeta select{width:auto}.density{display:flex;gap:2px;border:1px solid var(--border);padding:2px;border-radius:9px}.density button{border:0;min-height:38px;padding:6px 12px}.density button[aria-pressed=true]{background:var(--brand);color:#fff}.result{font-variant-numeric:tabular-nums}.linkbutton{border:0;color:var(--brand);padding:6px}.directory{width:100%;border-collapse:collapse;table-layout:fixed}.directory th{text-align:left;font-size:12px;font-weight:500;color:var(--muted);background:var(--card);padding:10px 18px;border-block:1px solid var(--border)}.directory td{padding:14px 18px;height:72px;border-bottom:1px solid var(--border);overflow-wrap:anywhere;vertical-align:middle}.directory.compact td{padding-block:6px;height:56px}.directory tbody tr:hover{background:var(--card)}.directory th:first-child{width:17%}.directory th:nth-child(2){width:15%}.directory th:nth-child(3),.directory th:nth-child(4){width:20%}.directory th:nth-child(5){width:19%}.directory th:last-child{width:9%}.unit{font-weight:650}.status{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px}.status::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}.status.tenant{color:var(--green)}.status.owner{color:var(--brand)}.status.vacant{color:var(--amber)}.open{color:var(--brand);padding:6px;min-width:44px;white-space:nowrap}.match{color:var(--brand);font-size:12px}.footer{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:16px 18px}.footer label{flex-direction:row;align-items:center}.footer select{width:76px}.pagination{display:flex;align-items:center;gap:10px}.empty{text-align:center;padding:60px 24px}.mobilelist{display:none}.detailhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:22px 0}.detailhead h1{margin:0 0 8px}.tabs{display:flex;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:24px}.tabs [aria-selected=true]{background:var(--brand);color:#fff;border-color:var(--brand)}.detailgrid{display:grid;grid-template-columns:2fr 1fr;gap:24px}.panel{padding:24px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}dl{display:grid;grid-template-columns:160px 1fr;gap:14px;margin:0}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}.actionlist{list-style:none;padding:0;margin:0}.actionlist li{padding:12px 0;border-bottom:1px solid var(--border)}.note{font-size:12px;color:var(--muted);margin:20px 0}.hiddenlabel{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%)}
+@media(min-width:800px){.shell{padding-top:20px}h1{margin-top:20px}.summary{margin-top:16px}.toolbar{padding-block:14px}.listmeta{padding-block:10px}}
+@media(min-width:800px) and (max-width:1199px){.contactcolumn{display:none}.directory th:first-child{width:19%}.directory th:nth-child(2){width:20%}.directory th:nth-child(3),.directory th:nth-child(4){width:25%}.directory th:last-child{width:11%}.shell{padding-inline:24px}}
+@media(max-width:799px){.shell{padding:20px 16px}.topline{align-items:flex-start}.topline>small{text-align:right;max-width:140px}.demo{padding-inline:12px}h1{font-size:24px}.summary{gap:8px 12px}.summary span{padding-right:12px}.toolbar{grid-template-columns:1fr 1fr;padding:14px;gap:10px}.searchlabel{grid-column:1/-1}.desktoplist{display:none}.mobilelist{display:block}.mobileunit{display:grid;grid-template-columns:minmax(0,1fr) 52px;gap:8px;padding:14px;border-top:1px solid var(--border)}.mobileunit>div{min-width:0;overflow-wrap:anywhere}.mobileunit .identity{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px}.mobileunit .open{align-self:center}.mobileunit p{font-size:13px}.listmeta{padding:12px 14px}.density{display:none}.detailgrid{grid-template-columns:1fr}.panel{padding:18px}dl{grid-template-columns:1fr;gap:4px}dd{margin-bottom:12px}.detailhead{align-items:flex-start}.footer{padding:14px}.pagination{gap:7px}.pagination button{padding:8px 10px}.tabs button{flex:1}.note{margin-bottom:0}}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#121317;--surface:#1c1d24;--card:#181920;--border:#383b47;--text:#fff;--muted:#b1b5bd;--brand:#38bdf8;--green:#34d399;--amber:#fbbf24;--focus:#38bdf8}.demo{background:#163044;color:#c5e8ff}.tabs [aria-selected=true],.density button[aria-pressed=true]{color:#102330}}
+</style>
+</head>
+<body>
+<div class="demo">Tasarım taslağı · 240 kurgusal daire · Gerçek kayıtlar etkilenmez</div>
+<main class="shell">
+<div class="topline"><div class="brand">Site<span>Pulse</span> <span class="muted">/ Yönetim</span></div><small>Örnek site · Yönetici görünümü</small></div>
+<section id="directoryView" aria-labelledby="directoryTitle">
+<h1 id="directoryTitle">Sakinler & Malikler</h1>
+<p class="muted">Daireyi bulun, sakin ve malik bilgilerini tek bakışta görün.</p>
+<div id="summary" class="summary" aria-label="Site geneli özeti"></div>
+<div class="workspace">
+<div class="toolbar">
+<label class="searchlabel" for="search">Daire veya kişi ara<input id="search" type="search" placeholder="Daire, sakin, malik, hane sakini, telefon…" autocomplete="off"></label>
+<label for="block">Blok<select id="block"><option value="all">Tüm bloklar</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
+<label for="occupancy">İkamet durumu<select id="occupancy"><option value="all">Tüm durumlar</option><option value="tenant">Kiracılı</option><option value="owner">Malik oturuyor</option><option value="vacant">Boş</option></select></label>
+</div>
+<div class="listmeta"><div><span id="result" class="result" aria-live="polite"></span><button id="clear" class="linkbutton" hidden>Filtreleri temizle</button></div><div><label for="sort">Sırala<select id="sort"><option value="unit">Blok / daire ↑</option><option value="resident">Sakin A–Z</option><option value="owner">Malik A–Z</option></select></label><div class="density" role="group" aria-label="Satır yoğunluğu"><button id="comfortable" aria-pressed="true">Rahat</button><button id="compact" aria-pressed="false">Sıkı</button></div></div></div>
+<div class="desktoplist"><table class="directory" id="unitTable"><caption class="hiddenlabel">Daireler ve kişi rolleri</caption><thead><tr><th scope="col">Daire</th><th scope="col">İkamet durumu</th><th scope="col">Sakin</th><th scope="col">Kat maliki</th><th scope="col" class="contactcolumn">Birincil muhatap</th><th scope="col"><span class="hiddenlabel">Daire detayı</span></th></tr></thead><tbody id="rows"></tbody></table></div>
+<div class="mobilelist" id="mobileRows" aria-label="Daireler"></div>
+<div class="empty" id="empty" hidden><h2>Aramanıza uygun daire yok</h2><p class="muted">Aramayı değiştirin veya filtreleri temizleyin.</p><button id="emptyClear">Filtreleri temizle</button></div>
+<div class="footer"><label for="pageSize">Sayfa başına<select id="pageSize"><option>25</option><option>50</option><option>100</option></select></label><nav class="pagination" aria-label="Daire sayfaları"><button id="previous" aria-label="Önceki sayfa">← Önceki</button><span id="pageLabel" class="result"></span><button id="next" aria-label="Sonraki sayfa">Sonraki →</button></nav></div>
+</div>
+<p class="note">Kişi kaydı ekleme, kişiler dizini ve konut tipleri mevcut uygulama akışlarında korunur. Bu taslak liste ve detay gezinmesini gösterir.</p>
+</section>
+<section id="detailView" hidden aria-labelledby="detailTitle">
+<button id="back" style="margin-top:24px">← Daire listesine dön</button>
+<div class="detailhead"><div><h1 id="detailTitle" tabindex="-1"></h1><p id="detailSubtitle" class="muted"></p></div><span id="detailStatus" class="status"></span></div>
+<div class="tabs" role="tablist" aria-label="Daire bilgileri"><button id="tabOverview" role="tab" aria-selected="true" aria-controls="detailPanel" data-tab="overview">Genel bakış</button><button id="tabResidents" role="tab" aria-selected="false" aria-controls="detailPanel" data-tab="residents" tabindex="-1">Sakinler</button><button id="tabOwners" role="tab" aria-selected="false" aria-controls="detailPanel" data-tab="owners" tabindex="-1">Malikler</button><button id="tabHistory" role="tab" aria-selected="false" aria-controls="detailPanel" data-tab="history" tabindex="-1">Tarihçe</button></div>
+<div class="detailgrid"><section id="detailPanel" class="panel" role="tabpanel" aria-labelledby="tabOverview" tabindex="0"></section><aside class="panel"><h2>Daire işlemleri</h2><p class="muted">Mevcut duruma göre önerilen girişler</p><ul id="operations" class="actionlist"></ul><p class="note">İşlemler bu taslakta salt okunur. Uygulamada yetki ve güncel daire durumu doğrulanarak mevcut tam ekran akışları açılır.</p></aside></div>
+</section>
+</main>
+<script>
+'use strict';
+const byId = id => document.getElementById(id);
+const labels = {tenant:'Kiracılı',owner:'Malik oturuyor',vacant:'Boş'};
+const names = ['İpek Yılmaz','Ece Kaya','Mert Demir','Selin Aydın','Can Öztürk','Elif Şahin','Arda Koç','Derya Çelik','Oya Aksoy','Emre Yıldız','Aslı Güneş','Bora Arslan'];
+const units = Array.from({length:240}, (_, index) => {
+  const number = index % 60 + 1;
+  const status = number % 5 === 0 ? 'vacant' : number % 3 === 0 ? 'owner' : 'tenant';
+  const owner = index === 4 ? '' : names[(index + 3) % names.length];
+  const resident = status === 'vacant' ? '' : status === 'owner' ? owner : names[index % names.length];
+  const household = status === 'vacant' ? [] : [number % 2 ? 'Deniz Örnek' : 'Ada Örnek'];
+  const responsible = index === 1 ? household[0] : resident || owner;
+  const responsibleRole = !responsible ? 'Muhatap yok' : index === 1 ? 'Hane sakini' : status === 'tenant' ? 'Kiracı' : 'Kat maliki';
+  return {id:index+1,block:'ABCD'[Math.floor(index/60)],number,status,owner,resident,household,responsible,responsibleRole,floor:Math.floor((number-1)/4),type:number%2?'3+1':'2+1',contact:`DEMO-${String(index+1).padStart(3,'0')}`};
+});
+let page = 1, density = 'comfortable', activeUnit = null, activeTab = 'overview', listScroll = 0, originId = null;
+const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
+const fold = value => value.toLocaleLowerCase('tr-TR').replace(/ı/g,'i').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const residentLabel = unit => unit.resident || 'İkamet eden yok';
+const ownerLabel = unit => unit.owner || 'Malik kaydı yok';
+const roleLabel = unit => unit.responsibleRole;
+const statusMarkup = unit => `<span class="status ${unit.status}">${labels[unit.status]}</span>`;
+function searchValues(unit) {return [unit.block,unit.number,`${unit.block} ${unit.number}`,unit.owner,unit.resident,unit.responsible,...unit.household,unit.contact].map(value => fold(String(value)));}
+function getFiltered() {
+  const query = fold(byId('search').value.trim());
+  return units.filter(unit => (byId('block').value === 'all' || unit.block === byId('block').value) && (byId('occupancy').value === 'all' || unit.status === byId('occupancy').value) && (!query || searchValues(unit).some(value => value.includes(query)))).sort((left,right) => {
+    const key = byId('sort').value;
+    const compare = key === 'unit' ? 0 : left[key].localeCompare(right[key], 'tr');
+    return compare || left.block.localeCompare(right.block,'tr',{numeric:true}) || left.number-right.number || left.id-right.id;
+  });
+}
+function matchMarkup(unit) {
+  const query = fold(byId('search').value.trim());
+  if (!query) return '';
+  if (unit.household.some(name => fold(name).includes(query))) return '<small class="match">Eşleşme: hane sakini</small>';
+  if (fold(unit.contact).includes(query)) return '<small class="match">Eşleşme: iletişim kaydı</small>';
+  return '';
+}
+function render() {
+  const filtered = getFiltered(), size = Number(byId('pageSize').value);
+  const pages = Math.max(1,Math.ceil(filtered.length/size));
+  page = Math.max(1,Math.min(page,pages));
+  const start = (page-1)*size, visible = filtered.slice(start,start+size);
+  byId('result').textContent = filtered.length ? `${start+1}–${Math.min(start+size,filtered.length)} / ${filtered.length} daire` : '0 daire';
+  byId('clear').hidden = !byId('search').value && byId('block').value === 'all' && byId('occupancy').value === 'all';
+  byId('rows').innerHTML = visible.map(unit => `<tr><td><span class="unit">${unit.block} · Daire ${unit.number}</span><small>Kat ${unit.floor} · ${unit.type}</small></td><td>${statusMarkup(unit)}</td><td>${escapeHtml(residentLabel(unit))}${matchMarkup(unit)}</td><td>${escapeHtml(ownerLabel(unit))}</td><td class="contactcolumn">${escapeHtml(unit.responsible || 'Muhatap yok')}<small>${roleLabel(unit)}</small></td><td><button id="open-desktop-${unit.id}" class="open" data-open="${unit.id}" aria-label="${unit.block} blok daire ${unit.number} detayını aç">Aç →</button></td></tr>`).join('');
+  byId('mobileRows').innerHTML = visible.map(unit => `<article class="mobileunit"><div><div class="identity"><span class="unit">${unit.block} · Daire ${unit.number}</span>${statusMarkup(unit)}</div><p>${escapeHtml(residentLabel(unit))}</p><small>Malik: ${escapeHtml(ownerLabel(unit))}</small>${matchMarkup(unit)}</div><button id="open-mobile-${unit.id}" class="open" data-open="${unit.id}" aria-label="${unit.block} blok daire ${unit.number} detayını aç">Aç →</button></article>`).join('');
+  byId('unitTable').classList.toggle('compact',density === 'compact');
+  byId('comfortable').setAttribute('aria-pressed',String(density === 'comfortable'));
+  byId('compact').setAttribute('aria-pressed',String(density === 'compact'));
+  byId('empty').hidden = filtered.length !== 0;
+  byId('pageLabel').textContent = `${page} / ${pages}`;
+  byId('previous').disabled = page <= 1;
+  byId('next').disabled = page >= pages;
+}
+function resetFilters() {byId('search').value='';byId('block').value='all';byId('occupancy').value='all';page=1;render();byId('search').focus();}
+function fieldsMarkup(entries) {return `<dl>${entries.map(([title,value])=>`<dt>${escapeHtml(title)}</dt><dd>${escapeHtml(value)}</dd>`).join('')}</dl>`;}
+function renderDetail() {
+  const unit = activeUnit;
+  byId('detailTitle').textContent = `${unit.block} Blok · Daire ${unit.number}`;
+  byId('detailSubtitle').textContent = `Kat ${unit.floor} · ${unit.type} · Kurgusal kayıt`;
+  byId('detailStatus').textContent = labels[unit.status];byId('detailStatus').className=`status ${unit.status}`;
+  const tabButtons = Array.from(document.querySelectorAll('[role=tab]'));
+  tabButtons.forEach(button=>{const selected=button.dataset.tab===activeTab;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;});
+  byId('detailPanel').setAttribute('aria-labelledby',tabButtons.find(button=>button.dataset.tab===activeTab).id);
+  let content;
+  if(activeTab==='overview') content='<h2>Birincil muhatap</h2>'+fieldsMarkup([['Ad soyad',unit.responsible||'Muhatap yok'],['Rol',roleLabel(unit)],['İletişim',`${unit.contact} · örnek kayıt`],['Telefon','Bu taslakta yer almıyor'],['E-posta','Bu taslakta yer almıyor']])+'<h3>Daire özeti</h3>'+fieldsMarkup([['İkamet durumu',labels[unit.status]],['Sakin',residentLabel(unit)],['Kat maliki',ownerLabel(unit)]]);
+  else if(activeTab==='residents') content='<h2>Sakinler</h2>'+fieldsMarkup([['Aktif sakin',residentLabel(unit)],['Hane sakinleri',unit.household.join(', ')||'Aktif hane sakini yok']]);
+  else if(activeTab==='owners') content='<h2>Mülkiyet bilgileri</h2>'+fieldsMarkup([['Kat maliki',ownerLabel(unit)],['İkamet',unit.status==='owner'?'Bu dairede oturuyor':'Bu dairede oturmuyor']])+'<p class="note">Mülkiyet, ikamet durumundan bağımsızdır. Boş dairenin maliki olabilir.</p>';
+  else content='<h2>Daire tarihçesi</h2><p class="muted">Bu taslak geçmiş işlem kaydı içermez.</p><p class="note">Uygulamada mevcut giriş, çıkış ve mülkiyet geçmişi bu alanda gösterilir.</p>';
+  byId('detailPanel').innerHTML=content;
+  const actions = !unit.owner ? ['Malik kaydı oluştur'] : unit.status==='vacant' ? ['Kiracı girişi','Kat maliki taşınsın','Mülk devri'] : unit.status==='owner' ? ['Tahliye','Daireyi kiraya ver','Mülk devri'] : ['Tahliye','Kiracı değişikliği','Kat maliki geri alsın','Mülk devri'];
+  byId('operations').innerHTML=actions.map(action=>`<li>${action}</li>`).join('');
+}
+function openDetail(id,buttonId) {activeUnit=units.find(unit=>unit.id===id);originId=buttonId;listScroll=window.scrollY;activeTab='overview';renderDetail();byId('directoryView').hidden=true;byId('detailView').hidden=false;window.scrollTo(0,0);byId('detailTitle').focus({preventScroll:true});}
+function closeDetail() {byId('detailView').hidden=true;byId('directoryView').hidden=false;window.scrollTo(0,listScroll);byId(originId)?.focus({preventScroll:true});activeUnit=null;}
+document.addEventListener('click',event=>{const button=event.target.closest('[data-open]');if(button)openDetail(Number(button.dataset.open),button.id);});
+for(const id of ['search','block','occupancy','sort','pageSize']) byId(id).addEventListener(id==='search'?'input':'change',()=>{page=1;render();});
+byId('clear').addEventListener('click',resetFilters);byId('emptyClear').addEventListener('click',resetFilters);
+for(const value of ['comfortable','compact'])byId(value).addEventListener('click',()=>{density=value;render();});
+function changePage(direction) {page+=direction;render();document.querySelector('.toolbar').scrollIntoView({block:'start'});}
+byId('previous').addEventListener('click',()=>changePage(-1));byId('next').addEventListener('click',()=>changePage(1));byId('back').addEventListener('click',closeDetail);
+const tabs=Array.from(document.querySelectorAll('[role=tab]'));
+tabs.forEach((button,index)=>{button.addEventListener('click',()=>{activeTab=button.dataset.tab;renderDetail();});button.addEventListener('keydown',event=>{let next=index;if(event.key==='ArrowRight')next=(index+1)%tabs.length;else if(event.key==='ArrowLeft')next=(index-1+tabs.length)%tabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;event.preventDefault();tabs[next].click();tabs[next].focus();});});
+byId('summary').innerHTML=`<span><strong>${units.length}</strong> daire · site geneli</span><span><strong>${units.filter(unit=>unit.status==='tenant').length}</strong> kiracılı</span><span><strong>${units.filter(unit=>unit.status==='owner').length}</strong> malik oturuyor</span><span><strong>${units.filter(unit=>unit.status==='vacant').length}</strong> boş</span>`;
+render();
+</script>
+</body>
+</html>
