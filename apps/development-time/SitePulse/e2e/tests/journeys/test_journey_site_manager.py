@@ -14,6 +14,7 @@ def _unit_id(stack, block: str, number: int) -> str:
 
 @pytest.mark.journey
 @pytest.mark.role_manager
+@pytest.mark.covers("SC-06-06-02")
 @pytest.mark.gui_id("GUI-J-02")
 def test_site_manager_journey(journey, first_sign_in, sign_in_again, page, api, actors, stack):
     j = journey("site manager")

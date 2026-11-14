@@ -14,6 +14,7 @@ RESIDENT_EMAIL = "elif.yilmaz@e2e.test"
 
 @pytest.mark.journey
 @pytest.mark.role_resident
+@pytest.mark.covers("SC-06-06-04")
 @pytest.mark.gui_id("GUI-J-04")
 def test_home_resident_journey(journey, first_sign_in, sign_in_again, page, api, actors, builders):
     j = journey("home resident")

@@ -128,6 +128,11 @@ class TestGatesAndLoop(unittest.TestCase):
         self.assertTrue(vg.is_valid_acceptance_id("rust:integration_tests::when_x"))
         self.assertTrue(vg.is_valid_acceptance_id("flutter:test/a_test.dart"))
         self.assertTrue(vg.is_valid_acceptance_id("system:restart_persistence"))
+        self.assertTrue(vg.is_valid_acceptance_id("scenario:SC-10-01-01"))
+        self.assertFalse(vg.is_valid_acceptance_id("scenario:GUI-10-01"))
+        self.assertIn("test-run-recorded", vg.GLOBAL_GATES)
+        statuses = vg._scenario_statuses('noise {"epics": [{"stories": [{"scenarios": [{"id": "SC-10-01-01", "status": "PASS"}]}]}]}')
+        self.assertEqual(statuses, {"SC-10-01-01": "PASS"})
         self.assertFalse(vg.is_valid_acceptance_id("SyntaxGate"))
 
     def test_rust_test_lines_are_parsed_per_test(self):
@@ -239,6 +244,7 @@ class TestProjectData(unittest.TestCase):
     def test_project_dag_is_valid(self):
         TaskDag(PROJECT_ROOT / ".specify" / "tasks" / "task-dag.json")
 
+    # covers: SC-05-06-01
     def test_project_rtm_is_consistent(self):
         from harness.rtm_validator import RtmValidator
         report = RtmValidator().validate()

@@ -47,6 +47,9 @@ def build_parser() -> argparse.ArgumentParser:
     for command in ("status", "step", "run", "cancel", "recover", "events", "audit"):
         p = sub.add_parser(command)
         p.add_argument("run_id")
+    p = sub.add_parser("captures", help="List (or with --output, write) the files gates captured in the latest verification, e.g. test run records")
+    p.add_argument("run_id")
+    p.add_argument("--output", type=Path, help="Directory (repository root) to write the captured files into; existing files are never overwritten")
     p = sub.add_parser("t3-dispatch", help="Claim the next stage and print its T3 delegate_task payload (or run gates when none remain)")
     p.add_argument("run_id")
     p.add_argument("--catalog", type=Path, required=True, help="Fresh T3 orchestrator_capabilities result")
@@ -116,6 +119,8 @@ def main(argv=None) -> int:
                     while status not in TERMINAL:
                         status = engine.step(args.run_id)
                 value = {"run_id": args.run_id, "status": status}
+            elif args.command == "captures":
+                value = engine.captures(args.run_id, args.output)
             elif args.command == "t3-dispatch":
                 capabilities = t3.capabilities_from_catalog(read_json(args.registry), read_json(args.catalog))
                 value = engine.t3_dispatch(args.run_id, capabilities)

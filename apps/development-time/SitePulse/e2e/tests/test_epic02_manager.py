@@ -9,6 +9,7 @@ from support.money import last_amount
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-03")
+@pytest.mark.covers("SC-02-03-01")
 def test_manager_adds_owner_resident(login_as, page, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
@@ -29,6 +30,7 @@ def test_manager_adds_owner_resident(login_as, page, stack):
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-10-01")
+@pytest.mark.covers("SC-10-07-01")
 def test_capital_segment_offers_project_creation(login_as, page):
     login_as("manager")
     ManagerCockpit(page).wait()
@@ -59,6 +61,7 @@ def october_dues_b3_paid(api, actors):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-02")
+@pytest.mark.covers("SC-02-02-01")
 def test_overdue_filter_lists_every_overdue_flat(login_as, page, api, october_dues_b3_paid, stack):
     api.record_manual_payment(october_dues_b3_paid, "1", Decimal("1400.00"), "Mehmet Öz", payer_role="OWNER")
     overdue_units = set(stack.sql(
@@ -80,6 +83,7 @@ def test_overdue_filter_lists_every_overdue_flat(login_as, page, api, october_du
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-05")
+@pytest.mark.covers("SC-02-03-03")
 def test_resident_without_history_can_be_deleted(login_as, page, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
@@ -122,6 +126,7 @@ def test_resident_without_history_can_be_deleted(login_as, page, stack):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-05")
+@pytest.mark.covers("SC-02-03-04")
 # Zero data loss: a unit with ledger history is refused (409) and its card stays.
 def test_refused_delete_keeps_the_resident_card(login_as, page, october_dues_b3_paid, stack):
     login_as("manager")
@@ -142,6 +147,7 @@ def test_refused_delete_keeps_the_resident_card(login_as, page, october_dues_b3_
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-06")
+@pytest.mark.covers("SC-02-04-01")
 def test_manager_can_send_a_payment_reminder(builders, login_as, page):
     builders.overdue_dues(unit_number=14, principal=Decimal("1400.00"), days_overdue=10)
     login_as("manager")
@@ -154,6 +160,7 @@ def test_manager_can_send_a_payment_reminder(builders, login_as, page):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-07")
+@pytest.mark.covers("SC-02-05-01")
 def test_manager_can_create_an_announcement(login_as, page, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
@@ -177,6 +184,7 @@ def _open_house_types(page):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-08")
+@pytest.mark.covers("SC-02-01-04")
 def test_house_type_tariff_is_saved_and_negative_amount_rejected(login_as, page, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
@@ -197,6 +205,7 @@ def test_house_type_tariff_is_saved_and_negative_amount_rejected(login_as, page,
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-08")
+@pytest.mark.covers("SC-02-01-05")
 def test_house_type_tariff_rejects_more_than_two_decimals(login_as, page, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
@@ -235,6 +244,7 @@ def _cockpit_figures(login_as, page) -> tuple[Decimal, Decimal, str]:
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-01")
+@pytest.mark.covers("SC-02-01-01")
 def test_cockpit_shows_the_accrued_total_before_any_payment(login_as, page, api, actors, stack):
     _accrue_october(api, actors, Decimal("1400.00"))
     expected = Decimal(stack.sql("SELECT sum(principal_amount) FROM dues_liabilities WHERE period = 'Ekim 2026';"))
@@ -248,6 +258,7 @@ def test_cockpit_shows_the_accrued_total_before_any_payment(login_as, page, api,
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-01")
+@pytest.mark.covers("SC-02-01-02")
 def test_cockpit_counts_a_payment_as_collected(login_as, page, api, actors, stack):
     manager = _accrue_october(api, actors, Decimal("1400.00"))
     b3 = stack.sql("SELECT u.id FROM units u JOIN blocks b ON b.id = u.block_id "
@@ -265,6 +276,7 @@ def test_cockpit_counts_a_payment_as_collected(login_as, page, api, actors, stac
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-02-01")
+@pytest.mark.covers("SC-02-01-03")
 def test_cockpit_amounts_keep_kurus(login_as, page, api, actors):
     _accrue_october(api, actors, Decimal("1400.55"))
     _, shown_expected, _ = _cockpit_figures(login_as, page)

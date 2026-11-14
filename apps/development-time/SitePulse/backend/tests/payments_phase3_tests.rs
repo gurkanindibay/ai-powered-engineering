@@ -226,6 +226,7 @@ async fn approved_budget(state: &AppState) -> OperatingBudget {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-01-01
 async fn when_a_budget_line_uses_house_type_or_meter_keys_then_shares_follow_the_weights() {
     let state = fixture().await;
     let svc = OperatingBudgetService::new(state.clone());
@@ -314,6 +315,7 @@ async fn when_a_budget_line_uses_house_type_or_meter_keys_then_shares_follow_the
 }
 
 #[tokio::test]
+// covers: SC-11-01-02
 async fn when_a_site_requiring_a_budget_is_in_transition_then_the_tariff_accrues_and_is_reported_without_basis(
 ) {
     let state = fixture().await;
@@ -396,6 +398,7 @@ async fn when_a_site_requiring_a_budget_is_in_transition_then_the_tariff_accrues
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-02-01
 async fn when_a_privacy_notice_is_published_then_residents_acknowledge_it_and_set_channel_consents()
 {
     let state = fixture().await;
@@ -460,6 +463,7 @@ async fn when_a_privacy_notice_is_published_then_residents_acknowledge_it_and_se
 }
 
 #[tokio::test]
+// covers: SC-11-02-02
 async fn when_a_non_staff_role_exports_debtors_then_names_are_masked_and_every_export_is_logged() {
     let state = fixture().await;
     push_due(
@@ -495,6 +499,7 @@ async fn when_a_non_staff_role_exports_debtors_then_names_are_masked_and_every_e
 }
 
 #[tokio::test]
+// covers: SC-11-02-03
 async fn when_retention_is_reviewed_then_ledger_records_keep_ten_years_and_old_logs_are_purged() {
     let state = fixture().await;
     let kvkk = KvkkService::new(&state);
@@ -544,6 +549,7 @@ async fn when_retention_is_reviewed_then_ledger_records_keep_ten_years_and_old_l
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-03-01
 async fn when_a_tenant_has_a_lease_then_owner_operational_debts_are_claimable_up_to_the_unpaid_rent(
 ) {
     let state = fixture().await;
@@ -602,6 +608,7 @@ async fn when_a_tenant_has_a_lease_then_owner_operational_debts_are_claimable_up
 }
 
 #[tokio::test]
+// covers: SC-11-03-02
 async fn when_a_tenant_pays_owner_capital_dues_then_the_receipt_cites_kmk22_and_a_rent_certificate_is_issued(
 ) {
     let state = fixture().await;
@@ -656,6 +663,7 @@ async fn when_a_tenant_pays_owner_capital_dues_then_the_receipt_cites_kmk22_and_
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-04-01
 async fn when_dunning_runs_then_the_due_step_is_sent_once_and_disputed_items_are_paused() {
     let state = fixture().await;
     push_due(
@@ -714,6 +722,7 @@ async fn when_dunning_runs_then_the_due_step_is_sent_once_and_disputed_items_are
 }
 
 #[tokio::test]
+// covers: SC-11-04-02
 async fn when_a_resident_opts_out_of_sms_then_reminders_are_blocked_but_legal_notices_go_out() {
     let state = fixture().await;
     push_due(
@@ -760,6 +769,7 @@ async fn when_a_resident_opts_out_of_sms_then_reminders_are_blocked_but_legal_no
 }
 
 #[tokio::test]
+// covers: SC-11-04-03
 async fn when_a_debt_notice_targets_a_group_channel_then_it_is_blocked_and_logged() {
     let state = fixture().await;
     let n = NotificationService::new(&state);
@@ -820,6 +830,7 @@ async fn when_a_site_announcement_is_published_then_residents_can_read_it() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-05-01
 async fn when_a_tenant_requests_a_virman_and_staff_approve_then_the_owner_debt_is_settled_from_the_tenant_advance(
 ) {
     let state = fixture().await;
@@ -912,6 +923,7 @@ async fn when_a_tenant_requests_a_virman_and_staff_approve_then_the_owner_debt_i
 }
 
 #[tokio::test]
+// covers: SC-11-05-02
 async fn when_a_dispute_is_resolved_then_dunning_resumes() {
     let state = fixture().await;
     push_due(
@@ -1043,6 +1055,7 @@ async fn saved_card(state: &AppState) -> SavedPaymentMethod {
 }
 
 #[tokio::test]
+// covers: SC-11-06-01
 async fn when_autopay_runs_then_due_items_are_charged_once_through_the_ingestion_path() {
     let state = fixture().await;
     let card = saved_card(&state).await;
@@ -1103,6 +1116,7 @@ async fn when_autopay_runs_then_due_items_are_charged_once_through_the_ingestion
 }
 
 #[tokio::test]
+// covers: SC-11-06-02
 async fn when_a_card_is_declined_then_the_due_stays_open_and_is_retried_and_an_expired_card_suspends_the_mandate(
 ) {
     let state = fixture().await;
@@ -1214,6 +1228,7 @@ fn expense(vendor: i64, number: &str, net: &str, category: &str) -> CreateExpens
 }
 
 #[tokio::test]
+// covers: SC-11-07-01
 async fn when_an_expense_is_approved_then_four_eyes_and_the_auditor_threshold_apply() {
     let state = fixture().await;
     let acc = AccountingService::new(&state);
@@ -1298,6 +1313,7 @@ async fn when_an_expense_is_approved_then_four_eyes_and_the_auditor_threshold_ap
 }
 
 #[tokio::test]
+// covers: SC-11-07-02
 async fn when_the_ledger_is_derived_then_the_trial_balance_balances_and_receivables_equal_open_dues(
 ) {
     let state = fixture().await;
@@ -1472,6 +1488,7 @@ async fn when_the_ledger_is_derived_then_the_trial_balance_balances_and_receivab
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-08-01
 async fn when_a_case_reaches_enforcement_then_it_needs_a_legal_basis_and_the_lawyer_reads_the_pack_by_token(
 ) {
     let state = fixture().await;
@@ -1639,6 +1656,7 @@ async fn when_a_case_reaches_enforcement_then_it_needs_a_legal_basis_and_the_law
 }
 
 #[tokio::test]
+// covers: SC-11-08-02
 async fn when_an_owner_was_enforced_three_times_in_two_years_then_the_kmk25_flag_is_raised() {
     let state = fixture().await;
     let budget = approved_budget(&state).await;
@@ -1703,6 +1721,7 @@ async fn when_an_owner_was_enforced_three_times_in_two_years_then_the_kmk25_flag
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-09-01
 async fn when_a_transfer_bypasses_the_virtual_iban_then_phone_and_block_unit_hints_rank_the_units()
 {
     let state = fixture().await;
@@ -1755,6 +1774,7 @@ async fn when_a_transfer_bypasses_the_virtual_iban_then_phone_and_block_unit_hin
 }
 
 #[tokio::test]
+// covers: SC-11-09-02
 async fn when_the_daily_reconciliation_runs_then_differences_and_unmatched_lines_are_stored() {
     let state = fixture().await;
     push_due(
@@ -1846,6 +1866,7 @@ async fn when_the_daily_reconciliation_runs_then_differences_and_unmatched_lines
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-10-01
 async fn when_a_waiver_is_approved_by_a_second_person_then_what_is_owed_drops_and_the_ledger_still_balances(
 ) {
     let state = fixture().await;
@@ -1972,6 +1993,7 @@ async fn when_a_waiver_is_approved_by_a_second_person_then_what_is_owed_drops_an
 }
 
 #[tokio::test]
+// covers: SC-11-10-02
 async fn when_a_plan_is_kept_it_completes_and_waives_the_penalty_and_when_late_it_breaks() {
     let state = fixture().await;
     push_due(
@@ -2074,6 +2096,7 @@ async fn when_a_plan_is_kept_it_completes_and_waives_the_penalty_and_when_late_i
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-11-01
 async fn when_a_heating_period_is_approved_then_shares_add_up_and_the_occupant_is_billed() {
     let state = fixture().await;
     let heat = HeatShareService::new(&state);
@@ -2158,6 +2181,7 @@ async fn when_a_heating_period_is_approved_then_shares_add_up_and_the_occupant_i
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-12-01
 async fn when_the_assembly_accepts_a_budget_item_then_a_numbered_decision_approves_the_budget() {
     let state = fixture().await;
     let draft = OperatingBudgetService::new(state.clone())
@@ -2314,6 +2338,7 @@ async fn when_the_assembly_accepts_a_budget_item_then_a_numbered_decision_approv
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-13-01
 async fn when_a_management_company_invoices_its_sites_then_each_period_is_invoiced_once_and_only_members_see_the_portfolio(
 ) {
     let state = fixture().await;
@@ -2402,6 +2427,7 @@ async fn when_a_management_company_invoices_its_sites_then_each_period_is_invoic
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+// covers: SC-11-14-01
 async fn when_analytics_are_computed_then_rates_channels_forecast_and_risky_units_are_reported() {
     let state = fixture().await;
     approved_budget(&state).await;

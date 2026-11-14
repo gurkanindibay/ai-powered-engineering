@@ -11,6 +11,7 @@ from support.flutter import by_id, text_of
 @pytest.mark.smoke
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-02")
+@pytest.mark.covers("SC-01-04-02")
 def test_no_dues_shows_zero_balance_without_overdue_badge(login_as, page, api, actors):
     login_as("homeowner")
     home = ResidentHome(page).wait()
@@ -23,6 +24,9 @@ def test_no_dues_shows_zero_balance_without_overdue_badge(login_as, page, api, a
 @pytest.mark.smoke
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-01")
+@pytest.mark.covers("SC-01-02-01")
+@pytest.mark.covers("SC-01-03-01")
+@pytest.mark.covers("SC-01-04-01")
 def test_overdue_balance_matches_backend_total(builders, login_as, page, api, actors):
     builders.overdue_dues(unit_number=14, principal=Decimal("1400.00"), days_overdue=10)
     dashboard = api.resident_dashboard(api.login(**actors["homeowner"]))
@@ -39,6 +43,7 @@ def test_overdue_balance_matches_backend_total(builders, login_as, page, api, ac
 @pytest.mark.smoke
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-07-01")
+@pytest.mark.covers("SC-07-04-02")
 def test_virtual_iban_shown_and_copied(login_as, page, api, actors, stack, browser_name):
     expected = api.resident_dashboard(api.login(**actors["homeowner"]))["virtual_iban"]
     assert expected == stack.sql("SELECT virtual_iban FROM units WHERE unit_number = 14;")
@@ -58,6 +63,7 @@ def test_virtual_iban_shown_and_copied(login_as, page, api, actors, stack, brows
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-03")
+@pytest.mark.covers("SC-01-05-01")
 def test_account_movements_itemise_principal_and_penalty(login_as, page, builders):
     from support.flutter import by_id_prefix, text_of
     builders.overdue_dues(principal=Decimal("1400.00"), days_overdue=10)
@@ -72,6 +78,7 @@ def test_account_movements_itemise_principal_and_penalty(login_as, page, builder
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-04")
+@pytest.mark.covers("SC-01-03-02")
 def test_site_announcement_reaches_the_resident(api, actors, login_as, page):
     manager = api.login(**actors["manager"])
     api.call("POST", "/api/v1/announcements", manager.token,

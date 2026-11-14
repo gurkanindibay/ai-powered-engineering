@@ -674,6 +674,7 @@ def check_resident_statement(ctx: Context) -> Tuple[bool, str]:
     return ok, f"owner principal {owner and owner['principal_outstanding']} = buckets {buckets}, receipts {len(st['receipts'])}, other site {other}"
 
 
+# covers: SC-11-07-03
 def check_finance_desk(ctx: Context) -> Tuple[bool, str]:
     """SPEC-009 over HTTP and PostgreSQL: the derived ledger balances, dunning and
     analytics run, the debtor export is named for staff, an invoice is never

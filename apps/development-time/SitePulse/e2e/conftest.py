@@ -29,6 +29,21 @@ from pages import LoginPage  # noqa: E402
 
 ARTIFACTS = E2E / ".artifacts"
 
+pytest_plugins = [
+    "support.executions",
+    "steps.capital_steps",
+    "steps.epic01_steps",
+    "steps.epic02_steps",
+    "steps.epic03_steps",
+    "steps.epic04_steps",
+    "steps.epic05_steps",
+    "steps.epic06_steps",
+    "steps.epic07_steps",
+    "steps.epic08_steps",
+    "steps.epic09_steps",
+    "steps.epic11_steps",
+]
+
 
 def _actors() -> dict:
     real = E2E / "fixtures" / "actors.json"
