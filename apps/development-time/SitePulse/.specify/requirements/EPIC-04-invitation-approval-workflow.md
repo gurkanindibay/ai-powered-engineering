@@ -33,6 +33,9 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
 - **Verification & Tests:**
   - `when_generating_invite_link_then_returns_valid_url_and_token` (Rust)
 
+
+Executable scenarios: [`STORY-04-01-invitation-link-generation.feature`](../features/EPIC-04/STORY-04-01-invitation-link-generation.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-04-02: Quick Action & Modal Bottom Sheet Link Sharing
@@ -50,6 +53,9 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
   - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart` (`InviteLinkModalBottomSheet`)
 - **Verification & Tests:**
   - Flutter client integration tests & live verification
+
+
+Executable scenarios: [`STORY-04-02-invite-link-sharing.feature`](../features/EPIC-04/STORY-04-02-invite-link-sharing.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -71,6 +77,9 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
 - **Verification & Tests:**
   - `when_submitting_self_registration_then_creates_pending_request` (Rust)
 
+
+Executable scenarios: [`STORY-04-03-self-registration-submission.feature`](../features/EPIC-04/STORY-04-03-self-registration-submission.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-04-04: Site Manager Real-Time Approval Queue
@@ -89,6 +98,9 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
   - `apps/development-time/SitePulse/flutter/lib/models/manager_models.dart` (`RegistrationRequestItem`)
 - **Verification & Tests:**
   - Flutter client integration tests & live verification
+
+
+Executable scenarios: [`STORY-04-04-approval-queue.feature`](../features/EPIC-04/STORY-04-04-approval-queue.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -112,6 +124,9 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
   - `when_approving_pending_registration_then_provisions_user_and_returns_credentials` (Rust)
   - Flutter client integration tests
 
+
+Executable scenarios: [`STORY-04-05-one-tap-approval.feature`](../features/EPIC-04/STORY-04-05-one-tap-approval.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-04-06: Application Rejection with Reason
@@ -130,6 +145,9 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
   - `apps/development-time/SitePulse/flutter/lib/controllers/dashboard_controller.dart`
 - **Verification & Tests:**
   - Unit tests in `integration_tests.rs` (Rust) and Flutter tests
+
+
+Executable scenarios: [`STORY-04-06-application-rejection.feature`](../features/EPIC-04/STORY-04-06-application-rejection.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -159,3 +177,5 @@ Enables the Site Admin to generate and broadcast a secure invitation link (via W
   - `when_generating_unit_invite_link_then_returns_unit_scoped_url_and_token` (Rust)
   - `when_registering_home_resident_then_assigns_home_resident_role_and_unit_scope` (Rust)
   - Flutter client integration tests
+
+Executable scenarios: [`STORY-04-07-unit-scoped-invitation.feature`](../features/EPIC-04/STORY-04-07-unit-scoped-invitation.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).

@@ -87,6 +87,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | GUI-03-07 | 03-06 | SaaS | P1 | seed | Try to delete Begonya (has units) → blocked with the invariant message ("aktif daireler … bulunmaktadır") and the card stays | NEW:`btn_delete_site_*` | ✅ |
 | GUI-03-08 | 03-07 | SaaS | P1 | seed | "Şifre Yenile" on a site → new `SP-XXXX-PASS` password dialog; the old manager password stops working | NEW:`btn_reset_admin_password_*` | ✅ |
 | — | 03-05 | — | — | — | **Excluded:** REST contract, covered by `scripts/api_system_check.py`. | | |
+| — | 11-01, 11-02, 11-03, 11-04, 11-05, 11-06, 11-07, 11-08, 11-09, 11-10, 11-11, 11-12, 11-13, 11-14 | — | — | — | **Excluded:** payments phase 3 has no GUI scenarios yet; covered by `backend/tests/payments_phase3_tests.rs`, `flutter/test/payments_phase3_test.dart` and `scripts/api_system_check.py`. | | |
 
 ### EPIC-04 Invitation & Approval Workflow
 | ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |

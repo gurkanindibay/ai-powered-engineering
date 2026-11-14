@@ -8,6 +8,8 @@ from support.flutter import by_id, input_value, nav_tab_count
 
 @pytest.mark.smoke
 @pytest.mark.role_manager
+@pytest.mark.covers("SC-06-02-02")
+@pytest.mark.covers("SC-06-05-03")
 @pytest.mark.gui_id("GUI-06-01")
 def test_manager_login_reaches_cockpit(login_as, page):
     login_as("manager")
@@ -16,6 +18,7 @@ def test_manager_login_reaches_cockpit(login_as, page):
 
 @pytest.mark.smoke
 @pytest.mark.role_homeowner
+@pytest.mark.covers("SC-06-02-03")
 @pytest.mark.gui_id("GUI-06-02")
 def test_homeowner_login_reaches_dashboard(login_as, page):
     login_as("homeowner")
@@ -24,6 +27,7 @@ def test_homeowner_login_reaches_dashboard(login_as, page):
 
 @pytest.mark.smoke
 @pytest.mark.role_manager
+@pytest.mark.covers("SC-06-02-04")
 @pytest.mark.gui_id("GUI-06-03")
 def test_wrong_password_shows_error_and_stays_on_login(login_page, actors):
     login_page.login("manager", actors["manager"]["email"], "definitely-wrong-password")
@@ -33,6 +37,7 @@ def test_wrong_password_shows_error_and_stays_on_login(login_page, actors):
 
 @pytest.mark.smoke
 @pytest.mark.role_homeowner
+@pytest.mark.covers("SC-06-04-03")
 @pytest.mark.gui_id("GUI-06-08")
 def test_logout_returns_to_login_screen(login_as, login_page, page):
     login_as("homeowner")
@@ -44,6 +49,7 @@ def test_logout_returns_to_login_screen(login_as, login_page, page):
 
 @pytest.mark.smoke
 @pytest.mark.role_saas
+@pytest.mark.covers("SC-06-06-01")
 @pytest.mark.gui_id("GUI-06-06")
 def test_saas_admin_must_change_bootstrap_password(login_as, login_page, page, api, actors, stack):
     stack.sql("UPDATE users SET must_change_password=true WHERE email='admin@sitepulse.io';")
@@ -66,6 +72,7 @@ def test_saas_admin_must_change_bootstrap_password(login_as, login_page, page, a
 
 @pytest.mark.core
 @pytest.mark.role_manager
+@pytest.mark.covers("SC-06-02-05")
 @pytest.mark.gui_id("GUI-06-05")
 @pytest.mark.parametrize("role, tab", [("homeowner", "homeOwner"), ("manager", "siteManager")])
 def test_clear_login_cache_empties_the_fields(login_page, page, role, tab):
@@ -81,6 +88,7 @@ def test_clear_login_cache_empties_the_fields(login_page, page, role, tab):
 
 @pytest.mark.core
 @pytest.mark.role_homeowner
+@pytest.mark.covers("SC-06-04-02")
 @pytest.mark.gui_id("GUI-06-07")
 def test_homeowner_changes_password_from_profile_and_logs_in_again(login_as, login_page, page, api, actors):
     homeowner = actors["homeowner"]
@@ -101,6 +109,7 @@ def test_homeowner_changes_password_from_profile_and_logs_in_again(login_as, log
 
 @pytest.mark.core
 @pytest.mark.role_manager
+@pytest.mark.covers("SC-06-04-04")
 @pytest.mark.gui_id("GUI-06-08")
 def test_profile_logout_and_browser_back_stay_logged_out(login_as, page):
     login_as("manager")
@@ -115,6 +124,7 @@ def test_profile_logout_and_browser_back_stay_logged_out(login_as, page):
 
 @pytest.mark.core
 @pytest.mark.role_homeowner
+@pytest.mark.covers("SC-06-01-01")
 @pytest.mark.gui_id("GUI-06-09")
 def test_homeowner_sees_no_manager_actions_and_api_refuses_them(login_as, page, api, actors):
     login_as("homeowner")
@@ -130,6 +140,7 @@ def test_homeowner_sees_no_manager_actions_and_api_refuses_them(login_as, page, 
 
 @pytest.mark.core
 @pytest.mark.role_manager
+@pytest.mark.covers("SC-06-04-05")
 @pytest.mark.gui_id("GUI-06-10")
 def test_manager_switches_between_cockpit_and_own_flat(login_as, page):
     login_as("manager")
@@ -147,6 +158,7 @@ def test_manager_switches_between_cockpit_and_own_flat(login_as, page):
 
 @pytest.mark.core
 @pytest.mark.role_homeowner
+@pytest.mark.covers("SC-06-04-06")
 @pytest.mark.gui_id("GUI-06-08")
 def test_logout_asks_for_confirmation_and_cancel_keeps_the_session(login_as, page):
     login_as("homeowner")
