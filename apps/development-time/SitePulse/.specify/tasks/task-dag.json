@@ -626,12 +626,13 @@
       "id": "task-31",
       "name": "Centralize person writes and duplicate resolution",
       "module": "backend-rust",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": ["task-30"],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#backend-design",
       "description": "A1: introduce person_repository and transactional PersonService::resolve; move all person inserts to the repository; enforce hard and soft duplicate rules and add a lint rule barring other inserts. Preserve existing API contracts. Cover existing and new references, site isolation and concurrent insert races.",
       "gates": ["rust-build", "rust-clippy", "rust-test", "rust-standards-lint", "tenant-lint", "logging-standards-lint"],
-      "attempts": 0
+      "attempts": 0,
+      "evidence": ".specify/evidence/task-31.json"
     },
     {
       "id": "task-32",
@@ -726,12 +727,13 @@
       "id": "task-40",
       "name": "Publish person API contract",
       "module": "backend-rust",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": ["task-31"],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#endpoints",
       "description": "A3a: define the PersonRef, person card, person search and person create/edit request and response DTOs with utoipa schemas and register them as components in the generated OpenAPI document, following the design Endpoints section; routes and handlers land in task-33. Unblocks the Flutter components (task-36) and the backend implementation (task-33).",
       "gates": ["rust-build", "rust-clippy", "rust-test", "rust-standards-lint", "api-system", "logging-standards-lint"],
-      "attempts": 0
+      "attempts": 0,
+      "evidence": ".specify/evidence/task-40.json"
     },
     {
       "id": "task-41",
