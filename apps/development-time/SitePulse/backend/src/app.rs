@@ -70,6 +70,8 @@ routes! {
     put "/api/v1/site-admin/persons/:person_id/preferences" => handlers::update_person_preferences, Require(PersonManage);
     post "/api/v1/site-admin/units/:id/move-out" => handlers::move_out_resident, Require(OccupancyManage);
     post "/api/v1/site-admin/units/:id/move-in" => handlers::move_in_resident, Require(OccupancyManage);
+    post "/api/v1/site-admin/units/:id/occupancy-transitions" => handlers::apply_occupancy_transition, Require(OccupancyManage);
+    get "/api/v1/site-admin/units/:id/occupancy-state" => handlers::get_unit_occupancy_state, Require(PersonRead);
     get "/api/v1/site-admin/units/:id/occupancy-history" => handlers::get_unit_occupancy_history, Require(PersonRead);
     get "/api/v1/site-admin/house-types" => handlers::get_house_types, Require(SiteManage);
     post "/api/v1/site-admin/house-types" => handlers::create_house_type, Require(SiteManage);

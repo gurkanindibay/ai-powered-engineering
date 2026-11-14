@@ -45,55 +45,75 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
     );
   }
 
-  void _openMoveIn(HomeOwnerItem ho) {
+  /// The tenant form for T2 (vacant unit), C1 (replace the tenant) and C2 (the
+  /// owner rents the unit out). An owner never moves in through this form:
+  /// that is [_openOwnerMoveIn], which takes no person data (STORY-08-06).
+  void _openMoveIn(HomeOwnerItem ho, {OccupancyCommand command = OccupancyCommand.tenantMoveIn}) {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
-    String selectedRole = 'TENANT'; // 'TENANT' or 'OWNER'
     PersonSummary? chosen; // U7: an existing person of the site
+    bool isSaving = false;
+
+    final title = switch (command) {
+      OccupancyCommand.replaceTenant => 'Kiracı Değişikliği',
+      OccupancyCommand.ownerRentsOut => 'Daireyi Kiraya Ver',
+      _ => 'Kiracı Girişi (Move-In)',
+    };
+    final settlementNote = switch (command) {
+      OccupancyCommand.replaceTenant =>
+        'Mevcut kiracı ${ho.tenantFullName ?? ''} aynı gün tahliye edilir ve çıkış bakiyesi kaydedilir.',
+      OccupancyCommand.ownerRentsOut =>
+        'Kat maliki ${ho.ownerFullName} daireden ayrılır; tapu sahibi değişmez.',
+      _ => 'Kat maliki ${ho.ownerFullName} olarak kalır; kiracı yalnızca daireye taşınır.',
+    };
 
     AppFullscreenPage.push(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDlgState) {
           return AppFullscreenPage(
-            title: 'Yeni Sakin / Giriş (Move-In)',
+            title: title,
             subtitle: '${ho.block} Blok Daire ${ho.unitNo}',
             bottomBar: AppFullscreenPage.buildBottomBar(
               context: ctx,
               children: [
-                OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text(AppStrings.cancel)),
+                OutlinedButton(onPressed: isSaving ? null : () => Navigator.pop(ctx), child: const Text(AppStrings.cancel)),
                 testId('module_confirm_move_in_btn', ElevatedButton(
                   key: const Key('module_confirm_move_in_btn'),
-                  onPressed: () async {
-                    final name = nameCtrl.text.trim();
-                    final messenger = ScaffoldMessenger.of(this.context);
-                    final problem = name.isEmpty
-                        ? 'Ad soyad gerekli.'
-                        : (chosen == null ? validatePersonEmail(emailCtrl.text) : null);
-                    if (problem != null) {
-                      messenger.showSnackBar(spSnackBar(kind: ToastKind.warning, content: Text(problem)));
-                      return;
-                    }
-                    final success = await widget.controller.moveInResident(
-                      ho.unitId,
-                      role: selectedRole,
-                      fullName: name,
-                      phone: phoneCtrl.text.trim(),
-                      email: emailCtrl.text.trim(),
-                      personId: chosen?.personId,
-                    );
-                    if (!success && ctx.mounted) {
-                      messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: const Text('Giriş kaydedilemedi. Bilgileri kontrol edip tekrar deneyin.')));
-                    }
-                    if (success && ctx.mounted) {
-                      Navigator.pop(ctx);
-                      final roleLabel = selectedRole == 'OWNER' ? 'Kat Maliki' : 'Kiracı';
-                      ScaffoldMessenger.of(this.context).showSnackBar(
-                        appSnackBar(content: Text('Yeni $roleLabel girişi başarıyla yapıldı.')),
-                      );
-                    }
-                  },
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final name = nameCtrl.text.trim();
+                          final messenger = ScaffoldMessenger.of(this.context);
+                          final problem = name.isEmpty
+                              ? 'Ad soyad gerekli.'
+                              : (chosen == null ? validatePersonEmail(emailCtrl.text) : null);
+                          if (problem != null) {
+                            messenger.showSnackBar(spSnackBar(kind: ToastKind.warning, content: Text(problem)));
+                            return;
+                          }
+                          setDlgState(() => isSaving = true);
+                          final result = await widget.controller.applyOccupancyTransition(
+                            ho.unitId,
+                            command: command,
+                            personId: chosen?.personId,
+                            fullName: name,
+                            phone: phoneCtrl.text.trim(),
+                            email: emailCtrl.text.trim(),
+                          );
+                          if (!ctx.mounted) return;
+                          setDlgState(() => isSaving = false);
+                          if (!result.ok) {
+                            messenger.showSnackBar(spSnackBar(
+                              kind: ToastKind.error,
+                              content: Text(result.message ?? 'Giriş kaydedilemedi. Bilgileri kontrol edip tekrar deneyin.'),
+                            ));
+                            return;
+                          }
+                          Navigator.pop(ctx);
+                          messenger.showSnackBar(appSnackBar(content: const Text('Kiracı girişi başarıyla yapıldı.')));
+                        },
                   child: const Text('Girişi Tamamla'),
                 )),
               ],
@@ -102,33 +122,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'İkamet Edecek Kişinin Rolü (Kat Maliki / Kiracı)',
-                    style: TextStyle(color: AppColors.textPrimary(ctx), fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: testId('module_move_in_role_selector', SegmentedButton<String>(
-                      key: const Key('module_move_in_role_selector'),
-                      segments: const [
-                        ButtonSegment<String>(
-                          value: 'TENANT',
-                          label: Text('Kiracı Girişi'),
-                          icon: Icon(Icons.key, size: 16),
-                        ),
-                        ButtonSegment<String>(
-                          value: 'OWNER',
-                          label: Text('Kat Maliki Girişi'),
-                          icon: Icon(Icons.home_outlined, size: 16),
-                        ),
-                      ],
-                      selected: {selectedRole},
-                      onSelectionChanged: (newSelection) {
-                        setDlgState(() => selectedRole = newSelection.first);
-                      },
-                    )),
-                  ),
+                  Text(settlementNote, style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12)),
                   const SizedBox(height: 16),
                   testId('module_move_in_pick_existing_btn', OutlinedButton.icon(
                     key: const Key('module_move_in_pick_existing_btn'),
@@ -172,11 +166,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                   TextField(
                     controller: nameCtrl,
                     readOnly: chosen != null,
-                    decoration: InputDecoration(
-                      labelText: selectedRole == 'OWNER' ? 'Kat Maliki Ad Soyad *' : 'Kiracı Ad Soyad *',
-                      filled: true,
-                      border: const OutlineInputBorder(),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Kiracı Ad Soyad *', filled: true, border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -195,6 +185,111 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                 ],
               ),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// T3 owner move-in or C3 owner takes the unit back: a confirmation naming
+  /// the owner on record, with no person fields. With several owners the
+  /// manager picks one of them (decision A1).
+  void _openOwnerMoveIn(HomeOwnerItem ho, {OccupancyCommand command = OccupancyCommand.ownerMoveIn}) {
+    final stateFuture = widget.controller.fetchOccupancyState(ho.unitId);
+    int? selectedOwner;
+    bool isSaving = false;
+    final takesBack = command == OccupancyCommand.ownerTakesBack;
+
+    AppFullscreenPage.push(
+      context: context,
+      builder: (ctx) => FutureBuilder<UnitOccupancyState?>(
+        future: stateFuture,
+        builder: (context, snapshot) {
+          final state = snapshot.data ?? UnitOccupancyState.fromHomeOwner(ho);
+          final owners = state.owners;
+          final loading = snapshot.connectionState == ConnectionState.waiting;
+          return StatefulBuilder(
+            builder: (context, setDlgState) {
+              final ownerId = selectedOwner ?? (owners.length == 1 ? owners.first.personId : null);
+              final ownerName = owners.where((o) => o.personId == ownerId).map((o) => o.fullName).firstOrNull;
+              final canConfirm = !loading && !isSaving && (owners.length == 1 || ownerId != null);
+              return AppFullscreenPage(
+                title: takesBack ? 'Kat Maliki Daireyi Geri Alsın' : 'Kat Maliki Taşınsın',
+                subtitle: '${ho.block} Blok Daire ${ho.unitNo}',
+                bottomBar: AppFullscreenPage.buildBottomBar(
+                  context: ctx,
+                  children: [
+                    OutlinedButton(onPressed: isSaving ? null : () => Navigator.pop(ctx), child: const Text(AppStrings.cancel)),
+                    testId('module_confirm_owner_move_in_btn', ElevatedButton(
+                      key: const Key('module_confirm_owner_move_in_btn'),
+                      onPressed: !canConfirm
+                          ? null
+                          : () async {
+                              final messenger = ScaffoldMessenger.of(this.context);
+                              setDlgState(() => isSaving = true);
+                              final result = await widget.controller.applyOccupancyTransition(
+                                ho.unitId,
+                                command: command,
+                                ownerPersonId: owners.length > 1 ? ownerId : null,
+                              );
+                              if (!ctx.mounted) return;
+                              setDlgState(() => isSaving = false);
+                              if (!result.ok) {
+                                messenger.showSnackBar(spSnackBar(
+                                  kind: ToastKind.error,
+                                  content: Text(result.message ?? 'Kat maliki girişi kaydedilemedi.'),
+                                ));
+                                return;
+                              }
+                              Navigator.pop(ctx);
+                              messenger.showSnackBar(appSnackBar(content: Text('${ownerName ?? 'Kat maliki'} daireye taşındı.')));
+                            },
+                      child: const Text('Onayla'),
+                    )),
+                  ],
+                ),
+                child: loading
+                    ? const SpSkeletonList()
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (takesBack)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                'Kiracı ${ho.tenantFullName ?? ''} aynı gün tahliye edilir ve çıkış bakiyesi kaydedilir.',
+                                style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12),
+                              ),
+                            ),
+                          if (owners.isEmpty)
+                            Text(
+                              'Bu dairenin kayıtlı kat maliki yok. Önce kat malikini kaydedin.',
+                              style: TextStyle(color: AppColors.dangerText(ctx), fontSize: 13),
+                            )
+                          else if (owners.length == 1)
+                            testId('module_owner_move_in_owner_name', Text(
+                              '${owners.first.fullName} daireye taşınacak. Kat maliki değişmez; yeni bir malik yalnızca tapu devri ile kaydedilir.',
+                              style: TextStyle(color: AppColors.textPrimary(ctx), fontSize: 14, fontWeight: FontWeight.bold),
+                            ))
+                          else ...[
+                            Text(
+                              'Daireye taşınacak kat malikini seçin. Kat maliki değişmez.',
+                              style: TextStyle(color: AppColors.textPrimary(ctx), fontSize: 13),
+                            ),
+                            const SizedBox(height: 8),
+                            for (final owner in owners)
+                              testId('module_owner_move_in_option_${owner.personId}', RadioListTile<int>(
+                                value: owner.personId,
+                                groupValue: ownerId,
+                                onChanged: (v) => setDlgState(() => selectedOwner = v),
+                                title: Text(owner.fullName),
+                                subtitle: Text('Hisse: %${owner.sharePercentage}'),
+                              )),
+                          ],
+                        ],
+                      ),
+              );
+            },
           );
         },
       ),
@@ -308,6 +403,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
     final emailCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
     bool isSubmitting = false;
+    bool newOwnerMovesIn = false;
 
     AppFullscreenPage.push(
       context: context,
@@ -348,6 +444,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                               newOwnerPhone: phoneCtrl.text.trim(),
                               newOwnerEmail: emailCtrl.text.trim(),
                               notes: notesCtrl.text.trim(),
+                              newOwnerMovesIn: ho.isOwnerOccupied && newOwnerMovesIn,
                             );
                             if (res != null && ctx.mounted) {
                               Navigator.pop(ctx);
@@ -461,6 +558,24 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                       border: OutlineInputBorder(),
                     ),
                   )),
+                  const SizedBox(height: 12),
+                  // STORY-08-09: what happens to the occupancy at transfer.
+                  if (ho.isOwnerOccupied)
+                    testId('module_transfer_new_owner_moves_in', CheckboxListTile(
+                      key: const Key('module_transfer_new_owner_moves_in'),
+                      value: newOwnerMovesIn,
+                      onChanged: (v) => setDlgState(() => newOwnerMovesIn = v ?? false),
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Yeni kat maliki daireye taşınıyor'),
+                      subtitle: const Text('İşaretlenmezse eski malik ayrılır ve daire boş kalır.'),
+                    ))
+                  else
+                    Text(
+                      ho.isTenantOccupied
+                          ? 'Kiracılık devam eder; kira sözleşmesi tapu devrinden etkilenmez.'
+                          : 'Daire boş kalır; yeni kat maliki daha sonra "Kat Maliki Taşınsın" ile taşınabilir.',
+                      style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12),
+                    ),
                 ],
               ),
             ),

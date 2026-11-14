@@ -407,28 +407,56 @@ extension _UnitCard on _OwnersResidentsModulePageState {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppColors.accentOrange.withOpacity(0.3)),
                       ),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.info_outline, color: AppColors.accentOrange, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Bu daire şu anda boştur. Yeni sakin veya kiracı girişi yapabilirsiniz.',
-                              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
-                            ),
+                          Row(
+                            children: [
+                              const Icon(Icons.info_outline, color: AppColors.accentOrange, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  ho.allows(OccupancyCommand.ownerMoveIn)
+                                      ? 'Bu daire şu anda boştur. Kat maliki ${ho.ownerFullName} olarak kalır; kiracı girişi yapabilir veya kat malikini taşıyabilirsiniz.'
+                                      : 'Bu dairenin kayıtlı kat maliki yok. Kiracı girişi için önce kat malikini kaydedin.',
+                                  style: TextStyle(color: AppColors.textPrimary(context), fontSize: 12),
+                                ),
+                              ),
+                            ],
                           ),
-                          testId('module_move_in_${ho.unitId}', ElevatedButton.icon(
-                            key: Key('module_move_in_${ho.unitId}'),
-                            onPressed: () => _openMoveIn(ho),
-                            icon: const Icon(Icons.person_add_alt, size: 12),
-                            label: const Text('Yeni Kiracı / Sakin Girişi', style: TextStyle(fontSize: 12)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.successFill,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              minimumSize: const Size(0, 28),
-                            ),
-                          )),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              if (ho.allows(OccupancyCommand.tenantMoveIn))
+                                testId('module_move_in_${ho.unitId}', ElevatedButton.icon(
+                                  key: Key('module_move_in_${ho.unitId}'),
+                                  onPressed: () => _openMoveIn(ho),
+                                  icon: const Icon(Icons.key, size: 12),
+                                  label: const Text('Kiracı Girişi', style: TextStyle(fontSize: 12)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.successFill,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    minimumSize: const Size(0, 28),
+                                  ),
+                                )),
+                              if (ho.allows(OccupancyCommand.ownerMoveIn))
+                                testId('module_owner_move_in_${ho.unitId}', OutlinedButton.icon(
+                                  key: Key('module_owner_move_in_${ho.unitId}'),
+                                  onPressed: () => _openOwnerMoveIn(ho),
+                                  icon: const Icon(Icons.home_outlined, size: 12),
+                                  label: const Text('Kat Maliki Taşınsın', style: TextStyle(fontSize: 12)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.accentCyan,
+                                    side: const BorderSide(color: AppColors.accentCyan),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    minimumSize: const Size(0, 28),
+                                  ),
+                                )),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -472,9 +500,9 @@ extension _UnitCard on _OwnersResidentsModulePageState {
                               const SizedBox(width: 4),
                               testId('module_add_tenant_${ho.unitId}', OutlinedButton.icon(
                                 key: Key('module_add_tenant_${ho.unitId}'),
-                                onPressed: () => _openMoveIn(ho),
+                                onPressed: () => _openMoveIn(ho, command: OccupancyCommand.ownerRentsOut),
                                 icon: const Icon(Icons.person_add_alt, size: 11),
-                                label: const Text('Kiracı Girişi', style: TextStyle(fontSize: 12)),
+                                label: const Text('Kiraya Ver', style: TextStyle(fontSize: 12)),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppColors.accentGreen,
                                   side: const BorderSide(color: AppColors.accentGreen),
@@ -678,15 +706,29 @@ extension _UnitCard on _OwnersResidentsModulePageState {
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    if (isTenant)
+                    if (isTenant && ho.allows(OccupancyCommand.replaceTenant))
                       testId('module_quick_move_in_${ho.unitId}', OutlinedButton.icon(
                         key: Key('module_quick_move_in_${ho.unitId}'),
-                        onPressed: () => _openMoveIn(ho),
+                        onPressed: () => _openMoveIn(ho, command: OccupancyCommand.replaceTenant),
                         icon: const Icon(Icons.key, size: 13, color: AppColors.accentGreen),
-                        label: const Text('Yeni Kiracı Girişi', style: TextStyle(fontSize: 12)),
+                        label: const Text('Kiracı Değişikliği', style: TextStyle(fontSize: 12)),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.accentGreen,
                           side: const BorderSide(color: AppColors.accentGreen),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          minimumSize: const Size(0, 30),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      )),
+                    if (isTenant && ho.allows(OccupancyCommand.ownerTakesBack))
+                      testId('module_owner_takes_back_${ho.unitId}', OutlinedButton.icon(
+                        key: Key('module_owner_takes_back_${ho.unitId}'),
+                        onPressed: () => _openOwnerMoveIn(ho, command: OccupancyCommand.ownerTakesBack),
+                        icon: const Icon(Icons.home_outlined, size: 13, color: AppColors.accentCyan),
+                        label: const Text('Kat Maliki Geri Alsın', style: TextStyle(fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.accentCyan,
+                          side: const BorderSide(color: AppColors.accentCyan),
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           minimumSize: const Size(0, 30),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

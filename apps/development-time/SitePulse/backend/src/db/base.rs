@@ -266,6 +266,10 @@ pub async fn reset_db_to_seed_data(
             TRUNCATE TABLE invitation_tokens CASCADE;
             TRUNCATE TABLE unit_sender_ibans CASCADE;
             TRUNCATE TABLE unit_payer_names RESTART IDENTITY CASCADE;
+            TRUNCATE TABLE occupancy_transitions RESTART IDENTITY;
+            -- Only the seeded owners' sessions survive a reset (status is derived, V31).
+            DELETE FROM occupancy_members WHERE occupancy_id IN (SELECT id FROM unit_occupancies WHERE occupancy_type <> 'OWNER');
+            DELETE FROM unit_occupancies WHERE occupancy_type <> 'OWNER';
             UPDATE units SET owner_person_id = 1, tenant_person_id = NULL, occupancy_status = 'OWNER_OCCUPIED' WHERE id = 14;
             UPDATE units SET owner_person_id = 4, tenant_person_id = NULL, occupancy_status = 'OWNER_OCCUPIED' WHERE id = 3;
             DELETE FROM unit_occupancies WHERE unit_id NOT IN (14, 3);

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
+import '../../domain/models/unit_state.dart';
 import '../components/app_fullscreen_page.dart';
 import '../components/dues_management_view.dart';
 import '../components/hero_balance_card.dart';
@@ -1709,7 +1710,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         key: Key('move_in_btn_${ho.unitId}'),
                                         onPressed: () => _showMoveInDialog(ho),
                                         icon: const Icon(Icons.person_add_alt, size: 13),
-                                        label: const Text('Yeni Sakin / Kiracı Girişi (Move-In)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                        label: const Text('Kiracı Girişi (Move-In)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: AppColors.successFill,
                                           foregroundColor: Colors.white,
@@ -1893,10 +1894,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _showUnitActions(HomeOwnerItem unit) async {
     final actions = <String, String>{
       'edit': 'Daire ve malik bilgilerini düzenle',
-      if (!unit.isVacant) ...{
-        'move_in': unit.isTenantOccupied ? 'Yeni kiracı girişi' : 'Kiracı tanımla',
-        'move_out': 'Sakin ayrılışı',
-      },
+      // STORY-08-07: only the commands legal for the unit's state.
+      if (unit.allows(OccupancyCommand.tenantMoveIn) ||
+          unit.allows(OccupancyCommand.replaceTenant) ||
+          unit.allows(OccupancyCommand.ownerRentsOut))
+        'move_in': unit.isTenantOccupied
+            ? 'Kiracı değişikliği'
+            : (unit.isVacant ? 'Kiracı girişi' : 'Daireyi kiraya ver'),
+      if (unit.allows(OccupancyCommand.ownerMoveIn)) 'owner_move_in': 'Kat maliki taşınsın',
+      if (unit.allows(OccupancyCommand.ownerTakesBack)) 'owner_takes_back': 'Kat maliki daireyi geri alsın',
+      if (unit.allows(OccupancyCommand.moveOut)) 'move_out': 'Sakin ayrılışı',
       'history': 'Daire tarihçesi',
       'statement': 'Hesap ekstresi',
       'iban': 'Sanal IBAN',
@@ -1907,6 +1914,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'edit': 'edit_unit_${unit.unitId}',
       'move_in': 'move_in_ho_${unit.unitId}',
       'move_out': 'move_out_ho_${unit.unitId}',
+      'owner_move_in': 'owner_move_in_ho_${unit.unitId}',
+      'owner_takes_back': 'owner_takes_back_ho_${unit.unitId}',
       'history': 'history_ho_${unit.unitId}',
       'statement': 'btn_statement_${unit.unitId}',
       'iban': 'module_iban_ho_${unit.unitId}',
@@ -1928,6 +1937,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _showMoveInDialog(unit);
       case 'move_out':
         _showMoveOutDialog(unit);
+      case 'owner_move_in':
+        _confirmOwnerMoveIn(unit, OccupancyCommand.ownerMoveIn);
+      case 'owner_takes_back':
+        _confirmOwnerMoveIn(unit, OccupancyCommand.ownerTakesBack);
       case 'history':
         _showUnitOccupancyHistoryDialog(unit);
       case 'statement':
@@ -2220,12 +2233,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// T3 / C3: the owner on record moves in; the confirmation names the owner
+  /// and asks for no person data (STORY-08-06).
+  Future<void> _confirmOwnerMoveIn(HomeOwnerItem unit, OccupancyCommand command) async {
+    final takesBack = command == OccupancyCommand.ownerTakesBack;
+    final confirmed = await showSpConfirmDialog(
+      context,
+      title: takesBack ? 'Kat Maliki Daireyi Geri Alsın' : 'Kat Maliki Taşınsın',
+      message: takesBack
+          ? 'Kiracı ${unit.tenantFullName ?? ''} tahliye edilir ve ${unit.ownerFullName} daireye taşınır. Kat maliki değişmez.'
+          : '${unit.ownerFullName} daireye taşınır. Kat maliki değişmez; yeni bir malik yalnızca tapu devri ile kaydedilir.',
+      confirmLabel: 'Onayla',
+      confirmKey: 'btn_confirm_owner_move_in',
+    );
+    if (!confirmed || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await widget.controller.applyOccupancyTransition(unit.unitId, command: command);
+    if (!mounted) return;
+    messenger.showSnackBar(result.ok
+        ? appSnackBar(content: Text('${unit.ownerFullName} daireye taşındı.'))
+        : spSnackBar(kind: ToastKind.error, content: Text(result.message ?? 'Kat maliki girişi kaydedilemedi.')));
+  }
+
   void _showMoveInDialog(HomeOwnerItem resident) {
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
-    String selectedRole = 'TENANT';
+    // STORY-08-06: this form is for a tenant only; the command follows the state.
+    final command = resident.isTenantOccupied
+        ? OccupancyCommand.replaceTenant
+        : (resident.isOwnerOccupied ? OccupancyCommand.ownerRentsOut : OccupancyCommand.tenantMoveIn);
     bool isSaving = false;
     String? errorMsg;
 
@@ -2270,15 +2308,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     });
                     try {
                       final messenger = ScaffoldMessenger.of(this.context);
-                      final ok = await widget.controller.moveInResident(
+                      final result = await widget.controller.applyOccupancyTransition(
                         resident.unitId,
-                        role: selectedRole,
+                        command: command,
                         fullName: nameCtrl.text.trim(),
                         email: emailCtrl.text.trim(),
                         phone: phoneCtrl.text.trim().isNotEmpty ? phoneCtrl.text.trim() : null,
                         notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
                       );
-                      if (ok && ctx.mounted) {
+                      if (result.ok && ctx.mounted) {
                         Navigator.pop(ctx);
                         messenger.showSnackBar(
                           appSnackBar(
@@ -2289,7 +2327,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       } else if (ctx.mounted) {
                         setDialogState(() {
                           isSaving = false;
-                          errorMsg = 'Kayıt işlemi başarısız oldu.';
+                          errorMsg = result.message ?? 'Kayıt işlemi başarısız oldu.';
                         });
                       }
                     } catch (e) {
@@ -2320,17 +2358,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'TENANT', label: Text('Kiracı (Tenant)'), icon: Icon(Icons.key)),
-                    ButtonSegment(value: 'OWNER', label: Text('Kat Maliki (Owner)'), icon: Icon(Icons.home)),
-                  ],
-                  selected: {selectedRole},
-                  onSelectionChanged: (val) {
-                    setDialogState(() {
-                      selectedRole = val.first;
-                    });
-                  },
+                Text(
+                  command == OccupancyCommand.replaceTenant
+                      ? 'Mevcut kiracı aynı gün tahliye edilir ve çıkış bakiyesi kaydedilir.'
+                      : 'Kat maliki ${resident.ownerFullName} olarak kalır; kiracı yalnızca daireye taşınır.',
+                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                 ),
                 const SizedBox(height: 16),
                 testId('move_in_name_field', TextField(

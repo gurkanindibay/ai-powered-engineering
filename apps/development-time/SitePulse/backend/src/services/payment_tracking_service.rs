@@ -1443,12 +1443,13 @@ impl PaymentTrackingService {
         let site_id = req.site_id.unwrap_or_default();
         let unit_id = req.unit_id.clone();
         let now = Utc::now();
-        let transfer_date = req.transfer_date.unwrap_or_else(|| now.date_naive());
-
         let mut inner = self.state.inner.write().await;
+        // Dates are the site's local dates (an Istanbul evening is already tomorrow in UTC).
+        let today = crate::services::finance_common::site_today(&inner, &site_id);
+        let transfer_date = req.transfer_date.unwrap_or(today);
 
         // Find unit
-        let unit_idx = inner
+        let mut unit_idx = inner
             .units
             .iter()
             .position(|u| u.id == unit_id)
@@ -1506,8 +1507,6 @@ impl PaymentTrackingService {
             person_id: None,
         };
 
-        inner.users.push(new_user.clone());
-
         // Archive old owner in unit_occupancies
         let notes = format!(
             "Mülk satışı / Tapu devri. Eski malik: {}, Çıkış bakiyesi: ₺{:.2}. Yeni malik: {}. {}",
@@ -1554,6 +1553,48 @@ impl PaymentTrackingService {
             created_at: now,
         };
 
+        // PostgreSQL is the source of truth: a refused transfer changes nothing,
+        // in the database or in memory.
+        let mut old_owner_exit_balance = old_owner_exit_balance;
+        if let Some(pool) = self.state.pool.clone() {
+            let unit_index_id = inner.units[unit_idx].id.clone();
+            drop(inner);
+            let persisted = crate::db::transfer_unit_ownership_db(
+                &pool,
+                &crate::db::TitleTransfer {
+                    unit_id: &unit_id,
+                    site_id: &site_id,
+                    new_user: &new_user,
+                    buyer_person_id: req.new_owner_person_id,
+                    new_owner_moves_in: req.new_owner_moves_in,
+                    transfer_date,
+                    today,
+                    notes: req.notes.as_deref(),
+                },
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            if let Some(balance) = persisted {
+                old_owner_exit_balance = balance;
+            }
+            inner = self.state.inner.write().await;
+            unit_idx = inner
+                .units
+                .iter()
+                .position(|u| u.id == unit_index_id)
+                .ok_or_else(|| format!("Daire bulunamadı: {}", unit_id))?;
+        } else if transfer_date > today {
+            return Err(crate::domain::unit_state::TransitionError::FutureDate {
+                date: transfer_date,
+            }
+            .to_string());
+        }
+
+        let history_item = OccupancyHistoryItem {
+            exit_balance: old_owner_exit_balance,
+            ..history_item
+        };
+        inner.users.push(new_user.clone());
         inner
             .unit_occupancies
             .entry(unit_id.clone())
@@ -1562,22 +1603,7 @@ impl PaymentTrackingService {
 
         // Update unit owner
         inner.units[unit_idx].owner_user_id = Some(new_user_id);
-
         drop(inner);
-
-        if let Some(ref pool) = self.state.pool {
-            crate::db::transfer_unit_ownership_db(
-                pool,
-                &unit_id,
-                &site_id,
-                &new_user,
-                transfer_date,
-                old_owner_exit_balance,
-                req.notes.as_deref(),
-            )
-            .await
-            .map_err(|e| e.to_string())?;
-        }
 
         Ok(TransferOwnershipResponse {
             success: true,

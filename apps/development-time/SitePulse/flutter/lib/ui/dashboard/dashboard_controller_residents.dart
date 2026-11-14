@@ -874,6 +874,106 @@ extension DashboardControllerResidents on DashboardController {
     return true;
   }
 
+  /// EPIC-08 §3.3: one guarded occupancy command (move-in, move-out, or a
+  /// compound move). The server checks the unit's state and refuses a command
+  /// that is not legal there; its reason is returned for the screen.
+  Future<OccupancyTransitionResult> applyOccupancyTransition(
+    String unitId, {
+    required OccupancyCommand command,
+    int? personId,
+    String? fullName,
+    String? email,
+    String? phone,
+    int? ownerPersonId,
+    String? notes,
+  }) async {
+    final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+    if (!isTestMode) {
+      try {
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/units/$unitId/occupancy-transitions?site_id=$effectiveSiteId');
+        final response = await ApiClient.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'command': command.code,
+            'person_id': ?personId,
+            'full_name': ?fullName,
+            'email': ?email,
+            'phone': ?phone,
+            'owner_person_id': ?ownerPersonId,
+            'notes': ?notes,
+          }),
+        ).timeout(const Duration(seconds: 8));
+        if (response.statusCode == 200) {
+          await fetchHomeOwners(siteId: effectiveSiteId);
+          return const OccupancyTransitionResult.success();
+        }
+        return OccupancyTransitionResult.failure(
+          extractErrorMessage(response, fallback: 'İşlem kaydedilemedi.'),
+        );
+      } catch (e) {
+        AppLogger.warn('Occupancy transition did not reach the server: $e', tag: 'Residents');
+        return const OccupancyTransitionResult.failure('Sunucuya ulaşılamadı. Lütfen tekrar deneyin.');
+      }
+    }
+    return _applyOccupancyTransitionLocally(unitId, command, fullName: fullName, email: email, phone: phone, notes: notes);
+  }
+
+  /// The unit's owners on record and legal commands, from the server.
+  Future<UnitOccupancyState?> fetchOccupancyState(String unitId) async {
+    final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
+    if (isTestMode) {
+      final idx = _homeOwners.indexWhere((h) => h.unitId == unitId);
+      return idx == -1 ? null : UnitOccupancyState.fromHomeOwner(_homeOwners[idx]);
+    }
+    try {
+      final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/units/$unitId/occupancy-state?site_id=$effectiveSiteId');
+      final response = await ApiClient.get(url).timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) return null;
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? UnitOccupancyState.fromJson(decoded) : null;
+    } catch (e) {
+      AppLogger.warn('Occupancy state did not reach the server: $e', tag: 'Residents');
+      return null;
+    }
+  }
+
+  /// Demonstration storage: the same transition table, applied to the list.
+  OccupancyTransitionResult _applyOccupancyTransitionLocally(
+    String unitId,
+    OccupancyCommand command, {
+    String? fullName,
+    String? email,
+    String? phone,
+    String? notes,
+  }) {
+    final idx = _homeOwners.indexWhere((h) => h.unitId == unitId);
+    if (idx == -1) return const OccupancyTransitionResult.failure('Daire bulunamadı.');
+    final ho = _homeOwners[idx];
+    if (!ho.allows(command)) {
+      return OccupancyTransitionResult.failure('${command.label} bu dairenin mevcut durumunda yapılamaz.');
+    }
+    final today = DateTime.now().toIso8601String().split('T').first;
+    final history = _localOccupancyHistory.putIfAbsent(unitId, () => []);
+    _localOccupancyHistory[unitId] = history
+        .map((h) => h.isActive ? h.copyWith(isActive: false, endDate: today, notes: notes) : h)
+        .toList();
+    if (command == OccupancyCommand.moveOut) {
+      _homeOwners[idx] = ho.copyWith(occupancyStatus: 'VACANT', tenantFullName: null, tenantEmail: null, tenantPhone: null);
+    } else if (command.opensOwnerSession) {
+      _homeOwners[idx] = ho.copyWith(occupancyStatus: 'OWNER_OCCUPIED', tenantFullName: null, tenantEmail: null, tenantPhone: null);
+    } else {
+      _homeOwners[idx] = ho.copyWith(
+        occupancyStatus: 'TENANT_OCCUPIED',
+        tenantFullName: fullName,
+        tenantEmail: email,
+        tenantPhone: phone,
+      );
+    }
+    notify();
+    return const OccupancyTransitionResult.success();
+  }
+
   Future<bool> moveOutResident(String unitId, {String? notes}) async {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
@@ -971,7 +1071,8 @@ extension DashboardControllerResidents on DashboardController {
         tenantFullName: isTenant ? fullName : null,
         tenantEmail: isTenant ? email : null,
         tenantPhone: isTenant ? phone : null,
-        ownerFullName: !isTenant ? fullName : _homeOwners[idx].ownerFullName,
+        // STORY-08-06: a move-in never changes the owner on record.
+        ownerFullName: _homeOwners[idx].ownerFullName,
       );
 
       final currentHist = _localOccupancyHistory.putIfAbsent(unitId, () => []);
@@ -1308,9 +1409,12 @@ extension DashboardControllerResidents on DashboardController {
     String? newOwnerEmail,
     String? notes,
     String? siteId,
+    bool newOwnerMovesIn = false,
   }) async {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
     final payload = {
+      // STORY-08-09: an owner-occupied unit becomes vacant unless the new owner moves in.
+      'new_owner_moves_in': newOwnerMovesIn,
       'site_id': effectiveSiteId,
       'unit_id': unitId,
       'new_owner_name': newOwnerName,

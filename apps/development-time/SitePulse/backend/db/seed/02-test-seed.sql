@@ -113,6 +113,21 @@ SET floor = EXCLUDED.floor,
     tenant_person_id = EXCLUDED.tenant_person_id,
     virtual_iban = EXCLUDED.virtual_iban;
 
+-- 4b. EPIC-08 §3: the seeded owners are owners of record and live in their
+--     units (OWNER_OCCUPIED is derived from the active owner session, V31).
+INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, is_active)
+SELECT u.id, u.owner_person_id, 100.00, COALESCE(u.created_at::date, CURRENT_DATE), TRUE
+FROM units u JOIN sites s ON s.id = u.site_id
+WHERE s.slug = 'begonya-sitesi' AND u.owner_person_id IS NOT NULL AND u.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM unit_ownerships o WHERE o.unit_id = u.id AND o.is_active)
+ON CONFLICT DO NOTHING;
+INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active)
+SELECT u.id, u.owner_person_id, 'OWNER', COALESCE(u.created_at::date, CURRENT_DATE), TRUE
+FROM units u JOIN sites s ON s.id = u.site_id
+WHERE s.slug = 'begonya-sitesi' AND u.owner_person_id IS NOT NULL AND u.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM unit_occupancies o WHERE o.unit_id = u.id AND o.is_active)
+ON CONFLICT DO NOTHING;
+
 -- 5. Test Site Bank Account (Auto-Increment Identity id, site and configured_by resolved dynamically)
 INSERT INTO site_bank_accounts (site_id, bank_code, bank_name, iban, account_holder, statement_format, is_active, configured_by)
 SELECT 

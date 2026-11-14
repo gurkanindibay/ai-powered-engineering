@@ -8,14 +8,18 @@ use axum::{
 use serde::Deserialize;
 
 use crate::authorization::{AuthzContext, SecurityError};
+use crate::db::occupancy_repository::OccupancyError;
+use crate::domain::unit_state::CommandKind;
 use crate::error::AppError;
 use crate::models::Permission;
 use crate::models::{
     BlockDto, CreateBlockRequest, CreateHouseTypeRequest, HomeOwnerResponse, HouseTypeTariff,
-    MoveInResidentRequest, MoveOutResidentRequest, OccupancyHistoryItem, RegisterHomeOwnerRequest,
-    UpdateHomeOwnerRequest,
+    MoveInResidentRequest, MoveOutResidentRequest, OccupancyHistoryItem,
+    OccupancyTransitionRequest, OccupancyTransitionResponse, RegisterHomeOwnerRequest,
+    UnitOccupancyStateResponse, UpdateHomeOwnerRequest,
 };
 use crate::services::account_activation_service::{ActivationDelivery, ActivationError};
+use crate::services::occupancy_service::OccupancyService;
 use crate::services::person_directory_service::{
     DirectoryPage, DirectoryQuery, PersonDirectoryError, PersonDirectoryService, PersonProfile,
 };
@@ -181,6 +185,26 @@ pub async fn resend_activation(
         .map_err(activation_error)
 }
 
+/// Maps a refused or failed transition to the error envelope: an illegal
+/// command for the unit's state is a 409, invalid input a 400.
+pub(crate) fn occupancy_error(e: OccupancyError) -> AppError {
+    use crate::domain::unit_state::TransitionError;
+    match e {
+        OccupancyError::UnitNotFound => AppError::not_found(service::UNIT_NOT_FOUND),
+        OccupancyError::PersonNotFound => AppError::not_found(service::PERSON_NOT_FOUND),
+        OccupancyError::Rule(
+            rule @ (TransitionError::IllegalCommand { .. }
+            | TransitionError::OwnerRequired
+            | TransitionError::MoveInAtTransferNotAllowed),
+        ) => AppError::conflict(rule.to_string()),
+        OccupancyError::Storage(detail) => {
+            tracing::error!(error = %detail, "Occupancy transition storage failure");
+            AppError::internal("Occupancy storage failure")
+        }
+        other => AppError::validation(other.to_string()),
+    }
+}
+
 pub async fn move_out_resident(
     State(state): State<AppState>,
     scope: crate::tenancy::TenantScope,
@@ -189,12 +213,31 @@ pub async fn move_out_resident(
     Json(payload): Json<MoveOutResidentRequest>,
 ) -> Result<Json<OccupancyHistoryItem>, AppError> {
     let site_id = scope.pinned(q.site_id)?;
-    let service = SiteAdminService::new(state);
-    service
-        .move_out_resident(&site_id, &id, payload)
+    if state.pool.is_none() {
+        return SiteAdminService::new(state)
+            .move_out_resident(&site_id, &id, payload)
+            .await
+            .map(Json)
+            .map_err(person_error);
+    }
+    let request = OccupancyTransitionRequest {
+        command: CommandKind::MoveOut,
+        effective_date: service::parse_effective_date(payload.end_date.as_deref())
+            .map_err(occupancy_error)?,
+        person_id: None,
+        full_name: None,
+        phone: None,
+        email: None,
+        owner_person_id: None,
+        notes: payload.notes,
+    };
+    OccupancyService::new(state)
+        .transition(&site_id, &id, request)
         .await
+        .map_err(occupancy_error)?
+        .closed
         .map(Json)
-        .map_err(person_error)
+        .ok_or_else(|| AppError::internal("Move-out closed no occupancy"))
 }
 
 pub async fn move_in_resident(
@@ -205,12 +248,45 @@ pub async fn move_in_resident(
     Json(payload): Json<MoveInResidentRequest>,
 ) -> Result<Json<OccupancyHistoryItem>, AppError> {
     let site_id = scope.pinned(q.site_id)?;
-    let service = SiteAdminService::new(state);
-    service
-        .move_in_resident(&site_id, &id, payload)
+    let request = service::move_in_request(payload).map_err(occupancy_error)?;
+    OccupancyService::new(state)
+        .transition(&site_id, &id, request)
+        .await
+        .map_err(occupancy_error)?
+        .opened
+        .map(Json)
+        .ok_or_else(|| AppError::internal("Move-in opened no occupancy"))
+}
+
+/// Any guarded occupancy command, including the compound moves C1-C3.
+pub async fn apply_occupancy_transition(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Path(id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<OccupancyTransitionRequest>,
+) -> Result<Json<OccupancyTransitionResponse>, AppError> {
+    let site_id = scope.pinned(q.site_id)?;
+    OccupancyService::new(state)
+        .transition(&site_id, &id, payload)
         .await
         .map(Json)
-        .map_err(person_error)
+        .map_err(occupancy_error)
+}
+
+/// The unit's ownership, occupancy, owners on record and legal commands.
+pub async fn get_unit_occupancy_state(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Path(id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+) -> Result<Json<UnitOccupancyStateResponse>, AppError> {
+    let site_id = scope.pinned(q.site_id)?;
+    OccupancyService::new(state)
+        .unit_state(&site_id, &id)
+        .await
+        .map(Json)
+        .map_err(occupancy_error)
 }
 
 pub async fn get_unit_occupancy_history(

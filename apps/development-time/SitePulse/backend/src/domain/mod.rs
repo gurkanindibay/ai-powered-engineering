@@ -28,3 +28,5 @@ pub mod kvkk;
 pub mod limitation;
 pub mod payer_match;
 pub mod tax_id;
+// EPIC-08 unit ownership & occupancy state machine.
+pub mod unit_state;

@@ -105,7 +105,10 @@ GATES: Dict[str, List[CommandSpec]] = {
     "rust-test": [CommandSpec(["cargo", "test", "--locked"], "backend")],
     # The PostgreSQL persistence path: RLS tenant isolation, read-only GETs,
     # transactional advance offsets, 503 on database failure (needs DB_PASS).
+    # The unit state model (EPIC-08 §3): guarded transitions, derived status.
     "rust-db-test": [CommandSpec(["cargo", "test", "--locked", "--test", "db_tenant_isolation_tests",
+                                  "--", "--ignored", "--test-threads=1"], "backend", 900),
+                     CommandSpec(["cargo", "test", "--locked", "--test", "db_occupancy_transitions_tests",
                                   "--", "--ignored", "--test-threads=1"], "backend", 900)],
     # Errors are fatal; warnings/infos are reported by `flutter analyze` itself.
     "flutter-analyze": [CommandSpec(["flutter", "analyze", "--no-fatal-infos", "--no-fatal-warnings"], "flutter", 600)],
