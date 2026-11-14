@@ -63,7 +63,7 @@ class _FakeApi extends PersonDirectoryApi {
 Widget _host(Widget child) => MaterialApp(theme: AppTheme.light(), home: child);
 
 void main() {
-  // covers: SC-12-03-01
+  // covers: SC-12-04-01
   testWidgets('pages through the directory and filters people waiting for activation', (tester) async {
     final api = _FakeApi();
     await tester.pumpWidget(_host(PeopleDirectoryPage(api: api)));

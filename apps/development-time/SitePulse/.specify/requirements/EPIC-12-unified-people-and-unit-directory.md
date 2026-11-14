@@ -39,7 +39,21 @@ Executable scenarios: [STORY-12-01-person-schema-foundations.feature](../feature
 
 Executable scenarios: [STORY-12-02-unit-directory.feature](../features/EPIC-12/STORY-12-02-unit-directory.feature).
 
-### STORY-12-03: People directory
+### STORY-12-03: Shared person selection components
+- **Status:** IN PROGRESS
+- **Task Ref:** task-36 / GitHub issue #87
+- **Description:** Provide one typed person reference, an injectable repository boundary, a full-screen searchable picker, a duplicate-aware person form, a reusable person field, and person cards.
+- **Acceptance Criteria:**
+  - Existing person references and new person drafts serialize to the published API contract.
+  - Search pages beyond the first 100 results and shows ineligible people with the server reason.
+  - Creating a person surfaces duplicate candidates, blocks hard identity duplicates, and requires explicit confirmation for soft matches.
+  - Person name, phone, and email editing lives in the shared person form.
+  - Shared components keep stable automation ids and render in both themes at large text sizes.
+- **Verification:** fake-repository Flutter tests, Flutter analysis, shared-component reuse, UI style, test ID, and logging standards checks.
+
+Executable scenarios: [STORY-12-03-person-selection.feature](../features/EPIC-12/STORY-12-03-person-selection.feature).
+
+### STORY-12-04: People directory
 - **Status:** IN PROGRESS
 - **Task Ref:** task-37 / GitHub issue #88
 - **Description:** Move the people list onto the shared directory scaffold while keeping the existing person profile page and server-side search, filters and paging.
@@ -50,4 +64,4 @@ Executable scenarios: [STORY-12-02-unit-directory.feature](../features/EPIC-12/S
   - The existing profile, import and audited CSV export remain available.
 - **Verification:** targeted Flutter tests, GUI scenarios, Flutter analysis, shared-component reuse, UI style, test ID, and logging standards checks.
 
-Executable scenarios: [STORY-12-03-people-directory.feature](../features/EPIC-12/STORY-12-03-people-directory.feature).
+Executable scenarios: [STORY-12-04-people-directory.feature](../features/EPIC-12/STORY-12-04-people-directory.feature).
