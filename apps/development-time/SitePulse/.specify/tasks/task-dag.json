@@ -214,7 +214,7 @@
         "task-07"
       ],
       "spec_ref": "SPEC-003",
-      "description": "Provision ISO 7064 MOD-97-10 validated Virtual IBANs (Kuveyt T\u00fcrk Sandbox) and real-time incoming transfer webhook settlement with HMAC signature and idempotency guard.",
+      "description": "Provision ISO 7064 MOD-97-10 validated Virtual IBANs (Kuveyt Türk Sandbox) and real-time incoming transfer webhook settlement with HMAC signature and idempotency guard.",
       "gates": [],
       "acceptance_tests": [
         "rust:integration_tests::when_unit_created_then_generates_unique_sanal_iban",
@@ -554,7 +554,7 @@
     },
     {
       "id": "task-28",
-      "name": "Payments Phase 2: Virman Reversal, Resident Statement, Receipt PDF, Card Payments via Provider, \u0130\u015fletme Projesi",
+      "name": "Payments Phase 2: Virman Reversal, Resident Statement, Receipt PDF, Card Payments via Provider, İşletme Projesi",
       "module": "full-stack",
       "status": "UNVERIFIED",
       "depends_on": [
