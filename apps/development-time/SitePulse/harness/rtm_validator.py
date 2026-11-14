@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
-ACCEPTANCE_REF = re.compile(r"`((?:rust|flutter|system):[^`]+)`")
+ACCEPTANCE_REF = re.compile(r"`((?:rust|flutter|system|scenario):[^`]+)`")
 
 
 class RtmValidator:
@@ -98,7 +98,7 @@ class RtmValidator:
 
     def _evidence_issues(self, req_id: str, task_id: str, named_tests: List[str]) -> List[str]:
         if not named_tests:
-            return [f"[{req_id}] VERIFIED but names no acceptance tests (rust:/flutter:/system: ids)"]
+            return [f"[{req_id}] VERIFIED but names no acceptance tests (rust:/flutter:/system:/scenario: ids)"]
         path = self.evidence_dir / f"{task_id}.json"
         try:
             evidence = json.loads(path.read_text(encoding="utf-8"))

@@ -220,6 +220,34 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(list(repo.glob("runs")), [])
             self.assertEqual([r["run_id"][:8] for r in ft.load_history(store, limit=1)], ["20260103"])
 
+    def test_require_run_applies_to_task_branches_that_change_behaviour(self):
+        def git(repo, *args):
+            subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+                           cwd=repo, check=True, capture_output=True)
+
+        def run(status, n):
+            return {**_record("SC-42-01-01", status, n), "branch": "task-1"}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _workspace(tmp)
+            git(repo, "init", "-q", "-b", "master")
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "base")
+            catalogue, store = ft.load_catalogue(repo), ft.DirStore(repo / "history")
+            self.assertEqual(ft.require_run(catalogue, store, repo)[0], [])  # main branch
+            git(repo, "checkout", "-q", "-b", "task-1")
+            (repo / "notes.md").write_text("docs only\n", encoding="utf-8")
+            self.assertIn("changes no backend", ft.require_run(catalogue, store, repo)[1])
+            (repo / "backend" / "tests" / "demo.rs").write_text("fn changed() {}\n", encoding="utf-8")
+            problems, _ = ft.require_run(catalogue, store, repo)
+            self.assertIn("no test run is recorded for branch task-1", problems[0])
+            store.write("runs/2026/a.jsonl", json.dumps(run("FAIL", 1)) + "\n", "")
+            self.assertIn("has failing scenarios: SC-42-01-01", ft.require_run(catalogue, store, repo)[0][0])
+            store.write("runs/2026/b.jsonl", json.dumps(run("PASS", 2)) + "\n", "")
+            problems, note = ft.require_run(catalogue, store, repo)
+            self.assertEqual(problems, [])
+            self.assertIn("1/2 automated scenarios executed, PASS", note)
+
     def test_run_metadata_shape(self):
         meta = ft.run_metadata(now=datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc), trigger="ci")
         self.assertTrue(meta["run_id"].startswith("20260102T030405Z-"))

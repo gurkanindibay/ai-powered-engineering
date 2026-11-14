@@ -19,7 +19,9 @@ Sources
 Commands
   check                 static gate: every story of a migrated epic has a scenario, ids are
                         unique and consistent, links point at real scenarios;
-                        --require-run also fails when the current branch has no recorded run
+                        --require-run (gate `test-run-recorded`) also fails when a task branch
+                        that changes behaviour (backend, flutter, e2e, features) has no recorded
+                        run, or its latest recorded run has a FAIL or ERROR scenario
   record                append the last run's executions to the history and write its report
   task-report           the latest run of the current task as markdown (for the PR description)
   report                latest status per epic, story and scenario (--steps for step detail)
@@ -80,6 +82,8 @@ TEST_NAME = re.compile(r"""(?:fn|def)\s+(\w+)|(?:test|testWidgets)\(\s*['"](.+?)
 SCENARIO_ORDER = ["FAIL", "ERROR", "NOT RUN", "DEFECT", "PENDING", "SKIPPED", "PASS"]
 STORY_ORDER = ["FAIL", "ERROR", "MISSING", "NOT RUN", "DEFECT", "PENDING", "SKIPPED", "PASS"]
 FAILING = {"FAIL", "ERROR", "MISSING"}
+BEHAVIOUR_PATHS = ("backend/", "flutter/lib/", "flutter/test/", "e2e/", ".specify/features/")
+MAIN_BRANCHES = {"master", "main", "HEAD", ""}
 
 
 # ---------------------------------------------------------------- catalogue
@@ -542,6 +546,42 @@ def runs_of_task(runs: list[dict], task: str | None, branch: str) -> list[dict]:
     return [r for r in runs if (r["task"] == task if task else r["branch"] == branch)]
 
 
+def changed_behaviour_paths(repo: Path = ROOT) -> list[str] | None:
+    """SitePulse behaviour files this branch changes against the main branch (committed or not); None if unknown."""
+    base = next((ref for ref in ("origin/master", "origin/main", "master", "main")
+                 if _git(["rev-parse", "--verify", "--quiet", ref], repo, check_rc=False)), None)
+    merge_base = _git(["merge-base", base, "HEAD"], repo, check_rc=False) if base else ""
+    if not merge_base:
+        return None
+    names = _git(["diff", "--name-only", "--relative", merge_base], repo, check_rc=False).splitlines()
+    names += _git(["ls-files", "--others", "--exclude-standard"], repo, check_rc=False).splitlines()
+    return sorted({name for name in names if name.startswith(BEHAVIOUR_PATHS)})
+
+
+def require_run(catalogue: Catalogue, store, repo: Path = ROOT) -> tuple[list[str], str]:
+    """The rule every task must meet (AGENTS.md rule 13). Returns (problems, note on why it passed)."""
+    branch = run_metadata(repo)["branch"]
+    if branch in MAIN_BRANCHES:
+        return [], "not required on the main branch (runs arrive with the merged tasks)"
+    changed = changed_behaviour_paths(repo)
+    if changed is None:
+        return [], "not required: no main branch to compare this checkout with"
+    if not changed:
+        return [], "not required: this branch changes no backend, flutter, e2e or feature file"
+    mine = runs_of_task(build_runs(load_history(store, 10_000), catalogue, limit=10_000), None, branch)
+    if not mine:
+        return [f"no test run is recorded for branch {branch}, which changes {len(changed)} behaviour file(s) "
+                f"(e.g. {changed[0]}): run `python3 scripts/gui_e2e.py run --record --task \"<task>\"` "
+                f"and commit .specify/executions"], ""
+    latest = mine[0]
+    failing = [row["id"] for row in latest["scenarios"] if row["status"] in FAILING]
+    if failing:
+        return [f"the latest recorded run of branch {branch} ({latest['run_id']}) has failing scenarios: "
+                f"{', '.join(failing)}. Fix them, run the suite again with --record and commit the new run"], ""
+    return [], (f"run {latest['run_id']} recorded for task '{latest['task']}': "
+                f"{latest['executed']}/{latest['automated']} automated scenarios executed, {latest['status']}")
+
+
 def print_runs(runs: list[dict], detail: bool) -> None:
     for run in runs:
         counts = ", ".join(f"{run['counts'][s]} {s}" for s in SCENARIO_ORDER if s in run["counts"])
@@ -782,20 +822,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "check":
         catalogue = load_catalogue()
         problems = check(catalogue)
+        note = ""
         if args.require_run:
-            branch = run_metadata()["branch"]
-            if not runs_of_task(build_runs(load_history(open_store(args.store)), catalogue, limit=10_000), None, branch):
-                problems.append(f"no test run is recorded for branch {branch}: run the suite with "
-                                f"`scripts/gui_e2e.py run --record --task <task>` and commit .specify/executions")
+            run_problems, note = require_run(catalogue, open_store(args.store))
+            problems += run_problems
         summary = {"migrated_epics": catalogue.migrated_epics, "scenarios": len(catalogue.scenarios),
                    "by_mode": dict(Counter(s.mode for s in catalogue.scenarios)),
                    "linked_tests": sum(len(v) for v in catalogue.links.values())}
+        if args.require_run:
+            summary["test_run"] = note
         if args.json:
             print(json.dumps({"status": "FAILED" if problems else "PASSED", "problems": problems, **summary}, indent=2))
         else:
             print("\n".join(problems) if problems else
                   f"OK: {summary['scenarios']} scenarios in {', '.join(summary['migrated_epics']) or 'no epic'} "
-                  f"({summary['by_mode']}), {summary['linked_tests']} linked tests")
+                  f"({summary['by_mode']}), {summary['linked_tests']} linked tests"
+                  + (f"\ntest run: {note}" if note else ""))
         return 1 if problems else 0
 
     store = open_store(args.store)

@@ -50,10 +50,16 @@ A run id is `<UTC time>-<commit>`, so runs from different branches never collide
 The dashboard `e2e/.artifacts/feature-report.html` is regenerated after every recorded run.
 
 ```bash
-python3 scripts/feature_traceability.py check --require-run        # gate: catalogue is consistent and this branch has a run
+python3 scripts/feature_traceability.py check --require-run        # gate `test-run-recorded`: this branch has a passing recorded run
 python3 scripts/feature_traceability.py task-report                # markdown of this task's latest run, for the PR
 python3 scripts/feature_traceability.py runs --detail --limit 5    # recent runs: executed, regressed, fixed
 python3 scripts/feature_traceability.py report --epic EPIC-10 --steps
 python3 scripts/feature_traceability.py history SC-10-01-01
 python3 scripts/feature_traceability.py html                       # dashboard: e2e/.artifacts/feature-report.html
 ```
+
+## Harness tasks
+
+A task in `.specify/tasks/task-dag.json` can name scenarios as acceptance tests
+(`"acceptance_tests": ["scenario:SC-10-01-01"]`): the task verifies only when the scenario's
+latest recorded execution is PASS. Every `harness_cli.py verify` also runs `test-run-recorded`.
