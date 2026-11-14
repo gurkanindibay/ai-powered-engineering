@@ -32,6 +32,13 @@ def _rules(report: dict) -> list[str]:
 
 
 class RustStandardsLintTests(unittest.TestCase):
+    def test_person_inserts_are_confined_to_repository(self):
+        report = _lint({
+            "src/services/a.rs": 'const SQL: &str = "INSERT INTO persons (full_name) VALUES ($1)";\n',
+            "src/db/person_repository.rs": 'const SQL: &str = "INSERT INTO persons (full_name) VALUES ($1)";\n',
+        })
+        self.assertEqual(_rules(report), ["person-insert-location"])
+
     def test_domain_must_not_depend_on_infrastructure(self):
         report = _lint({"src/domain/x.rs": "use axum::Json;\nfn f() { let _ = std::env::var(\"A\"); crate::state::AppState::new(); }\n"})
         self.assertEqual(_rules(report), ["domain-purity", "domain-purity", "domain-purity"])

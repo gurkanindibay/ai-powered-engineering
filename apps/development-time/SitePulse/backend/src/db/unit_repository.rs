@@ -74,10 +74,15 @@ pub async fn save_unit(
                 let phone: Option<String> = ur.get(1);
                 let email: String = ur.get(2);
                 let ph = phone.unwrap_or_default();
-                client.execute(
-                    "INSERT INTO persons (id, full_name, phone, email, person_type) VALUES ($1, $2, $3, $4, 'HOME_OWNER') ON CONFLICT (id) DO NOTHING",
-                    &[&oid, &name, &ph, &email],
-                ).await?;
+                super::person_repository::ensure_legacy_person(
+                    &client,
+                    oid,
+                    &name,
+                    Some(&ph),
+                    &email,
+                    "HOME_OWNER",
+                )
+                .await?;
                 Some(oid)
             } else {
                 None
@@ -105,10 +110,15 @@ pub async fn save_unit(
                 let phone: Option<String> = ur.get(1);
                 let email: String = ur.get(2);
                 let ph = phone.unwrap_or_default();
-                client.execute(
-                    "INSERT INTO persons (id, full_name, phone, email, person_type) VALUES ($1, $2, $3, $4, 'HOME_RESIDENT') ON CONFLICT (id) DO NOTHING",
-                    &[&tid, &name, &ph, &email],
-                ).await?;
+                super::person_repository::ensure_legacy_person(
+                    &client,
+                    tid,
+                    &name,
+                    Some(&ph),
+                    &email,
+                    "HOME_RESIDENT",
+                )
+                .await?;
                 Some(tid)
             } else {
                 None
@@ -194,10 +204,30 @@ pub async fn save_unit_member(
     };
     let person_id: i64 = match existing_person {
         Some(row) => row.get(0),
-        None => client.query_one(
-            "INSERT INTO persons(full_name,phone,email,person_type,site_id) VALUES ($1,$2,NULLIF($3,''),'HOME_RESIDENT',$4) RETURNING id",
-            &[&full_name,&phone,&normalized_email,&site_id],
-        ).await?.get(0),
+        None => {
+            if let Some(site) = site_id {
+                super::person_repository::resolve_new_site_person(
+                    &client,
+                    full_name,
+                    Some(phone),
+                    (!normalized_email.is_empty()).then_some(normalized_email.as_str()),
+                    "HOME_RESIDENT",
+                    site,
+                    true,
+                )
+                .await?
+            } else {
+                super::person_repository::insert_site_person(
+                    &client,
+                    full_name,
+                    Some(phone),
+                    (!normalized_email.is_empty()).then_some(normalized_email.as_str()),
+                    "HOME_RESIDENT",
+                    None,
+                )
+                .await?
+            }
+        }
     };
     let row = client.query_one(
         "INSERT INTO occupancy_members(occupancy_id,person_id,full_name,relationship,phone,email,is_emergency_contact) VALUES ($1,$2,$3,$4,$5,$6,false) ON CONFLICT(occupancy_id,person_id) WHERE person_id IS NOT NULL DO UPDATE SET full_name=EXCLUDED.full_name,relationship=EXCLUDED.relationship,phone=EXCLUDED.phone,email=EXCLUDED.email RETURNING id",

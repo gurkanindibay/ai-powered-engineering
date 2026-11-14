@@ -8,7 +8,8 @@ pub async fn save_user(
     pool: &Pool,
     user: &User,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client = pool.get().await?;
+    let mut connection = pool.get().await?;
+    let client = connection.transaction().await?;
     let role_str = user.role.as_str();
     let email = crate::domain::email::NormalizedEmail::normalize(&user.email);
     let site_id_num = if user.site_id.is_empty() {
@@ -54,13 +55,28 @@ pub async fn save_user(
                 Role::SiteManager => "SITE_MANAGER",
                 Role::Auditor => "AUDITOR",
             };
-            let row = client
-                .query_one(
-                    "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-                    &[&user.full_name, &user.phone, &email, &p_type, &site_id_num],
+            Some(if let Some(site_id) = site_id_num {
+                super::person_repository::resolve_new_site_person(
+                    &client,
+                    &user.full_name,
+                    Some(&user.phone),
+                    Some(&email),
+                    p_type,
+                    site_id,
+                    true,
                 )
-                .await?;
-            Some(row.get(0))
+                .await?
+            } else {
+                super::person_repository::insert_site_person(
+                    &client,
+                    &user.full_name,
+                    Some(&user.phone),
+                    Some(&email),
+                    p_type,
+                    None,
+                )
+                .await?
+            })
         } else {
             None
         }
@@ -117,6 +133,7 @@ pub async fn save_user(
             )
             .await?;
     }
+    client.commit().await?;
     Ok(())
 }
 
@@ -213,13 +230,15 @@ pub async fn ensure_bootstrap_admin(
         .await?;
     let person_id: i64 = match existing {
         Some(row) => row.get(0),
-        None => client
-            .query_one(
-                "INSERT INTO persons (full_name, email, person_type) VALUES ('SaaS Platform Admin', $1, 'SAAS_ADMIN') RETURNING id",
-                &[&email],
+        None => {
+            super::person_repository::insert_platform_person(
+                &client,
+                "SaaS Platform Admin",
+                &email,
+                "SAAS_ADMIN",
             )
             .await?
-            .get(0),
+        }
     };
     client
         .execute(
