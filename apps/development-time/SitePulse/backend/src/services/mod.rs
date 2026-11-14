@@ -38,6 +38,7 @@ pub mod lease_service;
 pub mod notification_service;
 pub mod person_directory_service;
 pub mod person_import_service;
+pub mod person_merge_service;
 pub mod person_record_service;
 pub mod plan_service;
 pub mod portfolio_service;
