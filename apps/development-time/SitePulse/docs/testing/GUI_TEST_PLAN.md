@@ -135,7 +135,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | GUI-08-12 | 08-08 | Manager | P1 | ui:GUI-08-01 + `overdue_dues(tenant, 1500.00)` | Replace the tenant → the previous tenant's history entry shows "Left with ₺1.500,00", the new tenant is active. Then "owner takes the unit back" → unit owner-occupied, owner unchanged | to be defined with the UI | ❌ not built (story pending) |
 | GUI-08-13 | 08-09 | Manager | P1 | seed (owner-occupied unit) | Transfer ownership of an owner-occupied unit → unit vacant with the new owner. Repeat with "new owner moves in" → owner-occupied by the new owner | to be defined with the UI | ❌ not built (story pending) |
 | GUI-08-14 | 08-10 | Manager | P1 | seed + vacant-period owner dues + tenant dues | Move-out → the exit balance in history equals the tenant's own unpaid dues, not the unit total. A move-out date before the session start is rejected with a message | to be defined with the UI | ❌ not built (story pending) |
-| GUI-08-15 | 08-11 | Manager | P1 | seed | Unit card → open workspace → actions and information tabs switch modes; allowed actions match unit status | unit_workspace_* | ❌ not built (story pending) |
+| GUI-08-15 | 08-11 | Manager | P1 | seed | Directory row → open workspace → actions and information tabs switch modes; allowed actions match unit status | unit_workspace_*, workspace_actions, workspace_information | ✅ |
 
 ### EPIC-09 Payment Tracking & Treasury
 | ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |

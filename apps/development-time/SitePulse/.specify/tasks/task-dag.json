@@ -870,6 +870,11 @@
       ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#unit-workspace",
       "description": "B3: wire the task-34 compact unit rows to the task-35 workspace so every row reaches actions in one tap and the information mode separately; restore list state, scroll position and focus on return at phone and desktop widths.",
+      "acceptance_tests": [
+        "flutter:test/unit_workspace_test.dart",
+        "flutter:test/unit_directory_row_test.dart",
+        "flutter:test/owners_residents_module_test.dart"
+      ],
       "gates": [
         "flutter-analyze",
         "flutter-test",

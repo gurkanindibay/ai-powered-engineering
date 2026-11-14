@@ -11,12 +11,16 @@ class UnitDirectoryRow extends StatelessWidget {
   final HomeOwnerItem unit;
   final VoidCallback onActions;
   final VoidCallback onDetails;
+  final FocusNode? actionsFocusNode;
+  final FocusNode? detailsFocusNode;
 
   const UnitDirectoryRow({
     super.key,
     required this.unit,
     required this.onActions,
     required this.onDetails,
+    this.actionsFocusNode,
+    this.detailsFocusNode,
   });
 
   String get _unitLabel => '${unit.block.trim()} ${unit.unitNo}'.trim();
@@ -157,22 +161,38 @@ class UnitDirectoryRow extends StatelessWidget {
       spacing: AppSpacing.xs,
       children: [
         testId(
-          'module_unit_actions_${unit.unitId}',
-          OutlinedButton.icon(
-            key: Key('module_unit_actions_${unit.unitId}'),
-            onPressed: onActions,
-            icon: const Icon(Icons.bolt_outlined, size: 16),
-            label: const Text('İşlemler'),
+          'module_workspace_actions_${unit.unitId}',
+          KeyedSubtree(
+            key: Key('module_workspace_actions_${unit.unitId}'),
+            child: testId(
+              'module_unit_actions_${unit.unitId}',
+              OutlinedButton.icon(
+                key: Key('module_unit_actions_${unit.unitId}'),
+                focusNode: actionsFocusNode,
+                onPressed: onActions,
+                icon: const Icon(Icons.bolt_outlined, size: 16),
+                label: const Text('İşlemler'),
+              ),
+              label: '$_unitLabel işlemlerini aç',
+            ),
           ),
           label: '$_unitLabel işlemlerini aç',
         ),
         testId(
-          'module_unit_details_${unit.unitId}',
-          TextButton.icon(
-            key: Key('module_unit_details_${unit.unitId}'),
-            onPressed: onDetails,
-            icon: const Icon(Icons.info_outline, size: 16),
-            label: const Text('Detay'),
+          'module_workspace_info_${unit.unitId}',
+          KeyedSubtree(
+            key: Key('module_workspace_info_${unit.unitId}'),
+            child: testId(
+              'module_unit_details_${unit.unitId}',
+              TextButton.icon(
+                key: Key('module_unit_details_${unit.unitId}'),
+                focusNode: detailsFocusNode,
+                onPressed: onDetails,
+                icon: const Icon(Icons.info_outline, size: 16),
+                label: const Text('Detay'),
+              ),
+              label: '$_unitLabel detaylarını aç',
+            ),
           ),
           label: '$_unitLabel detaylarını aç',
         ),
