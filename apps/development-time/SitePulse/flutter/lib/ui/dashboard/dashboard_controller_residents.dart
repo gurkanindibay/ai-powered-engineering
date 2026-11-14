@@ -52,9 +52,12 @@ extension DashboardControllerResidents on DashboardController {
   Future<void> registerHomeOwner({
     required String block,
     required int unitNo,
-    required String ownerName,
-    required String email,
-    required String phone,
+    String ownerName = '',
+    String email = '',
+    String phone = '',
+    PersonRef? ownerRef,
+    PersonRef? tenantRef,
+    List<RegistrationMember> members = const [],
     String? tenantFullName,
     String? tenantEmail,
     String? tenantPhone,
@@ -89,12 +92,19 @@ extension DashboardControllerResidents on DashboardController {
             'block': block,
             'unit_no': unitNo,
             'floor': ((unitNo - 1) ~/ 4) + 1,
-            'owner_full_name': ownerName,
-            'email': email,
-            'phone': phone,
-            'tenant_full_name': tenantFullName,
-            'tenant_email': tenantEmail,
-            'tenant_phone': tenantPhone,
+            if (ownerRef != null) 'owner': ownerRef.toJson(),
+            if (tenantRef != null) 'tenant': tenantRef.toJson(),
+            if (members.isNotEmpty)
+              'members': [
+                for (final m in members)
+                  {'person': m.person.toJson(), 'relationship': m.relationship},
+              ],
+            if (ownerRef == null) 'owner_full_name': ownerName,
+            if (ownerRef == null) 'email': email,
+            if (ownerRef == null) 'phone': phone,
+            if (tenantRef == null) 'tenant_full_name': tenantFullName,
+            if (tenantRef == null) 'tenant_email': tenantEmail,
+            if (tenantRef == null) 'tenant_phone': tenantPhone,
             // F3: the entered share; without one the server uses the site's usual share and says so.
             if (landShare != null) 'land_share': '$landShare',
             // F4: only a known tariff is sent; otherwise the server applies and reports its default.
@@ -310,6 +320,17 @@ extension DashboardControllerResidents on DashboardController {
       }
     }
 
+    for (final member in members) {
+      await addHouseholdMember(
+        unitId: targetUnitId,
+        block: block,
+        unitNo: unitNo,
+        fullName: member.fullName,
+        phone: member.phone,
+        email: member.email,
+        relationship: member.relationship,
+      );
+    }
     notify();
   }
 

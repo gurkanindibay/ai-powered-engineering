@@ -28,6 +28,8 @@ import 'people_directory_page.dart';
 import '../../domain/services/person_directory_api.dart';
 import '../../domain/services/person_directory_repository.dart';
 import 'sp_person_field.dart';
+import '../../domain/repositories/person_repository.dart';
+import 'person_profile_page.dart';
 import '../design_system/sp_filter_chip.dart';
 import '../design_system/sp_semantics.dart';
 import '../design_system/sp_tone.dart';
@@ -49,6 +51,7 @@ class OwnersResidentsModulePage extends StatefulWidget {
   final String? initialUnitId;
   final String? initialBlockFilter;
   final String? initialOccupancyFilter;
+  final PersonRepository personRepository;
 
   const OwnersResidentsModulePage({
     super.key,
@@ -56,6 +59,7 @@ class OwnersResidentsModulePage extends StatefulWidget {
     this.initialUnitId,
     this.initialBlockFilter,
     this.initialOccupancyFilter,
+    this.personRepository = const PersonDirectoryRepository(),
   });
 
   @override

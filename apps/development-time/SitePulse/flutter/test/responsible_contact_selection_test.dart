@@ -50,6 +50,9 @@ void main() {
   ) async {
     final pending = Completer<http.Response>();
     ApiClient.transport = MockClient((request) {
+      if (request.url.path.endsWith('/occupancy-history')) {
+        return Future.value(http.Response('[]', 200));
+      }
       expect(
         request.url.path,
         '/api/v1/site-admin/units/42/responsible-contact',
@@ -96,6 +99,8 @@ void main() {
   ) async {
     var requests = 0;
     ApiClient.transport = MockClient((request) async {
+      if (request.url.path.endsWith('/occupancy-history'))
+        return http.Response('[]', 200);
       requests++;
       return http.Response('unexpected request', 500);
     });
@@ -150,4 +155,57 @@ void main() {
       expect(controller.homeOwners.single.tenantFullName, 'Tenant Contact');
     },
   );
+
+  // covers: SC-12-06-03
+  testWidgets('choosing a contact sends the person card id', (tester) async {
+    Map<String, dynamic>? sent;
+    ApiClient.transport = MockClient((request) async {
+      if (request.url.path.endsWith('/occupancy-history')) {
+        return http.Response(
+          jsonEncode([
+            {
+              'id': 1,
+              'unit_id': 42,
+              'person_id': 77,
+              'person_name': 'Owner Contact',
+              'role': 'OWNER',
+              'start_date': '2026-01-01',
+              'is_active': true,
+              'exit_balance': '0.00',
+              'created_at': '2026-01-01T00:00:00Z',
+            },
+          ]),
+          200,
+        );
+      }
+      sent = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response(
+        jsonEncode({
+          'primary_responsible_name': 'Owner Contact',
+          'primary_responsible_role': 'OWNER',
+          'primary_responsible_phone': '05321112233',
+          'primary_responsible_email': 'owner@example.com',
+        }),
+        200,
+      );
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () =>
+                  showResponsibleContactSelection(context, controller, unit),
+              child: const Text('Choose'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Choose'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('responsible_contact_OWNER_42')));
+    await tester.pumpAndSettle();
+    expect(sent?['person_id'], 77);
+  });
 }

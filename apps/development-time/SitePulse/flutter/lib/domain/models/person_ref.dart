@@ -64,3 +64,20 @@ class PersonRef {
           'confirm_distinct': confirmDistinct,
         };
 }
+
+/// A household member chosen during unit registration, with a display copy of the card.
+class RegistrationMember {
+  final PersonRef person;
+  final String relationship;
+  final String fullName;
+  final String phone;
+  final String email;
+
+  const RegistrationMember({
+    required this.person,
+    required this.relationship,
+    this.fullName = '',
+    this.phone = '',
+    this.email = '',
+  });
+}

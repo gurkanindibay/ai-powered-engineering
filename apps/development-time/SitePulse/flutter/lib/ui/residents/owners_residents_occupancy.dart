@@ -122,7 +122,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                   Text(settlementNote, style: TextStyle(color: AppColors.textSecondary(ctx), fontSize: 12)),
                   const SizedBox(height: 16),
                   SpPersonField(
-                    repository: const PersonDirectoryRepository(),
+                    repository: widget.personRepository,
                     roleContext: 'tenant',
                     unitId: ho.unitId,
                     value: person,
@@ -385,7 +385,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                             final selected = newOwner!;
                             final details = selected.personId == null
                                 ? null
-                                : await const PersonDirectoryRepository().getById(selected.personId!);
+                                : await widget.personRepository.getById(selected.personId!);
                             if (details == null) {
                               if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(appSnackBar(content: const Text('Kişi kartı yüklenemedi.')));
                               return;
@@ -485,7 +485,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                   ),
                   const SizedBox(height: 12),
                   SpPersonField(
-                    repository: const PersonDirectoryRepository(),
+                    repository: widget.personRepository,
                     roleContext: 'owner',
                     unitId: ho.unitId,
                     value: newOwner,

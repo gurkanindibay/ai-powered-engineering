@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../models/person_ref.dart';
 import '../repositories/person_repository.dart';
 import 'api_client.dart';
 import 'person_directory_api.dart';
@@ -7,6 +8,10 @@ import 'person_directory_api.dart';
 /// Connects the shared picker and card form to the scoped person endpoints.
 class PersonDirectoryRepository implements PersonRepository {
   const PersonDirectoryRepository();
+
+  @override
+  PersonRef referenceFor(PersonSearchResult result) =>
+      PersonRef.existing(result.person.personId);
 
   @override
   Future<PersonSearchPage> search({
