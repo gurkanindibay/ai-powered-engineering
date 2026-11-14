@@ -2,7 +2,7 @@
 
 > **Scope:** EPIC-08 (Unit Occupancy Lifecycle), with effects on EPIC-04 (registration approval) and EPIC-09 (move-out settlement).
 > **Status:** Implemented (see §9). The normative model is in
-> [EPIC-08 §3](../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md#3-unit-state-model-normative); this document explains why it looks that way, what the code did before (§5), and how each gap was closed (§9).
+> [EPIC-08 §3](../../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md#3-unit-state-model-normative); this document explains why it looks that way, what the code did before (§5), and how each gap was closed (§9).
 > **Date:** 2026-11-13
 
 ---
@@ -136,7 +136,7 @@ G1 and G10 are what the user reported. G2 to G9 are the same weakness (no guarde
 
 ## 6. Requirement changes
 
-Made in [EPIC-08](../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md):
+Made in [EPIC-08](../../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md):
 
 | Change | Closes |
 | :--- | :--- |

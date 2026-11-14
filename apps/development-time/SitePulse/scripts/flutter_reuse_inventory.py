@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inventory and guard for Flutter component reuse (docs/flutter-reusability-report.md).
+"""Inventory and guard for Flutter component reuse (docs/reusability/flutter-reusability-report.md).
 
 Two parts:
 

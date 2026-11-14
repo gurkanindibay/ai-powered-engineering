@@ -4,9 +4,9 @@
 > **Epic ID:** EPIC-11 (`.specify/requirements/EPIC-11-payments-phase3.md`)
 > **Domain:** Treasury, Accounting, Collections and Governance contexts
 > **Target Roles:** Home Owner, Home Resident (tenant), Site Manager, Auditor (denetçi, read-only), SaaS Admin, management company staff, lawyer (token access)
-> **Governance:** KMK 20/22/25/30/35/37 (Law 7579), İİK 68/1, TBK 147/1, 6698 KVKK and Decision 2026/348, 6493, VUK (e-Arşiv). Items marked **(verify)** follow `docs/PAYMENTS_PRODUCT_OWNER_EVALUATION.md` and need counsel before production use.
+> **Governance:** KMK 20/22/25/30/35/37 (Law 7579), İİK 68/1, TBK 147/1, 6698 KVKK and Decision 2026/348, 6493, VUK (e-Arşiv). Items marked **(verify)** follow `docs/payments/PAYMENTS_PRODUCT_OWNER_EVALUATION.md` and need counsel before production use.
 > **Depends on:** SPEC-005, SPEC-006, SPEC-007 (V16–V18)
-> **Source analysis:** `docs/PAYMENTS_PRODUCT_OWNER_EVALUATION.md` §3–§4 (F-01 … F-17, §3.3 hygiene)
+> **Source analysis:** `docs/payments/PAYMENTS_PRODUCT_OWNER_EVALUATION.md` §3–§4 (F-01 … F-17, §3.3 hygiene)
 > **Schema:** migration `V20__payments_phase3.sql`
 
 ---

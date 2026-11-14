@@ -17,7 +17,7 @@ metadata:
 
 SitePulse has one shared implementation for each recurring UI and money pattern. This skill tells
 you which one to use, how to use it, and when to add a new one. The history and evidence are in
-[docs/flutter-reusability-report.md](file:///docs/flutter-reusability-report.md).
+[apps/development-time/SitePulse/docs/reusability/flutter-reusability-report.md](file:///apps/development-time/SitePulse/docs/reusability/flutter-reusability-report.md).
 
 **The rule:** before writing a private `_buildX` helper, a `Container` styled as a card or pill, a
 `TextField` for an amount, a `Clipboard` call, a `Decimal.tryParse`, a filter chip or a selection
@@ -49,7 +49,7 @@ Paths below are relative to `apps/development-time/SitePulse/flutter/lib/`.
 `SpPageHeader(title:, icon:, subtitle:, actions:)` is the full-width bordered module identity
 card. Titles wrap; actions wrap beneath the title. Place it after any context switcher and before
 section navigation, summaries and filters. The page layout contract and screen audit are in
-[docs/page-layout-standard.md](../../../docs/page-layout-standard.md). Dedicated full-screen flows
+[apps/development-time/SitePulse/docs/ux/page-layout-standard.md](../../../apps/development-time/SitePulse/docs/ux/page-layout-standard.md). Dedicated full-screen flows
 use `AppFullscreenPage` with its AppBar title, top-aligned body and sticky bottom actions.
 
 ### Metrics: `SpMetricValue`, `SpIconMetric` (`ui/design_system/sp_metric.dart`)
