@@ -68,6 +68,7 @@ routes! {
     post "/api/v1/site-admin/persons/import" => handlers::import_persons, Require(PersonManage);
     put "/api/v1/site-admin/persons/:person_id/national-id" => handlers::set_person_national_id, Require(PersonIdentityManage);
     put "/api/v1/site-admin/persons/:person_id/preferences" => handlers::update_person_preferences, Require(PersonManage);
+    put "/api/v1/site-admin/units/:id/responsible-contact" => handlers::select_responsible_contact, Require(PersonManage);
     post "/api/v1/site-admin/units/:id/move-out" => handlers::move_out_resident, Require(OccupancyManage);
     post "/api/v1/site-admin/units/:id/move-in" => handlers::move_in_resident, Require(OccupancyManage);
     post "/api/v1/site-admin/units/:id/occupancy-transitions" => handlers::apply_occupancy_transition, Require(OccupancyManage);
