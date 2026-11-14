@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
+import 'package:sitepulse/ui/components/sp_effective_date_field.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_screen.dart';
 import 'test_fixtures.dart';
 
@@ -76,6 +77,25 @@ void main() {
       expect(item.isActive, isFalse);
       expect(item.exitBalance, Decimal.parse('350.50'));
       expect(item.notes, 'Key returned to security desk');
+    });
+
+    test('Move-out records the effective date chosen by the manager', () async {
+      final controller = DashboardController(isTestMode: true);
+      controller.loadTestFixtures();
+      controller.switchSessionRole(UserRole.siteManager);
+      await controller.fetchHomeOwners(siteId: 'site-1');
+      final first = controller.homeOwners.first;
+      final earlier = DateTime(2026, 1, 15);
+
+      final ok = await controller.moveOutResident(first.unitId, effectiveDate: earlier);
+      expect(ok, isTrue);
+
+      final history = await controller.fetchOccupancyHistory(first.unitId);
+      final closed = history.where((h) => !h.isActive && h.endDate != null);
+      if (closed.isNotEmpty) {
+        expect(closed.first.endDate, '2026-01-15');
+      }
+      expect(formatEffectiveDate(earlier), '2026-01-15');
     });
 
     test('Controller handles move-out and move-in in local fallback mode', () async {

@@ -282,7 +282,7 @@ Any command not listed for the unit's current state is illegal and is rejected w
 
 ### STORY-08-10: Atomic Transitions, Derived Status & Per-Person Exit Balance
 - **Status:** COMPLETED
-- **Description:** Each transition runs in a single database transaction with the unit row locked, takes an effective date (not in the future, not before the start of the session being closed), and writes an audit record with the command, the previous state and the new state. `occupancy_status` is derived from the active occupancy session and cannot differ from it. The exit balance of a closed session is the sum of the unpaid liabilities charged to that person for that unit, not of all unpaid liabilities of the unit. A move-out never creates an occupancy session.
+- **Description:** Each transition runs in a single database transaction with the unit row locked, takes an effective date (not in the future, not before the start of the session being closed), and writes an audit record with the command, the previous state and the new state. `occupancy_status` is derived from the active occupancy session and cannot differ from it. The exit balance of a closed session is the sum of the unpaid liabilities charged to that person for that unit, not of all unpaid liabilities of the unit. A move-out never creates an occupancy session. Because a leave is often recorded after it happened, every move-out screen lets the Site Manager choose the effective date (default today); the same date rules apply.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Scenario: Exit balance counts only the departing tenant's liabilities
@@ -305,4 +305,12 @@ Any command not listed for the unit's current state is illegal and is rejected w
     Given Tenant "Zeynep Kaya" moved into Unit "B Blok D:12" on 2026-03-01
     When the Site Manager executes the move-out action with effective date 2026-02-15
     Then the request is rejected because the date is before the session start
+
+  Scenario: The leave is recorded after the resident actually left
+    Given Tenant "Zeynep Kaya" moved into Unit "B Blok D:12" on 2026-03-01
+    And she handed back the keys on 2026-10-20
+    When the Site Manager records the move-out on 2026-11-02 and sets the effective date to 2026-10-20
+    Then the session is closed with end_date 2026-10-20
+    And the exit balance is calculated as of the effective date
+    And the move-out dialog offers the effective date, defaulting to today and not later than today
   ```

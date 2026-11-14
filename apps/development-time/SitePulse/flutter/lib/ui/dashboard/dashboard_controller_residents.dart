@@ -974,7 +974,8 @@ extension DashboardControllerResidents on DashboardController {
     return const OccupancyTransitionResult.success();
   }
 
-  Future<bool> moveOutResident(String unitId, {String? notes}) async {
+  Future<bool> moveOutResident(String unitId, {String? notes, DateTime? effectiveDate}) async {
+    final endDate = formatEffectiveDate(effectiveDate ?? DateTime.now());
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
     if (!isTestMode) {
       try {
@@ -982,7 +983,7 @@ extension DashboardControllerResidents on DashboardController {
         final response = await ApiClient.post(
           url,
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'notes': notes}),
+          body: jsonEncode({'notes': notes, 'end_date': endDate}),
         ).timeout(const Duration(seconds: 4));
 
         if (response.statusCode == 200) {
@@ -1011,7 +1012,7 @@ extension DashboardControllerResidents on DashboardController {
           if (h.isActive) {
             return h.copyWith(
               isActive: false,
-              endDate: DateTime.now().toIso8601String().split('T').first,
+              endDate: endDate,
               notes: notes,
             );
           }
