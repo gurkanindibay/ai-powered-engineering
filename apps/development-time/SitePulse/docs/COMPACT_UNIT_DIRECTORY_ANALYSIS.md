@@ -4,6 +4,8 @@ Date: 14 November 2026
 
 Status: proposed design for review; application implementation is outside this change
 
+Unified with the person card proposal in [OWNERS_RESIDENTS_UNIFIED_DESIGN.md](OWNERS_RESIDENTS_UNIFIED_DESIGN.md). Develop from that document; this one is kept as the source of the directory design.
+
 Companion: [mobile design preview](ux-reference/mobile_unit_directory_preview.html) · [responsive draft](ux-reference/compact_unit_directory.html)
 
 ## Recommendation
