@@ -13,6 +13,23 @@ import 'package:sitepulse/ui/dashboard/dashboard_screen.dart';
 import 'package:sitepulse/ui/residents/owners_residents_module_page.dart';
 import 'test_fixtures.dart';
 
+Finder _directoryListScrollable() => find.descendant(
+      of: find.byType(ListView).first,
+      matching: find.byType(Scrollable),
+    ).first;
+
+Future<void> _scrollToDirectoryItem(WidgetTester tester, Finder item) async {
+  await tester.scrollUntilVisible(item, 180, scrollable: _directoryListScrollable());
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openUnitActions(WidgetTester tester, String unitId) async {
+  final action = find.byKey(Key('module_unit_actions_$unitId'));
+  await _scrollToDirectoryItem(tester, action);
+  await tester.tap(action);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -82,7 +99,44 @@ void main() {
       expect(find.textContaining('Boş Daire'), findsWidgets);
 
       // Verify injected unit is present on Sakinler tab
+      await _scrollToDirectoryItem(tester, find.text('Ayşe Kiracı'));
       expect(find.text('Ayşe Kiracı'), findsWidgets);
+    });
+
+    // covers: SC-12-02-06
+    testWidgets('unit directory row exposes separate actions and details targets', (tester) async {
+      final unit = controller.homeOwners.first;
+      await tester.pumpWidget(MaterialApp(
+        home: OwnersResidentsModulePage(controller: controller),
+      ));
+      await tester.pumpAndSettle();
+
+      final actions = find.byKey(Key('module_unit_actions_${unit.unitId}'));
+      final details = find.byKey(Key('module_unit_details_${unit.unitId}'));
+      await _scrollToDirectoryItem(tester, actions);
+
+      expect(actions, findsOneWidget);
+      expect(details, findsOneWidget);
+      expect(find.text('İşlemler'), findsWidgets);
+      expect(find.text('Detay'), findsWidgets);
+    });
+
+    // covers: SC-12-02-09
+    testWidgets('OwnersResidentsModulePage restores the unit directory search query', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        restorationScopeId: 'owners_residents_module_test',
+        home: OwnersResidentsModulePage(controller: controller),
+      ));
+      await tester.pumpAndSettle();
+
+      final search = find.byKey(const Key('module_search_input'));
+      await tester.enterText(search, '14');
+      await tester.pumpAndSettle();
+
+      await tester.restartAndRestore();
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<TextField>(search).controller?.text, '14');
     });
 
     testWidgets('Site Manager can navigate to Sakinler & Malikler tab via Cockpit button', (tester) async {
@@ -140,6 +194,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
+      await _openUnitActions(tester, 'unit-rented-kpi');
+
       final responsibleBtn = find.byKey(const Key('module_set_responsible_unit-rented-kpi'));
       await tester.ensureVisible(responsibleBtn);
       await tester.pumpAndSettle();
@@ -172,6 +228,8 @@ void main() {
         home: OwnersResidentsModulePage(controller: controller),
       ));
       await tester.pumpAndSettle();
+
+      await _openUnitActions(tester, 'unit-rented-kpi');
 
       // Verify tabs on rented unit
       final residentsTabFinder = find.byKey(const Key('module_tab_residents_unit-rented-kpi'));
@@ -215,6 +273,8 @@ void main() {
         home: OwnersResidentsModulePage(controller: controller),
       ));
       await tester.pumpAndSettle();
+
+      await _openUnitActions(tester, 'unit-rented-kpi');
 
       expect(find.byKey(const Key('module_add_resident_to_unit-rented-kpi')), findsOneWidget);
       expect(find.byKey(const Key('module_quick_add_resident_unit-rented-kpi')), findsNothing);
@@ -277,6 +337,8 @@ void main() {
         home: OwnersResidentsModulePage(controller: controller),
       ));
       await tester.pumpAndSettle();
+
+      await _openUnitActions(tester, 'unit-owner-context');
 
       expect(find.byKey(const Key('module_add_tenant_unit-owner-context')), findsOneWidget);
       expect(find.byKey(const Key('module_quick_move_in_unit-owner-context')), findsNothing);
@@ -351,6 +413,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
+      await _openUnitActions(tester, 'unit-rented-kpi');
+
       // Open Edit for rented unit
       final editBtn = find.byKey(const Key('module_edit_residents_unit-rented-kpi'));
       await tester.ensureVisible(editBtn);
@@ -413,6 +477,8 @@ void main() {
         home: OwnersResidentsModulePage(controller: controller),
       ));
       await tester.pumpAndSettle();
+
+      await _openUnitActions(tester, 'unit-vacant-test');
 
       // Find move-in button on vacant unit card
       final moveInBtn = find.byKey(const Key('module_move_in_unit-vacant-test'));
