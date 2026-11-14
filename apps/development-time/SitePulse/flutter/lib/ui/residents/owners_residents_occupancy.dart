@@ -4,9 +4,10 @@ part of 'owners_residents_module_page.dart';
 extension _OccupancyActions on _OwnersResidentsModulePageState {
   void _openMoveOut(HomeOwnerItem ho) {
     final notesCtrl = TextEditingController();
+    var effectiveDate = DateTime.now();
     AppFullscreenPage.push(
       context: context,
-      builder: (ctx) => AppFullscreenPage(
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setMoveOutState) => AppFullscreenPage(
         title: 'Sakin Ayrılışı (Move-Out / Tahliye)',
         subtitle: '${ho.block} Blok Daire ${ho.unitNo}',
         bottomBar: AppFullscreenPage.buildBottomBar(
@@ -17,7 +18,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
               key: const Key('module_confirm_move_out_btn'),
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.warningFill, foregroundColor: Colors.white),
               onPressed: () async {
-                final success = await widget.controller.moveOutResident(ho.unitId, notes: notesCtrl.text.trim());
+                final success = await widget.controller.moveOutResident(ho.unitId, notes: notesCtrl.text.trim(), effectiveDate: effectiveDate);
                 if (success && ctx.mounted) {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(this.context).showSnackBar(
@@ -34,6 +35,12 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
           children: [
             Text('Ayrılan Sakin: ${ho.activeResponsibleResidentName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 12),
+            testId('module_move_out_effective_date', SpEffectiveDateField(
+              key: const Key('module_move_out_effective_date'),
+              value: effectiveDate,
+              onChanged: (d) => setMoveOutState(() => effectiveDate = d),
+            )),
+            const SizedBox(height: 12),
             TextField(
               controller: notesCtrl,
               maxLines: 3,
@@ -41,7 +48,7 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
             ),
           ],
         ),
-      ),
+      )),
     );
   }
 

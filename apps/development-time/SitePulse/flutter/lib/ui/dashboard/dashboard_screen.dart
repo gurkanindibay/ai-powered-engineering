@@ -1,3 +1,4 @@
+import '../components/sp_effective_date_field.dart';
 import '../design_system/sp_page_header.dart';
 import '../payments/finance_hub_page.dart';
 import '../../testing/test_id.dart';
@@ -2105,6 +2106,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _showMoveOutDialog(HomeOwnerItem resident) {
     final notesCtrl = TextEditingController();
+    var effectiveDate = DateTime.now();
     bool isSaving = false;
     String? errorMsg;
 
@@ -2146,6 +2148,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       final ok = await widget.controller.moveOutResident(
                         resident.unitId,
                         notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
+                        effectiveDate: effectiveDate,
                       );
                       if (ok && ctx.mounted) {
                         Navigator.pop(ctx);
@@ -2211,6 +2214,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 16),
+                testId('move_out_effective_date', SpEffectiveDateField(
+                  key: const Key('move_out_effective_date'),
+                  value: effectiveDate,
+                  onChanged: (d) => setDialogState(() => effectiveDate = d),
+                )),
                 const SizedBox(height: 16),
                 TextField(
                   controller: notesCtrl,
