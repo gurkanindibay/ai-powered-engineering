@@ -1148,6 +1148,69 @@ pub struct MoveInResidentRequest {
     pub notes: Option<String>,
 }
 
+/// One guarded occupancy command on a unit (EPIC-08 §3.3).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OccupancyTransitionRequest {
+    pub command: crate::domain::unit_state::CommandKind,
+    /// The date the move takes effect; today when omitted. Never in the future.
+    #[serde(default)]
+    pub effective_date: Option<NaiveDate>,
+    /// The incoming tenant: an existing person of the site...
+    #[serde(default)]
+    pub person_id: Option<i64>,
+    /// ...or a new person (tenant commands only).
+    #[serde(default)]
+    pub full_name: Option<String>,
+    #[serde(default)]
+    pub phone: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+    /// Which owner moves in when the unit has several (decision A1).
+    #[serde(default)]
+    pub owner_person_id: Option<i64>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OccupancyTransitionResponse {
+    pub unit_id: i64,
+    pub command: crate::domain::unit_state::CommandKind,
+    pub from_state: crate::domain::unit_state::UnitState,
+    pub to_state: crate::domain::unit_state::UnitState,
+    /// The session the command closed, with its exit balance.
+    pub closed: Option<OccupancyHistoryItem>,
+    /// The session the command opened.
+    pub opened: Option<OccupancyHistoryItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnitOwnerDto {
+    pub person_id: i64,
+    pub full_name: String,
+    pub share_percentage: Decimal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnitOccupantDto {
+    pub occupancy_id: i64,
+    pub person_id: i64,
+    pub full_name: String,
+    pub role: DebtorType,
+    pub start_date: NaiveDate,
+}
+
+/// A unit's ownership and occupancy and the commands legal from there.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnitOccupancyStateResponse {
+    pub unit_id: i64,
+    pub ownership: crate::domain::unit_state::Ownership,
+    pub occupancy: crate::domain::unit_state::Occupancy,
+    pub owners: Vec<UnitOwnerDto>,
+    pub occupant: Option<UnitOccupantDto>,
+    pub allowed_commands: Vec<crate::domain::unit_state::CommandKind>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OccupancyHistoryItem {
     pub id: i64,
@@ -2252,6 +2315,13 @@ pub struct TransferOwnershipRequest {
     pub transfer_date: Option<NaiveDate>,
     #[serde(default)]
     pub notes: Option<String>,
+    /// The buyer as an existing person of the site (for example the tenant
+    /// buying the unit); otherwise a new owner is created from the fields above.
+    #[serde(default)]
+    pub new_owner_person_id: Option<i64>,
+    /// The new owner moves in at transfer (owner-occupied units only, A4).
+    #[serde(default)]
+    pub new_owner_moves_in: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

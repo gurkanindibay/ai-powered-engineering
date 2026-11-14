@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
+import 'package:sitepulse/l10n/app_strings.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_screen.dart';
 import 'package:sitepulse/ui/residents/owners_residents_module_page.dart';
@@ -387,7 +388,7 @@ void main() {
       expect(updated.isOwnerOccupied, isTrue);
     });
 
-    testWidgets('OwnersResidentsModulePage move-in dialog allows choosing between Kiracı and Kat Maliki', (tester) async {
+    testWidgets('OwnersResidentsModulePage vacant unit offers tenant move-in and owner move-in separately', (tester) async {
       // Inject a vacant unit
       final vacantUnit = HomeOwnerItem(
         unitId: 'unit-vacant-test',
@@ -421,20 +422,29 @@ void main() {
       await tester.tap(moveInBtn);
       await tester.pumpAndSettle();
 
-      // Verify Move-In dialog opens with role selector
-      expect(find.text('Yeni Sakin / Giriş (Move-In)'), findsOneWidget);
-      final roleSelector = find.byKey(const Key('module_move_in_role_selector'));
-      expect(roleSelector, findsOneWidget);
-      expect(find.descendant(of: roleSelector, matching: find.text('Kiracı Girişi')), findsOneWidget);
-      expect(find.descendant(of: roleSelector, matching: find.text('Kat Maliki Girişi')), findsOneWidget);
-
-      // Select Kat Maliki Girişi
-      await tester.ensureVisible(find.descendant(of: roleSelector, matching: find.text('Kat Maliki Girişi')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.descendant(of: roleSelector, matching: find.text('Kat Maliki Girişi')));
+      // STORY-08-06: the tenant form has no role switch and no owner fields.
+      expect(find.text('Kiracı Girişi (Move-In)'), findsOneWidget);
+      expect(find.byKey(const Key('module_move_in_role_selector')), findsNothing);
+      expect(find.text('Kiracı Ad Soyad *'), findsOneWidget);
+      expect(find.text('Kat Maliki Ad Soyad *'), findsNothing);
+      await tester.tap(find.text(AppStrings.cancel));
       await tester.pumpAndSettle();
 
-      expect(find.text('Kat Maliki Ad Soyad *'), findsOneWidget);
+      // Owner move-in is a confirmation naming the owner on record, without inputs.
+      final ownerMoveIn = find.byKey(const Key('module_owner_move_in_unit-vacant-test'));
+      await tester.ensureVisible(ownerMoveIn);
+      await tester.pumpAndSettle();
+      await tester.tap(ownerMoveIn);
+      await tester.pumpAndSettle();
+      expect(find.text('Kat Maliki Taşınsın'), findsWidgets);
+      expect(find.textContaining('Hasan Malik daireye taşınacak'), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+      await tester.tap(find.byKey(const Key('module_confirm_owner_move_in_btn')));
+      await tester.pumpAndSettle();
+
+      final moved = controller.homeOwners.firstWhere((h) => h.unitId == 'unit-vacant-test');
+      expect(moved.occupancyStatus, 'OWNER_OCCUPIED');
+      expect(moved.ownerFullName, 'Hasan Malik', reason: 'an owner move-in never changes the owner');
     });
 
     testWidgets('OwnersResidentsModulePage enforces resident owner exclusivity and saves dynamic co-residents on add form', (tester) async {

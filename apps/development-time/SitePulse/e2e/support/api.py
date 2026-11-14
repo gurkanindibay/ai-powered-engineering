@@ -103,8 +103,25 @@ class Api:
 
     def move_in(self, session: Session, unit_id: str, full_name: str, email: str, role: str = "TENANT",
                 phone: str = "+90 533 000 00 00") -> dict:
-        return self.call("POST", f"/api/v1/site-admin/units/{unit_id}/move-in?site_id={session.user['site_id']}",
-                         session.token, body={"role": role, "full_name": full_name, "email": email, "phone": phone})
+        """Moves a tenant in with the command the unit's state allows (EPIC-08 §3.3).
+
+        An owner-occupied unit is rented out (C2) and a tenant-occupied one gets a
+        replacement tenant (C1); an owner move-in takes no person data (T3).
+        Returns the opened occupancy session.
+        """
+        site = session.user["site_id"]
+        if role.upper() == "OWNER":
+            command = "OWNER_MOVE_IN"
+            body = {"command": command}
+        else:
+            state = self.call("GET", f"/api/v1/site-admin/units/{unit_id}/occupancy-state?site_id={site}",
+                              session.token)
+            command = {"OWNER_OCCUPIED": "OWNER_RENTS_OUT",
+                       "TENANT_OCCUPIED": "REPLACE_TENANT"}.get(state.get("occupancy"), "TENANT_MOVE_IN")
+            body = {"command": command, "full_name": full_name, "email": email, "phone": phone}
+        result = self.call("POST", f"/api/v1/site-admin/units/{unit_id}/occupancy-transitions?site_id={site}",
+                           session.token, body=body)
+        return result.get("opened") or {}
 
     def move_out(self, session: Session, unit_id: str) -> dict:
         return self.call("POST", f"/api/v1/site-admin/units/{unit_id}/move-out?site_id={session.user['site_id']}",

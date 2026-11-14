@@ -2,7 +2,7 @@
 
 > **Epic ID:** EPIC-08  
 > **Module:** Property & Financial Domain (`flutter-domain`, `flutter-ui`, `backend-rust`, `postgres-db`)  
-> **Status:** REVISION SPECIFIED (STORY-08-01 to 08-05 completed; STORY-08-06 to 08-10 pending)  
+> **Status:** COMPLETED (STORY-08-01 to 08-10; the state model of §3 is implemented)  
 > **Governing Principles:** Kat Mülkiyeti Kanunu (KMK Articles 20 & 22), GAAP Dual-Ledger Accounting  
 > **Terminology Standard:** English domain identifiers (`OPERATIONAL_DUES`, `CAPITAL_DUES`, `OWNER`, `TENANT`, `OWNER_OCCUPIED`, `TENANT_OCCUPIED`, `VACANT`)  
 
@@ -160,7 +160,7 @@ Any command not listed for the unit's current state is illegal and is rejected w
 ---
 
 ### STORY-08-06: Owner Move-In Without Ownership Change
-- **Status:** PENDING
+- **Status:** COMPLETED
 - **Description:** A vacant unit still belongs to its owner. When the owner moves in, the system opens an owner occupancy session for the owner on record. The manager does not enter a name, phone or email for an owner move-in, and ownership is not changed. A different person can become the owner only through a title deed transfer (STORY-08-05). The vacant unit offers two separate actions: tenant move-in (person form) and owner move-in (confirmation naming the owner on record). When the unit has several active owners, the manager selects one of them.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
@@ -190,7 +190,7 @@ Any command not listed for the unit's current state is illegal and is rejected w
 ---
 
 ### STORY-08-07: Guarded State Transitions
-- **Status:** PENDING
+- **Status:** COMPLETED
 - **Description:** Every occupancy command is accepted only in the states listed in §3.3. An illegal command is rejected with an error that names the current state, and changes no data. The rule applies to every entry point that changes occupancy or ownership: move-in, move-out, title transfer, owner edit, and registration approval (EPIC-04). The user interface shows only the actions that are legal for the unit's current state.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
@@ -220,7 +220,7 @@ Any command not listed for the unit's current state is illegal and is rejected w
 ---
 
 ### STORY-08-08: Compound Transitions Preserve Exit Settlement
-- **Status:** PENDING
+- **Status:** COMPLETED
 - **Description:** Replacing a tenant (C1), an owner renting out the unit (C2) and an owner taking the unit back (C3) are executed as a move-out followed by a move-in, in one database transaction with one effective date. The outgoing occupant's session is closed with `end_date` and `exit_balance` exactly as in a standalone move-out. The owner edit screen uses these same commands and has no separate rule for adding or removing a tenant.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
@@ -247,7 +247,7 @@ Any command not listed for the unit's current state is illegal and is rejected w
 ---
 
 ### STORY-08-09: Title Deed Transfer Keeps Occupancy Consistent
-- **Status:** PENDING
+- **Status:** COMPLETED
 - **Description:** Extends STORY-08-05 with the occupancy effect of a transfer for each state (§3.3, T6). A transfer of an owner-occupied unit closes the previous owner's occupancy session and leaves the unit `VACANT`, unless the manager states that the new owner moves in. A transfer to the current tenant converts the tenancy into owner occupancy.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
@@ -281,7 +281,7 @@ Any command not listed for the unit's current state is illegal and is rejected w
 ---
 
 ### STORY-08-10: Atomic Transitions, Derived Status & Per-Person Exit Balance
-- **Status:** PENDING
+- **Status:** COMPLETED
 - **Description:** Each transition runs in a single database transaction with the unit row locked, takes an effective date (not in the future, not before the start of the session being closed), and writes an audit record with the command, the previous state and the new state. `occupancy_status` is derived from the active occupancy session and cannot differ from it. The exit balance of a closed session is the sum of the unpaid liabilities charged to that person for that unit, not of all unpaid liabilities of the unit. A move-out never creates an occupancy session.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin

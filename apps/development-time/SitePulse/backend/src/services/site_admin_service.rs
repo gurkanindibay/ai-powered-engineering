@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{Datelike, Utc};
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -69,6 +69,9 @@ pub const PERSON_NOT_FOUND: &str = "Person not found";
 
 /// The unit is not in this site (or does not exist); never answered with invented data.
 pub const UNIT_NOT_FOUND: &str = "Unit not found";
+/// A household member joins the active occupancy; a vacant unit has none.
+pub const NO_HOUSEHOLD_TO_JOIN: &str =
+    "The unit is vacant; move a tenant or the owner in before adding household members";
 
 /// A login email change staged until the new address confirms it.
 struct PendingEmailChange {
@@ -407,6 +410,10 @@ impl SiteAdminService {
         // Whether PostgreSQL holds the data (and its tokens); otherwise memory is the store.
         let mut persisted = false;
 
+        let registration_today = {
+            let inner = self.state.inner.read().await;
+            crate::services::finance_common::site_today(&inner, site_id)
+        };
         // 2. Persist to PostgreSQL if pool is available
         if let Some(ref pool) = self.state.pool {
             let mut connection = pool
@@ -628,8 +635,6 @@ impl SiteAdminService {
 
             if let Some(existing_unit) = existing_unit_opt {
                 unit_numeric_id = existing_unit.get("id");
-                let prev_owner: Option<i64> = existing_unit.get("owner_person_id");
-                let prev_tenant: Option<i64> = existing_unit.get("tenant_person_id");
 
                 if is_resident_only {
                     client
@@ -651,157 +656,34 @@ impl SiteAdminService {
                         )
                         .await.map_err(|e| e.to_string())?;
                 } else {
-                    // Check active occupancy in unit_occupancies
-                    let active_occ_row = client
-                        .query_opt(
-                            "SELECT id FROM unit_occupancies WHERE unit_id = $1 AND is_active = true",
-                            &[&unit_numeric_id],
+                    // T1 (+T2) through the guarded transitions: an existing
+                    // owner is never replaced and no session is closed here.
+                    register_occupancy(
+                        &client,
+                        site_numeric_id,
+                        unit_numeric_id,
+                        registration_today,
+                        person_numeric_id,
+                        is_tenant,
+                        request.is_resident && !has_explicit_tenant,
+                        explicit_tenant_person_id,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    client
+                        .execute(
+                            "UPDATE units SET house_type = COALESCE($1, house_type), virtual_iban = COALESCE(virtual_iban, $2) WHERE id = $3",
+                            &[&effective_house_type, &viban, &unit_numeric_id],
                         )
                         .await
-                        .map_err(|e| format!("DB query error: {}", e))?;
-
-                    if let Some(occ_row) = active_occ_row {
-                        let occ_id: i64 = occ_row.get(0);
-                        client
-                            .execute(
-                                "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE, notes = COALESCE(notes, '') || ' • Ayrıldı (Yeni sakin devri)' WHERE id = $1",
-                                &[&occ_id],
-                            )
-                            .await.map_err(|e| e.to_string())?;
-                    } else if let Some(prev_pid) = prev_tenant.or(prev_owner) {
-                        // Legacy occupant was not in unit_occupancies; archive it now so history is preserved
-                        let prev_role = if prev_tenant.is_some() {
-                            "TENANT"
-                        } else {
-                            "OWNER"
-                        };
-                        client
-                            .execute(
-                                r#"
-                                INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, end_date, is_active, exit_balance, notes)
-                                VALUES ($1, $2, $3, CURRENT_DATE - INTERVAL '6 months', CURRENT_DATE, false, 0.00, 'Önceki sakin (Yeni kayıt ile devredildi)')
-                                "#,
-                                &[&unit_numeric_id, &prev_pid, &prev_role],
-                            )
-                            .await.map_err(|e| e.to_string())?;
-                    }
-
-                    // Insert new occupant into unit_occupancies
-                    let new_occ_type = if has_explicit_tenant || is_tenant {
-                        "TENANT"
-                    } else {
-                        "OWNER"
-                    };
-                    let new_occ_status = if has_explicit_tenant || is_tenant {
-                        "TENANT_OCCUPIED"
-                    } else if request.is_resident {
-                        "OWNER_OCCUPIED"
-                    } else {
-                        "VACANT"
-                    };
-                    let active_occ_pid = if has_explicit_tenant {
-                        explicit_tenant_person_id
-                    } else {
-                        Some(person_numeric_id)
-                    };
-
-                    if has_explicit_tenant || is_tenant || request.is_resident {
-                        if let Some(occ_pid) = active_occ_pid {
-                            client
-                                .execute(
-                                    r#"
-                                    INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
-                                    VALUES ($1, $2, $3, CURRENT_DATE, true, 0.00, $4)
-                                    "#,
-                                    &[&unit_numeric_id, &occ_pid, &new_occ_type, &Some(format!("Yeni {} girişi", if has_explicit_tenant || is_tenant { "kiracı" } else { "malik" }))],
-                                )
-                                .await.map_err(|e| e.to_string())?;
-                        }
-                    }
-
-                    // Update unit with new occupant
-                    if has_explicit_tenant {
-                        client
-                            .execute(
-                                r#"
-                                UPDATE units SET
-                                    owner_person_id = $1,
-                                    tenant_person_id = $2,
-                                    occupancy_status = 'TENANT_OCCUPIED',
-                                    house_type = COALESCE($3, house_type),
-                                    virtual_iban = COALESCE(virtual_iban, $4)
-                                WHERE id = $5
-                                "#,
-                                &[
-                                    &person_numeric_id,
-                                    &explicit_tenant_person_id,
-                                    &effective_house_type,
-                                    &viban,
-                                    &unit_numeric_id,
-                                ],
-                            )
-                            .await
-                            .map_err(|e| e.to_string())?;
-                    } else if is_tenant {
-                        client
-                            .execute(
-                                r#"
-                                UPDATE units SET
-                                    tenant_person_id = $1,
-                                    occupancy_status = $2,
-                                    house_type = COALESCE($3, house_type),
-                                    virtual_iban = COALESCE(virtual_iban, $4)
-                                WHERE id = $5
-                                "#,
-                                &[
-                                    &person_numeric_id,
-                                    &new_occ_status,
-                                    &effective_house_type,
-                                    &viban,
-                                    &unit_numeric_id,
-                                ],
-                            )
-                            .await
-                            .map_err(|e| e.to_string())?;
-                    } else {
-                        client
-                            .execute(
-                                r#"
-                                UPDATE units SET
-                                    owner_person_id = $1,
-                                    tenant_person_id = CASE WHEN $2 = true THEN NULL ELSE tenant_person_id END,
-                                    occupancy_status = $3,
-                                    house_type = COALESCE($4, house_type),
-                                    virtual_iban = COALESCE(virtual_iban, $5)
-                                WHERE id = $6
-                                "#,
-                                &[&person_numeric_id, &request.is_resident, &new_occ_status, &effective_house_type, &viban, &unit_numeric_id],
-                            )
-                            .await.map_err(|e| e.to_string())?;
-                    }
+                        .map_err(|e| e.to_string())?;
                 }
             } else {
-                // New Unit
-                let occ_status = if has_explicit_tenant || is_tenant {
-                    "TENANT_OCCUPIED"
-                } else if request.is_resident {
-                    "OWNER_OCCUPIED"
-                } else {
-                    "VACANT"
-                };
-                let owner_pid = if is_tenant && !has_explicit_tenant {
-                    None
-                } else {
-                    Some(person_numeric_id)
-                };
-                let tenant_pid = if has_explicit_tenant {
-                    explicit_tenant_person_id
-                } else if is_tenant {
-                    Some(person_numeric_id)
-                } else {
-                    None
-                };
-
+                // New Unit: owner, tenant and status are projections that the
+                // transitions below fill in.
+                let owner_pid: Option<i64> = None;
+                let tenant_pid: Option<i64> = None;
+                let occ_status = "VACANT";
                 let unit_row = client
                     .query_one(
                         r#"
@@ -853,29 +735,19 @@ impl SiteAdminService {
                             ],
                         )
                         .await.map_err(|e| e.to_string())?;
-                } else if has_explicit_tenant {
-                    if let Some(t_pid) = explicit_tenant_person_id {
-                        client
-                            .execute(
-                                r#"
-                                INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
-                                VALUES ($1, $2, 'TENANT', CURRENT_DATE, true, 0.00, 'İlk kiracı kaydı')
-                                "#,
-                                &[&unit_numeric_id, &t_pid],
-                            )
-                            .await.map_err(|e| e.to_string())?;
-                    }
-                } else if is_tenant || request.is_resident {
-                    let occ_type = if is_tenant { "TENANT" } else { "OWNER" };
-                    client
-                        .execute(
-                            r#"
-                            INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
-                            VALUES ($1, $2, $3, CURRENT_DATE, true, 0.00, 'İlk sakin kaydı')
-                            "#,
-                            &[&unit_numeric_id, &person_numeric_id, &occ_type],
-                        )
-                        .await.map_err(|e| e.to_string())?;
+                } else {
+                    register_occupancy(
+                        &client,
+                        site_numeric_id,
+                        unit_numeric_id,
+                        registration_today,
+                        person_numeric_id,
+                        is_tenant,
+                        request.is_resident && !has_explicit_tenant,
+                        explicit_tenant_person_id,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
                 }
             }
 
@@ -1673,6 +1545,10 @@ impl SiteAdminService {
         let mut email_changes: Vec<PendingEmailChange> = Vec::new();
         // Whether PostgreSQL holds the data; otherwise memory is the store.
         let mut persisted = false;
+        let edit_today = {
+            let inner = self.state.inner.read().await;
+            crate::services::finance_common::site_today(&inner, site_id)
+        };
 
         // 1. If DB pool is available, update database
         if let Some(ref pool) = self.state.pool {
@@ -1713,27 +1589,23 @@ impl SiteAdminService {
                     let t_id: Option<i64> = u_row.get(5);
 
                     if req.remove_tenant == Some(true) {
-                        if let Some(tenant_person_id) = t_id {
-                            client.execute(
-                                "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE WHERE unit_id = $1 AND person_id = $2 AND is_active = true",
-                                &[&u_id, &tenant_person_id],
-                            ).await.map_err(|e| e.to_string())?;
-                        }
-                        let new_occupancy = if req.is_resident == Some(true) {
-                            "OWNER_OCCUPIED"
-                        } else {
-                            "VACANT"
-                        };
-                        client.execute("UPDATE units SET tenant_person_id = NULL, occupancy_status = $1 WHERE id = $2", &[&new_occupancy, &u_id]).await.map_err(|e| e.to_string())?;
-                        if req.is_resident == Some(true) {
-                            if let Some(owner_person_id) = p_id {
-                                client.execute(
-                                    "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, created_at)
-                                     VALUES ($1, $2, 'OWNER', CURRENT_DATE, true, NOW())
-                                     ON CONFLICT DO NOTHING",
-                                    &[&u_id, &owner_person_id],
-                                ).await.map_err(|e| e.to_string())?;
-                            }
+                        // STORY-08-08: the same commands as the occupancy actions,
+                        // so the outgoing tenant is settled with an exit balance.
+                        if t_id.is_some() {
+                            let command = if req.is_resident == Some(true) {
+                                crate::domain::unit_state::Command::OwnerTakesBack
+                            } else {
+                                crate::domain::unit_state::Command::MoveOut
+                            };
+                            crate::db::occupancy_repository::apply_occupancy_command(
+                                &client,
+                                site_numeric,
+                                u_id,
+                                command,
+                                &edit_transition_input(edit_today, None, p_id),
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
                         }
                     } else if let Some(tenant_person_id) = t_id {
                         if let Some(ref t_name) = req.tenant_full_name {
@@ -1799,12 +1671,30 @@ impl SiteAdminService {
                                     .get(0),
                             };
                             {
-                                client.execute("UPDATE units SET tenant_person_id = $1, occupancy_status = 'TENANT_OCCUPIED' WHERE id = $2", &[&new_t_id, &u_id]).await.map_err(|e| e.to_string())?;
-                                client.execute(
-                                    "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, created_at)
-                                     VALUES ($1, $2, 'TENANT', CURRENT_DATE, true, NOW())",
-                                    &[&u_id, &new_t_id],
-                                ).await.map_err(|e| e.to_string())?;
+                                // T2 on a vacant unit, C2 when the owner lives there.
+                                let snapshot = crate::db::occupancy_repository::lock_unit_snapshot(
+                                    &client,
+                                    site_numeric,
+                                    u_id,
+                                )
+                                .await
+                                .map_err(|e| e.to_string())?;
+                                let command = if snapshot.state.occupancy
+                                    == crate::domain::unit_state::Occupancy::OwnerOccupied
+                                {
+                                    crate::domain::unit_state::Command::OwnerRentsOut
+                                } else {
+                                    crate::domain::unit_state::Command::TenantMoveIn
+                                };
+                                crate::db::occupancy_repository::apply_occupancy_command(
+                                    &client,
+                                    site_numeric,
+                                    u_id,
+                                    command,
+                                    &edit_transition_input(edit_today, Some(new_t_id), None),
+                                )
+                                .await
+                                .map_err(|e| e.to_string())?;
                             }
                         }
                     }
@@ -2123,11 +2013,11 @@ impl SiteAdminService {
                     &[&u_id],
                 ).await.map_err(|e| e.to_string())?;
                 tx.execute(
-                    "UPDATE unit_occupancies SET is_active = FALSE, end_date = CURRENT_DATE WHERE unit_id = $1 AND is_active = TRUE",
+                    "UPDATE unit_occupancies SET is_active = FALSE, end_date = GREATEST(start_date, CURRENT_DATE) WHERE unit_id = $1 AND is_active = TRUE",
                     &[&u_id],
                 ).await.map_err(|e| e.to_string())?;
                 tx.execute(
-                    "UPDATE unit_ownerships SET is_active = FALSE, end_date = CURRENT_DATE WHERE unit_id = $1 AND is_active = TRUE",
+                    "UPDATE unit_ownerships SET is_active = FALSE, end_date = GREATEST(start_date, CURRENT_DATE) WHERE unit_id = $1 AND is_active = TRUE",
                     &[&u_id],
                 ).await.map_err(|e| e.to_string())?;
                 tx.execute(
@@ -2397,7 +2287,14 @@ impl SiteAdminService {
                 email,
             )
             .await
-            .map_err(|_| "Household storage unavailable".to_string())?,
+            .map_err(|e| {
+                // A vacant unit has no household to join (EPIC-08 invariant 6).
+                if e.to_string() == crate::db::NO_CURRENT_OCCUPANT {
+                    NO_HOUSEHOLD_TO_JOIN.to_string()
+                } else {
+                    "Household storage unavailable".to_string()
+                }
+            })?,
             None => 0,
         };
 
@@ -2816,211 +2713,87 @@ impl SiteAdminService {
         Ok(block)
     }
 
+    /// T4/T5 move-out through the guarded transition service (STORY-08-07).
     pub async fn move_out_resident(
         &self,
         site_id: &str,
         unit_id: &str,
         req: crate::models::MoveOutResidentRequest,
     ) -> Result<crate::models::OccupancyHistoryItem, String> {
-        let site_numeric = crate::db::require_id("entity", site_id)?;
-        let unit_numeric = crate::db::parse_id_to_i64(unit_id)
-            .or_else(|| {
-                if unit_id.starts_with("unit-") {
-                    unit_id
-                        .strip_prefix("unit-")
-                        .and_then(|s| s.parse::<i64>().ok())
-                } else if unit_id.starts_with("d-") {
-                    unit_id
-                        .strip_prefix("d-")
-                        .and_then(|s| s.parse::<i64>().ok())
-                } else {
-                    None
-                }
-            })
-            .ok_or_else(|| format!("Invalid unit ID: {}", unit_id))?;
-
-        if let Some(ref pool) = self.state.pool {
-            if let Ok(client) = pool.get().await {
-                // Find unit
-                let unit_row = client
-                    .query_opt(
-                        "SELECT id, owner_person_id, tenant_person_id, occupancy_status FROM units WHERE id = $1 AND site_id = $2",
-                        &[&unit_numeric, &site_numeric],
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .ok_or_else(|| format!("Unit {} not found for site {}", unit_id, site_id))?;
-
-                let owner_id: Option<i64> = unit_row.get(1);
-                let tenant_id: Option<i64> = unit_row.get(2);
-
-                let target_person_id = tenant_id
-                    .or(owner_id)
-                    .ok_or_else(|| "Unit has no occupant to move out".to_string())?;
-                let occ_role = if tenant_id.is_some() {
-                    DebtorType::Tenant
-                } else {
-                    DebtorType::Owner
-                };
-
-                // Calculate exit balance: operational liabilities for tenant, all liabilities for owner (KMK Art. 20/22)
-                let exit_balance: Decimal = if occ_role == DebtorType::Tenant {
-                    client
-                        .query_one(
-                            r#"
-                            SELECT COALESCE(SUM(principal_amount + delay_penalty - paid_amount), 0.00)
-                            FROM dues_liabilities
-                            WHERE unit_id = $1 AND status != 'PAID' AND expense_type != 'CAPITAL_DUES'
-                            "#,
-                            &[&unit_numeric],
-                        )
-                        .await
-                        .map(|r| r.get(0))
-                        .unwrap_or(Decimal::ZERO)
-                } else {
-                    client
-                        .query_one(
-                            r#"
-                            SELECT COALESCE(SUM(principal_amount + delay_penalty - paid_amount), 0.00)
-                            FROM dues_liabilities
-                            WHERE unit_id = $1 AND status != 'PAID'
-                            "#,
-                            &[&unit_numeric],
-                        )
-                        .await
-                        .map(|r| r.get(0))
-                        .unwrap_or(Decimal::ZERO)
-                };
-
-                let notes_val = req.notes.clone();
-
-                // Check if active record exists in unit_occupancies
-                let active_occ = client
-                    .query_opt(
-                        "SELECT id FROM unit_occupancies WHERE unit_id = $1 AND person_id = $2 AND is_active = true ORDER BY id DESC LIMIT 1",
-                        &[&unit_numeric, &target_person_id],
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                let occ_id: i64 = if let Some(row) = active_occ {
-                    let id: i64 = row.get(0);
-                    client
-                        .execute(
-                            "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE, exit_balance = $1, notes = COALESCE($2, notes) WHERE id = $3",
-                            &[&exit_balance, &notes_val, &id],
-                        )
-                        .await.map_err(|e| e.to_string())?;
-                    id
-                } else {
-                    let row = client
-                        .query_one(
-                            r#"
-                            INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, end_date, is_active, exit_balance, notes)
-                            VALUES ($1, $2, $3, CURRENT_DATE - INTERVAL '30 days', CURRENT_DATE, false, $4, $5)
-                            RETURNING id
-                            "#,
-                            &[&unit_numeric, &target_person_id, &occ_role, &exit_balance, &notes_val],
-                        )
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    row.get(0)
-                };
-
-                // Bind active household members to the closed occupancy session
-                client
-                    .execute(
-                        "UPDATE occupancy_members SET occupancy_id = $1 WHERE occupancy_id IS NULL AND person_id IN (SELECT person_id FROM unit_occupancies WHERE id = $1)",
-                        &[&occ_id],
-                    )
-                    .await.map_err(|e| e.to_string())?;
-
-                // Clear active household members from in-memory cache
-                {
-                    let mut inner = self.state.inner.write().await;
-                    for key in &[
-                        unit_numeric.to_string(),
-                        format!("d-{}", unit_numeric),
-                        format!("unit-{}", unit_numeric),
-                        unit_id.to_string(),
-                    ] {
-                        inner.unit_members.remove(key);
-                    }
-                }
-
-                // Update unit status to VACANT and clear tenant_person_id if tenant moved out
-                if tenant_id.is_some() {
-                    client
-                        .execute(
-                            "UPDATE units SET tenant_person_id = NULL, occupancy_status = 'VACANT' WHERE id = $1",
-                            &[&unit_numeric],
-                        )
-                        .await.map_err(|e| e.to_string())?;
-                } else {
-                    client
-                        .execute(
-                            "UPDATE units SET occupancy_status = 'VACANT' WHERE id = $1",
-                            &[&unit_numeric],
-                        )
-                        .await
-                        .map_err(|e| e.to_string())?;
-                }
-
-                // Fetch person details
-                let person_row = client
-                    .query_one(
-                        "SELECT full_name, phone, email FROM persons WHERE id = $1",
-                        &[&target_person_id],
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                return Ok(crate::models::OccupancyHistoryItem {
-                    id: occ_id,
-                    unit_id: unit_numeric,
-                    person_id: target_person_id,
-                    person_name: person_row.get(0),
-                    person_phone: person_row.get(1),
-                    person_email: person_row.get(2),
-                    role: occ_role,
-                    start_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
-                    end_date: Some(chrono::Utc::now().format("%Y-%m-%d").to_string()),
-                    is_active: false,
-                    exit_balance,
-                    notes: notes_val,
-                    created_at: chrono::Utc::now(),
-                });
-            }
+        if self.state.pool.is_none() {
+            return self.move_out_in_memory(unit_id, req).await;
         }
+        let request = crate::models::OccupancyTransitionRequest {
+            command: crate::domain::unit_state::CommandKind::MoveOut,
+            effective_date: parse_effective_date(req.end_date.as_deref())
+                .map_err(|e| e.to_string())?,
+            person_id: None,
+            full_name: None,
+            phone: None,
+            email: None,
+            owner_person_id: None,
+            notes: req.notes,
+        };
+        crate::services::occupancy_service::OccupancyService::new(self.state.clone())
+            .transition(site_id, unit_id, request)
+            .await
+            .map_err(|e| e.to_string())?
+            .closed
+            .ok_or_else(|| "Move-out closed no occupancy".to_string())
+    }
 
-        // In-memory fallback if PostgreSQL pool is not active
+    /// Demonstration storage (no PostgreSQL): only a tenant can move out.
+    async fn move_out_in_memory(
+        &self,
+        unit_id: &str,
+        req: crate::models::MoveOutResidentRequest,
+    ) -> Result<crate::models::OccupancyHistoryItem, String> {
+        let unit_numeric = crate::services::occupancy_service::parse_unit_id(unit_id)
+            .ok_or_else(|| format!("Invalid unit ID: {}", unit_id))?;
         let mut inner = self.state.inner.write().await;
-        if let Some(unit) = inner
+        let unit = inner
             .units
             .iter_mut()
-            .find(|u| u.id == unit_id || u.unit_number.to_string() == unit_id)
-        {
-            unit.tenant_user_id = None;
-        }
-        for key in &[
+            .find(|u| u.id == unit_id || crate::db::parse_id_to_i64(&u.id) == Some(unit_numeric))
+            .ok_or_else(|| UNIT_NOT_FOUND.to_string())?;
+        let state = crate::domain::unit_state::UnitState::new(
+            if unit.owner_user_id.is_some() {
+                crate::domain::unit_state::Ownership::Owned
+            } else {
+                crate::domain::unit_state::Ownership::Unowned
+            },
+            if unit.tenant_user_id.is_some() {
+                crate::domain::unit_state::Occupancy::TenantOccupied
+            } else {
+                crate::domain::unit_state::Occupancy::Vacant
+            },
+        );
+        crate::domain::unit_state::plan(state, crate::domain::unit_state::Command::MoveOut)
+            .map_err(|e| e.to_string())?;
+        let tenant = unit.tenant_user_id.take();
+        for key in [
             unit_numeric.to_string(),
             format!("d-{}", unit_numeric),
             format!("unit-{}", unit_numeric),
             unit_id.to_string(),
         ] {
-            inner.unit_members.remove(key);
+            inner.unit_members.remove(&key);
         }
-
+        let person_name = tenant
+            .as_deref()
+            .and_then(|id| inner.users.iter().find(|u| u.id == id))
+            .map_or_else(|| "Tenant".to_string(), |u| u.full_name.clone());
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
         Ok(crate::models::OccupancyHistoryItem {
             id: 1,
             unit_id: unit_numeric,
             person_id: 1,
-            person_name: "Tenant".to_string(),
+            person_name,
             person_phone: None,
             person_email: None,
             role: DebtorType::Tenant,
-            start_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
-            end_date: Some(chrono::Utc::now().format("%Y-%m-%d").to_string()),
+            start_date: today.clone(),
+            end_date: Some(req.end_date.unwrap_or(today)),
             is_active: false,
             exit_balance: Decimal::ZERO,
             notes: req.notes,
@@ -3028,160 +2801,21 @@ impl SiteAdminService {
         })
     }
 
+    /// T2 tenant move-in or T3 owner move-in (STORY-08-06): an owner move-in
+    /// names an owner on record and never changes ownership.
     pub async fn move_in_resident(
         &self,
         site_id: &str,
         unit_id: &str,
         req: crate::models::MoveInResidentRequest,
     ) -> Result<crate::models::OccupancyHistoryItem, String> {
-        let site_numeric = crate::db::require_id("entity", site_id)?;
-        let unit_numeric = crate::db::parse_id_to_i64(unit_id)
-            .or_else(|| {
-                if unit_id.starts_with("unit-") {
-                    unit_id
-                        .strip_prefix("unit-")
-                        .and_then(|s| s.parse::<i64>().ok())
-                } else if unit_id.starts_with("d-") {
-                    unit_id
-                        .strip_prefix("d-")
-                        .and_then(|s| s.parse::<i64>().ok())
-                } else {
-                    None
-                }
-            })
-            .ok_or_else(|| format!("Invalid unit ID: {}", unit_id))?;
-
-        if let Some(ref pool) = self.state.pool {
-            // A storage failure is reported; it no longer falls back to memory as if saved.
-            {
-                let client = pool
-                    .get()
-                    .await
-                    .map_err(|e| format!("Database connection error: {}", e))?;
-                // Resolve or create the person, always inside this site (S1, U7).
-                let person_id: i64 = if let Some(pid) = req.person_id {
-                    client
-                        .query_opt(
-                            "SELECT id FROM persons WHERE id = $1 AND site_id = $2 AND deleted_at IS NULL",
-                            &[&pid, &site_numeric],
-                        )
-                        .await
-                        .map_err(|e| format!("DB query error: {}", e))?
-                        .map(|row| row.get(0))
-                        .ok_or_else(|| PERSON_NOT_FOUND.to_string())?
-                } else if let Some(ref email) = req.email {
-                    let clean_email = crate::domain::email::NormalizedEmail::normalize(email);
-                    let existing = client
-                        .query_opt(
-                            "SELECT id FROM persons WHERE site_id = $2 AND LOWER(email) = $1 AND deleted_at IS NULL",
-                            &[&clean_email, &site_numeric],
-                        )
-                        .await
-                        .map_err(|e| format!("DB query error: {}", e))?;
-                    if let Some(p) = existing {
-                        p.get(0)
-                    } else {
-                        let full_name = req
-                            .full_name
-                            .clone()
-                            .unwrap_or_else(|| "New Resident".to_string());
-                        let phone = req.phone.clone();
-                        let p_type = if req.role == DebtorType::Tenant {
-                            "HOME_RESIDENT"
-                        } else {
-                            "HOME_OWNER"
-                        };
-                        let row = client
-                            .query_one(
-                                "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-                                &[&full_name, &phone, &clean_email, &p_type, &site_numeric],
-                            )
-                            .await
-                            .map_err(|e| e.to_string())?;
-                        row.get(0)
-                    }
-                } else {
-                    return Err("Either person_id or email must be provided".to_string());
-                };
-
-                // Close any existing active occupancy for this unit
-                client
-                    .execute(
-                        "UPDATE unit_occupancies SET is_active = false, end_date = CURRENT_DATE WHERE unit_id = $1 AND is_active = true",
-                        &[&unit_numeric],
-                    )
-                    .await.map_err(|e| e.to_string())?;
-
-                let occ_role = req.role.as_str();
-                let occ_status = if req.role == DebtorType::Tenant {
-                    "TENANT_OCCUPIED"
-                } else {
-                    "OWNER_OCCUPIED"
-                };
-
-                // Insert into unit_occupancies
-                let notes_val = req.notes.clone();
-                let occ_row = client
-                    .query_one(
-                        r#"
-                        INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active, exit_balance, notes)
-                        VALUES ($1, $2, $3, CURRENT_DATE, true, 0.00, $4)
-                        RETURNING id, start_date::text, created_at
-                        "#,
-                        &[&unit_numeric, &person_id, &occ_role, &notes_val],
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                let occ_id: i64 = occ_row.get(0);
-                let start_date_str: String = occ_row.get(1);
-                let created_at: DateTime<Utc> = occ_row.get(2);
-
-                // Update unit
-                if req.role == DebtorType::Tenant {
-                    client
-                        .execute(
-                            "UPDATE units SET tenant_person_id = $1, occupancy_status = $2 WHERE id = $3",
-                            &[&person_id, &occ_status, &unit_numeric],
-                        )
-                        .await.map_err(|e| e.to_string())?;
-                } else {
-                    client
-                        .execute(
-                            "UPDATE units SET owner_person_id = $1, occupancy_status = $2 WHERE id = $3",
-                            &[&person_id, &occ_status, &unit_numeric],
-                        )
-                        .await.map_err(|e| e.to_string())?;
-                }
-
-                // Fetch person details
-                let person_row = client
-                    .query_one(
-                        "SELECT full_name, phone, email FROM persons WHERE id = $1",
-                        &[&person_id],
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                return Ok(crate::models::OccupancyHistoryItem {
-                    id: occ_id,
-                    unit_id: unit_numeric,
-                    person_id,
-                    person_name: person_row.get(0),
-                    person_phone: person_row.get(1),
-                    person_email: person_row.get(2),
-                    role: req.role,
-                    start_date: start_date_str,
-                    end_date: None,
-                    is_active: true,
-                    exit_balance: Decimal::ZERO,
-                    notes: notes_val,
-                    created_at,
-                });
-            }
-        }
-
-        Err("Database connection unavailable".to_string())
+        let request = move_in_request(req).map_err(|e| e.to_string())?;
+        crate::services::occupancy_service::OccupancyService::new(self.state.clone())
+            .transition(site_id, unit_id, request)
+            .await
+            .map_err(|e| e.to_string())?
+            .opened
+            .ok_or_else(|| "Move-in opened no occupancy".to_string())
     }
 
     pub async fn get_unit_occupancy_history(
@@ -3271,5 +2905,129 @@ impl SiteAdminService {
             return Ok(items.clone());
         }
         Ok(Vec::new())
+    }
+}
+
+/// Reads an optional `YYYY-MM-DD` effective date from a move request.
+pub fn parse_effective_date(
+    value: Option<&str>,
+) -> Result<Option<chrono::NaiveDate>, crate::db::occupancy_repository::OccupancyError> {
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        None => Ok(None),
+        Some(text) => chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d")
+            .map(Some)
+            .map_err(|_| {
+                crate::db::occupancy_repository::OccupancyError::InvalidDate(text.to_string())
+            }),
+    }
+}
+
+/// The guarded command a move-in request stands for: the role picks T2 or T3.
+pub fn move_in_request(
+    req: crate::models::MoveInResidentRequest,
+) -> Result<
+    crate::models::OccupancyTransitionRequest,
+    crate::db::occupancy_repository::OccupancyError,
+> {
+    let command = match req.role {
+        DebtorType::Tenant => crate::domain::unit_state::CommandKind::TenantMoveIn,
+        DebtorType::Owner => crate::domain::unit_state::CommandKind::OwnerMoveIn,
+    };
+    Ok(crate::models::OccupancyTransitionRequest {
+        command,
+        effective_date: parse_effective_date(req.start_date.as_deref())?,
+        person_id: req.person_id,
+        full_name: req.full_name,
+        phone: req.phone,
+        email: req.email,
+        owner_person_id: None,
+        notes: req.notes,
+    })
+}
+
+/// The occupancy part of a registration, as guarded transitions: T1 for an
+/// owner (with residence when the owner lives there), T2 for a tenant, and T2
+/// for a tenant named next to the owner. An owner on record is never
+/// replaced; that is a title deed transfer.
+#[allow(clippy::too_many_arguments)]
+async fn register_occupancy(
+    tx: &deadpool_postgres::Transaction<'_>,
+    site: i64,
+    unit: i64,
+    today: chrono::NaiveDate,
+    person: i64,
+    is_tenant: bool,
+    resides: bool,
+    explicit_tenant: Option<i64>,
+) -> Result<(), crate::db::occupancy_repository::OccupancyError> {
+    use crate::db::occupancy_repository::{self as repo, TransitionInput};
+    use crate::domain::unit_state::{self, Command, Ownership};
+
+    let input = |tenant: Option<i64>, owner: Option<i64>| TransitionInput {
+        effective_date: today,
+        today,
+        tenant_person_id: tenant,
+        owner_person_id: owner,
+        new_owner_person_id: None,
+        notes: None,
+    };
+    if is_tenant {
+        repo::apply_occupancy_command(
+            tx,
+            site,
+            unit,
+            Command::TenantMoveIn,
+            &input(Some(person), None),
+        )
+        .await?;
+        return Ok(());
+    }
+    let snapshot = repo::lock_unit_snapshot(tx, site, unit).await?;
+    if !snapshot.is_owner(person) {
+        if snapshot.state.ownership == Ownership::Owned {
+            return Err(crate::db::occupancy_repository::OccupancyError::UnitHasOwner);
+        }
+        let plan = unit_state::plan(snapshot.state, Command::RegisterOwner { resides })?;
+        tx.execute(
+            "INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, is_active) VALUES ($1, $2, 100.00, $3, TRUE)",
+            &[&unit, &person, &today],
+        )
+        .await
+        ?;
+        repo::execute_plan(
+            tx,
+            &snapshot,
+            plan,
+            plan.opens.map(|_| person),
+            &input(None, Some(person)),
+        )
+        .await?;
+    }
+    if let Some(tenant) = explicit_tenant {
+        repo::apply_occupancy_command(
+            tx,
+            site,
+            unit,
+            Command::TenantMoveIn,
+            &input(Some(tenant), None),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+/// Today's move by the owner edit screen, as a guarded transition input.
+fn edit_transition_input(
+    today: chrono::NaiveDate,
+    tenant: Option<i64>,
+    owner: Option<i64>,
+) -> crate::db::occupancy_repository::TransitionInput {
+    crate::db::occupancy_repository::TransitionInput {
+        effective_date: today,
+        today,
+        tenant_person_id: tenant,
+        owner_person_id: owner,
+        new_owner_person_id: None,
+        notes: None,
     }
 }

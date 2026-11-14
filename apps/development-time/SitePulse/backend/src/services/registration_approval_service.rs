@@ -171,6 +171,10 @@ impl RegistrationApprovalService {
             crate::models::Permission::ResidentApprove,
             &ctx.claims.site_id,
         )?;
+        let today = {
+            let inner = self.state.inner.read().await;
+            crate::services::finance_common::site_today(&inner, &ctx.claims.site_id)
+        };
         let password = generate_resident_temporary_password();
         let hash = crate::auth::hash_password_async(password.clone())
             .await
@@ -226,38 +230,16 @@ impl RegistrationApprovalService {
             } else {
                 tx.query_one("INSERT INTO units(block_id,site_id,unit_number,floor,land_share) VALUES ($1,$2,$3,$4,1) RETURNING id",&[&block_id,&site,&number,&floor]).await.map_err(|_|SecurityError::Unavailable)?.get(0)
             };
-            let sql = if resident {
-                "UPDATE units SET tenant_person_id=$1 WHERE id=$2 AND site_id=$3"
-            } else {
-                "UPDATE units SET owner_person_id=$1 WHERE id=$2 AND site_id=$3"
-            };
-            tx.execute(sql, &[&person, &unit_id, &site])
-                .await
-                .map_err(|_| SecurityError::Unavailable)?;
             tx.execute(
                 "INSERT INTO user_site_roles(user_id,site_id,role) VALUES ($1,$2,$3)",
                 &[&user_id, &site, &role.as_str()],
             )
             .await
             .map_err(|_| SecurityError::Unavailable)?;
-            tx.execute(
-                "INSERT INTO unit_occupancies(unit_id,person_id,occupancy_type) VALUES ($1,$2,$3)",
-                &[
-                    &unit_id,
-                    &person,
-                    &if resident { "TENANT" } else { "OWNER" },
-                ],
-            )
-            .await
-            .map_err(|_| SecurityError::Unavailable)?;
-            if !resident {
-                tx.execute(
-                    "INSERT INTO unit_ownerships(unit_id,person_id) VALUES ($1,$2)",
-                    &[&unit_id, &person],
-                )
-                .await
-                .map_err(|_| SecurityError::Unavailable)?;
-            }
+            // STORY-08-07: an approval is a guarded transition. An owner is
+            // registered only on a unit without one (T1, residing); a tenant
+            // moves in only on a vacant unit with an owner (T2).
+            approve_occupancy(&tx, site, unit_id, person, resident, today).await?;
             tx.execute("UPDATE pending_registrations SET status='APPROVED' WHERE request_id=$1 AND site_id=$2",&[&request_id,&site]).await.map_err(|_|SecurityError::Unavailable)?;
             tx.commit().await.map_err(|_| SecurityError::Unavailable)?;
             let mut inner = self.state.inner.write().await;
@@ -439,4 +421,59 @@ impl RegistrationApprovalService {
 
 fn generate_resident_temporary_password() -> String {
     crate::auth::generate_temporary_password("SP-RESIDENT-")
+}
+
+/// Applies the occupancy effect of an approved registration (T1 or T2), or
+/// refuses it with a conflict when the unit's state does not allow it.
+async fn approve_occupancy(
+    tx: &deadpool_postgres::Transaction<'_>,
+    site: i64,
+    unit: i64,
+    person: i64,
+    tenant: bool,
+    today: chrono::NaiveDate,
+) -> Result<(), crate::authorization::SecurityError> {
+    use crate::authorization::SecurityError;
+    use crate::db::occupancy_repository::{self as repo, OccupancyError, TransitionInput};
+    use crate::domain::unit_state::{self, Command};
+
+    let refuse = |e: OccupancyError| match e {
+        OccupancyError::Storage(detail) => {
+            tracing::error!(error = %detail, "Registration approval occupancy storage failure");
+            SecurityError::Unavailable
+        }
+        other => {
+            tracing::warn!(unit_id = unit, reason = %other, "Registration approval refused by unit state");
+            SecurityError::Conflict
+        }
+    };
+    let input = TransitionInput {
+        effective_date: today,
+        today,
+        tenant_person_id: tenant.then_some(person),
+        owner_person_id: (!tenant).then_some(person),
+        new_owner_person_id: None,
+        notes: None,
+    };
+    if tenant {
+        repo::apply_occupancy_command(tx, site, unit, Command::TenantMoveIn, &input)
+            .await
+            .map_err(refuse)?;
+        return Ok(());
+    }
+    let snapshot = repo::lock_unit_snapshot(tx, site, unit)
+        .await
+        .map_err(refuse)?;
+    let plan = unit_state::plan(snapshot.state, Command::RegisterOwner { resides: true })
+        .map_err(|e| refuse(e.into()))?;
+    tx.execute(
+        "INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, is_active) VALUES ($1, $2, 100.00, $3, TRUE)",
+        &[&unit, &person, &today],
+    )
+    .await
+    .map_err(|_| SecurityError::Unavailable)?;
+    repo::execute_plan(tx, &snapshot, plan, Some(person), &input)
+        .await
+        .map_err(refuse)?;
+    Ok(())
 }

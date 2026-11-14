@@ -10,6 +10,7 @@ pub mod home_resident_invitation_service;
 pub mod kuveyt_turk_service;
 pub mod ledger_application;
 pub mod mt940_engine;
+pub mod occupancy_service;
 pub mod operating_budget_service;
 pub mod payment_tracking_service;
 pub mod receipt_document;
