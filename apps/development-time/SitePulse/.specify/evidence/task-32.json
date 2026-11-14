@@ -1,0 +1,70 @@
+{
+  "task_id": "task-32",
+  "passed": true,
+  "started_at": "2026-11-14T20:43:42.987070+00:00",
+  "finished_at": "2026-11-14T20:44:40.095978+00:00",
+  "gates": [
+    {
+      "name": "rust-build",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo build --all-targets --locked",
+      "duration_s": 7.544870493002236
+    },
+    {
+      "name": "rust-clippy",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo clippy --all-targets --locked -- -D warnings",
+      "duration_s": 5.121625096013304
+    },
+    {
+      "name": "flutter-analyze",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter analyze --no-fatal-infos --no-fatal-warnings",
+      "duration_s": 4.868315725994762
+    },
+    {
+      "name": "test-run-recorded",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/feature_traceability.py --json check --require-run",
+      "duration_s": 0.17603236704599112
+    },
+    {
+      "name": "schema-integrity",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/schema_integrity_check.py --json",
+      "duration_s": 16.05385375500191
+    },
+    {
+      "name": "rust-db-test",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo test --locked --test db_tenant_isolation_tests -- --ignored --test-threads=1 && cargo test --locked --test db_occupancy_transitions_tests -- --ignored --test-threads=1",
+      "duration_s": 22.682232937950175
+    },
+    {
+      "name": "tenant-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/tenant_isolation_lint.py --json",
+      "duration_s": 0.08521054300945252
+    },
+    {
+      "name": "logging-standards-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/logging_standards_lint.py --json",
+      "duration_s": 0.572599187027663
+    }
+  ],
+  "acceptance_tests": [],
+  "gates_evaluated": 8,
+  "diagnostics": [],
+  "commit": "dae622550815b00fa6d04fc1c0f706956a57c135",
+  "dirty": true,
+  "attempts": 0
+}
