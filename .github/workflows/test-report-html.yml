@@ -7,6 +7,7 @@ name: Test report (HTML)
 on:
   pull_request:
     paths:
+      - ".github/workflows/test-report-html.yml"
       - "apps/development-time/SitePulse/.specify/executions/**"
       - "apps/development-time/SitePulse/.specify/features/**"
       - "apps/development-time/SitePulse/scripts/feature_traceability.py"
