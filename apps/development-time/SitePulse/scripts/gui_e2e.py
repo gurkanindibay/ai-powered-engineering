@@ -113,7 +113,8 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
     proc = subprocess.run(argv, cwd=E2E, env=env,
                           stdout=subprocess.PIPE if args.json else None, stderr=subprocess.STDOUT if args.json else None,
                           text=True)
-    history = record_history(args.task) if args.record else None
+    # A run made for a named task ($SITEPULSE_TASK, e.g. inside run_tests.py) is always recorded.
+    history = record_history(args.task) if args.record or os.environ.get("SITEPULSE_TASK") else None
     if history and not args.json:
         print(f"test history: {history.get('records', 0)} scenario executions recorded"
               f"{' as ' + history['run_id'] if history.get('records') else ''}; "

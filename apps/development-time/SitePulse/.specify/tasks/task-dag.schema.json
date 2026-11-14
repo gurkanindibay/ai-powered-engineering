@@ -25,7 +25,7 @@
           "gates": {"type": "array", "items": {"type": "string"}},
           "acceptance_tests": {
             "type": "array",
-            "items": {"type": "string", "pattern": "^(rust:[A-Za-z0-9_]+::[A-Za-z0-9_:]+|flutter:test/[A-Za-z0-9_/]+\\.dart|system:[a-z0-9_]+)$"}
+            "items": {"type": "string", "pattern": "^(rust:[A-Za-z0-9_]+::[A-Za-z0-9_:]+|flutter:test/[A-Za-z0-9_/]+\\.dart|system:[a-z0-9_]+|scenario:SC-[0-9]{2}-[0-9]{2}-[0-9]{2})$"}
           },
           "attempts": {"type": "integer", "minimum": 0},
           "max_attempts": {"type": "integer", "minimum": 1},
