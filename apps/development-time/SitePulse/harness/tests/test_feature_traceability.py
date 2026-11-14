@@ -132,6 +132,37 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(page.count('<i class="'), 2)  # one bar per recorded run
         self.assertIn('class="badge NOT-RUN"', page)
 
+    def test_runs_report_what_executed_and_what_changed(self):
+        history = [_record("SC-42-01-01", "PASS", 1), _record("SC-42-02-01", "FAIL", 1),
+                   _record("SC-42-01-01", "FAIL", 2), _record("SC-42-02-01", "PASS", 2),
+                   _record("SC-42-01-01", "FAIL", 3)]
+        with tempfile.TemporaryDirectory() as tmp:
+            catalogue = ft.load_catalogue(_workspace(tmp))
+            runs = ft.build_runs(history, catalogue)
+            page = ft.render_html(ft.build_report(catalogue, history), "now", "store", runs)
+        self.assertEqual([r["run_id"][:8] for r in runs], ["20260103", "20260102", "20260101"])
+        latest, second, first = runs
+        self.assertEqual((latest["executed"], latest["automated"], latest["not_executed"]), (1, 2, ["SC-42-02-01"]))
+        self.assertEqual(latest["changes"], {})  # still failing: neither regressed nor fixed
+        self.assertEqual(second["changes"], {"regressed": 1, "fixed": 1})
+        self.assertEqual(first["changes"], {"new": 2})
+        self.assertEqual((second["status"], second["task"]), ("FAIL", "master"))
+        self.assertIn("1/2</b><span>executed in the latest run", page)
+        self.assertIn('<span class="chg regressed">1 regressed</span>', page)
+        self.assertIn("Not executed in this run (1)", page)
+
+    def test_run_markdown_lists_result_changes_and_gaps(self):
+        history = [_record("SC-42-01-01", "PASS", 1), _record("SC-42-01-01", "FAIL", 2)]
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = ft.build_runs(history, ft.load_catalogue(_workspace(tmp)))
+        text = ft.run_markdown(runs[0])
+        self.assertIn("- **Result:** FAIL (1 FAIL)", text)
+        self.assertIn("- **regressed**: `SC-42-01-01` Works", text)
+        self.assertIn("| `SC-42-01-01` | FAIL | regressed |", text)
+        self.assertIn("`SC-42-02-01`", text.split("## Not executed in this run")[1])
+        self.assertEqual(ft.runs_of_task(runs, None, "master"), runs)
+        self.assertEqual(ft.runs_of_task(runs, "other-task", "master"), [])
+
     def test_unexecuted_scenario_is_not_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             report = ft.build_report(ft.load_catalogue(_workspace(tmp)), [])
@@ -193,6 +224,7 @@ class StoreTests(unittest.TestCase):
         meta = ft.run_metadata(now=datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc), trigger="ci")
         self.assertTrue(meta["run_id"].startswith("20260102T030405Z-"))
         self.assertEqual((meta["started_at"], meta["trigger"]), ("2026-01-02T03:04:05Z", "ci"))
+        self.assertEqual(ft.run_metadata(task="issue-7")["task"], "issue-7")
 
 
 if __name__ == "__main__":

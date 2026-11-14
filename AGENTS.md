@@ -85,6 +85,16 @@ The workspace centers on **SitePulse**, a residential site platform built using 
    - If a failure is unrelated to your change (for example, also failing on `master`, or an infrastructure outage), do not paper over it: report it with the failing check name and log excerpt, and leave the task open for the user to decide.
    - Once every check passes (or no check ran for the PR), the task is complete and you must remove your own worktree as described in rule 11.
 
+13. **Record a Test Run for Every Task (All Agents)**:
+   - Applies to every agent, for every task that changes SitePulse behaviour (backend, Flutter, e2e, or `.specify/features`). Docs-only tasks are exempt.
+   - Acceptance criteria live as Gherkin scenarios under `apps/development-time/SitePulse/.specify/features/EPIC-xx/` (conventions: [.specify/features/README.md](file:///apps/development-time/SitePulse/.specify/features/README.md)). When a task adds or changes behaviour of a migrated epic, add or update the scenario (`@SC-xx-yy-nn`) in the same change; a scenario you cannot automate yet is tagged `@pending`, never omitted.
+   - **Before opening the PR**, execute the scenarios and record the run under a label that names your task (issue or PR number plus a few words):
+     - `python3 apps/development-time/SitePulse/scripts/gui_e2e.py run --record --task "<task>"` (add `-k`/`-m` only to iterate; the recorded run for the PR must cover at least every scenario of the stories you touched).
+     - This writes `.specify/executions/runs/<year>/<run id>.jsonl` (one record per scenario, one status per step) and `.specify/executions/reports/<year>/<run id>.md`. **Commit both with the task.** Never edit or delete recorded runs, including other agents' runs.
+   - Put the report in the PR description: `python3 apps/development-time/SitePulse/scripts/feature_traceability.py task-report`.
+   - `python3 apps/development-time/SitePulse/scripts/feature_traceability.py check --require-run` must pass on your branch before you report the task as complete. A FAIL or ERROR scenario in your recorded run means the task is not complete (rule 12 applies: fix, re-run, record again).
+   - If the suite cannot run in your environment (no PostgreSQL, no browser), do not fabricate a record: state it in the PR with the reason, and leave the task open for the user to decide.
+
 ## Durable engineering harness
 
 For persistent multi-role development runs, use `python3 scripts/development_harness.py --help` and the [team-orchestration skill](.agents/skills/team-orchestration/SKILL.md). Setup, execution boundaries and recovery are in [docs/engineering-harness.md](docs/engineering-harness.md). Preserve user changes; create runs from an explicit committed revision. Model targets require live capabilities and configured eligibility; a plan alone does not execute agents.
