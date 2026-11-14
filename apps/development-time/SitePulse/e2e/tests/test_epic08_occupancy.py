@@ -115,7 +115,12 @@ def test_history_lists_previous_tenant_with_exit_balance_and_the_new_one(login_a
     ManagerCockpit(page).wait()
     ResidentsTab(page).open()
 
-    by_id(page, f"module_history_ho_{b3}").click()
+    btn = by_id(page, f"unit_actions_{b3}")
+    if btn.count() > 0:
+        btn.click()
+        by_id(page, f"history_ho_{b3}").click()
+    else:
+        by_id(page, f"module_history_ho_{b3}").click()
     by_id_prefix(page, "history_item_").first.wait_for(timeout=10_000)
     items = [text_of(by_id_prefix(page, "history_item_").nth(i))
              for i in range(by_id_prefix(page, "history_item_").count())]
@@ -138,6 +143,9 @@ def test_ownership_transfer_keeps_the_previous_owner_in_history(login_as, page, 
     Shell(page).verify_sensitive(actors["manager"]["password"])
     ResidentsTab(page).open()
 
+    btn = by_id(page, f"unit_actions_{a14}")
+    if btn.count() > 0:
+        btn.click()
     by_id(page, f"transfer_ownership_{a14}").click()
     by_id(page, "module_transfer_new_owner_name_input").wait_for(timeout=10_000)
     fill(page, "module_transfer_new_owner_name_input", "Selim Evsahibi")
@@ -162,6 +170,9 @@ def test_ownership_transfer_records_the_previous_owners_period(login_as, page, s
     from pages.shell import Shell
     Shell(page).verify_sensitive(actors["manager"]["password"])
     ResidentsTab(page).open()
+    btn = by_id(page, f"unit_actions_{a14}")
+    if btn.count() > 0:
+        btn.click()
     by_id(page, f"transfer_ownership_{a14}").click()
     by_id(page, "module_transfer_new_owner_name_input").wait_for(timeout=10_000)
     fill(page, "module_transfer_new_owner_name_input", "Selim Evsahibi")
@@ -181,7 +192,11 @@ def two_household_members(login_as, page, stack):
     ResidentsTab(page).open()
     for name, phone, email in (("Ali Kaya", "05320000001", "ali.kaya@e2e.test"),
                                ("Can Kaya", "05320000002", "can.kaya@e2e.test")):
-        by_id(page, f"add_resident_member_to_{a14}").click()
+        btn = by_id(page, f"add_resident_to_{a14}")
+        if btn.count() > 0:
+            btn.click()
+        else:
+            by_id(page, f"add_resident_member_to_{a14}").click()
         by_id(page, "household_name_field").wait_for(timeout=10_000)
         fill(page, "household_name_field", name)
         fill(page, "household_phone_field", phone)
