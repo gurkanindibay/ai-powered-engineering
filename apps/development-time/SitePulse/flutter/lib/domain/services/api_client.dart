@@ -308,6 +308,17 @@ class ApiClient {
     headers,
   );
 
+  static Future<http.Response> patch(
+    Uri url, {
+    Map<String, String>? headers,
+    Object? body,
+    Encoding? encoding,
+  }) => _send(
+    url,
+    (h) => transport.patch(url, headers: h, body: body, encoding: encoding),
+    headers,
+  );
+
   static Future<http.Response> delete(
     Uri url, {
     Map<String, String>? headers,

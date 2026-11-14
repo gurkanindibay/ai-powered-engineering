@@ -24,6 +24,7 @@ import 'resident_directory.dart';
 import 'sp_directory_scaffold.dart';
 import 'unit_directory_row.dart';
 import 'people_directory_page.dart';
+import 'person_profile_page.dart';
 import '../../domain/services/person_directory_api.dart';
 import '../design_system/sp_filter_chip.dart';
 import '../design_system/sp_semantics.dart';
@@ -165,7 +166,11 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> w
               key: const Key('module_people_directory_btn'),
               onPressed: () => AppFullscreenPage.push<void>(
                 context: context,
-                builder: (_) => const PeopleDirectoryPage(),
+                builder: (_) => PeopleDirectoryPage(
+                  onOpenUnit: _openUnitById,
+                  onGiveRole: _giveRole,
+                  onChanged: _refreshPeople,
+                ),
               ),
               icon: const Icon(Icons.badge_outlined, size: 14),
               label: const Text('Kişiler', style: TextStyle(fontSize: 12)),

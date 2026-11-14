@@ -744,6 +744,8 @@ class UnitResidentMember {
   final String email;
   final bool isOwner;
   final String permissionScope;
+  /// Person card of the member, when the server knows it.
+  final int? personId;
 
   const UnitResidentMember({
     required this.id,
@@ -753,9 +755,21 @@ class UnitResidentMember {
     this.email = '',
     this.isOwner = false,
     this.permissionScope = 'Sakin Yetkisi',
+    this.personId,
   });
 
   String get residentId => id;
+
+  UnitResidentMember copyWith({String? fullName, String? phone, String? email}) => UnitResidentMember(
+        id: id,
+        fullName: fullName ?? this.fullName,
+        relationship: relationship,
+        phone: phone ?? this.phone,
+        email: email ?? this.email,
+        isOwner: isOwner,
+        permissionScope: permissionScope,
+        personId: personId,
+      );
 
   factory UnitResidentMember.fromJson(Map<String, dynamic> json) {
     return UnitResidentMember(
@@ -766,6 +780,7 @@ class UnitResidentMember {
       email: json['email']?.toString() ?? '',
       isOwner: json['is_owner'] as bool? ?? json['isOwner'] as bool? ?? false,
       permissionScope: json['permission_scope']?.toString() ?? json['permissionScope']?.toString() ?? 'Sakin Yetkisi',
+      personId: (json['person_id'] as num?)?.toInt(),
     );
   }
 
@@ -916,6 +931,9 @@ class HomeOwnerItem {
   final String? primaryResponsiblePhone;
   final String? primaryResponsibleEmail;
   final String? primaryResponsibleMemberId;
+  /// Person cards of the owner and tenant on record (unit to person links).
+  final int? ownerPersonId;
+  final int? tenantPersonId;
 
   OccupancyStatus get occupancy => OccupancyStatus.fromCode(occupancyStatus);
 
@@ -1021,6 +1039,8 @@ class HomeOwnerItem {
     this.primaryResponsiblePhone,
     this.primaryResponsibleEmail,
     this.primaryResponsibleMemberId,
+    this.ownerPersonId,
+    this.tenantPersonId,
   }) : _operationalDuesBalance = operationalDuesBalance,
        _capitalDuesBalance = capitalDuesBalance,
        _advanceBalance = advanceBalance;
@@ -1062,6 +1082,8 @@ class HomeOwnerItem {
       primaryResponsiblePhone: json['primary_responsible_phone']?.toString(),
       primaryResponsibleEmail: json['primary_responsible_email']?.toString(),
       primaryResponsibleMemberId: json['primary_responsible_member_id']?.toString(),
+      ownerPersonId: (json['owner_person_id'] as num?)?.toInt(),
+      tenantPersonId: (json['tenant_person_id'] as num?)?.toInt(),
     );
   }
 
@@ -1097,6 +1119,8 @@ class HomeOwnerItem {
     String? primaryResponsibleEmail,
     String? primaryResponsibleMemberId,
     bool clearPrimaryResponsible = false,
+    int? ownerPersonId,
+    int? tenantPersonId,
   }) {
     return HomeOwnerItem(
       unitId: unitId ?? this.unitId,
@@ -1129,6 +1153,8 @@ class HomeOwnerItem {
       primaryResponsiblePhone: clearPrimaryResponsible ? null : (primaryResponsiblePhone ?? this.primaryResponsiblePhone),
       primaryResponsibleEmail: clearPrimaryResponsible ? null : (primaryResponsibleEmail ?? this.primaryResponsibleEmail),
       primaryResponsibleMemberId: clearPrimaryResponsible ? null : (primaryResponsibleMemberId ?? this.primaryResponsibleMemberId),
+      ownerPersonId: ownerPersonId ?? this.ownerPersonId,
+      tenantPersonId: clearTenant ? null : (tenantPersonId ?? this.tenantPersonId),
     );
   }
 

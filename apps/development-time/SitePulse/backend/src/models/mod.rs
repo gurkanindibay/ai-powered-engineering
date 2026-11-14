@@ -1328,6 +1328,12 @@ pub struct HomeOwnerResponse {
     pub advance_balance: Option<Decimal>,
     #[serde(default)]
     pub household_residents: Vec<UnitMemberDto>,
+    /// Person card of the owner on record, for the unit-to-person link.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_person_id: Option<i64>,
+    /// Person card of the tenant on record, for the unit-to-person link.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_person_id: Option<i64>,
 }
 
 // Registration Approval DTOs

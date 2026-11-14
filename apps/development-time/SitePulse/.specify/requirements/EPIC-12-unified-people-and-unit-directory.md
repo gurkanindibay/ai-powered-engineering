@@ -77,3 +77,15 @@ Executable scenarios: [STORY-12-04-people-directory.feature](../features/EPIC-12
 - **Verification:** cargo build, clippy, tests, tenant isolation lint, API system checks against PostgreSQL.
 
 Executable scenarios: [STORY-12-05-person-card-api.feature](../features/EPIC-12/STORY-12-05-person-card-api.feature).
+
+### STORY-12-06: Person card and cross-navigation
+- **Status:** IN PROGRESS
+- **Task Ref:** task-43 / GitHub issue #100
+- **Description:** Expand the person card with edit, login, unit links and role actions that start from the person; unit tabs link to the person card.
+- **Acceptance Criteria:**
+  - Unit to person to unit navigation keeps the unit list's search, filters and focus.
+  - A card edit updates the owner, tenant and household roles the person holds on every unit shown.
+  - A person without a login can be given one from the card; role actions ask for the unit with the person fixed.
+- **Verification:** targeted Flutter tests, cargo build, Flutter analysis, shared-component reuse, UI style, test ID, and logging standards checks.
+
+Executable scenarios: [STORY-12-06-person-card-navigation.feature](../features/EPIC-12/STORY-12-06-person-card-navigation.feature).
