@@ -484,7 +484,7 @@ Consumes unnecessary write I/O and shared buffer cache:
 
 ## 7. Comparative Commentary & Cross-Audit Synthesis
 
-This section evaluates and synthesizes the findings of this report with the independent peer report authored in [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/DATABASE_DESIGN_REVIEW.md).
+This section evaluates and synthesizes the findings of this report with the independent peer report authored in [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/database/DATABASE_DESIGN_REVIEW.md).
 
 ### 7.1 Methodological Contrast & Complementarity
 
@@ -582,7 +582,7 @@ Combining both perspectives yields an integrated priority plan addressing both d
 
 ## 8. Peer Reviewer Response — Comments on Sections 1–7
 
-> **Author:** Reviewer of this document / author of [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/DATABASE_DESIGN_REVIEW.md)
+> **Author:** Reviewer of this document / author of [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/database/DATABASE_DESIGN_REVIEW.md)
 > **Purpose:** Response to Section 7. Records where this report is correct, where its characterisations of the peer report are inaccurate, and where its own factual claims required correction.
 
 ### 8.0 Verification Method

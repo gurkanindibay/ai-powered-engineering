@@ -53,7 +53,7 @@ So the module is **further along on ledger correctness** than the draft said. It
 
 ## Implementation status (2026-11-09)
 
-SPEC-007 (V18) and SPEC-009 (V20, [spec](../.specify/specs/009-payments-phase3/spec.md), [EPIC-11](../.specify/requirements/EPIC-11-payments-phase3.md)) implement every feature in §3.2. External services are behind ports with **sandbox** implementations only, and items marked (verify) still need counsel or a mali müşavir before production.
+SPEC-007 (V18) and SPEC-009 (V20, [spec](../../.specify/specs/009-payments-phase3/spec.md), [EPIC-11](../../.specify/requirements/EPIC-11-payments-phase3.md)) implement every feature in §3.2. External services are behind ports with **sandbox** implementations only, and items marked (verify) still need counsel or a mali müşavir before production.
 
 | ID | Feature | Status | Where | Still needed for production |
 |---|---|---|---|---|

@@ -9,9 +9,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let target_path = if args.len() > 1 {
         args[1].clone()
     } else if Path::new("../docs").exists() {
-        "../docs/openapi.json".to_string()
+        "../docs/api/openapi.json".to_string()
     } else {
-        "docs/openapi.json".to_string()
+        "docs/api/openapi.json".to_string()
     };
 
     let target = Path::new(&target_path);

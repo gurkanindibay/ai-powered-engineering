@@ -6,7 +6,7 @@
 > **Target Roles:** Home Owner, Home Resident (tenant), Site Manager, SaaS Admin (revaluation rates), licensed payment provider (webhook)
 > **Governance:** KMK 20 (penalty), KMK 35/37 as amended by Law 7579 (RG 22.05.2026, işletme projesi), İİK 68/1, TBK 147/1 (5-year limitation), 6493 (payment services), KVKK (no payer data on public verification)
 > **Depends on:** SPEC-005 / V16, SPEC-006 / V17
-> **Source analysis:** `docs/PAYMENTS_REGULATORY_AND_MARKET_EVALUATION.md` F1, F4, F7, E2, E10, E11; SPEC-006 §4 (deferred virman reversal, receipt PDF)
+> **Source analysis:** `docs/payments/PAYMENTS_REGULATORY_AND_MARKET_EVALUATION.md` F1, F4, F7, E2, E10, E11; SPEC-006 §4 (deferred virman reversal, receipt PDF)
 > **Schema:** migration `V18__payments_phase2.sql`
 
 ---

@@ -1,4 +1,4 @@
-"""Shared parts of the per-role user journeys (docs/GUI_TEST_PLAN.md §9).
+"""Shared parts of the per-role user journeys (docs/testing/GUI_TEST_PLAN.md §9).
 
 Every journey starts the way a real account starts: the first sign-in uses a
 temporary password. `first_sign_in` walks the STORY-06-06 gate and checks it the way

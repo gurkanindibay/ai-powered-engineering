@@ -3,7 +3,7 @@
 > **Scope:** the payment-related PostgreSQL schema as it stands after replaying V1–V15. Tables: `payment_entries`, `payment_receipts`, `payment_allocations`, `dues_liabilities`, `advance_balances`, `advance_ledger_entries`, `payment_idempotency_keys`, `receipt_counters`, `processed_bank_webhooks`, `debt_aging_snapshots`, `reconciliation_queue`.
 > **Method:** replayed every migration into an empty database, dumped columns, constraints, indexes, triggers and views, and read every code path that writes these tables.
 > **Fix:** migration **V16 `payment_ledger_integrity.sql`** and the SPEC-005 code changes, verified by the schema-integrity gate (fresh install and upgrade test) and the API system check against a real backend.
-> **Related:** [PAYMENTS_MANAGEMENT_STRUCTURE_REPORT.md](PAYMENTS_MANAGEMENT_STRUCTURE_REPORT.md) · [PAYMENTS_REGULATORY_AND_MARKET_EVALUATION.md](PAYMENTS_REGULATORY_AND_MARKET_EVALUATION.md) · `.specify/specs/005-payment-compliance-phase1/spec.md`
+> **Related:** [PAYMENTS_MANAGEMENT_STRUCTURE_REPORT.md](../payments/PAYMENTS_MANAGEMENT_STRUCTURE_REPORT.md) · [PAYMENTS_REGULATORY_AND_MARKET_EVALUATION.md](../payments/PAYMENTS_REGULATORY_AND_MARKET_EVALUATION.md) · `.specify/specs/005-payment-compliance-phase1/spec.md`
 > **Date:** 2026-11-08
 
 ---
