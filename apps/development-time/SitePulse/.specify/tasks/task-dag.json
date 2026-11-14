@@ -863,7 +863,7 @@
       "id": "task-41",
       "name": "Open unit workspace from directory rows",
       "module": "flutter-ui",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-34",
         "task-35"
@@ -883,7 +883,8 @@
         "testid-lint",
         "logging-standards-lint"
       ],
-      "attempts": 0
+      "attempts": 0,
+      "evidence": ".specify/evidence/task-41.json"
     },
     {
       "id": "task-42",
