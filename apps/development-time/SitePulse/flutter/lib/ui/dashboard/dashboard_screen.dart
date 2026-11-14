@@ -5,6 +5,7 @@ import '../../testing/test_id.dart';
 import 'dart:async';
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import '../components/step_up_prompt.dart';
 import '../../l10n/app_strings.dart';
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
@@ -7219,14 +7220,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           setDlgState(() => isSubmitting = true);
                           try {
                             final messenger = ScaffoldMessenger.of(this.context);
-                            final res = await widget.controller.transferUnitOwnership(
-                              unitId: ho.unitId,
-                              newOwnerName: newName,
-                              newOwnerPhone: phoneCtrl.text.trim(),
-                              newOwnerEmail: emailCtrl.text.trim(),
-                              notes: notesCtrl.text.trim(),
+                            // Ownership transfer is a sensitive action: the server asks for a
+                            // recent password check, then the same request is retried once.
+                            final res = await runWithStepUp(
+                              ctx,
+                              reason: 'Mülk malikini değiştiriyorsunuz. Devam etmek için kendi şifrenizi doğrulayın.',
+                              action: () => widget.controller.transferUnitOwnership(
+                                unitId: ho.unitId,
+                                newOwnerName: newName,
+                                newOwnerPhone: phoneCtrl.text.trim(),
+                                newOwnerEmail: emailCtrl.text.trim(),
+                                notes: notesCtrl.text.trim(),
+                              ),
                             );
-                            if (res != null && ctx.mounted) {
+                            if (res != null && res['success'] == false && ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                appSnackBar(
+                                  content: Text(res['needs_step_up'] == true
+                                      ? 'Şifre doğrulaması gerekli. Devir yapılmadı.'
+                                      : 'Hata: ${res['message']}'),
+                                  backgroundColor: AppColors.dangerFill,
+                                ),
+                              );
+                            } else if (res != null && ctx.mounted) {
                               Navigator.pop(ctx);
                               messenger.showSnackBar(
                                 appSnackBar(
