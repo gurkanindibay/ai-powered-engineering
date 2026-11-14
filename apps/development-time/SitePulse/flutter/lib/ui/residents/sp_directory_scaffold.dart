@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../design_system/sp_tone.dart';
 import '../theme/app_theme.dart';
+import '../../testing/test_id.dart';
 
 /// Shared directory layout with a scrollable header, lazy rows and local paging.
 ///
@@ -239,17 +240,25 @@ class _DirectoryPager extends StatelessWidget {
             if (value != null) onPageSizeChanged(value);
           },
         );
-        final previous = IconButton(
-          tooltip: 'Önceki sayfa',
-          onPressed: page > 0 ? () => onPageChanged(page - 1) : null,
-          icon: const Icon(Icons.chevron_left),
+        final previous = testId(
+          'directory_previous_page_btn',
+          IconButton(
+            tooltip: 'Önceki sayfa',
+            onPressed: page > 0 ? () => onPageChanged(page - 1) : null,
+            icon: const Icon(Icons.chevron_left),
+          ),
+          label: 'Önceki sayfa',
         );
-        final next = IconButton(
-          tooltip: 'Sonraki sayfa',
-          onPressed: page + 1 < pageCount
-              ? () => onPageChanged(page + 1)
-              : null,
-          icon: const Icon(Icons.chevron_right),
+        final next = testId(
+          'directory_next_page_btn',
+          IconButton(
+            tooltip: 'Sonraki sayfa',
+            onPressed: page + 1 < pageCount
+                ? () => onPageChanged(page + 1)
+                : null,
+            icon: const Icon(Icons.chevron_right),
+          ),
+          label: 'Sonraki sayfa',
         );
         return DecoratedBox(
           decoration: BoxDecoration(
