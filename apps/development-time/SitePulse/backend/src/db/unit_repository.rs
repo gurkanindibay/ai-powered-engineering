@@ -365,17 +365,13 @@ pub async fn transfer_unit_ownership_db(
             new_owner_moves_in: transfer.new_owner_moves_in,
         },
     )?;
-    let closing_start = plan
-        .closes
-        .and(snapshot.session.as_ref())
-        .map(|s| s.start_date);
-    unit_state::validate_effective_date(transfer.transfer_date, transfer.today, closing_start)?;
+    unit_state::validate_effective_date(transfer.transfer_date, transfer.today)?;
 
     // 3. Close every active ownership; an owner known only from the unit
     //    column (no ownership history) is archived so the history is complete.
     let closed_ownerships = tx
         .execute(
-            "UPDATE unit_ownerships SET is_active = false, end_date = $2 WHERE unit_id = $1 AND is_active = true",
+            "UPDATE unit_ownerships SET is_active = false, end_date = $2, start_date = LEAST(start_date, $2) WHERE unit_id = $1 AND is_active = true",
             &[&unit_id_num, &transfer.transfer_date],
         )
         .await?;

@@ -242,11 +242,7 @@ pub async fn apply_occupancy_command(
     let snapshot = lock_unit_snapshot(tx, site_id, unit_id).await?;
     let plan = unit_state::plan(snapshot.state, command)?;
     let incoming = incoming_person(&snapshot, &plan, input)?;
-    unit_state::validate_effective_date(
-        input.effective_date,
-        input.today,
-        closing_start(&snapshot, &plan),
-    )?;
+    unit_state::validate_effective_date(input.effective_date, input.today)?;
     execute_plan(tx, &snapshot, plan, incoming, input).await
 }
 
@@ -289,12 +285,6 @@ fn incoming_person(
             .map(Some)
             .ok_or(OccupancyError::PersonNotFound),
     }
-}
-
-fn closing_start(snapshot: &UnitSnapshot, plan: &TransitionPlan) -> Option<NaiveDate> {
-    plan.closes
-        .and(snapshot.session.as_ref())
-        .map(|s| s.start_date)
 }
 
 /// Closes and opens the sessions the plan names and records the transition.
@@ -403,13 +393,15 @@ async fn close_session(
     notes: Option<&str>,
 ) -> Result<ClosedSession, OccupancyError> {
     // An owner owes what accrued to them as owner, including vacant periods.
+    // The session never starts after the day it ends.
+    let start_date = session.start_date.min(end_date);
     let period_start = match session.role {
         SessionRole::Owner => snapshot
             .owners
             .iter()
             .find(|o| o.person_id == session.person_id)
-            .map_or(session.start_date, |o| o.start_date.min(session.start_date)),
-        SessionRole::Tenant => session.start_date,
+            .map_or(start_date, |o| o.start_date.min(start_date)),
+        SessionRole::Tenant => start_date,
     };
     let balance = exit_balance(tx, snapshot.unit_id, session, period_start, end_date).await?;
     // Closing the session also archives its household members: active members
@@ -417,18 +409,24 @@ async fn close_session(
     tx.execute(
         r#"
         UPDATE unit_occupancies
-        SET is_active = FALSE, end_date = $2, exit_balance = $3,
+        SET is_active = FALSE, start_date = $5, end_date = $2, exit_balance = $3,
             notes = COALESCE($4, notes)
         WHERE id = $1
         "#,
-        &[&session.occupancy_id, &end_date, &balance, &notes],
+        &[
+            &session.occupancy_id,
+            &end_date,
+            &balance,
+            &notes,
+            &start_date,
+        ],
     )
     .await?;
     Ok(ClosedSession {
         occupancy_id: session.occupancy_id,
         person_id: session.person_id,
         role: session.role,
-        start_date: session.start_date,
+        start_date,
         end_date,
         exit_balance: balance,
     })
