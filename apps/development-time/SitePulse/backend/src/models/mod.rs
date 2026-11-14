@@ -2,6 +2,9 @@ use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+mod person_api;
+pub use person_api::*;
+
 mod payments_phase2;
 pub use payments_phase2::*;
 mod payments_phase3;
