@@ -33,6 +33,8 @@ Establishes the enterprise-grade foundation of the SitePulse platform: PostgreSQ
 - **Verification & Tests:**
   - `SqlSchemaGate.verify_numeric_precision`
 
+Executable scenarios: [`STORY-05-01-postgresql-schema-migrations.feature`](../features/EPIC-05/STORY-05-01-postgresql-schema-migrations.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-05-02: Rust Domain Models with High-Precision Decimals
@@ -53,6 +55,8 @@ Establishes the enterprise-grade foundation of the SitePulse platform: PostgreSQ
   - `FinancialIntegrityGate.verify_due_rounding`
   - `cargo test` integration suite
 
+Executable scenarios: [`STORY-05-02-rust-domain-models-decimals.feature`](../features/EPIC-05/STORY-05-02-rust-domain-models-decimals.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-05-03: Rust Axum REST API Handlers & Endpoints
@@ -70,6 +74,8 @@ Establishes the enterprise-grade foundation of the SitePulse platform: PostgreSQ
 - **Verification & Tests:**
   - `RestEndpointGate`
   - `cargo test` Axum integration tests
+
+Executable scenarios: [`STORY-05-03-rest-api-handlers.feature`](../features/EPIC-05/STORY-05-03-rest-api-handlers.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -92,6 +98,8 @@ Establishes the enterprise-grade foundation of the SitePulse platform: PostgreSQ
   - `test_financial_integrity_gate_detects_rounding_leak`
   - `test_syntax_gate_detects_unclosed_braces`
 
+Executable scenarios: [`STORY-05-04-verification-harness-gates.feature`](../features/EPIC-05/STORY-05-04-verification-harness-gates.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-05-05: Unified Automated Test Runner (`run-tests.sh`)
@@ -109,6 +117,8 @@ Establishes the enterprise-grade foundation of the SitePulse platform: PostgreSQ
 - **Verification & Tests:**
   - 100% assertions green on execution
 
+Executable scenarios: [`STORY-05-05-unified-test-runner.feature`](../features/EPIC-05/STORY-05-05-unified-test-runner.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-05-06: CMMI Bidirectional Requirements Traceability Matrix & Validator
@@ -125,3 +135,5 @@ Establishes the enterprise-grade foundation of the SitePulse platform: PostgreSQ
   - `docs/cmmi-pipeline/traceability-matrix.md`
 - **Verification & Tests:**
   - `test_rtm_validator_bidirectional_consistency`
+
+Executable scenarios: [`STORY-05-06-requirements-traceability-validator.feature`](../features/EPIC-05/STORY-05-06-requirements-traceability-validator.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).

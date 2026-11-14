@@ -161,24 +161,7 @@ CREATE INDEX idx_dues_capital_project ON dues_liabilities (capital_project_id);
 - **So that:** The financial obligations are legally grounded under KMK Art. 20 without manual calculation errors.
 
 #### Acceptance Criteria (Gherkin):
-```gherkin
-Scenario: Create a capital project distributed strictly by Land Share (Arsa Payı)
-  Given Site "Begonya Sitesi" has 10 units with total land share of 1000
-  And Unit 14 has land share 24 (2.4%)
-  When the Site Manager creates a Capital Project:
-    | title          | Asansör Revizyon Projesi |
-    | total_budget   | ₺500.000,00              |
-    | allocation     | BY_LAND_SHARE            |
-    | contractor     | Otis Asansör San. Tic.   |
-  Then the project is saved with status "ACTIVE"
-  And Unit 14's total projected share is exactly ₺12.000,00
-  And the sum of all flat project allocations exactly equals ₺500.000,00 with 0 kuruş drift
-
-Scenario: Create a capital project with equal allocation per unit
-  Given Site "Begonya Sitesi" has 12 units
-  When the Site Manager creates a project with budget ₺60.000,00 and allocation "EQUAL_PER_UNIT"
-  Then every unit receives an allocation of exactly ₺5.000,00
-```
+Executable scenarios: [`STORY-10-01-capital-project-creation.feature`](../features/EPIC-10/STORY-10-01-capital-project-creation.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -188,20 +171,7 @@ Scenario: Create a capital project with equal allocation per unit
 - **So that:** Property owners can pay gradually and the system automatically generates `CAPITAL_DUES` liabilities when each installment maturity arrives.
 
 #### Acceptance Criteria (Gherkin):
-```gherkin
-Scenario: Schedule 3 installments and accrue installment 1
-  Given an active capital project with total budget ₺300.000,00 across 10 units
-  When the Site Manager configures 3 monthly installments:
-    | Installment 1 | ₺100.000,00 | Due: 2026-11-15 |
-    | Installment 2 | ₺100.000,00 | Due: 2026-12-15 |
-    | Installment 3 | ₺100.000,00 | Due: 2027-01-15 |
-  And triggers accrual for Installment 1
-  Then exactly 10 new dues_liabilities records are created
-  And each liability has expense_type = "CAPITAL_DUES"
-  And each liability has debtor_type = "OWNER"
-  And no tenant receives a dues liability
-  And installment 1 is marked as is_accrued = true
-```
+Executable scenarios: [`STORY-10-02-installment-scheduling.feature`](../features/EPIC-10/STORY-10-02-installment-scheduling.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -211,26 +181,7 @@ Scenario: Schedule 3 installments and accrue installment 1
 - **So that:** The capital liability is cleared and, if paid by a tenant, a legally binding TBK 314 Rent-Offset receipt is generated.
 
 #### Acceptance Criteria (Gherkin):
-```gherkin
-Scenario: Property owner pays capital due directly via FAST Sanal IBAN
-  Given Unit 14 has an accrued capital due of ₺4.000,00 for "Asansör Revizyonu 1. Taksit"
-  When Property Owner Ahmet Yılmaz transfers ₺4.000,00 to Unit 14's Virtual IBAN with description "Demirbaş 1. Taksit"
-  Then the capital dues liability transitions to "PAID"
-  And a collection receipt is issued indicating debtor "OWNER"
-  And the capital project collected amount increases by ₺4.000,00
-
-Scenario: Tenant pays capital due on behalf of owner and receives TBK 314 Rent-Offset Receipt
-  Given Unit 14 is TENANT_OCCUPIED by Canan Can and owned by Ahmet Yılmaz
-  And Unit 14 has an accrued capital due of ₺4.000,00
-  When Tenant Canan Can pays ₺4.000,00 with note "Demirbaş Ödemesi"
-  Then the capital dues liability is marked "PAID"
-  And the receipt contains the statutory legal clause:
-    """
-    634 sayılı KMK Madde 20 & 22 uyarınca ortak demirbaş giderleri Kat Maliki sorumluluğundadır. 
-    Kiracı tarafından ödenen bu tutar TBK Madde 314 gereğince kira bedelinden mahsuba uygundur.
-    """
-  And the receipt is tagged with is_rent_offset_eligible = true
-```
+Executable scenarios: [`STORY-10-03-capital-payment-ingestion.feature`](../features/EPIC-10/STORY-10-03-capital-payment-ingestion.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -240,15 +191,7 @@ Scenario: Tenant pays capital due on behalf of owner and receives TBK 314 Rent-O
 - **So that:** Property owners who overpaid previous dues do not need to make duplicate bank transfers.
 
 #### Acceptance Criteria (Gherkin):
-```gherkin
-Scenario: Transfer advance balance to clear capital dues (Virman)
-  Given Unit 14 has an advance balance of ₺3.500,00 in operational reservoir
-  And Unit 14 has an accrued capital due of ₺2.500,00
-  When the Site Manager executes Virman transfer of ₺2.500,00 to capital project
-  Then Unit 14's advance balance decreases to ₺1.000,00
-  And the capital dues liability is fully paid (paid_amount = ₺2.500,00, status = "PAID")
-  And an inter-ledger audit record is recorded in collection_transactions
-```
+Executable scenarios: [`STORY-10-04-inter-ledger-virman.feature`](../features/EPIC-10/STORY-10-04-inter-ledger-virman.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -258,16 +201,7 @@ Scenario: Transfer advance balance to clear capital dues (Virman)
 - **So that:** The site maintains 100% financial transparency between collected capital funds and paid contractor invoices.
 
 #### Acceptance Criteria (Gherkin):
-```gherkin
-Scenario: Record contractor milestone disbursement
-  Given Capital Project "Asansör Revizyonu" has collected ₺220.000,00 from unit owners
-  And total previous disbursements are ₺50.000,00
-  When the Site Manager authorizes "2. Hakediş (Motor & Halat Montajı)" of ₺120.000,00 to "Otis Asansör San. Tic."
-  Then the disbursement is recorded with invoice number "ASN-2026-0044"
-  And the project disbursed_amount becomes ₺170.000,00
-  And the remaining capital fund cash balance displays ₺50.000,00 (₺220.000,00 collected - ₺170.000,00 disbursed)
-  And disbursement exceeding collected funds triggers an overdrawn cash warning
-```
+Executable scenarios: [`STORY-10-05-contractor-disbursements.feature`](../features/EPIC-10/STORY-10-05-contractor-disbursements.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -277,21 +211,7 @@ Scenario: Record contractor milestone disbursement
 - **So that:** I have complete visibility over my obligations without confusion.
 
 #### Acceptance Criteria (Gherkin):
-```gherkin
-Scenario: Property Owner views separate Operational and Capital balance cards
-  Given Property Owner "Ahmet Yılmaz" logs in
-  When inspecting the dashboard
-  Then the primary balance card displays:
-    | Operational Dues | ₺1.500,00 (Aylık İşletme Aidatı) |
-    | Capital Dues     | ₺3.000,00 (Demirbaş Taksiti: Asansör Revizyonu 2/3) |
-  And clicking "Detay" shows project breakdown, contractor info, and installment schedule
-
-Scenario: Tenant views clear statutory protection guidance
-  Given Tenant "Canan Can" logs in to a unit with an active capital project
-  When viewing the dues breakdown
-  Then the capital project is listed with badge "Kat Maliki Sorumluluğunda"
-  And a banner clarifies: "Demirbaş giderleri yasal olarak ev sahibinize aittir. Ödemeniz halinde kiradan düşebilirsiniz."
-```
+Executable scenarios: [`STORY-10-06-resident-capital-view.feature`](../features/EPIC-10/STORY-10-06-resident-capital-view.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -301,17 +221,7 @@ Scenario: Tenant views clear statutory protection guidance
 - **So that:** I can manage active projects, monitor unit collection percentages, trigger installment accruals, and export project audit reports from one cohesive interface.
 
 #### Acceptance Criteria (Gherkin):
-```gherkin
-Scenario: Site Manager inspects Capital Projects segment in Aidat Yönetimi
-  Given the Site Manager navigates to the "Aidat Yönetimi" tab
-  When selecting the "Demirbaş & Yatırım" segment tab
-  Then the view displays:
-    | Active Capital Projects Summary (Total Budget, Collected %, Disbursed %) |
-    | Unit-by-unit capital debt and payment status table                        |
-    | Action Button: "Yeni Demirbaş Projesi Tanımla"                            |
-    | Action Button: "Hakediş / Gider Çıkışı Yap"                              |
-    | Action Button: "Taksit Tahakkuk Ettir"                                   |
-```
+Executable scenarios: [`STORY-10-07-manager-capital-cockpit.feature`](../features/EPIC-10/STORY-10-07-manager-capital-cockpit.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 

@@ -125,6 +125,7 @@ void main() {
       expect(find.byKey(const Key('btn_record_disbursement')), findsOneWidget);
     });
 
+    // covers: SC-10-01-01
     testWidgets('CapitalProjectWizardPage validates input and creates new capital project', (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 1400));
       addTearDown(() => tester.binding.setSurfaceSize(null));

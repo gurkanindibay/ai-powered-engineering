@@ -33,6 +33,8 @@ Enables complex managers to monitor building-wide financial health, inspect indi
 - **Verification & Tests:**
   - Flutter client integration tests & live verification
 
+Executable scenarios: [`STORY-02-01-collection-tracking.feature`](../features/EPIC-02/STORY-02-01-collection-tracking.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-02-02: Flat-by-Flat Dues Ledger & Filtering
@@ -50,6 +52,8 @@ Enables complex managers to monitor building-wide financial health, inspect indi
   - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
   - Flutter client integration tests & live verification
+
+Executable scenarios: [`STORY-02-02-dues-ledger-filtering.feature`](../features/EPIC-02/STORY-02-02-dues-ledger-filtering.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -73,6 +77,8 @@ Enables complex managers to monitor building-wide financial health, inspect indi
   - `when_registering_home_owner_then_provisions_user_with_resident_password` (Rust)
   - Flutter client unit tests
 
+Executable scenarios: [`STORY-02-03-manual-owner-registration.feature`](../features/EPIC-02/STORY-02-03-manual-owner-registration.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-02-04: Targeted Payment Reminder & Resident Direct Messaging
@@ -91,6 +97,8 @@ Enables complex managers to monitor building-wide financial health, inspect indi
 - **Verification & Tests:**
   - Verified via Flutter UI widget tests
 
+Executable scenarios: [`STORY-02-04-payment-reminders.feature`](../features/EPIC-02/STORY-02-04-payment-reminders.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-02-05: Site-Wide Announcement Broadcasting
@@ -108,3 +116,5 @@ Enables complex managers to monitor building-wide financial health, inspect indi
   - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
   - Verified via Flutter UI widget tests
+
+Executable scenarios: [`STORY-02-05-announcements.feature`](../features/EPIC-02/STORY-02-05-announcements.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
