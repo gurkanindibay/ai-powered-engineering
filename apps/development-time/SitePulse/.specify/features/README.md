@@ -15,7 +15,7 @@ One `.feature` file per story: `EPIC-xx/STORY-xx-yy-<slug>.feature`. The epic do
 | Tag | Meaning |
 |---|---|
 | `@layer:gui` | Test layer that executes the scenario (required unless `@pending`) |
-| `@GUI-10-02` | Row in `docs/GUI_TEST_PLAN.md`; becomes the `gui_id` marker |
+| `@GUI-10-02` | Row in `docs/testing/GUI_TEST_PLAN.md`; becomes the `gui_id` marker |
 | `@smoke`, `@core`, `@edge`, `@role_*` | Ordinary pytest markers (`e2e/pytest.ini`) |
 | `@pending` | Specified, not automated yet. Reported as PENDING, never executed |
 | `@linked` | Verified by a non-Gherkin test that declares `covers`. Not executed from the feature file |

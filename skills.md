@@ -83,7 +83,7 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 ## 2. Rust Engineering Skills & Standards (`rust-skills`)
 
 - **Skill Definition:** [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md)
-- **Authoritative Standards Document:** [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md)
+- **Authoritative Standards Document:** [apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md](file:///apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md)
 - **Rule Directives:** [.agents/rules/rust-standards.md](file:///.agents/rules/rust-standards.md)
 - **Purpose:** 265 coding rules across 26 categories ([leonardomso/rust-skills](https://github.com/leonardomso/rust-skills)) covering ownership, error handling, async patterns, concurrency, memory optimization, and numeric precision (`rust_decimal`).
 - **Agent Bindings:** Formally bound to **Architect Agent** (contracts, DTOs, migrations, concurrency models) and **Developer Agent** (synthesis, zero-clippy, zero-unwrap, persistence safety).
@@ -91,12 +91,12 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 ### 2a. SitePulse Rust Backend Workflow (`sitepulse-rust-backend`)
 
 - **Skill Definition:** [.agents/skills/sitepulse-rust-backend/SKILL.md](file:///.agents/skills/sitepulse-rust-backend/SKILL.md)
-- **Purpose:** How to apply `docs/RUST_STANDARDS.md` sections 10–16 in the backend. Covers where new code goes (`src/domain/` vs services vs db vs handlers), which shared primitives to reuse (`apportion`, `fold_turkish`, `TrIban`, `NormalizedEmail`, `fingerprint`, `ParseReport`), recipes for domain primitives, persisted contracts, money, external input and multi-tenant state, test conventions, verification commands, and a review checklist.
+- **Purpose:** How to apply `apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md` sections 10–16 in the backend. Covers where new code goes (`src/domain/` vs services vs db vs handlers), which shared primitives to reuse (`apportion`, `fold_turkish`, `TrIban`, `NormalizedEmail`, `fingerprint`, `ParseReport`), recipes for domain primitives, persisted contracts, money, external input and multi-tenant state, test conventions, verification commands, and a review checklist.
 
 ### 2b. Rust Standards Lint (`rust_standards_lint.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/rust_standards_lint.py](file:///apps/development-time/SitePulse/scripts/rust_standards_lint.py) (symlinked to `scripts/rust_standards_lint.py`)
-- **Purpose:** Mechanically enforces `docs/RUST_STANDARDS.md` sections 10–16 on `backend/src`.
+- **Purpose:** Mechanically enforces `apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md` sections 10–16 on `backend/src`.
   - **Hard rules** fail on any hit: `domain-purity` (no Axum/PostgreSQL/AppState/env in `src/domain/`), `layering` (only handlers/app/main import `crate::handlers`), `inline-email`, `inline-turkish-fold`, `inline-iban-check`, `regex-per-call`, `implicit-rounding` (`round_dp(..)`), `float-money`, `ad-hoc-hash` (SHA-256/HMAC outside `domain::fingerprint`), `non-english-identifier`, and `domain-unformatted`.
   - **Ratchet rules** count `unwrap`, `expect`, `string-error` (`Result<_, String>` in services), `pool-branch` and `unformatted-file`. These counts in `scripts/rust_standards_baseline.json` may only go down.
   - Comments, string/char literals and `#[cfg(test)]` modules are ignored. Run against the baseline commit, it reports all 75 issues fixed by the reusability work.
@@ -147,7 +147,7 @@ Released migrations are append-only: add `V<n+1>__name.sql` and register it in `
 ## 5a. Multi-Tenant & Lock Guardrails (`tenant_isolation_lint.py`, `lock_scope_lint.py`)
 
 - **Executable Scripts:** [apps/development-time/SitePulse/scripts/tenant_isolation_lint.py](file:///apps/development-time/SitePulse/scripts/tenant_isolation_lint.py) and [apps/development-time/SitePulse/scripts/lock_scope_lint.py](file:///apps/development-time/SitePulse/scripts/lock_scope_lint.py) (both symlinked into `scripts/`)
-- **Purpose:** Keep one site's data out of another's reach and keep the shared state lock off I/O (`docs/RUST_STANDARDS.md` §15.4–15.11).
+- **Purpose:** Keep one site's data out of another's reach and keep the shared state lock off I/O (`apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md` §15.4–15.11).
   - `tenant_isolation_lint.py` rules: `unscoped-site-input` (a handler takes a `site_id`-bearing Query/Json without `TenantScope`), `unscoped-object-path` (a route's path id is not middleware-attributable and the handler takes no scope, e.g. `/capital-projects/:id`; both `.route(..)` and table-style `post "/p" => handlers::x` routes are parsed, and an unparseable router fails the rule; an `AuthzContext` handler must call `ctx.require(..)`, pin via `TenantScope` or state `// tenant-scope: checked in <Service::fn>`), `guessed-tenant` (`unwrap_or_else(|| "1".to_string())`, hard-coded `"site-..."`), `unbound-tenant-transaction` (a service transaction without `tx_bind_tenant`), `rls-coverage` (a tenant-keyed table without `sp_enable_tenant_rls`). Run against the pre-guardrail commit it reports 83 findings (35 unscoped handlers, 7 object paths, 6 guessed tenants, 4 unbound transactions, 31 tables without RLS).
   - `lock_scope_lint.py` rules: `write-guard-across-io` / `read-guard-across-io` (an `inner` guard alive at a database, pool, HTTP or I/O-service `.await`; opt out with `// lock-scope: allow <reason>`). It matches a whole statement, so an `.await` on a continuation line is still found. It reported 16 sites in total (10 on the pre-guardrail commit, plus 6 that the line-based first version missed), all now fixed.
   - Gates `tenant-lint` and `lock-lint` in `run_tests.py`. Self-tests: `harness/tests/test_tenant_isolation_lint.py`.
@@ -182,7 +182,7 @@ SPEC-008 checks also verify durable household membership and rollback (`househol
 ## 5b-2. GUI End-to-End Suite (`gui_e2e.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/gui_e2e.py](file:///apps/development-time/SitePulse/scripts/gui_e2e.py) (symlinked to `scripts/gui_e2e.py`)
-- **Purpose:** Runs the Playwright GUI suite (`apps/development-time/SitePulse/e2e/`) in a real browser against an isolated stack: a throwaway database `sitepulse_e2e_<pid>`, the real backend on :8180 and the Flutter web E2E bundle (`--dart-define=E2E=true`) on :9190. It never touches the developer stack on :8080. The database is reset to the seed before every test; tests fail on uncaught page errors or backend 5xx. Scenario catalogue: `apps/development-time/SitePulse/docs/GUI_TEST_PLAN.md`.
+- **Purpose:** Runs the Playwright GUI suite (`apps/development-time/SitePulse/e2e/`) in a real browser against an isolated stack: a throwaway database `sitepulse_e2e_<pid>`, the real backend on :8180 and the Flutter web E2E bundle (`--dart-define=E2E=true`) on :9190. It never touches the developer stack on :8080. The database is reset to the seed before every test; tests fail on uncaught page errors or backend 5xx. Scenario catalogue: `apps/development-time/SitePulse/docs/testing/GUI_TEST_PLAN.md`.
 - **Writing tests:** locate widgets only through page objects (`e2e/pages/`) and `testId(...)` ids (`flutter/lib/testing/test_id.dart`); mark known product bugs and gaps `xfail(strict=True, reason=...)`.
 
 ```bash
@@ -207,7 +207,7 @@ Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/
 ## 5b-3b. UI Style Lint (`ui_style_lint.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/ui_style_lint.py](file:///apps/development-time/SitePulse/scripts/ui_style_lint.py) (symlinked to `scripts/ui_style_lint.py`)
-- **Purpose:** Enforces the design-system rules from `docs/UX_UI_EVALUATION_REPORT.md` on `flutter/lib/ui`. Hard rules fail on any hit: font sizes below 12 px, amounts printed by hand (`'₺${x.toStringAsFixed(2)}'`, `'₺$x'`; use `formatTry`/`MoneyFormatter`), emoji in string literals, the `Icons.g_mobiledata` stand-in, and floating popups or partial sheets (`no-popup`: `showDialog`, `showModalBottomSheet`, `AlertDialog`, `SimpleDialog`, `Dialog`; the constitution mandates full-screen pages, so use `AppFullscreenPage` or `showSpPage` with `SpAlertPage`/`SpDialogPage`/`SpSelectionPage` from `ui/components/sp_dialog_pages.dart`). Ratchet rules count literal `fontSize:` and `Color(0x…)` outside `ui/theme` and `ui/design_system`; the counts in `scripts/ui_style_baseline.json` may only go down. Comments are ignored. Gate `ui-style-lint` in `run_tests.py`.
+- **Purpose:** Enforces the design-system rules from `apps/development-time/SitePulse/docs/ux/UX_UI_EVALUATION_REPORT.md` on `flutter/lib/ui`. Hard rules fail on any hit: font sizes below 12 px, amounts printed by hand (`'₺${x.toStringAsFixed(2)}'`, `'₺$x'`; use `formatTry`/`MoneyFormatter`), emoji in string literals, the `Icons.g_mobiledata` stand-in, and floating popups or partial sheets (`no-popup`: `showDialog`, `showModalBottomSheet`, `AlertDialog`, `SimpleDialog`, `Dialog`; the constitution mandates full-screen pages, so use `AppFullscreenPage` or `showSpPage` with `SpAlertPage`/`SpDialogPage`/`SpSelectionPage` from `ui/components/sp_dialog_pages.dart`). Ratchet rules count literal `fontSize:` and `Color(0x…)` outside `ui/theme` and `ui/design_system`; the counts in `scripts/ui_style_baseline.json` may only go down. Comments are ignored. Gate `ui-style-lint` in `run_tests.py`.
 
 ```bash
 ./scripts/ui_style_lint.py                    # exit 1 with file:line:[rule] for every finding
@@ -218,7 +218,7 @@ Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/
 ## 5b-3c. Flutter Reuse Inventory (`flutter_reuse_inventory.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/flutter_reuse_inventory.py](file:///apps/development-time/SitePulse/scripts/flutter_reuse_inventory.py) (symlinked to `scripts/flutter_reuse_inventory.py`)
-- **Purpose:** Tracks component reuse from [docs/flutter-reusability-report.md](file:///docs/flutter-reusability-report.md). The inventory counts design-token adoption and repeated patterns in `flutter/lib/ui` (`EdgeInsets.` vs `AppSpacing.`, raw colours vs `SpTone.`, `appSnackBar(` vs `spSnackBar(`, shared-widget usage). Reuse rules fail with `--check`: `clipboard` (raw `Clipboard.setData` outside `sp_clipboard.dart`), `money-parse` (`Decimal.tryParse` in `lib/ui`; use `MoneyInput`/`SpMoneyFormField`), `json-decimal` (the `?? '0') ?? Decimal.zero` fallback; use `readDecimal`), and `bank-amount` (hand-rolled `.replaceAll('.', '').replaceAll(',', '.')`; use `BankFileParser.parseAmount`), `filter-chip` (raw `FilterChip(`; use `SpFilterChip`), `selection-page` (hand-built `SpSelectionPage(`; use `showSpSelection<T>`), and `raw-snackbar` (direct `SnackBar(`; use `SpToast`/`spSnackBar(kind:)`). Comments are ignored. Gate `flutter-reuse` in `run_tests.py`.
+- **Purpose:** Tracks component reuse from [apps/development-time/SitePulse/docs/reusability/flutter-reusability-report.md](file:///apps/development-time/SitePulse/docs/reusability/flutter-reusability-report.md). The inventory counts design-token adoption and repeated patterns in `flutter/lib/ui` (`EdgeInsets.` vs `AppSpacing.`, raw colours vs `SpTone.`, `appSnackBar(` vs `spSnackBar(`, shared-widget usage). Reuse rules fail with `--check`: `clipboard` (raw `Clipboard.setData` outside `sp_clipboard.dart`), `money-parse` (`Decimal.tryParse` in `lib/ui`; use `MoneyInput`/`SpMoneyFormField`), `json-decimal` (the `?? '0') ?? Decimal.zero` fallback; use `readDecimal`), and `bank-amount` (hand-rolled `.replaceAll('.', '').replaceAll(',', '.')`; use `BankFileParser.parseAmount`), `filter-chip` (raw `FilterChip(`; use `SpFilterChip`), `selection-page` (hand-built `SpSelectionPage(`; use `showSpSelection<T>`), and `raw-snackbar` (direct `SnackBar(`; use `SpToast`/`spSnackBar(kind:)`). Comments are ignored. Gate `flutter-reuse` in `run_tests.py`.
 
 ```bash
 ./scripts/flutter_reuse_inventory.py           # inventory table + rule findings (exit 0)
@@ -231,7 +231,7 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ## 5b-4. GUI Traceability (`gui_traceability.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/gui_traceability.py](file:///apps/development-time/SitePulse/scripts/gui_traceability.py) (symlinked to `scripts/gui_traceability.py`)
-- **Purpose:** Joins the stories (`.specify/requirements`), the scenario catalogue (`docs/GUI_TEST_PLAN.md` §3) and the last GUI run (`e2e/.artifacts/junit.xml`, where each test records its `gui_ids`) into a per-story status: PASS, DEFECT (strict xfail), FAIL, NOT RUN, GAP, EXCLUDED or MISSING. `--write-status` refreshes the generated section in `COMPLETION_STATUS.md`. Exit 1 on FAIL or MISSING.
+- **Purpose:** Joins the stories (`.specify/requirements`), the scenario catalogue (`apps/development-time/SitePulse/docs/testing/GUI_TEST_PLAN.md` §3) and the last GUI run (`e2e/.artifacts/junit.xml`, where each test records its `gui_ids`) into a per-story status: PASS, DEFECT (strict xfail), FAIL, NOT RUN, GAP, EXCLUDED or MISSING. `--write-status` refreshes the generated section in `COMPLETION_STATUS.md`. Exit 1 on FAIL or MISSING.
 
 ```bash
 ./scripts/gui_traceability.py                  # table
@@ -257,7 +257,7 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ## 5c. Test Execution & Verification Run (`run_tests.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)
-- **Test Plan & Matrix:** [docs/TEST_PLAN_AND_EXECUTION_MATRIX.md](file:///docs/TEST_PLAN_AND_EXECUTION_MATRIX.md)
+- **Test Plan & Matrix:** [apps/development-time/SitePulse/docs/testing/TEST_PLAN_AND_EXECUTION_MATRIX.md](file:///apps/development-time/SitePulse/docs/testing/TEST_PLAN_AND_EXECUTION_MATRIX.md)
 - **Purpose:** Runs platform verification across 6 execution cases: full platform run, area-specific verification (`finance`, `auth`, `residents`, `ui`, `db`, `core`), or change-driven selective testing (`--changed`) using real compilers, linters, test targets, and database tools.
 
 ```bash
@@ -311,7 +311,7 @@ echo -n 'new-password' | cargo run --quiet --bin hash-password   # from backend/
 ## 6. Durable Engineering Harness (`development_harness.py`)
 
 - **Skill:** [.agents/skills/team-orchestration/SKILL.md](.agents/skills/team-orchestration/SKILL.md)
-- **Guide:** [docs/engineering-harness.md](docs/engineering-harness.md)
+- **Guide:** [apps/development-time/SitePulse/docs/engineering-process/engineering-harness.md](apps/development-time/SitePulse/docs/engineering-process/engineering-harness.md)
 - **Runtime:** `scripts/development_harness.py` (Python 3.12+, Docker for execution).
 - **Planner compatibility:** `scripts/team_orchestrator.py`; plans only, unresolved model targets without capabilities.
 - **Capabilities:** five specialized roles plus conditional Architect, risk floors, live target validation, SQLite scheduling, decimal budgets, per-attempt evidence, cancellation/recovery, container isolation and trusted final-candidate gates.

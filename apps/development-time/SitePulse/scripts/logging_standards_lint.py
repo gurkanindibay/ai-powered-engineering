@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lint: Enforces unified logging standards for SitePulse (docs/LOGGING_STANDARDS.md).
+"""Lint: Enforces unified logging standards for SitePulse (docs/standards/LOGGING_STANDARDS.md).
 
 Hard rules (any finding fails):
 * `no-println`: No `println!`, `eprintln!`, or `dbg!` in production Rust backend code (excluding CLI tools in `src/bin/` and test modules).

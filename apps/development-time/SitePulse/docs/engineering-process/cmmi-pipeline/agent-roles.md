@@ -57,7 +57,7 @@ graph TD
 ### 2.2 ArchitectAgent (System Architect)
 - **CMMI Process Areas:** Technical Solution (TS), Decision Analysis & Resolution (DAR).
 - **Core Responsibility:** Establish clean architecture boundaries, design entity schemas, define immutable interface contracts, DTOs, and database migration blueprints.
-- **Input Artifacts:** `spec.md`, `constitution.md`, [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md), [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md), existing domain models.
+- **Input Artifacts:** `spec.md`, `constitution.md`, [apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md](file:///apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md), [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md), existing domain models.
 - **Output Artifacts:** Interface definitions, DTO schemas, DB migration plans (`V*.sql`), error taxonomy enums (`AppError`), clean architecture layer diagrams.
 - **Context Boundaries:** Focuses exclusively on interface contracts and architectural boundaries; does not write business logic implementations.
 - **Deterministic Gate:** `ContractIntegrityGate` (validates typing, naming conventions, zero-floating point in financial models, and layer dependency directions).
@@ -81,7 +81,7 @@ graph TD
 ### 2.5 MakerAgent (Developer)
 - **CMMI Process Areas:** Technical Solution (TS), Product Integration (PI).
 - **Core Responsibility:** Implement task-scoped production code strictly matching the assigned contract.
-- **Input Artifacts:** Assigned task from `task-dag.json`, parent interface contracts, `constitution.md` rules, [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md), [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md).
+- **Input Artifacts:** Assigned task from `task-dag.json`, parent interface contracts, `constitution.md` rules, [apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md](file:///apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md), [.agents/skills/rust-skills/SKILL.md](file:///.agents/skills/rust-skills/SKILL.md).
 - **Output Artifacts:** Clean architecture source code (Flutter / Dart / Rust / C# / Python).
 - **Context Boundaries:** Single-task context. Forbidden from modifying parent contracts or out-of-scope files without architect approval.
 - **Deterministic Gate:** `SyntaxGate` (AST brace matching, compile check), `FinancialIntegrityGate` (no `float`/`double`), `ClippyGate` (zero warnings), and `PersistenceLintGate` (`memory_persistence_lint.py`).

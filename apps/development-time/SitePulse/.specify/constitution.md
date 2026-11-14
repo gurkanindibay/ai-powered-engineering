@@ -43,7 +43,7 @@
    - **Referential Integrity:** Enforce foreign keys between `siteler` -> `bloklar` -> `bagimsiz_bolumler` -> `kat_malikleri` and `aidat_tahakkuklari`.
 
 3. **Rust Standards & Agent Governance:**
-   - All backend code must strictly adhere to [docs/RUST_STANDARDS.md](../../../../docs/RUST_STANDARDS.md) and [rust-skills](../../../../.agents/skills/rust-skills/SKILL.md) (265 rules across 26 categories).
+   - All backend code must strictly adhere to [docs/standards/RUST_STANDARDS.md](../docs/standards/RUST_STANDARDS.md) and [rust-skills](../../../../.agents/skills/rust-skills/SKILL.md) (265 rules across 26 categories).
    - The **Architect Agent** governs API contracts, DTO schemas, and database migrations.
    - The **Developer Agent** guarantees zero Clippy warnings (`-D warnings`), zero unwrap in production, strict borrowing, and persistence safety (`memory_persistence_lint.py`).
 

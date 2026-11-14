@@ -26,7 +26,7 @@ For tests, build the app with `flutter build web --dart-define=E2E=true --dart-d
 
 ## 3. Phases
 
-### Phase 0: Scenario catalogue (`docs/GUI_TEST_PLAN.md`)
+### Phase 0: Scenario catalogue (`docs/testing/GUI_TEST_PLAN.md`)
 1. For each epic except EPIC-05, turn every Given/When/Then criterion with a visible UI effect into a scenario.
 2. Cross-check against the screens: login, dashboard and manager cockpit, dues management, payment tracking, bank reconciliation, manual unit assignment, residents and owners module, capital projects, SaaS admin, profile and role sheet, house types, checkout dialog, virtual IBAN card.
 3. Each scenario records: id `GUI-<EPIC>-<NN>`, role, story id, preconditions and seed data, steps, expected UI result, an optional database check (`scripts/db_verify.py query-json`), and a priority (P0 smoke, P1 core, P2 edge).

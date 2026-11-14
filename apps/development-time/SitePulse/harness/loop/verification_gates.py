@@ -132,11 +132,11 @@ GATES: Dict[str, List[CommandSpec]] = {
     "test-run-recorded": [CommandSpec(["python3", "scripts/feature_traceability.py", "--json", "check", "--require-run"], ".", 120)],
     # Design-system rules (12 px floor, MoneyFormatter, no emoji icons, ratchet on literal styles).
     "ui-style-lint": [CommandSpec(["python3", "scripts/ui_style_lint.py", "--json"], ".", 120)],
-    # Rust standards (docs/RUST_STANDARDS.md 10-16): domain purity, layering, shared rules,
+    # Rust standards (docs/standards/RUST_STANDARDS.md 10-16): domain purity, layering, shared rules,
     # no per-call regex / implicit rounding / floats; ratchet on unwrap, String errors, fmt.
     "rust-standards-lint": [CommandSpec(["python3", "scripts/rust_standards_lint.py", "--json"], ".", 300)],
     # Shared-component reuse guard: no raw clipboard writes, hand-rolled amount parsing or
-    # JSON Decimal fallbacks outside the shared helpers (docs/flutter-reusability-report.md).
+    # JSON Decimal fallbacks outside the shared helpers (docs/reusability/flutter-reusability-report.md).
     "flutter-reuse": [CommandSpec(["python3", "scripts/flutter_reuse_inventory.py", "--check", "--json"], ".", 120)],
     # Multi-tenant guardrails: handlers pin site input through TenantScope, object-id
     # routes check ownership, no guessed tenants, service transactions bind their
@@ -144,7 +144,7 @@ GATES: Dict[str, List[CommandSpec]] = {
     "tenant-lint": [CommandSpec(["python3", "scripts/tenant_isolation_lint.py", "--json"], ".", 120)],
     # No guard on the global AppState lock is held across database/network I/O.
     "lock-lint": [CommandSpec(["python3", "scripts/lock_scope_lint.py", "--json"], ".", 120)],
-    # Cross-stack logging standards (docs/LOGGING_STANDARDS.md): no println/dbg in backend,
+    # Cross-stack logging standards (docs/standards/LOGGING_STANDARDS.md): no println/dbg in backend,
     # no raw print in Flutter, structured AppLogger usage, no credential leaks.
     "logging-standards-lint": [CommandSpec(["python3", "scripts/logging_standards_lint.py", "--json"], ".", 120)],
     # Browser end-to-end suite (e2e/): isolated DB, release backend, Flutter E2E web build, Chrome.

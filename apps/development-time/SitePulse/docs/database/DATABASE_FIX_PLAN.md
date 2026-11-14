@@ -346,7 +346,7 @@ flowchart TD
 
 ## 8. Peer Review Addendum — Blocking Defects, Missing Steps & Scope Gaps
 
-> **Reviewer:** author of [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/DATABASE_DESIGN_REVIEW.md)
+> **Reviewer:** author of [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/database/DATABASE_DESIGN_REVIEW.md)
 > **Validation method:** every DDL statement and backfill query in this plan was **executed** against a database rebuilt from `db/init/00-01 … 00-10`, not merely read. Results are quoted verbatim below.
 
 ### 8.0 Verdict
@@ -607,7 +607,7 @@ Phase 6 currently runs three existing commands. Add:
 
 ## 9. Additional Additions — Rollout Mechanics, Contract Impact & Execution Artifacts
 
-> **Reviewer:** author of [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/DATABASE_DESIGN_REVIEW.md)
+> **Reviewer:** author of [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/database/DATABASE_DESIGN_REVIEW.md)
 > **Relationship to §8:** §8 covers *defects in the plan's SQL*. This section covers what the plan does **not discuss at all**: how the change is rolled out, what breaks at the API boundary, which tests will fail, how to undo a phase, and which decisions must be made by a human before any of it executes.
 
 ### 9.1 Rollout Strategy — the plan is a big-bang cutover; it does not have to be
@@ -810,7 +810,7 @@ Step 7 must use the `information_schema` guard pattern already used in `00-07`, 
 
 ## 10. Additional Additions — Transactionality, Credential Storage, Lifecycle & Test Coverage
 
-> **Reviewer:** author of [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/DATABASE_DESIGN_REVIEW.md)
+> **Reviewer:** author of [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/database/DATABASE_DESIGN_REVIEW.md)
 > **Relationship to §8 / §9:** §8 corrects the plan's SQL, §9 covers rollout and contract impact. This section covers four properties of the **database as an operating system of record** that the plan changes without addressing: atomicity, credential fidelity, data lifecycle, and whether any of it is actually tested.
 
 ### 10.1 Atomicity — the plan changes a multi-statement flow that has no transaction
@@ -994,7 +994,7 @@ Without A1 and A2 the plan fixes accounting semantics on top of a non-atomic flo
 
 ## 11. Additional Additions — "Memory Is Not Source of Truth" Audit
 
-> **Reviewer:** author of [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/DATABASE_DESIGN_REVIEW.md)
+> **Reviewer:** author of [`DATABASE_DESIGN_REVIEW.md`](file:///home/gurkanindibay/Documents/source/epam/ai-powered-engineering/apps/development-time/SitePulse/docs/database/DATABASE_DESIGN_REVIEW.md)
 > **Governing rule (from product owner):** *Any operation that exists only in process memory is a defect.* PostgreSQL must be the system of record for every business fact; `AppStateInner` may only be a read-through cache.
 > **Relationship to §8 / §10:** §8 found four *dead tables*; §10 found *no transaction* and *no DB tests*. This section shows the cause: **an entire bounded context (EPIC-09 Treasury) writes only to memory.** That is why the tables are dead.
 

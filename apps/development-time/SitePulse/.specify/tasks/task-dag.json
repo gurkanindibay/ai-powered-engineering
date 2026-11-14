@@ -616,7 +616,7 @@
       "module": "full-stack",
       "status": "UNVERIFIED",
       "depends_on": [],
-      "spec_ref": "docs/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#delivery-plan",
+      "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#delivery-plan",
       "description": "Step 0: add a reusable person integrity report for site-less people, unlinked household members, multiple active logins, unmatched primary contacts and likely duplicates; record current directory density and manager task times before setting constraints or claiming improvements.",
       "gates": ["schema-integrity", "harness-selftest"],
       "attempts": 0
@@ -627,7 +627,7 @@
       "module": "backend-rust",
       "status": "UNVERIFIED",
       "depends_on": ["task-30"],
-      "spec_ref": "docs/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#backend-design",
+      "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#backend-design",
       "description": "A1: introduce person_repository and transactional PersonService::resolve; move all person inserts to the repository; enforce hard and soft duplicate rules and add a lint rule barring other inserts. Preserve existing API contracts. Cover existing and new references, site isolation and concurrent insert races.",
       "gates": ["rust-build", "rust-clippy", "rust-test", "rust-standards-lint", "tenant-lint", "logging-standards-lint"],
       "attempts": 0
@@ -638,7 +638,7 @@
       "module": "postgres-db",
       "status": "UNVERIFIED",
       "depends_on": ["task-30"],
-      "spec_ref": "docs/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#schema-changes-proposed-migration-v33",
+      "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#schema-changes-proposed-migration-v33",
       "description": "A2: migrate normalized person search keys, version, merge tombstone and primary contact person reference; backfill safely and add person, unit and relationship views. Add integrity checks; apply uniqueness and non-null constraints only after the measured data passes their preconditions.",
       "gates": ["schema-integrity", "rust-db-test", "tenant-lint", "logging-standards-lint"],
       "attempts": 0
@@ -649,7 +649,7 @@
       "module": "backend-rust",
       "status": "UNVERIFIED",
       "depends_on": ["task-31", "task-32"],
-      "spec_ref": "docs/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#endpoints",
+      "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#endpoints",
       "description": "A3: add scoped person search, create, edit and login endpoints; accept PersonRef in unit, occupancy, ownership, household and registration commands while retaining legacy request fields for one release; select primary contact by person_id; update OpenAPI and tenant isolation coverage.",
       "gates": ["rust-build", "rust-clippy", "rust-test", "api-system", "schema-integrity", "tenant-lint", "logging-standards-lint"],
       "attempts": 0
@@ -660,7 +660,7 @@
       "module": "flutter-ui",
       "status": "UNVERIFIED",
       "depends_on": ["task-30"],
-      "spec_ref": "docs/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#frontend-design",
+      "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#frontend-design",
       "description": "B1: build the reusable directory scaffold and unit rows with search, filters, natural sort, paging, density, responsive layouts and restored state; benchmark 1,000 and 10,000 units before choosing server paging.",
       "gates": ["flutter-analyze", "flutter-test", "flutter-reuse", "ui-style-lint", "testid-lint", "logging-standards-lint"],
       "attempts": 0
@@ -671,7 +671,7 @@
       "module": "flutter-ui",
       "status": "UNVERIFIED",
       "depends_on": ["task-34"],
-      "spec_ref": "docs/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#unit-workspace",
+      "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#unit-workspace",
       "description": "B2: add the unit workspace with separate actions and information modes, using server allowed_commands and full-screen action pages; preserve current workflows, history, separate ledgers and navigation state.",
       "gates": ["flutter-analyze", "flutter-test", "flutter-reuse", "ui-style-lint", "testid-lint", "logging-standards-lint"],
       "attempts": 0
@@ -682,7 +682,7 @@
       "module": "full-stack",
       "status": "UNVERIFIED",
       "depends_on": ["task-33", "task-35"],
-      "spec_ref": "docs/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#choosing-or-creating-a-person",
+      "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#choosing-or-creating-a-person",
       "description": "C1: add PersonRef, SpPersonField, full-screen searchable picker, SpPersonForm and SpPersonCard; replace inline person inputs in move-in, title transfer, household, primary contact, registration and unit edit; show duplicate and role eligibility reasons.",
       "gates": ["flutter-analyze", "flutter-test", "flutter-reuse", "ui-style-lint", "testid-lint", "api-system", "logging-standards-lint"],
       "attempts": 0
@@ -693,7 +693,7 @@
       "module": "flutter-ui",
       "status": "UNVERIFIED",
       "depends_on": ["task-36"],
-      "spec_ref": "docs/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#people-list-and-person-card",
+      "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#people-list-and-person-card",
       "description": "C2: move the people list to the shared scaffold; expand person card with edit, login, units and allowed role actions; add unit selection for person-first actions and cross-links from unit tabs while restoring list state and focus.",
       "gates": ["flutter-analyze", "flutter-test", "flutter-reuse", "ui-style-lint", "testid-lint", "logging-standards-lint"],
       "attempts": 0
@@ -704,7 +704,7 @@
       "module": "full-stack",
       "status": "UNVERIFIED",
       "depends_on": ["task-37"],
-      "spec_ref": "docs/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#delivery-plan",
+      "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#delivery-plan",
       "description": "D: implement step-up protected merge without rewriting ledger rows, reject conflicting unit roles and resolve tombstones in readers; add the server unit directory endpoint only if the measured 1,000 and 10,000 unit benchmark requires it.",
       "gates": ["rust-build", "rust-clippy", "rust-test", "rust-db-test", "api-system", "flutter-analyze", "flutter-test", "schema-integrity", "tenant-lint", "logging-standards-lint"],
       "attempts": 0
@@ -715,7 +715,7 @@
       "module": "full-stack",
       "status": "UNVERIFIED",
       "depends_on": ["task-38"],
-      "spec_ref": "docs/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#delivery-plan",
+      "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#delivery-plan",
       "description": "E: after the compatibility release, remove inline person fields from requests and copied occupancy member and primary contact data; make person_type nullable for role-free cards and verify history and financial ledger integrity.",
       "gates": ["rust-build", "rust-clippy", "rust-test", "rust-db-test", "api-system", "flutter-analyze", "flutter-test", "schema-integrity", "flutter-reuse", "tenant-lint", "logging-standards-lint"],
       "attempts": 0
