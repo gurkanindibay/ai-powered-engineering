@@ -153,12 +153,12 @@ void main() {
 
       // Verify modal content
       expect(find.text('Aktif Sorumlu Sakini Belirle'), findsOneWidget);
-      expect(find.text('Kemal Ev Sahibi'), findsWidgets);
+      expect(find.textContaining('Kemal Ev Sahibi'), findsWidgets);
 
       // Choose Kat Maliki as active responsible
-      await tester.ensureVisible(find.text('Kemal Ev Sahibi').first);
+      await tester.ensureVisible(find.textContaining('Kemal Ev Sahibi').first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Kemal Ev Sahibi').first);
+      await tester.tap(find.textContaining('Kemal Ev Sahibi').first);
       await tester.pumpAndSettle();
 
       // Verify controller was updated

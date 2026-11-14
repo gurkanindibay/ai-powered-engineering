@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
 
 from pathlib import Path
 
@@ -119,6 +119,7 @@ class DuesManagement:
         by_id(self.page, "btn_confirm_period_accrual").click()
         message = by_id(self.page, "snackbar_accrual_result")
         message.wait_for(timeout=15_000)
+        expect(message).not_to_have_text("")
         text = text_of(message)
         message.wait_for(state="detached", timeout=15_000)  # let the snackbar go before the next action
         return period, text

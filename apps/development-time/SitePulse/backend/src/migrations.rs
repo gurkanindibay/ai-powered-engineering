@@ -63,6 +63,7 @@ pub const MIGRATIONS: &[Migration] = &[
         "V30__release_identity_uniqueness_for_archived_records.sql"
     ),
     migration!(31, "V31__unit_state_model.sql"),
+    migration!(32, "V32__unit_responsible_contact.sql"),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.
