@@ -39,7 +39,21 @@ Executable scenarios: [STORY-12-01-person-schema-foundations.feature](../feature
 
 Executable scenarios: [STORY-12-02-unit-directory.feature](../features/EPIC-12/STORY-12-02-unit-directory.feature).
 
-### STORY-12-03: Person card API and reference-based commands
+### STORY-12-03: Shared person selection components
+- **Status:** IN PROGRESS
+- **Task Ref:** task-36 / GitHub issue #87
+- **Description:** Provide one typed person reference, an injectable repository boundary, a full-screen searchable picker, a duplicate-aware person form, a reusable person field, and person cards.
+- **Acceptance Criteria:**
+  - Existing person references and new person drafts serialize to the published API contract.
+  - Search pages beyond the first 100 results and shows ineligible people with the server reason.
+  - Creating a person surfaces duplicate candidates, blocks hard identity duplicates, and requires explicit confirmation for soft matches.
+  - Person name, phone, and email editing lives in the shared person form.
+  - Shared components keep stable automation ids and render in both themes at large text sizes.
+- **Verification:** fake-repository Flutter tests, Flutter analysis, shared-component reuse, UI style, test ID, and logging standards checks.
+
+Executable scenarios: [STORY-12-03-person-selection.feature](../features/EPIC-12/STORY-12-03-person-selection.feature).
+
+### STORY-12-04: Person card API and reference-based commands
 - **Status:** IN PROGRESS
 - **Task Ref:** task-33 / GitHub issue #84
 - **Description:** Expose scoped person search, role-free create, card read, version-checked edit and login routes, and let unit commands accept a `PersonRef` while legacy request fields remain for one release.
@@ -49,4 +63,4 @@ Executable scenarios: [STORY-12-02-unit-directory.feature](../features/EPIC-12/S
   - Household, occupancy and registration approval accept an existing or new person; the primary contact is selected by `person_id`.
 - **Verification:** cargo build, clippy, tests, tenant isolation lint, API system checks against PostgreSQL.
 
-Executable scenarios: [STORY-12-03-person-card-api.feature](../features/EPIC-12/STORY-12-03-person-card-api.feature).
+Executable scenarios: [STORY-12-04-person-card-api.feature](../features/EPIC-12/STORY-12-04-person-card-api.feature).

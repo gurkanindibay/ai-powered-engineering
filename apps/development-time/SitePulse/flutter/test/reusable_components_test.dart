@@ -8,6 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitepulse/domain/formatting/json_decimal.dart';
 import 'package:sitepulse/domain/formatting/money_formatter.dart';
 import 'package:sitepulse/domain/models/dues_models.dart';
+import 'package:sitepulse/domain/models/person_ref.dart';
+import 'package:sitepulse/domain/repositories/person_repository.dart';
+import 'package:sitepulse/domain/services/person_directory_api.dart';
 import 'package:sitepulse/domain/services/bank_file_parser.dart';
 import 'package:sitepulse/ui/components/sp_dialog_pages.dart';
 import 'package:sitepulse/ui/components/step_up_prompt.dart';
@@ -25,6 +28,9 @@ import 'package:sitepulse/ui/design_system/sp_status_badge.dart';
 import 'package:sitepulse/ui/design_system/sp_tone.dart';
 import 'package:sitepulse/ui/residents/resident_directory.dart';
 import 'package:sitepulse/ui/residents/sp_directory_scaffold.dart';
+import 'package:sitepulse/ui/residents/sp_person_card.dart';
+import 'package:sitepulse/ui/residents/sp_person_field.dart';
+import 'package:sitepulse/ui/residents/sp_person_form.dart';
 import 'package:sitepulse/ui/theme/app_theme.dart';
 
 /// Pumps [child] in the real SitePulse theme, without a DashboardController.
@@ -36,6 +42,23 @@ Future<void> _pump(WidgetTester tester, Widget child, {ThemeData? theme, double 
       child: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   ));
+}
+
+class _PersonComponentRepository implements PersonRepository {
+  final person = const PersonSummary(personId: 42, fullName: 'Ayşe Demir', email: 'ayse@example.test', phone: '0555 000 00 01', role: 'HOME_OWNER', ownedUnits: 2, occupiedUnits: 1, login: PersonLogin.active);
+
+  @override
+  Future<PersonSearchPage> search({String query = '', String? context, String? unitId, int page = 1, int pageSize = 50}) async => PersonSearchPage(items: [PersonSearchResult(person: person)], total: 1, page: 1, pageSize: pageSize);
+  @override
+  Future<List<DuplicateCandidate>> findDuplicates({required String fullName, String? email, String? phone, int? excludePersonId}) async => const [];
+  @override
+  Future<PersonSummary> create({required String fullName, String? phone, String? email, bool confirmDistinct = false}) async => person;
+  @override
+  Future<PersonSummary> update(int personId, {required int version, required String fullName, String? phone, String? email}) async => person;
+  @override
+  Future<PersonSummary?> getById(int personId) async => person;
+  @override
+  PersonRef referenceFor(PersonSearchResult result) => PersonRef.existing(result.person.personId);
 }
 
 HomeOwnerItem _unit({
@@ -107,6 +130,42 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.tap(find.text('Add resident'));
         expect(calls, 1);
+      });
+
+      testWidgets('person components remain usable at $width and 2x text in ${theme.brightness}', (tester) async {
+        tester.view.physicalSize = Size(width, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final repository = _PersonComponentRepository();
+        PersonRef? selected;
+        await _pump(tester, SpPersonField(repository: repository, onChanged: (value) => selected = value), theme: theme, textScale: 2);
+        expect(find.text('Kişi seç veya ekle'), findsOneWidget);
+        await tester.tap(find.text('Kişi seç veya ekle'));
+        await tester.pumpAndSettle();
+        expect(find.text('Kişi seç'), findsOneWidget);
+        await tester.tap(find.text('Ayşe Demir'));
+        await tester.pumpAndSettle();
+        expect(selected?.personId, 42);
+        expect(find.text('Değiştir'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(MaterialApp(theme: theme, home: MediaQuery(data: const MediaQueryData(textScaler: TextScaler.linear(2)), child: SpPersonForm(repository: repository))));
+        expect(find.byKey(const Key('person_form_name')), findsOneWidget);
+        expect(find.byKey(const Key('person_form_phone')), findsOneWidget);
+        expect(find.byKey(const Key('person_form_email')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('person card stays readable at $width and 2x text in ${theme.brightness}', (tester) async {
+        tester.view.physicalSize = Size(width, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await _pump(tester, SpPersonCard(person: const PersonSummary(personId: 42, fullName: 'Ayşe Demir', email: 'ayse@example.test', phone: '0555 000 00 01', role: 'HOME_OWNER', ownedUnits: 2, occupiedUnits: 1, login: PersonLogin.active), size: SpPersonCardSize.full, roles: const ['Malik', 'Sakin'], unitLabels: const ['A-12', 'D-1']), theme: theme, textScale: 2);
+        expect(find.text('Ayşe Demir'), findsOneWidget);
+        expect(find.text('A-12'), findsOneWidget);
+        expect(tester.takeException(), isNull);
       });
     }
   }

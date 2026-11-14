@@ -49,9 +49,23 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    Finder directoryListScrollable() => find.descendant(
+          of: find.byType(ListView).first,
+          matching: find.byType(Scrollable),
+        ).first;
+
+    Future<void> openUnitCard(WidgetTester tester, String unitId) async {
+      final action = find.byKey(Key('module_unit_actions_$unitId'));
+      await tester.scrollUntilVisible(action, 180, scrollable: directoryListScrollable());
+      await tester.pumpAndSettle();
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+    }
+
     // covers: SC-08-11-01
     testWidgets('actions follow the allowed commands of a tenant-occupied unit', (tester) async {
       await openModule(tester);
+      await openUnitCard(tester, 'unit-ws');
       final entry = find.byKey(const Key('module_workspace_actions_unit-ws'));
       await tester.ensureVisible(entry);
       await tester.tap(entry);
@@ -67,6 +81,7 @@ void main() {
     // covers: SC-08-11-02
     testWidgets('switches to information with separate ledgers and returns to the list', (tester) async {
       await openModule(tester);
+      await openUnitCard(tester, 'unit-ws');
       final entry = find.byKey(const Key('module_workspace_info_unit-ws'));
       await tester.ensureVisible(entry);
       await tester.tap(entry);
