@@ -24,3 +24,17 @@ Represent a person once and derive unit roles and directory views from scoped re
 - **Verification:** schema-integrity, PostgreSQL-backed tests, tenant isolation lint, and logging standards lint.
 
 Executable scenarios: [STORY-12-01-person-schema-foundations.feature](../features/EPIC-12/STORY-12-01-person-schema-foundations.feature).
+
+### STORY-12-02: Compact unit directory
+- **Status:** IN PROGRESS
+- **Task Ref:** task-34 / GitHub issue #85
+- **Description:** Provide the shared directory scaffold and compact responsive unit rows with searchable, filterable, naturally sorted, locally paged results and restorable view state.
+- **Acceptance Criteria:**
+  - Search folds Turkish resident names and matches phone digits; occupancy and block filters and natural unit sorting work together.
+  - The manager can select row density, change pages, and restore the selected page and density.
+  - The search query and active filters remain selected after app restoration.
+  - Compact rows adapt from phone to desktop widths and provide distinct actions and details targets.
+  - Rendering 1,000 and 10,000 units builds only rows for the current page.
+- **Verification:** targeted Flutter tests, GUI scenarios, Flutter analysis, shared-component reuse, UI style, test ID, and logging standards checks.
+
+Executable scenarios: [STORY-12-02-unit-directory.feature](../features/EPIC-12/STORY-12-02-unit-directory.feature).

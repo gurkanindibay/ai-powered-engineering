@@ -23,6 +23,7 @@ That skill is mandatory for SitePulse Flutter work through
 | `money_formatter.dart` | Re-export of `MoneyFormatter` / `formatTry` |
 
 Related shared code outside this folder:
+- `ui/residents/sp_directory_scaffold.dart`: `SpDirectoryScaffold<T>` for paged, lazy directory layouts.
 - `ui/components/sp_dialog_pages.dart`: `showSpSelection<T>`.
 - `ui/components/app_fullscreen_page.dart`: `pushConfirmation`.
 - `ui/residents/resident_directory.dart`: resident directory pieces.
