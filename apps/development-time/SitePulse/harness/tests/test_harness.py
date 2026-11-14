@@ -204,8 +204,9 @@ class TestRtmValidator(unittest.TestCase):
         (spec / "tasks").mkdir(parents=True)
         (spec / "tasks" / "task-dag.json").write_text(json.dumps({"tasks": [task("task-01", gates=[], acceptance_tests=["rust:t::a"], status="COMPLETED" if status == "VERIFIED" else "UNVERIFIED")]}))
         (root / "src.rs").write_text("")
-        (root / "docs" / "cmmi-pipeline").mkdir(parents=True)
-        (root / "docs" / "cmmi-pipeline" / "traceability-matrix.md").write_text(
+        rtm_dir = root / "apps" / "development-time" / "SitePulse" / "docs" / "engineering-process" / "cmmi-pipeline"
+        rtm_dir.mkdir(parents=True)
+        (rtm_dir / "traceability-matrix.md").write_text(
             f"| **REQ-001** | intent | spec | arch | `task-01` | `src.rs` | `rust:t::a` | criteria | **{status}** |\n")
         if evidence is not None:
             (spec / "evidence").mkdir()

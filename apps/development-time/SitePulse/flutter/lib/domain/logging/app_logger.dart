@@ -3,7 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
-/// Severity level for application logs adhering to docs/LOGGING_STANDARDS.md.
+/// Severity level for application logs adhering to docs/standards/LOGGING_STANDARDS.md
 enum LogLevel {
   trace(100, 'TRACE', '🔍'),
   debug(500, 'DEBUG', '🐛'),
@@ -145,7 +145,7 @@ class InMemoryLogSink implements LogSink {
 }
 
 /// Single application entry point for all frontend logging.
-/// Adheres strictly to docs/LOGGING_STANDARDS.md.
+/// Adheres strictly to docs/standards/LOGGING_STANDARDS.md
 class AppLogger {
   AppLogger._();
 

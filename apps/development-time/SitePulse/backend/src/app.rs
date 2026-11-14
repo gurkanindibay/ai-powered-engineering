@@ -305,7 +305,7 @@ pub fn build_router(state: AppState) -> Router {
             HeaderName::from_static("idempotency-key"),
             HeaderName::from_static("x-sitepulse-support-grant"),
             // The Flutter client sends a correlation id on every request
-            // (docs/LOGGING_STANDARDS.md); without it every browser preflight fails.
+            // (docs/standards/LOGGING_STANDARDS.md); without it every browser preflight fails.
             HeaderName::from_static("x-request-id"),
         ])
         .expose_headers([HeaderName::from_static("x-request-id")]);

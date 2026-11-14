@@ -5,7 +5,7 @@ description: Plan and run a durable software engineering harness with Product Ow
 
 # Team orchestration
 
-Use `scripts/development_harness.py` for persistent runs. The architecture and supported deployment boundaries are documented in `docs/engineering-harness.md`. Use `scripts/team_orchestrator.py` only for compatible planning; it no longer emits unvalidated T3 payloads or assumes model availability.
+Use `scripts/development_harness.py` for persistent runs. The architecture and supported deployment boundaries are documented in `apps/development-time/SitePulse/docs/engineering-process/engineering-harness.md`. Use `scripts/team_orchestrator.py` only for compatible planning; it no longer emits unvalidated T3 payloads or assumes model availability.
 
 ## Roles and routing
 

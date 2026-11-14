@@ -9,7 +9,7 @@ This document is the single reference for developing two proposals together:
 - the compact unit directory with an actions-first unit workspace ([COMPACT_UNIT_DIRECTORY_ANALYSIS.md](COMPACT_UNIT_DIRECTORY_ANALYSIS.md), now a source document), and
 - the person card (create a person once, use them as user, resident, owner or tenant).
 
-Companion: [combined interactive draft](ux-reference/owners_residents_unified.html). It follows this document. The earlier single-topic drafts ([unit directory](ux-reference/compact_unit_directory.html), [its phone preview](ux-reference/mobile_unit_directory_preview.html), [person card](ux-reference/person_card.html)) are kept as sources.
+Companion: [combined interactive draft](../ux/ux-reference/owners_residents_unified.html). It follows this document. The earlier single-topic drafts ([unit directory](../ux/ux-reference/compact_unit_directory.html), [its phone preview](../ux/ux-reference/mobile_unit_directory_preview.html), [person card](../ux/ux-reference/person_card.html)) are kept as sources.
 
 ## Recommendation
 
@@ -50,22 +50,22 @@ Nothing in either proposal has to be dropped.
 
 | Area | Evidence | Meaning for this design |
 | --- | --- | --- |
-| One person table, scoped to a site | [V21](../backend/migrations/V21__person_tenant_scope_and_account_activation.sql): `persons.site_id`, triggers `trg_person_site_*` | Keep. The card is a site-level record. |
-| Roles are derived | [V23](../backend/migrations/V23__derived_person_roles.sql), [V30](../backend/migrations/V30__release_identity_uniqueness_for_archived_records.sql): view `v_person_roles` | Keep. `persons.person_type` is only a fallback. |
-| Ownership and occupancy are separate facts; commands depend on state | [V31](../backend/migrations/V31__unit_state_model.sql), [unit_state.dart](../flutter/lib/domain/models/unit_state.dart), [EPIC-08](../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md) | The action list shows `allowed_commands`. Vacancy never implies a missing owner. |
+| One person table, scoped to a site | [V21](../../backend/migrations/V21__person_tenant_scope_and_account_activation.sql): `persons.site_id`, triggers `trg_person_site_*` | Keep. The card is a site-level record. |
+| Roles are derived | [V23](../../backend/migrations/V23__derived_person_roles.sql), [V30](../../backend/migrations/V30__release_identity_uniqueness_for_archived_records.sql): view `v_person_roles` | Keep. `persons.person_type` is only a fallback. |
+| Ownership and occupancy are separate facts; commands depend on state | [V31](../../backend/migrations/V31__unit_state_model.sql), [unit_state.dart](../../flutter/lib/domain/models/unit_state.dart), [EPIC-08](../../.specify/requirements/EPIC-08-occupancy-lifecycle-and-dual-ledger-management.md) | The action list shows `allowed_commands`. Vacancy never implies a missing owner. |
 | Identity uniqueness | Partial unique indexes on `(site_id, lower(email))` and `(site_id, national_id_hash)` | These are the hard duplicate rules. |
-| Duplicate detection | [person_record_service.rs](../backend/src/services/person_record_service.rs): `match_reasons`; `POST /site-admin/persons/duplicate-check` | Reuse as the soft duplicate rule. |
-| People directory, profile, import, export | [people_directory_page.dart](../flutter/lib/ui/residents/people_directory_page.dart), [person_profile_page.dart](../flutter/lib/ui/residents/person_profile_page.dart) | The profile page becomes the full card. |
-| Unit search helpers | [resident_directory.dart](../flutter/lib/ui/residents/resident_directory.dart): owner, tenant, primary contact, household, contacts, unit, block | Keep this coverage in the compact list. |
-| Full-screen navigation | [app_fullscreen_page.dart](../flutter/lib/ui/components/app_fullscreen_page.dart) | Reuse for the unit workspace, picker and card. Its 640 px default width must be widened for the desktop table. |
-| Primary contact selection saved by the server | [responsible_contact_selection.dart](../flutter/lib/ui/residents/responsible_contact_selection.dart), `PUT /site-admin/units/:id/responsible-contact` | Keep the action; change what it stores (G12). |
+| Duplicate detection | [person_record_service.rs](../../backend/src/services/person_record_service.rs): `match_reasons`; `POST /site-admin/persons/duplicate-check` | Reuse as the soft duplicate rule. |
+| People directory, profile, import, export | [people_directory_page.dart](../../flutter/lib/ui/residents/people_directory_page.dart), [person_profile_page.dart](../../flutter/lib/ui/residents/person_profile_page.dart) | The profile page becomes the full card. |
+| Unit search helpers | [resident_directory.dart](../../flutter/lib/ui/residents/resident_directory.dart): owner, tenant, primary contact, household, contacts, unit, block | Keep this coverage in the compact list. |
+| Full-screen navigation | [app_fullscreen_page.dart](../../flutter/lib/ui/components/app_fullscreen_page.dart) | Reuse for the unit workspace, picker and card. Its 640 px default width must be widened for the desktop table. |
+| Primary contact selection saved by the server | [responsible_contact_selection.dart](../../flutter/lib/ui/residents/responsible_contact_selection.dart), `PUT /site-admin/units/:id/responsible-contact` | Keep the action; change what it stores (G12). |
 
 ### Gaps: unit directory
 
 | # | Finding | Evidence | Effect |
 | --- | --- | --- | --- |
-| D1 | Every matching unit is rendered as a fully expanded card. | [owners_residents_module_page.dart](../flutter/lib/ui/residents/owners_residents_module_page.dart) maps the whole filtered list | The manager scrolls through complete workspaces before choosing a unit. All cards are built eagerly. |
-| D2 | Each card mixes finding and operating. | [owners_residents_unit_card.dart](../flutter/lib/ui/residents/owners_residents_unit_card.dart): metadata, dues, primary contact, contacts, tabs, household, management actions | Units cannot be compared at a glance. Actions are far from the row on phones. |
+| D1 | Every matching unit is rendered as a fully expanded card. | [owners_residents_module_page.dart](../../flutter/lib/ui/residents/owners_residents_module_page.dart) maps the whole filtered list | The manager scrolls through complete workspaces before choosing a unit. All cards are built eagerly. |
+| D2 | Each card mixes finding and operating. | [owners_residents_unit_card.dart](../../flutter/lib/ui/residents/owners_residents_unit_card.dart): metadata, dues, primary contact, contacts, tabs, household, management actions | Units cannot be compared at a glance. Actions are far from the row on phones. |
 | D3 | The page container is 640 px wide. | `AppFullscreenPage` default | A table does not fit without an explicit wider layout. |
 | D4 | All units are held in the client. | The controller loads the site's units once | Client-side filtering is fine as a first step; it is not a statement about large sites. |
 
@@ -84,7 +84,7 @@ Nothing in either proposal has to be dropped.
 | G9 | A legacy path inserts a person with a user ID as the person ID and without a site. | `unit_repository.rs:78`, `:109` | Two ID spaces are mixed. |
 | G10 | A person may have several active login accounts. | `idx_users_person_id` is not unique | "Has login" is ambiguous on the card. |
 | G11 | Nine separate person field groups exist in three Flutter files. | `owners_residents_registration.dart` (owner, tenant, household entries), `owners_residents_edit.dart` (owner, tenant, add member, edit member), `owners_residents_occupancy.dart` (move-in, new owner) | Validation, labels and duplicate handling differ. |
-| G12 | The primary contact is stored as a JSON copy of name, role, phone and email, and is selected by role and name. | [V32](../backend/migrations/V32__unit_responsible_contact.sql): `units.primary_responsible_contact JSONB`; `SelectResponsibleContactRequest { role, resident_name, member_id }` | A third copy of person data. It does not follow a later edit of the person, and two household members with the same name are ambiguous. |
+| G12 | The primary contact is stored as a JSON copy of name, role, phone and email, and is selected by role and name. | [V32](../../backend/migrations/V32__unit_responsible_contact.sql): `units.primary_responsible_contact JSONB`; `SelectResponsibleContactRequest { role, resident_name, member_id }` | A third copy of person data. It does not follow a later edit of the person, and two household members with the same name are ambiguous. |
 
 ## Design principles
 
@@ -348,7 +348,7 @@ Every operation runs in one transaction.
 | `SpDirectoryScaffold` | Shared list page: search, desktop toolbar or phone filter page, result caption, paging (25, 50, 100), lazy rows, loading, empty and error states, and restoration of query, filters, sort, page, scroll and focus | the eager card list; the people list's own layout |
 | `UnitDirectoryRow` | Desktop table row and phone card for one unit, with İşlemler and Detay | `_buildUnitCard` in the list |
 | `UnitWorkspacePage` | Actions and information modes for one unit; builds the action list from `allowed_commands` | the management part of the unit card |
-| `UnitActionPage` | Full-screen page per action: unit context, effective date ([sp_effective_date_field.dart](../flutter/lib/ui/components/sp_effective_date_field.dart)), person field where needed, confirm | the dialogs in `owners_residents_occupancy.dart` and `owners_residents_edit.dart` |
+| `UnitActionPage` | Full-screen page per action: unit context, effective date ([sp_effective_date_field.dart](../../flutter/lib/ui/components/sp_effective_date_field.dart)), person field where needed, confirm | the dialogs in `owners_residents_occupancy.dart` and `owners_residents_edit.dart` |
 | `PersonRef` (domain model) | `existing(id)` or `draft(fields, confirmDistinct)`; serializes to the API shape | text controllers |
 | `SpPersonField` | Form field. Empty: "choose or add a person". Filled: compact card with change and open. Takes `context` and `unitId`. | nine field groups (G11) |
 | `showSpPersonPicker` | Full-screen page. Debounced server search, stale responses cancelled, "create new" row. Returns a `PersonRef`. | `showSpSelection<PersonSummary>` at `owners_residents_occupancy.dart:141` |
@@ -491,7 +491,7 @@ Together:
 
 ## Draft review guide
 
-Open [owners_residents_unified.html](ux-reference/owners_residents_unified.html) directly in a browser; it needs no server or network. It holds 60 fictional units and about 90 fictional people, stored the way this document proposes: each person once, each unit referencing people.
+Open [owners_residents_unified.html](../ux/ux-reference/owners_residents_unified.html) directly in a browser; it needs no server or network. It holds 60 fictional units and about 90 fictional people, stored the way this document proposes: each person once, each unit referencing people.
 
 Paths to try:
 

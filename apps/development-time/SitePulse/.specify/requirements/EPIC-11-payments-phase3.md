@@ -3,7 +3,7 @@
 > **Epic ID:** EPIC-11
 > **Module:** `backend-rust`, `flutter-ui`, `flutter-domain`, `postgres-db`
 > **Specification:** [SPEC-009](../specs/009-payments-phase3/spec.md), migration `V20__payments_phase3.sql`
-> **Source:** [docs/PAYMENTS_PRODUCT_OWNER_EVALUATION.md](../../docs/PAYMENTS_PRODUCT_OWNER_EVALUATION.md) §3–§4 (F-01 … F-17)
+> **Source:** [docs/payments/PAYMENTS_PRODUCT_OWNER_EVALUATION.md](../../docs/payments/PAYMENTS_PRODUCT_OWNER_EVALUATION.md) §3–§4 (F-01 … F-17)
 > **Status:** IMPLEMENTED (sandbox providers; items marked *verify* need counsel before production)
 > **Target Audience:** `SITE_MANAGER`, `AUDITOR`, `HOME_OWNER`, `HOME_RESIDENT`, `SAAS_ADMIN`, management-company members, lawyers (token)
 > **Invariants:** `rust_decimal` / `Decimal` money and `NUMERIC(15,2)` columns; every split through `domain::apportion`; four-eyes on every waiver, write-off, payment plan and invoice approval; debt notices only on personal channels (KVKK 2026/348); no card data in SitePulse (6493).

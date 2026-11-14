@@ -24,7 +24,7 @@
 | §3.11 Receipt VKN / PDF / QR | ⚠️ **VKN fixed (V17):** `sites.tax_id` plus an issuer snapshot on each receipt. Hash coverage, PDF and QR are still open |
 | §3.12 Resident authorization | ❌ Open. Kept staff-only on purpose: a resident must not self-record a settled payment without a real payment provider |
 
-Database design findings and their fixes: [PAYMENTS_DATABASE_DESIGN_REVIEW.md](PAYMENTS_DATABASE_DESIGN_REVIEW.md).
+Database design findings and their fixes: [PAYMENTS_DATABASE_DESIGN_REVIEW.md](../database/PAYMENTS_DATABASE_DESIGN_REVIEW.md).
 
 ## 1. Verdict
 

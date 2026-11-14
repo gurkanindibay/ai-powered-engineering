@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lint: the SitePulse Rust backend follows docs/RUST_STANDARDS.md (sections 10-16).
+"""Lint: the SitePulse Rust backend follows docs/standards/RUST_STANDARDS.md (sections 10-16).
 
 Hard rules (any finding fails):
 * `domain-purity`          `src/domain/` has no Axum, PostgreSQL, AppState, service, handler,

@@ -13,7 +13,7 @@ When creating, modifying or reviewing Dart code under `apps/development-time/Sit
   before writing a widget helper, form field, copy action, filter, empty state, status pill,
   confirmation or API model.
 - The background and evidence are in
-  [docs/flutter-reusability-report.md](file:///docs/flutter-reusability-report.md).
+  [apps/development-time/SitePulse/docs/reusability/flutter-reusability-report.md](file:///apps/development-time/SitePulse/docs/reusability/flutter-reusability-report.md).
 
 ## 2. Obligations
 
@@ -36,7 +36,7 @@ When creating, modifying or reviewing Dart code under `apps/development-time/Sit
 4. **Tokens:** use `AppSpacing`, `AppRadius`, theme text styles and `SpTone` in new code. Do not
    raise the `ui-style-lint` ratchet.
 5. **Keep automation ids:** pass the existing keys and `testId`s through shared components.
-6. **Logging:** Follow [docs/LOGGING_STANDARDS.md](file:///docs/LOGGING_STANDARDS.md). Use `AppLogger` (`lib/domain/logging/app_logger.dart`) for structured logging. Never use raw `print()`, and avoid unstructured `debugPrint()`. Pass `traceId` / context when logging errors.
+6. **Logging:** Follow [apps/development-time/SitePulse/docs/standards/LOGGING_STANDARDS.md](file:///apps/development-time/SitePulse/docs/standards/LOGGING_STANDARDS.md). Use `AppLogger` (`lib/domain/logging/app_logger.dart`) for structured logging. Never use raw `print()`, and avoid unstructured `debugPrint()`. Pass `traceId` / context when logging errors.
 
 
 ### For Tester Agent (The Checker)

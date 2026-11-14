@@ -6,20 +6,20 @@ description: >
   folding, IBAN, email, fingerprints), how to treat persisted contracts, external input and
   tenant scoping, how to test, and which gates to run. Use before writing, reviewing, or
   refactoring any backend Rust code. Complements the generic rust-skills rules and the
-  binding standard docs/RUST_STANDARDS.md.
+  binding standard apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md
 license: MIT
 metadata:
   author: Antigravity
   version: "1.0.0"
-  standard: docs/RUST_STANDARDS.md v1.2.0 (sections 10-16)
+  standard: apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md v1.2.0 (sections 10-16)
   enforcement: apps/development-time/SitePulse/scripts/rust_standards_lint.py (gate rust-standards-lint)
 ---
 
 # SitePulse Rust Backend Development
 
-`docs/RUST_STANDARDS.md` says **what** the rules are. This skill says **how** to apply them while
+`apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md` says **what** the rules are. This skill says **how** to apply them while
 changing the backend, so the same mistakes are not reintroduced. It was written from the
-reusability assessment in `docs/reports/rust-backend-reusability-report.md`, which found the same rule
+reusability assessment in `apps/development-time/SitePulse/docs/reusability/rust-backend-reusability-report.md`, which found the same rule
 implemented in several places with different behavior (IBAN validation, Turkish folding, email
 matching, money splitting) and fixed them.
 

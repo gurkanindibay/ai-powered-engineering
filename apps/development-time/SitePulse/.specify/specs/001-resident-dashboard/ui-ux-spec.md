@@ -4,7 +4,7 @@
 > **Platform:** Cross-Platform Mobile & Web (Flutter / Material 3)  
 > **Backend Architecture:** High-Performance Rust Service (`axum` / `tokio`)  
 > **Design Language:** Modern Fintech (Papara Style)  
-> **Design Principles Reference:** [Papara Design Guidelines](../../docs/PAPARA_DESIGN_GUIDELINES.md)  
+> **Design Principles Reference:** [Papara Design Guidelines](../../../docs/ux/PAPARA_DESIGN_GUIDELINES.md)  
 > **Theme Mode:** Parametric Dual-Theme (Papara Light First & Matte Midnight)  
 > **Currency Invariant:** Exclusively Turkish Lira (`₺` / TRY)  
 
@@ -14,7 +14,7 @@
 
 ![SitePulse Design Philosophy](assets/sitepulse_design_system.jpg)
 
-See the comprehensive [Papara Design Guidelines](../../docs/PAPARA_DESIGN_GUIDELINES.md) derived from official Papara mobile interfaces.
+See the comprehensive [Papara Design Guidelines](../../../docs/ux/PAPARA_DESIGN_GUIDELINES.md) derived from official Papara mobile interfaces.
 
 ### 1.1 Icon Set Design Philosophy
 The visual identity of SitePulse adheres to an intentional, high-end fintech aesthetic rather than decorative or arbitrary iconography:

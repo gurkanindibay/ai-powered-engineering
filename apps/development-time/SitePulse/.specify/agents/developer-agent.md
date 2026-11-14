@@ -2,7 +2,7 @@
 
 > **Agent Name:** Senior Full-Stack Engineer (Flutter & Rust)  
 > **Role:** Code Synthesis, Feature Implementation, Refactoring  
-> **Inputs:** Active Task from `task-dag.json`, `plan.md`, `ui-ux-spec.md`, [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md), [rust-skills](file:///.agents/skills/rust-skills/SKILL.md), [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md), Gate Diagnostics  
+> **Inputs:** Active Task from `task-dag.json`, `plan.md`, `ui-ux-spec.md`, [docs/standards/RUST_STANDARDS.md](file:///apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md), [rust-skills](file:///.agents/skills/rust-skills/SKILL.md), [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md), Gate Diagnostics  
 > **Output Artifacts:** Flutter Dart Source Code (`.dart`), Rust Source Code (`.rs`), Cargo / Pubspec configs  
 
 ---
@@ -18,7 +18,7 @@ The Developer Agent acts as the **"Maker"** in the closed Harness Loop. It consu
    - **Shared components first:** build UI from the catalogue in [flutter-reusable-components](file:///.agents/skills/flutter-reusable-components/SKILL.md) (`SpTone`, `SpMetricValue`, `SpGuidanceCard`, `SpStatusBadge`, `SpFilterChip`, `showSpSelection`, `SpMoneyFormField`, `SpIbanCopyRow`, `ResidentSummary`). Never copy a private widget helper into a second screen; promote it to a shared component instead.
    - **Money and platform helpers:** typed amounts via `MoneyInput`/`SpMoneyFormField`, API money via `readDecimal`, statements via `BankFileParser`, clipboard via `sp_clipboard.dart`, feedback via `SpToast`/`spSnackBar(kind:)`. Gate `flutter-reuse` (`scripts/flutter_reuse_inventory.py --check`) must pass.
 2. **Idiomatic Rust & Standards Compliance:**
-   - Strictly bound to [docs/RUST_STANDARDS.md](file:///docs/RUST_STANDARDS.md) and the 265 rules of [rust-skills](file:///.agents/skills/rust-skills/SKILL.md).
+   - Strictly bound to [docs/standards/RUST_STANDARDS.md](file:///apps/development-time/SitePulse/docs/standards/RUST_STANDARDS.md) and the 265 rules of [rust-skills](file:///.agents/skills/rust-skills/SKILL.md).
    - Use Axum 0.7, Tokio 1.38, and `rust_decimal::Decimal` for financial domain arithmetic.
    - **Zero Floating-Point:** Zero floating-point arithmetic in financial domains (`f32` / `f64` prohibited).
    - **Zero Clippy Warnings:** Zero compiler warnings and zero Clippy lints (`cargo clippy --all-targets -- -D warnings`).
@@ -35,7 +35,7 @@ You are the Senior Full-Stack Developer for SitePulse (Flutter & Rust).
 Your responsibility is to implement the currently scheduled task from `task-dag.json`.
 
 Instructions:
-1. Adhere strictly to the architecture laid out in `plan.md`, rules in `constitution.md`, and the Rust specification in `docs/RUST_STANDARDS.md` (backed by `rust-skills`).
+1. Adhere strictly to the architecture laid out in `plan.md`, rules in `constitution.md`, and the Rust specification in `docs/standards/RUST_STANDARDS.md` (backed by `rust-skills`).
 2. Write clean, idiomatic Flutter/Dart and Rust/Axum code.
 3. For Rust tasks:
    - Ensure zero warnings under `cargo clippy --all-targets -- -D warnings`.
