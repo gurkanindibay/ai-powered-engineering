@@ -32,6 +32,8 @@ class PersonSummary {
   final int ownedUnits;
   final int occupiedUnits;
   final PersonLogin login;
+  final int version;
+  final List<String> allowedActions;
 
   const PersonSummary({
     required this.personId,
@@ -42,6 +44,8 @@ class PersonSummary {
     required this.ownedUnits,
     required this.occupiedUnits,
     required this.login,
+    this.version = 0,
+    this.allowedActions = const [],
   });
 
   factory PersonSummary.fromJson(Map<String, dynamic> json) => PersonSummary(
@@ -53,6 +57,8 @@ class PersonSummary {
         ownedUnits: (json['owned_units'] as num?)?.toInt() ?? 0,
         occupiedUnits: (json['occupied_units'] as num?)?.toInt() ?? 0,
         login: PersonLogin.fromCode(json['login']?.toString()),
+        version: (json['version'] as num?)?.toInt() ?? 0,
+        allowedActions: ((json['allowed_actions'] as List?) ?? const []).map((action) => action.toString()).toList(),
       );
 }
 

@@ -149,6 +149,22 @@ These are feature widgets, shared by the dashboard directory and `OwnersResident
 Any new resident list, count or filter goes through these instead of re-implementing the
 `.where(...)` logic.
 
+### Person selection (`ui/residents/sp_person_*.dart`)
+- `PersonRef` (`domain/models/person_ref.dart`) is the command value: `existing(id)` or
+  `draft(fields, confirmDistinct)`. Serialize it with `toJson()`; do not rebuild the wire shape in
+  action pages.
+- `PersonRepository` (`domain/repositories/person_repository.dart`) is the boundary for paged
+  search, duplicate candidates and card writes. Features inject it; widgets never own API clients.
+- `SpPersonField` opens `showSpPersonPicker`, passes the role context and unit id, and returns a
+  `PersonRef`. The picker requests 50 rows at a time, debounces search and keeps ineligible matches
+  visible with their server reason.
+- `SpPersonForm` is the only shared component that edits a person's name, phone or email. It checks
+  duplicates, blocks a same-email candidate and requires explicit confirmation for soft matches.
+- `SpPersonCard` renders a read-only person summary in `row`, `compact` or `full` size. Keep
+  navigation and actions in the caller.
+- Cover shared person widgets in `flutter/test/reusable_components_test.dart` for both themes and
+  large text, and behavior against a fake repository in focused widget tests.
+
 ### Decimal from JSON: `readDecimal`, `readDecimalOrNull` (`domain/formatting/json_decimal.dart`)
 `readDecimal(json, 'total_amount')` (optionally with `fallback:`) and
 `readDecimalOrNull(json, 'contract_amount')`. Malformed values are reported through

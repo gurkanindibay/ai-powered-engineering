@@ -743,12 +743,17 @@
       "id": "task-36",
       "name": "Build person field, picker, form and card components",
       "module": "flutter-ui",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-40"
       ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#choosing-or-creating-a-person",
       "description": "C1a: add the Dart PersonRef model and person repository interface from the task-40 contract, SpPersonField, the full-screen searchable picker (beyond the first 100 people), SpPersonForm and SpPersonCard, tested against a fake repository; show duplicate and role eligibility reasons. Replacing inline inputs in action pages is task-42.",
+      "acceptance_tests": [
+        "scenario:SC-12-03-01",
+        "scenario:SC-12-03-02",
+        "scenario:SC-12-03-03"
+      ],
       "gates": [
         "flutter-analyze",
         "flutter-test",
