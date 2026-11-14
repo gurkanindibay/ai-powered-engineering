@@ -9,7 +9,7 @@ This document is the single reference for developing two proposals together:
 - the compact unit directory with an actions-first unit workspace ([COMPACT_UNIT_DIRECTORY_ANALYSIS.md](COMPACT_UNIT_DIRECTORY_ANALYSIS.md), now a source document), and
 - the person card (create a person once, use them as user, resident, owner or tenant).
 
-Companions: [unit directory draft](ux-reference/compact_unit_directory.html) · [mobile preview](ux-reference/mobile_unit_directory_preview.html) · [person card draft](ux-reference/person_card.html). The drafts are still separate files; see "Draft review guide".
+Companion: [combined interactive draft](ux-reference/owners_residents_unified.html). It follows this document. The earlier single-topic drafts ([unit directory](ux-reference/compact_unit_directory.html), [its phone preview](ux-reference/mobile_unit_directory_preview.html), [person card](ux-reference/person_card.html)) are kept as sources.
 
 ## Recommendation
 
@@ -491,20 +491,30 @@ Together:
 
 ## Draft review guide
 
-The drafts are not merged into one file. Each shows one half; this document defines how they join.
+Open [owners_residents_unified.html](ux-reference/owners_residents_unified.html) directly in a browser; it needs no server or network. It holds 60 fictional units and about 90 fictional people, stored the way this document proposes: each person once, each unit referencing people.
 
-- [compact_unit_directory.html](ux-reference/compact_unit_directory.html) and the [phone preview](ux-reference/mobile_unit_directory_preview.html): the unit list, İşlemler and Detay, grouped action previews, the filter page, return navigation. Try "Deniz", "İpek", a unit number; open İşlemler and an action; return with the bottom button or browser Back. Its action pages are previews without person input.
-- [person_card.html](ux-reference/person_card.html): the person field, picker, create form with duplicate handling, people list and person card. Its "Daire işlemleri" view stands in for the action pages of the unit workspace. Try "ayse", "A-3", "0002"; choose Mehmet Kaya as the tenant of B-7 (blocked); create "Ayse Demir" (similar name) or reuse an existing email (blocked); edit a card and read the scope note.
+Paths to try:
 
-Differences to ignore when reading them side by side: the two drafts use different fictional people; the directory draft's "Kişiler" group still says edit resident and edit owner; the person card draft has no unit field and no primary contact.
+- **Unit first.** On Daireler, press İşlemler on a vacant unit (A-6), choose Kiracı girişi, open the person field, search, pick a person, confirm. The action page has no name, phone or email inputs. Return with the back button or browser Back; the list keeps its page, filters and focus.
+- **Blocked choice.** In that picker, search the unit's owner: the row is disabled and says why.
+- **Create with duplicate handling.** In a picker, type "Ayse Demir" and choose the create row: the similar-name warning appears. Reuse an existing email: creation is blocked.
+- **Owner actions without person input.** Malik taşınıyor and Birincil muhatabı seç offer only people already on the unit.
+- **State-dependent actions.** D-15 (last page) has no owner: it offers Malik kaydet and no tenant move-in or title transfer.
+- **Person first.** On Kişiler, open a card, choose "Haneye ekle" or "Kiracı olarak yerleştir": the same action page opens with the person fixed and a unit field. Units that cannot take the action are listed with the reason.
+- **Cross links.** Detay → Sakinler → a person row opens the card; a unit row on the card opens the unit.
+- **Search.** "ayse" matches "Ayşe"; a household member's name finds the unit and shows why it matched; phone digits work in both lists.
+- **Phone width.** Unit cards with İşlemler and Detay, a full-screen Filtrele page that applies only on confirmation, and a bottom return bar on every inner page.
+- **Registration.** "+ Daire kaydı" uses the same person field for owner and tenant and lists what saving will do.
 
-Both simulate rules in the browser. Nothing is sent or stored.
+What the draft does not show: step-up verification, merge, login removal, import and export, financial data, IBAN, deletion, real history, and server paging. Rules run in the browser as stand-ins for the server. Nothing is sent or stored; "Taslağı sıfırla" restores the starting data.
 
 ## Draft verification
 
-No draft changed in this revision.
+The combined draft was exercised in the browser with scripted runs, all passing except one check that was wrong about the draft's ordering, not the draft:
 
-- Person card draft: a scripted browser run of 27 checks passed (search folding, phone and unit search, choosing and creating people, similar-name and same-email handling, registration summary, move-in, title transfer, role filter, card actions, edit warning). At 320 px none of its four views scrolls horizontally. Dark mode, 200% text size and screen readers were not tested.
-- Unit directory draft: its verification is recorded in the source document and was not repeated here.
+- Desktop width (1280 px), 44 checks: numeric unit order, folded search, household match reason, state-dependent action lists for vacant, tenant-occupied, owner-occupied and unowned units, tenant move-in with an existing person, the disabled owner in the tenant picker, creating a person from the picker with similar-name and same-email handling, tenant replacement and its history, owner move-in without person input, title transfer and primary contact reassignment, registration and its same-person block, the person card, a role started from a person with the unit field, people filters and phone search, list state after return (filter, page, notice when the unit no longer matches) and no horizontal overflow.
+- Phone width (320 px), 17 checks: cards instead of the table, 48 px row targets, 72 px action rows, the filter page (cancel keeps, apply sets), the last action scrolling clear of the bottom bar, and no horizontal overflow in any of the ten views.
 
-These results cover the drafts only, not the Flutter application or the backend. Gate results for this change are in the accompanying PR.
+Not tested: dark mode, 200% text size, screen readers, keyboard-only use, real devices, and browser Forward after an action has been applied. The earlier drafts were not re-run.
+
+These results cover the draft only, not the Flutter application or the backend. Gate results for this change are in the accompanying PR.

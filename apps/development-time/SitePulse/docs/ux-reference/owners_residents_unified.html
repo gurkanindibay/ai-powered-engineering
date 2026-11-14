@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sakinler & Malikler — Birleşik tasarım taslağı</title>
+<style>
+:root{color-scheme:light;--bg:#f4f7fc;--surface:#fff;--card:#f8fafd;--border:#e2e8f0;--text:#0f172a;--muted:#526077;--brand:#0369a1;--onbrand:#fff;--brand-soft:#e0f2fe;--green:#047857;--green-soft:#d1fae5;--amber:#92400e;--amber-soft:#fef3c7;--red:#b91c1c;--red-soft:#fee2e2;--purple:#6d28d9;--purple-soft:#ede9fe}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#121317;--surface:#1c1d24;--card:#181920;--border:#383b47;--text:#fff;--muted:#b1b5bd;--brand:#38bdf8;--onbrand:#102330;--brand-soft:#163044;--green:#34d399;--green-soft:#0f3328;--amber:#fbbf24;--amber-soft:#3a2c0b;--red:#f87171;--red-soft:#3f1717;--purple:#c4b5fd;--purple-soft:#2a2147}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,sans-serif}
+button,input,select{font:inherit;color:inherit}
+button{min-height:44px;padding:8px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;touch-action:manipulation}
+button:hover{border-color:var(--brand)}
+button.primary{background:var(--brand);border-color:var(--brand);color:var(--onbrand);font-weight:600}
+button.link{min-height:0;padding:0;border:0;background:none;color:var(--brand);text-decoration:underline}
+button:disabled{opacity:.5;cursor:default}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+h1:focus{outline:none}
+input,select{width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+input[type=checkbox],input[type=radio]{width:18px;min-height:18px;height:18px;margin:0;flex:none;accent-color:var(--brand)}
+label{display:block;font-weight:600}
+label>input,label>select{margin-top:4px;font-weight:400}
+h1{font-size:26px;margin:16px 0 4px}h2{font-size:17px;margin:0 0 4px}h3{font-size:13px;margin:0;color:var(--muted);font-weight:500}
+p{margin:0 0 8px}
+.muted{color:var(--muted)}.small{font-size:12.5px}
+.demo{padding:8px 16px;background:var(--brand-soft);color:var(--brand);text-align:center;font-size:13px}
+.shell{max-width:1440px;margin:0 auto;padding:16px 24px 32px}
+.shell.narrow{max-width:760px}
+.topline{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.brand{font-weight:700;font-size:16px}.brand span{color:var(--brand)}
+.tabs{display:flex;gap:4px;margin-top:12px;border-bottom:1px solid var(--border);overflow-x:auto}
+.tabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;white-space:nowrap;color:var(--muted)}
+.tabs button[aria-selected=true]{border-bottom-color:var(--brand);color:var(--text);font-weight:600}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:16px}
+.panel.flush{padding:0;overflow:hidden}
+.summary{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:8px}
+.toolbar{display:grid;grid-template-columns:minmax(220px,2fr) repeat(3,minmax(130px,1fr)) auto;gap:12px;align-items:end;padding:14px 16px}
+.toolbar.people{grid-template-columns:minmax(0,1fr) auto}
+.listmeta{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;border-top:1px solid var(--border)}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;min-height:36px;padding:4px 12px}
+.seg button[aria-pressed=true],.seg button[aria-selected=true]{background:var(--brand);color:var(--onbrand);font-weight:600}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th,td{text-align:left;padding:14px 16px;border-top:1px solid var(--border);vertical-align:middle;overflow-wrap:anywhere}
+th{font-size:12.5px;color:var(--muted);font-weight:500;padding-block:10px;background:var(--card)}
+.compact td{padding-block:6px}
+td small,.cell small{display:block;color:var(--muted);font-size:12.5px}
+td.acts{white-space:nowrap;text-align:right}
+td.acts button{min-height:40px;padding:4px 12px}
+tr.clickable{cursor:pointer}tr.clickable:hover{background:var(--card)}
+.ucard{padding:12px 14px;border-top:1px solid var(--border)}
+.ucard .identity{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.rowactions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.rowactions button{min-height:48px}
+.badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--brand-soft);color:var(--brand)}
+.badge.owner{background:var(--purple-soft);color:var(--purple)}
+.badge.tenant{background:var(--amber-soft);color:var(--amber)}
+.badge.ok{background:var(--green-soft);color:var(--green)}
+.badge.none{background:var(--card);color:var(--muted);border:1px solid var(--border)}
+.footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--border)}
+.footer label{display:flex;align-items:center;gap:8px;font-weight:400}.footer select{width:auto}
+.pagination{display:flex;align-items:center;gap:10px}
+.empty{padding:24px 16px;text-align:center}
+.backtop{margin-top:12px}
+.bottombar{display:none}
+.groups{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;margin-top:16px}
+.group{border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden}
+.group h3{padding:12px 16px;background:var(--card)}
+.actionitem{display:grid;grid-template-columns:minmax(0,1fr) 16px;align-items:center;gap:12px;width:100%;min-height:68px;padding:12px 16px;text-align:left;border:0;border-top:1px solid var(--border);border-radius:0}
+.actionitem strong{display:block}.actionitem small{color:var(--muted);font-size:12.5px}
+.actionitem.danger strong{color:var(--red)}
+.context{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.pf{margin-top:16px}
+.pflabel{display:block;font-weight:600;margin-bottom:4px}
+.pick{width:100%;text-align:left;border-style:dashed;color:var(--muted)}
+.pcard{display:flex;gap:12px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--card)}
+.pmain{flex:1;min-width:0;overflow-wrap:anywhere}
+.pmain strong{display:block}
+.pacts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.pacts button{min-height:36px;padding:4px 10px}
+.avatar{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand);font-weight:700}
+.avatar.big{width:64px;height:64px;font-size:22px}
+.note{margin-top:8px;padding:8px 12px;border-radius:8px;background:var(--card);border:1px solid var(--border);font-size:13px}
+.note.warn{background:var(--amber-soft);color:var(--amber);border-color:transparent}
+.note.bad{background:var(--red-soft);color:var(--red);border-color:transparent}
+.check{display:flex;gap:8px;align-items:center;font-weight:400;min-height:32px}
+.radio{display:flex;gap:10px;align-items:center;font-weight:400;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-top:6px;min-height:48px}
+.row{display:flex;gap:12px;align-items:center;width:100%;text-align:left;padding:10px 16px;border:0;border-top:1px solid var(--border);border-radius:0;background:none;min-height:56px}
+.row:first-child{border-top:0}
+button.row:hover{background:var(--card)}
+.row[aria-disabled=true]{cursor:not-allowed}.row[aria-disabled=true] .avatar,.row[aria-disabled=true] strong{opacity:.55}
+.reason{display:block;color:var(--amber);font-size:12.5px}
+.newrow{color:var(--brand);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 12px}
+.chips button{min-height:36px;padding:4px 12px;border-radius:999px}
+.chips button[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:var(--onbrand)}
+.cardhead{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;align-items:start}
+.kv{display:grid;grid-template-columns:130px minmax(0,1fr);gap:6px 12px;margin:0}.kv dt{color:var(--muted)}.kv dd{margin:0;overflow-wrap:anywhere}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.formgrid{display:grid;gap:12px}
+.steps{margin:0;padding-left:18px}.steps li{margin-bottom:4px}
+.toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);max-width:calc(100% - 32px);padding:10px 16px;border-radius:10px;background:var(--text);color:var(--bg);z-index:10}
+.toast:empty{display:none}
+.mobileonly{display:none}
+@media(min-width:800px) and (max-width:1199px){.contactcol{display:none}}
+@media(max-width:799px){
+ .shell{padding:12px 16px 24px}.shell.sub{padding-bottom:96px}
+ h1{font-size:22px}
+ .toolbar,.toolbar.people{grid-template-columns:minmax(0,1fr) auto;padding:12px}
+ .desktoponly{display:none!important}.mobileonly{display:revert}
+ .groups,.grid2{grid-template-columns:1fr}
+ .actionitem{min-height:72px}
+ .pcard{flex-wrap:wrap}.pacts{width:100%;justify-content:flex-start}
+ .bottombar{display:block;position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border);z-index:5}
+ .bottombar button{width:100%;min-height:48px}
+ th,td{padding:10px 12px}
+}
+</style>
+</head>
+<body>
+<div class="demo">Birleşik tasarım taslağı · 60 kurgusal daire · Gerçek kayıtlar etkilenmez</div>
+<div id="app"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+/* ---------- helpers ---------- */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fold=s=>s.toLocaleLowerCase('tr').replace(/ı/g,'i').replace(/[çğöşü]/g,c=>({ç:'c',ğ:'g',ö:'o',ş:'s',ü:'u'}[c])).replace(/\s+/g,' ').trim();
+const digits=s=>s.replace(/\D/g,'');
+const phoneKey=s=>{const d=digits(s);return d.length>=10?d.slice(-10):''};
+const nameKey=s=>fold(s).split(' ').sort().join(' ');
+const trDate=iso=>iso.split('-').reverse().join('.');
+function lev1(a,b){if(Math.abs(a.length-b.length)>1)return false;let i=0,j=0,e=0;while(i<a.length&&j<b.length){if(a[i]===b[j]){i++;j++;continue}if(++e>1)return false;if(a.length>b.length)i++;else if(a.length<b.length)j++;else{i++;j++}}return e+(a.length-i)+(b.length-j)<=1}
+function toast(msg){$('toast').textContent=msg;clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').textContent='',4500)}
+const mobile=matchMedia('(max-width:799px)');
+
+/* ---------- fictional data: people are stored once, units reference them ---------- */
+const F=['Ayşe','Mehmet','Zeynep','Can','Deniz','Elif','İpek','Burak','Selin','Emre','Derya','Kerem','Gül','Onur','Nil','Tolga'];
+const L=['Demir','Kaya','Arslan','Yıldız','Şahin','Çelik','Öztürk','Aydın','Koç','Polat','Güneş','Aksoy','Erdem','Tekin','Bulut'];
+const P=[],U=[];
+const byId=id=>P.find(p=>p.id===id);
+const unitById=id=>U.find(u=>u.id===id);
+function mkPerson(o={}){const i=P.length,id=i+1,name=o.name||F[i%16]+' '+L[i%15];
+ const p={id,name,phone:o.phone??('0555 000 '+String(id).padStart(4,'0').replace(/(..)(..)/,'$1 $2')),email:o.email??(fold(name).replace(/ /g,'.')+'@example.test'),login:o.login||'NONE',tckn:o.tckn||''};
+ P.push(p);return p}
+for(let k=0;k<60;k++){
+ const u={id:k+1,block:'ABCD'[k/15|0],no:k%15+1,floor:Math.ceil((k%15+1)/3),type:['2+1','3+1','1+1'][k%3],owners:[],occ:null,members:[],primary:null,history:[]};
+ U.push(u);if(k===59)continue; /* D-15 has no owner on record */
+ const owner=k%10===3?byId(U[k-3].owners[0]):mkPerson({login:k%7===2?'PENDING':'ACTIVE',tckn:k%2?'':'•••••••••'+(10+k)});
+ u.owners=[owner.id];const m=k%6;
+ if(m<3)u.occ={pid:owner.id,type:'OWNER',since:'01.03.2019'};
+ else if(m<5)u.occ={pid:mkPerson({login:k%4===0?'ACTIVE':'NONE',email:k%3===0?'':undefined}).id,type:'TENANT',since:'01.07.2025'};
+ if(u.occ&&k%4===0){const mem=mkPerson({phone:byId(u.occ.pid).phone,email:''});u.members.push({pid:mem.id,rel:'Eş',since:u.occ.since});if(k%8===0)u.primary=mem.id}
+ if(!u.primary)u.primary=u.occ?u.occ.pid:owner.id;
+}
+U[5].history.push({pid:mkPerson({login:'ACTIVE'}).id,rel:'TENANT',since:'01.08.2024',end:'30.06.2026'});
+mkPerson(); /* a person with no role yet */
+
+/* ---------- derived facts: a role is a relationship, never a field ---------- */
+const label=u=>`${u.block}-${u.no}`;
+const REL={OWNER:['Kat maliki','owner'],OCC_OWNER:['Malik sakin','ok'],TENANT:['Kiracı','tenant'],MEMBER:['Hane üyesi',''],PRIMARY:['Birincil muhatap','']};
+const LOGIN={ACTIVE:['Giriş hesabı etkin','ok'],PENDING:['Etkinleştirme bekliyor','tenant'],NONE:['Giriş hesabı yok','none']};
+function rolesOf(p){const r=[];for(const u of U){
+ if(u.owners.includes(p.id))r.push({u,rel:'OWNER'});
+ if(u.occ?.pid===p.id)r.push({u,rel:u.occ.type==='OWNER'?'OCC_OWNER':'TENANT',since:u.occ.since});
+ const m=u.members.find(x=>x.pid===p.id);if(m)r.push({u,rel:'MEMBER',extra:m.rel,since:m.since});
+ if(u.primary===p.id)r.push({u,rel:'PRIMARY'})}return r}
+function pastOf(p){const r=[];for(const u of U)for(const h of u.history)if(h.pid===p.id)r.push({u,...h});return r}
+function badges(p,withLogin){const roles=rolesOf(p),kinds=[...new Set(roles.map(x=>x.rel))].filter(k=>k!=='PRIMARY');
+ let h=kinds.map(k=>`<span class="badge ${REL[k][1]}">${REL[k][0]} · ${esc(roles.filter(x=>x.rel===k).map(x=>label(x.u)).join(', '))}</span>`).join('');
+ if(!kinds.length)h='<span class="badge none">Rolü yok</span>';
+ if(withLogin)h+=`<span class="badge ${LOGIN[p.login][1]}">${LOGIN[p.login][0]}</span>`;return h}
+const initials=n=>n.split(' ').map(w=>w[0]).slice(0,2).join('').toLocaleUpperCase('tr');
+const avatar=(p,big)=>`<span class="avatar${big?' big':''}" aria-hidden="true">${esc(initials(p.name))}</span>`;
+const contact=p=>[p.phone||'Telefon yok',p.email||'E-posta yok'].map(esc).join(' · ');
+const statusOf=u=>u.occ?(u.occ.type==='OWNER'?['Malik oturuyor','ok']:['Kiracılı','tenant']):['Boş','none'];
+const statusBadge=u=>`<span class="badge ${statusOf(u)[1]}">${statusOf(u)[0]}</span>`;
+const residentText=u=>u.occ?byId(u.occ.pid).name:'İkamet eden yok';
+const ownerText=u=>u.owners.length?byId(u.owners[0]).name+(u.owners.length>1?` +${u.owners.length-1}`:''):'Malik kaydı yok';
+const roleOnUnit=(u,pid)=>u.owners.includes(pid)?'Kat maliki':u.occ?.pid===pid?'Kiracı':'Hane üyesi';
+const peopleOn=u=>[...new Set([...u.owners,u.occ?.pid,...u.members.map(m=>m.pid)].filter(Boolean))].map(byId);
+
+/* ---------- rules the server owns: allowed actions, eligibility, duplicates ---------- */
+const A={
+ openResident:{g:'Kişiler',l:'Sakin kartını aç',d:'İletişim bilgisi kişi kartında düzenlenir.'},
+ openOwner:{g:'Kişiler',l:'Malik kartını aç',d:'İletişim bilgisi kişi kartında düzenlenir.'},
+ registerOwner:{g:'Kişiler',l:'Malik kaydet',d:'Mevcut bir kişiyi seçin veya yeni kart oluşturun.',ctx:'owner',date:1,slot:'Kat maliki *'},
+ addMember:{g:'Kişiler',l:'Hane üyesi ekle',d:'Kişi seçilir; yalnızca yakınlık girilir.',ctx:'member',rel:1,slot:'Hane üyesi *'},
+ primary:{g:'Kişiler',l:'Birincil muhatabı seç',d:'Dairedeki kişiler arasından seçilir.',pick:'primary'},
+ tenantMoveIn:{g:'İkamet',l:'Kiracı girişi',d:'Boş daireye kiracı yerleştirir.',ctx:'tenant',date:1,slot:'Kiracı *'},
+ replaceTenant:{g:'İkamet',l:'Kiracıyı değiştir',d:'Mevcut kiracı çıkar, yenisi girer.',ctx:'tenant',date:1,slot:'Yeni kiracı *'},
+ rentOut:{g:'İkamet',l:'Kiraya ver',d:'Malik çıkar, kiracı girer.',ctx:'tenant',date:1,slot:'Kiracı *'},
+ ownerMoveIn:{g:'İkamet',l:'Malik taşınıyor',d:'Kayıtlı malik daireye yerleşir.',pick:'owner',date:1},
+ ownerTakesBack:{g:'İkamet',l:'Malik geri alıyor',d:'Kiracı çıkar, malik yerleşir.',pick:'owner',date:1},
+ moveOut:{g:'İkamet',l:'Çıkış yap',d:'İkameti ve haneyi kapatır.',date:1},
+ transfer:{g:'Mülkiyet',l:'Tapu devri',d:'Yeni malik seçilir; mevcut bir kiracı da olabilir.',ctx:'owner',date:1,slot:'Yeni kat maliki *'},
+ history:{g:'Daire',l:'Daire tarihçesi',d:'Geçmiş ikamet ve mülkiyet kayıtları.'},
+ iban:{g:'Daire',l:'Sanal IBAN',d:'Mevcut okuma akışı; taslakta gösterilmez.'},
+ del:{g:'Diğer',l:'Daireyi sil',d:'Yalnızca boş daire. Ayrı onay gerekir.',danger:1}
+};
+function allowed(u){const a=[],owned=u.owners.length>0,occ=u.occ;
+ if(occ)a.push('openResident');a.push(owned?'openOwner':'registerOwner');
+ if(occ)a.push('addMember');if(owned||occ)a.push('primary');
+ if(owned&&!occ)a.push('tenantMoveIn','ownerMoveIn');
+ if(occ?.type==='TENANT')a.push('replaceTenant','ownerTakesBack','moveOut');
+ if(occ?.type==='OWNER')a.push('rentOut','moveOut');
+ if(owned)a.push('transfer');a.push('history','iban');if(!occ)a.push('del');return a}
+function elig(ctx,u,p){
+ if(ctx==='regTenant')return D&&D.slots.owner===p.id?'Malik ve kiracı aynı kişi olamaz. “Malik oturuyor” seçin.':'';
+ if(!u)return '';
+ if(ctx==='tenant'){if(u.owners.includes(p.id))return 'Bu dairenin maliki. Kiracı olamaz; malik için “Malik taşınıyor” kullanılır.';if(u.occ?.pid===p.id)return 'Zaten bu dairede oturuyor.'}
+ if(ctx==='owner'&&u.owners.includes(p.id))return 'Zaten bu dairenin maliki.';
+ if(ctx==='member'&&(u.occ?.pid===p.id||u.members.some(m=>m.pid===p.id)))return 'Zaten bu hanede kayıtlı.';
+ return ''}
+function info(ctx,u,p){if(ctx!=='tenant'&&ctx!=='regTenant')return '';
+ const t=rolesOf(p).filter(x=>x.rel==='TENANT'&&x.u!==u).map(x=>label(x.u));return t.length?`Şu an ${t.join(', ')} dairesinde kiracı.`:''}
+function unitElig(act,u,p){
+ if(!allowed(u).includes(act))return act==='tenantMoveIn'?(u.owners.length?'Daire dolu.':'Malik kaydı yok.'):act==='transfer'?'Malik kaydı yok; önce malik kaydedilir.':'İkamet eden yok.';
+ return p?elig(A[act].ctx,u,p):''}
+function duplicates(name,phone,email,exceptId){const nk=nameKey(name),pk=phoneKey(phone),em=email.trim().toLowerCase();
+ return P.filter(p=>p.id!==exceptId).map(p=>{const reasons=[];
+  if(em&&p.email===em)reasons.push('Aynı e-posta');
+  if(pk&&phoneKey(p.phone)===pk)reasons.push('Aynı telefon');
+  const k=nameKey(p.name);if(nk.length>=4&&(k===nk||lev1(k,nk)))reasons.push('Benzer ad');
+  return {p,reasons,hard:reasons.includes('Aynı e-posta')}}).filter(d=>d.reasons.length).slice(0,5)}
+function searchPeople(q){const fq=fold(q),d=digits(q);if(!fq)return null;
+ return P.filter(p=>fold(p.name).includes(fq)||p.email.includes(fq)||(d.length>=3&&digits(p.phone).includes(d))||rolesOf(p).some(x=>fold(label(x.u))===fq))
+  .sort((a,b)=>fold(b.name).startsWith(fq)-fold(a.name).startsWith(fq)||a.name.localeCompare(b.name,'tr'))}
+/* '' = shown; text = matched on a field the row does not show; null = no match */
+function unitMatch(u,q){const fq=fold(q),d=digits(q);if(!fq)return '';
+ const lab=fold(label(u));if(lab.includes(fq)||lab.replace('-',' ').includes(fq))return '';
+ const shown=[u.occ?.pid,...u.owners,u.primary].filter(Boolean).map(byId);
+ if(shown.some(p=>fold(p.name).includes(fq)))return '';
+ for(const p of peopleOn(u)){
+  if(fold(p.name).includes(fq))return 'Eşleşme: hane üyesi '+p.name;
+  if(p.email&&p.email.includes(fq))return 'Eşleşme: e-posta ('+p.name+')';
+  if(d.length>=3&&digits(p.phone).includes(d))return 'Eşleşme: telefon ('+p.name+')'}
+ return null}
+
+/* ---------- state ---------- */
+const S={q:'',block:'all',occ:'all',sort:'unit',page:1,size:25,compact:false,pq:'',pfilter:'all',ppage:1,infoTab:'overview',notice:''};
+let D=null;            /* draft of the action in progress: unit, person slots, date */
+let route={v:'units'};
+const saved={};
+const keyOf=r=>[r.v,r.id||'',r.mode||''].join(':');
+
+/* ---------- navigation: one back stack for every level ---------- */
+function go(r){saved[keyOf(route)]={y:scrollY,fk:document.activeElement?.dataset?.fk};history.pushState(r,'','#'+keyOf(r));route=r;render()}
+function swap(r){history.replaceState(r,'','#'+keyOf(r));route=r;render()}
+function back(n=1){history.go(-n)}
+addEventListener('popstate',e=>{route=e.state||{v:'units'};render(true)});
+mobile.addEventListener('change',()=>render(true));
+
+/* ---------- lists ---------- */
+function filteredUnits(){
+ let list=U.map(u=>({u,m:unitMatch(u,S.q)})).filter(x=>x.m!==null&&(S.block==='all'||x.u.block===S.block)&&(S.occ==='all'||(S.occ==='vacant'?!x.u.occ:x.u.occ?.type===S.occ)));
+ const cmp={unit:(a,b)=>a.u.id-b.u.id,resident:(a,b)=>residentText(a.u).localeCompare(residentText(b.u),'tr')||a.u.id-b.u.id,owner:(a,b)=>ownerText(a.u).localeCompare(ownerText(b.u),'tr')||a.u.id-b.u.id}[S.sort];
+ return list.sort(cmp)}
+const filterCount=()=>(S.block!=='all')+(S.occ!=='all')+(S.sort!=='unit');
+function pager(total,page,size,kind){const pages=Math.max(1,Math.ceil(total/size));
+ return `<div class="footer"><label>Sayfa başına <select data-size="${kind}">${[25,50,100].map(n=>`<option ${n===size?'selected':''}>${n}</option>`).join('')}</select></label>
+ <nav class="pagination" aria-label="Sayfalar"><button data-page="${kind}:-1" ${page<=1?'disabled':''}>← Önceki</button><span class="muted">${page} / ${pages}</span><button data-page="${kind}:1" ${page>=pages?'disabled':''}>Sonraki →</button></nav></div>`}
+function head(tab){return `<div class="topline"><div class="brand">Site<span>Pulse</span> <span class="muted">/ Yönetim</span></div><button data-reset>Taslağı sıfırla</button></div>
+ <h1 tabindex="-1">Sakinler & Malikler</h1>
+ <div class="tabs" role="tablist"><button role="tab" aria-selected="${tab==='units'}" data-nav="units">Daireler</button><button role="tab" aria-selected="${tab==='people'}" data-nav="people">Kişiler</button></div>`}
+const opts=(list,cur)=>list.map(([v,l])=>`<option value="${v}" ${v===cur?'selected':''}>${l}</option>`).join('');
+const BLOCKS=[['all','Tüm bloklar'],['A','A'],['B','B'],['C','C'],['D','D']],OCCS=[['all','Tüm durumlar'],['TENANT','Kiracılı'],['OWNER','Malik oturuyor'],['vacant','Boş']],SORTS=[['unit','Blok / daire'],['resident','Sakin A–Z'],['owner','Malik A–Z']];
+
+const V={},AFTER={};
+V.units=()=>{const occd=U.filter(u=>u.occ).length;
+ return head('units')+`<div class="summary muted"><span><strong>${U.length}</strong> daire</span><span class="desktoponly">${occd} dolu</span><span class="desktoponly">${U.length-occd} boş</span><span class="desktoponly">${P.length} kişi kartı</span></div>
+ <div class="panel flush"><div class="toolbar">
+  <label>Daire veya kişi ara<input id="uq" type="search" placeholder="Daire, sakin, malik, hane üyesi, telefon…" autocomplete="off" value="${esc(S.q)}"></label>
+  <label class="desktoponly">Blok<select data-f="block">${opts(BLOCKS,S.block)}</select></label>
+  <label class="desktoponly">İkamet durumu<select data-f="occ">${opts(OCCS,S.occ)}</select></label>
+  <label class="desktoponly">Sırala<select data-f="sort">${opts(SORTS,S.sort)}</select></label>
+  <button class="mobileonly" data-nav="filters" data-fk="filters">Filtrele${filterCount()?` (${filterCount()})`:''}</button>
+  <button class="primary desktoponly" data-nav="register" data-fk="register">+ Daire kaydı</button></div>
+ <div id="ulist"></div></div>
+ <button class="primary mobileonly" data-nav="register" style="width:100%;margin-top:12px;min-height:48px">+ Daire kaydı</button>`};
+AFTER.units=renderUnitRows;
+function renderUnitRows(){
+ const list=filteredUnits(),pages=Math.max(1,Math.ceil(list.length/S.size));S.page=Math.min(S.page,pages);
+ const start=(S.page-1)*S.size,rows=list.slice(start,start+S.size),active=S.q.trim()||S.block!=='all'||S.occ!=='all';
+ const btns=u=>`<button class="primary" data-nav="unit:${u.id}:actions" data-fk="u${u.id}a" aria-label="${label(u)} işlemleri">İşlemler</button><button data-nav="unit:${u.id}:info" data-fk="u${u.id}i" aria-label="${label(u)} detayı">Detay</button>`;
+ const primary=u=>u.primary?`${esc(byId(u.primary).name)}<small>${roleOnUnit(u,u.primary)}</small>`:'<span class="muted">Seçilmedi</span>';
+ let body;
+ if(!rows.length)body=`<div class="empty"><h2>Aramanıza uygun daire yok</h2><p class="muted">Aramayı değiştirin veya filtreleri temizleyin.</p><button data-clearfilters>Filtreleri temizle</button></div>`;
+ else if(mobile.matches)body=rows.map(({u,m})=>`<div class="ucard"><div class="identity"><strong>${label(u)}</strong>${statusBadge(u)}</div>
+  <p><span class="muted">Sakin:</span> ${esc(residentText(u))}</p><p><span class="muted">Malik:</span> ${esc(ownerText(u))}</p>${m?`<p class="reason">${esc(m)}</p>`:''}<div class="rowactions">${btns(u)}</div></div>`).join('');
+ else body=`<table class="${S.compact?'compact':''}"><caption class="muted" style="position:absolute;left:-9999px">Daireler ve kişi rolleri</caption><thead><tr><th scope="col" style="width:13%">Daire</th><th scope="col" style="width:13%">İkamet durumu</th><th scope="col">Sakin</th><th scope="col">Kat maliki</th><th scope="col" class="contactcol">Birincil muhatap</th><th scope="col" style="width:190px"><span style="position:absolute;left:-9999px">İşlemler</span></th></tr></thead><tbody>${rows.map(({u,m})=>`<tr><td><strong>${label(u)}</strong><small>${u.floor}. kat · ${u.type}</small></td><td>${statusBadge(u)}</td><td>${esc(residentText(u))}${m?`<small class="reason">${esc(m)}</small>`:''}</td><td>${esc(ownerText(u))}</td><td class="contactcol">${primary(u)}</td><td class="acts">${btns(u)}</td></tr>`).join('')}</tbody></table>`;
+ $('ulist').innerHTML=`<div class="listmeta"><div><span aria-live="polite">${list.length?`${start+1}–${start+rows.length} / ${list.length} daire`:'0 daire'}</span>${active?' · <button class="link" data-clearfilters>Filtreleri temizle</button>':''}</div>
+  <div class="seg desktoponly" role="group" aria-label="Satır yoğunluğu"><button data-density="0" aria-pressed="${!S.compact}">Rahat</button><button data-density="1" aria-pressed="${S.compact}">Sıkı</button></div></div>
+  ${S.notice?`<div class="note warn" style="margin:0 16px 8px">${esc(S.notice)}</div>`:''}${body}${rows.length?pager(list.length,S.page,S.size,'u'):''}`;
+ S.notice='';
+}
+V.filters=()=>{V.filters.d=V.filters.d||{block:S.block,occ:S.occ,sort:S.sort};const d=V.filters.d;
+ return `<h1 tabindex="-1">Filtrele ve sırala</h1><div class="panel formgrid">
+ <label>Blok<select data-fd="block">${opts(BLOCKS,d.block)}</select></label><label>İkamet durumu<select data-fd="occ">${opts(OCCS,d.occ)}</select></label><label>Sırala<select data-fd="sort">${opts(SORTS,d.sort)}</select></label>
+ <div class="actions"><button class="primary" data-applyfilters>Uygula</button><button data-back>Vazgeç</button></div></div>`};
+
+const PF=[['all','Tümü',()=>true],['OWNER','Malikler',r=>r.some(x=>x.rel==='OWNER')],['TENANT','Kiracılar',r=>r.some(x=>x.rel==='TENANT')],['MEMBER','Hane üyeleri',r=>r.some(x=>x.rel==='MEMBER')],['none','Rolü yok',r=>!r.length],['nologin','Giriş hesabı yok',(r,p)=>p.login==='NONE'],['pending','Etkinleştirme bekleyen',(r,p)=>p.login==='PENDING']];
+const personRow=(p,attrs,extra='')=>`<button class="row" ${attrs}>${avatar(p)}<span class="pmain"><strong>${esc(p.name)}</strong><span class="muted small">${contact(p)}</span><span class="badges">${badges(p,true)}</span>${extra}</span></button>`;
+V.people=()=>head('people')+`<p class="muted" style="margin-top:8px">Her kişi bir kez kayıtlıdır. Roller, kişinin dairelerle ilişkisinden gelir.</p>
+ <div class="panel flush"><div class="toolbar people"><label>Kişi ara<input id="pq" type="search" placeholder="Ad, telefon, e-posta veya daire" autocomplete="off" value="${esc(S.pq)}"></label><button class="primary" data-newperson data-fk="newperson">+ Yeni kişi</button></div>
+ <div class="chips" role="group" aria-label="Rol filtresi">${PF.map(([k,l])=>`<button data-pfilter="${k}" aria-pressed="${S.pfilter===k}">${l}</button>`).join('')}</div><div id="plist"></div></div>`;
+AFTER.people=renderPeopleRows;
+function renderPeopleRows(){
+ const f=PF.find(x=>x[0]===S.pfilter)[2];
+ const list=(searchPeople(S.pq)||[...P].sort((a,b)=>a.name.localeCompare(b.name,'tr'))).filter(p=>f(rolesOf(p),p));
+ const pages=Math.max(1,Math.ceil(list.length/25));S.ppage=Math.min(S.ppage,pages);const start=(S.ppage-1)*25,rows=list.slice(start,start+25);
+ $('plist').innerHTML=`<div class="listmeta"><span aria-live="polite">${list.length?`${start+1}–${start+rows.length} / ${list.length} kişi`:'0 kişi'}</span></div>`+
+  (rows.map(p=>personRow(p,`data-nav="person:${p.id}" data-fk="p${p.id}"`)).join('')||'<div class="empty"><p class="muted">Eşleşen kişi yok. Aramayı değiştirin veya yeni kişi ekleyin.</p></div>')+
+  (list.length>25?`<div class="footer"><span></span><nav class="pagination" aria-label="Sayfalar"><button data-page="p:-1" ${S.ppage<=1?'disabled':''}>← Önceki</button><span class="muted">${S.ppage} / ${pages}</span><button data-page="p:1" ${S.ppage>=pages?'disabled':''}>Sonraki →</button></nav></div>`:'');
+}
+
+/* ---------- unit workspace: actions first, information optional ---------- */
+V.unit=r=>{const u=unitById(r.id);if(!u)return '<h1 tabindex="-1">Daire bulunamadı</h1><p class="muted">Kayıt silinmiş veya erişiminiz yok.</p>';
+ const headHtml=`<div class="context"><div><h1 tabindex="-1">${label(u)}</h1><p class="muted">${u.floor}. kat · ${u.type} · Sakin: ${esc(residentText(u))} · Malik: ${esc(ownerText(u))}</p></div>${statusBadge(u)}</div>
+ <div class="seg" role="tablist" aria-label="Daire görünümü"><button role="tab" aria-selected="${r.mode==='actions'}" data-mode="actions">İşlemler</button><button role="tab" aria-selected="${r.mode==='info'}" data-mode="info">Daire bilgileri</button></div>`;
+ if(r.mode==='actions'){const acts=allowed(u),groups=[...new Set(acts.map(a=>A[a].g))];
+  return headHtml+`<div class="groups">${groups.map(g=>`<div class="group"><h3>${g}</h3>${acts.filter(a=>A[a].g===g).map(a=>`<button class="actionitem${A[a].danger?' danger':''}" data-act="${a}" data-fk="a-${a}"><span><strong>${A[a].l}</strong><small>${A[a].d}</small></span><span aria-hidden="true">›</span></button>`).join('')}</div>`).join('')}</div>
+  <p class="muted small" style="margin-top:12px">Yalnızca bu dairenin durumuna uygun işlemler gösterilir.</p>`}
+ const t=S.infoTab,prow=(p,sub)=>personRow(p,`data-nav="person:${p.id}" data-fk="p${p.id}"`,`<span class="small muted">${sub}</span>`);
+ const tabs=[['overview','Genel'],['residents','Sakinler'],['owners','Malikler'],['history','Tarihçe']];
+ let body;
+ if(t==='overview')body=`<dl class="kv" style="padding:16px"><dt>Daire</dt><dd>${label(u)} · ${u.floor}. kat · ${u.type}</dd><dt>İkamet durumu</dt><dd>${statusOf(u)[0]}</dd><dt>Sakin</dt><dd>${esc(residentText(u))}</dd><dt>Kat maliki</dt><dd>${esc(ownerText(u))}</dd><dt>Birincil muhatap</dt><dd>${u.primary?esc(byId(u.primary).name)+' · '+roleOnUnit(u,u.primary):'Seçilmedi'}</dd></dl>`;
+ else if(t==='residents')body=u.occ?prow(byId(u.occ.pid),(u.occ.type==='OWNER'?'Malik sakin':'Kiracı')+' · '+u.occ.since+' tarihinden beri')+u.members.map(m=>prow(byId(m.pid),'Hane üyesi · '+esc(m.rel))).join(''):'<div class="empty muted">İkamet eden yok.</div>';
+ else if(t==='owners')body=u.owners.map(id=>prow(byId(id),'Kat maliki')).join('')||'<div class="empty muted">Malik kaydı yok.</div>';
+ else body=u.history.length?`<table><thead><tr><th>Kişi</th><th>Rol</th><th>Dönem</th></tr></thead><tbody>${u.history.map(h=>`<tr class="clickable" data-nav="person:${h.pid}"><td>${esc(byId(h.pid).name)}</td><td>${REL[h.rel][0]}</td><td>${h.since} – ${h.end}</td></tr>`).join('')}</tbody></table>`:'<div class="empty muted">Kapanmış kayıt yok.</div>';
+ return headHtml+`<div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button role="tab" aria-selected="${t===k}" data-infotab="${k}">${l}</button>`).join('')}</div><div class="panel flush" style="margin-top:12px">${body}</div>
+ <p class="muted small" style="margin-top:12px">Kişi satırı kişi kartını açar. Telefon ve e-posta yalnızca kartta düzenlenir.</p>`};
+
+/* ---------- person field: the one way a workflow receives a person ---------- */
+function field(slot,lab,ctx,u){const p=byId(D.slots[slot]);
+ if(!p)return `<div class="pf"><span class="pflabel">${lab}</span><button class="pick" data-pick="${slot}:${ctx}" data-fk="pick-${slot}">⌕ Kişi seç veya yeni ekle</button></div>`;
+ let note='';const why=elig(ctx,u,p),extra=info(ctx,u,p);
+ if(why)note+=`<div class="note bad">${esc(why)}</div>`;
+ if(extra)note+=`<div class="note warn">${esc(extra)} Yine de seçilebilir.</div>`;
+ if(ctx!=='member'){
+  if(p.login==='ACTIVE')note+=`<div class="note">Mevcut giriş hesabı bu daireyi de görecek. Yeni hesap açılmaz.</div>`;
+  else if(p.login==='PENDING')note+=`<div class="note">Etkinleştirme daveti daha önce gönderildi.</div>`;
+  else if(p.email)note+=`<div class="note"><label class="check"><input type="checkbox" data-invite="${slot}" ${D.invite[slot]!==false?'checked':''}> ${esc(p.email)} adresine giriş daveti gönder</label></div>`;
+  else note+=`<div class="note warn">E-posta yok: giriş hesabı açılamaz. Kişi kartına e-posta ekleyebilirsiniz.</div>`}
+ return `<div class="pf"><span class="pflabel">${lab}</span>${compactCard(p,D.lock==='person'&&slot==='person'?'':`<button data-pick="${slot}:${ctx}" data-fk="pick-${slot}">Değiştir</button><button data-clearslot="${slot}" aria-label="Seçimi kaldır">✕</button>`)}${note}</div>`}
+const compactCard=(p,acts)=>`<div class="pcard">${avatar(p)}<div class="pmain"><strong>${esc(p.name)}</strong><span class="muted small">${contact(p)}</span><div class="badges">${badges(p)}</div></div><div class="pacts">${acts}</div></div>`;
+const unitCard=(u,acts='')=>`<div class="pcard"><div class="pmain"><strong>${label(u)}</strong><span class="muted small">${u.floor}. kat · ${u.type} · Sakin: ${esc(residentText(u))} · Malik: ${esc(ownerText(u))}</span><div class="badges">${statusBadge(u)}</div></div><div class="pacts">${acts}</div></div>`;
+
+function startAction(act,unitId,personId){D={act,unitId:unitId||null,lock:personId?'person':'unit',slots:{person:personId||null},invite:{},date:'2026-11-14',rel:'Eş',choice:null};go({v:'action',id:act})}
+V.action=()=>{const a=A[D.act],u=unitById(D.unitId);let h=`<h1 tabindex="-1">${a.l}</h1><p class="muted">${a.d}</p><div class="panel">`;
+ h+=`<span class="pflabel">Daire</span>`+(u?unitCard(u,D.lock==='person'?'<button data-pickunit data-fk="pickunit">Değiştir</button>':''):`<button class="pick" data-pickunit data-fk="pickunit">⌕ Daire seç</button>`);
+ if(a.ctx)h+=field('person',a.slot,a.ctx,u);
+ if(a.rel)h+=`<div class="pf"><label>Yakınlık<select data-d="rel">${['Eş','Çocuk','Anne / Baba','Kardeş','Diğer'].map(x=>`<option ${D.rel===x?'selected':''}>${x}</option>`).join('')}</select></label></div>`;
+ if(a.pick&&u){const list=a.pick==='owner'?u.owners.map(byId):peopleOn(u);if(D.choice==null)D.choice=a.pick==='primary'?u.primary:list.length===1?list[0].id:null;
+  h+=`<div class="pf"><span class="pflabel">${a.pick==='owner'?'Yerleşecek malik':'Birincil muhatap'}</span>${list.map(p=>`<label class="radio"><input type="radio" name="choice" value="${p.id}" ${D.choice===p.id?'checked':''}><span><strong>${esc(p.name)}</strong> · ${roleOnUnit(u,p.id)}<span class="muted small" style="display:block">${contact(p)}</span></span></label>`).join('')}
+  <p class="muted small" style="margin-top:8px">${a.pick==='owner'?'Kişi bilgisi girilmez; malik kayıttan gelir.':'Seçim maliki, kiracıyı veya borçluyu değiştirmez.'}</p></div>`}
+ if(a.date)h+=`<div class="pf"><label>Geçerlilik tarihi<input type="date" data-d="date" value="${D.date}"></label></div>`;
+ if(D.act==='transfer')h+=`<div class="note">Onayda parola doğrulaması istenir (taslakta gösterilmez). Eski malik dairede oturuyorsa çıkışı devirle birlikte yapılır.</div>`;
+ if(D.act==='iban')h+=`<div class="note">Sanal IBAN mevcut ekranda gösterilir. Taslak IBAN üretmez.</div>`;
+ if(D.act==='del')h+=`<div class="note bad">Silme, tam ekran onay ve yetki denetimi gerektirir. Taslakta silme yapılmaz.</div>`;
+ const can=!['iban','del'].includes(D.act);
+ return h+`<div class="actions">${can?`<button class="primary" data-apply>${a.l} · Onayla</button>`:''}<button data-back>Vazgeç</button></div></div>`};
+
+/* ---------- pickers and person form: further levels of the same stack ---------- */
+V.picker=r=>`<h1 tabindex="-1">${esc(D.pick.title)}</h1><div class="panel flush"><div style="padding:14px 16px"><label>Kişi ara<input id="kq" type="search" placeholder="Ad, telefon, e-posta veya daire" autocomplete="off" value="${esc(D.pick.q||'')}"></label><p class="muted small" id="khint" style="margin:8px 0 0"></p></div><div id="klist"></div></div>`;
+AFTER.picker=()=>{renderPicker();$('kq').focus()};
+function renderPicker(){const {ctx}=D.pick,u=unitById(D.unitId),q=$('kq').value,found=searchPeople(q),list=(found||P.slice(0,6)).slice(0,30);D.pick.q=q;
+ $('khint').textContent=found?`${found.length} sonuç`:'Son kullanılan kişiler';
+ $('klist').innerHTML=list.map(p=>{const why=elig(ctx,u,p),more=info(ctx,u,p);return personRow(p,why?'aria-disabled="true"':`data-use="${p.id}"`,why||more?`<span class="reason">${esc(why||more)}</span>`:'')}).join('')
+  +`<button class="row newrow" data-newperson>＋ ${q.trim()?`“${esc(q.trim())}” için yeni kişi oluştur`:'Yeni kişi oluştur'}</button>`}
+V.unitpicker=()=>`<h1 tabindex="-1">Daire seç</h1><p class="muted">${esc(byId(D.slots.person).name)} · ${A[D.act].l}</p><div class="panel flush"><div style="padding:14px 16px"><label>Daire ara<input id="xq" type="search" placeholder="Daire, sakin veya malik" autocomplete="off"></label></div><div id="xlist"></div></div>`;
+AFTER.unitpicker=()=>{renderUnitPicker();$('xq').focus()};
+function renderUnitPicker(){const p=byId(D.slots.person),q=$('xq').value;
+ const list=U.filter(u=>unitMatch(u,q)!==null).map(u=>({u,why:unitElig(D.act,u,p)})).sort((a,b)=>!!a.why-!!b.why||a.u.id-b.u.id).slice(0,30);
+ $('xlist').innerHTML=list.map(({u,why})=>`<button class="row" ${why?'aria-disabled="true"':`data-useunit="${u.id}"`}><span class="pmain"><strong>${label(u)}</strong><span class="muted small">Sakin: ${esc(residentText(u))} · Malik: ${esc(ownerText(u))}</span><span class="badges">${statusBadge(u)}</span>${why?`<span class="reason">${esc(why)}</span>`:''}</span></button>`).join('')||'<div class="empty muted">Eşleşen daire yok.</div>'}
+function prefill(q){q=(q||'').trim();if(q.includes('@'))return{name:'',phone:'',email:q};if(digits(q).length>=7&&!/[a-zçğıöşü]/i.test(q))return{name:'',phone:q,email:''};return{name:q,phone:'',email:''}}
+V.form=r=>{const edit=r.mode==='edit',p=edit?byId(r.id):(r.pre||{name:'',phone:'',email:''}),n=edit?new Set(rolesOf(p).map(x=>x.u.id)).size:0;
+ return `<h1 tabindex="-1">${edit?'Kişi kartını düzenle':'Yeni kişi kartı'}</h1><form id="pform" class="panel formgrid" novalidate>
+ ${n?`<div class="note warn" style="margin:0">Bu değişiklik kişinin ${n} dairesinde ve tüm listelerde görünür.</div>`:''}
+ <label>Ad Soyad *<input id="fn" autocomplete="off" value="${esc(p.name)}"></label><label>Telefon<input id="fp" inputmode="tel" autocomplete="off" value="${esc(p.phone)}"></label><label>E-posta<input id="fe" type="email" autocomplete="off" value="${esc(p.email)}"></label>
+ <p class="muted small" style="margin:0">Rol burada seçilmez; kişinin bir daireyle ilişkisinden gelir. Giriş daveti için e-posta gerekir.</p>
+ <div id="dupes" aria-live="polite"></div><div id="ferr" class="note bad" role="alert" hidden></div>
+ <div class="actions" style="margin:0"><button class="primary">${edit?'Kaydet':'Kişiyi oluştur'}</button><button type="button" data-back>Vazgeç</button></div></form>`};
+AFTER.form=()=>{renderDupes();$('fn').focus()};
+function renderDupes(){const edit=route.mode==='edit',found=duplicates($('fn').value,$('fp').value,$('fe').value,edit?route.id:0);
+ if(!found.length){$('dupes').innerHTML='';return}const hard=found.some(d=>d.hard);
+ $('dupes').innerHTML=`<div class="note ${hard?'bad':'warn'}" style="margin:0"><strong>${hard?'Bu e-posta başka bir kişi kartında kayıtlı.':'Bu kişi zaten kayıtlı olabilir.'}</strong></div><div class="panel flush" style="margin-top:8px">${found.map(d=>`<div class="row">${avatar(d.p)}<span class="pmain"><strong>${esc(d.p.name)}</strong><span class="muted small">${contact(d.p)}</span><span class="badges">${d.reasons.map(x=>`<span class="badge tenant">${x}</span>`).join('')}${badges(d.p)}</span></span>${edit?'':`<button type="button" data-usedupe="${d.p.id}">Bu kişiyi kullan</button>`}</div>`).join('')}</div>${hard?'':'<label class="check" style="margin-top:8px"><input type="checkbox" id="distinct"> Farklı bir kişi olduğunu onaylıyorum</label>'}`}
+function choose(id,levels){const p=byId(id);
+ if(D&&D.pick){const why=elig(D.pick.ctx,unitById(D.unitId),p);if(why){toast(why);return}D.slots[D.pick.slot]=id;delete D.invite[D.pick.slot];D.pick=null;toast(`${p.name} seçildi. Yeni kayıt açılmadı.`);back(levels)}
+ else swap({v:'person',id})}
+function saveForm(){const edit=route.mode==='edit',name=$('fn').value.replace(/\s+/g,' ').trim(),phone=$('fp').value.trim(),email=$('fe').value.trim().toLowerCase(),err=[];
+ if(name.length<3)err.push('Ad Soyad gerekli.');
+ if(phone&&digits(phone).length<10)err.push('Telefon en az 10 haneli olmalı.');
+ if(email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))err.push('E-posta biçimi geçersiz.');
+ const found=duplicates(name,phone,email,edit?route.id:0);
+ if(found.some(d=>d.hard))err.push('Bu e-posta kullanılıyor. Mevcut kişiyi kullanın veya e-postayı değiştirin.');
+ else if(found.length&&!$('distinct')?.checked)err.push('Benzer kayıt var. Mevcut kişiyi kullanın veya farklı kişi olduğunu onaylayın.');
+ if(err.length){$('ferr').hidden=false;$('ferr').textContent=err.join(' ');return}
+ if(edit){Object.assign(byId(route.id),{name,phone,email});toast('Kişi kartı güncellendi.');back();return}
+ const p=mkPerson({name,phone,email});p.isNew=true;
+ if(D&&D.pick){D.slots[D.pick.slot]=p.id;D.pick=null;toast(`${name} için kişi kartı oluşturuldu ve seçildi.`);back(2)}
+ else{toast('Kişi kartı oluşturuldu. Henüz rolü yok.');swap({v:'person',id:p.id})}}
+
+/* ---------- person card ---------- */
+V.person=r=>{const p=byId(r.id);if(!p)return '<h1 tabindex="-1">Kişi bulunamadı</h1>';
+ const roles=rolesOf(p),past=pastOf(p);
+ const login=p.login==='ACTIVE'?'':p.login==='PENDING'?'<button data-login>Daveti yeniden gönder</button>':p.email?'<button data-login>Giriş daveti gönder</button>':'<span class="muted small">Davet için önce e-posta ekleyin.</span>';
+ return `<div class="panel"><div class="cardhead">${avatar(p,true)}<div class="pmain"><h1 tabindex="-1" style="margin:0">${esc(p.name)}</h1><div class="badges">${badges(p,true)}</div></div><button data-nav="form:edit:${p.id}" data-fk="edit">Düzenle</button></div></div>
+ <div class="grid2"><div><div class="panel flush"><h2 style="padding:16px 16px 8px">Daireler ve roller</h2>
+ ${roles.length||past.length?`<table><thead><tr><th>Daire</th><th>Rol</th><th>Durum</th></tr></thead><tbody>${roles.map(x=>`<tr class="clickable" data-nav="unit:${x.u.id}:info" tabindex="0"><td><strong>${label(x.u)}</strong></td><td>${REL[x.rel][0]}${x.extra?' ('+esc(x.extra)+')':''}</td><td><span class="badge ok">Sürüyor</span></td></tr>`).join('')}${past.map(x=>`<tr class="clickable" data-nav="unit:${x.u.id}:info" tabindex="0"><td><strong>${label(x.u)}</strong></td><td>${REL[x.rel][0]}</td><td class="muted">Bitti · ${x.end}</td></tr>`).join('')}</tbody></table>`:'<p class="muted" style="padding:0 16px 16px">Bu kişinin henüz bir rolü yok.</p>'}</div>
+ <div class="panel"><h2>Bu kişiye rol ver</h2><p class="muted small">İşlem ekranı bu kişi seçili açılır; yalnızca daire seçilir.</p><div class="actions" style="margin-top:8px"><button data-pact="tenantMoveIn" data-fk="r1">Kiracı olarak yerleştir</button><button data-pact="transfer" data-fk="r2">Malik yap (tapu devri)</button><button data-pact="addMember" data-fk="r3">Haneye ekle</button></div></div></div>
+ <div><div class="panel"><h2>İletişim</h2><dl class="kv"><dt>Telefon</dt><dd>${esc(p.phone||'Telefon yok')}</dd><dt>E-posta</dt><dd>${esc(p.email||'E-posta yok')}</dd><dt>Kimlik no</dt><dd>${esc(p.tckn||'Kayıtlı değil')}</dd></dl></div>
+ <div class="panel"><h2>Giriş hesabı</h2><p><span class="badge ${LOGIN[p.login][1]}">${LOGIN[p.login][0]}</span></p>${login}</div></div></div>`};
+
+/* ---------- unit registration ---------- */
+V.register=()=>{if(!D||D.act!=='register')D={act:'register',unitId:null,slots:{owner:null,tenant:null},invite:{},occ:'owner',block:'D',no:16};
+ const o=byId(D.slots.owner),t=byId(D.slots.tenant),items=[],errs=[];
+ if(U.some(u=>u.block===D.block&&u.no===+D.no))errs.push(`${D.block}-${D.no} zaten kayıtlı.`);
+ if(!o)errs.push('Kat maliki seçilmedi.');else items.push(`${o.isNew?'Yeni kişi kartı':'Mevcut kişi kartı'} kullanılacak: <strong>${esc(o.name)}</strong>${o.isNew?'':' (yeni kayıt açılmaz)'}.`,'Daire için malik kaydı açılacak.');
+ if(D.occ==='owner'&&o)items.push(`${esc(o.name)}, malik sakin olarak yerleşecek.`);
+ if(D.occ==='vacant')items.push('Daire boş olarak kaydedilecek.');
+ if(D.occ==='tenant'){if(!t)errs.push('Kiracı seçilmedi.');else if(o&&t.id===o.id)errs.push('Malik ve kiracı aynı kişi olamaz.');else items.push(`<strong>${esc(t.name)}</strong>, kiracı olarak yerleşecek.`)}
+ [['owner',o],[D.occ==='tenant'?'tenant':'',t]].forEach(([s,p])=>{if(s&&p&&p.login==='NONE'&&p.email&&D.invite[s]!==false)items.push(`${esc(p.name)} için giriş daveti gönderilecek.`)});
+ return `<h1 tabindex="-1">Yeni daire kaydı</h1><p class="muted">Kişi bilgisi bu ekranda yazılmaz. Kişi seçilir ya da kişi kartı olarak bir kez oluşturulur.</p>
+ <div class="grid2"><div class="panel"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><label>Blok<select data-d="block">${opts(BLOCKS.slice(1),D.block)}</select></label><label>Daire no<input type="number" min="1" data-d="no" value="${esc(D.no)}"></label></div>
+ ${field('owner','Kat maliki *','regOwner',null)}
+ <div class="pf"><span class="pflabel">İkamet durumu</span>${[['owner','Malik oturuyor'],['tenant','Kiracı oturuyor'],['vacant','Boş']].map(([v,l])=>`<label class="radio"><input type="radio" name="regocc" value="${v}" ${D.occ===v?'checked':''}> ${l}</label>`).join('')}</div>
+ ${D.occ==='tenant'?field('tenant','Kiracı *','regTenant',null):''}</div>
+ <div class="panel" aria-live="polite"><h2>Kaydedince</h2>${items.length?`<ul class="steps">${items.map(i=>`<li>${i}</li>`).join('')}</ul>`:''}${errs.map(e=>`<div class="note warn">${esc(e)}</div>`).join('')}
+ <div class="actions"><button class="primary" data-savereg ${errs.length?'disabled':''}>Daireyi kaydet</button><button data-back>Vazgeç</button></div></div></div>`};
+function saveReg(){const u={id:U.length+1,block:D.block,no:+D.no,floor:Math.ceil(D.no/3),type:'3+1',owners:[D.slots.owner],occ:null,members:[],primary:null,history:[]};
+ if(D.occ==='owner')u.occ={pid:D.slots.owner,type:'OWNER',since:'14.11.2026'};
+ if(D.occ==='tenant')u.occ={pid:D.slots.tenant,type:'TENANT',since:'14.11.2026'};
+ u.primary=u.occ?u.occ.pid:D.slots.owner;U.push(u);
+ [['owner',D.slots.owner],[D.occ==='tenant'?'tenant':'',D.slots.tenant]].forEach(([s,id])=>{const p=byId(id);if(s&&p.login==='NONE'&&p.email&&D.invite[s]!==false)p.login='PENDING'});
+ D=null;S.q=label(u);S.block=S.occ='all';S.page=1;toast(`${label(u)} kaydedildi.`);back()}
+
+/* ---------- applying an action: commands take references, never person text ---------- */
+function closeOcc(u,end){if(!u.occ)return;const leaving=[u.occ.pid,...u.members.map(m=>m.pid)];
+ u.history.unshift({pid:u.occ.pid,rel:u.occ.type==='OWNER'?'OCC_OWNER':'TENANT',since:u.occ.since,end});
+ u.members.forEach(m=>u.history.unshift({pid:m.pid,rel:'MEMBER',since:m.since,end}));
+ if(leaving.includes(u.primary)&&!u.owners.includes(u.primary))u.primary=null;u.occ=null;u.members=[]}
+function applyAction(){const a=A[D.act],u=unitById(D.unitId),when=trDate(D.date);
+ if(!u){toast('Önce bir daire seçin.');return}
+ if(!allowed(u).includes(D.act)){toast('Bu işlem dairenin şu anki durumunda yapılamaz.');return}
+ let p=null;
+ if(a.ctx){p=byId(D.slots.person);if(!p){toast('Önce bir kişi seçin.');return}const why=elig(a.ctx,u,p);if(why){toast(why);return}}
+ if(a.pick){p=byId(+D.choice);if(!p){toast('Önce bir kişi seçin.');return}}
+ switch(D.act){
+  case 'registerOwner':u.owners=[p.id];if(!u.primary)u.primary=p.id;break;
+  case 'addMember':u.members.push({pid:p.id,rel:D.rel,since:when});break;
+  case 'primary':u.primary=p.id;break;
+  case 'tenantMoveIn':case 'replaceTenant':case 'rentOut':closeOcc(u,when);u.occ={pid:p.id,type:'TENANT',since:when};if(!u.primary)u.primary=p.id;break;
+  case 'ownerMoveIn':case 'ownerTakesBack':closeOcc(u,when);u.occ={pid:p.id,type:'OWNER',since:when};if(!u.primary)u.primary=p.id;break;
+  case 'moveOut':closeOcc(u,when);if(!u.primary&&u.owners.length)u.primary=u.owners[0];break;
+  case 'transfer':{const old=u.owners;if(u.occ?.type==='OWNER')closeOcc(u,when);old.forEach(id=>u.history.unshift({pid:id,rel:'OWNER',since:'—',end:when}));u.owners=[p.id];if(old.includes(u.primary)||!u.primary)u.primary=u.occ?u.occ.pid:p.id;break}
+  case 'history':break}
+ if(a.ctx&&a.ctx!=='member'&&p.login==='NONE'&&p.email&&D.invite.person!==false)p.login='PENDING';
+ const visible=filteredUnits().some(x=>x.u===u);if(!visible)S.notice=`${label(u)} artık bu filtreyle eşleşmiyor.`;
+ toast(`${label(u)}: ${a.l.toLocaleLowerCase('tr')} tamamlandı.`);D=null;back()}
+
+/* ---------- render ---------- */
+function render(restore){
+ if(['action','picker','unitpicker'].includes(route.v)&&(!D||(route.v==='picker'&&!D.pick))){route={v:'units'};history.replaceState(route,'','#units::')}
+ if(route.v!=='filters')V.filters.d=null;
+ if(!['action','picker','unitpicker','form','register'].includes(route.v))D=null;
+ const root=route.v==='units'||route.v==='people',narrow=['action','picker','unitpicker','form','filters'].includes(route.v);
+ $('app').innerHTML=`<main class="shell${root?'':' sub'}${narrow?' narrow':''}">${root?'':'<button class="backtop" data-back data-fk="back">← Geri</button>'}${V[route.v](route)}</main>${root?'':'<div class="bottombar"><button data-back>← Geri dön</button></div>'}`;
+ AFTER[route.v]?.(route);
+ const s=restore&&saved[keyOf(route)];
+ if(s){scrollTo(0,s.y);const el=s.fk&&document.querySelector(`[data-fk="${s.fk}"]`);(el||document.querySelector('#ulist [data-fk],#plist [data-fk]')||document.querySelector('h1'))?.focus({preventScroll:true})}
+ else if(!document.activeElement||document.activeElement===document.body){scrollTo(0,0);document.querySelector('h1')?.focus({preventScroll:true})}}
+function parseNav(s){const [v,a,b]=s.split(':');
+ if(v==='unit')return{v,id:+a,mode:b};if(v==='person')return{v,id:+a};if(v==='form')return{v,mode:a,id:+b};return{v}}
+
+document.addEventListener('click',e=>{
+ const el=e.target.closest('button,tr[data-nav]');if(!el)return;const d=el.dataset;
+ if(d.nav){if(d.nav==='units'||d.nav==='people'){if(route.v!==d.nav)go({v:d.nav})}else go(parseNav(d.nav))}
+ else if('back' in d)back();
+ else if(d.mode){S.infoTab='overview';swap({...route,mode:d.mode})}
+ else if(d.infotab){S.infoTab=d.infotab;render(true)}
+ else if(d.act){const u=unitById(route.id);
+  if(d.act==='openResident')go({v:'person',id:u.occ.pid});
+  else if(d.act==='openOwner')go({v:'person',id:u.owners[0]});
+  else if(d.act==='history'){S.infoTab='history';swap({...route,mode:'info'})}
+  else startAction(d.act,u.id)}
+ else if(d.pact)startAction(d.pact,null,route.id);
+ else if(d.pick){const [slot,ctx]=d.pick.split(':');D.pick={slot,ctx,title:(A[D.act]?.slot||(slot==='owner'?'Kat maliki':'Kiracı')).replace(' *','')+' seç'};go({v:'picker'})}
+ else if('pickunit' in d)go({v:'unitpicker'});
+ else if(d.use)choose(+d.use,1);
+ else if(d.usedupe)choose(+d.usedupe,2);
+ else if(d.useunit){D.unitId=+d.useunit;D.choice=null;back()}
+ else if(d.clearslot){D.slots[d.clearslot]=null;render(true)}
+ else if('newperson' in d)go({v:'form',mode:'new',pre:prefill(route.v==='picker'?$('kq').value:S.pq)});
+ else if('apply' in d)applyAction();
+ else if('savereg' in d)saveReg();
+ else if('login' in d){const p=byId(route.id);p.login='PENDING';toast(`${p.email} adresine davet gönderildi.`);render(true)}
+ else if(d.page){const [k,n]=d.page.split(':');if(k==='u'){S.page+=+n;renderUnitRows()}else{S.ppage+=+n;renderPeopleRows()}scrollTo(0,0)}
+ else if(d.density){S.compact=d.density==='1';renderUnitRows()}
+ else if(d.pfilter){S.pfilter=d.pfilter;S.ppage=1;render(true)}
+ else if('clearfilters' in d){S.q='';S.block=S.occ='all';S.sort='unit';S.page=1;render(true)}
+ else if('applyfilters' in d){Object.assign(S,V.filters.d,{page:1});back()}
+ else if('reset' in d){history.replaceState(null,'',location.pathname);location.reload()}
+});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('tr[data-nav]'))go(parseNav(e.target.dataset.nav))});
+document.addEventListener('input',e=>{const t=e.target,d=t.dataset;
+ if(t.id==='uq'){S.q=t.value;S.page=1;renderUnitRows()}
+ else if(t.id==='pq'){S.pq=t.value;S.ppage=1;renderPeopleRows()}
+ else if(t.id==='kq')renderPicker();
+ else if(t.id==='xq')renderUnitPicker();
+ else if(['fn','fp','fe'].includes(t.id)){$('ferr').hidden=true;renderDupes()}
+ else if(d.f){S[d.f]=t.value;S.page=1;renderUnitRows()}
+ else if(d.fd)V.filters.d[d.fd]=t.value;
+ else if(d.size){S.size=+t.value;S.page=1;renderUnitRows()}
+ else if(d.d){D[d.d]=t.value;if(route.v==='register')render(true)}
+ else if(t.name==='choice')D.choice=+t.value;
+ else if(t.name==='regocc'){D.occ=t.value;render(true)}
+ else if(d.invite){D.invite[d.invite]=t.checked;if(route.v==='register')render(true)}
+});
+document.addEventListener('submit',e=>{e.preventDefault();if(e.target.id==='pform')saveForm()});
+history.replaceState(route,'','#units::');render();
+</script>
+</body>
+</html>
