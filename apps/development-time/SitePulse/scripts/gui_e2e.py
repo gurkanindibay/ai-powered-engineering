@@ -17,6 +17,7 @@ Examples:
   python3 scripts/gui_e2e.py --env-file backend/.env
   python3 scripts/gui_e2e.py run -m smoke --headed
   python3 scripts/gui_e2e.py run -k login --json
+  python3 scripts/gui_e2e.py run --record --task issue-123   # the run every task must record before its PR
   python3 scripts/gui_e2e.py serve
 
 Exit codes: 0 all selected tests passed, 1 test failures, 2 setup error.
@@ -74,14 +75,18 @@ def summarize_junit(path: Path) -> dict:
     return {k: int(suite.get(k, 0)) for k in ("tests", "failures", "errors", "skipped")} | {"cases": cases}
 
 
-def record_history() -> dict:
-    """Append this run's scenario executions to the test history (scripts/feature_traceability.py)."""
-    proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "feature_traceability.py"), "--json", "record"],
-                          capture_output=True, text=True)
+def record_history(task: str | None) -> dict:
+    """Append this run's scenario executions to the test history and refresh the HTML dashboard."""
+    tool = [sys.executable, str(ROOT / "scripts" / "feature_traceability.py"), "--json"]
+    proc = subprocess.run([*tool, "record", *(["--task", task] if task else [])], capture_output=True, text=True)
     try:
-        return json.loads(proc.stdout)
+        result = json.loads(proc.stdout)
     except json.JSONDecodeError:
         return {"error": (proc.stderr or proc.stdout).strip()[-500:]}
+    page = subprocess.run([*tool, "html"], capture_output=True, text=True)
+    if page.returncode == 0:
+        result.update(json.loads(page.stdout))
+    return result
 
 
 def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
@@ -108,7 +113,12 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
     proc = subprocess.run(argv, cwd=E2E, env=env,
                           stdout=subprocess.PIPE if args.json else None, stderr=subprocess.STDOUT if args.json else None,
                           text=True)
-    history = None if args.no_history else record_history()
+    history = record_history(args.task) if args.record else None
+    if history and not args.json:
+        print(f"test history: {history.get('records', 0)} scenario executions recorded"
+              f"{' as ' + history['run_id'] if history.get('records') else ''}; "
+              f"dashboard: {history.get('report', 'not generated')}" if 'error' not in history
+              else f"test history not recorded: {history['error']}")
     if args.json:
         summary = summarize_junit(junit)
         summary.update({"exit_code": proc.returncode, "seconds": round(time.time() - started, 1),
@@ -159,8 +169,11 @@ def main() -> int:
     ap.add_argument("-k", "--keyword", help="pytest -k expression")
     ap.add_argument("--rebuild", action="store_true", help="rebuild the E2E web bundle first")
     ap.add_argument("--json", action="store_true", help="print a JSON summary instead of pytest output")
-    ap.add_argument("--no-history", action="store_true",
-                    help="do not append this run to the test history (git branch test-history)")
+    ap.add_argument("--task", help="label of the work this run verifies, shown on the dashboard "
+                                   "(default: $SITEPULSE_TASK, else the branch)")
+    ap.add_argument("--record", action="store_true",
+                    help="append this run to the test history under .specify/executions (commit it with the task) "
+                         "and refresh the dashboard")
     args, passthrough = ap.parse_known_args()
     if args.browser != "chromium":
         args.browser_channel = ""

@@ -33,15 +33,27 @@ Amounts in steps are plain decimals (`500000.00`) and are parsed as `Decimal`.
 
 ## Results and history
 
-`scripts/gui_e2e.py` writes one record per scenario to `e2e/.artifacts/executions.jsonl` and appends
-the run to the local git branch `test-history` (`runs/<year>/<run id>.jsonl`, stamped with commit,
-branch and time). Read it with `scripts/feature_traceability.py`:
+Every task records the run that verifies it (AGENTS.md rule 13):
 
 ```bash
-python3 scripts/feature_traceability.py check                      # static gate `feature-traceability`
+python3 scripts/gui_e2e.py run --record --task "issue-123 virman transfer"
+```
+
+That writes, under `.specify/executions/` (committed with the task):
+
+| Path | Content |
+|---|---|
+| `runs/<year>/<run id>.jsonl` | One record per executed scenario: epic, story, scenario, status, duration, one status per step, error text, plus the run's task label, commit, branch and time |
+| `reports/<year>/<run id>.md` | The same run as a readable report: result, what regressed or was fixed, every scenario, and the automated scenarios that were not executed |
+
+A run id is `<UTC time>-<commit>`, so runs from different branches never collide. Recorded runs are append-only.
+The dashboard `e2e/.artifacts/feature-report.html` is regenerated after every recorded run.
+
+```bash
+python3 scripts/feature_traceability.py check --require-run        # gate: catalogue is consistent and this branch has a run
+python3 scripts/feature_traceability.py task-report                # markdown of this task's latest run, for the PR
+python3 scripts/feature_traceability.py runs --detail --limit 5    # recent runs: executed, regressed, fixed
 python3 scripts/feature_traceability.py report --epic EPIC-10 --steps
 python3 scripts/feature_traceability.py history SC-10-01-01
-python3 scripts/feature_traceability.py history STORY-10-05 --json
-python3 scripts/feature_traceability.py html                       # visual report: e2e/.artifacts/feature-report.html
-python3 scripts/feature_traceability.py record --push origin       # share the history branch
+python3 scripts/feature_traceability.py html                       # dashboard: e2e/.artifacts/feature-report.html
 ```

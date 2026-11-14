@@ -7,7 +7,8 @@ A record is produced for
 Scenario tags drive the rest: `@SC-…`, `@STORY-…`, `@EPIC-…` identify the scenario,
 `@GUI-…` becomes the `gui_id` marker, `@layer:<name>` names the test layer, and
 `@pending` / `@linked` scenarios are deselected (nothing to execute here).
-scripts/feature_traceability.py stores the records in the run history and reports on them.
+`scripts/gui_e2e.py run --record` stores the records in the run history (.specify/executions);
+scripts/feature_traceability.py reports on them.
 """
 from __future__ import annotations
 

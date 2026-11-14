@@ -242,14 +242,15 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ## 5b-5. Feature Traceability & Test History (`feature_traceability.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/feature_traceability.py](file:///apps/development-time/SitePulse/scripts/feature_traceability.py) (symlinked to `scripts/feature_traceability.py`)
-- **Purpose:** Epic → story → Gherkin scenario → execution traceability. The acceptance criteria are the `.feature` files under `.specify/features/EPIC-xx/` (tags `@EPIC-xx`, `@STORY-xx-yy`, `@SC-xx-yy-nn`; conventions in [.specify/features/README.md](file:///apps/development-time/SitePulse/.specify/features/README.md)). `check` is the static gate `feature-traceability`; `record` appends the last GUI run (one record per scenario, one status per step) to the git branch `test-history`; `report` shows the latest status per epic, story and scenario; `history <SC-|STORY-|EPIC- id>` shows the runs over time. `scripts/gui_e2e.py` records every run unless `--no-history` is passed.
+- **Purpose:** Epic → story → Gherkin scenario → execution traceability. The acceptance criteria are the `.feature` files under `.specify/features/EPIC-xx/` (tags `@EPIC-xx`, `@STORY-xx-yy`, `@SC-xx-yy-nn`; conventions in [.specify/features/README.md](file:///apps/development-time/SitePulse/.specify/features/README.md)). Every task records its verifying run with `gui_e2e.py run --record --task "<task>"` into `.specify/executions/` (run records plus a markdown report, committed with the task; AGENTS.md rule 13). `check` is the static gate `feature-traceability` (`--require-run` also demands a recorded run for the branch); `task-report` prints the task's latest run for the PR; `runs`, `report` and `history <SC-|STORY-|EPIC- id>` read the history; `html` writes the dashboard.
 
 ```bash
-./scripts/feature_traceability.py check --json
+./scripts/feature_traceability.py check --require-run
+./scripts/feature_traceability.py task-report
+./scripts/feature_traceability.py runs --detail --limit 5
 ./scripts/feature_traceability.py report --epic EPIC-10 --steps
 ./scripts/feature_traceability.py history SC-10-01-01 --limit 20
 ./scripts/feature_traceability.py html          # e2e/.artifacts/feature-report.html
-./scripts/feature_traceability.py record --push origin
 ```
 
 ## 5c. Test Execution & Verification Run (`run_tests.py`)
