@@ -559,13 +559,14 @@ impl AuthService {
         .await
         .map_err(|_| "Household storage unavailable")?
         .ok_or("The invited unit is unavailable")?;
-        let person = crate::db::person_repository::insert_site_person(
+        let person = crate::db::person_repository::resolve_new_site_person(
             &tx,
             &user.full_name,
             Some(&user.phone),
             Some(&user.email),
             "HOME_RESIDENT",
-            Some(site),
+            site,
+            false,
         )
         .await
         .map_err(|_| "This identity cannot be registered; ask your site manager for assistance")?;

@@ -207,8 +207,8 @@ pub async fn save_unit_member(
         None => {
             super::person_repository::insert_site_person(
                 &client,
-                &full_name,
-                Some(&phone),
+                full_name,
+                Some(phone),
                 (!normalized_email.is_empty()).then_some(normalized_email.as_str()),
                 "HOME_RESIDENT",
                 site_id,

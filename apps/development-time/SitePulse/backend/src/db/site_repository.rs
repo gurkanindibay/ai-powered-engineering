@@ -208,13 +208,14 @@ pub async fn create_site_with_manager_and_blocks(
     let numeric_site: i64 = site_row.get(0);
     let s_id = numeric_site.to_string();
 
-    let p_id = super::person_repository::insert_site_person(
+    let p_id = super::person_repository::resolve_new_site_person(
         &tx,
         admin_full_name,
         Some(admin_phone),
         Some(admin_email),
         "SITE_MANAGER",
-        Some(numeric_site),
+        numeric_site,
+        false,
     )
     .await?;
 
