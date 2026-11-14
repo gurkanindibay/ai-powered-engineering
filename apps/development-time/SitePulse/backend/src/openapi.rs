@@ -496,7 +496,7 @@ fn api_tags() -> Vec<serde_json::Value> {
 }
 
 fn component_schemas() -> serde_json::Value {
-    serde_json::json!({
+    let mut schemas = serde_json::json!({
         "ErrorEnvelope": {
             "type": "object",
             "required": ["error"],
@@ -898,7 +898,37 @@ fn component_schemas() -> serde_json::Value {
                 }
             }
         }
-    })
+    });
+
+    let person_schemas = utoipa::openapi::schema::ComponentsBuilder::new()
+        .schema_from::<crate::models::PersonRef>()
+        .schema_from::<crate::models::NewPerson>()
+        .schema_from::<crate::models::PersonRole>()
+        .schema_from::<crate::models::PersonLoginState>()
+        .schema_from::<crate::models::PersonCard>()
+        .schema_from::<crate::models::PersonEligibility>()
+        .schema_from::<crate::models::PersonSearchItem>()
+        .schema_from::<crate::models::PersonSearchContext>()
+        .schema_from::<crate::models::PersonSearchQuery>()
+        .schema_from::<crate::models::PersonSearchResponse>()
+        .schema_from::<crate::models::CreatePersonRequest>()
+        .schema_from::<crate::models::UpdatePersonRequest>()
+        .schema_from::<crate::models::PersonUnitRelation>()
+        .schema_from::<crate::models::PersonCardResponse>()
+        .schema_from::<crate::models::PersonMutationResponse>()
+        .build()
+        .schemas;
+
+    if let (Some(schema_map), Ok(generated_schemas)) = (
+        schemas.as_object_mut(),
+        serde_json::to_value(person_schemas),
+    ) {
+        if let Some(generated_schemas) = generated_schemas.as_object() {
+            schema_map.extend(generated_schemas.clone());
+        }
+    }
+
+    schemas
 }
 
 /// Returns the self-contained HTML page rendering interactive Swagger UI.
@@ -1025,4 +1055,37 @@ pub fn scalar_ui_html() -> &'static str {
   </body>
 </html>
 "#
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_openapi_spec;
+
+    #[test]
+    fn person_api_schemas_are_registered_in_openapi_components() {
+        let spec = build_openapi_spec();
+        for schema_name in [
+            "PersonRef",
+            "NewPerson",
+            "PersonRole",
+            "PersonLoginState",
+            "PersonCard",
+            "PersonEligibility",
+            "PersonSearchItem",
+            "PersonSearchContext",
+            "PersonSearchQuery",
+            "PersonSearchResponse",
+            "CreatePersonRequest",
+            "UpdatePersonRequest",
+            "PersonUnitRelation",
+            "PersonCardResponse",
+            "PersonMutationResponse",
+        ] {
+            assert!(
+                spec.pointer(&format!("/components/schemas/{schema_name}"))
+                    .is_some(),
+                "missing OpenAPI component schema {schema_name}"
+            );
+        }
+    }
 }
