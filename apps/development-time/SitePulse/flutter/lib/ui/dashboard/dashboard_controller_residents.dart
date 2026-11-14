@@ -559,50 +559,51 @@ extension DashboardControllerResidents on DashboardController {
     String? phone,
     String? email,
     String? siteId,
+    String? memberId,
   }) async {
-    final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
-
+    final index = _homeOwners.indexWhere((unit) => unit.unitId == unitId);
+    if (index == -1) return false;
+    final effectiveSiteId = siteId ?? _homeOwners[index].siteId;
+    var name = residentName;
+    var contactRole = role;
+    var contactPhone = phone;
+    var contactEmail = email;
+    var savedMemberId = memberId;
     if (!isTestMode) {
       try {
-        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/home-owners/$unitId?site_id=$effectiveSiteId');
-        final isOwner = role.toUpperCase() == 'OWNER';
-        final payload = <String, dynamic>{
-          if (isOwner) 'owner_full_name': residentName else 'tenant_full_name': residentName,
-          if (phone != null) (isOwner ? 'phone' : 'tenant_phone'): phone,
-          if (email != null) (isOwner ? 'email' : 'tenant_email'): email,
-        };
+        final url = Uri.parse('${ApiClient.baseUrl}/api/v1/site-admin/units/$unitId/responsible-contact?site_id=$effectiveSiteId');
         final response = await ApiClient.put(
           url,
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(payload),
+          body: json.encode({
+            'role': role,
+            'resident_name': residentName,
+            if (memberId != null) 'member_id': memberId,
+          }),
         ).timeout(const Duration(seconds: 4));
-        if (response.statusCode != 200 && response.statusCode != 204) {
-          debugPrint('setPrimaryResponsibleResident remote failed: ${response.statusCode}');
-          return false;
-        }
-      } catch (e) {
-        debugPrint('setPrimaryResponsibleResident remote error: $e');
+        if (response.statusCode != 200) return false;
+        final saved = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        name = saved['primary_responsible_name'] as String;
+        contactRole = saved['primary_responsible_role'] as String;
+        contactPhone = saved['primary_responsible_phone'] as String?;
+        contactEmail = saved['primary_responsible_email'] as String?;
+        savedMemberId = saved['primary_responsible_member_id'] as String?;
+      } catch (error) {
+        AppLogger.warn('Responsible contact save failed', tag: 'Residents');
         return false;
       }
     }
-
-    final index = _homeOwners.indexWhere((h) => h.unitId == unitId);
-    if (index != -1) {
-      _homeOwners[index] = _homeOwners[index].copyWith(
-        primaryResponsibleName: residentName,
-        primaryResponsibleRole: role,
-        primaryResponsiblePhone: phone,
-        primaryResponsibleEmail: email,
-      );
-    }
-
-    final flatIndex = _flatsList.indexWhere((f) => f.id == unitId || (index != -1 && f.unitNo == _homeOwners[index].unitNo));
-    if (flatIndex != -1) {
-      _flatsList[flatIndex] = _flatsList[flatIndex].copyWith(
-        residentName: residentName,
-      );
-    }
-
+    // The contact selection never changes ownership or the actual occupant.
+    final currentIndex = _homeOwners.indexWhere((unit) => unit.unitId == unitId);
+    if (currentIndex == -1) return false;
+    _homeOwners[currentIndex] = _homeOwners[currentIndex]
+        .copyWith(clearPrimaryResponsible: true).copyWith(
+      primaryResponsibleName: name,
+      primaryResponsibleRole: contactRole,
+      primaryResponsiblePhone: contactPhone,
+      primaryResponsibleEmail: contactEmail,
+      primaryResponsibleMemberId: savedMemberId,
+    );
     notify();
     return true;
   }

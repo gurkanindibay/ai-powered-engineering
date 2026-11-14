@@ -915,6 +915,7 @@ class HomeOwnerItem {
   final String? primaryResponsibleRole;
   final String? primaryResponsiblePhone;
   final String? primaryResponsibleEmail;
+  final String? primaryResponsibleMemberId;
 
   OccupancyStatus get occupancy => OccupancyStatus.fromCode(occupancyStatus);
 
@@ -958,7 +959,7 @@ class HomeOwnerItem {
   }
 
   String get activeResponsiblePhone {
-    if (primaryResponsiblePhone != null && primaryResponsiblePhone!.isNotEmpty) {
+    if (primaryResponsiblePhone != null) {
       return primaryResponsiblePhone!;
     }
     if (primaryResponsibleRole == 'OWNER') {
@@ -974,7 +975,7 @@ class HomeOwnerItem {
   }
 
   String get activeResponsibleEmail {
-    if (primaryResponsibleEmail != null && primaryResponsibleEmail!.isNotEmpty) {
+    if (primaryResponsibleEmail != null) {
       return primaryResponsibleEmail!;
     }
     if (primaryResponsibleRole == 'OWNER') {
@@ -1019,6 +1020,7 @@ class HomeOwnerItem {
     this.primaryResponsibleRole,
     this.primaryResponsiblePhone,
     this.primaryResponsibleEmail,
+    this.primaryResponsibleMemberId,
   }) : _operationalDuesBalance = operationalDuesBalance,
        _capitalDuesBalance = capitalDuesBalance,
        _advanceBalance = advanceBalance;
@@ -1059,6 +1061,7 @@ class HomeOwnerItem {
       primaryResponsibleRole: json['primary_responsible_role']?.toString(),
       primaryResponsiblePhone: json['primary_responsible_phone']?.toString(),
       primaryResponsibleEmail: json['primary_responsible_email']?.toString(),
+      primaryResponsibleMemberId: json['primary_responsible_member_id']?.toString(),
     );
   }
 
@@ -1092,6 +1095,7 @@ class HomeOwnerItem {
     String? primaryResponsibleRole,
     String? primaryResponsiblePhone,
     String? primaryResponsibleEmail,
+    String? primaryResponsibleMemberId,
     bool clearPrimaryResponsible = false,
   }) {
     return HomeOwnerItem(
@@ -1124,6 +1128,7 @@ class HomeOwnerItem {
       primaryResponsibleRole: clearPrimaryResponsible ? null : (primaryResponsibleRole ?? this.primaryResponsibleRole),
       primaryResponsiblePhone: clearPrimaryResponsible ? null : (primaryResponsiblePhone ?? this.primaryResponsiblePhone),
       primaryResponsibleEmail: clearPrimaryResponsible ? null : (primaryResponsibleEmail ?? this.primaryResponsibleEmail),
+      primaryResponsibleMemberId: clearPrimaryResponsible ? null : (primaryResponsibleMemberId ?? this.primaryResponsibleMemberId),
     );
   }
 
@@ -1155,6 +1160,7 @@ class HomeOwnerItem {
       'primary_responsible_role': primaryResponsibleRole,
       'primary_responsible_phone': primaryResponsiblePhone,
       'primary_responsible_email': primaryResponsibleEmail,
+      'primary_responsible_member_id': primaryResponsibleMemberId,
     };
   }
 }

@@ -551,3 +551,31 @@ pub async fn import_persons(
         .map(Json)
         .map_err(import_error)
 }
+
+/// Change only the selected unit communication contact.
+pub async fn select_responsible_contact(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Path(id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+    Json(request): Json<crate::models::SelectResponsibleContactRequest>,
+) -> Response {
+    let site = match scope.pinned(q.site_id) {
+        Ok(site) => site,
+        Err(error) => return error.into_response(),
+    };
+    match crate::services::responsible_contact_service::select(state, &site, &id, request).await {
+        Ok(contact) => Json(contact).into_response(),
+        Err(error) => {
+            use crate::services::responsible_contact_service::ResponsibleContactError;
+            match error {
+                ResponsibleContactError::NotFound => AppError::not_found(error.to_string()),
+                ResponsibleContactError::InvalidSelection => {
+                    AppError::validation(error.to_string())
+                }
+                ResponsibleContactError::Storage => AppError::unavailable(error.to_string()),
+            }
+            .into_response()
+        }
+    }
+}
