@@ -156,3 +156,11 @@ Executable scenarios: [`STORY-08-09-title-transfer-occupancy.feature`](../featur
 - **Description:** Each transition runs in a single database transaction with the unit row locked, takes an effective date (not in the future; it may be earlier than the recorded start of the session being closed, in which case the session start moves back to that date), and writes an audit record with the command, the previous state and the new state. `occupancy_status` is derived from the active occupancy session and cannot differ from it. The exit balance of a closed session is the sum of the unpaid liabilities charged to that person for that unit, not of all unpaid liabilities of the unit. A move-out never creates an occupancy session. Because a leave is often recorded after it happened, every move-out screen lets the Site Manager choose the effective date (default today); the same date rules apply.
 - **Acceptance Criteria (Gherkin):**
 Executable scenarios: [`STORY-08-10-atomic-transitions-exit-balance.feature`](../features/EPIC-08/STORY-08-10-atomic-transitions-exit-balance.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+---
+
+### STORY-08-11: Actions-First Unit Workspace
+- **Status:** IN PROGRESS
+- **Description:** A unit opens in a full-screen workspace with two modes on the same unit: actions and information. The action list follows the unit's allowed commands and keeps the existing occupancy workflows; the information mode keeps residents, owners and the separate operating and capital ledgers. The workspace is opened from the unit card; wiring it to the directory rows is a later task.
+- **Acceptance Criteria (Gherkin):**
+Executable scenarios: [`STORY-08-11-unit-workspace.feature`](../features/EPIC-08/STORY-08-11-unit-workspace.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
