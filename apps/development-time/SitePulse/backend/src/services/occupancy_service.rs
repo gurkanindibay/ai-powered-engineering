@@ -256,7 +256,7 @@ async fn resolve_tenant(
         email.as_deref(),
         "HOME_RESIDENT",
         site,
-        false,
+        true,
     )
     .await
     .map_err(|error| OccupancyError::Storage(error.to_string()))

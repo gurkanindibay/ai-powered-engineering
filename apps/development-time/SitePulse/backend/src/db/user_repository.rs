@@ -63,7 +63,7 @@ pub async fn save_user(
                     Some(&email),
                     p_type,
                     site_id,
-                    false,
+                    true,
                 )
                 .await?
             } else {

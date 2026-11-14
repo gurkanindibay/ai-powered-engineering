@@ -490,7 +490,7 @@ impl SiteAdminService {
                     Some(&email_norm),
                     person_type,
                     site_numeric_id,
-                    false,
+                    true,
                 )
                 .await
                 .map_err(|e| format!("Failed to insert person: {}", e))?
@@ -568,7 +568,7 @@ impl SiteAdminService {
                         Some(&t_email_norm),
                         "HOME_RESIDENT",
                         site_numeric_id,
-                        false,
+                        true,
                     )
                     .await
                     .map_err(|e| format!("Failed to insert tenant person: {}", e))?
@@ -1700,7 +1700,7 @@ impl SiteAdminService {
                                     Some(&t_email),
                                     "HOME_RESIDENT",
                                     site_numeric,
-                                    false,
+                                    true,
                                 )
                                 .await
                                 .map_err(|e| format!("Failed to save tenant: {}", e))?,

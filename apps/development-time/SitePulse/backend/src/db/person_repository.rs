@@ -18,6 +18,9 @@ pub enum ResolvePersonError {
 }
 
 /// Resolves a new site person in the caller's transaction after duplicate checks.
+/// Legacy request adapters pass `confirm_distinct = true` until the client can show
+/// candidates and collect an explicit choice; new `PersonRef` callers must pass false
+/// unless the manager confirms a distinct person.
 pub async fn resolve_new_site_person(
     tx: &deadpool_postgres::Transaction<'_>,
     full_name: &str,

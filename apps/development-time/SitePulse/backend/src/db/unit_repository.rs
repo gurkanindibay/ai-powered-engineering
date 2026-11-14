@@ -213,7 +213,7 @@ pub async fn save_unit_member(
                     (!normalized_email.is_empty()).then_some(normalized_email.as_str()),
                     "HOME_RESIDENT",
                     site,
-                    false,
+                    true,
                 )
                 .await?
             } else {

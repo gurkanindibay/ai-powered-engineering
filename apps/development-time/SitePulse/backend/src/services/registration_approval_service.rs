@@ -229,7 +229,7 @@ impl RegistrationApprovalService {
                 Some(&email),
                 role.as_str(),
                 site,
-                false,
+                true,
             )
             .await
             .map_err(|_| SecurityError::Conflict)?;

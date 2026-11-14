@@ -566,7 +566,7 @@ impl AuthService {
             Some(&user.email),
             "HOME_RESIDENT",
             site,
-            false,
+            true,
         )
         .await
         .map_err(|_| "This identity cannot be registered; ask your site manager for assistance")?;
