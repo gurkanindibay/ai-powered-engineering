@@ -686,7 +686,8 @@
         "tenant-lint",
         "logging-standards-lint"
       ],
-      "attempts": 0
+      "attempts": 0,
+      "evidence": ".specify/evidence/task-33.json"
     },
     {
       "id": "task-34",

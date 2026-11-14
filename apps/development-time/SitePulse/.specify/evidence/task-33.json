@@ -1,0 +1,77 @@
+{
+  "task_id": "task-33",
+  "passed": true,
+  "started_at": "2026-11-14T23:28:14.255507+00:00",
+  "finished_at": "2026-11-14T23:30:29.352279+00:00",
+  "gates": [
+    {
+      "name": "rust-build",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo build --all-targets --locked",
+      "duration_s": 62.801283600972965
+    },
+    {
+      "name": "rust-clippy",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo clippy --all-targets --locked -- -D warnings",
+      "duration_s": 5.3430284030037
+    },
+    {
+      "name": "flutter-analyze",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter analyze --no-fatal-infos --no-fatal-warnings",
+      "duration_s": 4.965762601990718
+    },
+    {
+      "name": "test-run-recorded",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/feature_traceability.py --json check --require-run",
+      "duration_s": 0.36948069802019745
+    },
+    {
+      "name": "rust-test",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo test --locked",
+      "duration_s": 9.84724874200765
+    },
+    {
+      "name": "api-system",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/api_system_check.py --json",
+      "duration_s": 22.832067402021494
+    },
+    {
+      "name": "schema-integrity",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/schema_integrity_check.py --json",
+      "duration_s": 28.182488292979542
+    },
+    {
+      "name": "tenant-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/tenant_isolation_lint.py --json",
+      "duration_s": 0.09371251903939992
+    },
+    {
+      "name": "logging-standards-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/logging_standards_lint.py --json",
+      "duration_s": 0.6602164770010859
+    }
+  ],
+  "acceptance_tests": [],
+  "gates_evaluated": 9,
+  "diagnostics": [],
+  "commit": "e1aa0367ecd293fd37d204f944f8b542101ecdb7",
+  "dirty": true,
+  "attempts": 0
+}
