@@ -249,13 +249,16 @@ async fn resolve_tenant(
         .filter(|n| !n.is_empty())
         .ok_or(OccupancyError::TenantRequired)?;
     let phone = req.phone.clone().unwrap_or_default();
-    let row = tx
-        .query_one(
-            "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, 'HOME_RESIDENT', $4) RETURNING id",
-            &[&full_name, &phone, &email, &site],
-        )
-        .await?;
-    Ok(row.get(0))
+    crate::db::person_repository::insert_site_person(
+        tx,
+        full_name,
+        Some(&phone),
+        email.as_deref(),
+        "HOME_RESIDENT",
+        Some(site),
+    )
+    .await
+    .map_err(OccupancyError::from)
 }
 
 /// Which owner moves in. Person data never creates an owner: an email is only

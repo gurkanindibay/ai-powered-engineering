@@ -8,6 +8,7 @@ pub mod finance_store;
 pub mod occupancy_repository;
 pub mod payment_intent_repository;
 pub mod payment_repository;
+pub mod person_repository;
 pub mod reconciliation_repository;
 pub mod registration_repository;
 pub mod site_repository;

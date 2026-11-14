@@ -54,13 +54,17 @@ pub async fn save_user(
                 Role::SiteManager => "SITE_MANAGER",
                 Role::Auditor => "AUDITOR",
             };
-            let row = client
-                .query_one(
-                    "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-                    &[&user.full_name, &user.phone, &email, &p_type, &site_id_num],
+            Some(
+                super::person_repository::insert_site_person_client(
+                    &client,
+                    &user.full_name,
+                    Some(&user.phone),
+                    Some(&email),
+                    p_type,
+                    site_id_num,
                 )
-                .await?;
-            Some(row.get(0))
+                .await?,
+            )
         } else {
             None
         }
@@ -213,13 +217,15 @@ pub async fn ensure_bootstrap_admin(
         .await?;
     let person_id: i64 = match existing {
         Some(row) => row.get(0),
-        None => client
-            .query_one(
-                "INSERT INTO persons (full_name, email, person_type) VALUES ('SaaS Platform Admin', $1, 'SAAS_ADMIN') RETURNING id",
-                &[&email],
+        None => {
+            super::person_repository::insert_platform_person(
+                &client,
+                "SaaS Platform Admin",
+                &email,
+                "SAAS_ADMIN",
             )
             .await?
-            .get(0),
+        }
     };
     client
         .execute(
