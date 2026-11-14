@@ -743,7 +743,7 @@
       "id": "task-36",
       "name": "Build person field, picker, form and card components",
       "module": "flutter-ui",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-40"
       ],
