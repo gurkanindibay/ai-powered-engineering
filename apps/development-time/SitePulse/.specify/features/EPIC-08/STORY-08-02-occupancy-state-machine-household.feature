@@ -2,6 +2,11 @@
 Feature: Unit occupancy state machine and household resident scoping
   Household members are scoped to the current active resident.
 
+  @SC-08-02-03 @pending
+  Scenario: A possible household person duplicate requires manager confirmation
+    Given the site already has a person with the same normalized phone or similar name
+    When a manager adds a different household member without confirming the match
+    Then the household change is rejected and the matching person candidates are returned
   @SC-08-02-01 @GUI-08-03 @layer:gui @linked @core @role_manager
   Scenario: Household members are bound to the active resident session
     Given Tenant "Zeynep Kaya" lives in "B Blok D:12" with household members "Ali Kaya (Son)" and "Can Kaya (Brother)"
