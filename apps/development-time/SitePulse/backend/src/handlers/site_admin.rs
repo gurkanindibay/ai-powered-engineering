@@ -579,3 +579,113 @@ pub async fn select_responsible_contact(
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Unified person API (task-33): scoped search, role-free create, card, edit.
+// ---------------------------------------------------------------------------
+
+/// Query for person routes: the unified-API search fields plus the pinned site.
+#[derive(Debug, Deserialize)]
+pub struct PersonSearchParams {
+    #[serde(flatten)]
+    pub search: crate::models::PersonSearchQuery,
+    #[serde(default)]
+    pub site_id: Option<String>,
+}
+
+fn person_api_error(e: crate::services::person_service::PersonApiError) -> AppError {
+    use crate::services::person_service::PersonApiError as E;
+    match e {
+        E::NotFound => AppError::not_found("Person not found"),
+        E::Validation(msg) => AppError::validation(msg),
+        E::StaleVersion => AppError::coded_conflict(
+            "PERSON_VERSION_CONFLICT",
+            "The person card changed since it was loaded. Reload and retry.",
+            serde_json::json!({ "overridable": false }),
+        ),
+        E::IdentityTaken(person_id) => AppError::coded_conflict(
+            "PERSON_IDENTITY_TAKEN",
+            "This person is already recorded in the site.",
+            serde_json::json!({ "overridable": false, "person_id": person_id }),
+        ),
+        E::PossibleDuplicate(found) => AppError::coded_conflict(
+            "PERSON_POSSIBLE_DUPLICATE",
+            "A similar person already exists in the site.",
+            serde_json::json!({
+                "overridable": true,
+                "candidates": found.iter().map(|m| serde_json::json!({
+                    "person_id": m.person_id,
+                    "reasons": m.reasons,
+                })).collect::<Vec<_>>(),
+            }),
+        ),
+        E::Unavailable => AppError::unavailable(e.to_string()),
+        E::Storage(_) => AppError::internal(e.to_string()),
+    }
+}
+
+fn site_number(site_id: &str) -> Result<i64, AppError> {
+    crate::db::parse_id_to_i64(site_id).ok_or_else(|| AppError::validation("Site is not valid"))
+}
+
+/// Type-ahead person search with role eligibility for the picker.
+pub async fn search_people(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Query(q): Query<PersonSearchParams>,
+) -> Result<Json<crate::models::PersonSearchResponse>, AppError> {
+    let site = site_number(&scope.pinned(q.site_id)?)?;
+    crate::services::person_service::PersonService::new(&state)
+        .search(site, &q.search)
+        .await
+        .map(Json)
+        .map_err(person_api_error)
+}
+
+/// Creates a card that holds no role yet.
+pub async fn create_person(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<crate::models::CreatePersonRequest>,
+) -> Result<(StatusCode, Json<crate::models::PersonMutationResponse>), AppError> {
+    let site = site_number(&scope.pinned(q.site_id)?)?;
+    crate::services::person_service::PersonService::new(&state)
+        .create(site, &payload)
+        .await
+        .map(|body| (StatusCode::CREATED, Json(body)))
+        .map_err(person_api_error)
+}
+
+/// One card with role flags, version and unit history.
+pub async fn get_person_card(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Path(person_id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+) -> Result<Json<crate::models::PersonCardResponse>, AppError> {
+    let site = site_number(&scope.pinned(q.site_id)?)?;
+    let id = person_id_of(&person_id)?;
+    crate::services::person_service::PersonService::new(&state)
+        .card(site, id)
+        .await
+        .map(Json)
+        .map_err(person_api_error)
+}
+
+/// Edits name, phone and email; the request must carry the card `version`.
+pub async fn update_person(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Path(person_id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<crate::models::UpdatePersonRequest>,
+) -> Result<Json<crate::models::PersonMutationResponse>, AppError> {
+    let site = site_number(&scope.pinned(q.site_id)?)?;
+    let id = person_id_of(&person_id)?;
+    crate::services::person_service::PersonService::new(&state)
+        .update(site, id, &payload)
+        .await
+        .map(Json)
+        .map_err(person_api_error)
+}
