@@ -105,24 +105,6 @@ pub async fn insert_site_person(
     Ok(row.get(0))
 }
 
-/// Inserts a site person through a pooled client for legacy non-transactional callers.
-pub async fn insert_site_person_client(
-    client: &deadpool_postgres::Client,
-    full_name: &str,
-    phone: Option<&str>,
-    email: Option<&str>,
-    person_type: &str,
-    site_id: Option<i64>,
-) -> Result<i64, tokio_postgres::Error> {
-    let row = client
-        .query_one(
-            "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-            &[&full_name, &phone, &email, &person_type, &site_id],
-        )
-        .await?;
-    Ok(row.get(0))
-}
-
 /// Inserts a platform person without a tenant site.
 pub async fn insert_platform_person(
     client: &deadpool_postgres::Client,
