@@ -197,7 +197,7 @@ async fn ensure_occupancy(t: &TestDb, unit: i64) {
 
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
-// covers: SC-12-04-02, SC-12-04-03
+// covers: SC-12-05-02, SC-12-05-03
 async fn person_cards_are_created_edited_and_stay_in_their_site() {
     let t = TestDb::create("person_card").await;
     let a = t.site_id("begonya-sitesi").await;
@@ -325,7 +325,7 @@ async fn person_cards_are_created_edited_and_stay_in_their_site() {
 
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
-// covers: SC-12-04-01
+// covers: SC-12-05-01
 async fn search_reports_role_eligibility_for_a_unit() {
     let t = TestDb::create("person_eligibility").await;
     let a = t.site_id("begonya-sitesi").await;
@@ -360,7 +360,7 @@ async fn search_reports_role_eligibility_for_a_unit() {
 
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
-// covers: SC-12-04-04, SC-12-04-05
+// covers: SC-12-05-04, SC-12-05-05
 async fn household_by_reference_and_primary_contact_by_person() {
     let t = TestDb::create("person_household").await;
     let a = t.site_id("begonya-sitesi").await;
@@ -552,7 +552,7 @@ async fn logins_open_with_an_activation_link_and_removal_needs_step_up() {
 
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
-// covers: SC-12-04-04
+// covers: SC-12-05-04
 async fn registration_accepts_person_references_for_owner_and_members() {
     let t = TestDb::create("person_register").await;
     let a = t.site_id("begonya-sitesi").await;

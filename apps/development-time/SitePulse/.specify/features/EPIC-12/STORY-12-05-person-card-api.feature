@@ -1,6 +1,6 @@
-@EPIC-12 @STORY-12-04
+@EPIC-12 @STORY-12-05
 Feature: Person card API and reference-based commands
-  @SC-12-04-01
+  @SC-12-05-01
   @layer:db
   @linked
   Scenario: Search offers people with role eligibility for the unit
@@ -9,7 +9,7 @@ Feature: Person card API and reference-based commands
     Then the owner is returned as not eligible with code OWNER_CANNOT_BE_TENANT
     And people of other sites are never returned
 
-  @SC-12-04-02
+  @SC-12-05-02
   @layer:db
   @linked
   Scenario: Creating a card reports possible duplicates unless confirmed
@@ -18,7 +18,7 @@ Feature: Person card API and reference-based commands
     Then the request is rejected with PERSON_POSSIBLE_DUPLICATE and the candidates
     And the same request with confirm_distinct creates the card
 
-  @SC-12-04-03
+  @SC-12-05-03
   @layer:db
   @linked
   Scenario: Editing a card needs the current version
@@ -26,7 +26,7 @@ Feature: Person card API and reference-based commands
     When the manager edits it with version 2
     Then the edit is rejected with PERSON_VERSION_CONFLICT
 
-  @SC-12-04-04
+  @SC-12-05-04
   @layer:db
   @linked
   Scenario: Actions accept an existing person or a new card
@@ -34,7 +34,7 @@ Feature: Person card API and reference-based commands
     When the manager adds a household member by person reference
     Then the member links to that card and no second card is created
 
-  @SC-12-04-05
+  @SC-12-05-05
   @layer:db
   @linked
   Scenario: The primary contact is selected by person

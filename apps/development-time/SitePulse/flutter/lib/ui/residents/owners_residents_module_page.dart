@@ -70,6 +70,28 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> w
   String get _occupancyFilter => _occupancyFilterState.value;
   String get _sortMode => _sortModeState.value;
   final Map<String, int> _unitTabs = {}; // 0: Sakinler, 1: Kat Maliki
+  final Map<String, FocusNode> _actionFocusNodes = {};
+  final Map<String, FocusNode> _detailFocusNodes = {};
+
+  FocusNode _getActionFocusNode(String id) =>
+      _actionFocusNodes.putIfAbsent(id, () => FocusNode(debugLabel: 'unit_action_$id'));
+
+  FocusNode _getDetailFocusNode(String id) =>
+      _detailFocusNodes.putIfAbsent(id, () => FocusNode(debugLabel: 'unit_detail_$id'));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialUnitId != null && widget.initialUnitId!.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final matches = widget.controller.homeOwners.where((h) => h.unitId == widget.initialUnitId);
+        if (matches.isNotEmpty) {
+          _openUnitWorkspace(matches.first);
+        }
+      });
+    }
+  }
 
   @override
   String? get restorationId => 'owners_residents_directory';
@@ -88,6 +110,14 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> w
 
   @override
   void dispose() {
+    for (final fn in _actionFocusNodes.values) {
+      fn.dispose();
+    }
+    _actionFocusNodes.clear();
+    for (final fn in _detailFocusNodes.values) {
+      fn.dispose();
+    }
+    _detailFocusNodes.clear();
     unregisterFromRestoration(_searchController);
     unregisterFromRestoration(_blockFilterState);
     unregisterFromRestoration(_occupancyFilterState);
@@ -124,10 +154,11 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> w
         filtered.sort((a, b) => compareUnitDirectoryItems(a, b, descending: _sortMode == 'reverse'));
 
         final stats = ResidentOccupancyStats.from(homeOwners);
+        final isPhone = MediaQuery.sizeOf(context).width < 720;
 
         return AppFullscreenPage(
-          title: 'Kat Malikleri & Sakinler Modülü',
-          subtitle: '${widget.controller.userSession.siteName} • Yönetim ve Operasyon Portalı',
+          title: isPhone ? 'Kat Malikleri & Sakinler' : 'Kat Malikleri & Sakinler Modülü',
+          subtitle: isPhone ? null : '${widget.controller.userSession.siteName} • Yönetim ve Operasyon Portalı',
           icon: const Icon(Icons.people_alt, color: AppColors.accentCyan),
           actions: [
             testId('module_people_directory_btn', OutlinedButton.icon(
@@ -140,17 +171,24 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> w
               label: const Text('Kişiler', style: TextStyle(fontSize: 12)),
             )),
             const SizedBox(width: AppSpacing.sm),
-            OutlinedButton.icon(
-              onPressed: () => showManageHouseTypesFullscreen(context, widget.controller),
-              icon: const Icon(Icons.home_work_outlined, size: 14),
-              label: const Text('Konut Tipleri & Tarifeler', style: TextStyle(fontSize: 12)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.accentPurple,
-                side: const BorderSide(color: AppColors.accentPurple),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            if (isPhone)
+              IconButton(
+                onPressed: () => showManageHouseTypesFullscreen(context, widget.controller),
+                icon: const Icon(Icons.home_work_outlined, size: 18, color: AppColors.accentPurple),
+                tooltip: 'Konut Tipleri & Tarifeler',
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: () => showManageHouseTypesFullscreen(context, widget.controller),
+                icon: const Icon(Icons.home_work_outlined, size: 14),
+                label: const Text('Konut Tipleri & Tarifeler', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.accentPurple,
+                  side: const BorderSide(color: AppColors.accentPurple),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                ),
               ),
-            ),
           ],
           bottomBar: AppFullscreenPage.buildBottomBar(
             context: context,
@@ -291,6 +329,8 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> w
                   ),
             itemBuilder: (context, unit, index) => UnitDirectoryRow(
               unit: unit,
+              actionsFocusNode: _getActionFocusNode(unit.unitId),
+              detailsFocusNode: _getDetailFocusNode(unit.unitId),
               onActions: () => _openUnitActions(unit),
               onDetails: () => _openUnitDetails(unit),
             ),
@@ -323,45 +363,20 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> w
   }
 
   Future<void> _openUnitActions(HomeOwnerItem unit) async {
-    await AppFullscreenPage.push<void>(
-      context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setActionState) {
-          _unitActionsSetState = setActionState;
-          return AppFullscreenPage(
-            title: '${unit.block} ${unit.unitNo} • İşlemler',
-            subtitle: widget.controller.userSession.siteName,
-            icon: const Icon(Icons.bolt_outlined),
-            maxWidth: 960,
-            child: _buildUnitCard(unit),
-          );
-        },
-      ),
+    final focusNode = _getActionFocusNode(unit.unitId);
+    await _openUnitWorkspace(
+      unit,
+      mode: UnitWorkspaceMode.actions,
+      returnFocusNode: focusNode,
     );
-    _unitActionsSetState = null;
   }
 
   Future<void> _openUnitDetails(HomeOwnerItem unit) async {
-    await AppFullscreenPage.push<void>(
-      context: context,
-      builder: (_) => AppFullscreenPage(
-        title: '${unit.block} ${unit.unitNo} • Detay',
-        subtitle: widget.controller.userSession.siteName,
-        icon: const Icon(Icons.home_outlined),
-        maxWidth: 960,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ListTile(title: const Text('Durum'), subtitle: Text(unit.isTenantOccupied ? 'Kiracılı' : unit.isVacant ? 'Boş' : 'Malik mukim')),
-            ListTile(title: const Text('Kat'), subtitle: Text(unit.floor.toString())),
-            if (unit.houseType != null) ListTile(title: const Text('Konut tipi'), subtitle: Text(unit.houseType!)),
-            ListTile(title: const Text('Malik'), subtitle: Text(unit.ownerFullName)),
-            if (unit.tenantFullName != null) ListTile(title: const Text('Kiracı'), subtitle: Text(unit.tenantFullName!)),
-            ListTile(title: const Text('Birincil muhatap'), subtitle: Text(unit.activeResponsibleResidentName)),
-            ListTile(title: const Text('Aylık aidat'), subtitle: Text(formatTry(unit.monthlyDues))),
-          ],
-        ),
-      ),
+    final focusNode = _getDetailFocusNode(unit.unitId);
+    await _openUnitWorkspace(
+      unit,
+      mode: UnitWorkspaceMode.information,
+      returnFocusNode: focusNode,
     );
   }
 
@@ -371,4 +386,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> w
     setState(change);
     _unitActionsSetState?.call(() {});
   }
+
+  @visibleForTesting
+  Widget buildUnitCard(HomeOwnerItem ho) => _buildUnitCard(ho);
 }

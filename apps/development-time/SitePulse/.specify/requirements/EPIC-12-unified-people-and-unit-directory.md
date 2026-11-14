@@ -53,7 +53,20 @@ Executable scenarios: [STORY-12-02-unit-directory.feature](../features/EPIC-12/S
 
 Executable scenarios: [STORY-12-03-person-selection.feature](../features/EPIC-12/STORY-12-03-person-selection.feature).
 
-### STORY-12-04: Person card API and reference-based commands
+### STORY-12-04: People directory
+- **Status:** IN PROGRESS
+- **Task Ref:** task-37 / GitHub issue #88
+- **Description:** Move the people list onto the shared directory scaffold while keeping the existing person profile page and server-side search, filters and paging.
+- **Acceptance Criteria:**
+  - Search and the existing role and login filters query the server and reset paging.
+  - The shared pager requests the selected server page and page size without loading the whole directory.
+  - Query, filters, page and page size survive app restoration; list scroll state survives opening and returning from a person profile.
+  - The existing profile, import and audited CSV export remain available.
+- **Verification:** targeted Flutter tests, GUI scenarios, Flutter analysis, shared-component reuse, UI style, test ID, and logging standards checks.
+
+Executable scenarios: [STORY-12-04-people-directory.feature](../features/EPIC-12/STORY-12-04-people-directory.feature).
+
+### STORY-12-05: Person card API and reference-based commands
 - **Status:** IN PROGRESS
 - **Task Ref:** task-33 / GitHub issue #84
 - **Description:** Expose scoped person search, role-free create, card read, version-checked edit and login routes, and let unit commands accept a `PersonRef` while legacy request fields remain for one release.
@@ -63,4 +76,4 @@ Executable scenarios: [STORY-12-03-person-selection.feature](../features/EPIC-12
   - Household, occupancy and registration approval accept an existing or new person; the primary contact is selected by `person_id`.
 - **Verification:** cargo build, clippy, tests, tenant isolation lint, API system checks against PostgreSQL.
 
-Executable scenarios: [STORY-12-04-person-card-api.feature](../features/EPIC-12/STORY-12-04-person-card-api.feature).
+Executable scenarios: [STORY-12-05-person-card-api.feature](../features/EPIC-12/STORY-12-05-person-card-api.feature).

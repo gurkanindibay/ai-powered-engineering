@@ -1,0 +1,102 @@
+{
+  "task_id": "task-41",
+  "passed": true,
+  "started_at": "2026-11-14T22:58:18.818267+00:00",
+  "finished_at": "2026-11-14T22:59:22.546836+00:00",
+  "gates": [
+    {
+      "name": "rust-build",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo build --all-targets --locked",
+      "duration_s": 0.4274866000050679
+    },
+    {
+      "name": "rust-clippy",
+      "passed": true,
+      "diagnostics": [],
+      "command": "cargo clippy --all-targets --locked -- -D warnings",
+      "duration_s": 0.4143066260148771
+    },
+    {
+      "name": "flutter-analyze",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter analyze --no-fatal-infos --no-fatal-warnings",
+      "duration_s": 4.971509539987892
+    },
+    {
+      "name": "test-run-recorded",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/feature_traceability.py --json check --require-run",
+      "duration_s": 0.15176489303121343
+    },
+    {
+      "name": "flutter-test",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter test",
+      "duration_s": 35.36440512200352
+    },
+    {
+      "name": "flutter-reuse",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/flutter_reuse_inventory.py --check --json",
+      "duration_s": 0.7191063509671949
+    },
+    {
+      "name": "ui-style-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/ui_style_lint.py --json",
+      "duration_s": 0.3690743549959734
+    },
+    {
+      "name": "testid-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/testid_lint.py --json",
+      "duration_s": 0.1209537640097551
+    },
+    {
+      "name": "logging-standards-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/logging_standards_lint.py --json",
+      "duration_s": 0.6834814939647913
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "id": "flutter:test/unit_workspace_test.dart",
+      "name": "flutter:test/unit_workspace_test.dart",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter test test/unit_workspace_test.dart",
+      "duration_s": 6.126468496979214
+    },
+    {
+      "id": "flutter:test/unit_directory_row_test.dart",
+      "name": "flutter:test/unit_directory_row_test.dart",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter test test/unit_directory_row_test.dart",
+      "duration_s": 3.9221958949929103
+    },
+    {
+      "id": "flutter:test/owners_residents_module_test.dart",
+      "name": "flutter:test/owners_residents_module_test.dart",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter test test/owners_residents_module_test.dart",
+      "duration_s": 10.456224150024354
+    }
+  ],
+  "gates_evaluated": 12,
+  "diagnostics": [],
+  "commit": "fcf05cd4675b536d3071aab6369ace0e9fe8e421",
+  "dirty": true,
+  "attempts": 0
+}

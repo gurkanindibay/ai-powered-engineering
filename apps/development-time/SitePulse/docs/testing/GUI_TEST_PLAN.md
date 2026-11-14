@@ -90,6 +90,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | — | 11-01, 11-02, 11-03, 11-04, 11-05, 11-06, 11-07, 11-08, 11-09, 11-10, 11-11, 11-12, 11-13, 11-14 | — | — | — | **Excluded:** payments phase 3 has no GUI scenarios yet; covered by `backend/tests/payments_phase3_tests.rs`, `flutter/test/payments_phase3_test.dart` and `scripts/api_system_check.py`. | | |
 | — | 12-01 | — | — | — | **Excluded:** backend schema foundation; GUI coverage belongs to the API and client stories that follow. | | |
 | — | 12-03 | — | — | — | **Partial (confirmed gap):** shared person picker and form components are tested as Flutter widgets but are not wired into a manager screen yet; browser coverage follows when action flows integrate them in issue #99. | | |
+| — | 12-05 | — | — | — | **Excluded:** REST and persistence contract with no GUI surface yet; covered by `backend/tests/db_person_api_tests.rs` and `scripts/api_system_check.py`. | | |
 
 ### EPIC-04 Invitation & Approval Workflow
 | ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |
@@ -135,7 +136,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | GUI-08-12 | 08-08 | Manager | P1 | ui:GUI-08-01 + `overdue_dues(tenant, 1500.00)` | Replace the tenant → the previous tenant's history entry shows "Left with ₺1.500,00", the new tenant is active. Then "owner takes the unit back" → unit owner-occupied, owner unchanged | to be defined with the UI | ❌ not built (story pending) |
 | GUI-08-13 | 08-09 | Manager | P1 | seed (owner-occupied unit) | Transfer ownership of an owner-occupied unit → unit vacant with the new owner. Repeat with "new owner moves in" → owner-occupied by the new owner | to be defined with the UI | ❌ not built (story pending) |
 | GUI-08-14 | 08-10 | Manager | P1 | seed + vacant-period owner dues + tenant dues | Move-out → the exit balance in history equals the tenant's own unpaid dues, not the unit total. A move-out date before the session start is rejected with a message | to be defined with the UI | ❌ not built (story pending) |
-| GUI-08-15 | 08-11 | Manager | P1 | seed | Unit card → open workspace → actions and information tabs switch modes; allowed actions match unit status | unit_workspace_* | ❌ not built (story pending) |
+| GUI-08-15 | 08-11 | Manager | P1 | seed | Directory row → open workspace → actions and information tabs switch modes; allowed actions match unit status | unit_workspace_*, workspace_actions, workspace_information | ✅ |
 
 ### EPIC-09 Payment Tracking & Treasury
 | ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |
@@ -173,6 +174,11 @@ Each journey is one test that follows a single user from the first sign-in with 
 | GUI-J-03 | 01-02/01-04/04-07/06-01/06-06/07-04 | Owner | P0 | SQL: overdue dues on A Blok D:14; owner flagged | Gate → balance = API total with penalty, overdue badge → virtual IBAN = API → unit invite link → manager pages and API closed → change the password from the profile → sign in again | `hero_balance_amount`, `virtual_iban_text`, `resident_action_invite`, `invite_link_text` | ✅ |
 | GUI-J-04 | 04-07/06-01/06-06/08-02 | Resident | P0 | API: owner invite link → resident registration (issued temporary password) | Gate → the flat's balance = API → no invite action, invite API refused → manager pages and API closed → sign in again | `hero_balance_amount`, no `resident_action_invite` | ✅ |
 | GUI-J-05 | 06-01/06-06 | Auditor | P0 | SQL: auditor account (no API issues one) | Gate → ledger rows = API trial balance → read-only (no requests tab, dunning or notice publishing) → manager/resident pages and API closed → sign in again | `finance_tab_*`, `trial_balance_*` | ✅ |
+
+### EPIC-12 Unified People and Unit Directory
+| ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |
+|---|---|---|---|---|---|---|---|
+| GUI-12-01 | 12-04 | Manager | P1 | seed people directory | Search for a person, apply an activation filter, page through results, open a person profile and return → the query, filters and directory position remain available | `people_search_input`, `people_filter_pending`, `people_filter_no_login`, person rows, directory pager | ✅ |
 
 ### Cross-cutting
 | ID | Role | Pri | Steps → Expected | UI |

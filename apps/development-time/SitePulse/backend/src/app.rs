@@ -73,6 +73,7 @@ routes! {
     post "/api/v1/site-admin/persons/duplicate-check" => handlers::check_person_duplicates, Require(PersonRead);
     post "/api/v1/site-admin/persons/import" => handlers::import_persons, Require(PersonManage);
     put "/api/v1/site-admin/persons/:person_id/national-id" => handlers::set_person_national_id, Require(PersonIdentityManage);
+    post "/api/v1/site-admin/persons/:person_id/merge" => handlers::merge_person, Require(PersonManage);
     put "/api/v1/site-admin/persons/:person_id/preferences" => handlers::update_person_preferences, Require(PersonManage);
     put "/api/v1/site-admin/units/:id/responsible-contact" => handlers::select_responsible_contact, Require(PersonManage);
     post "/api/v1/site-admin/units/:id/move-out" => handlers::move_out_resident, Require(OccupancyManage);

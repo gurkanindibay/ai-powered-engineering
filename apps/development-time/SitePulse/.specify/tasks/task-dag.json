@@ -723,7 +723,7 @@
       "id": "task-35",
       "name": "Build actions-first unit workspace and action pages",
       "module": "flutter-ui",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-30"
       ],
@@ -768,7 +768,7 @@
       "id": "task-37",
       "name": "Move people list onto the shared directory scaffold",
       "module": "flutter-ui",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-34"
       ],
@@ -782,13 +782,17 @@
         "testid-lint",
         "logging-standards-lint"
       ],
-      "attempts": 0
+      "acceptance_tests": [
+        "scenario:SC-12-04-01"
+      ],
+      "attempts": 0,
+      "evidence": ".specify/evidence/task-37.json"
     },
     {
       "id": "task-38",
       "name": "Merge person cards on the server",
       "module": "backend-rust",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-32",
         "task-33"
@@ -859,13 +863,18 @@
       "id": "task-41",
       "name": "Open unit workspace from directory rows",
       "module": "flutter-ui",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-34",
         "task-35"
       ],
       "spec_ref": "docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md#unit-workspace",
       "description": "B3: wire the task-34 compact unit rows to the task-35 workspace so every row reaches actions in one tap and the information mode separately; restore list state, scroll position and focus on return at phone and desktop widths.",
+      "acceptance_tests": [
+        "flutter:test/unit_workspace_test.dart",
+        "flutter:test/unit_directory_row_test.dart",
+        "flutter:test/owners_residents_module_test.dart"
+      ],
       "gates": [
         "flutter-analyze",
         "flutter-test",
@@ -874,7 +883,8 @@
         "testid-lint",
         "logging-standards-lint"
       ],
-      "attempts": 0
+      "attempts": 0,
+      "evidence": ".specify/evidence/task-41.json"
     },
     {
       "id": "task-42",

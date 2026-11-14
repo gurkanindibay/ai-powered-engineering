@@ -65,6 +65,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(31, "V31__unit_state_model.sql"),
     migration!(32, "V32__unit_responsible_contact.sql"),
     migration!(33, "V33__person_schema_foundations.sql"),
+    migration!(34, "V34__person_merge_canonical.sql"),
 ];
 
 /// Arbitrary constant for `pg_advisory_lock`, so concurrent instances migrate one at a time.

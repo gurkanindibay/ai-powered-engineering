@@ -26,6 +26,9 @@ use crate::services::person_directory_service::{
 use crate::services::person_import_service::{
     ImportReport, ImportRequest, PersonImportError, PersonImportService,
 };
+use crate::services::person_merge_service::{
+    MergePersonRequest, PersonMergeError, PersonMergeService,
+};
 use crate::services::person_record_service::{
     ContactPreferences, DuplicateCandidate, DuplicateQuery, PersonRecordError, PersonRecordService,
     SetNationalIdRequest,
@@ -760,4 +763,41 @@ pub async fn remove_person_login(
         .await
         .map(|()| StatusCode::NO_CONTENT)
         .map_err(person_api_error)
+}
+
+/// Merges this card into another one; needs `PersonManage` and a recent step-up.
+/// Ledger rows keep their person IDs; readers resolve the tombstone.
+pub async fn merge_person(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    scope: crate::tenancy::TenantScope,
+    Path(person_id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+    Json(payload): Json<MergePersonRequest>,
+) -> Result<Response, AppError> {
+    let site_id = scope.pinned(q.site_id)?;
+    let id = person_id_of(&person_id)?;
+    match PersonMergeService::new(&state)
+        .merge(&ctx, &site_id, id, &payload)
+        .await
+    {
+        Ok(outcome) => Ok(Json(outcome).into_response()),
+        Err(PersonMergeError::StepUpRequired) => Ok(SecurityError::StepUp.into_response()),
+        Err(e) => Err(merge_error(e)),
+    }
+}
+
+fn merge_error(e: PersonMergeError) -> AppError {
+    match e {
+        PersonMergeError::NotFound => AppError::not_found("Kişi bulunamadı."),
+        PersonMergeError::SamePerson => {
+            AppError::validation("Bir kişi kendisiyle birleştirilemez.")
+        }
+        PersonMergeError::NotMergeable
+        | PersonMergeError::VersionMismatch
+        | PersonMergeError::RoleConflict { .. } => AppError::conflict(e.to_string()),
+        PersonMergeError::StepUpRequired => AppError::validation(e.to_string()),
+        PersonMergeError::Unavailable => AppError::unavailable(e.to_string()),
+        PersonMergeError::Storage(_) => AppError::internal(e.to_string()),
+    }
 }
