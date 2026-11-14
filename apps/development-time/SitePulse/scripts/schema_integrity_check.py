@@ -326,6 +326,41 @@ POSITIVE_CASES = [
     ("national id is never stored in clear text (M6)",
      "INSERT INTO persons (national_id, full_name, person_type) VALUES ('11111111110', 'PII Check', 'HOME_OWNER')",
      "SELECT national_id IS NULL AND national_id_masked = '*******1110' AND length(national_id_hash) = 64 FROM persons WHERE full_name = 'PII Check'"),
+    ("person search names use shared Turkish folding (V33)",
+     "INSERT INTO persons (site_id, full_name, phone, person_type)"
+     " SELECT id, 'Yılmaz Ayşe', '0532 111 22 33', 'HOME_RESIDENT' FROM sites ORDER BY id LIMIT 1",
+     "SELECT name_key = 'ayse yilmaz'"
+     " FROM persons WHERE full_name = 'Yılmaz Ayşe'"),
+    ("person search phones use last-ten digits (V33)",
+     "INSERT INTO persons (site_id, full_name, phone, person_type)"
+     " SELECT id, 'Phone Key Check', '0532 111 22 33', 'HOME_RESIDENT' FROM sites ORDER BY id LIMIT 1",
+     "SELECT phone_key = '5321112233'"
+     " FROM persons WHERE full_name = 'Phone Key Check'"),
+    ("person card excludes merged tombstones (V33)",
+     "INSERT INTO persons (site_id, full_name, person_type)"
+     " SELECT id, 'Merged Source', 'HOME_RESIDENT' FROM sites ORDER BY id LIMIT 1;"
+     " INSERT INTO persons (site_id, full_name, person_type)"
+     " SELECT id, 'Merge Target', 'HOME_RESIDENT' FROM sites ORDER BY id LIMIT 1;"
+     " UPDATE persons SET merged_into_person_id = (SELECT id FROM persons WHERE full_name = 'Merge Target')"
+     " WHERE full_name = 'Merged Source'",
+     "SELECT NOT EXISTS (SELECT 1 FROM v_person_card WHERE full_name = 'Merged Source')"
+     " AND EXISTS (SELECT 1 FROM v_person_card WHERE full_name = 'Merge Target')"),
+    ("unit and person views expose scoped relationships and selected contact (V33)",
+     "UPDATE units SET primary_contact_person_id = owner_person_id WHERE owner_person_id IS NOT NULL",
+     "SELECT EXISTS (SELECT 1 FROM v_unit_directory WHERE primary_contact_person_id IS NOT NULL)"
+     " AND EXISTS (SELECT 1 FROM v_person_roles WHERE is_primary_contact)"
+     " AND EXISTS (SELECT 1 FROM v_person_unit_relations WHERE relation = 'OWNER')"),
+    ("person integrity view reports site-less legacy rows (V33)",
+     "INSERT INTO persons (full_name, person_type) VALUES ('Unscoped Resident', 'HOME_RESIDENT')",
+     "SELECT EXISTS (SELECT 1 FROM v_person_integrity_violations"
+     " WHERE check_name = 'person_without_site' AND subject ="
+     " (SELECT id::TEXT FROM persons WHERE full_name = 'Unscoped Resident'))"),
+    ("person integrity view reports unresolved legacy contacts (V33)",
+     "UPDATE units SET primary_contact_person_id = NULL, primary_responsible_contact = jsonb_build_object("
+     "'primary_responsible_name', 'Unknown Contact', 'primary_responsible_role', 'OWNER')"
+     " WHERE id = (SELECT min(id) FROM units)",
+     "SELECT EXISTS (SELECT 1 FROM v_person_integrity_violations"
+     " WHERE check_name = 'legacy_primary_contact_unmatched')"),
     ("unit owner follows the ownership history (M1)",
      "INSERT INTO unit_ownerships (unit_id, person_id, share_percentage, start_date, is_active)"
      " SELECT (SELECT min(id) FROM units), id, 100, CURRENT_DATE, TRUE FROM persons WHERE full_name = 'PII Check'",
@@ -390,6 +425,14 @@ UPGRADE_ASSERTIONS = [
      "SELECT (SELECT count(*) FROM units) = 1 AND (SELECT count(*) FROM dues_liabilities) = 1 AND (SELECT count(*) FROM users WHERE id = 1) = 1"),
     ("paid_penalty backfilled consistently", "SELECT bool_and(paid_amount = paid_principal + paid_penalty) FROM dues_liabilities"),
     ("legacy person_type translated (V8)", "SELECT person_type = 'HOME_OWNER' FROM persons WHERE id = 1"),
+    ("legacy person search keys backfilled (V33)",
+     "SELECT name_key = 'legacy owner' AND version = 0 AND merged_into_person_id IS NULL"
+     " FROM persons WHERE id = 1"),
+    ("legacy person and unit views are available (V33)",
+     "SELECT EXISTS (SELECT 1 FROM v_person_card WHERE person_id = 1)"
+     " AND EXISTS (SELECT 1 FROM v_unit_directory WHERE unit_id = 1)"),
+    ("legacy primary contact is backfilled to a same-site person (V33)",
+     "SELECT primary_contact_person_id = 1 FROM units WHERE id = 1"),
     ("legacy national id no longer in clear text (V15)", "SELECT national_id IS NULL AND national_id_masked IS NOT NULL FROM persons WHERE id = 1"),
     ("e-mails lower-cased (V14)", "SELECT bool_and(email = lower(email)) FROM users"),
     ("created_at is never NULL",
@@ -521,7 +564,17 @@ def check() -> dict:
         data = psql(upgraded, V7_DATA)
         findings.append({"check": f"upgrade: V{UPGRADE_FROM}-era rows load", "ok": data.returncode == 0, "detail": [data.stderr.strip()] if data.returncode else []})
         try:
-            replay(upgraded, new)
+            before_v33 = [path for path in new if int(path.stem.split("__")[0][1:]) < 33]
+            replay(upgraded, before_v33)
+            legacy_contact = psql(
+                upgraded,
+                "UPDATE units SET primary_responsible_contact = "
+                "jsonb_build_object('primary_responsible_name', 'Legacy Owner', "
+                "'primary_responsible_role', 'OWNER') WHERE id = 1",
+            )
+            if legacy_contact.returncode != 0:
+                raise RuntimeError(f"cannot seed the legacy primary contact: {legacy_contact.stderr.strip()}")
+            replay(upgraded, [path for path in new if int(path.stem.split("__")[0][1:]) >= 33])
             findings.append({"check": f"upgrade: V{UPGRADE_FROM + 1}..V{len(files)} apply on existing rows", "ok": True, "detail": []})
         except RuntimeError as exc:
             findings.append({"check": f"upgrade: V{UPGRADE_FROM + 1}..V{len(files)} apply on existing rows", "ok": False, "detail": [str(exc)]})

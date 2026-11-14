@@ -19,6 +19,7 @@ Each Epic represents a core business domain and contains atomic User Stories wit
 | **EPIC-09** | Payment Tracking, Dual-Ledger Treasury & Delinquency Management | 7 | 0 | 7 | **SPECIFIED** | [EPIC-09-payment-tracking-and-treasury-management.md](EPIC-09-payment-tracking-and-treasury-management.md) |
 | **EPIC-10** | Capital Expenditure & Fixture Dues Management (Demirbaş & Yatırım Projeleri) | 7 | 0 | 7 | **SPECIFIED** | [EPIC-10-capital-expenditure-and-fixture-dues-management.md](EPIC-10-capital-expenditure-and-fixture-dues-management.md) |
 | **EPIC-11** | Payments Phase 3: Compliance Gates, Collections, Accounting & Governance | 14 | 14 | 0 | **IMPLEMENTED** | [EPIC-11-payments-phase3.md](EPIC-11-payments-phase3.md) |
+| **EPIC-12** | Unified People and Unit Directory | 1 | 0 | 1 | **SPECIFIED** | [EPIC-12-unified-people-and-unit-directory.md](EPIC-12-unified-people-and-unit-directory.md) |
 
 ---
 
