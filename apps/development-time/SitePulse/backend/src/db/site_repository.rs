@@ -215,7 +215,7 @@ pub async fn create_site_with_manager_and_blocks(
         Some(admin_email),
         "SITE_MANAGER",
         numeric_site,
-        false,
+        true,
     )
     .await?;
 
