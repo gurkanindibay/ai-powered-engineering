@@ -119,6 +119,19 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(stories["STORY-42-02"]["status"], "PASS")
         self.assertEqual(report["epics"][0]["status"], "FAIL")
 
+    def test_html_report_shows_scenarios_steps_and_escapes_text(self):
+        steps = [{"keyword": "Then", "text": "a <b> & c", "status": "FAIL", "duration_s": 0.2, "error": "boom <x>"}]
+        history = [_record("SC-42-01-01", "PASS", 1), _record("SC-42-01-01", "FAIL", 2, steps)]
+        with tempfile.TemporaryDirectory() as tmp:
+            report = ft.build_report(ft.load_catalogue(_workspace(tmp)), history)
+        page = ft.render_html(report, "2026-01-02 00:00 UTC", "store")
+        self.assertIn("SC-42-01-01", page)
+        self.assertIn("a &lt;b&gt; &amp; c", page)
+        self.assertIn("boom &lt;x&gt;", page)
+        self.assertNotIn("<script", page)
+        self.assertEqual(page.count('<i class="'), 2)  # one bar per recorded run
+        self.assertIn('class="badge NOT-RUN"', page)
+
     def test_unexecuted_scenario_is_not_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             report = ft.build_report(ft.load_catalogue(_workspace(tmp)), [])
