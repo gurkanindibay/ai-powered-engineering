@@ -36,6 +36,8 @@ Provides residents of managed complexes with full transparency into their financ
   - `FinancialIntegrityGate.verify_due_rounding`
   - `DuesCalculatorTests.Should_Preserve_Kurus_Precision`
 
+Executable scenarios: [`STORY-01-01-domain-money-and-dues-value-objects.feature`](../features/EPIC-01/STORY-01-01-domain-money-and-dues-value-objects.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-01-02: KMK Statutory Delay Fee Calculation Engine
@@ -58,6 +60,8 @@ Provides residents of managed complexes with full transparency into their financ
   - `whenNotOverdue_thenPenaltyRemainsZero`
   - `TestSitePulseHarness.test_financial_integrity_gate_kmk_calculation`
 
+Executable scenarios: [`STORY-01-02-kmk-statutory-delay-fee.feature`](../features/EPIC-01/STORY-01-02-kmk-statutory-delay-fee.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-01-03: Reactive Resident Dashboard State Management
@@ -76,6 +80,8 @@ Provides residents of managed complexes with full transparency into their financ
 - **Verification & Tests:**
   - `dashboard_controller_test.dart`
   - `SyntaxGate`
+
+Executable scenarios: [`STORY-01-03-reactive-dashboard-state.feature`](../features/EPIC-01/STORY-01-03-reactive-dashboard-state.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -98,6 +104,8 @@ Provides residents of managed complexes with full transparency into their financ
   - `SyntaxGate.verify_curly_braces`
   - Flutter client visual inspection
 
+Executable scenarios: [`STORY-01-04-resident-dashboard-ui.feature`](../features/EPIC-01/STORY-01-04-resident-dashboard-ui.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-01-05: Account Movement Ledger & Payment Receipts
@@ -116,6 +124,8 @@ Provides residents of managed complexes with full transparency into their financ
 - **Verification & Tests:**
   - Visual verification in Flutter client
 
+Executable scenarios: [`STORY-01-05-account-movement-ledger.feature`](../features/EPIC-01/STORY-01-05-account-movement-ledger.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-01-06: Offline Cache & Synchronization Layer
@@ -133,3 +143,5 @@ Provides residents of managed complexes with full transparency into their financ
   - `apps/development-time/SitePulse/flutter/lib/controllers/dashboard_controller.dart`
 - **Verification & Tests:**
   - `RoomCacheTests.Should_Return_Cached_Statement_On_Network_Timeout`
+
+Executable scenarios: [`STORY-01-06-offline-cache.feature`](../features/EPIC-01/STORY-01-06-offline-cache.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).

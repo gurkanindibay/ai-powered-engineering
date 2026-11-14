@@ -125,6 +125,7 @@ void main() {
       expect(find.text('Cihazdan Dosya Seç (.xlsx, .xls, .csv)'), findsOneWidget);
     });
 
+    // covers: SC-07-07-03
     testWidgets('DuesManagementView opens Toplu Aidat Tahakkuku confirmation dialog with duplicate prevention note', (tester) async {
       await tester.pumpWidget(
         MaterialApp(

@@ -30,6 +30,106 @@ SPEC-007 closed card checkout, the core işletme projesi and the resident statem
 | STORY-11-13 | management company | a portfolio summary and monthly e-Arşiv / e-Fatura fee invoices | I run many sites from one console (F-15) | `…management_company_invoices…` |
 | STORY-11-14 | manager | collection rate, on-time rate, DSO, channel shares, a forecast and at-risk units | I can see and act on collection trends (F-17) | `…analytics_are_computed…` |
 
+## 2a. Story details and executable acceptance
+
+### STORY-11-01: Allocation keys and the 90-day transition
+- **As a:** manager  
+- **I want to:** to split budget lines by house type, meter or custom weights and run a 90-day transition  
+- **So that:** dues of every site rest on a lawful key (F-01)
+
+Executable scenarios: [`STORY-11-01-allocation-keys-and-transition.feature`](../features/EPIC-11/STORY-11-01-allocation-keys-and-transition.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-02: Privacy notice, channel consents and retention
+- **As a:** resident  
+- **I want to:** to read the privacy notice, acknowledge it and choose my message channels  
+- **So that:** my financial data is handled under KVKK (F-03)
+
+Executable scenarios: [`STORY-11-02-kvkk-privacy-and-retention.feature`](../features/EPIC-11/STORY-11-02-kvkk-privacy-and-retention.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-03: KMK 22 tenant claim cap and rent certificate
+- **As a:** manager  
+- **I want to:** to see how much of an owner's debt I may claim from the tenant, capped at the unpaid rent  
+- **So that:** collection letters respect KMK 22 (F-04)
+
+Executable scenarios: [`STORY-11-03-kmk22-tenant-claim.feature`](../features/EPIC-11/STORY-11-03-kmk22-tenant-claim.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-04: Dunning schedule and lawful channels
+- **As a:** manager  
+- **I want to:** a dunning schedule that sends each step once, never to a group channel  
+- **So that:** debtors are reminded lawfully and consistently (F-05)
+
+Executable scenarios: [`STORY-11-04-dunning-schedule.feature`](../features/EPIC-11/STORY-11-04-dunning-schedule.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-05: Selecting debts, disputes and virman requests
+- **As a:** resident  
+- **I want to:** to choose which debts I pay, dispute an item and request a virman  
+- **So that:** I control how my money is applied (F-06)
+
+Executable scenarios: [`STORY-11-05-resident-payment-control.feature`](../features/EPIC-11/STORY-11-05-resident-payment-control.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-06: Saved card and automatic payment
+- **As a:** resident  
+- **I want to:** to save my card at the provider and pay automatically  
+- **So that:** I never miss a due date (F-07)
+
+Executable scenarios: [`STORY-11-06-autopay.feature`](../features/EPIC-11/STORY-11-06-autopay.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-07: Vendors, invoices, ledger and yearly account report
+- **As a:** manager / auditor  
+- **I want to:** vendors, approved invoices, a balanced ledger, budget vs actual and the yearly account report  
+- **So that:** I can account to the assembly from one tool (F-08, F-16)
+
+Executable scenarios: [`STORY-11-07-finance-desk.feature`](../features/EPIC-11/STORY-11-07-finance-desk.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-08: Collection case workflow, evidence pack and lawyer link
+- **As a:** manager  
+- **I want to:** a collection case workflow with an evidence pack and a lawyer link  
+- **So that:** debts reach enforcement with their legal basis (F-09)
+
+Executable scenarios: [`STORY-11-08-collection-cases.feature`](../features/EPIC-11/STORY-11-08-collection-cases.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-09: Payer hints and daily bank reconciliation
+- **As a:** manager  
+- **I want to:** payer hints (TCKN, phone, block/unit) and a daily bank reconciliation  
+- **So that:** transfers outside the virtual IBAN are matched (F-10)
+
+Executable scenarios: [`STORY-11-09-payer-hints-and-reconciliation.feature`](../features/EPIC-11/STORY-11-09-payer-hints-and-reconciliation.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-10: Payment plans, waivers and write-offs
+- **As a:** manager  
+- **I want to:** payment plans and four-eyes waivers and write-offs  
+- **So that:** hardship cases are handled transparently (F-11)
+
+Executable scenarios: [`STORY-11-10-payment-plans-and-waivers.feature`](../features/EPIC-11/STORY-11-10-payment-plans-and-waivers.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-11: Heating costs split by meter readings and area
+- **As a:** manager  
+- **I want to:** heating costs split by meter readings and area  
+- **So that:** central-heating sites bill fairly (F-13)
+
+Executable scenarios: [`STORY-11-11-heating-cost-split.feature`](../features/EPIC-11/STORY-11-11-heating-cost-split.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-12: Meetings, quorum, votes and decisions book
+- **As a:** manager  
+- **I want to:** meetings, quorum, votes and a numbered decisions book  
+- **So that:** decisions approve budgets with evidence (F-14)
+
+Executable scenarios: [`STORY-11-12-assembly-decisions-book.feature`](../features/EPIC-11/STORY-11-12-assembly-decisions-book.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-13: Portfolio summary and fee invoices
+- **As a:** management company  
+- **I want to:** a portfolio summary and monthly e-Arşiv / e-Fatura fee invoices  
+- **So that:** I run many sites from one console (F-15)
+
+Executable scenarios: [`STORY-11-13-management-company-console.feature`](../features/EPIC-11/STORY-11-13-management-company-console.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+### STORY-11-14: Collection analytics and at-risk units
+- **As a:** manager  
+- **I want to:** collection rate, on-time rate, DSO, channel shares, a forecast and at-risk units  
+- **So that:** I can see and act on collection trends (F-17)
+
+Executable scenarios: [`STORY-11-14-collection-analytics.feature`](../features/EPIC-11/STORY-11-14-collection-analytics.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ## 3. Verification
 - Rust: `tests/payments_phase3_tests.rs` (28 scenarios), domain unit tests, `tests/finance_store_pg_tests.rs` (opt-in PostgreSQL round trip of every record).
 - System: `scripts/api_system_check.py` check `finance_desk_over_http`; `schema_integrity_check.py` replays V20.

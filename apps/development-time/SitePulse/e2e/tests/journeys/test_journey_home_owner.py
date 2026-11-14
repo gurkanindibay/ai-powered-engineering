@@ -13,6 +13,7 @@ from support.journey import Account, push_route, wait_route
 
 @pytest.mark.journey
 @pytest.mark.role_homeowner
+@pytest.mark.covers("SC-06-06-03")
 @pytest.mark.gui_id("GUI-J-03")
 def test_home_owner_journey(journey, first_sign_in, sign_in_again, page, api, actors, builders, stack):
     j = journey("home owner")

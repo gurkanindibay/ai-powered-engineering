@@ -17,6 +17,7 @@ def _a14(stack) -> str:
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-09-03")
+@pytest.mark.covers("SC-09-03-02")
 def test_resident_statement_ages_overdue_dues_with_the_penalty(login_as, page, stack):
     stack.sql(f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type, expense_type) "
               f"VALUES ({int(_a14(stack))}, 'Eylül 2026', 1400.00, CURRENT_DATE - 45, 'PENDING', 'OWNER', 'OPERATIONAL_DUES');")
@@ -35,6 +36,7 @@ def test_resident_statement_ages_overdue_dues_with_the_penalty(login_as, page, s
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-01-03")
+@pytest.mark.covers("SC-09-04-04")
 def test_card_payment_on_the_provider_page_issues_a_receipt(login_as, page, builders, stack):
     builders.overdue_dues(unit_number=14, principal=Decimal("1400.00"), days_overdue=3, period="Ekim 2026")
     login_as("homeowner")
@@ -63,6 +65,7 @@ def test_card_payment_on_the_provider_page_issues_a_receipt(login_as, page, buil
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-09-04")
+@pytest.mark.covers("SC-09-04-02")
 def test_manager_downloads_the_receipt_pdf_and_reverses_the_receipt(login_as, page, api, actors, stack):
     manager = api.login(**actors["manager"])
     receipt = api.record_manual_payment(manager, _a14(stack), Decimal("750.00"), "Ahmet Yılmaz")

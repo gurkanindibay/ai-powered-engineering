@@ -74,7 +74,10 @@ FEATURES = ROOT / ".specify" / "features"
 EXECUTIONS = ROOT / "e2e" / ".artifacts" / "executions.jsonl"
 HTML_REPORT = ROOT / "e2e" / ".artifacts" / "feature-report.html"
 RECENT_RUNS = 30
-LINK_SOURCES = (("backend/tests", "*.rs"), ("flutter/test", "*.dart"), ("e2e/tests", "*.py"))
+LINK_SOURCES = (("backend/tests", "*.rs"), ("flutter/test", "*.dart"), ("e2e/tests", "*.py"),
+                ("harness/tests", "*.py"), ("scripts", "*.py"))
+# Files that quote `covers:` markers as fixtures or documentation, never as real links.
+LINK_EXCLUDE = frozenset({"harness/tests/test_feature_traceability.py", "scripts/feature_traceability.py"})
 DEFAULT_STORE = str(ROOT / ".specify" / "executions")
 
 EPIC_FILE = re.compile(r"^(EPIC-\d{2})-")
@@ -190,6 +193,8 @@ def load_links(root: Path = ROOT) -> dict[str, list[dict]]:
     links: dict[str, list[dict]] = defaultdict(list)
     for directory, pattern in LINK_SOURCES:
         for path in sorted((root / directory).rglob(pattern)):
+            if path.relative_to(root).as_posix() in LINK_EXCLUDE:
+                continue
             lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
             for index, line in enumerate(lines):
                 if "covers" not in line:

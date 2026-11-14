@@ -35,6 +35,8 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
   - `SqlSchemaGate.verify_numeric_precision`
   - Integration entity tests
 
+Executable scenarios: [`STORY-03-01-multi-tenant-data-isolation.feature`](../features/EPIC-03/STORY-03-01-multi-tenant-data-isolation.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-03-02: SaaS Super Admin Management Dashboard
@@ -53,6 +55,8 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
   - `apps/development-time/SitePulse/flutter/lib/screens/dashboard_screen.dart`
 - **Verification & Tests:**
   - Flutter client integration tests & live verification
+
+Executable scenarios: [`STORY-03-02-saas-admin-dashboard.feature`](../features/EPIC-03/STORY-03-02-saas-admin-dashboard.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -77,6 +81,8 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
   - `when_registering_new_site_then_provisions_site_and_manager_with_temporary_password` (Rust)
   - Flutter client unit tests
 
+Executable scenarios: [`STORY-03-03-site-onboarding.feature`](../features/EPIC-03/STORY-03-03-site-onboarding.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-03-04: Automated Site Manager Account Creation & Credential Provisioning
@@ -99,6 +105,8 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
   - `when_registering_new_site_then_provisions_site_and_manager_with_temporary_password` (Rust)
   - `when_duplicate_email_then_throws_exception` (Rust)
 
+Executable scenarios: [`STORY-03-04-manager-credential-provisioning.feature`](../features/EPIC-03/STORY-03-04-manager-credential-provisioning.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-03-05: Multi-Tenant REST API Endpoints
@@ -116,6 +124,8 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
   - `apps/development-time/SitePulse/backend/src/handlers/mod.rs`
 - **Verification & Tests:**
   - Rust Axum integration tests in `tests/integration_tests.rs`
+
+Executable scenarios: [`STORY-03-05-multi-tenant-rest-api.feature`](../features/EPIC-03/STORY-03-05-multi-tenant-rest-api.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -148,6 +158,8 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
   - `flutter/test/widget_test.dart`
   - `backend/tests/saas_tenant_tests.rs`
 
+Executable scenarios: [`STORY-03-06-inactive-site-deletion.feature`](../features/EPIC-03/STORY-03-06-inactive-site-deletion.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-03-07: Temporary Password Renewal & Recovery for Site Managers
@@ -179,3 +191,4 @@ Transforms SitePulse from a single-site solution into a multi-tenant SaaS platfo
   - `flutter/test/widget_test.dart`
   - `backend/tests/integration_tests.rs`
 
+Executable scenarios: [`STORY-03-07-temporary-password-renewal.feature`](../features/EPIC-03/STORY-03-07-temporary-password-renewal.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
