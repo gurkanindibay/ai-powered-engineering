@@ -69,6 +69,44 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(self.finish(run_id), "BLOCKED")
         self.assertEqual(self.backend.gate_runs, 2)
 
+    def test_gate_captures_reach_evidence_and_export_without_changing_the_candidate(self):
+        self.policy["gates"][0]["captures"] = ["records"]
+        run_id = self.create()
+        self.backend.mode = "capture"
+        self.assertEqual(self.finish(run_id), "READY_FOR_REVIEW")
+        workspace = self.engine.workspace(run_id)
+        self.assertFalse((workspace.path / "records").exists())
+        self.assertTrue(workspace.clean())
+        listed = self.engine.captures(run_id)
+        self.assertEqual(listed["files"], ["records/runs/run-1.jsonl"])
+        self.assertEqual((listed["written"], listed["candidate"]), ([], self.store.run(run_id)["candidate"]))
+        target = self.repo.parent / "delivered"
+        target.mkdir()
+        self.assertEqual(self.engine.captures(run_id, target)["written"], ["records/runs/run-1.jsonl"])
+        self.assertIn("SC-01-01-01", (target / "records" / "runs" / "run-1.jsonl").read_text())
+        with self.assertRaises(HarnessError):  # recorded runs are append-only
+            self.engine.captures(run_id, target)
+
+    def test_sitepulse_policy_lets_the_tester_write_scenarios_but_no_worker_write_records(self):
+        from scripts.engineering_harness.contracts import under
+        from scripts.engineering_harness.sitepulse import policy_for_sitepulse
+        policy = policy_for_sitepulse("sha256:" + "a" * 64)
+        root = "apps/development-time/SitePulse"
+
+        def writable(role, path):
+            return (any(under(path, p) for p in policy["role_paths"][role])
+                    and not any(under(path, p) for p in policy["protected_paths"]))
+
+        self.assertTrue(writable("tester", f"{root}/.specify/features/EPIC-10/STORY-10-01-x.feature"))
+        self.assertTrue(writable("tester", f"{root}/e2e/steps/capital_steps.py"))
+        for role in policy["role_paths"]:
+            self.assertFalse(writable(role, f"{root}/.specify/executions/runs/2026/x.jsonl"), role)
+            self.assertFalse(writable(role, f"{root}/.specify/requirements/EPIC-10-x.md"), role)
+            self.assertFalse(writable(role, f"{root}/e2e/support/executions.py"), role)
+        full = next(g for g in policy["gates"] if g["id"] == "sitepulse-full")
+        self.assertEqual(full["captures"], [f"{root}/.specify/executions"])
+        self.assertIn("SITEPULSE_TASK=engineering-harness", full["argv"])
+
     def test_gate_source_mutation_cannot_pass(self):
         self.policy["limits"]["max_repairs"] = 0
         run_id = self.create()

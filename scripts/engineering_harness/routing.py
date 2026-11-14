@@ -17,7 +17,7 @@ PROMPTS = {
     "backend_developer": "Implement the accepted contract with focused regression tests, decimal money arithmetic and persistence safety.",
     "frontend_developer": "Implement UI state, loading/error/empty behavior, accessibility and responsive layouts. Reuse the design system.",
     "developer": "Implement the bounded task with focused regression tests and existing shared components.",
-    "tester": "Independently verify every acceptance criterion on this candidate. Report defects and residual risk. Do not weaken checks.",
+    "tester": "Independently verify every acceptance criterion on this candidate. Report defects and residual risk. Do not weaken checks. Where the policy lets you write, express each criterion as a Gherkin scenario with a stable id and bind its steps; never mark an automated scenario pending and never write a test run record yourself.",
 }
 
 

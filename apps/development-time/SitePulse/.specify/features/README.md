@@ -36,14 +36,18 @@ Amounts in steps are plain decimals (`500000.00`) and are parsed as `Decimal`.
 Every task records the run that verifies it (AGENTS.md rule 13):
 
 ```bash
-python3 scripts/gui_e2e.py run --record --task "issue-123 virman transfer"
+python3 scripts/gui_e2e.py run --affected --record --task "issue-123 virman transfer"
 ```
+
+`--affected` selects the smoke set plus the epics the branch's changes touch, or the full suite when
+shared code changed. The mapping from changed files to epics is `impact-map.json` in this directory;
+`python3 scripts/feature_traceability.py affected` prints the selection and the reason per file.
 
 That writes, under `.specify/executions/` (committed with the task):
 
 | Path | Content |
 |---|---|
-| `runs/<year>/<run id>.jsonl` | One record per executed scenario: epic, story, scenario, status, duration, one status per step, error text, plus the run's task label, commit, branch and time |
+| `runs/<year>/<run id>.jsonl` | One record per executed test (a scenario, or a test not yet linked to one): epic, story, scenario, status, duration, one status per step, error text, plus the run's task label, commit, branch and time |
 | `reports/<year>/<run id>.md` | The same run as a readable report: result, what regressed or was fixed, every scenario, and the automated scenarios that were not executed |
 
 A run id is `<UTC time>-<commit>`, so runs from different branches never collide. Recorded runs are append-only.
@@ -51,7 +55,8 @@ The dashboard `e2e/.artifacts/feature-report.html` is regenerated after every re
 
 ```bash
 python3 scripts/feature_traceability.py check --require-run        # gate `test-run-recorded`: this branch has a passing recorded run
-python3 scripts/feature_traceability.py task-report                # markdown of this task's latest run, for the PR
+python3 scripts/feature_traceability.py affected                   # what this branch's changes call for
+python3 scripts/feature_traceability.py task-report                # the "Test report" section for the PR description
 python3 scripts/feature_traceability.py runs --detail --limit 5    # recent runs: executed, regressed, fixed
 python3 scripts/feature_traceability.py report --epic EPIC-10 --steps
 python3 scripts/feature_traceability.py history SC-10-01-01

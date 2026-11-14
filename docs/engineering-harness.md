@@ -177,3 +177,14 @@ READY_FOR_REVIEW means the exact combined candidate satisfied required checks an
 `evaluate --cases FILE` reports exact-match and harmful under-classification counts. With `--measurements FILE`, supply paired entries `{task_id, repetition, arm: baseline|routed, accepted, duration_ms, cost}`. Every baseline/routed pair must match; cost-per-accepted includes failed-run costs, and no accepted results yields null. Report sample size, medians and p95 without claiming significance from small samples.
 
 The implementation provides the sequential runtime, configurable model gateway, role contracts, project adapter, bounded repairs, fault tests and pilot evaluation tooling. Deployment-specific credentials/proxy enforcement, complete project images, live provider qualification, representative held-out feature trials, staffing and cost/latency acceptance decisions remain required. Parallel branch integration, native provider-specific bridges, artifact-store signing, fleet scheduling/dashboarding, AST classification and external tracker integrations remain follow-on work. They are not represented as finished by fixture tests.
+
+## Test run records (gate captures)
+
+A gate may declare `"captures": ["<directory>"]`. After the gate runs in its disposable copy of the candidate, the controller reads the **new** UTF-8 text files under those directories (files already tracked in the candidate are ignored; at most 64 files of 256 KiB each; links are rejected) and stores them in that gate's evidence, which is hashed and audited like all other evidence. The candidate itself is never modified.
+
+```bash
+python3 scripts/development_harness.py --json captures RUN_ID                       # list captured files
+python3 scripts/development_harness.py --json captures RUN_ID --output /path/to/repository   # write them; never overwrites
+```
+
+The generated SitePulse policy uses this for test execution history (AGENTS.md rule 13): `sitepulse-full` runs `run_tests.py` with `SITEPULSE_TASK=engineering-harness`, which makes the browser suite record its run under `apps/development-time/SitePulse/.specify/executions`, and captures that directory. Workers cannot write there: every `.specify` subdirectory except `features/` is protected, and so are the e2e fixtures (`e2e/support`, `e2e/pages`, `conftest.py`, `pytest.ini`). The `tester` role may write `.specify/features`, `e2e/steps` and `e2e/tests`, so it can express acceptance criteria as Gherkin scenarios and bind their steps. Recording needs an image that can run the browser suite (PostgreSQL, Flutter web build, Chrome); without one the `gui-e2e` gate inside `sitepulse-full` fails and nothing is captured.

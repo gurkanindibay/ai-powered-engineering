@@ -17,7 +17,7 @@ Examples:
   python3 scripts/gui_e2e.py --env-file backend/.env
   python3 scripts/gui_e2e.py run -m smoke --headed
   python3 scripts/gui_e2e.py run -k login --json
-  python3 scripts/gui_e2e.py run --record --task issue-123   # the run every task must record before its PR
+  python3 scripts/gui_e2e.py run --affected --record --task issue-123   # the run every task records before its PR
   python3 scripts/gui_e2e.py serve
 
 Exit codes: 0 all selected tests passed, 1 test failures, 2 setup error.
@@ -89,6 +89,16 @@ def record_history(task: str | None) -> dict:
     return result
 
 
+def affected_selection() -> dict:
+    """What the changes on this branch call for (scripts/feature_traceability.py affected)."""
+    proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "feature_traceability.py"), "--json", "affected"],
+                          capture_output=True, text=True)
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return {"error": (proc.stderr or proc.stdout).strip()[-500:]}
+
+
 def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     junit = ARTIFACTS / "junit.xml"
@@ -99,6 +109,20 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
              "--tracing", "retain-on-failure", "--screenshot", "only-on-failure"]
     if args.headed:
         argv.append("--headed")
+    if args.affected:
+        selection = affected_selection()
+        if "error" in selection:
+            print(f"setup error: could not work out the affected tests: {selection['error']}")
+            return 2
+        if selection["mode"] == "none":
+            print("--affected: no backend, flutter, e2e or feature file changed on this branch; nothing to run")
+            return 0
+        if not args.json:
+            print(f"--affected: {selection['mode']} run"
+                  + (f", selecting: {selection['marker']}" if selection["marker"] else " (full suite)"))
+            print("\n".join(f"  {reason}" for reason in selection["reasons"][:20]))
+        if selection["marker"]:
+            args.marker = f"({selection['marker']}) and ({args.marker})" if args.marker else selection["marker"]
     if args.marker:
         argv += ["-m", args.marker]
     if args.keyword:
@@ -116,7 +140,7 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
     # A run made for a named task ($SITEPULSE_TASK, e.g. inside run_tests.py) is always recorded.
     history = record_history(args.task) if args.record or os.environ.get("SITEPULSE_TASK") else None
     if history and not args.json:
-        print(f"test history: {history.get('records', 0)} scenario executions recorded"
+        print(f"test history: {history.get('records', 0)} test executions recorded"
               f"{' as ' + history['run_id'] if history.get('records') else ''}; "
               f"dashboard: {history.get('report', 'not generated')}" if 'error' not in history
               else f"test history not recorded: {history['error']}")
@@ -172,6 +196,9 @@ def main() -> int:
     ap.add_argument("--json", action="store_true", help="print a JSON summary instead of pytest output")
     ap.add_argument("--task", help="label of the work this run verifies, shown on the dashboard "
                                    "(default: $SITEPULSE_TASK, else the branch)")
+    ap.add_argument("--affected", action="store_true",
+                    help="run only what the changes on this branch affect: the smoke set plus the affected epics, "
+                         "or the full suite when shared code changed (.specify/features/impact-map.json)")
     ap.add_argument("--record", action="store_true",
                     help="append this run to the test history under .specify/executions (commit it with the task) "
                          "and refresh the dashboard")
