@@ -723,7 +723,7 @@
       "id": "task-35",
       "name": "Build actions-first unit workspace and action pages",
       "module": "flutter-ui",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-30"
       ],
