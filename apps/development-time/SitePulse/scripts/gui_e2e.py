@@ -25,6 +25,7 @@ Exit codes: 0 all selected tests passed, 1 test failures, 2 setup error.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -49,10 +50,15 @@ def load_env_file(path: Path) -> None:
 
 
 def ensure_venv() -> None:
-    if VENV_PY.exists():
+    req_file = E2E / "requirements.txt"
+    stamp = E2E / ".venv" / ".requirements.sha256"
+    req_hash = hashlib.sha256(req_file.read_bytes()).hexdigest() if req_file.exists() else ""
+    if VENV_PY.exists() and stamp.exists() and stamp.read_text().strip() == req_hash:
         return
-    subprocess.run([sys.executable, "-m", "venv", str(E2E / ".venv")], check=True)
-    subprocess.run([str(VENV_PY), "-m", "pip", "install", "-q", "-r", str(E2E / "requirements.txt")], check=True)
+    if not VENV_PY.exists():
+        subprocess.run([sys.executable, "-m", "venv", str(E2E / ".venv")], check=True)
+    subprocess.run([str(VENV_PY), "-m", "pip", "install", "-q", "-r", str(req_file)], check=True)
+    stamp.write_text(req_hash)
 
 
 def summarize_junit(path: Path) -> dict:
@@ -102,6 +108,7 @@ def affected_selection() -> dict:
 def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     junit = ARTIFACTS / "junit.xml"
+    junit.unlink(missing_ok=True)
     argv = [str(VENV_PY), "-m", "pytest", str(E2E / "tests"), "-p", "no:cacheprovider",
             f"--junitxml={junit}", "--browser-channel", args.browser_channel] if args.browser_channel else \
            [str(VENV_PY), "-m", "pytest", str(E2E / "tests"), "-p", "no:cacheprovider", f"--junitxml={junit}"]
@@ -148,7 +155,7 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
         summary = summarize_junit(junit)
         summary.update({"exit_code": proc.returncode, "seconds": round(time.time() - started, 1),
                         "artifacts": str(ARTIFACTS), "history": history})
-        if proc.returncode not in (0, 1):
+        if proc.returncode != 0:
             summary["output_tail"] = (proc.stdout or "")[-3000:]
         print(json.dumps(summary, indent=2))
     if proc.returncode in (0, 1):
