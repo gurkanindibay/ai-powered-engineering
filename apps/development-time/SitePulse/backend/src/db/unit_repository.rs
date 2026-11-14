@@ -243,6 +243,68 @@ pub async fn save_unit_member(
     Ok(member_id)
 }
 
+/// A household member added through a [`PersonRef`](crate::models::PersonRef).
+pub struct SavedMember {
+    pub member_id: i64,
+    pub person_id: i64,
+    pub full_name: String,
+    pub phone: String,
+    pub email: String,
+}
+
+/// Adds a household member to the unit's active occupancy, resolving the person
+/// by reference in the same transaction. The legacy contact columns of
+/// `occupancy_members` are filled from the card until they are dropped.
+pub async fn save_unit_member_ref(
+    pool: &Pool,
+    unit_id: &str,
+    person: &crate::models::PersonRef,
+    relationship: &str,
+) -> Result<SavedMember, Box<dyn std::error::Error + Send + Sync>> {
+    let mut connection = pool.get().await?;
+    let tx = connection.transaction().await?;
+    let u_num = require_id("unit", unit_id)?;
+    let unit = tx
+        .query_opt(
+            "SELECT site_id FROM units WHERE id=$1 AND deleted_at IS NULL AND site_id IS NOT NULL FOR UPDATE",
+            &[&u_num],
+        )
+        .await?
+        .ok_or_else(|| format!("Unit {unit_id} not found"))?;
+    let site: i64 = unit.get(0);
+    let occupancy_id: i64 = tx
+        .query_opt(
+            "SELECT id FROM unit_occupancies WHERE unit_id=$1 AND is_active AND end_date IS NULL ORDER BY id DESC LIMIT 1",
+            &[&u_num],
+        )
+        .await?
+        .map(|row| row.get(0))
+        .ok_or_else(|| NO_CURRENT_OCCUPANT.to_string())?;
+    let person_id = crate::services::person_service::resolve_person_ref(&tx, site, person).await?;
+    let card = tx
+        .query_one(
+            "SELECT full_name, COALESCE(phone, ''), COALESCE(email, '') FROM persons WHERE id=$1",
+            &[&person_id],
+        )
+        .await?;
+    let (full_name, phone, email): (String, String, String) =
+        (card.get(0), card.get(1), card.get(2));
+    let row = tx
+        .query_one(
+            "INSERT INTO occupancy_members(occupancy_id,person_id,full_name,relationship,phone,email,is_emergency_contact) VALUES ($1,$2,$3,$4,$5,$6,false) ON CONFLICT(occupancy_id,person_id) WHERE person_id IS NOT NULL DO UPDATE SET relationship=EXCLUDED.relationship RETURNING id",
+            &[&occupancy_id, &person_id, &full_name, &relationship, &phone, &email],
+        )
+        .await?;
+    tx.commit().await?;
+    Ok(SavedMember {
+        member_id: row.get(0),
+        person_id,
+        full_name,
+        phone,
+        email,
+    })
+}
+
 pub async fn save_remembered_sender_iban(
     pool: &Pool,
     iban: &str,

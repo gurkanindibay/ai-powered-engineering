@@ -8,8 +8,12 @@ use crate::db::Storage;
 use crate::domain::email::NormalizedEmail;
 use crate::models::{
     CreatePersonRequest, NewPerson, PersonCard, PersonCardResponse, PersonEligibility,
-    PersonLoginState, PersonMutationResponse, PersonRole, PersonSearchContext, PersonSearchItem,
-    PersonSearchQuery, PersonSearchResponse, PersonUnitRelation, UpdatePersonRequest,
+    PersonLoginState, PersonMutationResponse, PersonRef, PersonRole, PersonSearchContext,
+    PersonSearchItem, PersonSearchQuery, PersonSearchResponse, PersonUnitRelation,
+    UpdatePersonRequest,
+};
+use crate::services::account_activation_service::{
+    self as activation, AccountActivationService, ActivationDelivery, ActivationPurpose,
 };
 use crate::services::site_admin_service::validate_phone;
 use crate::state::AppState;
@@ -30,6 +34,10 @@ pub enum PersonApiError {
     IdentityTaken(i64),
     #[error("Possible duplicate people")]
     PossibleDuplicate(Vec<DuplicateMatch>),
+    #[error("The person already has an active login")]
+    LoginAlreadyActive,
+    #[error("The person has no login to remove")]
+    NoLogin,
     #[error("The person card changed since it was loaded")]
     StaleVersion,
     #[error("Person records need the database")]
@@ -105,7 +113,11 @@ fn card_of(row: &tokio_postgres::Row) -> PersonCard {
             PersonLoginState::None
         },
         version: i64::from(version),
-        allowed_actions: vec!["EDIT".to_string()],
+        allowed_actions: if login == "ACTIVE" {
+            vec!["EDIT".to_string(), "REMOVE_LOGIN".to_string()]
+        } else {
+            vec!["EDIT".to_string(), "OPEN_LOGIN".to_string()]
+        },
     }
 }
 
@@ -129,13 +141,67 @@ pub(crate) fn eligibility_for(
     }
 }
 
+/// Resolves a [`PersonRef`] inside the caller's transaction so the action and the
+/// card it uses commit or roll back together.
+///
+/// `Existing` locks the card in the caller's site and rejects archived or merged
+/// cards. `New` validates and normalizes the fields and applies the duplicate rules.
+///
+/// # Errors
+/// A missing card, invalid fields, a taken identity or an unconfirmed duplicate.
+pub async fn resolve_person_ref(
+    tx: &deadpool_postgres::Transaction<'_>,
+    site: i64,
+    person: &PersonRef,
+) -> Result<i64, PersonApiError> {
+    match person {
+        PersonRef::Existing { person_id } => tx
+            .query_opt(
+                "SELECT id FROM persons WHERE id = $1 AND site_id = $2 \
+                 AND deleted_at IS NULL AND merged_into_person_id IS NULL FOR UPDATE",
+                &[person_id, &site],
+            )
+            .await
+            .map_err(storage)?
+            .map(|row| row.get(0))
+            .ok_or(PersonApiError::NotFound),
+        PersonRef::New {
+            card,
+            confirm_distinct,
+        } => {
+            let name = clean_name(&card.full_name)?;
+            let phone = clean_phone(card.phone.as_deref())?;
+            let email = clean_email(card.email.as_deref())?;
+            person_repository::resolve_new_site_person(
+                tx,
+                &name,
+                phone.as_deref(),
+                email.as_deref(),
+                ROLE_FREE_PERSON_TYPE,
+                site,
+                *confirm_distinct,
+            )
+            .await
+            .map_err(|e| match e {
+                ResolvePersonError::IdentityTaken(id) => PersonApiError::IdentityTaken(id),
+                ResolvePersonError::PossibleDuplicate(found) => {
+                    PersonApiError::PossibleDuplicate(found)
+                }
+                ResolvePersonError::Database(e) => storage(e),
+            })
+        }
+    }
+}
+
 pub struct PersonService {
+    state: AppState,
     store: Storage,
 }
 
 impl PersonService {
     pub fn new(state: &AppState) -> Self {
         Self {
+            state: state.clone(),
             store: Storage::of(state),
         }
     }
@@ -239,6 +305,9 @@ impl PersonService {
         let email = clean_email(card.email.as_deref())?;
         let mut client = self.pool()?.get().await.map_err(storage)?;
         let tx = client.transaction().await.map_err(storage)?;
+        crate::db::tx_bind_tenant(&tx, site)
+            .await
+            .map_err(storage)?;
         let id = person_repository::resolve_new_site_person(
             &tx,
             &name,
@@ -316,6 +385,129 @@ impl PersonService {
         Ok(PersonCardResponse { card, units })
     }
 
+    /// Opens a login for the person (or re-sends the activation link while it is
+    /// still pending). Needs an email; no password is ever issued.
+    ///
+    /// # Errors
+    /// A missing card or email, an email used by another login, or a storage failure.
+    pub async fn open_login(
+        &self,
+        site: i64,
+        person_id: i64,
+    ) -> Result<ActivationDelivery, PersonApiError> {
+        let mut client = self.pool()?.get().await.map_err(storage)?;
+        let tx = client.transaction().await.map_err(storage)?;
+        crate::db::tx_bind_tenant(&tx, site)
+            .await
+            .map_err(storage)?;
+        let person = tx
+            .query_opt(
+                "SELECT p.full_name, COALESCE(p.email, ''), \
+                        EXISTS (SELECT 1 FROM v_person_roles r WHERE r.person_id = p.id AND r.is_owner) \
+                 FROM persons p WHERE p.id = $1 AND p.site_id = $2 \
+                 AND p.deleted_at IS NULL AND p.merged_into_person_id IS NULL FOR UPDATE",
+                &[&person_id, &site],
+            )
+            .await
+            .map_err(storage)?
+            .ok_or(PersonApiError::NotFound)?;
+        let (name, email, is_owner): (String, String, bool) =
+            (person.get(0), person.get(1), person.get(2));
+        if email.trim().is_empty() {
+            return Err(PersonApiError::Validation(
+                "An email address is required to open a login.".into(),
+            ));
+        }
+        let existing = tx
+            .query_opt(
+                "SELECT id, role, (password_hash IS NOT NULL OR google_sub IS NOT NULL) \
+                 FROM users WHERE person_id = $1 AND site_id = $2 AND is_active",
+                &[&person_id, &site],
+            )
+            .await
+            .map_err(storage)?;
+        let user_id: i64 = match existing {
+            Some(row) => {
+                let role: String = row.get(1);
+                let active: bool = row.get(2);
+                if active || !matches!(role.as_str(), "HOME_OWNER" | "HOME_RESIDENT") {
+                    return Err(PersonApiError::LoginAlreadyActive);
+                }
+                row.get(0)
+            }
+            None => {
+                let role = if is_owner {
+                    "HOME_OWNER"
+                } else {
+                    "HOME_RESIDENT"
+                };
+                tx.query_one(
+                    "INSERT INTO users (site_id, person_id, email, password_hash, role, must_change_password) \
+                     VALUES ($1, $2, $3, NULL, $4, TRUE) RETURNING id",
+                    &[&site, &person_id, &email, &role],
+                )
+                .await
+                .map_err(|_| {
+                    PersonApiError::Validation("This email is already used by another login.".into())
+                })?
+                .get(0)
+            }
+        };
+        let issued =
+            activation::issue_in(&tx, user_id, Some(site), ActivationPurpose::Activate, None)
+                .await
+                .map_err(storage)?;
+        tx.commit().await.map_err(storage)?;
+        Ok(AccountActivationService::new(self.state.clone()).deliver(
+            &format!("user-{user_id}"),
+            &name,
+            &email,
+            ActivationPurpose::Activate,
+            &issued,
+        ))
+    }
+
+    /// Deactivates the person's resident login and revokes its sessions and links.
+    ///
+    /// # Errors
+    /// A missing card, no removable login, or a storage failure.
+    pub async fn remove_login(&self, site: i64, person_id: i64) -> Result<(), PersonApiError> {
+        self.load_card(site, person_id).await?;
+        let mut client = self.pool()?.get().await.map_err(storage)?;
+        let tx = client.transaction().await.map_err(storage)?;
+        crate::db::tx_bind_tenant(&tx, site)
+            .await
+            .map_err(storage)?;
+        let ids: Vec<i64> = tx
+            .query(
+                "UPDATE users SET is_active = false, auth_version = auth_version + 1 \
+                 WHERE site_id = $1 AND person_id = $2 AND is_active \
+                 AND role IN ('HOME_OWNER', 'HOME_RESIDENT') RETURNING id",
+                &[&site, &person_id],
+            )
+            .await
+            .map_err(storage)?
+            .iter()
+            .map(|r| r.get(0))
+            .collect();
+        if ids.is_empty() {
+            return Err(PersonApiError::NoLogin);
+        }
+        tx.execute(
+            "UPDATE auth_sessions SET revoked_at = now() WHERE revoked_at IS NULL AND user_id = ANY($1)",
+            &[&ids],
+        )
+        .await
+        .map_err(storage)?;
+        tx.execute(
+            "UPDATE account_activations SET used_at = now() WHERE used_at IS NULL AND user_id = ANY($1)",
+            &[&ids],
+        )
+        .await
+        .map_err(storage)?;
+        tx.commit().await.map_err(storage)
+    }
+
     /// Edits name, phone and email under optimistic version checking.
     ///
     /// # Errors
@@ -334,6 +526,9 @@ impl PersonService {
         self.load_card(site, person_id).await?;
         let mut client = self.pool()?.get().await.map_err(storage)?;
         let tx = client.transaction().await.map_err(storage)?;
+        crate::db::tx_bind_tenant(&tx, site)
+            .await
+            .map_err(storage)?;
         if let Some(email) = email.as_deref() {
             let taken = tx
                 .query_opt(

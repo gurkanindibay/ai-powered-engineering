@@ -47,15 +47,32 @@ pub async fn get_pending_registrations(
     Ok(Json(service.get_pending_registrations(&site_id).await))
 }
 
+/// Optional body of the approval route.
+#[derive(Debug, serde::Deserialize)]
+pub struct ApproveRegistrationRequest {
+    /// An existing person card to link instead of creating one.
+    #[serde(default)]
+    pub person_id: Option<i64>,
+}
+
 pub async fn approve_registration(
     Path(request_id): Path<String>,
     State(state): State<AppState>,
     ctx: crate::authorization::AuthzContext,
+    body: axum::body::Bytes,
 ) -> Result<Json<ApprovalResultResponse>, crate::authorization::SecurityError> {
+    // The body is optional: `{"person_id": n}` links the request to an existing card.
+    let person_id = if body.is_empty() {
+        None
+    } else {
+        serde_json::from_slice::<ApproveRegistrationRequest>(&body)
+            .map_err(|_| crate::authorization::SecurityError::BadRequest)?
+            .person_id
+    };
     // tenant-scope: checked in RegistrationApprovalService::approve_registration
     // (ctx.require on the caller's site; SQL filters request_id AND site_id).
     RegistrationApprovalService::new(state)
-        .approve_registration(&ctx, &request_id)
+        .approve_registration_with(&ctx, &request_id, person_id)
         .await
         .map(Json)
 }

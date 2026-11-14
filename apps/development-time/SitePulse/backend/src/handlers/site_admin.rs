@@ -197,6 +197,7 @@ pub(crate) fn occupancy_error(e: OccupancyError) -> AppError {
             | TransitionError::OwnerRequired
             | TransitionError::MoveInAtTransferNotAllowed),
         ) => AppError::conflict(rule.to_string()),
+        OccupancyError::Person(error) => person_api_error(error),
         OccupancyError::Storage(detail) => {
             tracing::error!(error = %detail, "Occupancy transition storage failure");
             AppError::internal("Occupancy storage failure")
@@ -221,6 +222,7 @@ pub async fn move_out_resident(
             .map_err(person_error);
     }
     let request = OccupancyTransitionRequest {
+        person: None,
         command: CommandKind::MoveOut,
         effective_date: service::parse_effective_date(payload.end_date.as_deref())
             .map_err(occupancy_error)?,
@@ -593,7 +595,7 @@ pub struct PersonSearchParams {
     pub site_id: Option<String>,
 }
 
-fn person_api_error(e: crate::services::person_service::PersonApiError) -> AppError {
+pub(crate) fn person_api_error(e: crate::services::person_service::PersonApiError) -> AppError {
     use crate::services::person_service::PersonApiError as E;
     match e {
         E::NotFound => AppError::not_found("Person not found"),
@@ -603,6 +605,12 @@ fn person_api_error(e: crate::services::person_service::PersonApiError) -> AppEr
             "The person card changed since it was loaded. Reload and retry.",
             serde_json::json!({ "overridable": false }),
         ),
+        E::LoginAlreadyActive => AppError::coded_conflict(
+            "PERSON_LOGIN_ALREADY_ACTIVE",
+            "The person already has an active login.",
+            serde_json::json!({ "overridable": false }),
+        ),
+        E::NoLogin => AppError::not_found("The person has no login to remove"),
         E::IdentityTaken(person_id) => AppError::coded_conflict(
             "PERSON_IDENTITY_TAKEN",
             "This person is already recorded in the site.",
@@ -687,5 +695,41 @@ pub async fn update_person(
         .update(site, id, &payload)
         .await
         .map(Json)
+        .map_err(person_api_error)
+}
+
+/// Opens a login for the person, or re-sends a pending activation link.
+pub async fn open_person_login(
+    State(state): State<AppState>,
+    scope: crate::tenancy::TenantScope,
+    Path(person_id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+) -> Result<Json<ActivationDelivery>, AppError> {
+    let site = site_number(&scope.pinned(q.site_id)?)?;
+    let id = person_id_of(&person_id)?;
+    crate::services::person_service::PersonService::new(&state)
+        .open_login(site, id)
+        .await
+        .map(Json)
+        .map_err(person_api_error)
+}
+
+/// Removes the person's login. Needs a recent step-up.
+pub async fn remove_person_login(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    scope: crate::tenancy::TenantScope,
+    Path(person_id): Path<String>,
+    Query(q): Query<SiteIdParam>,
+) -> Result<StatusCode, AppError> {
+    if !ctx.stepped_up {
+        return Err(AppError::forbidden("Step-up authentication is required."));
+    }
+    let site = site_number(&scope.pinned(q.site_id)?)?;
+    let id = person_id_of(&person_id)?;
+    crate::services::person_service::PersonService::new(&state)
+        .remove_login(site, id)
+        .await
+        .map(|()| StatusCode::NO_CONTENT)
         .map_err(person_api_error)
 }

@@ -1158,6 +1158,10 @@ pub struct OccupancyTransitionRequest {
     /// The date the move takes effect; today when omitted. Never in the future.
     #[serde(default)]
     pub effective_date: Option<NaiveDate>,
+    /// The incoming person as a reference: an existing card or a new one created
+    /// atomically with the move. Takes precedence over the legacy fields below.
+    #[serde(default)]
+    pub person: Option<PersonRef>,
     /// The incoming tenant: an existing person of the site...
     #[serde(default)]
     pub person_id: Option<i64>,
@@ -1244,7 +1248,12 @@ pub struct PrimaryResponsibleContact {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelectResponsibleContactRequest {
+    /// Preferred: the person card chosen as primary contact. Replaces `role` and name.
+    #[serde(default)]
+    pub person_id: Option<i64>,
+    #[serde(default)]
     pub role: String,
+    #[serde(default)]
     pub resident_name: String,
     #[serde(default)]
     pub member_id: Option<String>,
@@ -1402,8 +1411,14 @@ pub struct UnitMemberDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddUnitMemberRequest {
+    /// Preferred: an existing card or a new one created atomically with the member.
+    #[serde(default)]
+    pub person: Option<PersonRef>,
+    #[serde(default)]
     pub full_name: String,
+    #[serde(default)]
     pub phone: String,
+    #[serde(default)]
     pub email: String,
     #[serde(default)]
     pub relationship: Option<String>,
@@ -2328,6 +2343,11 @@ pub struct TransferOwnershipRequest {
     #[serde(default)]
     pub site_id: Option<String>,
     pub unit_id: String,
+    /// Preferred: the buyer as an existing card or a new one. Overrides the
+    /// `new_owner_*` fields, which remain for one release.
+    #[serde(default)]
+    pub new_owner: Option<PersonRef>,
+    #[serde(default)]
     pub new_owner_name: String,
     #[serde(default)]
     pub new_owner_national_id: Option<String>,

@@ -721,10 +721,68 @@ pub async fn transfer_unit_ownership(
         scope.pin_opt(&mut payload.site_id)?;
     }
     payload.unit_id = unit_id;
+    apply_new_owner_ref(&state, &mut payload).await?;
     let service = crate::services::PaymentTrackingService::new(state);
     service
         .transfer_ownership(payload)
         .await
         .map(Json)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))
+}
+
+/// Maps `new_owner` onto the legacy buyer fields: an existing card is read from the
+/// site, a new card supplies the inline fields.
+async fn apply_new_owner_ref(
+    state: &AppState,
+    payload: &mut crate::models::TransferOwnershipRequest,
+) -> Result<(), (StatusCode, String)> {
+    use crate::models::PersonRef;
+    let Some(reference) = payload.new_owner.clone() else {
+        return Ok(());
+    };
+    match reference {
+        PersonRef::New { card, .. } => {
+            payload.new_owner_person_id = None;
+            payload.new_owner_name = card.full_name;
+            payload.new_owner_phone = card.phone;
+            payload.new_owner_email = card.email;
+            payload.new_owner_national_id = card.national_id;
+        }
+        PersonRef::Existing { person_id } => {
+            let pool = state.pool.as_ref().ok_or((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Person records need the database".to_string(),
+            ))?;
+            let site = payload
+                .site_id
+                .as_deref()
+                .and_then(crate::db::parse_id_to_i64)
+                .ok_or((StatusCode::BAD_REQUEST, "Site is not valid".to_string()))?;
+            let client = pool.get().await.map_err(|_| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Storage unavailable".to_string(),
+                )
+            })?;
+            let row = client
+                .query_opt(
+                    "SELECT full_name, phone, email FROM persons WHERE id = $1 AND site_id = $2 \
+                     AND deleted_at IS NULL AND merged_into_person_id IS NULL",
+                    &[&person_id, &site],
+                )
+                .await
+                .map_err(|_| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "Storage unavailable".to_string(),
+                    )
+                })?
+                .ok_or((StatusCode::NOT_FOUND, "Person not found".to_string()))?;
+            payload.new_owner_person_id = Some(person_id);
+            payload.new_owner_name = row.get(0);
+            payload.new_owner_phone = row.get(1);
+            payload.new_owner_email = row.get(2);
+        }
+    }
+    Ok(())
 }

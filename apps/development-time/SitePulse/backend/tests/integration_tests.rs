@@ -3821,6 +3821,7 @@ async fn when_property_ownership_transferred_then_old_owner_debt_frozen_and_tena
     }
 
     let transfer_req = TransferOwnershipRequest {
+        new_owner: None,
         site_id: Some("site-1".to_string()),
         unit_id: "d-14".to_string(),
         new_owner_name: "Mehmet Yeni Malik".to_string(),
@@ -4153,6 +4154,7 @@ async fn when_transferring_property_ownership_then_freezes_old_debt_and_creates_
     }
 
     let req = TransferOwnershipRequest {
+        new_owner: None,
         site_id: Some("site-1".to_string()),
         unit_id: "d-14".to_string(),
         new_owner_name: "Fatma Yılmaz".to_string(),
