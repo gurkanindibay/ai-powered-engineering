@@ -269,8 +269,8 @@ All 21 P0 scenarios are automated: `scripts/gui_e2e.py run -m smoke` gives **19 
 | GUI-08-01 | `test_epic08_occupancy.py::test_tenant_move_in` | pass (active TENANT occupancy, `units.tenant_person_id`) |
 | GUI-08-04 | `test_epic08_occupancy.py::test_tenant_move_out_keeps_history_and_debt` | pass (occupancy closed, `exit_balance` 1500.00, liability and person kept) |
 | GUI-09-01 | `test_epic09_payments.py::test_payment_stream_role_filter_shows_only_tenant_payments` | pass (role filter; ids equal the API's TENANT entries). The UI has no period filter, so that part of the scenario is not testable |
-| GUI-10-02 | `test_epic10_capital.py::test_project_budget_is_split_by_land_share_to_the_kurus` | pass (unit shares sum exactly to ₺500.000,00; unit 14's share is exact) |
-| GUI-10-04 | `test_epic10_capital.py::test_installment_accrual_charges_owners_only` | pass (OWNER / CAPITAL_DUES rows only, installment marked accrued) |
+| GUI-10-02 | `SC-10-01-01` in `.specify/features/EPIC-10/STORY-10-01-capital-project-creation.feature` | pass (unit shares sum exactly to ₺500.000,00; unit 14's share is exact) |
+| GUI-10-04 | `SC-10-02-01` in `.specify/features/EPIC-10/STORY-10-02-installment-scheduling.feature` | pass (OWNER / CAPITAL_DUES rows only, installment marked accrued) |
 | GUI-X-01 | conftest `page_guard` | applies to every test |
 
 New builders: `Api.change_password`, `submit_registration`, `move_in`, `create_period`, `accrue_period`, `record_manual_payment`, `payment_stream`; `Builders.tenant_debt` (SQL arrange). `support/bank_files.py` generates statement files in code, so there are no binary fixtures in git.
@@ -313,7 +313,7 @@ Second pass (the remaining ten):
 | GUI-09-02 / 09-04 | `test_epic09_receipts.py::test_receipt_shows_number_and_penalty_principal_advance_split` | pass (TAH number, penalty → principal → advance equals the API, sums to the total) |
 | GUI-09-04 | `…::test_homeowner_receipt_shows_the_issued_receipt_number` | **xfail: bug** |
 | GUI-09-03 | `…::test_tenant_statement_lists_operational_items_only` | **xfail: gap** |
-| GUI-10-05 | `test_epic10_capital.py::test_disbursement_within_collected_cash_updates_the_reserve` | pass (disbursed 1000, reserve 3000, DB row) |
+| GUI-10-05 | `SC-10-05-01` in `.specify/features/EPIC-10/STORY-10-05-contractor-disbursements.feature` | pass (disbursed 1000, reserve 3000, DB row) |
 | GUI-10-07 | `…::test_owner_fast_payment_raises_the_projects_collected_amount` | pass (collected 4000, DB paid 4000) |
 | GUI-10-09 | `…::test_virman_dialog_offers_real_units_and_advances` | **xfail: bug**, hard-coded units |
 | GUI-10-10 | `…::test_owner_dashboard_shows_capital_dues_separately` | **xfail: gap** |

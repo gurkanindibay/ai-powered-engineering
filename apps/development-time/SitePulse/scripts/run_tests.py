@@ -57,6 +57,7 @@ ORDER = [
     "tenant-lint",
     "lock-lint",
     "testid-lint",
+    "feature-traceability",
     "ui-style-lint",
     "flutter-reuse",
     "logging-standards-lint",

@@ -124,6 +124,9 @@ GATES: Dict[str, List[CommandSpec]] = {
     "api-system": [CommandSpec(["python3", "scripts/api_system_check.py", "--json"], ".", 900)],
     # Every widget Key in flutter/lib/ui must have the same id as a GUI automation testId.
     "testid-lint": [CommandSpec(["python3", "scripts/testid_lint.py", "--json"], ".", 120)],
+    # Epic -> story -> Gherkin scenario catalogue (.specify/features): every story of a migrated
+    # epic has a scenario, scenario ids are unique, `covers` links point at real scenarios.
+    "feature-traceability": [CommandSpec(["python3", "scripts/feature_traceability.py", "--json", "check"], ".", 120)],
     # Design-system rules (12 px floor, MoneyFormatter, no emoji icons, ratchet on literal styles).
     "ui-style-lint": [CommandSpec(["python3", "scripts/ui_style_lint.py", "--json"], ".", 120)],
     # Rust standards (docs/RUST_STANDARDS.md 10-16): domain purity, layering, shared rules,

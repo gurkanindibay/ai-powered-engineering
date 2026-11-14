@@ -261,6 +261,7 @@ def tenant_paid_capital(api, actors, stack):
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-09-05")
 @pytest.mark.gui_id("GUI-10-08")
+@pytest.mark.covers("SC-10-03-02")
 def test_tenant_capital_payment_receipt_names_the_owner_and_rent_offset(login_as, page, tenant_paid_capital, stack):
     login_as("manager")
     ManagerCockpit(page).wait()
