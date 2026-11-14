@@ -31,6 +31,7 @@ def _statement(tmp_path):
     ])
 
 
+@pytest.mark.covers("SC-07-02-01")
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-03")
@@ -61,6 +62,7 @@ def test_confirming_matched_rows_records_the_payment(login_as, page, tmp_path, o
                      f"AND period = '{PERIOD}';") == str(DUES)
 
 
+@pytest.mark.covers("SC-07-07-01")
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-10")
@@ -90,6 +92,7 @@ from support.money import api_amount, parse_try  # noqa: E402
 A14_IBAN = "TR620020500009863791600001"
 
 
+@pytest.mark.covers("SC-07-04-01")
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-07-02")
@@ -106,6 +109,7 @@ def test_checkout_offers_fast_to_the_virtual_iban(login_as, page, builders):
     assert "gerek yoktur" in text_of(note)
 
 
+@pytest.mark.covers("SC-07-02-02")
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-04")
@@ -119,6 +123,7 @@ def test_approved_statement_match_clears_the_homeowners_balance(login_as, login_
     assert api_amount(api.resident_dashboard(homeowner)["total_debt"]) == Decimal("0.00")
 
 
+@pytest.mark.covers("SC-07-06-02")
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-07")
@@ -143,6 +148,7 @@ def test_wrong_statement_format_is_rejected_and_excel_accepted(login_as, page, t
     assert dues.upload_statement(_statement(tmp_path)).matched()[0] == 1
 
 
+@pytest.mark.covers("SC-07-03-01")
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-07-08")
@@ -163,6 +169,7 @@ def test_fast_webhook_pays_the_balance_once(login_as, page, builders, api, actor
     assert stack.sql("SELECT sum(amount) FROM payment_entries;") == str(total)
 
 
+@pytest.mark.covers("SC-07-05-01")
 @pytest.mark.core
 @pytest.mark.role_homeowner
 @pytest.mark.gui_id("GUI-07-09")
@@ -181,6 +188,7 @@ def test_overpayment_becomes_an_advance(login_as, page, builders, api, actors):
     assert home.balance() == paid - total
 
 
+@pytest.mark.covers("SC-07-02-04")
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-05")

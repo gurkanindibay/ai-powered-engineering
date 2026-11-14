@@ -32,6 +32,7 @@ def test_tenant_move_in(login_as, page, stack):
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-04")
+@pytest.mark.covers("SC-08-03-01")
 def test_tenant_move_out_keeps_history_and_debt(login_as, page, api, actors, builders, stack):
     b3 = _unit_id(stack, "B Blok", 3)
     manager = api.login(**actors["manager"])
@@ -62,6 +63,7 @@ from support.flutter import by_id, by_id_prefix, fill, text_of  # noqa: E402
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-02")
+@pytest.mark.covers("SC-08-01-01")
 def test_operational_dues_go_to_the_tenant_and_capital_dues_to_the_owner(login_as, page, api, actors, stack):
     b3 = _unit_id(stack, "B Blok", 3)
     manager = api.login(**actors["manager"])
@@ -103,6 +105,7 @@ def test_owner_occupied_unit_operational_dues_go_to_the_owner(login_as, page, ap
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-05")
+@pytest.mark.covers("SC-08-04-01")
 def test_history_lists_previous_tenant_with_exit_balance_and_the_new_one(login_as, page, api, actors, builders, stack):
     b3 = _unit_id(stack, "B Blok", 3)
     manager = api.login(**actors["manager"])
@@ -134,6 +137,7 @@ def test_history_lists_previous_tenant_with_exit_balance_and_the_new_one(login_a
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-06")
+@pytest.mark.covers("SC-08-05-01")
 def test_ownership_transfer_keeps_the_previous_owner_in_history(login_as, page, stack, actors):
     a14 = _unit_id(stack, "A Blok", 14)
     old_owner = stack.sql(f"SELECT owner_person_id FROM units WHERE id = {int(a14)};")
@@ -209,6 +213,7 @@ def two_household_members(login_as, page, stack):
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-03")
+@pytest.mark.covers("SC-08-02-01")
 def test_household_members_are_added(two_household_members, api, actors):
     manager = api.login(**actors["manager"])
     members = api.call("GET", f"/api/v1/home-residents/members/{two_household_members}?site_id=1", manager.token)

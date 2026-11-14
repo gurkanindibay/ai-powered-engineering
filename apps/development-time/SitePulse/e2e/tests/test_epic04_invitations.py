@@ -18,6 +18,7 @@ def two_registrations(api):
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-04-02")
+@pytest.mark.covers("SC-04-04-01")
 def test_pending_registrations_are_listed_for_the_manager(login_as, page, two_registrations):
     login_as("manager")
     cockpit = ManagerCockpit(page).wait()
@@ -30,6 +31,7 @@ def test_pending_registrations_are_listed_for_the_manager(login_as, page, two_re
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-04-03")
+@pytest.mark.covers("SC-04-05-01")
 def test_approving_a_registration_creates_an_active_account(login_as, page, two_registrations, api, stack):
     login_as("manager")
     cockpit = ManagerCockpit(page).wait()

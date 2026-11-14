@@ -9,6 +9,7 @@ from pages import ManagerCockpit, PaymentStream
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-09-01")
+@pytest.mark.covers("SC-09-01-01")
 def test_payment_stream_role_filter_shows_only_tenant_payments(login_as, page, api, actors, stack):
     manager = api.login(**actors["manager"])
     b3 = stack.sql("SELECT u.id FROM units u JOIN blocks b ON b.id = u.block_id "

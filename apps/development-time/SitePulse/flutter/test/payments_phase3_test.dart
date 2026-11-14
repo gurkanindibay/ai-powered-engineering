@@ -59,6 +59,7 @@ void main() {
     });
 
     test('the privacy status lists consents per channel', () {
+      // covers: SC-11-02-04
       final s = PrivacyStatus.fromJson({
         'current_notice': {'title': 'Aydınlatma', 'body': 'Metin', 'version': 2},
         'acknowledged': false,
@@ -72,6 +73,7 @@ void main() {
     });
 
     test('the designated amount is the sum of the selected items only', () {
+      // covers: SC-11-05-04
       StatementOpenItem item(String id, String amount) => StatementOpenItem.fromJson({
             'due_id': id, 'period': id, 'expense_type': 'OPERATIONAL_DUES', 'due_date': '2026-10-15', 'days_overdue': 5,
             'principal_outstanding': amount, 'penalty_outstanding': '0', 'total_outstanding': amount, 'limitation_warning': false,
@@ -127,6 +129,7 @@ void main() {
   });
 
   testWidgets('selecting open items enables a designated card payment', (tester) async {
+    // covers: SC-11-05-03
     final statement = ResidentStatement.fromJson({
       'unit_id': '14',
       'unit_label': 'A Blok D:14',

@@ -789,6 +789,7 @@ async fn when_resetting_admin_password_for_non_existent_site_then_fails() {
 // STORY-07-02: Zero-Approval Bank Statement (Excel / CSV / MT940) Parser Tests
 // ============================================================================
 
+// covers: SC-07-02-01
 #[tokio::test]
 async fn when_parsing_turkish_bank_excel_then_matches_flat_and_amount() {
     let state = AppState::new();
@@ -875,6 +876,7 @@ fn flutter_reconciliation_payload_uses_backend_enum_contract() {
     assert_eq!(parsed.status, ReconciliationStatus::PendingApproval);
 }
 
+// covers: SC-07-02-03
 #[tokio::test]
 async fn when_parsing_mt940_statement_then_extracts_transactions_and_matches_due() {
     let state = AppState::new();
@@ -1042,6 +1044,7 @@ async fn when_confirming_reconciliation_with_optional_message_then_reports_notif
         .contains("iletildi"));
 }
 
+// covers: SC-07-06-01
 #[tokio::test]
 async fn when_site_manager_configures_bank_account_then_format_is_automatically_set_by_bank() {
     let state = AppState::new();
@@ -1193,6 +1196,7 @@ async fn when_invalid_bank_code_or_iban_then_configuration_fails_validation() {
         .is_err());
 }
 
+// covers: SC-07-06-02
 #[tokio::test]
 async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permits_new_format_after_change(
 ) {
@@ -1296,6 +1300,7 @@ async fn when_parsing_bank_statement_then_enforces_active_bank_format_and_permit
     assert!(msg2.contains("File format mismatch"));
 }
 
+// covers: SC-07-01-01
 #[test]
 fn when_unit_created_then_generates_unique_sanal_iban() {
     let iban = VirtualIbanService::generate_virtual_iban("00205", "site-1", "A", 14).unwrap();
@@ -1333,6 +1338,7 @@ async fn when_probing_kuveyt_turk_sandbox_status_then_reports_keys_loaded() {
     assert!(status_json.public_key_present);
 }
 
+// covers: SC-07-01-02
 #[tokio::test]
 async fn when_querying_resident_dashboard_then_includes_allocated_virtual_iban() {
     let state = AppState::new();
@@ -1459,6 +1465,7 @@ async fn when_querying_resident_dashboard_then_separates_capital_dues_by_project
     assert!(resident_dashboard.capital_dues.is_empty());
 }
 
+// covers: SC-07-03-02
 #[tokio::test]
 async fn when_statement_contains_virtual_iban_then_matches_flat_with_100_percent_confidence() {
     let service = ReconciliationService::new();
@@ -1518,6 +1525,7 @@ async fn when_statement_contains_virtual_iban_then_matches_flat_with_100_percent
     assert!(m.notes.as_ref().unwrap().contains("Virtual IBAN"));
 }
 
+// covers: SC-07-03-01
 #[tokio::test]
 async fn when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_generates_receipt() {
     let state = AppState::new();
@@ -1565,6 +1573,7 @@ async fn when_bank_webhook_delivers_virtual_iban_payment_then_clears_dues_and_ge
     assert_eq!(res2.status, "DUPLICATE_IGNORED");
 }
 
+// covers: SC-07-05-01
 #[tokio::test]
 async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_payment() {
     let state = AppState::new();
@@ -1681,6 +1690,7 @@ async fn when_excess_or_multiple_payments_delivered_then_credited_as_advance_pay
     assert_eq!(due_tx.subtitle, "Eylül 2026 aidat borcu kapatıldı");
 }
 
+// covers: SC-07-05-02
 #[tokio::test]
 async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_automatically_offsets_debt(
 ) {
@@ -1776,6 +1786,7 @@ async fn when_new_dues_period_accrued_and_resident_has_advance_payment_then_auto
     assert!(offset_tx.is_credit);
 }
 
+// covers: SC-07-07-01
 #[tokio::test]
 async fn when_dues_period_already_accrued_then_duplicate_accrual_is_prevented() {
     let state = AppState::new();
@@ -1836,6 +1847,7 @@ async fn when_dues_period_already_accrued_then_duplicate_accrual_is_prevented() 
     assert_eq!(final_dues_count, initial_dues_count);
 }
 
+// covers: SC-07-07-02
 #[tokio::test]
 async fn when_scheduler_batch_runs_then_accrues_and_prevents_duplicate_accrual() {
     let state = AppState::new();

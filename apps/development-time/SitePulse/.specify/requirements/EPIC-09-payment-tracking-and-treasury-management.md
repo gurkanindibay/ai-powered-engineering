@@ -195,6 +195,8 @@ stateDiagram-v2
     And clicking any payment opens the detailed allocation breakdown dialog
   ```
 
+Executable scenarios: [`STORY-09-01-unified-payment-stream.feature`](../features/EPIC-09/STORY-09-01-unified-payment-stream.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-09-02: Dual-Ledger FIFO Payment Allocation & KMK Interest Settlement Engine
@@ -215,6 +217,8 @@ stateDiagram-v2
     And the payment allocation audit record reflects the exact 3-tier distribution
   ```
 
+Executable scenarios: [`STORY-09-02-fifo-allocation-engine.feature`](../features/EPIC-09/STORY-09-02-fifo-allocation-engine.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-09-03: Real-Time Debt Aging, Delinquency Tracking & Sub-Ledger (Cari Hesap) Ekstresi
@@ -233,6 +237,8 @@ stateDiagram-v2
     And excludes capital dues assessed to the Property Owner
     And displays the net balance with statutory interest breakdown
   ```
+
+Executable scenarios: [`STORY-09-03-debt-aging-and-sub-ledger.feature`](../features/EPIC-09/STORY-09-03-debt-aging-and-sub-ledger.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -255,6 +261,8 @@ stateDiagram-v2
     And the receipt includes the site tax ID and itemized dues breakdown
   ```
 
+Executable scenarios: [`STORY-09-04-payment-receipts.feature`](../features/EPIC-09/STORY-09-04-payment-receipts.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-09-05: Occupancy Lifecycle Financial Settlement & Move-Out Frozen Balance Handover
@@ -274,6 +282,8 @@ stateDiagram-v2
     And subsequent monthly operational dues are automatically billed to the Property Owner
     And past payment receipts remain attributed to Zeynep Kaya
   ```
+
+Executable scenarios: [`STORY-09-05-move-out-settlement.feature`](../features/EPIC-09/STORY-09-05-move-out-settlement.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 
@@ -295,6 +305,8 @@ stateDiagram-v2
     And Canan Kaya's tenant operational dues balance remains unchanged
   ```
 
+Executable scenarios: [`STORY-09-06-tenant-pays-capital-on-behalf.feature`](../features/EPIC-09/STORY-09-06-tenant-pays-capital-on-behalf.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
 ---
 
 ### STORY-09-07: Change of Ownership (Property Sale) & Title Deed Financial Handover (Tapu Devri ve Mülk Satış Kapanışı)
@@ -314,6 +326,8 @@ stateDiagram-v2
     And all future capital dues and vacant period charges are billed to Burak Demir
     And active tenant records and operational dues remain unaffected
   ```
+
+Executable scenarios: [`STORY-09-07-change-of-ownership.feature`](../features/EPIC-09/STORY-09-07-change-of-ownership.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 
 ---
 

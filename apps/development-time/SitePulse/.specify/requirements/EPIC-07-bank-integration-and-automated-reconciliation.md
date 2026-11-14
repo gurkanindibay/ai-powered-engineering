@@ -36,15 +36,8 @@ This epic solves the operational bottleneck of manually matching bank transfers 
 - **Status:** `COMPLETED` (Verified with Kuveyt Türk Sandbox, ISO 7064 MOD-97-10 check digits & E2E suite)
 - **Target Role:** Site Manager & System
 - **Description:** Automatically provision and bind a unique Virtual IBAN sub-account to each apartment (`bagimsiz_bolum_id`) under the site's primary commercial collection account.
-- **Acceptance Criteria (Gherkin):**
-  ```gherkin
-  Scenario: Automated allocation of virtual IBAN upon unit setup
-    Given a new flat "A Blok Daire 14" is registered in "Begonya Sitesi"
-    When the virtual IBAN generation service is triggered
-    Then a valid TR Sanal IBAN is generated with format "TR410020504213991067000014"
-    And the IBAN is stored immutably against unit "A Blok D:14"
-    And the resident sees their dedicated bank IBAN on their mobile dashboard
-  ```
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-01-virtual-iban-allocation.feature`](../features/EPIC-07/STORY-07-01-virtual-iban-allocation.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 - **Implementation Artifacts:**
   - `virtual_iban_service.rs`, `kuveyt_turk_service.rs`, `models/mod.rs`, `handlers/mod.rs`
 - **Verification & Tests:**
@@ -58,15 +51,8 @@ This epic solves the operational bottleneck of manually matching bank transfers 
 - **Status:** `COMPLETED` (Verified with integration & UI test suite)
 - **Target Role:** Site Manager (Individual Developer Friendly)
 - **Description:** Allow site managers to upload monthly Excel, CSV, or SWIFT MT940 statements exported from any Turkish bank internet branch. An intelligent regex/NLP matcher parses transfer descriptions, extracts block/flat identifiers and resident names, and proposes batch dues clearances.
-- **Acceptance Criteria (Gherkin):**
-  ```gherkin
-  Scenario: Site manager uploads bank statement Excel file
-    Given the manager uploads an Excel statement containing "HAVALE - AHMET YILMAZ A BLOK D:14 EYLUL AIDAT - ₺1.423,33"
-    When the statement parsing engine processes the transaction rows
-    Then the engine identifies unit "A Blok D:14" with 100% confidence
-    And matches the exact outstanding dues balance ₺1.423,33
-    And marks the transaction as "ONAY_BEKLIYOR" in the reconciliation queue
-  ```
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-02-bank-statement-parser.feature`](../features/EPIC-07/STORY-07-02-bank-statement-parser.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 - **Implementation Artifacts:**
   - `bank_statement_parser.rs`, `mt940_engine.rs`, `reconciliation_service.rs`
 - **Verification & Tests:**
@@ -79,16 +65,8 @@ This epic solves the operational bottleneck of manually matching bank transfers 
 - **Status:** `COMPLETED` (Verified with live Sandbox webhook, instant dues clearance & Idempotency Gate)
 - **Target Role:** System / Bank Integration
 - **Description:** Provide a secure REST webhook endpoint accepting real-time incoming transfer notifications from participating banks (Kuveyt Türk, Garanti BBVA, Yapı Kredi, Akbank) with idempotency keys and automatic settlement to prevent duplicate booking.
-- **Acceptance Criteria (Gherkin):**
-  ```gherkin
-  Scenario: Real-time incoming transfer notification from bank
-    Given a valid incoming webhook payload to Sanal IBAN "TR410020504213991067000014"
-    And payload indicates ₺1460.67 transfer with reference "TXN-KT-LIVE-..."
-    When the webhook controller processes the event
-    Then the unit "A Blok D:14" dues status transitions to "ODENDI"
-    And an official sequential receipt is issued (#TAH-YYYY-NNNNNN, SPEC-005 single ingestion path)
-    And subsequent duplicate requests return "DUPLICATE_IGNORED" without double-crediting
-  ```
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-03-bank-webhook-listener.feature`](../features/EPIC-07/STORY-07-03-bank-webhook-listener.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 - **Implementation Artifacts:**
   - `handlers/mod.rs` (`handle_bank_incoming_webhook`), `reconciliation_service.rs`
 - **Verification & Tests:**
@@ -102,15 +80,8 @@ This epic solves the operational bottleneck of manually matching bank transfers 
 - **Status:** `COMPLETED` (Verified in Flutter & Prototype)
 - **Target Role:** Home Resident
 - **Description:** Replace technical banking jargon with clean, user-friendly Turkish fintech terminology on the mobile Resident Dashboard and Payment Checkout dialog ("Sanal IBAN ile FAST Transfer"), offering 1-tap clipboard copying, clear sender explanation instructions, and instant payment guidance.
-- **Acceptance Criteria (Gherkin):**
-  ```gherkin
-  Scenario: Resident chooses FAST transfer payment method
-    Given resident "Ahmet Yılmaz" opens "Hemen Öde" modal
-    When they select "Sanal IBAN ile FAST Transfer"
-    Then the UI renders flat's dedicated 26-character TR IBAN with spaced formatting
-    And subtitle states "Dairenize özel tanımlı sanal IBAN'a 7/24 FAST ile havale yapın. Açıklamaya hiçbir şey yazmasanız dahi ödemeniz anında eşleşir."
-    And tapping copy button copies the unspaced IBAN to clipboard with instant toast notification
-  ```
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-04-resident-fast-payment.feature`](../features/EPIC-07/STORY-07-04-resident-fast-payment.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 - **Implementation Artifacts:**
   - `payment_checkout_dialog.dart`, `hero_balance_card.dart`, `mvp_ux_prototype.html`
 - **Verification & Tests:**
@@ -122,17 +93,8 @@ This epic solves the operational bottleneck of manually matching bank transfers 
 - **Status:** `COMPLETED` (Verified in Rust Backend, Flutter & E2E)
 - **Target Role:** Home Resident & Site Manager
 - **Description:** When a resident transfers an amount greater than their outstanding debt (or makes early payments when no debt exists), credit the surplus as an Advance Payment (`advance_payment` / Avans Bakiye). Dynamically render `+₺{amount}` in emerald green on the resident's Hero Balance Card (*"Mevcut Avans Bakiyesi (Alacak)"*) instead of "₺0 ödenecek tutar", record credit movements in the transaction ledger, and automatically deduct future dues using FIFO.
-- **Acceptance Criteria (Gherkin):**
-  ```gherkin
-  Scenario: Surplus transfer allocated to resident advance balance
-    Given resident has an outstanding due of ₺1400.00
-    When resident transfers ₺2860.67 via their Sanal IBAN
-    Then the ₺1400.00 debt is marked as PAID
-    And remaining ₺1460.67 is recorded in unit's "advance_payment" balance
-    And Hero Balance Card displays "+₺1.460,67" in emerald green
-    And status pill displays "Gelecek Dönem İçin Avans Mevcut"
-    And transaction list logs "FAST ile Avans Yükleme"
-  ```
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-05-advance-payment-allocation.feature`](../features/EPIC-07/STORY-07-05-advance-payment-allocation.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 - **Implementation Artifacts:**
   - `handlers/mod.rs` (`apply_advance_payments_offset`), `models/mod.rs`, `hero_balance_card.dart`
 - **Verification & Tests:**
@@ -145,15 +107,8 @@ This epic solves the operational bottleneck of manually matching bank transfers 
 - **Status:** `COMPLETED` (Verified in Rust Backend & Flutter UI)
 - **Target Role:** Site Manager
 - **Description:** Provide a site banking administration endpoint and UI allowing site managers to configure their official bank account (Kuveyt Türk, Garanti BBVA, İş Bankası, Yapı Kredi, Akbank) and automatically enforce the active statement format (Excel, CSV, MT940). Reject incompatible statement formats during upload.
-- **Acceptance Criteria (Gherkin):**
-  ```gherkin
-  Scenario: Site manager configures Kuveyt Türk account and uploads statement
-    Given site manager configures bank "KUVEYT_TURK" with IBAN "TR620020500009863791600001"
-    When statement format is assigned as "EXCEL"
-    And manager uploads an incompatible MT940 statement file
-    Then the parser strictly rejects the upload with format mismatch error
-    And when matching Kuveyt Türk Excel file is provided, parser succeeds
-  ```
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-06-site-bank-account-configuration.feature`](../features/EPIC-07/STORY-07-06-site-bank-account-configuration.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 - **Implementation Artifacts:**
   - `handlers/mod.rs` (`configure_site_bank_account`), `models/mod.rs`, `dues_management_view.dart`
 - **Verification & Tests:**
@@ -166,19 +121,8 @@ This epic solves the operational bottleneck of manually matching bank transfers 
 - **Status:** `COMPLETED` (Verified in Tokio Backend, Flutter UI & Integration Suite)
 - **Target Role:** System & Site Manager
 - **Description:** Automate periodic monthly dues accrual across all sites via an embedded Tokio background scheduler (batch job) and empower site managers to manually trigger period accrual from the Aidat Yönetimi view ("Toplu Aidat Tahakkuku"). Enforce a strict duplicate accrual prevention guard (`prevent duplicate accrual`): if dues for a site and period (e.g. `Ekim 2026`) have already been accrued, reject duplicate liability creation, return `already_accrued: true` with an informative warning, and automatically offset any available resident advance balances (`advance_payment`) via FIFO.
-- **Acceptance Criteria (Gherkin):**
-  ```gherkin
-  Scenario: Automated monthly dues accrual with duplicate prevention
-    Given site "site-1" has 12 units
-    When the monthly accrual is executed for period "Ekim 2026"
-    Then 12 dues liabilities of ₺1400.00 each are created
-    And units with advance balance are automatically marked as PAID
-    And when the same accrual is triggered a second time for "Ekim 2026"
-    Then newly accrued unit count is 0
-    And response flags "already_accrued: true"
-    And message states "'Ekim 2026' dönemi için aidat tahakkuku bu sitede daha önce yapılmış. Mükerrer tahakkuk engellendi."
-    And total dues liabilities count remains exactly unchanged
-  ```
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-07-monthly-dues-accrual.feature`](../features/EPIC-07/STORY-07-07-monthly-dues-accrual.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
 - **Implementation Artifacts:**
   - `scheduler.rs`, `backend/src/main.rs`, `handlers/mod.rs` (`accrue_monthly_dues`), `dues_management_view.dart`, `dashboard_controller.dart`
 - **Verification & Tests:**

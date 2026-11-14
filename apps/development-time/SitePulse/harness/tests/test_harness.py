@@ -244,6 +244,7 @@ class TestProjectData(unittest.TestCase):
     def test_project_dag_is_valid(self):
         TaskDag(PROJECT_ROOT / ".specify" / "tasks" / "task-dag.json")
 
+    # covers: SC-05-06-01
     def test_project_rtm_is_consistent(self):
         from harness.rtm_validator import RtmValidator
         report = RtmValidator().validate()

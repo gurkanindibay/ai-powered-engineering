@@ -6,6 +6,7 @@ from support.api import ApiError
 from support.flutter import by_id
 
 
+@pytest.mark.covers("SC-03-02-01")
 @pytest.mark.smoke
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-03-01")
@@ -17,6 +18,7 @@ def test_portfolio_lists_every_site(login_as, page, api, actors):
     assert SaasAdmin(page).wait().site_ids() == expected_ids
 
 
+@pytest.mark.covers("SC-03-02-02")
 @pytest.mark.smoke
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-03-01")
@@ -29,6 +31,8 @@ def test_portfolio_stats_agree_with_site_list(api, actors):
     assert stats["total_units"] == sum(s["total_units"] for s in sites), (stats, [s["total_units"] for s in sites])
 
 
+@pytest.mark.covers("SC-03-03-01")
+@pytest.mark.covers("SC-03-04-01")
 @pytest.mark.smoke
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-03-02")
@@ -85,6 +89,7 @@ def saas_ui(saas_ready, login_page, page, actors):
     return SaasAdmin(page).wait()
 
 
+@pytest.mark.covers("SC-03-04-02")
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-03-03")
@@ -104,6 +109,7 @@ def test_new_manager_must_change_password_and_lands_on_an_empty_site(login_page,
     assert api.login("murat.yildirim@e2e.test", "E2E-New-Manager-5").user["must_change_password"] is False
 
 
+@pytest.mark.covers("SC-03-01-01")
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-03-04")
@@ -132,6 +138,7 @@ def test_edit_site_updates_the_card(saas_ui, stack):
     assert stack.sql("SELECT name FROM sites WHERE id = 1;") == "Begonya Sitesi Evleri"
 
 
+@pytest.mark.covers("SC-03-06-01")
 @pytest.mark.core
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-03-06")
@@ -160,6 +167,7 @@ def test_empty_site_can_be_deleted(api, saas_ready, login_page, page, actors, st
     ) == "1"
 
 
+@pytest.mark.covers("SC-03-06-02")
 @pytest.mark.core
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-03-07")
@@ -168,6 +176,7 @@ def test_site_with_units_cannot_be_deleted(saas_ui):
     assert saas_ui.page.locator('[flt-semantics-identifier="btn_delete_site_1"]').count() == 0
 
 
+@pytest.mark.covers("SC-03-07-01")
 @pytest.mark.core
 @pytest.mark.role_saas
 @pytest.mark.gui_id("GUI-03-08")
