@@ -29,6 +29,7 @@ import '../design_system/sp_tone.dart';
 import '../design_system/sp_guidance_card.dart';
 
 part 'owners_residents_unit_card.dart';
+part 'owners_residents_unit_workspace.dart';
 part 'owners_residents_registration.dart';
 part 'owners_residents_edit.dart';
 part 'owners_residents_occupancy.dart';

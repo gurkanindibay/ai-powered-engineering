@@ -701,6 +701,33 @@ extension _UnitCard on _OwnersResidentsModulePageState {
 
                 const SizedBox(height: 12),
 
+                // Entry points of the actions-first unit workspace.
+                Row(
+                  children: [
+                    Expanded(
+                      child: testId('module_workspace_actions_${ho.unitId}', FilledButton.icon(
+                        key: Key('module_workspace_actions_${ho.unitId}'),
+                        onPressed: () => _openUnitWorkspace(ho),
+                        icon: const Icon(Icons.bolt, size: 16),
+                        label: const Text('İşlemler'),
+                        style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                      )),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: testId('module_workspace_info_${ho.unitId}', OutlinedButton.icon(
+                        key: Key('module_workspace_info_${ho.unitId}'),
+                        onPressed: () => _openUnitWorkspace(ho, mode: UnitWorkspaceMode.information),
+                        icon: const Icon(Icons.info_outline, size: 16),
+                        label: const Text('Detay'),
+                        style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+                      )),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
                 // Keep unit tools here; occupied rentals can also start a replacement move-in.
                 Wrap(
                   spacing: 8,
