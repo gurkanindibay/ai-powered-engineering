@@ -541,3 +541,104 @@ async fn sender_ibans_are_persisted_for_their_unit() {
     assert_eq!(stored, 2, "both sender IBANs must be stored for the unit");
     t.drop_db().await;
 }
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+async fn responsible_contact_persists_without_changing_owner_or_tenant() {
+    let t = TestDb::create("responsible_contact").await;
+    let site = t.site_id("begonya-sitesi").await;
+    let other_site = t.site_id("kardelen-rezidans").await;
+    let unit = t.unit_of(site).await;
+    let unit_text = unit.to_string();
+    t.exec(&format!(
+        "INSERT INTO unit_occupancies (unit_id, person_id, occupancy_type, start_date, is_active)
+        SELECT id, COALESCE(tenant_person_id, owner_person_id),
+               CASE WHEN tenant_person_id IS NULL THEN 'OWNER' ELSE 'TENANT' END, CURRENT_DATE, TRUE
+        FROM units WHERE id = {unit} AND NOT EXISTS
+            (SELECT 1 FROM unit_occupancies WHERE unit_id = {unit} AND is_active = TRUE)"
+    ))
+    .await;
+    t.exec(&format!(
+        "INSERT INTO occupancy_members (occupancy_id, full_name, relationship, phone, email)
+        SELECT id, 'Selected Household Contact', 'SPOUSE', '05321112233', 'contact@tenant.test'
+        FROM unit_occupancies WHERE unit_id = {unit} AND is_active = TRUE"
+    ))
+    .await;
+    let app = build_router(t.state().await);
+    let token = manager_token(&app, site).await;
+    let foreign_token = manager_token(&app, other_site).await;
+    let list_url = format!("/api/v1/site-admin/home-owners?site_id={site}");
+    let (_, before) = call(&app, "GET", &list_url, &token, None).await;
+    let before = before
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["unit_id"] == unit_text)
+        .unwrap()
+        .clone();
+    let uri = format!("/api/v1/site-admin/units/{unit}/responsible-contact?site_id={site}");
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &uri,
+        &token,
+        Some(serde_json::json!({"role":"OWNER", "resident_name":"ignored client identity"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    assert_eq!(saved["primary_responsible_name"], before["owner_full_name"]);
+    let member = before["household_residents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|member| member["full_name"] == "Selected Household Contact")
+        .unwrap();
+    let (status, saved) = call(&app, "PUT", &uri, &token, Some(serde_json::json!({
+        "role": "RESIDENT", "resident_name": "Selected Household Contact", "member_id": member["resident_id"]
+    }))).await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let fresh_app = build_router(t.state().await);
+    let (_, after) = call(&fresh_app, "GET", &list_url, &token, None).await;
+    let after = after
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["unit_id"] == unit_text)
+        .unwrap();
+    assert_eq!(after["primary_responsible_role"], "RESIDENT");
+    assert_eq!(
+        after["primary_responsible_name"],
+        "Selected Household Contact"
+    );
+    for field in [
+        "owner_full_name",
+        "email",
+        "phone",
+        "tenant_full_name",
+        "tenant_phone",
+        "tenant_email",
+        "occupancy_status",
+    ] {
+        assert_eq!(
+            after[field], before[field],
+            "identity field changed: {field}"
+        );
+    }
+    let (status, _) = call(&fresh_app, "PUT", &uri, &token, Some(serde_json::json!({"role":"RESIDENT", "resident_name":"unrelated person", "member_id":"-1"}))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let foreign_uri =
+        format!("/api/v1/site-admin/units/{unit}/responsible-contact?site_id={other_site}");
+    let (status, _) = call(
+        &fresh_app,
+        "PUT",
+        &foreign_uri,
+        &foreign_token,
+        Some(serde_json::json!({"role":"OWNER", "resident_name":"foreign"})),
+    )
+    .await;
+    assert!(matches!(
+        status,
+        StatusCode::NOT_FOUND | StatusCode::FORBIDDEN
+    ));
+    t.drop_db().await;
+}

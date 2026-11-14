@@ -55,6 +55,7 @@ pub struct AppStateInner {
     pub homeowner_payments: Vec<HomeownerPaymentRecord>,
     pub remembered_sender_ibans: HashMap<String, String>,
     pub sender_iban_metadata: HashMap<String, (Option<String>, Option<String>)>,
+    pub unit_primary_contacts: HashMap<String, crate::models::PrimaryResponsibleContact>,
     pub unit_payer_names: HashMap<String, Vec<String>>,
     pub house_types: Vec<crate::models::HouseTypeTariff>,
     pub dues_periods: Vec<crate::models::DuesPeriod>,
@@ -118,6 +119,7 @@ impl AppStateInner {
             homeowner_payments: Vec::new(),
             remembered_sender_ibans: HashMap::new(),
             sender_iban_metadata: HashMap::new(),
+            unit_primary_contacts: HashMap::new(),
             unit_payer_names: HashMap::new(),
             house_types: Vec::new(),
             dues_periods: Vec::new(),
@@ -549,6 +551,7 @@ impl AppStateInner {
         self.dues.clear();
         self.pending_registrations.clear();
         self.unit_members.clear();
+        self.unit_primary_contacts.clear();
         self.unit_invite_tokens.clear();
         self.reconciliation_queue.clear();
         self.site_bank_accounts.clear();

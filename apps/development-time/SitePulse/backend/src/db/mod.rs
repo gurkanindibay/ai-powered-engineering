@@ -33,3 +33,5 @@ pub use user_repository::*;
 
 mod security_repository;
 pub use security_repository::security_connection;
+
+pub mod responsible_contact_repository;

@@ -1199,6 +1199,7 @@ impl SiteAdminService {
         }
 
         Ok(HomeOwnerResponse {
+            primary_responsible: None,
             unit_id,
             site_id: site_id.to_string(),
             block: request.block,
@@ -1241,6 +1242,24 @@ impl SiteAdminService {
         let mut owners = self.load_home_owners_for_site(site_id).await;
         let inner = self.state.inner.read().await;
         for o in owners.iter_mut() {
+            let stored = o.primary_responsible.clone().or_else(|| {
+                if self.state.pool.is_none() {
+                    inner.unit_primary_contacts.get(&o.unit_id).cloned()
+                } else {
+                    None
+                }
+            });
+            o.primary_responsible = stored.and_then(|contact| {
+                crate::services::responsible_contact_service::resolve_contact(
+                    o,
+                    &crate::models::SelectResponsibleContactRequest {
+                        role: contact.primary_responsible_role,
+                        resident_name: contact.primary_responsible_name,
+                        member_id: contact.primary_responsible_member_id,
+                    },
+                )
+                .ok()
+            });
             let unit = inner
                 .units
                 .iter()
@@ -1264,6 +1283,7 @@ impl SiteAdminService {
                 let query = r#"
                     SELECT 
                         u.id::text as unit_id,
+                        u.primary_responsible_contact,
                         u.site_id as site_id,
                         COALESCE(b.block_name, 'A Blok') as block_name,
                         COALESCE(u.unit_number, 0) as unit_number,
@@ -1379,6 +1399,11 @@ impl SiteAdminService {
                             }
 
                             db_result.push(HomeOwnerResponse {
+                                primary_responsible: r
+                                    .get::<_, Option<serde_json::Value>>(
+                                        "primary_responsible_contact",
+                                    )
+                                    .and_then(|value| serde_json::from_value(value).ok()),
                                 unit_id: unit_id_val,
                                 site_id: site_id.to_string(),
                                 block: block_name,
@@ -1472,6 +1497,7 @@ impl SiteAdminService {
                 .unwrap_or_default();
 
             result.push(HomeOwnerResponse {
+                primary_responsible: None,
                 unit_id,
                 site_id: site_id.to_string(),
                 block,
