@@ -1,0 +1,121 @@
+{
+  "task_id": "task-34",
+  "passed": true,
+  "started_at": "2026-11-14T21:43:20.790828+00:00",
+  "finished_at": "2026-11-14T21:44:15.084810+00:00",
+  "gates": [
+    {
+      "name": "flutter-analyze",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter analyze --no-fatal-infos --no-fatal-warnings",
+      "duration_s": 3.510418606980238
+    },
+    {
+      "name": "flutter-test",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter test",
+      "duration_s": 30.596845004998613
+    },
+    {
+      "name": "flutter-reuse",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/flutter_reuse_inventory.py --check --json",
+      "duration_s": 0.5678507239790633
+    },
+    {
+      "name": "ui-style-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/ui_style_lint.py --json",
+      "duration_s": 0.3386871159891598
+    },
+    {
+      "name": "testid-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/testid_lint.py --json",
+      "duration_s": 0.08919036597944796
+    },
+    {
+      "name": "logging-standards-lint",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/logging_standards_lint.py --json",
+      "duration_s": 0.592373731022235
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "id": "flutter:test/sp_directory_scaffold_test.dart",
+      "name": "flutter:test/sp_directory_scaffold_test.dart",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter test test/sp_directory_scaffold_test.dart",
+      "duration_s": 3.356393297028262
+    },
+    {
+      "id": "flutter:test/resident_directory_test.dart",
+      "name": "flutter:test/resident_directory_test.dart",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter test test/resident_directory_test.dart",
+      "duration_s": 1.990771858021617
+    },
+    {
+      "id": "flutter:test/unit_directory_row_test.dart",
+      "name": "flutter:test/unit_directory_row_test.dart",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter test test/unit_directory_row_test.dart",
+      "duration_s": 2.4284597379737534
+    },
+    {
+      "id": "flutter:test/owners_residents_module_test.dart",
+      "name": "flutter:test/owners_residents_module_test.dart",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter test test/owners_residents_module_test.dart",
+      "duration_s": 7.878659827983938
+    },
+    {
+      "id": "flutter:test/unit_directory_benchmark_test.dart",
+      "name": "flutter:test/unit_directory_benchmark_test.dart",
+      "passed": true,
+      "diagnostics": [],
+      "command": "flutter test test/unit_directory_benchmark_test.dart",
+      "duration_s": 2.8437861099955626
+    },
+    {
+      "id": "scenario:SC-12-02-05",
+      "name": "scenario:SC-12-02-05",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/feature_traceability.py --json report",
+      "duration_s": 0.09614065499044955
+    },
+    {
+      "id": "scenario:SC-12-02-06",
+      "name": "scenario:SC-12-02-06",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/feature_traceability.py --json report",
+      "duration_s": 0.09614065499044955
+    },
+    {
+      "id": "scenario:SC-12-02-07",
+      "name": "scenario:SC-12-02-07",
+      "passed": true,
+      "diagnostics": [],
+      "command": "python3 scripts/feature_traceability.py --json report",
+      "duration_s": 0.09614065499044955
+    }
+  ],
+  "gates_evaluated": 14,
+  "diagnostics": [],
+  "commit": "8a3a5d596d1cbab1d41824b30503c87f41da8d99",
+  "dirty": true,
+  "attempts": 0
+}

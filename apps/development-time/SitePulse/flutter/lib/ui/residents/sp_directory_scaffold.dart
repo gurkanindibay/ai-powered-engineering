@@ -1,0 +1,245 @@
+import 'package:flutter/material.dart';
+
+import '../design_system/sp_tone.dart';
+import '../theme/app_theme.dart';
+
+/// Shared directory layout with a scrollable header, lazy rows and local paging.
+///
+/// Callers own search, filters and sorting so the same scaffold can serve
+/// people, units and other site directories without hiding their domain rules.
+class SpDirectoryScaffold<T> extends StatefulWidget {
+  final List<T> items;
+  final Widget header;
+  final Widget emptyState;
+  final Widget Function(BuildContext context, T item, int index) itemBuilder;
+  final int initialPageSize;
+  final String restorationId;
+  final Object? resultKey;
+  final String? resultLabel;
+
+  const SpDirectoryScaffold({
+    super.key,
+    required this.items,
+    required this.header,
+    required this.emptyState,
+    required this.itemBuilder,
+    required this.restorationId,
+    this.initialPageSize = 25,
+    this.resultLabel,
+    this.resultKey,
+  });
+
+  @override
+  State<SpDirectoryScaffold<T>> createState() => _SpDirectoryScaffoldState<T>();
+}
+
+class _SpDirectoryScaffoldState<T> extends State<SpDirectoryScaffold<T>>
+    with RestorationMixin {
+  final RestorableInt _page = RestorableInt(0);
+  late final RestorableInt _pageSize;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _pageSize = RestorableInt(widget.initialPageSize);
+  }
+
+  @override
+  String? get restorationId => widget.restorationId;
+
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool _) {
+    registerForRestoration(_page, 'page');
+    registerForRestoration(_pageSize, 'pageSize');
+    _clampPage();
+  }
+
+  @override
+  void didUpdateWidget(covariant SpDirectoryScaffold<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.resultKey != widget.resultKey) {
+      _page.value = 0;
+      if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    } else if (oldWidget.items.length != widget.items.length) {
+      _clampPage();
+    }
+  }
+
+  void _clampPage() {
+    final maxPage = widget.items.isEmpty
+        ? 0
+        : (widget.items.length - 1) ~/ _pageSize.value;
+    if (_page.value > maxPage) _page.value = maxPage;
+  }
+
+  void _changePageSize(int pageSize) {
+    setState(() {
+      _pageSize.value = pageSize;
+      _page.value = 0;
+    });
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+  }
+
+  void _changePage(int page) {
+    setState(() => _page.value = page);
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    unregisterFromRestoration(_page);
+    unregisterFromRestoration(_pageSize);
+    _page.dispose();
+    _pageSize.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.items.length;
+    final start = total == 0 ? 0 : _page.value * _pageSize.value;
+    final end = (start + _pageSize.value).clamp(0, total);
+    final pageItems = widget.items.sublist(start, end);
+    final pageCount = total == 0
+        ? 0
+        : (total + _pageSize.value - 1) ~/ _pageSize.value;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        widget.header,
+        const SizedBox(height: AppSpacing.md),
+        Expanded(
+          child: total == 0
+              ? Center(child: widget.emptyState)
+              : ListView.builder(
+                  key: PageStorageKey<String>('${widget.restorationId}-rows'),
+                  controller: _scrollController,
+                  itemCount: pageItems.length,
+                  itemBuilder: (context, index) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: widget.itemBuilder(
+                      context,
+                      pageItems[index],
+                      start + index,
+                    ),
+                  ),
+                ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _DirectoryPager(
+          start: total == 0 ? 0 : start + 1,
+          end: end,
+          total: total,
+          page: _page.value,
+          pageCount: pageCount,
+          pageSize: _pageSize.value,
+          resultLabel: widget.resultLabel,
+          onPageSizeChanged: _changePageSize,
+          onPageChanged: _changePage,
+        ),
+      ],
+    );
+  }
+}
+
+class _DirectoryPager extends StatelessWidget {
+  final int start;
+  final int end;
+  final int total;
+  final int page;
+  final int pageCount;
+  final int pageSize;
+  final String? resultLabel;
+  final ValueChanged<int> onPageSizeChanged;
+  final ValueChanged<int> onPageChanged;
+
+  const _DirectoryPager({
+    required this.start,
+    required this.end,
+    required this.total,
+    required this.page,
+    required this.pageCount,
+    required this.pageSize,
+    required this.resultLabel,
+    required this.onPageSizeChanged,
+    required this.onPageChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final label = resultLabel == null
+        ? '$start–$end / $total'
+        : '$start–$end / $total ${resultLabel!}';
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 520;
+        final count = Text(label, style: Theme.of(context).textTheme.bodySmall);
+        final size = DropdownButton<int>(
+          value: pageSize,
+          isDense: true,
+          underline: const SizedBox.shrink(),
+          items: const [25, 50, 100]
+              .map(
+                (value) => DropdownMenuItem(
+                  value: value,
+                  child: Text('$value / sayfa'),
+                ),
+              )
+              .toList(),
+          onChanged: (value) {
+            if (value != null) onPageSizeChanged(value);
+          },
+        );
+        final previous = IconButton(
+          tooltip: 'Önceki sayfa',
+          onPressed: page > 0 ? () => onPageChanged(page - 1) : null,
+          icon: const Icon(Icons.chevron_left),
+        );
+        final next = IconButton(
+          tooltip: 'Sonraki sayfa',
+          onPressed: page + 1 < pageCount
+              ? () => onPageChanged(page + 1)
+              : null,
+          icon: const Icon(Icons.chevron_right),
+        );
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: AppColors.border(context))),
+          ),
+          child: narrow
+              ? Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: count),
+                        size,
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [previous, next],
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: count),
+                    size,
+                    const SizedBox(width: AppSpacing.sm),
+                    previous,
+                    Text(
+                      pageCount == 0 ? '0 / 0' : '${page + 1} / $pageCount',
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: SpTone.neutral.foreground(context)),
+                    ),
+                    next,
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}

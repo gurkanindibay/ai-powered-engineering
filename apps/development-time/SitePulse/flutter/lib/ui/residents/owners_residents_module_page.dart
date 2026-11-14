@@ -21,6 +21,8 @@ import '../design_system/sp_feedback.dart';
 import '../components/sp_dialog_pages.dart';
 import '../components/sp_effective_date_field.dart';
 import 'resident_directory.dart';
+import 'sp_directory_scaffold.dart';
+import 'unit_directory_row.dart';
 import 'people_directory_page.dart';
 import '../../domain/services/person_directory_api.dart';
 import '../design_system/sp_filter_chip.dart';
@@ -57,18 +59,44 @@ class OwnersResidentsModulePage extends StatefulWidget {
   State<OwnersResidentsModulePage> createState() => _OwnersResidentsModulePageState();
 }
 
-class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
-  late String _searchQuery;
-  late String _blockFilter;
-  late String _occupancyFilter;
+class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> with RestorationMixin {
+  final RestorableTextEditingController _searchController = RestorableTextEditingController();
+  final RestorableString _blockFilterState = RestorableString(allBlocksFilter);
+  final RestorableString _occupancyFilterState = RestorableString(OccupancyFilter.all);
+  final RestorableString _sortModeState = RestorableString('unit');
+  StateSetter? _unitActionsSetState;
+  String get _searchQuery => _searchController.value.text.trim();
+  String get _blockFilter => _blockFilterState.value;
+  String get _occupancyFilter => _occupancyFilterState.value;
+  String get _sortMode => _sortModeState.value;
   final Map<String, int> _unitTabs = {}; // 0: Sakinler, 1: Kat Maliki
 
   @override
-  void initState() {
-    super.initState();
-    _searchQuery = '';
-    _blockFilter = widget.initialBlockFilter ?? 'ALL';
-    _occupancyFilter = widget.initialOccupancyFilter ?? 'ALL';
+  String? get restorationId => 'owners_residents_directory';
+
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+    registerForRestoration(_searchController, 'query');
+    registerForRestoration(_blockFilterState, 'blockFilter');
+    registerForRestoration(_occupancyFilterState, 'occupancyFilter');
+    registerForRestoration(_sortModeState, 'sortMode');
+    if (initialRestore) {
+      _blockFilterState.value = widget.initialBlockFilter ?? allBlocksFilter;
+      _occupancyFilterState.value = widget.initialOccupancyFilter ?? OccupancyFilter.all;
+    }
+  }
+
+  @override
+  void dispose() {
+    unregisterFromRestoration(_searchController);
+    unregisterFromRestoration(_blockFilterState);
+    unregisterFromRestoration(_occupancyFilterState);
+    unregisterFromRestoration(_sortModeState);
+    _searchController.dispose();
+    _blockFilterState.dispose();
+    _occupancyFilterState.dispose();
+    _sortModeState.dispose();
+    super.dispose();
   }
 
   @override
@@ -93,6 +121,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
             query: _searchQuery,
           );
         }).toList();
+        filtered.sort((a, b) => compareUnitDirectoryItems(a, b, descending: _sortMode == 'reverse'));
 
         final stats = ResidentOccupancyStats.from(homeOwners);
 
@@ -152,54 +181,53 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
               )),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // KPI Metric Cards
-              ResidentSummary(stats: stats),
-
-              const SizedBox(height: 16),
-
-              // Search Input
-              testId('module_search_input', TextField(
-                key: const Key('module_search_input'),
-                onChanged: (val) {
-                  setState(() {
-                    _searchQuery = val.trim();
-                  });
-                },
-                decoration: InputDecoration(
-                  hintText: 'Sakin, malik, hane sakini, daire no veya telefon ara...',
-                  hintStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          tooltip: 'Aramayı temizle',
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () => setState(() => _searchQuery = ''),
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: AppColors.surface(context),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: AppColors.border(context)),
+          maxWidth: 1280,
+          isScrollable: false,
+          child: SpDirectoryScaffold<HomeOwnerItem>(
+            restorationId: 'unit_directory_paging',
+            resultKey: '$_searchQuery|$_blockFilter|$_occupancyFilter|$_sortMode',
+            items: filtered,
+            resultLabel: 'daire',
+            header: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ResidentSummary(stats: stats, dense: true),
+                const SizedBox(height: 16),
+                testId('module_search_input', TextField(
+                  key: const Key('module_search_input'),
+                  controller: _searchController.value,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'Sakin, malik, hane sakini, daire no veya telefon ara...',
+                    hintStyle: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            tooltip: 'Aramayı temizle',
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _searchController.value.clear();
+                              setState(() {});
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: AppColors.surface(context),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: AppColors.border(context)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: AppColors.border(context)),
+                    ),
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: AppColors.border(context)),
-                  ),
-                ),
-              )),
-
-              const SizedBox(height: 12),
-
-              // Occupancy Status Filters
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
+                )),
+                const SizedBox(height: 12),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(children: [
                     _buildOccupancyFilterChip('Tümü (${stats.totalUnits})', OccupancyFilter.all),
                     const SizedBox(width: AppSpacing.sm),
                     _buildOccupancyFilterChip('${AppStrings.tenantOccupied} (${stats.tenantCount})', OccupancyFilter.tenant),
@@ -207,56 +235,65 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
                     _buildOccupancyFilterChip('${AppStrings.ownerOccupied} (${stats.ownerCount})', OccupancyFilter.owner),
                     const SizedBox(width: AppSpacing.sm),
                     _buildOccupancyFilterChip('${AppStrings.vacantUnit} (${stats.vacantCount})', OccupancyFilter.vacant),
-                  ],
+                  ]),
                 ),
-              ),
-
-              const SizedBox(height: 8),
-
-              // Block Filters
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(children: [
                     _buildBlockFilterChip('Tüm Bloklar', allBlocksFilter),
-                    ...availableBlocks.map((b) => _buildBlockFilterChip('$b Blok', b)),
-                  ],
+                    ...availableBlocks.map((block) => _buildBlockFilterChip('$block Blok', block)),
+                  ]),
                 ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // List of Units
-              if (filtered.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(32),
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface(context),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border(context)),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(Icons.person_search_outlined, size: 44, color: AppColors.textSecondary(context)),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Arama kriterlerine uygun bağımsız bölüm bulunamadı.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Filtreleri sıfırlayarak tüm daireleri görüntüleyebilirsiniz.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
-                      ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: testId('module_unit_sort', DropdownButton<String>(
+                    key: const Key('module_unit_sort'),
+                    value: _sortMode,
+                    isDense: true,
+                    items: const [
+                      DropdownMenuItem(value: 'unit', child: Text('Blok ve daire no')),
+                      DropdownMenuItem(value: 'reverse', child: Text('Blok ve daire no (ters)')),
                     ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => _sortModeState.value = value);
+                    },
+                  )),
+                ),
+              ],
+            ),
+            emptyState: homeOwners.isEmpty
+                ? SpGuidanceCard(
+                    icon: Icons.home_work_outlined,
+                    title: 'Henüz daire yok',
+                    message: 'Site dizinini başlatmak için ilk daireyi ekleyin.',
+                    prominent: true,
+                    action: ElevatedButton.icon(
+                      onPressed: () => _openAddResident(context),
+                      icon: const Icon(Icons.add_home_work_outlined),
+                      label: const Text('İlk daireyi ekle'),
+                    ),
+                  )
+                : SpGuidanceCard(
+                    icon: Icons.person_search_outlined,
+                    title: 'Daire bulunamadı',
+                    message: 'Arama veya filtreleri temizleyerek tekrar deneyin.',
+                    action: testId('module_unit_directory_reset', TextButton(
+                      key: const Key('module_unit_directory_reset'),
+                      onPressed: () {
+                        _searchController.value.clear();
+                        _blockFilterState.value = allBlocksFilter;
+                        _occupancyFilterState.value = OccupancyFilter.all;
+                        setState(() {});
+                      },
+                      child: const Text('Filtreleri sıfırla'),
+                    )),
                   ),
-                )
-              else
-                ...filtered.map((ho) => _buildUnitCard(ho)),
-            ],
+            itemBuilder: (context, unit, index) => UnitDirectoryRow(
+              unit: unit,
+              onActions: () => _openUnitActions(unit),
+              onDetails: () => _openUnitDetails(unit),
+            ),
           ),
         );
       },
@@ -267,7 +304,7 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
     return SpFilterChip(
       label: label,
       selected: _occupancyFilter == code,
-      onSelected: () => setState(() => _occupancyFilter = code),
+      onSelected: () => setState(() => _occupancyFilterState.value = _occupancyFilter == code ? OccupancyFilter.all : code),
       id: 'module_occupancy_filter_$code',
     );
   }
@@ -278,14 +315,60 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> {
       child: SpFilterChip(
         label: label,
         selected: _blockFilter == code,
-        onSelected: () => setState(() => _blockFilter = code),
+        onSelected: () => setState(() => _blockFilterState.value = _blockFilter == code ? allBlocksFilter : code),
         tone: SpTone.accent,
         id: 'module_block_filter_$code',
       ),
     );
   }
 
+  Future<void> _openUnitActions(HomeOwnerItem unit) async {
+    await AppFullscreenPage.push<void>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setActionState) {
+          _unitActionsSetState = setActionState;
+          return AppFullscreenPage(
+            title: '${unit.block} ${unit.unitNo} • İşlemler',
+            subtitle: widget.controller.userSession.siteName,
+            icon: const Icon(Icons.bolt_outlined),
+            maxWidth: 960,
+            child: _buildUnitCard(unit),
+          );
+        },
+      ),
+    );
+    _unitActionsSetState = null;
+  }
+
+  Future<void> _openUnitDetails(HomeOwnerItem unit) async {
+    await AppFullscreenPage.push<void>(
+      context: context,
+      builder: (_) => AppFullscreenPage(
+        title: '${unit.block} ${unit.unitNo} • Detay',
+        subtitle: widget.controller.userSession.siteName,
+        icon: const Icon(Icons.home_outlined),
+        maxWidth: 960,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(title: const Text('Durum'), subtitle: Text(unit.isTenantOccupied ? 'Kiracılı' : unit.isVacant ? 'Boş' : 'Malik mukim')),
+            ListTile(title: const Text('Kat'), subtitle: Text(unit.floor.toString())),
+            if (unit.houseType != null) ListTile(title: const Text('Konut tipi'), subtitle: Text(unit.houseType!)),
+            ListTile(title: const Text('Malik'), subtitle: Text(unit.ownerFullName)),
+            if (unit.tenantFullName != null) ListTile(title: const Text('Kiracı'), subtitle: Text(unit.tenantFullName!)),
+            ListTile(title: const Text('Birincil muhatap'), subtitle: Text(unit.activeResponsibleResidentName)),
+            ListTile(title: const Text('Aylık aidat'), subtitle: Text(formatTry(unit.monthlyDues))),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Rebuilds the list after a change made by one of the part files (they may not call
   /// the protected `setState` directly).
-  void _update(VoidCallback change) => setState(change);
+  void _update(VoidCallback change) {
+    setState(change);
+    _unitActionsSetState?.call(() {});
+  }
 }

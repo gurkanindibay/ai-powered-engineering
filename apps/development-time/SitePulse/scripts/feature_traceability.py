@@ -520,7 +520,8 @@ def build_runs(history: list[dict], catalogue: Catalogue, limit: int = 30) -> li
                       else "fixed" if before != "PASS" and status == "PASS" else "")
             rows.append({"id": record["scenario"] or ", ".join(record.get("gui_ids", [])) or "-",
                          "key": record_key(record), "scenario": record["scenario"], "epic": record.get("epic", ""),
-                         "story": record["story"], "status": status, "change": change,
+                         "story": record["story"], "gui_ids": record.get("gui_ids", []),
+                         "status": status, "change": change,
                          "name": names.get(record["scenario"], record.get("name", "")),
                          "duration_s": record["duration_s"], "failing_step": failing_step(record)})
         previous.update({row["key"]: row["status"] for row in rows})
@@ -587,7 +588,12 @@ def affected(catalogue: Catalogue, repo: Path = ROOT, impact_map: Path = IMPACT_
     mode "none": no behaviour file changed. "targeted": run the smoke set plus the listed epics.
     "full": run everything (shared code changed, or a changed file maps to no epic).
     """
-    automated = [s for s in catalogue.scenarios if s.id and s.mode != "pending"]
+    # gui_e2e.py is the sole writer of execution records. Include scenario-driven GUI
+    # cases and scenarios linked to an E2E test; backend, Flutter and harness-linked
+    # scenarios are verified by their own test gates and cannot be recorded by this runner.
+    automated = [s for s in catalogue.scenarios if s.id and s.mode != "pending" and (
+        s.mode == "gherkin" or any(link["file"].startswith("e2e/")
+                                    for link in catalogue.links.get(s.id, [])))]
     changed = changed_behaviour_paths(repo)
     if changed is None:
         return {"mode": "full", "epics": [], "marker": "", "files": [], "scenarios": sorted(s.id for s in automated),
@@ -623,6 +629,21 @@ def affected(catalogue: Catalogue, repo: Path = ROOT, impact_map: Path = IMPACT_
             "scenarios": sorted(s.id for s in automated if parents_of(s.id)[0] in epics)}
 
 
+def latest_execution_rows(runs: list[dict]) -> dict[str, dict]:
+    """Resolve latest statuses by scenario and stable GUI identity across link changes."""
+    latest: dict[str, dict] = {}
+    for run in reversed(runs):  # oldest first, so the newest execution of each test wins
+        for row in run["scenarios"]:
+            if row.get("scenario"):
+                latest[row["scenario"]] = row
+            gui_ids = row.get("gui_ids", [])
+            if gui_ids:
+                latest.update({f"gui:{gui_id}": row for gui_id in gui_ids})
+            else:
+                latest[row["key"]] = row
+    return latest
+
+
 def require_run(catalogue: Catalogue, store, repo: Path = ROOT, impact_map: Path = IMPACT_MAP) -> tuple[list[str], str]:
     """The rule every task must meet (AGENTS.md rule 13). Returns (problems, note on why it passed).
 
@@ -643,9 +664,7 @@ def require_run(catalogue: Catalogue, store, repo: Path = ROOT, impact_map: Path
         return [f"no test run is recorded for branch {branch}, which changes {len(selection['files'])} behaviour "
                 f"file(s) (e.g. {selection['files'][0]}): run `python3 scripts/gui_e2e.py run {how} "
                 f"--task \"<task>\"` and commit .specify/executions"], ""
-    latest: dict[str, dict] = {}
-    for run in reversed(mine):  # oldest first, so the newest execution of each test wins
-        latest.update({row["key"]: row for row in run["scenarios"]})
+    latest = latest_execution_rows(mine)
     problems = []
     failing = sorted(row["id"] for row in latest.values() if row["status"] in FAILING)
     if failing:

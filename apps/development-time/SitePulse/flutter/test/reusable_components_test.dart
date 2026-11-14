@@ -24,6 +24,7 @@ import 'package:sitepulse/ui/design_system/sp_money_field.dart';
 import 'package:sitepulse/ui/design_system/sp_status_badge.dart';
 import 'package:sitepulse/ui/design_system/sp_tone.dart';
 import 'package:sitepulse/ui/residents/resident_directory.dart';
+import 'package:sitepulse/ui/residents/sp_directory_scaffold.dart';
 import 'package:sitepulse/ui/theme/app_theme.dart';
 
 /// Pumps [child] in the real SitePulse theme, without a DashboardController.
@@ -372,6 +373,28 @@ void main() {
       await tester.tap(find.byKey(const Key('chip')));
       expect(taps, 1);
       expect(tester.widget<FilterChip>(find.byType(FilterChip)).selected, isTrue);
+    });
+
+    testWidgets('SpDirectoryScaffold shows rows in a bounded, paged layout', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        restorationScopeId: 'shared_directory_test',
+        home: Scaffold(
+          body: SpDirectoryScaffold<String>(
+            restorationId: 'shared_directory',
+            items: const ['A-1', 'A-2'],
+            resultLabel: 'daire',
+            header: const Text('Daireler'),
+            emptyState: const Text('Daire bulunamadı'),
+            itemBuilder: (context, item, index) => ListTile(title: Text(item)),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Daireler'), findsOneWidget);
+      expect(find.text('A-1'), findsOneWidget);
+      expect(find.text('1–2 / 2 daire'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 
