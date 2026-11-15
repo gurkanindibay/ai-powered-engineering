@@ -163,7 +163,9 @@ jobs:
         with:
           name: e2e-shard-${{ matrix.shard }}
           path: apps/development-time/SitePulse/e2e/.artifacts/
-          if-no-files-found: ignore
+          # .artifacts is a dot directory: upload-artifact skips hidden paths unless told otherwise.
+          include-hidden-files: true
+          if-no-files-found: warn
           retention-days: 14
 
   # One report for the whole e2e run: the stats on the run page (job summary) and the report,

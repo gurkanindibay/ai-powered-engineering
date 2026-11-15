@@ -19,7 +19,8 @@ Usage:
   python3 scripts/ci_test_report.py --shards shard-results --out e2e-test-report --task "PR 131"
   python3 scripts/ci_test_report.py --shards shard-results --out /tmp/report --json --no-summary
 
-Exit code: 0 (a failing test fails its e2e shard job, not the report); 2 on bad arguments.
+Exit code: 0 (a failing test fails its e2e shard job, not the report; a missing --shards
+directory is reported as NO RESULTS); 2 on bad arguments.
 """
 from __future__ import annotations
 
@@ -126,7 +127,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="print the stats as JSON")
     args = parser.parse_args(argv)
     if not args.shards.is_dir():
-        parser.error(f"--shards {args.shards} is not a directory")
+        # No shard uploaded anything (e.g. every shard failed before pytest): still publish a report.
+        print(f"warning: --shards {args.shards} does not exist; reporting no results", file=sys.stderr)
+        args.shards.mkdir(parents=True, exist_ok=True)
 
     summary = build(args.shards, args.out, args.task, args.history)
     target = os.environ.get("GITHUB_STEP_SUMMARY")
