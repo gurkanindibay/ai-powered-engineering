@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Python gates (harness self-test, lints, feature traceability)
@@ -68,7 +68,7 @@ jobs:
           workspaces: apps/development-time/SitePulse/backend
           # Red runs are the common case while a PR is iterated; keep their compile output too.
           cache-on-failure: true
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Install psql client
@@ -97,7 +97,7 @@ jobs:
       - name: Flutter dependencies
         working-directory: apps/development-time/SitePulse/flutter
         run: flutter pub get
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Flutter gates
@@ -154,7 +154,7 @@ jobs:
         with:
           path: apps/development-time/SitePulse/flutter/build/web-e2e
           key: e2e-web-${{ hashFiles('apps/development-time/SitePulse/flutter/pubspec.*', 'apps/development-time/SitePulse/flutter/lib/**', 'apps/development-time/SitePulse/flutter/web/**', 'apps/development-time/SitePulse/flutter/assets/**') }}
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Install psql client
@@ -181,7 +181,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
@@ -214,7 +214,7 @@ jobs:
           test '${{ needs.flutter.result }}' = success
           test '${{ needs.e2e.result }}' = success
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Test run recorded for the branch
