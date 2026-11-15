@@ -374,6 +374,22 @@ class PersonDirectoryApi {
     return data is Map<String, dynamic> ? data['national_id_masked']?.toString() : null;
   }
 
+  /// Merges the [sourcePersonId] card into [targetPersonId]. The server refuses a stale
+  /// [expectedTargetVersion] and throws `STEP_UP_REQUIRED` until the caller has
+  /// re-entered their password. Returns the surviving card's new version.
+  Future<int?> mergePerson(int sourcePersonId, int targetPersonId, {int? expectedTargetVersion}) async {
+    final response = await ApiClient.post(
+      ApiClient.uri('/api/v1/site-admin/persons/$sourcePersonId/merge'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'target_person_id': '$targetPersonId',
+        if (expectedTargetVersion != null) 'expected_target_version': expectedTargetVersion,
+      }),
+    ).timeout(const Duration(seconds: 15));
+    final data = ApiClient.decode(response);
+    return data is Map<String, dynamic> ? (data['target_version'] as num?)?.toInt() : null;
+  }
+
   Future<ContactPreferences> updatePreferences(int personId, ContactPreferences preferences) async {
     final response = await ApiClient.put(
       ApiClient.uri('/api/v1/site-admin/persons/$personId/preferences'),
