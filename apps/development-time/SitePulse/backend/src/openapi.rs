@@ -134,7 +134,10 @@ fn convert_axum_path_to_openapi(path: &str) -> String {
 fn extract_path_parameters(path: &str) -> Vec<serde_json::Value> {
     let mut params = Vec::new();
     for segment in path.split('/') {
-        if let Some(param) = segment.strip_prefix(':') {
+        let param_opt = segment
+            .strip_prefix(':')
+            .or_else(|| segment.strip_prefix('{').and_then(|s| s.strip_suffix('}')));
+        if let Some(param) = param_opt {
             params.push(serde_json::json!({
                 "name": param,
                 "in": "path",
@@ -345,7 +348,9 @@ fn request_body_for_route(path: &str) -> Option<serde_json::Value> {
         "PersonImportPayload"
     } else if path == "/api/v1/site-admin/persons" {
         "CreatePersonRequest"
-    } else if path == "/api/v1/site-admin/persons/:person_id" {
+    } else if path == "/api/v1/site-admin/persons/:person_id"
+        || path == "/api/v1/site-admin/persons/{person_id}"
+    {
         "UpdatePersonRequest"
     } else if path == "/api/v1/bank/statements/parse" {
         "BankStatementParseRequest"

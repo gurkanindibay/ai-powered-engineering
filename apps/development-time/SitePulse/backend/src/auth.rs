@@ -841,6 +841,7 @@ pub async fn require_auth(State(state): State<AppState>, mut req: Request, next:
                 | crate::models::Permission::PlatformIntegrationConfigure
         ) && req.method() != Method::GET
             || template.ends_with("/persons/:person_id/merge")
+            || template.ends_with("/persons/{person_id}/merge")
             || template.ends_with("/transfer-ownership")
             || template.ends_with("/reset-admin-password")
             || template.ends_with("/platform-roles");
@@ -923,9 +924,13 @@ async fn scope_request(
         .map(|p| p.as_str())
         .unwrap_or("");
     if template.contains(":unit_id")
+        || template.contains("{unit_id}")
         || template.starts_with("/api/v1/units/:id")
+        || template.starts_with("/api/v1/units/{id}")
         || template.starts_with("/api/v1/site-admin/units/:id")
+        || template.starts_with("/api/v1/site-admin/units/{id}")
         || template.starts_with("/api/v1/site-admin/home-owners/:id")
+        || template.starts_with("/api/v1/site-admin/home-owners/{id}")
     {
         let idx = if matches!(parts.get(2), Some(&"site-admin" | &"home-residents")) {
             4

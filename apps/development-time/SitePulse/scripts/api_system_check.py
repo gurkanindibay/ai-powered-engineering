@@ -72,9 +72,9 @@ PUBLIC_ROUTES = {
     "/health", "/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/register", "/api/v1/auth/refresh",
     "/api/v1/auth/activate", "/api/v1/auth/confirm-email",
     "/api/v1/home-residents/register", "/api/v1/bank/webhook/incoming-transfer", "/api/v1/site-admin/banks",
-    "/api/v1/registration/submit/:slug",
+    "/api/v1/registration/submit/{slug}",
     "/api/v1/public/receipts/verify", "/api/v1/payments/provider/webhook",
-    "/api/v1/payment-provider/sandbox/checkout/:reference", "/api/v1/payment-provider/sandbox/checkout/:reference/complete",
+    "/api/v1/payment-provider/sandbox/checkout/{reference}", "/api/v1/payment-provider/sandbox/checkout/{reference}/complete",
     # SPEC-009 R8: the lawyer's evidence pack is authenticated by its one-time token.
     "/api/v1/public/collection-cases/pack",
     # API documentation: the OpenAPI spec and its Swagger UI / Scalar viewers.
@@ -299,7 +299,7 @@ def public_route_drift(text: Optional[str] = None) -> Tuple[List[str], List[str]
 
 
 def concrete(path: str) -> str:
-    return re.sub(r":([a-z_]+)", lambda m: SAMPLE_PARAMS.get(m.group(1), "1"), path)
+    return re.sub(r"[:{]([a-z_]+)\}?", lambda m: SAMPLE_PARAMS.get(m.group(1), "1"), path)
 
 
 class Context:

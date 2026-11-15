@@ -137,7 +137,10 @@ fn when_spec_is_generated_then_all_registered_routes_are_covered() {
             .path
             .split('/')
             .map(|s| {
-                if let Some(param) = s.strip_prefix(':') {
+                if let Some(param) = s
+                    .strip_prefix(':')
+                    .or_else(|| s.strip_prefix('{').and_then(|p| p.strip_suffix('}')))
+                {
                     format!("{{{}}}", param)
                 } else {
                     s.to_string()
