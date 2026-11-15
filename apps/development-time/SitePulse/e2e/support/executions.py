@@ -75,9 +75,16 @@ def pytest_bdd_apply_tag(tag, function):
 
 
 def epics_of(item) -> list[str]:
-    """['EPIC-10'] from the test's GUI ids and, for a Gherkin scenario, its @EPIC tag."""
+    """['EPIC-10'] from the test's GUI ids, the scenarios it `covers`, and a Gherkin @EPIC tag.
+
+    A linked test belongs to the epic of every scenario it covers, so `-m epic_12` (used by
+    `gui_e2e.py run --affected`) selects it whenever EPIC-12 is affected, even if its GUI id
+    names another epic.
+    """
     found = {f"EPIC-{m.group(1)}" for marker in item.iter_markers("gui_id") if marker.args
              for m in [EPIC_OF_GUI.match(str(marker.args[0]))] if m}
+    found |= {f"EPIC-{m.group(1)}" for marker in item.iter_markers("covers") for arg in marker.args
+              for m in [SCENARIO_ID.match(str(arg))] if m}
     scenario = getattr(getattr(item, "obj", None), "__scenario__", None)
     if scenario is not None:
         found |= {t for t in _tags(scenario) if re.fullmatch(r"EPIC-\d{2}", t)}
