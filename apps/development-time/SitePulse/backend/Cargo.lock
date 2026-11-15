@@ -2607,7 +2607,7 @@ dependencies = [
  "jsonwebtoken",
  "printpdf",
  "qrcode",
- "rand 0.8.8",
+ "rand 0.10.3",
  "regex",
  "reqwest",
  "rust_decimal",
