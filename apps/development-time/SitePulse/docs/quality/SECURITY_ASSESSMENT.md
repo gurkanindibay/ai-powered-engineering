@@ -13,22 +13,22 @@ The backend is in good shape for its core controls: authentication, authorizatio
 | ID | Severity | Finding | Status |
 |---|---|---|---|
 | S1 | **Critical** | Kuveyt Türk API client secret committed to a public repository | File removed in this change; **rotation is still required** |
-| S2 | High | 12 known advisories in pinned Rust dependencies | Open |
-| S3 | Medium | The backend runs in development mode unless `APP_ENV` says production | Open |
-| S4 | Medium | Login throttling has no per-client limit and can lock out other users | Open |
-| S5 | Medium | Site invitation tokens have about 31 bits of entropy | Open |
-| S6 | Medium | Handlers return internal error text to clients (36 places) | Open, ratcheted by CI |
-| S7 | Medium | No HTTP security headers; API documentation is public in production | Open |
-| S8 | Medium | CI actions are pinned to mutable tags; no automated dependency updates | Open |
+| S2 |High | 12 known advisories in pinned Rust dependencies | Partly fixed: patch updates and `jsonwebtoken` 10.3 applied; `printpdf`/`lopdf` allowlisted until 2027-03-31 |
+| S3 |Medium | The backend runs in development mode unless `APP_ENV` says production | Fixed in this change |
+| S4 |Medium | Login throttling has no per-client limit and can lock out other users | Fixed in memory (per-client tier); per-account counters in PostgreSQL still open |
+| S5 |Medium | Site invitation tokens have about 31 bits of entropy | Fixed in this change |
+| S6 |Medium | Handlers return internal error text to clients (36 places) | Fixed in this change (baseline is empty) |
+| S7 |Medium | No HTTP security headers; API documentation is public in production | Fixed in this change (CSP on the Flutter host page is minimal; extend it at the web server) |
+| S8 |Medium | CI actions are pinned to mutable tags; no automated dependency updates | Fixed in this change (SHA pins, Dependabot); `master` protection is a manual repository setting |
 | S9 | Low | Workflows ran with the default token permissions | Fixed in this change |
-| S10 | Low | No request timeout or connection limit in the server | Open |
-| S11 | Low | Audit log records the proxy address, not the client address | Open |
-| S12 | Low | Bank webhook accepts replays of old signed bodies after the idempotency record is gone | Open |
-| S13 | Low | Lawyer evidence pack token travels in the URL query string | Open |
-| S14 | Low | `adminer:latest` and tag-only base images | Open, baselined |
-| S15 | Low | Password policy checks length only | Open |
-| S16 | Low | Flutter client shows a locally invented temporary password when the server sends none | Open |
-| S17 | Low | Migration helper functions execute their arguments as SQL and are callable by `PUBLIC` | Open |
+| S10 |Low | No request timeout or connection limit in the server | Fixed in this change |
+| S11 |Low | Audit log records the proxy address, not the client address | Fixed in this change (`SITEPULSE_TRUSTED_PROXIES`) |
+| S12 |Low | Bank webhook accepts replays of old signed bodies after the idempotency record is gone | Accepted: idempotency records must never be purged; no signed timestamp available |
+| S13 |Low | Lawyer evidence pack token travels in the URL query string | Mitigated by the S7 headers (`no-referrer`, `no-store`); proxy log scrubbing is a deployment task |
+| S14 |Low | `adminer:latest` and tag-only base images | Fixed for Adminer; digest pinning of base images left to Dependabot |
+| S15 |Low | Password policy checks length only | Fixed in this change (own identity and common-password checks; no breached-list lookup) |
+| S16 |Low | Flutter client shows a locally invented temporary password when the server sends none | Fixed in this change |
+| S17 |Low | Migration helper functions execute their arguments as SQL and are callable by `PUBLIC` | Fixed in this change (migration V36) |
 
 Severity reflects the impact on a production deployment that handles residents' personal and payment data.
 

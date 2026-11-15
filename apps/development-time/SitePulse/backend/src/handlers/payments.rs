@@ -9,7 +9,10 @@ pub(crate) fn payment_error_status(e: String) -> (StatusCode, String) {
         || e.starts_with("Payment was not recorded")
         || e.starts_with("Reversal was not recorded")
     {
-        (StatusCode::SERVICE_UNAVAILABLE, e)
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            crate::error::sanitized("Payment storage is temporarily unavailable", &e),
+        )
     } else {
         (StatusCode::BAD_REQUEST, e)
     }
@@ -157,7 +160,7 @@ pub async fn record_homeowner_payment(
             .map_err(|e| {
                 (
                     StatusCode::SERVICE_UNAVAILABLE,
-                    format!("Database write failed: {}", e),
+                    crate::error::sanitized("Database write failed", &e),
                 )
             })?;
     }
@@ -293,7 +296,7 @@ pub async fn get_homeowner_payments(
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(serde_json::json!({
                     "status": "ERROR",
-                    "message": format!("Payment records unavailable: {}", e)
+                    "message": crate::error::sanitized("Payment records unavailable", &e)
                 })),
             )
                 .into_response(),
@@ -589,7 +592,12 @@ pub async fn get_payment_stream(
         .get_payment_stream(filter)
         .await
         .map(Json)
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                crate::error::sanitized("Internal error", &e),
+            )
+        })
 }
 
 pub async fn get_debt_aging_report(
@@ -603,7 +611,12 @@ pub async fn get_debt_aging_report(
         .get_debt_aging_report(&site_id)
         .await
         .map(Json)
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                crate::error::sanitized("Internal error", &e),
+            )
+        })
 }
 
 pub async fn record_manual_payment(
@@ -684,7 +697,12 @@ pub async fn snapshot_debt_aging(
     let rows = service
         .snapshot_debt_aging(q.site_id.as_deref().filter(|s| !s.trim().is_empty()))
         .await
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                crate::error::sanitized("Internal error", &e),
+            )
+        })?;
     Ok(Json(
         serde_json::json!({ "status": "OK", "rows": rows, "as_of_date": Utc::now().date_naive() }),
     ))

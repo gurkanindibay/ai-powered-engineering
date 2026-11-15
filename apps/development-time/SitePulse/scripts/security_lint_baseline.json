@@ -1,15 +1,6 @@
 {
-  "accepted": [
-    "unpinned-image|apps/development-time/SitePulse/backend/docker-compose.yml|adminer:latest has no fixed version tag"
-  ],
-  "internal_error_leaks": {
-    "apps/development-time/SitePulse/backend/src/handlers/dues.rs": 6,
-    "apps/development-time/SitePulse/backend/src/handlers/payments.rs": 5,
-    "apps/development-time/SitePulse/backend/src/handlers/payments_phase2.rs": 2,
-    "apps/development-time/SitePulse/backend/src/handlers/payments_phase3.rs": 2,
-    "apps/development-time/SitePulse/backend/src/handlers/reconciliation.rs": 11,
-    "apps/development-time/SitePulse/backend/src/handlers/system.rs": 10
-  },
+  "accepted": [],
+  "internal_error_leaks": {},
   "public_routes": [
     "GET /health",
     "GET /api/v1/health",

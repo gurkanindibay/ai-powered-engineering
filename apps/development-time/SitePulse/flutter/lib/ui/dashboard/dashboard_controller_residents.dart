@@ -1204,7 +1204,9 @@ extension DashboardControllerResidents on DashboardController {
     if (index == -1) return;
 
     final target = _pendingRegistrations[index];
-    String tempPassword = 'SP-SAKIN-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}';
+    // A placeholder exists only in the offline test mode; a live approval shows what the server sent.
+    String tempPassword =
+        isTestMode ? 'SP-SAKIN-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}' : '';
 
     if (!isTestMode) {
       try {

@@ -373,7 +373,7 @@ pub async fn provider_webhook(
     let event: ProviderWebhookEvent = serde_json::from_slice(&body).map_err(|e| {
         (
             StatusCode::BAD_REQUEST,
-            format!("Invalid notification: {}", e),
+            crate::error::sanitized("Invalid notification", &e),
         )
     })?;
     crate::audit::CONTEXT
@@ -443,8 +443,12 @@ pub async fn sandbox_checkout_complete(
             three_ds_status: Some(if approve { "Y" } else { "N" }.to_string()),
             failure_reason: failure,
         };
-        let body = serde_json::to_vec(&event)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let body = serde_json::to_vec(&event).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                crate::error::sanitized("Internal error", &e),
+            )
+        })?;
         let signature = card_payment_service::sign_provider_body(&body);
         if !card_payment_service::verify_provider_signature(&body, Some(&signature)) {
             return Err((
@@ -490,8 +494,12 @@ pub async fn get_payment_receipt_pdf(
             .map(|u| inner.unit_label(&u.block_id, u.unit_number))
             .unwrap_or_else(|| receipt.unit_id.clone())
     };
-    let pdf = receipt_document::render_receipt_pdf(&receipt, &unit_label)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let pdf = receipt_document::render_receipt_pdf(&receipt, &unit_label).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            crate::error::sanitized("Internal error", &e),
+        )
+    })?;
     Ok((
         [
             (header::CONTENT_TYPE, "application/pdf".to_string()),

@@ -143,15 +143,43 @@ impl AppStateInner {
         }
     }
 
-    /// Strictly verifies whether the backend is executing in a production environment
-    pub fn is_production() -> bool {
-        if let Ok(env) = std::env::var("APP_ENV").or_else(|_| std::env::var("ENVIRONMENT")) {
-            let lower = env.to_ascii_lowercase();
-            if lower == "production" || lower == "prod" || lower == "live" {
-                return true;
-            }
+    /// Declared runtime mode: `Some(Some(true))` production, `Some(Some(false))`
+    /// development, `Some(None)` an unrecognised value, `None` not declared.
+    fn declared_production_mode() -> Option<Option<bool>> {
+        let raw = std::env::var("APP_ENV")
+            .or_else(|_| std::env::var("ENVIRONMENT"))
+            .ok();
+        match raw.as_deref().map(str::to_ascii_lowercase).as_deref() {
+            Some("production" | "prod" | "live") => Some(Some(true)),
+            Some("development" | "dev" | "local" | "test") => Some(Some(false)),
+            Some(_) => Some(None),
+            None => None,
         }
-        false
+    }
+
+    /// Fails closed: production unless development was explicitly requested.
+    /// Test binaries that run against seeded fixtures count as development
+    /// when no mode is declared.
+    pub fn is_production() -> bool {
+        match Self::declared_production_mode() {
+            Some(Some(production)) => production,
+            Some(None) => true,
+            None => !(cfg!(test) || Self::is_running_fixture_test_binary()),
+        }
+    }
+
+    /// Validates that the runtime mode is declared with a recognised value.
+    ///
+    /// # Errors
+    /// Returns a message when `APP_ENV`/`ENVIRONMENT` is unset (outside tests) or unknown.
+    pub fn validate_mode() -> Result<(), String> {
+        match Self::declared_production_mode() {
+            Some(None) => Err("APP_ENV must be 'development' or 'production'".to_string()),
+            None if !cfg!(test) => {
+                Err("APP_ENV is not set; set it to 'development' or 'production'".to_string())
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Determines whether test fixtures should be seeded into memory
@@ -170,10 +198,14 @@ impl AppStateInner {
 
     /// Whether the current executable is a test binary that runs against the seeded fixtures.
     fn is_running_fixture_test_binary() -> bool {
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.file_name().map(|n| n.to_string_lossy().into_owned()))
-            .is_some_and(|name| Self::is_fixture_test_binary(&name))
+        // `cargo test` sets this for every test binary, whatever its name. The server
+        // refuses to start without a declared mode (`validate_mode`), so this can only
+        // relax behaviour inside tests.
+        std::env::var_os("CARGO_MANIFEST_DIR").is_some()
+            || std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.file_name().map(|n| n.to_string_lossy().into_owned()))
+                .is_some_and(|name| Self::is_fixture_test_binary(&name))
     }
 
     /// Whether a test binary file name belongs to a suite that runs against the seeded fixtures.

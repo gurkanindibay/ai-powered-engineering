@@ -113,10 +113,7 @@ pub async fn correlate(mut req: Request, next: Next) -> Response {
     let authentication_response = path.starts_with("/api/v1/auth/");
     let start = std::time::Instant::now();
     let context = AuditContext {
-        source_ip: req
-            .extensions()
-            .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-            .map(|peer| peer.0.ip().to_string()),
+        source_ip: client_ip(&req),
         user_agent: req
             .headers()
             .get("user-agent")
@@ -292,5 +289,77 @@ impl AuditContext {
             actor_role: None,
             session_id: None,
         }
+    }
+}
+
+/// Addresses of reverse proxies whose `X-Forwarded-For` header is believed
+/// (`SITEPULSE_TRUSTED_PROXIES`, comma separated).
+fn trusted_proxies() -> Vec<std::net::IpAddr> {
+    std::env::var("SITEPULSE_TRUSTED_PROXIES")
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(|s| s.trim().parse().ok())
+        .collect()
+}
+
+/// The real client address. The forwarded header is used only when the TCP peer
+/// is a trusted proxy; the rightmost entry that is not itself a trusted proxy wins.
+pub fn client_ip(req: &axum::extract::Request) -> Option<String> {
+    let peer = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|p| p.0.ip())?;
+    let trusted = trusted_proxies();
+    let forwarded = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok());
+    Some(resolve_client_ip(peer, forwarded, &trusted).to_string())
+}
+
+fn resolve_client_ip(
+    peer: std::net::IpAddr,
+    forwarded: Option<&str>,
+    trusted: &[std::net::IpAddr],
+) -> std::net::IpAddr {
+    if !trusted.contains(&peer) {
+        return peer;
+    }
+    forwarded
+        .into_iter()
+        .flat_map(|h| h.split(',').rev())
+        .filter_map(|s| s.trim().parse::<std::net::IpAddr>().ok())
+        .find(|ip| !trusted.contains(ip))
+        .unwrap_or(peer)
+}
+
+#[cfg(test)]
+mod client_ip_tests {
+    use super::resolve_client_ip;
+    use std::net::IpAddr;
+
+    fn ip(s: &str) -> IpAddr {
+        s.parse().unwrap()
+    }
+
+    #[test]
+    fn ignores_forwarded_header_from_untrusted_peer() {
+        assert_eq!(
+            resolve_client_ip(ip("203.0.113.9"), Some("1.2.3.4"), &[ip("10.0.0.1")]),
+            ip("203.0.113.9")
+        );
+    }
+
+    #[test]
+    fn takes_rightmost_untrusted_entry_from_trusted_proxy() {
+        let trusted = [ip("10.0.0.1"), ip("10.0.0.2")];
+        assert_eq!(
+            resolve_client_ip(
+                ip("10.0.0.1"),
+                Some("6.6.6.6, 198.51.100.7, 10.0.0.2"),
+                &trusted
+            ),
+            ip("198.51.100.7")
+        );
     }
 }

@@ -291,6 +291,15 @@ impl From<(StatusCode, &'static str)> for AppError {
     }
 }
 
+/// Logs the underlying failure and returns a fixed client-safe message.
+///
+/// Database and service errors can name tables, columns and constraints, so
+/// handlers return this text instead of the raw error.
+pub fn sanitized(public: &str, err: &dyn std::fmt::Display) -> String {
+    tracing::error!(error = %err, public_message = public, "Request failed with an internal error");
+    public.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

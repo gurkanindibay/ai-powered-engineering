@@ -122,7 +122,7 @@ pub async fn parse_bank_statement(
                 .map_err(|e| {
                     (
                         StatusCode::SERVICE_UNAVAILABLE,
-                        format!("Database write failed: {}", e),
+                        crate::error::sanitized("Database write failed", &e),
                     )
                 })?;
         }
@@ -388,7 +388,7 @@ pub async fn confirm_reconciliation(
                 .map_err(|e| {
                     (
                         StatusCode::SERVICE_UNAVAILABLE,
-                        format!("Database write failed: {}", e),
+                        crate::error::sanitized("Database write failed", &e),
                     )
                 })?;
             crate::db::update_reconciliation_status(
@@ -401,7 +401,7 @@ pub async fn confirm_reconciliation(
             .map_err(|e| {
                 (
                     StatusCode::SERVICE_UNAVAILABLE,
-                    format!("Database write failed: {}", e),
+                    crate::error::sanitized("Database write failed", &e),
                 )
             })?;
         }
@@ -413,7 +413,7 @@ pub async fn confirm_reconciliation(
                 .map_err(|e| {
                     (
                         StatusCode::SERVICE_UNAVAILABLE,
-                        format!("Database write failed: {}", e),
+                        crate::error::sanitized("Database write failed", &e),
                     )
                 })?;
         }
@@ -498,7 +498,7 @@ pub async fn remember_sender_iban(
         .map_err(|e| {
             (
                 StatusCode::SERVICE_UNAVAILABLE,
-                format!("Database write failed: {}", e),
+                crate::error::sanitized("Database write failed", &e),
             )
         })?;
     }
@@ -626,7 +626,7 @@ pub async fn add_unit_sender_iban(
         .map_err(|e| {
             (
                 StatusCode::SERVICE_UNAVAILABLE,
-                format!("Database write failed: {}", e),
+                crate::error::sanitized("Database write failed", &e),
             )
         })?;
     }
@@ -665,7 +665,7 @@ pub async fn delete_unit_sender_iban(
             .map_err(|e| {
                 (
                     StatusCode::SERVICE_UNAVAILABLE,
-                    format!("Database write failed: {}", e),
+                    crate::error::sanitized("Database write failed", &e),
                 )
             })?;
     }
@@ -705,7 +705,7 @@ pub async fn update_unit_payer_names(
             .map_err(|e| {
                 (
                     StatusCode::SERVICE_UNAVAILABLE,
-                    format!("Database write failed: {}", e),
+                    crate::error::sanitized("Database write failed", &e),
                 )
             })?;
     }
@@ -849,7 +849,12 @@ pub async fn test_kuveyt_turk_connection(
     let probe = service
         .test_connection(&client_id, &client_secret)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                crate::error::sanitized("Internal error", &e),
+            )
+        })?;
 
     Ok(Json(probe))
 }
@@ -875,7 +880,7 @@ pub async fn handle_bank_incoming_webhook(
     let payload: BankIncomingWebhookRequest = serde_json::from_slice(&body).map_err(|e| {
         (
             StatusCode::BAD_REQUEST,
-            format!("Invalid webhook payload: {}", e),
+            crate::error::sanitized("Invalid webhook payload", &e),
         )
     })?;
     validate_bank_webhook(&payload)?;
@@ -890,7 +895,7 @@ pub async fn handle_bank_incoming_webhook(
         let unavailable = |e: Box<dyn std::error::Error + Send + Sync>| {
             (
                 StatusCode::SERVICE_UNAVAILABLE,
-                format!("Could not record webhook: {}", e),
+                crate::error::sanitized("Could not record webhook", &e),
             )
         };
         let destination = payload.virtual_iban.replace(' ', "").to_uppercase();
@@ -1256,7 +1261,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
                 .map_err(|e| {
                     (
                         StatusCode::SERVICE_UNAVAILABLE,
-                        format!("Database write failed: {}", e),
+                        crate::error::sanitized("Database write failed", &e),
                     )
                 })?;
             }

@@ -943,7 +943,7 @@ pub fn swagger_ui_html() -> &'static str {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SitePulse API Documentation - Swagger UI</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui.css" integrity="sha384-rcbEi6xgdPk0iWkAQzT2F3FeBJXdG+ydrawGlfHAFIZG7wU6aKbQaRewysYpmrlW" crossorigin="anonymous" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏢</text></svg>">
   <style>
     body {
@@ -1009,8 +1009,8 @@ pub fn swagger_ui_html() -> &'static str {
     </div>
   </div>
   <div id="swagger-ui"></div>
-  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui-bundle.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui-standalone-preset.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui-bundle.js" integrity="sha384-NXtFPpN61oWCuN4D42K6Zd5Rt2+uxeIT36R7kpXBuY9tLnZorzrJ4ykpqwJfgjpZ" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui-standalone-preset.js" integrity="sha384-qr68CD0cvHa88PmVu7e1a58Ego4qvKtcvcLdS2a8Mo5zILI01gyIV9jVwJk7X2NU" crossorigin="anonymous"></script>
   <script>
     window.onload = function() {
       SwaggerUIBundle({
@@ -1055,7 +1055,7 @@ pub fn scalar_ui_html() -> &'static str {
       id="api-reference"
       data-url="/api-docs/openapi.json"
       data-configuration='{"theme": "kepler", "showSidebar": true}'
-      src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+      src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.78.1" integrity="sha384-uxI3m9J8tBk0lNYsd1UTuIxSyitPtjvVvQyFEvql1RH5lVGxkFt6wEQtjGTDBw13" crossorigin="anonymous"></script>
   </body>
 </html>
 "#

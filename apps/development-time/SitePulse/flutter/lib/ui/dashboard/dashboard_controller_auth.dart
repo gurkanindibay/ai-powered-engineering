@@ -573,6 +573,7 @@ extension DashboardControllerAuth on DashboardController {
   }) async {
     _lastSiteRegistrationError = null;
     final siteBlocks = (blocks != null && blocks.isNotEmpty) ? blocks : ['A Blok', 'B Blok'];
+    // The placeholder is for the offline test mode only; live responses must carry the password.
     final tempPassword = 'SP-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}-PASS';
 
     if (!isTestMode) {
@@ -595,7 +596,14 @@ extension DashboardControllerAuth on DashboardController {
         if (response.statusCode == 200 || response.statusCode == 201) {
           final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
           final createdSiteId = (data['site_id'] ?? data['id'])?.toString() ?? '${_saasSites.length + 1}';
-          final createdPassword = data['temporary_password']?.toString() ?? tempPassword;
+          final createdPassword = data['temporary_password']?.toString();
+          if (createdPassword == null || createdPassword.isEmpty) {
+            _lastSiteRegistrationError = 'Sunucu geçici şifre döndürmedi.';
+            _authMessage = _lastSiteRegistrationError;
+            AppLogger.warn('Site registration response had no temporary password', tag: 'Sites');
+            notify();
+            return false;
+          }
           final newSite = TenantSiteItem(
             id: createdSiteId,
             name: name,
@@ -833,9 +841,13 @@ extension DashboardControllerAuth on DashboardController {
         final response = await ApiClient.post(url).timeout(const Duration(seconds: 5));
         if (response.statusCode == 200) {
           final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-          if (data['temporary_password'] != null) {
-            tempPassword = data['temporary_password'].toString();
+          final issued = data['temporary_password']?.toString();
+          if (issued == null || issued.isEmpty) {
+            _authMessage = 'Sunucu geçici şifre döndürmedi.';
+            notify();
+            return false;
           }
+          tempPassword = issued;
         } else {
           _authMessage = extractErrorMessage(
             response,

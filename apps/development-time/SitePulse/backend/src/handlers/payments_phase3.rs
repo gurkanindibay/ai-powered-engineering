@@ -51,6 +51,12 @@ fn fail(e: FinanceError) -> ApiError {
         FinanceError::Forbidden(_) => StatusCode::FORBIDDEN,
         FinanceError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
     };
+    if status == StatusCode::SERVICE_UNAVAILABLE {
+        return api_error(
+            status,
+            crate::error::sanitized("Service temporarily unavailable", &e),
+        );
+    }
     api_error(status, e.to_string())
 }
 
@@ -67,8 +73,12 @@ fn caller(ctx: &AuthzContext) -> Caller {
 }
 
 fn pdf(document: &TextDocument, filename: &str) -> Result<Response, ApiError> {
-    let bytes = render_text_document(document)
-        .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let bytes = render_text_document(document).map_err(|e| {
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            crate::error::sanitized("Internal error", &e),
+        )
+    })?;
     Ok((
         [
             (header::CONTENT_TYPE, "application/pdf".to_string()),

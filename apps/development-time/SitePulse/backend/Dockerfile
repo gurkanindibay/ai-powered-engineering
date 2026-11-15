@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && useradd --system --uid 10001 --no-create-home sitepulse
 COPY --from=build /app/target/release/sitepulse-backend /usr/local/bin/sitepulse-backend
 USER 10001
+ENV APP_ENV=production
 ENV SITEPULSE_BIND_ADDR=0.0.0.0:8080
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/sitepulse-backend"]

@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /apps/development-time/SitePulse/backend
+    schedule: {interval: weekly}
+  - package-ecosystem: pub
+    directory: /apps/development-time/SitePulse/flutter
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: docker
+    directory: /apps/development-time/SitePulse/backend
+    schedule: {interval: weekly}

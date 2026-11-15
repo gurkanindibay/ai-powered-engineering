@@ -92,6 +92,7 @@ fn jwt_secret() -> Result<&'static [u8], String> {
 /// # Errors
 /// Rejects missing production secrets or invalid configuration.
 pub fn validate_configuration() -> Result<(), String> {
+    crate::state::AppStateInner::validate_mode()?;
     jwt_secret()?;
     if crate::state::AppStateInner::is_production()
         && std::env::var("SITEPULSE_BANK_WEBHOOK_SECRET")
@@ -284,6 +285,64 @@ pub fn validate_new_password(password: &str) -> Result<(), String> {
             "Password must be at least {} characters.",
             MIN_PASSWORD_LENGTH
         ));
+    }
+    Ok(())
+}
+
+/// Passwords that are long enough for the length rule but appear in every breach list.
+const COMMON_PASSWORDS: &[&str] = &[
+    "1234567890",
+    "12345678910",
+    "0123456789",
+    "1q2w3e4r5t",
+    "qwertyuiop",
+    "qwerty1234",
+    "qwerty12345",
+    "password12",
+    "password123",
+    "password1234",
+    "passw0rd123",
+    "1234567891",
+    "abcdefghij",
+    "abcd123456",
+    "iloveyou12",
+    "iloveyou123",
+    "welcome123",
+    "welcome1234",
+    "administrator",
+    "letmein1234",
+    "changeme123",
+    "sitepulse123",
+    "sitepulse1234",
+    "1111111111",
+    "0000000000",
+    "9876543210",
+    "asdfghjkl1",
+    "zxcvbnm123",
+];
+
+/// Rejects passwords that repeat the account's own identity or a well-known weak value.
+///
+/// # Errors
+/// Returns a user-facing message when the password is unacceptable.
+pub fn validate_password_for_account(
+    password: &str,
+    email: &str,
+    full_name: &str,
+) -> Result<(), String> {
+    validate_new_password(password)?;
+    let lower = password.trim().to_lowercase();
+    let email = crate::domain::email::NormalizedEmail::normalize(email);
+    let local = email.split('@').next().unwrap_or_default();
+    let name = full_name.trim().to_lowercase();
+    if lower == email
+        || (!local.is_empty() && lower == local)
+        || (!name.is_empty() && lower == name)
+    {
+        return Err("Password must not match your email or name.".to_string());
+    }
+    if COMMON_PASSWORDS.contains(&lower.as_str()) {
+        return Err("Password is too common. Choose a less predictable one.".to_string());
     }
     Ok(())
 }
@@ -576,6 +635,40 @@ pub async fn verify_password_async(password: String, hash: String) -> Result<boo
     .map_err(|_| "Password worker unavailable".to_string())
 }
 
+/// Requests per minute from one client address to the public routes.
+const PUBLIC_PER_ADDRESS_LIMIT: u32 = 120;
+/// Attempts per minute from one client against one account.
+const ACCOUNT_ATTEMPTS_PER_CLIENT: u32 = 10;
+/// Attempts per minute against one account from all clients together.
+const ACCOUNT_ATTEMPTS_TOTAL: u32 = 60;
+/// Circuit breaker for all public traffic; far above legitimate use.
+const PUBLIC_GLOBAL_LIMIT: u32 = 6000;
+
+/// Counts one request against every key; false when any limit is exceeded.
+/// Counters live in process memory and reset with the process.
+async fn throttle_allows(state: &AppState, mut keys: Vec<(String, u32)>) -> bool {
+    keys.push(("global".to_string(), PUBLIC_GLOBAL_LIMIT));
+    let mut store = state.security.lock().await;
+    store
+        .login_attempts
+        .retain(|_, (at, _)| at.elapsed().as_secs() < 60);
+    if store.login_attempts.len() > 50_000 {
+        return false;
+    }
+    let mut allowed = true;
+    for (key, max) in keys {
+        let attempt = store
+            .login_attempts
+            .entry(key)
+            .or_insert((std::time::Instant::now(), 0));
+        attempt.1 += 1;
+        if attempt.1 > max {
+            allowed = false;
+        }
+    }
+    allowed
+}
+
 /// Authentication, explicit route policy, current resource scope and audit identity.
 pub async fn require_auth(State(state): State<AppState>, mut req: Request, next: Next) -> Response {
     use crate::authorization::{AuthzContext, RoutePolicy, SecurityError};
@@ -615,10 +708,15 @@ pub async fn require_auth(State(state): State<AppState>, mut req: Request, next:
             session_id: None,
         });
     if matches!(policy, RoutePolicy::Public) {
-        if template.starts_with("/api/v1/auth/")
+        let client = audit
+            .source_ip
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
+        let is_credential_route = template.starts_with("/api/v1/auth/")
             || template.contains("/register")
-            || template.contains("/registration/submit/")
-        {
+            || template.contains("/registration/submit/");
+        let mut keys = vec![(format!("addr:{client}"), PUBLIC_PER_ADDRESS_LIMIT)];
+        if is_credential_route {
             let (parts, body) = req.into_parts();
             let bytes = match to_bytes(body, 16384).await {
                 Ok(b) => b,
@@ -637,28 +735,19 @@ pub async fn require_auth(State(state): State<AppState>, mut req: Request, next:
                         })
                 })
                 .unwrap_or_else(|| template.to_string());
-            let mut store = state.security.lock().await;
-            store
-                .login_attempts
-                .retain(|_, (at, _)| at.elapsed().as_secs() < 60);
-            if store.login_attempts.len() > 10000 {
+            // The tight limit is per client and account, so one client cannot lock a
+            // victim out; the loose per-account limit still bounds distributed guessing.
+            keys.push((
+                format!("client-account:{client}:{account}"),
+                ACCOUNT_ATTEMPTS_PER_CLIENT,
+            ));
+            keys.push((format!("account:{account}"), ACCOUNT_ATTEMPTS_TOTAL));
+            if !throttle_allows(&state, keys).await {
                 return SecurityError::RateLimited.into_response();
             }
-            for (key, max) in [
-                ("global".to_string(), 300),
-                (format!("account:{}", account), 10),
-            ] {
-                let attempt = store
-                    .login_attempts
-                    .entry(key)
-                    .or_insert((std::time::Instant::now(), 0));
-                attempt.1 += 1;
-                if attempt.1 > max {
-                    return SecurityError::RateLimited.into_response();
-                }
-            }
-            drop(store);
             req = Request::from_parts(parts, Body::from(bytes));
+        } else if !throttle_allows(&state, keys).await {
+            return SecurityError::RateLimited.into_response();
         }
         return crate::audit::CONTEXT.scope(audit, next.run(req)).await;
     }
@@ -973,5 +1062,58 @@ mod tests {
     fn query_decoding() {
         assert_eq!(decode_component("a%20b+c"), "a b c");
         assert_eq!(decode_component("100%"), "100%");
+    }
+}
+
+#[cfg(test)]
+mod password_policy_tests {
+    use super::validate_password_for_account;
+
+    #[test]
+    fn rejects_identity_and_common_passwords() {
+        assert!(
+            validate_password_for_account("ayse.demir@x.com", "ayse.demir@x.com", "A").is_err()
+        );
+        assert!(
+            validate_password_for_account("Ayse Demir Kaya", "a@x.com", "ayse demir kaya").is_err()
+        );
+        assert!(validate_password_for_account("Password123", "a@x.com", "A").is_err());
+        assert!(validate_password_for_account("short", "a@x.com", "A").is_err());
+        assert!(validate_password_for_account("tr1cky-Horse-staple", "a@x.com", "A").is_ok());
+    }
+}
+
+#[cfg(test)]
+mod throttle_tests {
+    use super::*;
+
+    fn keys(client: &str, account: &str) -> Vec<(String, u32)> {
+        vec![
+            (format!("addr:{client}"), PUBLIC_PER_ADDRESS_LIMIT),
+            (
+                format!("client-account:{client}:{account}"),
+                ACCOUNT_ATTEMPTS_PER_CLIENT,
+            ),
+            (format!("account:{account}"), ACCOUNT_ATTEMPTS_TOTAL),
+        ]
+    }
+
+    #[tokio::test]
+    async fn one_client_cannot_lock_out_another_clients_account() {
+        let state = AppState::new_empty();
+        for _ in 0..ACCOUNT_ATTEMPTS_PER_CLIENT {
+            assert!(throttle_allows(&state, keys("203.0.113.1", "victim@x.com")).await);
+        }
+        assert!(!throttle_allows(&state, keys("203.0.113.1", "victim@x.com")).await);
+        assert!(throttle_allows(&state, keys("198.51.100.2", "victim@x.com")).await);
+    }
+
+    #[tokio::test]
+    async fn varying_the_account_does_not_evade_the_address_limit() {
+        let state = AppState::new_empty();
+        for i in 0..PUBLIC_PER_ADDRESS_LIMIT {
+            assert!(throttle_allows(&state, keys("203.0.113.1", &format!("u{i}@x.com"))).await);
+        }
+        assert!(!throttle_allows(&state, keys("203.0.113.1", "another@x.com")).await);
     }
 }
