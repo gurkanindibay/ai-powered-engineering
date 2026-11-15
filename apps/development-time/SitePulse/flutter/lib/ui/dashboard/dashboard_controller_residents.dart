@@ -878,10 +878,14 @@ extension DashboardControllerResidents on DashboardController {
           memberUrl,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
-            if (person != null) 'person': person.toJson(),
-            if (person == null) 'full_name': fullName,
-            if (person == null) 'phone': phone,
-            if (person == null) 'email': email,
+            'person': (person ??
+                    PersonRef.draft(
+                      fullName: fullName,
+                      phone: phone.isEmpty ? null : phone,
+                      email: email.isEmpty ? null : email,
+                      confirmDistinct: true,
+                    ))
+                .toJson(),
             'relationship': relationship,
           }),
         ).timeout(const Duration(seconds: 4));

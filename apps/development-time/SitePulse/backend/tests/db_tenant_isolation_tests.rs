@@ -453,7 +453,9 @@ async fn household_members_round_trip_and_stay_in_their_site() {
         &format!("/api/v1/home-residents/members/{}?site_id={}", unit, a),
         &token,
         Some(serde_json::json!({
-            "full_name": "Ali Kaya", "phone": "05320000001", "email": "ali.kaya@rust.test"
+            "person": {"kind": "new", "card": {
+                "full_name": "Ali Kaya", "phone": "05320000001", "email": "ali.kaya@rust.test"
+            }}
         })),
     )
     .await;
