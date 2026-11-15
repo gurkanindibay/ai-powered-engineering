@@ -108,6 +108,12 @@ Savings are estimates for PR wall time against today's ~27 min.
 
 ## 4. Suggested rollout
 
+Status: step 1 (A, C, D) is implemented. `run_tests.py --group <lint|rust|flutter|e2e|final>` runs one
+job's gates. `sitepulse-ci.yml` runs `lint`, `rust`, `flutter` and `e2e` in parallel. The `verify` job
+(the required check name) needs all four, fails unless every one succeeded, and then runs `final` and
+`rtm_validator.py`. All Rust caches use `cache-on-failure: true`, the Flutter SDK is cached, and a newer
+push to a PR cancels the older check run. The full suite still runs on every PR; that changes in step 2.
+
 1. **A + C + D** (only `sitepulse-ci.yml`): parallel jobs, cache on failure, lints first. Measure.
 2. **B + I**: shard e2e, `--affected` on PRs, full suite on master and nightly. Needs a shard option in
    `gui_e2e.py` and a step that merges the run records, so `test-run-recorded` still sees one run per task.

@@ -258,7 +258,7 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)
 - **Test Plan & Matrix:** [apps/development-time/SitePulse/docs/testing/TEST_PLAN_AND_EXECUTION_MATRIX.md](file:///apps/development-time/SitePulse/docs/testing/TEST_PLAN_AND_EXECUTION_MATRIX.md)
-- **Purpose:** Runs platform verification across 6 execution cases: full platform run, area-specific verification (`finance`, `auth`, `residents`, `ui`, `db`, `core`), or change-driven selective testing (`--changed`) using real compilers, linters, test targets, and database tools.
+- **Purpose:** Runs platform verification across 6 execution cases: full platform run, area-specific verification (`finance`, `auth`, `residents`, `ui`, `db`, `core`), or change-driven selective testing (`--changed`) using real compilers, linters, test targets, and database tools. The fast Python gates run first, so a lint failure reports in seconds. `GATE_GROUPS` splits the gates into the groups that `.github/workflows/sitepulse-ci.yml` runs as parallel jobs; `harness/tests/test_run_tests_groups.py` fails when a gate is in no group or a group is not run in CI.
 
 ```bash
 # Area-specific verification & change-driven testing
@@ -274,6 +274,7 @@ DB_PASS=... ./scripts/run_tests.py            # everything including GUI Playwri
 ./scripts/run_tests.py --skip-db              # DB gates (incl. gui-e2e) reported as SKIPPED, not passed
 DB_PASS=... ./scripts/run_tests.py --skip-gui # everything except the browser suite (CI gate)
 ./scripts/run_tests.py --only rust-test,money-fixtures --json
+./scripts/run_tests.py --group lint           # one CI job's gates: lint (Python, seconds), rust, flutter, e2e, final
 ./scripts/run_tests.py --changed --skip-db --summary   # agent-friendly: one line per gate, <=15 diagnostic lines per failure
 ```
 
