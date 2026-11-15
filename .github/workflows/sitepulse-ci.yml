@@ -316,6 +316,8 @@ jobs:
       - name: Record evidence for every task (dependency order)
         env:
           CI: "true"
+          # Global gates (build, clippy, analyze, lints) are identical for every task: run once, reuse the pass.
+          SITEPULSE_GATE_CACHE_DIR: ${{ runner.temp }}/gate-cache
         run: |
           python3 - <<'PY'
           import json, subprocess, sys

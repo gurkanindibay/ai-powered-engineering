@@ -15,6 +15,7 @@ CLI. Acceptance tests are referenced by id:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -53,10 +54,31 @@ class CommandSpec:
     timeout_s: int = 900
 
 
+def _cache_file(spec: CommandSpec, root: Path) -> "Path | None":
+    """Opt-in cache of PASSED commands (``SITEPULSE_GATE_CACHE_DIR``), used by CI evidence recording.
+
+    Recording evidence verifies every task in one checkout, and each task repeats the same global
+    gates (build, clippy, analyze, lints). Within a single run the checkout does not change, so a
+    command that already passed is not re-run. Only passes are cached; failures always re-run.
+    """
+    cache_dir = os.environ.get("SITEPULSE_GATE_CACHE_DIR")
+    if not cache_dir:
+        return None
+    key = hashlib.sha256(json.dumps([list(spec.argv), spec.cwd, str(root.resolve())]).encode()).hexdigest()[:32]
+    return Path(cache_dir) / f"{key}.json"
+
+
 def run_command(name: str, spec: CommandSpec, root: Path) -> GateResult:
     """Runs one command; a missing executable, timeout or non-zero exit fails the gate."""
     exe = spec.argv[0]
     command = " ".join(spec.argv)
+    cache = _cache_file(spec, root)
+    if cache is not None and cache.is_file():
+        try:
+            hit = json.loads(cache.read_text())
+            return GateResult(name, True, [], command, float(hit.get("duration_s", 0.0)), hit.get("output", ""))
+        except (OSError, ValueError):
+            pass
     if shutil.which(exe) is None:
         return GateResult(name, False, [f"Required tool '{exe}' is not installed or not on PATH"], command)
     started = time.monotonic()
@@ -74,6 +96,12 @@ def run_command(name: str, spec: CommandSpec, root: Path) -> GateResult:
     duration = time.monotonic() - started
     output = (proc.stdout or "") + (proc.stderr or "")
     if proc.returncode == 0:
+        if cache is not None:
+            try:
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                cache.write_text(json.dumps({"duration_s": duration, "output": output}))
+            except OSError:
+                pass
         return GateResult(name, True, [], command, duration, output)
     return GateResult(name, False, extract_diagnostics(output), command, duration, output)
 
