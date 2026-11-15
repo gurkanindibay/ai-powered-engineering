@@ -10,8 +10,9 @@
 
 <!--
 CI runs the affected tests on every PR and publishes the report: the stats are on the
-`test-report` job's summary page, the full report and HTML dashboard are artifact `e2e-test-report`
-(AGENTS.md rule 13). Link the CI run here, or write "See CI". Docs-only PR: "Not required: no behaviour change".
+`test-report` job's summary page and the full report and HTML dashboard are artifact `e2e-test-report`
+(AGENTS.md rule 13). After a push to `master`, the latest report and archived master runs are also on
+the GitHub Pages site. Link the CI run here, or write "See CI". Docs-only PR: "Not required: no behaviour change".
 
 Only when recorded runs are switched back on (`require_recorded_run` in
 apps/development-time/SitePulse/.specify/executions/settings.json, or SITEPULSE_REQUIRE_RECORDED_RUN=1):

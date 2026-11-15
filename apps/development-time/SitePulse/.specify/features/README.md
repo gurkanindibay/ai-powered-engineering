@@ -35,7 +35,10 @@ Amounts in steps are plain decimals (`500000.00`) and are parsed as `Decimal`.
 
 GitHub CI runs the suite on every PR and publishes the result: the stats on the `test-report` job's
 summary, and artifact `e2e-test-report` (markdown report, HTML dashboard of the committed history plus
-that run, merged execution records). Committing a recorded run with every task is switched off
+that run, merged execution records). On pushes to `master`, CI also publishes the latest report and
+an archive of earlier master runs to the repository's GitHub Pages site using the `gh-pages` branch.
+Configure Pages to deploy from `gh-pages` at the repository root. PR reports remain available through
+their workflow summary and artifact. Committing a recorded run with every task is switched off
 (`"require_recorded_run": false` in `.specify/executions/settings.json`; `SITEPULSE_REQUIRE_RECORDED_RUN=1`
 overrides it). A run can still be recorded locally (AGENTS.md rule 13):
 
