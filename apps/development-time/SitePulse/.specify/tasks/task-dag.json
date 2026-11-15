@@ -961,6 +961,10 @@
         "tenant-lint",
         "logging-standards-lint"
       ],
+      "acceptance_tests": [
+        "scenario:SC-12-08-01",
+        "scenario:SC-12-08-02"
+      ],
       "attempts": 0
     }
   ],

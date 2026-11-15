@@ -17,6 +17,7 @@ import '../theme/app_theme.dart';
 import 'activation_status.dart';
 import 'person_preferences_page.dart';
 import 'sp_person_form.dart';
+import 'sp_person_picker.dart';
 
 /// One person: contact, login state and every unit they own, rent or live in, as a
 /// timeline (person module U3/U4/U10).
@@ -55,6 +56,7 @@ class _PersonProfilePageState extends State<PersonProfilePage> {
   bool _resending = false;
   bool _savingId = false;
   bool _openingLogin = false;
+  bool _merging = false;
 
   @override
   void initState() {
@@ -182,6 +184,73 @@ class _PersonProfilePageState extends State<PersonProfilePage> {
     }
   }
 
+  /// D2: merges this card into another one. The manager picks the card that survives,
+  /// confirms, and the server then asks for a fresh password check (step-up).
+  Future<void> _merge(PersonProfile profile) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final source = profile.person;
+    final picked = await showSpPersonPicker(context: context, repository: widget.repository);
+    if (picked == null || !mounted) return;
+    final targetId = picked.personId;
+    if (targetId == null) return;
+    if (targetId == source.personId) {
+      messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: const Text('Bir kişi kendisiyle birleştirilemez.')));
+      return;
+    }
+    PersonProfile target;
+    try {
+      target = await widget.api.profile(targetId);
+    } on ApiException catch (e) {
+      messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: Text(e.message)));
+      return;
+    } catch (_) {
+      messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: const Text('Kişi yüklenemedi.')));
+      return;
+    }
+    if (!mounted) return;
+    final targetName = target.person.fullName;
+    final confirmed = await showSpConfirmDialog(
+      context,
+      title: 'Kişileri birleştir',
+      message: '${source.fullName} kartı "$targetName" kartına birleştirilecek. Daire ilişkileri ve geçmiş kayıtlar hedef karta bağlanır; bu işlem geri alınamaz.',
+      confirmLabel: 'Birleştir',
+      destructive: true,
+      confirmKey: 'person_merge_confirm_btn',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _merging = true);
+    try {
+      Future<void> run() => widget.api.mergePerson(
+            source.personId,
+            targetId,
+            expectedTargetVersion: target.person.version,
+          );
+      try {
+        await run();
+      } on ApiException catch (e) {
+        if (e.code != 'STEP_UP_REQUIRED' || !mounted) rethrow;
+        final verified = await showStepUpPrompt(
+          context,
+          reason: 'Kişi kartlarını birleştirmek geri alınamaz. İşlemi onaylamak için şifrenizi doğrulayın; işlem denetim kaydına yazılır.',
+        );
+        if (!verified) return;
+        await run();
+      }
+      messenger.showSnackBar(spSnackBar(
+        kind: ToastKind.success,
+        content: Text('${source.fullName} kartı "$targetName" kartına birleştirildi.'),
+      ));
+      await _notifyChanged(target.person);
+      if (mounted) Navigator.of(context).maybePop();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: Text(e.message)));
+    } catch (_) {
+      messenger.showSnackBar(spSnackBar(kind: ToastKind.error, content: const Text('Kişiler birleştirilemedi.')));
+    } finally {
+      if (mounted) setState(() => _merging = false);
+    }
+  }
+
   Future<void> _editPreferences(PersonProfile profile) async {
     final saved = await showSpPage<ContactPreferences>(
       context: context,
@@ -225,6 +294,8 @@ class _PersonProfilePageState extends State<PersonProfilePage> {
               _roleActions(context, profile),
               const SizedBox(height: AppSpacing.xl),
             ],
+            _mergeSection(context, profile),
+            const SizedBox(height: AppSpacing.xl),
             Text('Daireler', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
             if (profile.units.isEmpty)
@@ -330,6 +401,30 @@ extension on _PersonProfilePageState {
             action('OWNER', 'Kat maliki yap', Icons.home_work_outlined),
             action('MEMBER', 'Haneye ekle', Icons.group_add_outlined),
           ],
+        ),
+      ],
+    );
+  }
+
+  Widget _mergeSection(BuildContext context, PersonProfile profile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Kartı birleştir', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Aynı kişi iki kez kayıtlıysa bu kartı diğerine birleştirin. İşlem şifre doğrulaması ister.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: testId('person_merge_btn', OutlinedButton.icon(
+            key: const Key('person_merge_btn'),
+            onPressed: _merging ? null : () => _merge(profile),
+            icon: const Icon(Icons.merge_type, size: 16),
+            label: const Text('Başka bir kişiyle birleştir'),
+          ), label: 'Kişi kartını başka bir kartla birleştir'),
         ),
       ],
     );
