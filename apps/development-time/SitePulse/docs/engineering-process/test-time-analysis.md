@@ -112,7 +112,13 @@ Status: step 1 (A, C, D) is implemented. `run_tests.py --group <lint|rust|flutte
 job's gates. `sitepulse-ci.yml` runs `lint`, `rust`, `flutter` and `e2e` in parallel. The `verify` job
 (the required check name) needs all four, fails unless every one succeeded, and then runs `final` and
 `rtm_validator.py`. All Rust caches use `cache-on-failure: true`, the Flutter SDK is cached, and a newer
-push to a PR cancels the older check run. The full suite still runs on every PR; that changes in step 2.
+push to a PR cancels the older check run.
+
+Step 2, sharding (B), is implemented. `scripts/e2e_shard.py` splits the suite on recorded durations, and
+`gui_e2e.py run --shard I/N` (or `$SITEPULSE_E2E_SHARD`) runs one shard. The `e2e` job is a 4-shard matrix.
+With the current history the plan is 29/28/29/29 tests at ~236 s each, down from ~945 s in one run.
+Each shard still builds the release backend and the web bundle itself. Building them once and sharing them
+as an artifact is a follow-up. Selection by `--affected` on PRs (I) is not done yet.
 
 1. **A + C + D** (only `sitepulse-ci.yml`): parallel jobs, cache on failure, lints first. Measure.
 2. **B + I**: shard e2e, `--affected` on PRs, full suite on master and nightly. Needs a shard option in

@@ -18,6 +18,7 @@ Examples:
   python3 scripts/gui_e2e.py run -m smoke --headed
   python3 scripts/gui_e2e.py run -k login --json
   python3 scripts/gui_e2e.py run --affected --record --task issue-123   # the run every task records before its PR
+  python3 scripts/gui_e2e.py run --shard 2/4 --json                  # one of four duration-balanced CI shards
   python3 scripts/gui_e2e.py serve
 
 Exit codes: 0 all selected tests passed, 1 test failures, 2 setup error.
@@ -136,8 +137,14 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
         argv += ["-k", args.keyword]
     if args.json:
         argv.append("-q")
+    if args.shard:
+        # scripts/e2e_shard.py deselects the tests of the other shards after collection.
+        argv += ["-p", "e2e_shard"]
     argv += passthrough
     env = {**os.environ, "GUI_E2E_REBUILD": "1" if args.rebuild or os.environ.get("GUI_E2E_REBUILD") == "1" else "0"}
+    if args.shard:
+        env["SITEPULSE_E2E_SHARD"] = args.shard
+        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(ROOT / "scripts"), env.get("PYTHONPATH", "")]))
     if len(env.get("TMPDIR", "")) > 30:
         env["TMPDIR"] = "/tmp"
     started = time.time()
@@ -160,6 +167,8 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> int:
         print(json.dumps(summary, indent=2))
     if proc.returncode in (0, 1):
         return proc.returncode
+    if proc.returncode == 5 and args.shard:
+        return 0  # the selection left no test for this shard
     return 2 if proc.returncode in (3, 4) else 1
 
 
@@ -209,7 +218,18 @@ def main() -> int:
     ap.add_argument("--record", action="store_true",
                     help="append this run to the test history under .specify/executions (commit it with the task) "
                          "and refresh the dashboard")
+    ap.add_argument("--shard", default=os.environ.get("SITEPULSE_E2E_SHARD", ""),
+                    help="run only shard I of N (e.g. 2/4), balanced on recorded durations (scripts/e2e_shard.py); "
+                         "default: $SITEPULSE_E2E_SHARD")
     args, passthrough = ap.parse_known_args()
+    if args.shard:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from e2e_shard import parse_shard  # noqa: E402
+        try:
+            parse_shard(args.shard)
+        except ValueError as exc:
+            print(f"setup error: --shard: {exc}")
+            return 2
     if args.browser != "chromium":
         args.browser_channel = ""
     if args.env_file and args.env_file.exists():
