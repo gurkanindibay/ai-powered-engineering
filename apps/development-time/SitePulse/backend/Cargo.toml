@@ -30,7 +30,7 @@ argon2 = "0.5"
 hmac = "0.12"
 hex = "0.4"
 chrono-tz = "0.10"
-tokio-postgres-rustls = { version = "0.13", default-features = false }
+tokio-postgres-rustls = { version = "0.14", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 webpki-roots = "0.26"
 # Receipt PDFs (SPEC-007 R3): embedded, subset DejaVu Sans for Turkish glyphs, and the verification QR code.
