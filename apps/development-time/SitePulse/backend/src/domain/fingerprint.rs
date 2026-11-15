@@ -10,6 +10,7 @@
 //! that are already at money scale, so the formatting never has to round.
 
 use chrono::{DateTime, Utc};
+use hmac::digest::KeyInit;
 use hmac::{Hmac, Mac};
 use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
@@ -92,7 +93,7 @@ pub fn verify_hmac_sha256_hex(secret: &[u8], body: &[u8], signature_hex: &str) -
     let Ok(signature) = hex::decode(signature_hex.trim().trim_start_matches("sha256=")) else {
         return false;
     };
-    let Ok(mut mac) = <Hmac<Sha256> as Mac>::new_from_slice(secret) else {
+    let Ok(mut mac) = <Hmac<Sha256> as KeyInit>::new_from_slice(secret) else {
         return false;
     };
     mac.update(body);
@@ -100,7 +101,7 @@ pub fn verify_hmac_sha256_hex(secret: &[u8], body: &[u8], signature_hex: &str) -
 }
 
 fn hmac_sha256(secret: &[u8], body: &[u8]) -> Vec<u8> {
-    match <Hmac<Sha256> as Mac>::new_from_slice(secret) {
+    match <Hmac<Sha256> as KeyInit>::new_from_slice(secret) {
         Ok(mut mac) => {
             mac.update(body);
             mac.finalize().into_bytes().to_vec()
