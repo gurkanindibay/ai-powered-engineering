@@ -150,7 +150,7 @@ jobs:
         working-directory: apps/development-time/SitePulse/flutter
         run: flutter pub get
       # The E2E web bundle; e2e/support/stack.py rebuilds it anyway when its source fingerprint differs.
-      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: apps/development-time/SitePulse/flutter/build/web-e2e
           key: e2e-web-${{ hashFiles('apps/development-time/SitePulse/flutter/pubspec.*', 'apps/development-time/SitePulse/flutter/lib/**', 'apps/development-time/SitePulse/flutter/web/**', 'apps/development-time/SitePulse/flutter/assets/**') }}
