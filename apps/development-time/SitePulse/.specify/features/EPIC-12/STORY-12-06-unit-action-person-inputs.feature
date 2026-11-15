@@ -14,6 +14,7 @@ Feature: Unit actions choose people through person cards
     When the edit page is shown
     Then owner and tenant identity is read-only and opens the person card
     And the page has no person text inputs
+    And occupancy changes are performed through the dedicated unit actions
 
   @SC-12-06-03 @layer:gui @linked @core
   Scenario: Choose the primary contact by person id

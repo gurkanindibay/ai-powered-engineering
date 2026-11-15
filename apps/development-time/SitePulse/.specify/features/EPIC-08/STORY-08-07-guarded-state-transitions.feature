@@ -57,3 +57,28 @@ Feature: Guarded state transitions
     When a resident registration request for the same unit is approved as tenant
     Then the approval is rejected with the reason that the unit is occupied
     And Selin Demir remains the active tenant
+
+  @SC-08-07-09 @layer:gui @linked @core @role_manager
+  Scenario: Resident details cannot change occupancy
+    Given an existing unit with an active tenant and household members
+    When the manager opens resident details
+    Then occupancy is displayed as read-only with guidance to use unit actions
+    And owner and tenant person cards remain accessible
+    And there is no occupancy selector or general save action
+    When the manager closes resident details
+    Then occupancy, ownership and household members are unchanged
+    And the unit workspace still offers tenant replacement and owner return
+
+  @SC-08-07-10 @layer:gui @linked @core @role_manager
+  Scenario Outline: Owner details preserve owner-occupied and vacant states
+    Given an owned unit in state <state> with no tenant
+    When the manager opens owner details
+    Then the current occupancy is read-only and the owner person card is accessible
+    And no tenant card or occupancy save action is shown
+    When the manager closes owner details
+    Then ownership and occupancy remain unchanged
+
+    Examples:
+      | state          |
+      | OWNER_OCCUPIED |
+      | VACANT         |

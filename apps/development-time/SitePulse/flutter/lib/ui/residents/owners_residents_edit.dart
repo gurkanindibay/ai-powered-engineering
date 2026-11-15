@@ -1,16 +1,12 @@
 part of 'owners_residents_module_page.dart';
 
-/// Editing an owner, a tenant and household members.
+/// Person-card links, read-only occupancy and independent household actions.
 extension _OwnerEdits on _OwnersResidentsModulePageState {
   void _openEditHomeOwner(HomeOwnerItem ho, {int initialTab = 0}) {
     int? ownerPersonId;
     int? tenantPersonId;
     // Identity lives on the person card; resolve the active owner/tenant ids for the card links.
     final identityLoaded = widget.controller.fetchOccupancyHistory(ho.unitId);
-
-    String occupancyMode = ho.isTenantOccupied
-        ? 'TENANT'
-        : (ho.isVacant ? 'VACANT' : 'OWNER');
 
     AppFullscreenPage.push(
       context: context,
@@ -37,71 +33,12 @@ extension _OwnerEdits on _OwnersResidentsModulePageState {
             bottomBar: AppFullscreenPage.buildBottomBar(
               context: ctx,
               children: [
-                OutlinedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text(AppStrings.cancel),
-                ),
                 testId(
-                  'module_save_edit_resident_btn',
-                  ElevatedButton(
-                    key: const Key('module_save_edit_resident_btn'),
-                    onPressed: () async {
-                      try {
-                        final messenger = ScaffoldMessenger.of(this.context);
-                        Future<bool> save() =>
-                            widget.controller.updateHomeOwner(
-                              unitId: ho.unitId,
-                              removeTenant: occupancyMode == 'TENANT'
-                                  ? null
-                                  : true,
-                              isResident: occupancyMode == 'OWNER',
-                            );
-
-                        var success = await save();
-                        // A login email change is an identity change: the server asks for the
-                        // manager's password first, then the same edit is retried once.
-                        if (!success &&
-                            widget.controller.homeOwnerUpdateNeedsStepUp &&
-                            ctx.mounted) {
-                          final verified = await showStepUpPrompt(
-                            ctx,
-                            reason: 'Bir sakinin giriş e-postasını değiştiriyorsunuz. Devam etmek için kendi şifrenizi doğrulayın.',
-                          );
-                          if (verified) success = await save();
-                        }
-
-                        if (success && ctx.mounted) {
-                          Navigator.pop(ctx);
-                          final pending = widget.controller.pendingEmailChanges;
-                          messenger.showSnackBar(
-                            appSnackBar(
-                              content: Text(
-                                pending.isEmpty
-                                    ? 'Sakin bilgileri başarıyla güncellendi.'
-                                    : 'Bilgiler kaydedildi. E-posta değişikliği, ${pending.join(', ')} adresinden onaylanınca geçerli olur.',
-                              ),
-                            ),
-                          );
-                        } else if (!success &&
-                            ctx.mounted &&
-                            widget.controller.lastHomeOwnerError != null) {
-                          messenger.showSnackBar(
-                            appSnackBar(
-                              content: Text(
-                                widget.controller.lastHomeOwnerError!,
-                              ),
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        AppLogger.warn(
-                          'Home owner edit failed',
-                          tag: 'Residents',
-                          error: e,
-                        );
-                      }
-                    },
-                    child: const Text(AppStrings.save),
+                  'module_close_edit_resident_btn',
+                  OutlinedButton(
+                    key: const Key('module_close_edit_resident_btn'),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Kapat'),
                   ),
                 ),
               ],
@@ -110,71 +47,19 @@ extension _OwnerEdits on _OwnersResidentsModulePageState {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // İkamet Durumu / Sakin Tipi Seçici
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.only(bottom: 14),
-                    decoration: BoxDecoration(
-                      color: AppColors.card(ctx),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: AppColors.accentCyan.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'İkamet Durumu / Sakin Tipi (Kat Maliki / Kiracı)',
-                          style: TextStyle(
-                            color: AppColors.textPrimary(ctx),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          width: double.infinity,
-                          child: testId(
-                            'module_edit_occupancy_role_selector',
-                            SegmentedButton<String>(
-                              key: const Key(
-                                'module_edit_occupancy_role_selector',
-                              ),
-                              segments: const [
-                                ButtonSegment<String>(
-                                  value: 'OWNER',
-                                  label: Text('Malik Oturuyor'),
-                                  icon: Icon(Icons.home_outlined, size: 16),
-                                ),
-                                ButtonSegment<String>(
-                                  value: 'TENANT',
-                                  label: Text('Kiracı Oturuyor'),
-                                  icon: Icon(Icons.key, size: 16),
-                                ),
-                                ButtonSegment<String>(
-                                  value: 'VACANT',
-                                  label: Text('Boş Daire'),
-                                  icon: Icon(
-                                    Icons.meeting_room_outlined,
-                                    size: 16,
-                                  ),
-                                ),
-                              ],
-                              selected: {occupancyMode},
-                              onSelectionChanged: (newSelection) {
-                                setDlgState(
-                                  () => occupancyMode = newSelection.first,
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
+                  testId(
+                    'module_edit_occupancy_status',
+                    SpGuidanceCard(
+                      key: const Key('module_edit_occupancy_status'),
+                      icon: Icons.home_outlined,
+                      title: 'İkamet Durumu: ${ho.effectiveOccupancy.label}',
+                      message: 'İkamet durumu, daire işlemlerindeki giriş, tahliye ve devir işlemleriyle güncellenir. Değişiklik için bu sayfayı kapatıp ilgili işlemi seçin.',
+                      tone: SpTone.info,
                     ),
                   ),
+                  const SizedBox(height: 14),
 
-                  if (occupancyMode == 'TENANT') ...[
+                  if (ho.isTenantOccupied) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 14),
@@ -266,7 +151,7 @@ extension _OwnerEdits on _OwnersResidentsModulePageState {
                     ),
                   ),
 
-                  // Hane Sakinleri / Birlikte Yaşayanlar (Co-residents)
+                  // Household members are edited through their own actions.
                   Builder(
                     builder: (context) {
                       final currentHo = widget.controller.homeOwners.firstWhere(

@@ -77,6 +77,23 @@ Any command not listed for the unit's current state is illegal and is rejected w
 5. Every session close records `end_date` and `exit_balance`; no session is closed implicitly.
 6. A session row is created only by a move-in, an owner registration with residence, or a title transfer; a move-out never creates one.
 
+### 3.5 Resident details and initial registration
+
+For an existing unit, resident and owner details display occupancy as read-only and
+explain that changes use the unit workspace actions from §3.3. These pages must not
+submit occupancy fields through a generic Save action. Person cards and household
+member actions retain their independent save flows. Closing details changes no unit
+state. All states, including vacant and units without an owner, follow this rule.
+
+Initial registration may collect the starting occupancy together with the owner and,
+when rented, the tenant. It must create the matching ownership and occupancy records;
+this is not an edit mechanism for an existing unit. Title transfer retains the
+state-dependent behavior in T6; selecting a contact or adding a household member
+never changes occupancy.
+
+Regression scenarios: `SC-08-07-09`, `SC-08-07-10`; identity navigation: `SC-12-06-02`.
+Analysis and case inventory: [occupancy editing analysis](../../docs/architecture/OCCUPANCY_EDIT_ACTIONS_ANALYSIS.md).
+
 ---
 
 ## 4. User Stories & Acceptance Criteria

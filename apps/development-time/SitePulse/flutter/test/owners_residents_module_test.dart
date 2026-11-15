@@ -403,55 +403,71 @@ void main() {
       expect(registered.isTenantOccupied, isTrue);
     });
 
-    // covers: SC-12-06-02
-    testWidgets('OwnersResidentsModulePage allows defining or switching occupancy mode in Edit dialog', (tester) async {
+    // covers: SC-12-06-02, SC-08-07-09
+    testWidgets('Resident details show occupancy without allowing a transition', (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
-
       await _openUnitActions(tester, 'unit-rented-kpi');
-
-      // Open Edit for rented unit
+      final before = controller.homeOwners.firstWhere((h) => h.unitId == 'unit-rented-kpi');
       final editBtn = find.byKey(const Key('module_edit_residents_unit-rented-kpi'));
       await tester.ensureVisible(editBtn);
-      await tester.pumpAndSettle();
       await tester.tap(editBtn);
       await tester.pumpAndSettle();
-
-      // Verify Edit dialog contains occupancy mode selector
       expect(find.text('Sakin Bilgilerini Düzenle'), findsOneWidget);
-      final roleSelector = find.byKey(const Key('module_edit_occupancy_role_selector'));
-      expect(roleSelector, findsOneWidget);
-      expect(find.descendant(of: roleSelector, matching: find.text('Kiracı Oturuyor')), findsOneWidget);
-      expect(find.descendant(of: roleSelector, matching: find.text('Malik Oturuyor')), findsOneWidget);
-      expect(find.descendant(of: roleSelector, matching: find.text('Boş Daire')), findsOneWidget);
-
-      // Identity is edited on the person card: the form has no person text inputs.
+      expect(find.byKey(const Key('module_edit_occupancy_status')), findsOneWidget);
+      expect(find.byKey(const Key('module_edit_occupancy_role_selector')), findsNothing);
+      expect(find.byKey(const Key('module_save_edit_resident_btn')), findsNothing);
       expect(find.byType(TextField), findsNothing);
       expect(find.byKey(const Key('module_edit_owner_person_card')), findsOneWidget);
-
-      // Switch to Malik Oturuyor (Owner Occupied)
-      await tester.ensureVisible(find.descendant(of: roleSelector, matching: find.text('Malik Oturuyor')));
+      expect(find.byKey(const Key('module_edit_tenant_person_card')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('module_close_edit_resident_btn')));
       await tester.pumpAndSettle();
-      await tester.tap(find.descendant(of: roleSelector, matching: find.text('Malik Oturuyor')));
-      await tester.pumpAndSettle();
-
-      // Kiracı fields should now be hidden
-      expect(find.text('Kiracı Bilgileri (Fiilen İkamet Eden)'), findsNothing);
-
-      // Save
-      await tester.ensureVisible(find.byKey(const Key('module_save_edit_resident_btn')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('module_save_edit_resident_btn')));
-      await tester.pumpAndSettle();
-
-      // Verify in controller that tenant was removed and status switched to OWNER_OCCUPIED
-      final updated = controller.homeOwners.firstWhere((h) => h.unitId == 'unit-rented-kpi');
-      expect(updated.tenantFullName, isNull);
-      expect(updated.occupancyStatus, equals('OWNER_OCCUPIED'));
-      expect(updated.isOwnerOccupied, isTrue);
+      final after = controller.homeOwners.firstWhere((h) => h.unitId == before.unitId);
+      expect(after.occupancyStatus, before.occupancyStatus);
+      expect(after.tenantFullName, before.tenantFullName);
+      expect(after.ownerFullName, before.ownerFullName);
+      expect(after.householdResidents.length, before.householdResidents.length);
+      expect(find.byKey(const Key('module_quick_move_in_unit-rented-kpi')), findsOneWidget);
+      expect(find.byKey(const Key('module_owner_takes_back_unit-rented-kpi')), findsOneWidget);
     });
+
+    for (final status in ['OWNER_OCCUPIED', 'VACANT']) {
+      // covers: SC-08-07-10
+      testWidgets('Owner details cannot change occupancy for $status', (tester) async {
+        final index = controller.homeOwners.indexWhere((h) => h.unitId == 'unit-rented-kpi');
+        controller.homeOwners[index] = controller.homeOwners[index].copyWith(
+          occupancyStatus: status,
+          isResident: status == 'OWNER_OCCUPIED',
+          clearTenant: true,
+          householdResidents: const [],
+        );
+        final before = controller.homeOwners[index];
+        await tester.pumpWidget(MaterialApp(
+          home: OwnersResidentsModulePage(controller: controller, personRepository: people),
+        ));
+        await tester.pumpAndSettle();
+        await _openUnitActions(tester, before.unitId);
+        final ownerDetails = find.byKey(Key('workspace_action_edit_owner_${before.unitId}'));
+        await tester.ensureVisible(ownerDetails);
+        await tester.tap(ownerDetails);
+        await tester.pumpAndSettle();
+        final statusCard = find.byKey(const Key('module_edit_occupancy_status'));
+        expect(statusCard, findsOneWidget);
+        expect(find.descendant(of: statusCard, matching: find.text('İkamet Durumu: ${before.occupancy.label}')), findsOneWidget);
+        expect(find.byKey(const Key('module_edit_occupancy_role_selector')), findsNothing);
+        expect(find.byKey(const Key('module_save_edit_resident_btn')), findsNothing);
+        expect(find.byKey(const Key('module_edit_tenant_person_card')), findsNothing);
+        expect(find.byKey(const Key('module_edit_owner_person_card')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('module_close_edit_resident_btn')));
+        await tester.pumpAndSettle();
+        final after = controller.homeOwners.firstWhere((h) => h.unitId == before.unitId);
+        expect(after.occupancyStatus, status);
+        expect(after.ownerFullName, before.ownerFullName);
+        expect(after.tenantFullName, isNull);
+      });
+    }
 
     testWidgets('OwnersResidentsModulePage vacant unit offers tenant move-in and owner move-in separately', (tester) async {
       // Inject a vacant unit
