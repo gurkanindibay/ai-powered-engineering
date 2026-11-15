@@ -1438,15 +1438,8 @@ pub struct UnitMemberDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddUnitMemberRequest {
-    /// Preferred: an existing card or a new one created atomically with the member.
-    #[serde(default)]
-    pub person: Option<PersonRef>,
-    #[serde(default)]
-    pub full_name: String,
-    #[serde(default)]
-    pub phone: String,
-    #[serde(default)]
-    pub email: String,
+    /// An existing card or a new one created atomically with the member.
+    pub person: PersonRef,
     #[serde(default)]
     pub relationship: Option<String>,
 }

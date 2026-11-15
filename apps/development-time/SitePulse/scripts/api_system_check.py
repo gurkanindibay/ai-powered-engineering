@@ -925,7 +925,8 @@ def check_household_members(ctx: Context) -> Tuple[bool, str]:
     email = f"household-{suffix}@example.com"
     path = f"/api/v1/home-residents/members/{ctx.unit_id}"
     status, body = http("POST", base + path, token=ctx.manager, body={
-        "full_name": "Household Verifier", "phone": "", "email": email, "relationship": "Family"})
+        "person": {"kind": "new", "card": {"full_name": "Household Verifier", "email": email}},
+        "relationship": "Family"})
     if status != 201:
         return False, f"creation {status} {body[:160]}"
     member = json.loads(body)
@@ -938,7 +939,8 @@ def check_household_members(ctx: Context) -> Tuple[bool, str]:
     rejected_email = f"rejected-{suffix}@example.com"
     try:
         rejected, _ = http("POST", base + path, token=ctx.manager, body={
-            "full_name": "Rejected Household", "phone": "", "email": rejected_email, "relationship": "Family"})
+            "person": {"kind": "new", "card": {"full_name": "Rejected Household", "email": rejected_email}},
+            "relationship": "Family"})
     finally:
         ctx.psql.run(db, "DROP TRIGGER reject_household_evidence ON occupancy_members; DROP FUNCTION reject_household_evidence();")
     count = ctx.psql.run(db, f"SELECT count(*) FROM persons WHERE email='{rejected_email}';")

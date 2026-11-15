@@ -119,7 +119,7 @@ pub async fn load_all_from_db(pool: &Pool, state: &mut AppStateInner) -> DbResul
         let rows = client
             .query(
                 // F6: the current role is derived from what the person holds now (V23).
-                "SELECT p.id, p.full_name, p.email, p.phone, r.derived_role, COALESCE(p.site_id::text, '') \
+                "SELECT p.id, p.full_name, p.email, p.phone, COALESCE(r.derived_role, 'HOME_RESIDENT'), COALESCE(p.site_id::text, '') \
                  FROM persons p JOIN v_person_roles r ON r.person_id = p.id \
                  WHERE p.deleted_at IS NULL AND (p.site_id IS NULL OR EXISTS (SELECT 1 FROM sites s WHERE s.id = p.site_id AND s.deleted_at IS NULL))",
                 &[],

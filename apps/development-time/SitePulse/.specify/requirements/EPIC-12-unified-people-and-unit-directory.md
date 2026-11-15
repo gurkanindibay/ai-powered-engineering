@@ -101,3 +101,15 @@ Executable scenarios: [STORY-12-06-unit-action-person-inputs.feature](../feature
 - **Verification:** targeted Flutter tests, cargo build, Flutter analysis, shared-component reuse, UI style, test ID, and logging standards checks.
 
 Executable scenarios: [STORY-12-07-person-card-navigation.feature](../features/EPIC-12/STORY-12-07-person-card-navigation.feature).
+
+### STORY-12-08: Person card merge
+- **Status:** IN PROGRESS
+- **Task Ref:** task-44 / GitHub issue #101
+- **Description:** Add the step-up protected merge flow to the person card using the server merge endpoint (task-38). Server unit-directory paging is not added: the filter and sort benchmark measures 133.1 ms at 10,000 units, under the 200 ms target (see `docs/architecture/UNIT_DIRECTORY_BENCHMARK.md`).
+- **Acceptance Criteria:**
+  - Merge is started from the person card, asks for confirmation, and requires a fresh password check (step-up).
+  - The request carries the version of the surviving card so a stale card is refused.
+  - A card cannot be merged into itself.
+- **Verification:** targeted Flutter tests, Flutter analysis, shared-component reuse, test ID, and logging standards checks.
+
+Executable scenarios: [STORY-12-08-person-merge-ui.feature](../features/EPIC-12/STORY-12-08-person-merge-ui.feature).

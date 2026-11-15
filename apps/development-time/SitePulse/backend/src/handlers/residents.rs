@@ -61,27 +61,12 @@ pub async fn add_unit_member(
     Query(q): Query<SiteIdParam>,
     Json(payload): Json<crate::models::AddUnitMemberRequest>,
 ) -> Result<(StatusCode, Json<UnitMemberDto>), AppError> {
-    let site_id = scope.pinned(q.site_id)?;
+    scope.pinned(q.site_id)?;
     let relationship = payload
         .relationship
         .clone()
         .unwrap_or_else(|| "OTHER".to_string());
-    if let Some(person) = &payload.person {
-        return add_unit_member_by_ref(&state, &unit_id, person, &relationship).await;
-    }
-    let service = SiteAdminService::new(state);
-    service
-        .add_unit_member(
-            &site_id,
-            &unit_id,
-            &payload.full_name,
-            &payload.phone,
-            &payload.email,
-            &relationship,
-        )
-        .await
-        .map(|res| (StatusCode::CREATED, Json(res)))
-        .map_err(person_error)
+    add_unit_member_by_ref(&state, &unit_id, &payload.person, &relationship).await
 }
 
 pub async fn delete_unit_member(

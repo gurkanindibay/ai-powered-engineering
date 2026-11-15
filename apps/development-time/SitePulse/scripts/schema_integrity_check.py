@@ -433,6 +433,9 @@ UPGRADE_ASSERTIONS = [
      " AND EXISTS (SELECT 1 FROM v_unit_directory WHERE unit_id = 1)"),
     ("legacy primary contact is backfilled to a same-site person (V33)",
      "SELECT primary_contact_person_id = 1 FROM units WHERE id = 1"),
+    ("person_type is nullable for role-free cards (V35)",
+     "SELECT is_nullable = 'YES' FROM information_schema.columns"
+     " WHERE table_name = 'persons' AND column_name = 'person_type'"),
     ("legacy national id no longer in clear text (V15)", "SELECT national_id IS NULL AND national_id_masked IS NOT NULL FROM persons WHERE id = 1"),
     ("e-mails lower-cased (V14)", "SELECT bool_and(email = lower(email)) FROM users"),
     ("created_at is never NULL",
