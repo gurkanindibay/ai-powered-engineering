@@ -2,8 +2,8 @@
 """Build a cumulative static site from a CI e2e test report.
 
 The destination is the checked-out GitHub Pages branch. Each workflow run is
-kept under reports/<run-id>-<attempt>/, while index.html and latest.html point
-to the newest report.
+kept under reports/<run-id>-<attempt>/. The root page opens the newest report;
+history.html links to every archived report.
 """
 from __future__ import annotations
 
@@ -23,12 +23,15 @@ def build(report: Path, site: Path, run_id: str, attempt: str) -> dict:
     key = f"{run_id}-{attempt}"
     destination = site / "reports" / key
     destination.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(page_path, destination / "index.html")
+    page = page_path.read_text(encoding="utf-8")
+    archived_page = add_history_link(page, "../../history.html")
+    (destination / "index.html").write_text(archived_page, encoding="utf-8")
     for name in ("test-report.md", "summary.json"):
         source = report / name
         if source.is_file():
             shutil.copyfile(source, destination / name)
-    shutil.copyfile(page_path, site / "latest.html")
+    latest_page = add_history_link(page, "history.html")
+    (site / "latest.html").write_text(latest_page, encoding="utf-8")
 
     reports = []
     report_root = site / "reports"
@@ -52,17 +55,26 @@ def build(report: Path, site: Path, run_id: str, attempt: str) -> dict:
             f'<tr><td><a href="reports/{html.escape(folder, quote=True)}/">{label}</a></td>'
             f"<td>{run}</td><td>{status}</td><td>{passed}/{tests}</td><td>{failed}</td></tr>"
         )
-    table = "\n".join(rows) or '<tr><td colspan="5">No reports yet.</td></tr>'
     latest_key = reports[0][1] if reports else key
-    index = f"""<!doctype html>
+    table = "\n".join(rows) or '<tr><td colspan="5">No reports yet.</td></tr>'
+    history = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SitePulse test reports</title>
+<title>SitePulse execution history</title>
 <style>body{{font:16px system-ui,sans-serif;max-width:1000px;margin:3rem auto;padding:0 1rem;color:#172033}}h1{{margin-bottom:.3rem}}a{{color:#1459a6}}table{{border-collapse:collapse;width:100%;margin-top:1.5rem}}th,td{{padding:.7rem;text-align:left;border-bottom:1px solid #d8dee8}}th{{background:#f2f5f9}}.latest{{font-size:1.15rem}}</style></head>
-<body><h1>SitePulse test reports</h1><p class="latest"><a href="reports/{html.escape(latest_key, quote=True)}/">Open latest report</a> · <a href="latest.html">Latest dashboard</a></p>
-<h2>History</h2><table><thead><tr><th>Run</th><th>Report ID</th><th>Status</th><th>Passed</th><th>Failed / errors</th></tr></thead><tbody>{table}</tbody></table>
+<body><h1>SitePulse execution history</h1><p class="latest"><a href="index.html">Latest report</a></p>
+<table><thead><tr><th>Run</th><th>Report ID</th><th>Status</th><th>Passed</th><th>Failed / errors</th></tr></thead><tbody>{table}</tbody></table>
 </body></html>\n"""
-    (site / "index.html").write_text(index, encoding="utf-8")
+    (site / "history.html").write_text(history, encoding="utf-8")
+    (site / "index.html").write_text(latest_page, encoding="utf-8")
     return {"reports": len(reports), "latest": latest_key, "site": str(site)}
+
+
+def add_history_link(page: str, href: str) -> str:
+    """Add archive navigation to a self-contained feature dashboard."""
+    link = (f'<p class="report-navigation"><a href="{html.escape(href, quote=True)}">'
+            'View previous executions</a></p>')
+    heading = "<h1>Feature test report</h1>"
+    return page.replace(heading, heading + link, 1) if heading in page else page
 
 
 def main() -> int:
