@@ -197,7 +197,6 @@ impl TenantScope {
     }
 }
 
-#[axum::async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for TenantScope {
     type Rejection = TenantDenied;
 
