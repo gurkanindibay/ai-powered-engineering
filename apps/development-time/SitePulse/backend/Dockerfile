@@ -3,7 +3,7 @@
 # so the runtime image needs no SQL files and no secrets (pass them as env vars).
 
 # Stage 1: build (dependencies are cached in their own layer)
-FROM rust:1.98-slim-bookworm AS build
+FROM rust:1.99-slim-bookworm AS build
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src/bin && echo 'fn main() {}' > src/main.rs && echo 'fn main() {}' > src/bin/hash_password.rs \
