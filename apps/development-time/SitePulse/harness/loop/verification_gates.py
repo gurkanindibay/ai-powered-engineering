@@ -147,6 +147,10 @@ GATES: Dict[str, List[CommandSpec]] = {
     # Cross-stack logging standards (docs/standards/LOGGING_STANDARDS.md): no println/dbg in backend,
     # no raw print in Flutter, structured AppLogger usage, no credential leaks.
     "logging-standards-lint": [CommandSpec(["python3", "scripts/logging_standards_lint.py", "--json"], ".", 120)],
+    # Static security guardrails (docs/quality/SECURITY_ASSESSMENT.md): no tracked credential files or
+    # hard-coded secrets, least-privilege workflows, pinned images, reviewed public routes, guarded
+    # development routes, no permissive CORS / weak crypto / client token storage, error-leak ratchet.
+    "security-lint": [CommandSpec(["python3", "scripts/security_lint.py", "--json"], ".", 120)],
     # Browser end-to-end suite (e2e/): isolated DB, release backend, Flutter E2E web build, Chrome.
     # Strict xfails pin known product defects; an unexpected pass (XPASS) fails the gate.
     "gui-e2e": [CommandSpec(["python3", "scripts/gui_e2e.py", "run", "--json"], ".", 3600)],

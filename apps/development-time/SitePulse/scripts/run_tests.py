@@ -57,6 +57,7 @@ ORDER = [
     "ui-style-lint",
     "flutter-reuse",
     "logging-standards-lint",
+    "security-lint",
     "rust-build",
     "rust-clippy",
     "rust-test",
@@ -77,6 +78,7 @@ GATE_GROUPS: Dict[str, List[str]] = {
     "lint": [
         "harness-selftest", "persistence-lint", "rust-standards-lint", "tenant-lint", "lock-lint",
         "testid-lint", "feature-traceability", "ui-style-lint", "flutter-reuse", "logging-standards-lint",
+        "security-lint",
     ],
     # Rust toolchain + PostgreSQL.
     "rust": ["rust-build", "rust-clippy", "rust-test", "schema-integrity", "rust-db-test", "api-system"],

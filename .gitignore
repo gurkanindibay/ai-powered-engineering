@@ -49,6 +49,9 @@ Thumbs.db
 apps/development-time/SitePulse/backend/keys/*
 .env
 *.env
+# Backups and variants of env files hold real credentials too (.env.bak-*, .env.local).
+.env.*
+!.env.example
 .envrc
 graphify-out
 

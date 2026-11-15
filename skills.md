@@ -179,6 +179,22 @@ SPEC-008 checks also verify durable household membership and rollback (`househol
 
 - **Identity reuse:** `person_activation_lifecycle` checks immediate re-registration after archival, one active account, and preserved person history without a backend restart.
 
+## 5a-2. Security Guardrails (`security_lint.py`, `dependency_audit.py`)
+
+- **Executable Scripts:** [apps/development-time/SitePulse/scripts/security_lint.py](file:///apps/development-time/SitePulse/scripts/security_lint.py) and [apps/development-time/SitePulse/scripts/dependency_audit.py](file:///apps/development-time/SitePulse/scripts/dependency_audit.py)
+- **Purpose:** Keep the weaknesses found in [SECURITY_ASSESSMENT.md](file:///apps/development-time/SitePulse/docs/quality/SECURITY_ASSESSMENT.md) from returning.
+  - `security_lint.py` rules: `tracked-secret-file`, `hardcoded-secret`, `workflow-permissions`, `workflow-untrusted`, `unpinned-image`, `public-route` (a new `Public` route must be added to `public_routes` in the baseline after review), `dev-route-guard`, `permissive-cors`, `weak-crypto`, `insecure-token-storage`, `unsafe-python`, and the `internal-error-leak` ratchet. Accepted findings: `scripts/security_lint_baseline.json` (`--write-baseline` never accepts public routes). Only the working tree is scanned, not git history.
+  - `dependency_audit.py` checks the versions pinned in `backend/Cargo.lock` and `flutter/pubspec.lock` against OSV. Accepted advisories go in `scripts/dependency_audit_allowlist.json` with `id`, `package`, `reason` and `expires`. Exit 2 means the audit could not run; it is never counted as passed.
+  - Gate `security-lint` in `run_tests.py` (group `lint`); the dependency audit runs in `.github/workflows/security-audit.yml` (lock file changes, weekly, manual) because it needs the network. Self-tests: `harness/tests/test_security_lint.py`.
+
+### Quick Usage Examples:
+```bash
+python3 apps/development-time/SitePulse/scripts/security_lint.py
+python3 apps/development-time/SitePulse/scripts/security_lint.py --json
+python3 apps/development-time/SitePulse/scripts/dependency_audit.py
+python3 apps/development-time/SitePulse/scripts/dependency_audit.py --json
+```
+
 ## 5b-2. GUI End-to-End Suite (`gui_e2e.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/gui_e2e.py](file:///apps/development-time/SitePulse/scripts/gui_e2e.py) (symlinked to `scripts/gui_e2e.py`)
