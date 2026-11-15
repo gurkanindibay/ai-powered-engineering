@@ -4133,7 +4133,14 @@ async fn when_recording_payment_with_penalty_then_amortizes_penalty_first_per_tb
         payer_name: "Ali Veli".to_string(),
         payer_role: DebtorType::Owner,
         payment_channel: PaymentChannel::BankTransfer,
-        payment_date: None,
+        // Fixed 30 days after the 2026-10-15 due date so the penalty (5% monthly) is exactly 50.00.
+        payment_date: Some(
+            NaiveDate::from_ymd_opt(2026, 11, 14)
+                .unwrap()
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc(),
+        ),
         idempotency_key: None,
         description: Some("Ekim Aidat ve Avans".to_string()),
         ..Default::default()
