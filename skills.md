@@ -284,7 +284,7 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ## 5b-6. CI Test Report (`ci_test_report.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/ci_test_report.py](file:///apps/development-time/SitePulse/scripts/ci_test_report.py) (symlinked to `scripts/ci_test_report.py`)
-- **Purpose:** Merges the e2e shard artifacts of one CI run (`e2e-shard-N`: junit.xml, executions.jsonl) into one report, without touching the committed history. Writes `test-report.md`, `feature-report.html` (committed history plus this run), `executions.jsonl` and `summary.json`, and appends the stats to `$GITHUB_STEP_SUMMARY`. Job `test-report` in `sitepulse-ci.yml` uploads the result as artifact `e2e-test-report`. Use it locally on downloaded artifacts (`gh run download <run> -p 'e2e-shard-*' -D shards`).
+- **Purpose:** Merges the e2e shard artifacts of one CI run (`e2e-shard-N`: junit.xml, executions.jsonl) into one report, without touching the committed history. Writes `test-report.md`, `feature-report.html` (committed history plus this run), `executions.jsonl`, `summary.json`, `product-status.json` and `product-status.html` (see 5b-8), and appends the stats to `$GITHUB_STEP_SUMMARY`. Job `test-report` in `sitepulse-ci.yml` uploads the result as artifact `e2e-test-report`. Use it locally on downloaded artifacts (`gh run download <run> -p 'e2e-shard-*' -D shards`).
 
 ```bash
 ./scripts/ci_test_report.py --shards shards --out /tmp/e2e-test-report --task "PR 131"
@@ -294,10 +294,22 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ## 5b-7. Publish CI Test Report History (`publish_test_report.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/publish_test_report.py](file:///apps/development-time/SitePulse/scripts/publish_test_report.py)
-- **Purpose:** Adds a generated CI report to a cumulative static Pages site, keeps one URL per GitHub workflow run, updates `latest.html`, and rebuilds the newest-first history index. `publish-test-report` in `sitepulse-ci.yml` publishes the site to `gh-pages` after master pushes.
+- **Purpose:** Adds a generated CI report to a cumulative static Pages site, keeps one URL per GitHub workflow run, updates `latest.html` (newest feature report), rebuilds the newest-first `history.html`, and renders the product status dashboard (5b-8) as `index.html`. `publish-test-report` in `sitepulse-ci.yml` publishes the site to `gh-pages` after master pushes.
 
 ```bash
 python3 apps/development-time/SitePulse/scripts/publish_test_report.py --report /tmp/e2e-test-report --site /tmp/test-report-site --run-id 1234 --attempt 1 --json
+```
+
+## 5b-8. Product Status Dashboard (`product_status.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/product_status.py](file:///apps/development-time/SitePulse/scripts/product_status.py) (symlinked to `scripts/product_status.py`)
+- **Purpose:** The product view of the test report: per epic, how many stories have acceptance scenarios and how many scenarios are passing, failing, automated without a CI result, or planned; trends of stories, scenarios, automation and passing scenarios; what was added recently; and the CI run history. `snapshot` writes `product-status.json` for one run (catalogue growth is read from the git history of `.specify`, so it needs a full clone). `html` renders the dashboard from one or more snapshots or from a published site directory. `ci_test_report.py` writes the snapshot into artifact `e2e-test-report`; `publish_test_report.py` keeps one snapshot per run on `gh-pages` and renders the dashboard as the site's `index.html`.
+
+```bash
+./scripts/product_status.py snapshot --out /tmp/product-status.json
+./scripts/product_status.py snapshot --executions apps/development-time/SitePulse/e2e/.artifacts/executions.jsonl --json
+./scripts/product_status.py html --snapshot /tmp/product-status.json --out /tmp/product-status.html
+./scripts/product_status.py html --site /tmp/test-report-site --out /tmp/product-status.html
 ```
 
 ## 5c. Test Execution & Verification Run (`run_tests.py`)

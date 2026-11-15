@@ -173,7 +173,8 @@ jobs:
           retention-days: 14
 
   # One report for the whole e2e run: the stats on the run page (job summary) and the report,
-  # HTML dashboard and merged records as artifact `e2e-test-report` (scripts/ci_test_report.py).
+  # HTML dashboard, product status snapshot and merged records as artifact `e2e-test-report`
+  # (scripts/ci_test_report.py, scripts/product_status.py).
   # This replaces committing a recorded run with every task (gate test-run-recorded is off).
   test-report:
     if: always()
@@ -181,6 +182,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history: product_status.py reads the growth of .specify (stories, scenarios) from git.
+          fetch-depth: 0
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
@@ -198,7 +202,8 @@ jobs:
           path: ${{ runner.temp }}/e2e-test-report/
           retention-days: 30
 
-  # Keep a public latest page and an archive for each completed master run.
+  # Keep a public product status dashboard (index.html: coverage per epic and trends over every
+  # archived run), the latest feature report and an archive for each completed master run.
   # PR runs remain available through the job summary and e2e-test-report artifact.
   publish-test-report:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'

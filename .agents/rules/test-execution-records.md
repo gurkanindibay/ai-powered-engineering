@@ -28,9 +28,10 @@ While it is off, the report comes from CI (`.github/workflows/sitepulse-ci.yml`)
 - each e2e shard uploads its `e2e/.artifacts` (junit, execution records, Playwright traces, logs) as artifact `e2e-shard-N`;
 - job `test-report` merges them with `scripts/ci_test_report.py`, writes the stats and the run to the job summary,
   and uploads artifact **`e2e-test-report`**: `test-report.md`, `feature-report.html` (dashboard: committed history plus this run),
-  `executions.jsonl` and `summary.json`.
+  `executions.jsonl`, `summary.json`, and `product-status.json` / `product-status.html` (coverage per epic).
 - On pushes to `master`, job `publish-test-report` stores each run under a stable history URL on the `gh-pages` branch;
-  the Pages `index.html` links to archived runs and `latest.html` points to the newest dashboard. Configure the
+  the Pages `index.html` is the product status dashboard (`scripts/product_status.py`: coverage per epic and trends
+  over every archived run), `latest.html` is the newest feature report and `history.html` lists the archived runs. Configure the
   repository's Pages source to deploy the `gh-pages` branch from its root. PR runs remain available as artifacts.
 
 Rule 12 still applies: a failing test fails its e2e shard and the required `verify` check. Steps 2-5 below stay available

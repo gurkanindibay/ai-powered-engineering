@@ -9,6 +9,8 @@ into one directory and runs this tool, which
 * writes <out>/test-report.md (the run: totals, regressions/fixes, every executed test),
   <out>/feature-report.html (the dashboard: committed history plus this run),
   <out>/executions.jsonl (the merged records) and <out>/summary.json (the stats),
+  <out>/product-status.json and <out>/product-status.html (scripts/product_status.py: coverage
+  per epic and trends; the published site keeps one snapshot per run to draw them),
 * appends the stats and the report to $GITHUB_STEP_SUMMARY, so they show on the run page.
 
 The workflow uploads <out> as artifact `e2e-test-report`. With CI reporting every PR, task
@@ -37,6 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import feature_traceability as ft  # noqa: E402
+import product_status as ps  # noqa: E402
 
 
 def junit_totals(files: list[Path]) -> dict:
@@ -99,6 +102,13 @@ def build(shards: Path, out: Path, task: str | None, history: Path) -> dict:
                "scenarios_covered": f"{run['executed']}/{run['automated']}" if run else "0/0",
                "out": str(out)}
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    # Product status counts this run's results only: an older pass does not make a scenario pass today.
+    run_records = [r for r in records if r.get("run_id") == meta["run_id"]]
+    snapshot = ps.build_snapshot(catalogue, run_records, summary, ps.catalogue_history())
+    (out / "product-status.json").write_text(json.dumps(snapshot, indent=1) + "\n", encoding="utf-8")
+    (out / "product-status.html").write_text(
+        ps.render_html([snapshot], {"detail": "feature-report.html", "history": "feature-report.html"}),
+        encoding="utf-8")
     return summary
 
 
