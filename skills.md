@@ -291,6 +291,15 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ./scripts/ci_test_report.py --shards shards --out /tmp/e2e-test-report --json --no-summary
 ```
 
+## 5b-7. Publish CI Test Report History (`publish_test_report.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/publish_test_report.py](file:///apps/development-time/SitePulse/scripts/publish_test_report.py)
+- **Purpose:** Adds a generated CI report to a cumulative static Pages site, keeps one URL per GitHub workflow run, updates `latest.html`, and rebuilds the newest-first history index. `publish-test-report` in `sitepulse-ci.yml` publishes the site to `gh-pages` after master pushes.
+
+```bash
+python3 apps/development-time/SitePulse/scripts/publish_test_report.py --report /tmp/e2e-test-report --site /tmp/test-report-site --run-id 1234 --attempt 1 --json
+```
+
 ## 5c. Test Execution & Verification Run (`run_tests.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)

@@ -198,6 +198,57 @@ jobs:
           path: ${{ runner.temp }}/e2e-test-report/
           retention-days: 30
 
+  # Keep a public latest page and an archive for each completed master run.
+  # PR runs remain available through the job summary and e2e-test-report artifact.
+  publish-test-report:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: test-report
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: e2e-test-report
+          path: ${{ runner.temp }}/e2e-test-report
+      - name: Update and push report history
+        working-directory: ${{ github.workspace }}
+        env:
+          REPORT_SITE: ${{ runner.temp }}/sitepulse-test-report-site
+          REPORT_DIR: ${{ runner.temp }}/e2e-test-report
+        run: |
+          for retry in 1 2 3 4 5; do
+            rm -rf "$REPORT_SITE"
+            mkdir -p "$REPORT_SITE"
+            if git ls-remote --exit-code origin refs/heads/gh-pages >/dev/null; then
+              git fetch origin gh-pages:refs/remotes/origin/gh-pages
+              git archive origin/gh-pages | tar -x -C "$REPORT_SITE"
+              git checkout -B gh-pages origin/gh-pages
+            else
+              git branch -D gh-pages >/dev/null 2>&1 || true
+              git checkout --orphan gh-pages
+            fi
+            python3 apps/development-time/SitePulse/scripts/publish_test_report.py \
+              --report "$REPORT_DIR" \
+              --site "$REPORT_SITE" \
+              --run-id "${{ github.run_id }}" \
+              --attempt "${{ github.run_attempt }}"
+            git rm -rf . >/dev/null 2>&1 || true
+            cp -a "$REPORT_SITE/." .
+            git add -A
+            if git diff --cached --quiet; then
+              exit 0
+            fi
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "Publish SitePulse test report ${{ github.run_id }}"
+            if git push origin HEAD:gh-pages; then
+              exit 0
+            fi
+            git checkout -f "${GITHUB_SHA}"
+          done
+          echo 'Could not publish report history after five retries' >&2
+          exit 1
+
   # Keeps the check name `verify` that branch protection requires. It runs even when a group
   # fails (a skipped required check would count as passing) and fails unless every group passed.
   verify:
