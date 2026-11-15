@@ -99,18 +99,23 @@ jobs:
       - name: Flutter gates
         run: python3 scripts/run_tests.py --group flutter
 
-  # The browser suite runs as 4 duration-balanced shards on 4 runners at once
+  # The browser suite runs as 8 duration-balanced shards on 8 runners at once
   # (scripts/e2e_shard.py, on the durations recorded in .specify/executions/runs).
   # Each shard has its own PostgreSQL, backend and web server; every test runs in exactly one shard.
   e2e:
-    name: e2e (browser suite, shard ${{ matrix.shard }}/4)
+    name: e2e (browser suite, shard ${{ matrix.shard }}/8)
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
-      SITEPULSE_E2E_SHARD: ${{ matrix.shard }}/4
+      SITEPULSE_E2E_SHARD: ${{ matrix.shard }}/8
+      # test_linked_backend_suites.py only re-runs suites that other jobs already gate
+      # (harness-selftest, rust-test, flutter-test, api-system), so CI shards skip it;
+      # recorded local runs keep it for scenario traceability.
+      # harness/tests/test_ci_linked_suites.py fails if a wrapped suite loses its CI gate.
+      PYTEST_ADDOPTS: --ignore=tests/test_linked_backend_suites.py
     services:
       postgres:
         image: postgres:16-alpine
@@ -140,6 +145,11 @@ jobs:
       - name: Flutter dependencies
         working-directory: apps/development-time/SitePulse/flutter
         run: flutter pub get
+      # The E2E web bundle; e2e/support/stack.py rebuilds it anyway when its source fingerprint differs.
+      - uses: actions/cache@v4
+        with:
+          path: apps/development-time/SitePulse/flutter/build/web-e2e
+          key: e2e-web-${{ hashFiles('apps/development-time/SitePulse/flutter/pubspec.*', 'apps/development-time/SitePulse/flutter/lib/**', 'apps/development-time/SitePulse/flutter/web/**', 'apps/development-time/SitePulse/flutter/assets/**') }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

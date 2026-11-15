@@ -189,7 +189,7 @@ SPEC-008 checks also verify durable household membership and rollback (`househol
 ./scripts/gui_e2e.py --env-file apps/development-time/SitePulse/backend/.env   # whole suite (DB_PASS from the file)
 DB_PASS=... ./scripts/gui_e2e.py run -m smoke --json                        # P0 only, JSON summary
 DB_PASS=... ./scripts/gui_e2e.py run -k login --headed                      # watch it in a browser window
-DB_PASS=... ./scripts/gui_e2e.py run --shard 2/4 --json                    # one of 4 duration-balanced shards (CI matrix)
+DB_PASS=... ./scripts/gui_e2e.py run --shard 2/8 --json                    # one of 8 duration-balanced shards (CI matrix)
 DB_PASS=... ./scripts/gui_e2e.py serve                                      # keep the stack up while writing tests
 ./scripts/gui_e2e.py build                                                  # rebuild the E2E web bundle
 ```
@@ -198,7 +198,7 @@ Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/
 ### 5b-2a. E2E Shard Planner (`e2e_shard.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/e2e_shard.py](file:///apps/development-time/SitePulse/scripts/e2e_shard.py)
-- **Purpose:** Splits the GUI suite into N shards of similar run time, using the latest `duration_s` per test from `.specify/executions/runs` (a test with no recorded duration counts as the median). `gui_e2e.py run --shard I/N` (or `$SITEPULSE_E2E_SHARD`) loads it as a pytest plugin that deselects other shards' tests after marker and `-k` filtering. The partition is deterministic, so each test runs in exactly one shard. `sitepulse-ci.yml` runs the `e2e` job as a 4-shard matrix. Self-tests: `harness/tests/test_e2e_shard.py`.
+- **Purpose:** Splits the GUI suite into N shards of similar run time, using the latest `duration_s` per test from `.specify/executions/runs` (a test with no recorded duration counts as the median). `gui_e2e.py run --shard I/N` (or `$SITEPULSE_E2E_SHARD`) loads it as a pytest plugin that deselects other shards' tests after marker and `-k` filtering. The partition is deterministic, so each test runs in exactly one shard. `sitepulse-ci.yml` runs the `e2e` job as an 8-shard matrix and ignores `e2e/tests/test_linked_backend_suites.py` there, because other CI gates already run the suites it wraps (`harness/tests/test_ci_linked_suites.py` enforces this). Self-tests: `harness/tests/test_e2e_shard.py`.
 
 ```bash
 python3 apps/development-time/SitePulse/scripts/e2e_shard.py plan --shards 4          # expected seconds per shard
