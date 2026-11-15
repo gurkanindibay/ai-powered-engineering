@@ -301,6 +301,7 @@ Rules 5–8 are enforced by `tenant_isolation_lint.py` (gate `tenant-lint`); rul
 | `ad-hoc-hash` | hard | §11 hashing only in `domain::fingerprint` (allow-list: token hash in `auth.rs`, checksums in `migrations.rs`) |
 | `non-english-identifier` | hard | workspace English-only rule |
 | `domain-unformatted` | hard | §8 formatting policy |
+| `query-flatten` | hard | a struct extracted with `Query<T>` declares its fields inline: `#[serde(flatten)]` makes `serde_urlencoded` pass values as strings, so `page=1` fails with "expected i64". Flatten in JSON bodies is fine |
 | `unwrap`, `expect`, `string-error`, `pool-branch`, `unformatted-file` | ratchet | counts in `scripts/rust_standards_baseline.json` may only go down |
 
 After paying down debt, lower the ratchet with `python3 scripts/rust_standards_lint.py --update-baseline`. Never raise a count with `--force` to make a change pass.

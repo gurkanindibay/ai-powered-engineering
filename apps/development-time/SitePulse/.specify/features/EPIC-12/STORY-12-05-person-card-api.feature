@@ -42,3 +42,12 @@ Feature: Person card API and reference-based commands
     When the manager selects that person as primary contact
     Then the unit stores the person as primary contact
     And a person who is not on the unit is refused
+
+  @SC-12-05-06
+  @layer:db
+  @linked
+  Scenario: Search accepts numeric paging query parameters
+    Given a site manager and people in the site
+    When the manager searches with q, context, unit_id, page=1 and limit=50 in the query string
+    Then the request succeeds with the requested page
+    And no query parameter the picker sends is rejected for its type

@@ -18,6 +18,9 @@ Hard rules (any finding fails):
                            token hash in `auth.rs` and migration checksums in `migrations.rs`).
 * `non-english-identifier` identifiers are ASCII English (Turkish text belongs in string literals).
 * `domain-unformatted`     every file under `src/domain/` is `rustfmt`-clean.
+* `query-flatten`          a struct extracted with `Query<T>` has no `#[serde(flatten)]` field:
+                           flattening makes `serde_urlencoded` buffer values as strings, so
+                           numeric parameters such as `page=1` fail with "expected i64".
 
 Ratchet rules (counts may only go down; `--update-baseline` records a lower count):
 * `unwrap`              `.unwrap()` outside test code.
@@ -69,6 +72,9 @@ NON_ASCII_IDENT_RE = re.compile(r"[A-Za-z_]*[^\x00-\x7F\s][A-Za-z0-9_]*")
 UNWRAP_RE = re.compile(r"\.unwrap\(\)")
 EXPECT_RE = re.compile(r"\.expect\(")
 STRING_ERROR_RE = re.compile(r"Result<[^;{]*,\s*String\s*>")
+QUERY_TYPE_RE = re.compile(r"\bQuery<\s*(?:[A-Za-z_][A-Za-z0-9_]*::)*([A-Za-z_][A-Za-z0-9_]*)\s*>")
+STRUCT_RE = re.compile(r"\bstruct\s+([A-Za-z_][A-Za-z0-9_]*)\b[^;{]*\{")
+SERDE_FLATTEN_RE = re.compile(r"#\[serde\([^\]]*\bflatten\b")
 POOL_BRANCH_RE = re.compile(r"if let Some\((?:ref )?pool\)|\bstate\.pool\b")
 
 HASH_ALLOWED = ("src/domain/fingerprint.rs", "src/auth.rs", "src/migrations.rs")
@@ -187,6 +193,8 @@ def lint(backend: Path, baseline_path: Path | None = None, check_fmt: bool = Tru
     findings: list[Finding] = []
     counts = {"unwrap": 0, "expect": 0, "string-error": 0, "pool-branch": 0}
     files = sorted((backend / "src").rglob("*.rs"))
+    query_types: set[str] = set()
+    structs: list[tuple[str, str, str, str, int, int]] = []  # name, rel, source, code, start, end
 
     for path in files:
         source = path.read_text(encoding="utf-8")
@@ -237,11 +245,27 @@ def lint(backend: Path, baseline_path: Path | None = None, check_fmt: bool = Tru
         for m in NON_ASCII_IDENT_RE.finditer(code):
             add("non-english-identifier", m.start())
 
+        query_types.update(m.group(1) for m in QUERY_TYPE_RE.finditer(code))
+        for m in STRUCT_RE.finditer(code):
+            depth, end = 1, m.end()
+            while end < len(code) and depth:
+                depth += {"{": 1, "}": -1}.get(code[end], 0)
+                end += 1
+            structs.append((m.group(1), rel, source, code, m.end(), end))
+
         counts["unwrap"] += len(UNWRAP_RE.findall(code))
         counts["expect"] += len(EXPECT_RE.findall(code))
         counts["pool-branch"] += len(POOL_BRANCH_RE.findall(code))
         if rel.startswith("src/services/"):
             counts["string-error"] += len(STRING_ERROR_RE.findall(code))
+
+    for name, rel, source, code, start, end in structs:
+        if name not in query_types:
+            continue
+        for m in SERDE_FLATTEN_RE.finditer(code, start, end):
+            ln = line_of(source, m.start())
+            text = source.split("\n")[ln - 1].strip()[:160]
+            findings.append(Finding("query-flatten", rel, ln, f"{name}: {text}"))
 
     fmt_files = unformatted_files(backend) if check_fmt else None
     if fmt_files is not None:
