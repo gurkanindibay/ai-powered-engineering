@@ -942,7 +942,7 @@
       "id": "task-44",
       "name": "Add merge UI and scale directory search",
       "module": "full-stack",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-38",
         "task-43"
