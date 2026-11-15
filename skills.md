@@ -189,10 +189,21 @@ SPEC-008 checks also verify durable household membership and rollback (`househol
 ./scripts/gui_e2e.py --env-file apps/development-time/SitePulse/backend/.env   # whole suite (DB_PASS from the file)
 DB_PASS=... ./scripts/gui_e2e.py run -m smoke --json                        # P0 only, JSON summary
 DB_PASS=... ./scripts/gui_e2e.py run -k login --headed                      # watch it in a browser window
+DB_PASS=... ./scripts/gui_e2e.py run --shard 2/4 --json                    # one of 4 duration-balanced shards (CI matrix)
 DB_PASS=... ./scripts/gui_e2e.py serve                                      # keep the stack up while writing tests
 ./scripts/gui_e2e.py build                                                  # rebuild the E2E web bundle
 ```
 Failure traces and screenshots: `apps/development-time/SitePulse/e2e/.artifacts/`. Exit codes: 0 pass, 1 test failures, 2 setup error.
+
+### 5b-2a. E2E Shard Planner (`e2e_shard.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/e2e_shard.py](file:///apps/development-time/SitePulse/scripts/e2e_shard.py)
+- **Purpose:** Splits the GUI suite into N shards of similar run time, using the latest `duration_s` per test from `.specify/executions/runs` (a test with no recorded duration counts as the median). `gui_e2e.py run --shard I/N` (or `$SITEPULSE_E2E_SHARD`) loads it as a pytest plugin that deselects other shards' tests after marker and `-k` filtering. The partition is deterministic, so each test runs in exactly one shard. `sitepulse-ci.yml` runs the `e2e` job as a 4-shard matrix. Self-tests: `harness/tests/test_e2e_shard.py`.
+
+```bash
+python3 apps/development-time/SitePulse/scripts/e2e_shard.py plan --shards 4          # expected seconds per shard
+python3 apps/development-time/SitePulse/scripts/e2e_shard.py --json plan --shards 3
+```
 
 ## 5b-3. testId Lint (`testid_lint.py`)
 
@@ -258,7 +269,7 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/run_tests.py](file:///apps/development-time/SitePulse/scripts/run_tests.py) (`run-tests.sh` is a wrapper; symlinked to `scripts/run_tests.py`)
 - **Test Plan & Matrix:** [apps/development-time/SitePulse/docs/testing/TEST_PLAN_AND_EXECUTION_MATRIX.md](file:///apps/development-time/SitePulse/docs/testing/TEST_PLAN_AND_EXECUTION_MATRIX.md)
-- **Purpose:** Runs platform verification across 6 execution cases: full platform run, area-specific verification (`finance`, `auth`, `residents`, `ui`, `db`, `core`), or change-driven selective testing (`--changed`) using real compilers, linters, test targets, and database tools.
+- **Purpose:** Runs platform verification across 6 execution cases: full platform run, area-specific verification (`finance`, `auth`, `residents`, `ui`, `db`, `core`), or change-driven selective testing (`--changed`) using real compilers, linters, test targets, and database tools. The fast Python gates run first, so a lint failure reports in seconds. `GATE_GROUPS` splits the gates into the groups that `.github/workflows/sitepulse-ci.yml` runs as parallel jobs; `harness/tests/test_run_tests_groups.py` fails when a gate is in no group or a group is not run in CI.
 
 ```bash
 # Area-specific verification & change-driven testing
@@ -274,6 +285,7 @@ DB_PASS=... ./scripts/run_tests.py            # everything including GUI Playwri
 ./scripts/run_tests.py --skip-db              # DB gates (incl. gui-e2e) reported as SKIPPED, not passed
 DB_PASS=... ./scripts/run_tests.py --skip-gui # everything except the browser suite (CI gate)
 ./scripts/run_tests.py --only rust-test,money-fixtures --json
+./scripts/run_tests.py --group lint           # one CI job's gates: lint (Python, seconds), rust, flutter, e2e, final
 ./scripts/run_tests.py --changed --skip-db --summary   # agent-friendly: one line per gate, <=15 diagnostic lines per failure
 ```
 

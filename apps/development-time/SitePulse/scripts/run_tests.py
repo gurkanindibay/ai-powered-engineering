@@ -12,6 +12,7 @@ Supports:
 
 Usage:
     python3 scripts/run_tests.py [--skip-db] [--skip-gui] [--only gate1,gate2] [--json]
+    python3 scripts/run_tests.py --group lint          # one CI job's gates (lint, rust, flutter, e2e, final)
     python3 scripts/run_tests.py --area finance [--skip-db]
     python3 scripts/run_tests.py --area auth,residents
     python3 scripts/run_tests.py --changed [--base HEAD~1] [--skip-db]
@@ -44,14 +45,9 @@ from harness.loop.verification_gates import (  # noqa: E402
     run_gate,
 )
 
+# Fast Python-only gates come first so a lint violation fails in seconds, before any compile.
 ORDER = [
     "harness-selftest",
-    "rust-build",
-    "rust-clippy",
-    "rust-test",
-    "money-fixtures",
-    "flutter-analyze",
-    "flutter-test",
     "persistence-lint",
     "rust-standards-lint",
     "tenant-lint",
@@ -61,12 +57,37 @@ ORDER = [
     "ui-style-lint",
     "flutter-reuse",
     "logging-standards-lint",
+    "rust-build",
+    "rust-clippy",
+    "rust-test",
+    "money-fixtures",
+    "flutter-analyze",
+    "flutter-test",
     "schema-integrity",
     "rust-db-test",
     "api-system",
     "gui-e2e",
     "test-run-recorded",
 ]
+# CI runs each group as its own parallel job (.github/workflows/sitepulse-ci.yml, --group <name>).
+# The groups partition ORDER exactly (harness/tests/test_run_tests_groups.py), so no gate can be
+# dropped from CI by adding it to ORDER only. Within a group, gates keep their ORDER position.
+GATE_GROUPS: Dict[str, List[str]] = {
+    # Python only: no Rust, Flutter or PostgreSQL needed.
+    "lint": [
+        "harness-selftest", "persistence-lint", "rust-standards-lint", "tenant-lint", "lock-lint",
+        "testid-lint", "feature-traceability", "ui-style-lint", "flutter-reuse", "logging-standards-lint",
+    ],
+    # Rust toolchain + PostgreSQL.
+    "rust": ["rust-build", "rust-clippy", "rust-test", "schema-integrity", "rust-db-test", "api-system"],
+    # Flutter + Rust toolchain (money-fixtures runs the Rust and Dart fixture suites).
+    "flutter": ["money-fixtures", "flutter-analyze", "flutter-test"],
+    # Rust + Flutter + PostgreSQL + browser.
+    "e2e": ["gui-e2e"],
+    # Runs after every other group: needs only git history and the recorded runs.
+    "final": ["test-run-recorded"],
+}
+
 DB_GATES = {"schema-integrity", "rust-db-test", "api-system", "gui-e2e"}
 GUI_GATES = {"gui-e2e"}
 
@@ -538,6 +559,10 @@ def main(argv=None) -> int:
     )
     parser.add_argument("--only", help="Comma-separated gate names to run")
     parser.add_argument(
+        "--group",
+        help=f"Comma-separated gate groups to run in ORDER ({', '.join(GATE_GROUPS)}); used by the parallel CI jobs",
+    )
+    parser.add_argument(
         "--area",
         help="Comma-separated functional area names (finance, auth, residents, ui, db, core, all)",
     )
@@ -652,7 +677,16 @@ def main(argv=None) -> int:
         return 1 if failed else 0
 
     # Standard Gate Execution Mode (backward compatible)
-    selected = [g.strip() for g in args.only.split(",")] if args.only else ORDER
+    if args.group:
+        groups = [g.strip() for g in args.group.split(",")]
+        unknown_groups = [g for g in groups if g not in GATE_GROUPS]
+        if unknown_groups:
+            print(f"Unknown group(s): {unknown_groups}. Known: {sorted(GATE_GROUPS)}", file=sys.stderr)
+            return 2
+        wanted = {gate for g in groups for gate in GATE_GROUPS[g]}
+        selected = [g for g in ORDER if g in wanted]
+    else:
+        selected = [g.strip() for g in args.only.split(",")] if args.only else ORDER
     unknown = [g for g in selected if g not in GATES]
     if unknown:
         print(f"Unknown gates: {unknown}. Known: {sorted(GATES)}", file=sys.stderr)

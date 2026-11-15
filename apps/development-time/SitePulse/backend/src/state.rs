@@ -165,16 +165,27 @@ impl AppStateInner {
             return val == "true" || val == "1";
         }
         // 2. Active test runner detection (cargo test)
-        if let Ok(exe) = std::env::current_exe() {
-            let exe_str = exe.to_string_lossy();
-            if exe_str.contains("/deps/integration_tests")
-                || exe_str.contains("/deps/sitepulse_backend")
-                || exe_str.ends_with("test")
-            {
-                return true;
-            }
-        }
-        cfg!(test)
+        Self::is_running_fixture_test_binary() || cfg!(test)
+    }
+
+    /// Whether the current executable is a test binary that runs against the seeded fixtures.
+    fn is_running_fixture_test_binary() -> bool {
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .is_some_and(|name| Self::is_fixture_test_binary(&name))
+    }
+
+    /// Whether a test binary file name belongs to a suite that runs against the seeded fixtures.
+    ///
+    /// Matched on the file name, not the directory: Cargo names test binaries
+    /// `<target>-<hash>` both in the classic `target/debug/deps/` layout and in the
+    /// build-dir layout of Cargo 1.100+ (`target/debug/build/<pkg>/<hash>/out/`).
+    /// The server binary (`sitepulse-backend`, with a hyphen) never matches.
+    pub fn is_fixture_test_binary(file_name: &str) -> bool {
+        file_name.starts_with("integration_tests-")
+            || file_name.starts_with("sitepulse_backend-")
+            || file_name.ends_with("test")
     }
 
     /// Essential system lookups and root administrator identity required for platform operation.
@@ -402,15 +413,7 @@ impl AppStateInner {
             .insert("14".to_string(), initial_history);
 
         // Seed September 2026 Dues only when actively executing cargo test suites
-        let is_running_test = cfg!(test)
-            || std::env::current_exe()
-                .map(|exe| {
-                    let s = exe.to_string_lossy();
-                    s.contains("/deps/integration_tests")
-                        || s.contains("/deps/sitepulse_backend")
-                        || s.ends_with("test")
-                })
-                .unwrap_or(false);
+        let is_running_test = cfg!(test) || Self::is_running_fixture_test_binary();
 
         if is_running_test && !self.dues.iter().any(|d| d.id == "b-101") {
             self.dues.push(DuesLiability {
@@ -813,5 +816,33 @@ pub fn seed_password_hash(password: &str) -> Option<String> {
             tracing::error!(%error,"Fixture account password unavailable");
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod fixture_detection_tests {
+    use super::AppStateInner;
+
+    #[test]
+    fn when_test_binary_uses_either_cargo_layout_then_fixtures_are_seeded() {
+        // Same file name in target/debug/deps/ (classic) and target/debug/build/<pkg>/<hash>/out/ (Cargo 1.100+).
+        assert!(AppStateInner::is_fixture_test_binary(
+            "integration_tests-2c11bc1fa6fc1e5c"
+        ));
+        assert!(AppStateInner::is_fixture_test_binary(
+            "integration_tests-376014e7de84e0fc"
+        ));
+        assert!(AppStateInner::is_fixture_test_binary(
+            "sitepulse_backend-0123456789abcdef"
+        ));
+    }
+
+    #[test]
+    fn when_binary_is_the_server_or_another_suite_then_fixtures_are_not_seeded() {
+        assert!(!AppStateInner::is_fixture_test_binary("sitepulse-backend"));
+        assert!(!AppStateInner::is_fixture_test_binary(
+            "payments_phase3_tests-0123456789abcdef"
+        ));
+        assert!(!AppStateInner::is_fixture_test_binary(""));
     }
 }

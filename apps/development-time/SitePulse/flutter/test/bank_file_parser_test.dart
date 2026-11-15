@@ -16,8 +16,11 @@ void main() {
     });
 
     test('parses Kuveyt Turk XLSX and matches resident flats with high confidence', () {
-      final file = File('/home/gurkanindibay/Downloads/hesap-ekstresi.xlsx');
-      expect(file.existsSync(), isTrue);
+      // Synthetic statement in the Kuveyt Turk export layout, with made-up data and the
+      // residents of test_fixtures.dart as payers. Regenerate with
+      // `python3 test/fixtures/make_kuveyt_turk_statement.py`.
+      final file = File('test/fixtures/kuveyt_turk_statement_synthetic.xlsx');
+      expect(file.existsSync(), isTrue, reason: 'committed test fixture is missing');
 
       final bytes = file.readAsBytesSync();
       controller.parseBankStatementFile(fileName: 'hesap-ekstresi.xlsx', bytes: bytes);
@@ -58,7 +61,7 @@ void main() {
       expect(matchServet.matchedUnitNumber, 6);
       expect(matchServet.confidenceScore, 100);
 
-      // 5. Outgoing transfers (e.g. Abdullah haidari -14.000 TL) are flagged as GIDER
+      // 5. Outgoing transfers (e.g. the -14.000 TL contractor payment) are flagged as GIDER
       final outgoing = controller.reconciliationQueue.where((m) => m.status == 'GIDER').toList();
       expect(outgoing.length, greaterThan(0));
     });

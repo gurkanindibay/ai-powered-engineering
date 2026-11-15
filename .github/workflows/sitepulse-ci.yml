@@ -14,6 +14,11 @@ defaults:
   run:
     working-directory: apps/development-time/SitePulse
 
+# A newer push to the same PR supersedes the running check; master pushes always finish.
+concurrency:
+  group: sitepulse-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   DB_HOST: 127.0.0.1
   DB_PORT: "5432"
@@ -22,7 +27,21 @@ env:
   CARGO_TERM_COLOR: never
 
 jobs:
-  verify:
+  # The gates run as parallel jobs, one per group in scripts/run_tests.py (GATE_GROUPS);
+  # harness/tests/test_run_tests_groups.py fails when a gate or group is missing here.
+  lint:
+    name: lint (Python gates)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python gates (harness self-test, lints, feature traceability)
+        run: python3 scripts/run_tests.py --group lint
+
+  rust:
+    name: rust (build, clippy, tests, schema, API system)
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -43,20 +62,113 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/development-time/SitePulse/backend
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.47.5"
-          channel: stable
+          # Red runs are the common case while a PR is iterated; keep their compile output too.
+          cache-on-failure: true
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Rust and database gates
+        run: python3 scripts/run_tests.py --group rust
+
+  flutter:
+    name: flutter (analyze, tests, money fixtures)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/development-time/SitePulse/backend
+          # Red runs are the common case while a PR is iterated; keep their compile output too.
+          cache-on-failure: true
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+          cache: true
       - name: Flutter dependencies
         working-directory: apps/development-time/SitePulse/flutter
         run: flutter pub get
-      - name: All gates (build, clippy, tests, money fixtures, analyze, lint, schema, API system)
-        run: python3 scripts/run_tests.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Flutter gates
+        run: python3 scripts/run_tests.py --group flutter
+
+  # The browser suite runs as 4 duration-balanced shards on 4 runners at once
+  # (scripts/e2e_shard.py, on the durations recorded in .specify/executions/runs).
+  # Each shard has its own PostgreSQL, backend and web server; every test runs in exactly one shard.
+  e2e:
+    name: e2e (browser suite, shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      SITEPULSE_E2E_SHARD: ${{ matrix.shard }}/4
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sitepulse_user
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: sitepulse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sitepulse_user -d sitepulse"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/development-time/SitePulse/backend
+          # Red runs are the common case while a PR is iterated; keep their compile output too.
+          cache-on-failure: true
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+          cache: true
+      - name: Flutter dependencies
+        working-directory: apps/development-time/SitePulse/flutter
+        run: flutter pub get
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Browser end-to-end suite
+        run: python3 scripts/run_tests.py --group e2e
+
+  # Keeps the check name `verify` that branch protection requires. It runs even when a group
+  # fails (a skipped required check would count as passing) and fails unless every group passed.
+  verify:
+    if: always()
+    needs: [lint, rust, flutter, e2e]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every gate group passed
+        working-directory: .
+        run: |
+          echo 'lint=${{ needs.lint.result }} rust=${{ needs.rust.result }} flutter=${{ needs.flutter.result }} e2e=${{ needs.e2e.result }}'
+          test '${{ needs.lint.result }}' = success
+          test '${{ needs.rust.result }}' = success
+          test '${{ needs.flutter.result }}' = success
+          test '${{ needs.e2e.result }}' = success
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test run recorded for the branch
+        run: python3 scripts/run_tests.py --group final
       - name: Traceability (VERIFIED requirements need current evidence)
         run: python3 harness/rtm_validator.py
 
@@ -83,10 +195,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/development-time/SitePulse/backend
+          cache-on-failure: true
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.47.5"
           channel: stable
+          cache: true
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Flutter dependencies
