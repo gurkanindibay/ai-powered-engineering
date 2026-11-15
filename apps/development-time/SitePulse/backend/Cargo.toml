@@ -27,7 +27,7 @@ tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_j
 deadpool-postgres = "0.14"
 jsonwebtoken = { version = "10.3", default-features = false, features = ["rust_crypto", "use_pem"] }
 argon2 = "0.5"
-hmac = "0.12"
+hmac = "0.13"
 hex = "0.4"
 chrono-tz = "0.10"
 tokio-postgres-rustls = { version = "0.13", default-features = false }
