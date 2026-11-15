@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from pages import DuesManagement, ManagerCockpit, PaymentStream, ResidentHome, ResidentsTab
+from pages import DuesManagement, ManagerCockpit, Occupancy, PaymentStream, ResidentHome, ResidentsTab
 from support.api import ApiError
 from support.bank_files import StatementRow, kuveyt_xlsx
 from support.flutter import by_id, by_id_prefix, fill, input_value, text_of
@@ -120,12 +120,15 @@ def test_adding_a_resident_to_an_occupied_unit_warns_and_saves_nothing(login_as,
     form = ResidentsTab(page).open().start_add()
     form.fill(unit_no="14", full_name="Deneme Kişi", email="deneme.kisi@e2e.test", phone="05320000009")
 
-    by_id(page, "btn_save_new_resident").click()
+    by_id(page, "module_save_new_resident_btn").click()
     by_id(page, "btn_confirmation_cancel").wait_for(timeout=10_000)
     by_id(page, "btn_confirmation_cancel").click()
     page.wait_for_timeout(1_000)
 
-    assert stack.sql("SELECT count(*) FROM persons WHERE email = 'deneme.kisi@e2e.test';") == "0"
+    # The card chosen in the picker exists without a role (REQ-042); the unit is untouched.
+    person = stack.sql("SELECT id FROM persons WHERE email = 'deneme.kisi@e2e.test';")
+    assert stack.sql(f"SELECT count(*) FROM unit_ownerships WHERE person_id = {int(person)};") == "0"
+    assert stack.sql(f"SELECT count(*) FROM unit_occupancies WHERE person_id = {int(person)};") == "0"
     assert stack.sql(f"SELECT owner_person_id FROM units WHERE id = {int(a14)};") == owner
 
 
@@ -191,32 +194,11 @@ def test_remove_tenant_only_keeps_the_owner(login_as, page, api, actors, stack):
     ResidentsTab(page).open()
 
     query = f"SELECT owner_person_id || '|' || coalesce(tenant_person_id::text, '') FROM units WHERE id = {int(b3)};"
-    # Under load a tap during the dialog's open animation can land on the barrier and just close it;
-    # retry only while the database shows no change, so the action is never applied twice.
-    calls: list[str] = []
-    for _ in range(2):
-        btn = by_id(page, f"unit_actions_{b3}")
-        if btn.count() > 0:
-            btn.click()
-        by_id(page, f"delete_ho_{b3}").click()
-        button = by_id(page, "remove_tenant_only_button")
-        button.wait_for(timeout=10_000)
-        page.wait_for_timeout(600)  # let the dialog finish opening
-        try:
-            with page.expect_response(lambda r: f"/site-admin/home-owners/{b3}" in r.url
-                                      and r.request.method == "PUT", timeout=10_000) as resp:
-                button.click()
-            calls.append(f"{resp.value.status} {resp.value.text()[:200]}")
-        except Exception as exc:  # the tap did not reach the button (no request was sent)
-            calls.append(f"no PUT ({type(exc).__name__})")
-            continue
-        if stack.wait_sql(query, f"{owner}|", timeout_s=5) == f"{owner}|":
-            break
-
-    cards = sorted(set(page.eval_on_selector_all('[flt-semantics-identifier^="unit_actions_"], [flt-semantics-identifier^="delete_ho_"]', 'els => els.map(e => e.getAttribute("flt-semantics-identifier"))')))
+    # Removing only the tenant is the unit's move-out: the owner keeps the unit.
+    Occupancy(page).move_out(b3)
+    stack.wait_sql(query, f"{owner}|", timeout_s=10)
     assert stack.sql(query) == f"{owner}|", (
-        f"tenant still set; PUT calls: {calls}; occupancies: {stack.sql(f'SELECT id, occupancy_type, is_active FROM unit_occupancies WHERE unit_id = {int(b3)};')!r}; "
-        f"cards: {cards}")
+        f"tenant still set; occupancies: {stack.sql(f'SELECT id, occupancy_type, is_active FROM unit_occupancies WHERE unit_id = {int(b3)};')!r}")
     assert stack.sql(f"SELECT is_active FROM unit_occupancies WHERE unit_id = {int(b3)} "
                      "AND occupancy_type = 'TENANT';") == "f"
 

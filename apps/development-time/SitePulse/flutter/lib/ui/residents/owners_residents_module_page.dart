@@ -21,6 +21,7 @@ import '../design_system/money_formatter.dart';
 import '../design_system/sp_feedback.dart';
 import '../components/sp_dialog_pages.dart';
 import '../components/sp_effective_date_field.dart';
+import '../payments/resident_statement_page.dart';
 import 'resident_directory.dart';
 import 'sp_directory_scaffold.dart';
 import 'unit_directory_row.dart';
@@ -52,6 +53,12 @@ class OwnersResidentsModulePage extends StatefulWidget {
   final String? initialUnitId;
   final String? initialBlockFilter;
   final String? initialOccupancyFilter;
+
+  /// Which workspace tab [initialUnitId] opens on.
+  final UnitWorkspaceMode initialMode;
+
+  /// Opens the registration page on top of the directory once it is shown.
+  final bool openAddResident;
   final PersonRepository personRepository;
 
   const OwnersResidentsModulePage({
@@ -60,6 +67,8 @@ class OwnersResidentsModulePage extends StatefulWidget {
     this.initialUnitId,
     this.initialBlockFilter,
     this.initialOccupancyFilter,
+    this.initialMode = UnitWorkspaceMode.actions,
+    this.openAddResident = false,
     this.personRepository = const PersonDirectoryRepository(),
   });
 
@@ -90,12 +99,16 @@ class _OwnersResidentsModulePageState extends State<OwnersResidentsModulePage> w
   @override
   void initState() {
     super.initState();
-    if (widget.initialUnitId != null && widget.initialUnitId!.isNotEmpty) {
+    if (widget.openAddResident) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openAddResident(context);
+      });
+    } else if (widget.initialUnitId != null && widget.initialUnitId!.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final matches = widget.controller.homeOwners.where((h) => h.unitId == widget.initialUnitId);
         if (matches.isNotEmpty) {
-          _openUnitWorkspace(matches.first);
+          _openUnitWorkspace(matches.first, mode: widget.initialMode);
         }
       });
     }

@@ -234,17 +234,23 @@ class _SpPersonFormState extends State<SpPersonForm> {
         ),
         const SizedBox(height: 16),
         if (_checkingDuplicates)
-          const LinearProgressIndicator(
-            semanticsLabel: 'Benzer kişiler aranıyor',
+          testId(
+            'person_form_checking',
+            const LinearProgressIndicator(
+              semanticsLabel: 'Benzer kişiler aranıyor',
+            ),
           ),
         for (final candidate in _duplicates)
           ListTile(
             leading: const Icon(Icons.person_search_outlined),
             title: Text(candidate.person.fullName),
             subtitle: Text('Benzerlik: ${candidate.reasonText}'),
-            trailing: TextButton(
-              onPressed: () => Navigator.pop(context, candidate.person),
-              child: const Text('Kullan'),
+            trailing: testId(
+              'person_form_use_${candidate.person.personId}',
+              TextButton(
+                onPressed: () => Navigator.pop(context, candidate.person),
+                child: const Text('Kullan'),
+              ),
             ),
           ),
         if (_duplicates.isNotEmpty &&

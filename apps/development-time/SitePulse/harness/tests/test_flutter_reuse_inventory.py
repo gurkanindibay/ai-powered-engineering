@@ -76,6 +76,22 @@ class FlutterReuseInventoryTests(unittest.TestCase):
         })
         self.assertEqual(_rules(report), ["filter-chip", "selection-page", "raw-snackbar"])
 
+    def test_person_text_inputs_outside_the_shared_form_are_reported(self):
+        report = _scan({
+            "ui/dashboard/dashboard_screen.dart": (
+                "decoration: const InputDecoration(labelText: 'Sakin Adı Soyadı *'),\n"
+                "testId('move_in_phone_field', TextField(key: const Key('move_in_phone_field'),\n"
+                "decoration: InputDecoration(hintText: 'E-posta Adresi'),\n"
+                "decoration: InputDecoration(labelText: 'Yönetici Ad Soyad'),\n"  # SaaS site-manager account
+                "SpPersonField(id: 'module_transfer_new_owner_name_input'),\n"
+            ),
+            "ui/residents/sp_person_form.dart": "decoration: const InputDecoration(labelText: 'Ad soyad'),",
+            "ui/residents/resident_household_member_page.dart": "key: const Key('household_name_field'),",
+            "ui/auth/login_screen.dart": "decoration: InputDecoration(labelText: 'E-posta Adresi'),",
+        })
+        self.assertEqual(_rules(report), ["person-inputs"] * 3)
+        self.assertEqual([f["line"] for f in report["findings"]], [1, 2, 3])
+
     def test_comments_are_ignored(self):
         report = _scan({"ui/a.dart": "// Clipboard.setData(x)\n/* Decimal.tryParse(y) */\nfinal ok = 1;"})
         self.assertTrue(report["passed"])
