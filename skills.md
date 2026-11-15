@@ -253,7 +253,7 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ## 5b-5. Feature Traceability & Test History (`feature_traceability.py`)
 
 - **Executable Script:** [apps/development-time/SitePulse/scripts/feature_traceability.py](file:///apps/development-time/SitePulse/scripts/feature_traceability.py) (symlinked to `scripts/feature_traceability.py`)
-- **Purpose:** Epic → story → Gherkin scenario → execution traceability. The acceptance criteria are the `.feature` files under `.specify/features/EPIC-xx/` (tags `@EPIC-xx`, `@STORY-xx-yy`, `@SC-xx-yy-nn`; conventions in [.specify/features/README.md](file:///apps/development-time/SitePulse/.specify/features/README.md)). Every task records its verifying run with `gui_e2e.py run --affected --record --task "<task>"` (only the smoke set plus the epics its changes affect, unless shared code changed) into `.specify/executions/` (run records plus a markdown report, committed with the task; AGENTS.md rule 13). `check` is the static gate `feature-traceability`; `check --require-run` is the gate `test-run-recorded` (last gate of `run_tests.py`, global gate of `harness_cli.py verify`), which fails when a branch that changes behaviour has no recorded run or its latest run has a failing scenario; `task-report` prints the task's latest run for the PR; `runs`, `report` and `history <SC-|STORY-|EPIC- id>` read the history; `html` writes the dashboard.
+- **Purpose:** Epic → story → Gherkin scenario → execution traceability. The acceptance criteria are the `.feature` files under `.specify/features/EPIC-xx/` (tags `@EPIC-xx`, `@STORY-xx-yy`, `@SC-xx-yy-nn`; conventions in [.specify/features/README.md](file:///apps/development-time/SitePulse/.specify/features/README.md)). CI reports every PR's run (artifact `e2e-test-report`, see 5b-6). `gui_e2e.py run --affected --record --task "<task>"` (only the smoke set plus the epics its changes affect, unless shared code changed) records a run into `.specify/executions/` (run records plus a markdown report). `check` is the static gate `feature-traceability`; `check --require-run` is the gate `test-run-recorded` (last gate of `run_tests.py`, global gate of `harness_cli.py verify`), which, only while `require_recorded_run` is true in `.specify/executions/settings.json` (or `SITEPULSE_REQUIRE_RECORDED_RUN=1`; currently off), fails when a branch that changes behaviour has no recorded run or its latest run has a failing scenario; `task-report` prints the task's latest run for the PR; `runs`, `report` and `history <SC-|STORY-|EPIC- id>` read the history; `html` writes the dashboard.
 
 ```bash
 ./scripts/feature_traceability.py affected      # full suite, or smoke + affected epics (impact-map.json)
@@ -263,6 +263,16 @@ The full catalogue and the promotion procedure are in the [flutter-reusable-comp
 ./scripts/feature_traceability.py report --epic EPIC-10 --steps
 ./scripts/feature_traceability.py history SC-10-01-01 --limit 20
 ./scripts/feature_traceability.py html          # e2e/.artifacts/feature-report.html
+```
+
+## 5b-6. CI Test Report (`ci_test_report.py`)
+
+- **Executable Script:** [apps/development-time/SitePulse/scripts/ci_test_report.py](file:///apps/development-time/SitePulse/scripts/ci_test_report.py) (symlinked to `scripts/ci_test_report.py`)
+- **Purpose:** Merges the e2e shard artifacts of one CI run (`e2e-shard-N`: junit.xml, executions.jsonl) into one report, without touching the committed history. Writes `test-report.md`, `feature-report.html` (committed history plus this run), `executions.jsonl` and `summary.json`, and appends the stats to `$GITHUB_STEP_SUMMARY`. Job `test-report` in `sitepulse-ci.yml` uploads the result as artifact `e2e-test-report`. Use it locally on downloaded artifacts (`gh run download <run> -p 'e2e-shard-*' -D shards`).
+
+```bash
+./scripts/ci_test_report.py --shards shards --out /tmp/e2e-test-report --task "PR 131"
+./scripts/ci_test_report.py --shards shards --out /tmp/e2e-test-report --json --no-summary
 ```
 
 ## 5c. Test Execution & Verification Run (`run_tests.py`)

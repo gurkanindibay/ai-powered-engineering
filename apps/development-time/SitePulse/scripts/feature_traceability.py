@@ -79,6 +79,11 @@ LINK_SOURCES = (("backend/tests", "*.rs"), ("flutter/test", "*.dart"), ("e2e/tes
 # Files that quote `covers:` markers as fixtures or documentation, never as real links.
 LINK_EXCLUDE = frozenset({"harness/tests/test_feature_traceability.py", "scripts/feature_traceability.py"})
 DEFAULT_STORE = str(ROOT / ".specify" / "executions")
+# Whether a task branch must commit a recorded run (gate `test-run-recorded`). Off while CI runs
+# the suite on every PR and uploads the report as an artifact (scripts/ci_test_report.py).
+# $SITEPULSE_REQUIRE_RECORDED_RUN (1/true/yes or 0/false/no) overrides the file.
+SETTINGS = ROOT / ".specify" / "executions" / "settings.json"
+REQUIRE_RUN_ENV = "SITEPULSE_REQUIRE_RECORDED_RUN"
 
 EPIC_FILE = re.compile(r"^(EPIC-\d{2})-")
 EPIC_TITLE = re.compile(r"^#\s+(?:Epic:\s*)?(.+?)\s*$")
@@ -644,12 +649,31 @@ def latest_execution_rows(runs: list[dict]) -> dict[str, dict]:
     return latest
 
 
-def require_run(catalogue: Catalogue, store, repo: Path = ROOT, impact_map: Path = IMPACT_MAP) -> tuple[list[str], str]:
+def recorded_run_required(settings: Path = SETTINGS) -> bool:
+    """The switch for gate `test-run-recorded`: $SITEPULSE_REQUIRE_RECORDED_RUN, else settings.json, else on."""
+    value = os.environ.get(REQUIRE_RUN_ENV, "").strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    try:
+        return bool(json.loads(settings.read_text(encoding="utf-8")).get("require_recorded_run", True))
+    except (OSError, ValueError, AttributeError):
+        return True
+
+
+def require_run(catalogue: Catalogue, store, repo: Path = ROOT, impact_map: Path = IMPACT_MAP,
+                required: bool | None = None) -> tuple[list[str], str]:
     """The rule every task must meet (AGENTS.md rule 13). Returns (problems, note on why it passed).
 
     Runs may be targeted: what counts is the latest execution of each test across all runs
     recorded on the branch, and that every scenario the changes affect was executed.
+    `required` defaults to recorded_run_required(); when off, the gate passes and CI's report counts.
     """
+    if not (recorded_run_required() if required is None else required):
+        return [], (f"not required: recorded runs are switched off ({REQUIRE_RUN_ENV} or "
+                    f".specify/executions/settings.json); CI runs the suite and uploads the report as "
+                    f"artifact `e2e-test-report`")
     branch = run_metadata(repo)["branch"]
     if branch in MAIN_BRANCHES:
         return [], "not required on the main branch (runs arrive with the merged tasks)"

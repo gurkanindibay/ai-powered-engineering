@@ -1,5 +1,5 @@
 ---
-description: Every task records the test run that verifies it; scenarios are Gherkin, results are stored per scenario and step.
+description: Scenarios are Gherkin; CI runs them on every PR and publishes the report as an artifact. Committing a recorded run per task is a switch (off by default).
 globs: apps/development-time/SitePulse/**
 ---
 
@@ -17,6 +17,22 @@ Operationalizes AGENTS.md rule 13. Paths are relative to `apps/development-time/
 
 `test-run-recorded` passes without a run on `master`/`main` and on branches that change no behaviour file.
 
+## Switch: recorded runs (currently off)
+
+GitHub CI runs the suite on every PR, so committing a recorded run per task is switched off:
+`.specify/executions/settings.json` has `"require_recorded_run": false`, and gate `test-run-recorded`
+then passes with the note "not required: recorded runs are switched off". `$SITEPULSE_REQUIRE_RECORDED_RUN`
+(`1`/`0`) overrides the file for one invocation. Set the file back to `true` to restore steps 2-5 below as requirements.
+
+While it is off, the report comes from CI (`.github/workflows/sitepulse-ci.yml`):
+- each e2e shard uploads its `e2e/.artifacts` (junit, execution records, Playwright traces, logs) as artifact `e2e-shard-N`;
+- job `test-report` merges them with `scripts/ci_test_report.py`, writes the stats and the run to the job summary,
+  and uploads artifact **`e2e-test-report`**: `test-report.md`, `feature-report.html` (dashboard: committed history plus this run),
+  `executions.jsonl` and `summary.json`.
+
+Rule 12 still applies: a failing test fails its e2e shard and the required `verify` check. Steps 2-5 below stay available
+for local runs (`gui_e2e.py run --affected --record`), but are not required.
+
 ## Run only what is affected
 
 `python3 scripts/feature_traceability.py affected` maps the files your branch changes (against `master`, committed or not) to tests, using `.specify/features/impact-map.json`:
@@ -31,6 +47,9 @@ Operationalizes AGENTS.md rule 13. Paths are relative to `apps/development-time/
 Every test carries an `epic_NN` marker automatically (from its `GUI-NN-…` id or `@EPIC-NN` tag). Several targeted runs on a branch add up: the gate looks at the latest execution of each test across all of the branch's runs. When a new keyword or shared path is needed, extend `impact-map.json` in the same change.
 
 ## What you do for every task
+
+Step 1 always; steps 2-5 only while recorded runs are switched on (see above). Otherwise link the CI run in the PR's `## Test report`.
+
 
 1. **Specify**: add or update the scenario in `.specify/features/EPIC-xx/STORY-xx-yy-*.feature` (`@SC-xx-yy-nn`, `@layer:…`). Not automatable yet: tag it `@pending`. Covered by an existing non-Gherkin test: tag it `@linked` and declare `covers` on that test.
 2. **Execute and record**: `python3 scripts/gui_e2e.py run --affected --record --task "<issue or PR> <few words>"`. A full gate run records too when the task is named: `SITEPULSE_TASK="<task>" python3 scripts/run_tests.py`.
@@ -49,4 +68,4 @@ Workers in `scripts/development_harness.py` runs cannot write `.specify/executio
 - Remove a scenario, or tag an automated scenario `@pending`, to make a run pass.
 - Report the task complete with a FAIL or ERROR scenario in your latest recorded run.
 
-If the suite cannot run in your environment (no PostgreSQL, no browser), say so in the PR with the reason and leave the task open; the gate stays red by design.
+While recorded runs are switched on: if the suite cannot run in your environment (no PostgreSQL, no browser), say so in the PR with the reason and leave the task open; the gate stays red by design.
