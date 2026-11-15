@@ -1502,6 +1502,27 @@ enum SupportedBank {
   }
 }
 
+/// A bank and statement format returned by the supported-bank API catalogue.
+class BankCatalogEntry {
+  final String code;
+  final String displayName;
+  final String statementFormat;
+
+  const BankCatalogEntry({
+    required this.code,
+    required this.displayName,
+    required this.statementFormat,
+  });
+
+  bool get supportsExcel => statementFormat.toUpperCase() == 'EXCEL';
+
+  factory BankCatalogEntry.fromJson(Map<String, dynamic> json) => BankCatalogEntry(
+        code: json['code']?.toString() ?? '',
+        displayName: json['display_name']?.toString() ?? '',
+        statementFormat: json['statement_format']?.toString() ?? '',
+      );
+}
+
 class SiteBankAccount {
   final String id;
   final String siteId;

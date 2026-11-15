@@ -478,6 +478,9 @@ class DashboardController extends ChangeNotifier {
   SiteBankAccount? _siteBankAccount;
   SiteBankAccount? get siteBankAccount => _siteBankAccount;
 
+  List<BankCatalogEntry>? _bankCatalog;
+  List<BankCatalogEntry> get bankCatalog => _bankCatalog ?? const [];
+
   // House Types & Dues Tariffs
   List<HouseTypeTariff> _houseTypes = [];
   List<HouseTypeTariff> get houseTypes {

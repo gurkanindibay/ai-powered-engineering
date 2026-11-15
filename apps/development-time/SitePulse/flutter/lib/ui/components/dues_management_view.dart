@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_strings.dart';
 import '../../domain/models/dues_models.dart';
 import '../../domain/services/bank_file_picker.dart';
+import '../../domain/services/bank_statement_sample_generator.dart';
+import '../../domain/services/platform_env.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../theme/app_theme.dart';
 import '../design_system/sp_semantics.dart';
@@ -115,7 +117,9 @@ class _DuesManagementViewState extends State<DuesManagementView> {
   }
 
 
-  void _showImportOptionsDialog() {
+  Future<void> _showImportOptionsDialog() async {
+    await widget.controller.fetchBankCatalog();
+    if (!mounted) return;
     final isDark = AppColors.isDark(context);
     showSpSheetPage(
       context: context,
@@ -164,12 +168,61 @@ class _DuesManagementViewState extends State<DuesManagementView> {
                   },
                 )),
 
+                ..._buildBankSampleDownloads(),
+
               ],
             ),
           ),
         );
       },
     );
+  }
+
+  List<Widget> _buildBankSampleDownloads() {
+    final excelBanks = widget.controller.bankCatalog
+        .where((bank) => bank.supportsExcel)
+        .toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    if (excelBanks.isEmpty) return const [];
+
+    return [
+      const Divider(height: 24),
+      Text(
+        'Örnek Excel ekstreleri',
+        style: TextStyle(
+          color: AppColors.textPrimary(context),
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        'İşleyişi denemek için kurgusal işlem içeren bir örnek indirin.',
+        style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+      ),
+      const SizedBox(height: 8),
+      for (final bank in excelBanks)
+        testId('btn_download_bank_sample_${bank.code.toLowerCase()}', ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.download_outlined),
+          title: Text('${bank.displayName} örnek ekstresi'),
+          subtitle: const Text('Excel çalışma kitabı (.xlsx)'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _downloadBankSample(bank),
+        )),
+    ];
+  }
+
+  void _downloadBankSample(BankCatalogEntry bank) {
+    final saved = downloadBytes(
+      BankStatementSampleGenerator.fileName(bank),
+      BankStatementSampleGenerator.create(bank),
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    ScaffoldMessenger.of(context).showSnackBar(spSnackBar(
+      kind: saved ? ToastKind.success : ToastKind.warning,
+      content: Text(saved ? 'Örnek ekstre indirildi.' : 'Bu cihazda dosya indirme desteklenmiyor.'),
+    ));
   }
 
   void _showImportSummaryModal(String fileName) {

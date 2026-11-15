@@ -15,7 +15,7 @@ Feature: Site bank account configuration and statement format enforcement
     Then the upload is rejected with a format mismatch error and nothing is queued
     And uploading a matching Excel statement succeeds
 
-  @SC-07-06-03 @layer:gui @pending @core @role_manager
+  @SC-07-06-03 @GUI-07-11 @layer:gui @linked @core @role_manager
   Scenario Outline: Excel upload offers a sample for each catalogued Excel bank
     Given the supported-bank catalogue contains bank "<bank_code>" with format "EXCEL"
     And the manager opens Excel / statement upload
@@ -29,7 +29,7 @@ Feature: Site bank account configuration and statement format enforcement
       | KUVEYT_TURK | Kuveyt Türk Katılım Bankası |
       | YAPI_KREDI  | Yapı Kredi Bankası          |
 
-  @SC-07-06-04 @layer:gui @pending @edge @role_manager
+  @SC-07-06-04 @GUI-07-12 @layer:gui @linked @edge @role_manager
   Scenario: Excel sample options exclude banks without an Excel format
     Given the supported-bank catalogue contains banks with CSV and MT940 formats
     And the manager opens Excel / statement upload
