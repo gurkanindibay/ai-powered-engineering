@@ -1,9 +1,11 @@
 """EPIC-07 Bank integration & reconciliation, STORY-07-07 period accrual."""
 from decimal import Decimal
+from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
-from pages import DuesManagement, ManagerCockpit
+from pages import DuesManagement, ImportSummary, ManagerCockpit
 from support.bank_files import StatementRow, kuveyt_xlsx
 
 PERIOD = "Ekim 2026"
@@ -86,7 +88,7 @@ def test_period_accrual_charges_every_unit_once(login_as, page, api, manager_ses
 # ---------------------------------------------------------------- P1 (core)
 
 from pages import ResidentHome  # noqa: E402
-from support.flutter import by_id, text_of  # noqa: E402
+from support.flutter import by_id, by_id_prefix, text_of  # noqa: E402
 from support.money import api_amount, parse_try  # noqa: E402
 
 A14_IBAN = "TR620020500009863791600001"
@@ -146,6 +148,69 @@ def test_wrong_statement_format_is_rejected_and_excel_accepted(login_as, page, t
     error.wait_for(state="detached", timeout=15_000)
 
     assert dues.upload_statement(_statement(tmp_path)).matched()[0] == 1
+
+
+@pytest.mark.covers("SC-07-06-03")
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-07-11")
+def test_excel_bank_samples_download_as_parser_compatible_workbooks(login_as, page, stack, tmp_path):
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    DuesManagement(page).open()
+    by_id(page, "btn_open_bank_import").click()
+
+    payments_before = stack.sql("SELECT count(*) FROM payment_entries;")
+    paid_before = stack.sql("SELECT coalesce(sum(paid_amount), 0) FROM dues_liabilities;")
+    samples = {
+        "kuveyt_turk": ("Kuveyt Türk Katılım Bankası", "SAMPLE-KUVEYT_TURK-001"),
+        "yapi_kredi": ("Yapı Kredi Bankası", "SAMPLE-YAPI_KREDI-001"),
+    }
+    assert by_id_prefix(page, "btn_download_bank_sample_").count() == len(samples)
+    sample_to_upload = None
+    for bank_code, (bank_name, reference) in samples.items():
+        with page.expect_download() as download_info:
+            by_id(page, f"btn_download_bank_sample_{bank_code}").click()
+        download = download_info.value
+        assert download.suggested_filename == f"{bank_code}_ornek_ekstre.xlsx"
+        saved_path = tmp_path / download.suggested_filename
+        download.save_as(saved_path)
+        if bank_code == "kuveyt_turk":
+            sample_to_upload = saved_path
+        with ZipFile(saved_path) as workbook:
+            shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
+            worksheet = workbook.read("xl/worksheets/sheet1.xml").decode("utf-8")
+        assert bank_name in shared_strings
+        assert reference in shared_strings
+        assert "Z BLOK D:999" in shared_strings
+        assert "0,01" in shared_strings
+        assert 'r="E17"' in worksheet
+
+    assert sample_to_upload is not None
+    with page.expect_file_chooser() as chooser:
+        by_id(page, "btn_import_pick_file").click()
+    chooser.value.set_files(str(sample_to_upload))
+    summary = ImportSummary(page).wait()
+    assert summary.matched()[0] == 0
+    assert stack.sql("SELECT count(*) FROM payment_entries;") == payments_before
+    assert stack.sql("SELECT coalesce(sum(paid_amount), 0) FROM dues_liabilities;") == paid_before
+
+
+@pytest.mark.covers("SC-07-06-04")
+@pytest.mark.edge
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-07-12")
+def test_non_excel_banks_have_no_excel_sample_download(login_as, page):
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    DuesManagement(page).open()
+    by_id(page, "btn_open_bank_import").click()
+
+    for bank_code in (
+        "is_bankasi", "ziraat_bankasi", "garanti_bbva", "akbank",
+        "halkbank", "vakifbank", "denizbank", "qnb_finansbank",
+    ):
+        assert by_id(page, f"btn_download_bank_sample_{bank_code}").count() == 0
 
 
 @pytest.mark.covers("SC-07-03-01")

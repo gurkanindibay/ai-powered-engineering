@@ -37,6 +37,14 @@ STORY-07-02 provides a **Zero-Approval / Zero-Permission** solution:
 - Sample preset selector (Garanti BBVA, İş Bankası, SWIFT MT940) for 1-click testability.
 - Interactive reconciliation queue with confidence badges, match details, and batch clearance button.
 
+### 2.3 Bank-specific Excel sample downloads
+- The bank selector's supported-bank catalogue is the source of truth: `GET /api/v1/site-admin/banks` returns bank code, display name, and statement format. Do not derive availability from a separate hard-coded list.
+- In the **Excel / Ekstre Yükle** flow, show a sample workbook download for each catalog bank whose statement format is `EXCEL`. Do not show an Excel sample for a bank whose format is `CSV` or `MT940`, or for a bank absent from the catalogue.
+- The current backend catalogue marks **Kuveyt Türk** and **Yapı Kredi** as `EXCEL`. Other currently catalogued banks use CSV or MT940 and therefore have no Excel sample link.
+- Each downloadable `.xlsx` must use the corresponding bank label and a workbook layout the current parser can read. Its rows must contain clearly fictional sample transactions, including date, reference, description, and amount, and must be safe to upload without settling real dues. The sample must be generated or packaged as a downloadable file, not presented as an upload action.
+- Keep the list data-driven so adding an Excel bank to the supported-bank catalogue exposes its sample without adding a UI-only bank definition. Hide the sample section when no catalogued Excel bank is available.
+- **Catalog inconsistency to resolve during implementation:** `backend/db/seed/01-system-seed.sql` and the Flutter `SupportedBank` enum disagree with the backend `SupportedBank` enum/API. The sample UI must use the API result; this feature must not silently expand or redefine supported banks.
+
 ---
 
 ## 3. Detailed Acceptance Criteria (Gherkin)

@@ -3,6 +3,26 @@ part of 'dashboard_controller.dart';
 /// Bank account configuration, statement ingestion and automated/manual transaction reconciliation.
 extension DashboardControllerReconciliation on DashboardController {
   // Site Bank Account Configuration (STORY-08-01)
+  Future<void> fetchBankCatalog() async {
+    if (_bankCatalog != null) return;
+    try {
+      final response = await ApiClient.get(
+        ApiClient.uri('/api/v1/site-admin/banks'),
+      ).timeout(const Duration(seconds: 4));
+      if (response.statusCode != 200) return;
+      final payload = json.decode(utf8.decode(response.bodyBytes));
+      if (payload is! List) return;
+      _bankCatalog = payload
+          .whereType<Map<String, dynamic>>()
+          .map(BankCatalogEntry.fromJson)
+          .where((bank) => bank.code.isNotEmpty && bank.displayName.isNotEmpty)
+          .toList(growable: false);
+      notify();
+    } catch (error) {
+      AppLogger.warn('Fetch bank catalogue error', tag: 'ReconciliationController', error: error);
+    }
+  }
+
   bool configureBankAccount({
     required String bankCode,
     required String iban,
