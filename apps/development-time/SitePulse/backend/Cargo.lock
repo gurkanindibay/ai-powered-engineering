@@ -2598,7 +2598,7 @@ version = "1.0.0"
 dependencies = [
  "argon2",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "chrono-tz",
  "deadpool-postgres",
