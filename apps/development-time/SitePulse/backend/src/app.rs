@@ -326,8 +326,71 @@ pub fn build_router(state: AppState) -> Router {
             audit::security_boundary,
         ))
         .layer(cors)
+        .layer(middleware::from_fn(security_headers))
         .layer(middleware::from_fn(audit::correlate))
+        .layer(tower_http::timeout::TimeoutLayer::new(REQUEST_TIMEOUT))
+        .layer(tower::limit::ConcurrencyLimitLayer::new(
+            max_concurrent_requests(),
+        ))
         .with_state(state)
+}
+
+/// Upper bound for one request, so stalled clients cannot hold a connection forever.
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+fn max_concurrent_requests() -> usize {
+    std::env::var("SITEPULSE_MAX_CONCURRENT_REQUESTS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(1024)
+}
+
+/// Adds the standard hardening headers to every response.
+async fn security_headers(
+    req: axum::extract::Request,
+    next: middleware::Next,
+) -> axum::response::Response {
+    let is_html_docs = matches!(
+        req.uri().path(),
+        "/swagger-ui" | "/swagger-ui/" | "/swagger-ui/index.html" | "/docs" | "/scalar"
+    );
+    let mut res = next.run(req).await;
+    let h = res.headers_mut();
+    h.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    h.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    h.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    if state::AppStateInner::is_production() {
+        h.insert(
+            header::STRICT_TRANSPORT_SECURITY,
+            HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        );
+    }
+    let csp = if is_html_docs {
+        // The documentation pages load pinned, integrity-checked scripts from one CDN
+        // and run an inline bootstrap script.
+        "default-src 'none'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; \
+         style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; \
+         font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self'; \
+         frame-ancestors 'none'; base-uri 'none'"
+    } else {
+        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+    };
+    h.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(csp),
+    );
+    // Tokens can travel in query strings on public links: never cache those responses.
+    if !h.contains_key(header::CACHE_CONTROL) {
+        h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
+    res
 }
 pub fn dev_routes_enabled() -> bool {
     !state::AppStateInner::is_production()

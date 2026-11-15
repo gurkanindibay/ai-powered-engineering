@@ -28,10 +28,10 @@ impl RegistrationApprovalService {
 
         let token_part: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
-            .take(6)
+            .take(24)
             .map(char::from)
             .collect();
-        let token = format!("SP-INV-{}", token_part.to_uppercase());
+        let token = format!("SP-INV-{}", token_part);
         let join_url = format!("https://sitepulse.app/join/{}?token={}", slug, token);
         let expires_at = Utc::now() + chrono::Days::new(7);
 

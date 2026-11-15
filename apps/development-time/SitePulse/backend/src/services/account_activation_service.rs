@@ -415,7 +415,7 @@ impl AccountActivationService {
     /// # Errors
     /// [`ActivationError::InvalidToken`] for any unusable token, or a password policy refusal.
     pub async fn activate(&self, request: ActivateAccountRequest) -> Result<(), ActivationError> {
-        crate::auth::validate_new_password(&request.new_password)
+        crate::auth::validate_password_for_account(&request.new_password, "", "")
             .map_err(ActivationError::Password)?;
         let hash = crate::auth::hash_password_async(request.new_password.clone())
             .await

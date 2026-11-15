@@ -369,7 +369,7 @@ impl AuthService {
         {
             return Err("Full name, email, and password are required.".to_string());
         }
-        auth::validate_new_password(&request.password)?;
+        auth::validate_password_for_account(&request.password, &request.email, &request.full_name)?;
         let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
         if self
             .find_user_by_email(&email_norm)
@@ -641,7 +641,7 @@ impl AuthService {
         {
             return Err("Email, current password, and new password are required.".to_string());
         }
-        auth::validate_new_password(&request.new_password)?;
+        auth::validate_password_for_account(&request.new_password, &request.email, "")?;
 
         let email_norm = crate::domain::email::NormalizedEmail::normalize(&request.email);
         // The same message for "no such user" and "wrong password" avoids user enumeration.

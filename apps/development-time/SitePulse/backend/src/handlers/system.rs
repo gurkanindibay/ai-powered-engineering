@@ -36,7 +36,7 @@ pub async fn reset_demo_data(State(state): State<AppState>) -> impl IntoResponse
     }
     if let Some(ref pool) = state.pool {
         if let Err(e) = crate::db::reset_db_to_seed_data(pool).await {
-            return system_error(format!("Database write failed: {}", e));
+            return system_error(crate::error::sanitized("Database write failed", &e));
         }
         if let Err(e) = state.reload_from_db().await {
             return system_error(e);
@@ -95,7 +95,7 @@ pub async fn seed_test_fixtures(State(state): State<AppState>) -> impl IntoRespo
     }
     if let Some(ref pool) = state.pool {
         if let Err(e) = crate::db::seed_test_data(pool).await {
-            return system_error(format!("Database write failed: {}", e));
+            return system_error(crate::error::sanitized("Database write failed", &e));
         }
         if let Err(e) = state.reload_from_db().await {
             return system_error(e);
@@ -131,7 +131,7 @@ pub async fn clear_all_data(State(state): State<AppState>) -> impl IntoResponse 
     }
     if let Some(ref pool) = state.pool {
         if let Err(e) = crate::db::wipe_all_db_data(pool).await {
-            return system_error(format!("Database write failed: {}", e));
+            return system_error(crate::error::sanitized("Database write failed", &e));
         }
         if let Err(e) = state.reload_from_db().await {
             return system_error(e);
@@ -170,7 +170,7 @@ pub async fn recreate_db(State(state): State<AppState>) -> impl IntoResponse {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                     "status": "ERROR",
-                    "message": format!("Veritabanı sıfırlanamadı: {}", e)
+                    "message": crate::error::sanitized("Veritabanı sıfırlanamadı", &e)
                 })),
             );
         }
@@ -215,7 +215,7 @@ pub async fn reset_to_initial_state(State(state): State<AppState>) -> impl IntoR
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                     "status": "ERROR",
-                    "message": format!("Veritabanı sıfırlanamadı: {}", e)
+                    "message": crate::error::sanitized("Veritabanı sıfırlanamadı", &e)
                 })),
             );
         }
@@ -261,7 +261,7 @@ pub async fn wipe_all_data(State(state): State<AppState>) -> impl IntoResponse {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                     "status": "ERROR",
-                    "message": format!("Tüm veriler silinemedi: {}", e)
+                    "message": crate::error::sanitized("Tüm veriler silinemedi", &e)
                 })),
             );
         }
@@ -419,7 +419,7 @@ pub async fn purge_site_cascade(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(
-                    serde_json::json!({"status": "ERROR", "message": format!("Site purge failed: {}", e)}),
+                    serde_json::json!({"status": "ERROR", "message": crate::error::sanitized("Site purge failed", &e)}),
                 ),
             );
         }
@@ -533,7 +533,7 @@ pub async fn provision_site_units(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(serde_json::json!({
                             "status": "ERROR",
-                            "message": format!("Database error: {}", e)
+                            "message": crate::error::sanitized("Database error", &e)
                         })),
                     );
                 }
@@ -545,7 +545,7 @@ pub async fn provision_site_units(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(serde_json::json!({
                             "status": "ERROR",
-                            "message": format!("Database error: {}", e)
+                            "message": crate::error::sanitized("Database error", &e)
                         })),
                     );
                 }
@@ -613,7 +613,7 @@ pub async fn provision_site_units(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(serde_json::json!({
                             "status": "ERROR",
-                            "message": format!("Database error: {}", e)
+                            "message": crate::error::sanitized("Database error", &e)
                         })),
                     );
                 }
@@ -625,7 +625,7 @@ pub async fn provision_site_units(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(serde_json::json!({
                             "status": "ERROR",
-                            "message": format!("Database error: {}", e)
+                            "message": crate::error::sanitized("Database error", &e)
                         })),
                     );
                 }
@@ -676,7 +676,7 @@ pub async fn provision_site_units(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(serde_json::json!({
                                 "status": "ERROR",
-                                "message": format!("Failed to create site: {}", e)
+                                "message": crate::error::sanitized("Failed to create site", &e)
                             })),
                         );
                     }
@@ -952,7 +952,7 @@ pub async fn provision_site_units(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                     "status": "ERROR",
-                    "message": format!("Provisioned units were not saved: {}", e)
+                    "message": crate::error::sanitized("Provisioned units were not saved", &e)
                 })),
             );
         }

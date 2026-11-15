@@ -73,7 +73,7 @@ pub async fn create_dues_period(
             .map_err(|e| {
                 (
                     StatusCode::SERVICE_UNAVAILABLE,
-                    format!("Database write failed: {}", e),
+                    crate::error::sanitized("Database write failed", &e),
                 )
             })?;
     }
@@ -194,7 +194,7 @@ pub async fn accrue_monthly_dues(
                 .map_err(|e| {
                     (
                         StatusCode::SERVICE_UNAVAILABLE,
-                        format!("Database unavailable: {}", e),
+                        crate::error::sanitized("Database unavailable", &e),
                     )
                 })?,
         ),
@@ -235,7 +235,7 @@ pub async fn accrue_monthly_dues(
             .map_err(|e| {
                 (
                     StatusCode::SERVICE_UNAVAILABLE,
-                    format!("Database write failed: {}", e),
+                    crate::error::sanitized("Database write failed", &e),
                 )
             })?;
     }
@@ -275,7 +275,7 @@ pub async fn accrue_monthly_dues(
                 .map_err(|e| {
                     (
                         StatusCode::SERVICE_UNAVAILABLE,
-                        format!("Database write failed: {}", e),
+                        crate::error::sanitized("Database write failed", &e),
                     )
                 })? {
                 Some(id) => due.id = id.to_string(),
@@ -287,7 +287,7 @@ pub async fn accrue_monthly_dues(
                     .map_err(|e| {
                         (
                             StatusCode::SERVICE_UNAVAILABLE,
-                            format!("Database write failed: {}", e),
+                            crate::error::sanitized("Database write failed", &e),
                         )
                     })?;
             }
@@ -352,7 +352,12 @@ pub async fn accrue_monthly_dues(
     // site only (each unit in its own tenant-bound transaction).
     let offset = settle_advances(&state, OffsetScope::Site(&payload.site_id))
         .await
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+        .map_err(|e| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                crate::error::sanitized("Internal error", &e),
+            )
+        })?;
     let (auto_settled_count, total_offset) = (offset.fully_settled_dues, offset.total_offset);
 
     Ok((
