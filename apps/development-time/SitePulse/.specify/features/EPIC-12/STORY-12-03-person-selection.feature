@@ -19,3 +19,10 @@ Feature: Shared person selection components
     Given the manager enters details matching an existing person
     When duplicate detection returns candidate reasons
     Then the form lists those reasons and requires explicit confirmation to create a distinct person
+
+  @SC-12-03-04 @GUI-12-03 @layer:gui @linked @core @role_manager
+  Scenario: Choose an existing person through the live search API
+    Given Unit "A Blok D:14" has an owner and another unit's owner exists in the same site
+    When the manager starts a title transfer from the unit workspace and searches the picker for that person
+    Then the picker's paged search request succeeds against the running backend
+    And choosing the person makes them the owner without creating a new person card

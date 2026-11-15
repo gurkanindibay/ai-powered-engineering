@@ -618,12 +618,38 @@ pub async fn select_responsible_contact(
 // ---------------------------------------------------------------------------
 
 /// Query for person routes: the unified-API search fields plus the pinned site.
+///
+/// The fields are declared inline rather than through `#[serde(flatten)]`:
+/// flattening makes `serde_urlencoded` buffer every value as a string, so
+/// numeric fields such as `page=1` fail with "expected i64".
 #[derive(Debug, Deserialize)]
 pub struct PersonSearchParams {
-    #[serde(flatten)]
-    pub search: crate::models::PersonSearchQuery,
+    #[serde(default)]
+    pub q: Option<String>,
+    #[serde(default)]
+    pub context: Option<crate::models::PersonSearchContext>,
+    #[serde(default)]
+    pub unit_id: Option<String>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+    #[serde(default)]
+    pub page: Option<i64>,
     #[serde(default)]
     pub site_id: Option<String>,
+}
+
+impl PersonSearchParams {
+    /// Splits the query into the pinned site and the service search query.
+    pub fn into_parts(self) -> (Option<String>, crate::models::PersonSearchQuery) {
+        let search = crate::models::PersonSearchQuery {
+            q: self.q,
+            context: self.context,
+            unit_id: self.unit_id,
+            limit: self.limit,
+            page: self.page,
+        };
+        (self.site_id, search)
+    }
 }
 
 pub(crate) fn person_api_error(e: crate::services::person_service::PersonApiError) -> AppError {
@@ -673,9 +699,10 @@ pub async fn search_people(
     scope: crate::tenancy::TenantScope,
     Query(q): Query<PersonSearchParams>,
 ) -> Result<Json<crate::models::PersonSearchResponse>, AppError> {
-    let site = site_number(&scope.pinned(q.site_id)?)?;
+    let (site_id, search) = q.into_parts();
+    let site = site_number(&scope.pinned(site_id)?)?;
     crate::services::person_service::PersonService::new(&state)
-        .search(site, &q.search)
+        .search(site, &search)
         .await
         .map(Json)
         .map_err(person_api_error)
@@ -799,5 +826,39 @@ fn merge_error(e: PersonMergeError) -> AppError {
         PersonMergeError::StepUpRequired => AppError::validation(e.to_string()),
         PersonMergeError::Unavailable => AppError::unavailable(e.to_string()),
         PersonMergeError::Storage(_) => AppError::internal(e.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod person_search_params_tests {
+    use super::PersonSearchParams;
+    use crate::models::PersonSearchContext;
+
+    // covers: SC-12-05-06
+    #[test]
+    fn numeric_paging_fields_parse_from_query_string() {
+        let uri: axum::http::Uri = "/x?context=owner&page=1&limit=50&site_id=7&q=ay"
+            .parse()
+            .expect("valid uri");
+        let axum::extract::Query(parsed) =
+            axum::extract::Query::<PersonSearchParams>::try_from_uri(&uri)
+                .expect("query string should deserialize");
+        let (site_id, search) = parsed.into_parts();
+        assert_eq!(site_id.as_deref(), Some("7"));
+        assert_eq!(search.page, Some(1));
+        assert_eq!(search.limit, Some(50));
+        assert_eq!(search.q.as_deref(), Some("ay"));
+        assert_eq!(search.context, Some(PersonSearchContext::Owner));
+    }
+
+    #[test]
+    fn empty_query_string_uses_defaults() {
+        let uri: axum::http::Uri = "/x".parse().expect("valid uri");
+        let axum::extract::Query(parsed) =
+            axum::extract::Query::<PersonSearchParams>::try_from_uri(&uri)
+                .expect("empty query should deserialize");
+        let (site_id, search) = parsed.into_parts();
+        assert!(site_id.is_none());
+        assert_eq!(search, crate::models::PersonSearchQuery::default());
     }
 }

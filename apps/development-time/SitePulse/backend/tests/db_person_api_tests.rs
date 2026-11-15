@@ -325,7 +325,7 @@ async fn person_cards_are_created_edited_and_stay_in_their_site() {
 
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
-// covers: SC-12-05-01
+// covers: SC-12-05-01, SC-12-05-06
 async fn search_reports_role_eligibility_for_a_unit() {
     let t = TestDb::create("person_eligibility").await;
     let a = t.site_id("begonya-sitesi").await;
@@ -341,7 +341,7 @@ async fn search_reports_role_eligibility_for_a_unit() {
         &app,
         "GET",
         &format!(
-        "/api/v1/site-admin/persons/search?site_id={a}&q={needle}&context=tenant&unit_id={unit}"),
+        "/api/v1/site-admin/persons/search?site_id={a}&q={needle}&context=tenant&unit_id={unit}&page=1&limit=50"),
         &token,
         None,
     )

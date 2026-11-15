@@ -261,7 +261,7 @@ A rule in `scripts/rust_standards_lint.py` fails the build when `INSERT INTO per
 
 | Method and path | Purpose | Permission |
 | --- | --- | --- |
-| `GET /site-admin/persons/search?q=&context=&unit_id=&limit=` | Type-ahead for the picker. Returns card summaries and `eligibility` for the context. | `PersonRead` |
+| `GET /site-admin/persons/search?q=&context=&unit_id=&page=&limit=` | Type-ahead for the picker. Returns card summaries and `eligibility` for the context. `page` and `limit` are integers. | `PersonRead` |
 | `POST /site-admin/persons` | Create a card with no role. | `PersonManage` |
 | `GET /site-admin/persons/:id` (exists) | Add role flags, `version`, `allowed_actions`. | `PersonRead` |
 | `PATCH /site-admin/persons/:id` | Edit name, phone, email. Requires `version`. | `PersonManage` |
@@ -468,6 +468,7 @@ Person card:
 12. A person who owns A-12 cannot be chosen as its tenant; the picker shows the reason before submit and the server rejects the same request.
 13. A card can be created with no role and later given one from its own page.
 14. The picker finds a person beyond the first 100 in the site. A person from another site is never returned and cannot be referenced by ID.
+14a. The picker's real search request, with `q`, `context`, `unit_id`, `page` and `limit`, succeeds against the running backend. A fake repository or a stubbed route does not count as evidence for this criterion.
 15. Merging two cards leaves payment rows unchanged, and reports for either original ID resolve to the surviving card.
 
 Together:

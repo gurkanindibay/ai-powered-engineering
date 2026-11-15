@@ -32,6 +32,24 @@ def _rules(report: dict) -> list[str]:
 
 
 class RustStandardsLintTests(unittest.TestCase):
+    def test_flatten_in_query_extracted_struct_is_reported(self):
+        report = _lint({
+            "src/handlers/a.rs": (
+                "#[derive(Deserialize)]\npub struct SearchParams {\n    #[serde(flatten)]\n"
+                "    pub search: crate::models::Search,\n    pub site_id: Option<String>,\n}\n"
+                "pub async fn h(Query(q): Query<SearchParams>) {}\n"
+                "pub async fn j(Query(q): Query<crate::handlers::a::Plain>) {}\n"
+            ),
+            "src/handlers/b.rs": (
+                "pub struct Plain { pub page: Option<i64> }\n"
+                "#[derive(Deserialize)]\npub struct BodyOnly {\n    #[serde(flatten)]\n    pub base: Base,\n}\n"
+                "pub async fn k(Json(b): Json<BodyOnly>) {}\n"
+            ),
+        })
+        self.assertEqual(_rules(report), ["query-flatten"])
+        self.assertEqual(report["findings"][0]["file"], "src/handlers/a.rs")
+        self.assertEqual(report["findings"][0]["line"], 3)
+
     def test_person_inserts_are_confined_to_repository(self):
         report = _lint({
             "src/services/a.rs": 'const SQL: &str = "INSERT INTO persons (full_name) VALUES ($1)";\n',
