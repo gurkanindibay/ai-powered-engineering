@@ -23,7 +23,18 @@ import 'sp_directory_scaffold.dart';
 class PeopleDirectoryPage extends StatefulWidget {
   final PersonDirectoryApi api;
 
-  const PeopleDirectoryPage({super.key, this.api = const PersonDirectoryApi()});
+  /// Cross-navigation hooks, forwarded to the person card (see [PersonProfilePage]).
+  final Future<void> Function(String unitId)? onOpenUnit;
+  final Future<void> Function(PersonSummary person, String role)? onGiveRole;
+  final Future<void> Function(PersonSummary person)? onChanged;
+
+  const PeopleDirectoryPage({
+    super.key,
+    this.api = const PersonDirectoryApi(),
+    this.onOpenUnit,
+    this.onGiveRole,
+    this.onChanged,
+  });
 
   @override
   State<PeopleDirectoryPage> createState() => _PeopleDirectoryPageState();
@@ -191,8 +202,13 @@ class _PeopleDirectoryPageState extends State<PeopleDirectoryPage>
   Future<void> _openProfile(PersonSummary person) async {
     await AppFullscreenPage.push<void>(
       context: context,
-      builder: (_) =>
-          PersonProfilePage(personId: person.personId, api: widget.api),
+      builder: (_) => PersonProfilePage(
+        personId: person.personId,
+        api: widget.api,
+        onOpenUnit: widget.onOpenUnit,
+        onGiveRole: widget.onGiveRole,
+        onChanged: widget.onChanged,
+      ),
     );
     if (mounted) _reload(resetPage: false, preserveItems: true);
   }

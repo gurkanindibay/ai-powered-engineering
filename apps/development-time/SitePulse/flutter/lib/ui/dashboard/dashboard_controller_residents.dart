@@ -339,6 +339,37 @@ extension DashboardControllerResidents on DashboardController {
     notify();
   }
 
+  /// A person card was edited: every unit role held by [personId] (owner, tenant,
+  /// household member) takes the new name and contact at once, before any reload.
+  void applyPersonUpdate(int personId, {required String fullName, required String phone, required String email}) {
+    var changed = false;
+    _homeOwners = [
+      for (final ho in _homeOwners)
+        () {
+          final isOwner = ho.ownerPersonId == personId;
+          final isTenant = ho.tenantPersonId == personId;
+          final hasMember = ho.householdResidents.any((m) => m.personId == personId);
+          if (!isOwner && !isTenant && !hasMember) return ho;
+          changed = true;
+          return ho.copyWith(
+            ownerFullName: isOwner ? fullName : null,
+            email: isOwner ? email : null,
+            phone: isOwner ? phone : null,
+            tenantFullName: isTenant ? fullName : null,
+            tenantEmail: isTenant ? email : null,
+            tenantPhone: isTenant ? phone : null,
+            householdResidents: hasMember
+                ? [
+                    for (final m in ho.householdResidents)
+                      m.personId == personId ? m.copyWith(fullName: fullName, phone: phone, email: email) : m,
+                  ]
+                : null,
+          );
+        }(),
+    ];
+    if (changed) notify();
+  }
+
   Future<void> fetchHomeOwners({String? siteId}) async {
     if (!isTestMode && !canReadSiteDirectory) return;
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');

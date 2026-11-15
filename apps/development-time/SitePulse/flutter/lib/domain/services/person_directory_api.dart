@@ -351,6 +351,17 @@ class PersonDirectoryApi {
     return data is Map<String, dynamic> ? data['status']?.toString() : null;
   }
 
+  /// Opens a login for the person, or re-sends a pending activation link. Returns the
+  /// delivery status (`SENT`, `DELIVERY_FAILED`, `NO_EMAIL`).
+  Future<String?> openLogin(int personId) async {
+    final response = await ApiClient.post(
+      ApiClient.uri('/api/v1/site-admin/persons/$personId/login'),
+      headers: {'Content-Type': 'application/json'},
+    ).timeout(const Duration(seconds: 15));
+    final data = ApiClient.decode(response);
+    return data is Map<String, dynamic> ? data['status']?.toString() : null;
+  }
+
   /// Records (or, with an empty value, clears) the person's national ID. Returns the
   /// masked form. Throws `STEP_UP_REQUIRED` until the caller has re-entered their password.
   Future<String?> setNationalId(int personId, String nationalId) async {

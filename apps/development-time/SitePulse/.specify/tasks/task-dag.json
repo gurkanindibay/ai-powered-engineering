@@ -914,7 +914,7 @@
       "id": "task-43",
       "name": "Expand person card and cross-navigation",
       "module": "flutter-ui",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-33",
         "task-36",
@@ -930,6 +930,11 @@
         "ui-style-lint",
         "testid-lint",
         "logging-standards-lint"
+      ],
+      "acceptance_tests": [
+        "scenario:SC-12-07-01",
+        "scenario:SC-12-07-02",
+        "scenario:SC-12-07-03"
       ],
       "attempts": 0
     },

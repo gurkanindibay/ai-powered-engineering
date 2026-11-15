@@ -1322,6 +1322,8 @@ impl SiteAdminService {
             capital_dues_balance: Some(Decimal::ZERO),
             advance_balance: None,
             household_residents: household,
+            owner_person_id: None,
+            tenant_person_id: None,
         })
     }
 
@@ -1388,6 +1390,8 @@ impl SiteAdminService {
                         pt.full_name as tenant_full_name,
                         pt.email as tenant_email,
                         pt.phone as tenant_phone,
+                        u.owner_person_id as owner_person_id,
+                        u.tenant_person_id as tenant_person_id,
                         COALESCE((SELECT SUM(principal_amount + delay_penalty - paid_amount) FROM dues_liabilities WHERE unit_id = u.id AND status != 'PAID' AND (expense_type = 'OPERATIONAL_DUES' OR debtor_type = 'TENANT')), 0.00) as operational_dues_balance,
                         COALESCE((SELECT SUM(principal_amount + delay_penalty - paid_amount) FROM dues_liabilities WHERE unit_id = u.id AND status != 'PAID' AND (expense_type = 'CAPITAL_DUES' OR debtor_type = 'OWNER')), 0.00) as capital_dues_balance,
                         CASE 
@@ -1409,7 +1413,7 @@ impl SiteAdminService {
                 if let Some(m_rows) = crate::db::logged(client
                     .query(
                         r#"
-                        SELECT uo.unit_id, om.id, om.full_name, om.relationship, COALESCE(om.phone, ''), COALESCE(om.email, ''), (uo.occupancy_type = 'OWNER'), om.occupancy_id
+                        SELECT uo.unit_id, om.id, om.full_name, om.relationship, COALESCE(om.phone, ''), COALESCE(om.email, ''), (uo.occupancy_type = 'OWNER'), om.occupancy_id, om.person_id
                         FROM occupancy_members om
                         JOIN unit_occupancies uo ON om.occupancy_id = uo.id
                         WHERE uo.is_active = true
@@ -1429,8 +1433,8 @@ impl SiteAdminService {
                             email: mr.get(5),
                             is_owner: mr.get(6),
                             occupancy_id: mr.try_get(7).ok().flatten(),
-                person_id: None,
-                resident_user_id: None,
+                            person_id: mr.try_get(8).ok().flatten(),
+                            resident_user_id: None,
                         };
                         household_map.entry(u_id).or_default().push(mem);
                     }
@@ -1520,6 +1524,8 @@ impl SiteAdminService {
                                 capital_dues_balance: Some(cap_balance),
                                 advance_balance: None,
                                 household_residents: household,
+                                owner_person_id: r.get("owner_person_id"),
+                                tenant_person_id: r.get("tenant_person_id"),
                             });
                         }
                         return db_result;
@@ -1615,6 +1621,8 @@ impl SiteAdminService {
                 capital_dues_balance: Some(Decimal::ZERO),
                 advance_balance: None,
                 household_residents: household,
+                owner_person_id: None,
+                tenant_person_id: None,
             });
         }
 

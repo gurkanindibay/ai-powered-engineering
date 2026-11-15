@@ -180,6 +180,7 @@ Each journey is one test that follows a single user from the first sign-in with 
 | ID | Story | Role | Pri | Arrange | Steps → Expected | Selectors | UI |
 |---|---|---|---|---|---|---|---|
 | GUI-12-01 | 12-04 | Manager | P1 | seed people directory | Search for a person, apply an activation filter, page through results, open a person profile and return → the query, filters and directory position remain available | `people_search_input`, `people_filter_pending`, `people_filter_no_login`, person rows, directory pager | ✅ |
+| GUI-12-02 | 12-06 | Manager | P1 | seed unit with owner person | Open a unit workspace, open the owner's person card, edit the name, open the unit from the card and return → list search and focus are kept and the new name shows on the unit | `workspace_person_owner_<id>`, `person_edit_btn`, `person_unit_<unit>`, `person_open_login_btn`, `person_role_tenant_btn` | ✅ |
 
 ### Cross-cutting
 | ID | Role | Pri | Steps → Expected | UI |
