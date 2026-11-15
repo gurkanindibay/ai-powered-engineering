@@ -107,9 +107,9 @@ fn webhook_secret() -> &'static [u8] {
         Ok(s) if s.len() >= 16 => s.into_bytes(),
         _ => {
             // Without a configured secret only the in-process sandbox can sign.
-            use rand::RngCore;
+            use rand::RngExt;
             let mut buf = vec![0u8; 32];
-            rand::thread_rng().fill_bytes(&mut buf);
+            rand::rng().fill(&mut buf[..]);
             buf
         }
     })

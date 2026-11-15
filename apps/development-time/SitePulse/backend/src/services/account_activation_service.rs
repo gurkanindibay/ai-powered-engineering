@@ -120,9 +120,9 @@ pub struct MemoryActivation {
 }
 
 fn new_token() -> String {
-    use rand::RngCore;
+    use rand::RngExt;
     let mut bytes = [0u8; 32];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    rand::rng().fill(&mut bytes[..]);
     hex::encode(bytes)
 }
 

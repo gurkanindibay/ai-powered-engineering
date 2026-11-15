@@ -1,5 +1,5 @@
 use chrono::Utc;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, RngExt};
 
 use crate::models::{
     ApprovalResultResponse, AuthProvider, PendingRegistrationResponse, RegistrationStatus, Role,
@@ -26,7 +26,7 @@ impl RegistrationApprovalService {
             .map(|s| s.slug.clone())
             .unwrap_or_else(|| crate::services::to_slug(site_id));
 
-        let token_part: String = rand::thread_rng()
+        let token_part: String = rand::rng()
             .sample_iter(&Alphanumeric)
             .take(24)
             .map(char::from)

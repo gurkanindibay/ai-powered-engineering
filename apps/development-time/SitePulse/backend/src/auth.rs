@@ -77,9 +77,9 @@ fn jwt_secret() -> Result<&'static [u8], String> {
                 Err("SITEPULSE_JWT_SECRET is required".to_string())
             }
             Err(_) => {
-                use rand::RngCore;
+                use rand::RngExt;
                 let mut bytes = vec![0u8; 48];
-                rand::thread_rng().fill_bytes(&mut bytes);
+                rand::rng().fill(&mut bytes[..]);
                 Ok(bytes)
             }
         })
@@ -349,12 +349,12 @@ pub fn validate_password_for_account(
 
 /// Generates a random one-time password with the given prefix (e.g. `SP-`).
 pub fn generate_temporary_password(prefix: &str) -> String {
-    use rand::Rng;
+    use rand::RngExt;
     const ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut part = || -> String {
         (0..5)
-            .map(|_| ALPHABET[rng.gen_range(0..ALPHABET.len())] as char)
+            .map(|_| ALPHABET[rng.random_range(0..ALPHABET.len())] as char)
             .collect()
     };
     format!("{}{}-{}", prefix, part(), part())

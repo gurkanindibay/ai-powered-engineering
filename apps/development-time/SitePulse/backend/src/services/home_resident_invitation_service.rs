@@ -1,5 +1,5 @@
 use chrono::Utc;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, RngExt};
 
 use crate::models::{
     AuthProvider, HomeResidentResponse, RegisterHomeResidentRequest, Role, UnitInviteLinkResponse,
@@ -36,7 +36,7 @@ impl HomeResidentInvitationService {
         let building = inner.block_label(&unit.block_id);
         let unit_number = unit.unit_number.to_string();
 
-        let token_part: String = rand::thread_rng()
+        let token_part: String = rand::rng()
             .sample_iter(&Alphanumeric)
             .take(24)
             .map(char::from)
