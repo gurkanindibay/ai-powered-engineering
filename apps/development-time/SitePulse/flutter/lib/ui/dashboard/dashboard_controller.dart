@@ -10,6 +10,7 @@ import 'package:flutter/material.dart' show ThemeMode;
 import '../../domain/models/auth_models.dart';
 import '../../domain/models/dues_models.dart';
 import '../../domain/models/unit_state.dart';
+import '../../domain/models/person_ref.dart';
 import '../../domain/services/api_client.dart';
 import '../../domain/services/bank_file_parser.dart';
 import '../../domain/services/person_directory_api.dart';

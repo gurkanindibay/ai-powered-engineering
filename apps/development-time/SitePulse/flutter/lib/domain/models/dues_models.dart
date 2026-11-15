@@ -744,8 +744,10 @@ class UnitResidentMember {
   final String email;
   final bool isOwner;
   final String permissionScope;
+  final int? personId;
 
   const UnitResidentMember({
+    this.personId,
     required this.id,
     required this.fullName,
     required this.relationship,
@@ -759,6 +761,7 @@ class UnitResidentMember {
 
   factory UnitResidentMember.fromJson(Map<String, dynamic> json) {
     return UnitResidentMember(
+      personId: (json['person_id'] as num?)?.toInt(),
       id: json['resident_id']?.toString() ?? json['id']?.toString() ?? '',
       fullName: json['full_name']?.toString() ?? json['fullName']?.toString() ?? '',
       relationship: json['relationship']?.toString() ?? 'Ev Sakini',
@@ -772,6 +775,7 @@ class UnitResidentMember {
   Map<String, dynamic> toJson() {
     return {
       'resident_id': id,
+      if (personId != null) 'person_id': personId,
       'full_name': fullName,
       'relationship': relationship,
       'phone': phone,
