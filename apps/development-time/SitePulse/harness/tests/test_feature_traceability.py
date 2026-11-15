@@ -110,6 +110,28 @@ class CatalogueTests(unittest.TestCase):
 
 
 class ReportTests(unittest.TestCase):
+    def test_run_inventory_deltas_and_dashboard_limit(self):
+        catalogue = ft.Catalogue({}, {}, [], {}, [])
+        history = []
+        for run_number in range(1, 8):
+            scenarios = ["SC-42-01-01", "SC-42-01-02"] if run_number < 7 else ["SC-42-01-01"]
+            for scenario in scenarios:
+                history.append({"run_id": f"run-{run_number}", "started_at": f"2026-01-{run_number:02}T00:00:00Z",
+                                "commit": "abcdef123", "branch": "master", "dirty": False, "trigger": "ci",
+                                "task": f"task {run_number}", "epic": "EPIC-42", "story": "STORY-42-01",
+                                "scenario": scenario, "gui_ids": [], "status": "PASS", "name": scenario,
+                                "duration_s": 1.0, "steps": [], "test": f"tests/test_{scenario}.py::test_case",
+                                "error": ""})
+        runs = ft.build_runs(history, catalogue, limit=20)
+        self.assertEqual(runs[0]["inventory_changes"], {
+            "scenarios_added": 0, "scenarios_removed": 1, "tests_added": 0, "tests_removed": 1})
+        self.assertEqual(runs[-1]["inventory_changes"]["scenarios_added"], 2)
+        page = ft.render_html({"epics": [], "story_status_counts": {}}, "now", "store", runs)
+        self.assertIn("-1 scenarios", page)
+        self.assertIn("-1 tests", page)
+        self.assertEqual(page.count('<details class="run"'), 5)
+        self.assertIn("Showing the latest five runs", page)
+
     def test_latest_linked_record_supersedes_unlinked_gui_failure(self):
         old = {"key": "tests/test_p2_edge.py::test_residents", "scenario": "", "gui_ids": ["GUI-08-07"],
                "status": "FAIL", "id": "GUI-08-07"}

@@ -516,6 +516,8 @@ def build_runs(history: list[dict], catalogue: Catalogue, limit: int = 30) -> li
     for record in history:  # oldest first
         grouped.setdefault(record["run_id"], []).append(record)
     previous: dict[str, str] = {}
+    previous_scenarios: set[str] = set()
+    previous_tests: set[str] = set()
     runs = []
     for run_id, records in grouped.items():
         rows = []
@@ -531,6 +533,13 @@ def build_runs(history: list[dict], catalogue: Catalogue, limit: int = 30) -> li
                          "duration_s": record["duration_s"], "failing_step": failing_step(record)})
         previous.update({row["key"]: row["status"] for row in rows})
         first, executed = records[0], {row["scenario"] for row in rows if row["scenario"]}
+        test_ids = {record.get("test", "") for record in records if record.get("test")}
+        inventory_changes = {
+            "scenarios_added": len(executed - previous_scenarios),
+            "scenarios_removed": len(previous_scenarios - executed),
+            "tests_added": len(test_ids - previous_tests),
+            "tests_removed": len(previous_tests - test_ids),
+        }
         runs.append({
             "run_id": run_id, "started_at": first["started_at"], "commit": first["commit"], "branch": first["branch"],
             "dirty": first.get("dirty", False), "trigger": first.get("trigger", ""),
@@ -539,9 +548,11 @@ def build_runs(history: list[dict], catalogue: Catalogue, limit: int = 30) -> li
             "status": worst([row["status"] for row in rows if row["status"] != "SKIPPED"] or ["SKIPPED"], SCENARIO_ORDER),
             "counts": dict(Counter(row["status"] for row in rows)),
             "changes": dict(Counter(row["change"] for row in rows if row["change"])),
+            "inventory_changes": inventory_changes,
             "executed": len(executed), "automated": len(automated), "tests": len(rows),
             "not_executed": [sid for sid in automated if sid not in executed],
             "duration_s": round(sum(row["duration_s"] for row in rows), 1), "scenarios": rows})
+        previous_scenarios, previous_tests = executed, test_ids
     return runs[::-1][:limit]
 
 
@@ -765,6 +776,8 @@ h2{font-size:16px;margin:28px 0 6px}.hint{color:var(--muted);font-size:13px;marg
 .chg{font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;white-space:nowrap}
 .chg.regressed{color:var(--fail);border:1px solid var(--fail)}.chg.fixed{color:var(--pass);border:1px solid var(--pass)}
 .chg.new{color:var(--muted);border:1px solid var(--line)}
+.chg.added{color:var(--pass);border:1px solid var(--pass);background:var(--pass-bg)}
+.chg.removed{color:var(--fail);border:1px solid var(--fail);background:var(--fail-bg)}
 .matrix{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto}
 .matrix table{width:auto}.matrix td,.matrix th{border:0;padding:2px}
 .matrix th.run{font:11px ui-monospace,Menlo,monospace;color:var(--muted);writing-mode:vertical-rl;transform:rotate(180deg);
@@ -823,6 +836,13 @@ def _run_html(run: dict, is_open: bool) -> str:
                      for s in SCENARIO_ORDER if s in run["counts"])
     changes = "".join(f'<span class="chg {kind}">{n} {kind}</span>' for kind, n in sorted(run["changes"].items())
                       if kind != "new")
+    inventory = run.get("inventory_changes", {})
+    inventory_badges = ""
+    for kind in ("scenarios", "tests"):
+        for direction, css_class, sign in (("added", "added", "+"), ("removed", "removed", "-")):
+            amount = inventory.get(f"{kind}_{direction}", 0)
+            if amount:
+                inventory_badges += f'<span class="chg {css_class}">{sign}{amount} {kind}</span>'
     rows = "".join(
         f'<tr><td><span class="id">{esc(row["id"])}</span></td><td>{_badge(row["status"])}</td>'
         f'<td>{esc(row["name"])}{" <span class=small>failed at: " + esc(row["failing_step"]) + "</span>" if row["failing_step"] else ""}</td>'
@@ -833,7 +853,7 @@ def _run_html(run: dict, is_open: bool) -> str:
         '<p class="note">Every automated scenario was executed in this run.</p>'
     return (f'<details class="run"{" open" if is_open else ""}><summary>'
             f'<span class="id">{esc(run["started_at"][:16].replace("T", " "))}</span>{_badge(run["status"])}'
-            f'<span class="title">{esc(run["task"])}</span>{badges}{changes}'
+            f'<span class="title">{esc(run["task"])}</span>{badges}{changes}{inventory_badges}'
             f'<span class="small">{run["tests"]} tests · {run["executed"]}/{run["automated"]} scenarios</span>'
             f'<span class="small"><code>{esc(run["commit"][:7])}</code>{"*" if run["dirty"] else ""} · {run["duration_s"]:.0f}s</span>'
             f'</summary><div class="body"><table>{rows}</table>{missing}</div></details>')
@@ -881,12 +901,13 @@ def render_html(report: dict, generated_at: str, store: str, runs: list[dict] | 
                            for kind in ("regressed", "fixed"))
                  + f'<div class="tile"><b>{counts.get("PENDING", 0)}</b>{_badge("PENDING")}</div>'
                  + f'<div class="tile"><b>{len(runs)}</b><span>runs recorded</span></div>')
+        recent_runs = runs[:5]
         dashboard = (
-            '<h2>Runs</h2><p class="hint">One row per recorded run, newest first, labelled with the task it verified. '
-            '"regressed" and "fixed" compare each scenario with its previous execution.</p>'
-            + "".join(_run_html(run, index == 0) for index, run in enumerate(runs))
-            + '<h2>Scenarios by run</h2><p class="hint">Each column is a run, oldest to newest; hover a cell for details.</p>'
-            + _matrix_html(report, runs) + '<h2>By feature</h2>'
+            '<h2>Recent runs</h2><p class="hint">Showing the latest five runs. Green +N badges mark scenarios or tests '
+            'added since the previous run; red -N badges mark removals. "Regressed" and "fixed" compare scenario status.</p>'
+            + "".join(_run_html(run, index == 0) for index, run in enumerate(recent_runs))
+            + '<h2>Scenarios by recent run</h2><p class="hint">Each column is one of the latest runs, oldest to newest; hover a cell for details.</p>'
+            + _matrix_html(report, recent_runs) + '<h2>By feature</h2>'
             '<p class="hint">Latest status of every story and scenario, with the steps of its last execution.</p>')
     blocks = []
     for epic in sorted(report["epics"], key=lambda e: e["status"] == "NOT MIGRATED"):  # epics with results first
