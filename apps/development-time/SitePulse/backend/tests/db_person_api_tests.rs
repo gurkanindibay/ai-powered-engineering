@@ -737,3 +737,43 @@ async fn title_transfer_honors_new_owner_reference_and_clears_the_old_primary_co
     );
     t.drop_db().await;
 }
+
+#[tokio::test]
+#[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
+// covers: SC-12-05-02
+async fn role_free_card_has_no_stored_role_and_leaves_the_ledger_intact() {
+    let t = TestDb::create("person_role_free").await;
+    let site = t.site_id("begonya-sitesi").await;
+    let app = build_router(t.state().await);
+    let token = manager_token(&app, site).await;
+    let before = t.ledger_fingerprint().await;
+
+    let (status, created) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/site-admin/persons?site_id={site}"),
+        &token,
+        Some(
+            serde_json::json!({"card": {"full_name": "Role Free", "email": "role.free@rust.test"}}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    let id = created["card"]["person_id"].as_i64().unwrap();
+
+    let stored = t
+        .scalar_text(&format!(
+            "SELECT COALESCE(person_type, 'NULL') FROM persons WHERE id = {id}"
+        ))
+        .await;
+    assert_eq!(stored, "NULL", "a role-free card stores no role");
+    assert_eq!(
+        t.scalar_i64(&format!(
+            "SELECT count(*) FROM v_person_roles WHERE person_id = {id} AND derived_role IS NULL"
+        ))
+        .await,
+        1
+    );
+    assert_eq!(t.ledger_fingerprint().await, before, "ledger is untouched");
+    t.drop_db().await;
+}

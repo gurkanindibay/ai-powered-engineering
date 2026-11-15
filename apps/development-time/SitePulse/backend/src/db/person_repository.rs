@@ -21,12 +21,12 @@ pub enum ResolvePersonError {
 /// Legacy request adapters pass `confirm_distinct = true` until the client can show
 /// candidates and collect an explicit choice; new `PersonRef` callers must pass false
 /// unless the manager confirms a distinct person.
-pub async fn resolve_new_site_person(
+pub async fn resolve_new_site_person<'a>(
     tx: &deadpool_postgres::Transaction<'_>,
     full_name: &str,
     phone: Option<&str>,
     email: Option<&str>,
-    person_type: &str,
+    person_type: impl Into<Option<&'a str>>,
     site_id: i64,
     confirm_distinct: bool,
 ) -> Result<i64, ResolvePersonError> {
@@ -52,9 +52,16 @@ pub async fn resolve_new_site_person(
     if !candidates.is_empty() && !confirm_distinct {
         return Err(ResolvePersonError::PossibleDuplicate(candidates));
     }
-    insert_site_person(tx, full_name, phone, email, person_type, Some(site_id))
-        .await
-        .map_err(ResolvePersonError::Database)
+    insert_site_person(
+        tx,
+        full_name,
+        phone,
+        email,
+        person_type.into(),
+        Some(site_id),
+    )
+    .await
+    .map_err(ResolvePersonError::Database)
 }
 
 /// Finds possible duplicates inside the caller's transaction and tenant scope.
@@ -91,14 +98,15 @@ pub async fn duplicate_candidates(
 }
 
 /// Inserts a site person and returns the database assigned identity.
-pub async fn insert_site_person(
+pub async fn insert_site_person<'a>(
     client: &deadpool_postgres::Transaction<'_>,
     full_name: &str,
     phone: Option<&str>,
     email: Option<&str>,
-    person_type: &str,
+    person_type: impl Into<Option<&'a str>>,
     site_id: Option<i64>,
 ) -> Result<i64, tokio_postgres::Error> {
+    let person_type: Option<&str> = person_type.into();
     let row = client
         .query_one(
             "INSERT INTO persons (full_name, phone, email, person_type, site_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",

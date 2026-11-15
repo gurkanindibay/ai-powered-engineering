@@ -21,8 +21,8 @@ use crate::state::AppState;
 const DEFAULT_LIMIT: i64 = 20;
 const MAX_LIMIT: i64 = 50;
 const MAX_NAME_LEN: usize = 120;
-/// Legacy `persons.person_type` stored for cards that hold no role yet.
-const ROLE_FREE_PERSON_TYPE: &str = "HOME_RESIDENT";
+/// `persons.person_type` for cards that hold no role yet: none (V35).
+const ROLE_FREE_PERSON_TYPE: Option<&str> = None;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PersonApiError {
