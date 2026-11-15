@@ -5,7 +5,6 @@ use crate::{
     state::AppState,
 };
 use axum::{
-    async_trait,
     extract::{FromRequestParts, Query, State},
     http::{request::Parts, StatusCode},
     response::{IntoResponse, Response},
@@ -110,7 +109,6 @@ impl AuthzContext {
         Ok(())
     }
 }
-#[async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for AuthzContext {
     type Rejection = SecurityError;
     async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {

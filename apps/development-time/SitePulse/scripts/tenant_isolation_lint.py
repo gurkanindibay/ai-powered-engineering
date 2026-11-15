@@ -71,6 +71,10 @@ MIDDLEWARE_SCOPED_PATHS = (
     "/api/v1/home-residents/invite-link/:", "/api/v1/home-residents/members/:",
     "/api/v1/site-admin/units/:", "/api/v1/site-admin/home-owners/:",
     "/api/v1/site-admin/bank-account/:",
+    "/api/v1/residents/{", "/api/v1/units/{",
+    "/api/v1/home-residents/invite-link/{", "/api/v1/home-residents/members/{",
+    "/api/v1/site-admin/units/{", "/api/v1/site-admin/home-owners/{",
+    "/api/v1/site-admin/bank-account/{",
 )
 NOT_TENANT_PATHS = (
     "/api/v1/saas", "/api/v1/system/", "/api/v1/registration/submit/",
