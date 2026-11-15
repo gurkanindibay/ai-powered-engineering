@@ -6,7 +6,7 @@ default-run = "sitepulse-backend"
 description = "SitePulse High-Performance Residential Management Platform - Rust & Axum Backend"
 
 [dependencies]
-axum = "0.7"
+axum = "0.8"
 tokio = { version = "1.38", features = ["full"] }
 tower = { version = "0.4", features = ["limit"] }
 serde = { version = "1.0", features = ["derive"] }
