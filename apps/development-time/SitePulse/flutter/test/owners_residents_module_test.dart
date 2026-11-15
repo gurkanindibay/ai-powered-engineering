@@ -11,6 +11,7 @@ import 'package:sitepulse/l10n/app_strings.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'package:sitepulse/ui/dashboard/dashboard_screen.dart';
 import 'package:sitepulse/ui/residents/owners_residents_module_page.dart';
+import 'support/fake_person_repository.dart';
 import 'test_fixtures.dart';
 
 Finder _directoryListScrollable() => find.descendant(
@@ -35,6 +36,7 @@ void main() {
 
   group('Owners & Residents Module Dedicated Tests', () {
     late DashboardController controller;
+    final people = FakePersonRepository({1: 'Selim Evsahibi', 2: 'Canan Kiracı', 3: 'Burak Demir', 4: 'Selin Demir'});
 
     setUp(() async {
       controller = DashboardController(isTestMode: true);
@@ -76,7 +78,7 @@ void main() {
 
     testWidgets('OwnersResidentsModulePage renders KPIs, filter chips, and unit cards', (tester) async {
       await tester.pumpWidget(MaterialApp(
-        home: OwnersResidentsModulePage(controller: controller),
+        home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
 
@@ -107,7 +109,7 @@ void main() {
     testWidgets('unit directory row exposes separate actions and details targets', (tester) async {
       final unit = controller.homeOwners.first;
       await tester.pumpWidget(MaterialApp(
-        home: OwnersResidentsModulePage(controller: controller),
+        home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
 
@@ -125,7 +127,7 @@ void main() {
     testWidgets('OwnersResidentsModulePage restores the unit directory search query', (tester) async {
       await tester.pumpWidget(MaterialApp(
         restorationScopeId: 'owners_residents_module_test',
-        home: OwnersResidentsModulePage(controller: controller),
+        home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
 
@@ -190,7 +192,7 @@ void main() {
 
     testWidgets('OwnersResidentsModulePage supports designating primary responsible resident', (tester) async {
       await tester.pumpWidget(MaterialApp(
-        home: OwnersResidentsModulePage(controller: controller),
+        home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
 
@@ -225,7 +227,7 @@ void main() {
 
     testWidgets('OwnersResidentsModulePage tab switching toggles Sakinler and Kat Maliki views', (tester) async {
       await tester.pumpWidget(MaterialApp(
-        home: OwnersResidentsModulePage(controller: controller),
+        home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
 
@@ -270,7 +272,7 @@ void main() {
 
     testWidgets('OwnersResidentsModulePage allows adding co-resident and shows occupancy history', (tester) async {
       await tester.pumpWidget(MaterialApp(
-        home: OwnersResidentsModulePage(controller: controller),
+        home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
 
@@ -334,7 +336,7 @@ void main() {
       controller.homeOwners.insert(0, ownerOccupiedUnit);
 
       await tester.pumpWidget(MaterialApp(
-        home: OwnersResidentsModulePage(controller: controller),
+        home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
 
@@ -348,7 +350,7 @@ void main() {
 
     testWidgets('OwnersResidentsModulePage allows defining Kat Maliki (Owner) vs Kiracı (Renter) when adding new resident', (tester) async {
       await tester.pumpWidget(MaterialApp(
-        home: OwnersResidentsModulePage(controller: controller),
+        home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
 
@@ -373,9 +375,7 @@ void main() {
 
       // Fill Kat Maliki and Unit details: Blok B Daire 99
       await tester.enterText(find.byKey(const Key('module_new_resident_unit')), '99');
-      await tester.enterText(find.byKey(const Key('module_new_resident_name')), 'Selim Evsahibi');
-      await tester.enterText(find.byKey(const Key('module_new_resident_phone')), '0532 888 77 66');
-      await tester.enterText(find.byKey(const Key('module_new_resident_email')), 'selim@example.com');
+      await pickPerson(tester, 'module_new_resident_name', 1);
       await tester.pumpAndSettle();
 
       // Now switch occupancy status to 'Daire Kirada' (Tenant Occupied)
@@ -385,12 +385,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify Kiracı fields appear
-      final tenantNameField = find.byKey(const Key('module_new_tenant_name'));
-      expect(tenantNameField, findsOneWidget);
-      await tester.ensureVisible(tenantNameField);
-      await tester.enterText(tenantNameField, 'Canan Kiracı');
-      await tester.enterText(find.byKey(const Key('module_new_tenant_phone')), '0533 999 88 77');
-      await tester.enterText(find.byKey(const Key('module_new_tenant_email')), 'canan@example.com');
+      expect(find.byKey(const Key('module_new_tenant_name')), findsOneWidget);
+      await pickPerson(tester, 'module_new_tenant_name', 2);
       await tester.pumpAndSettle();
 
       // Save new resident
@@ -407,9 +403,10 @@ void main() {
       expect(registered.isTenantOccupied, isTrue);
     });
 
+    // covers: SC-12-06-02
     testWidgets('OwnersResidentsModulePage allows defining or switching occupancy mode in Edit dialog', (tester) async {
       await tester.pumpWidget(MaterialApp(
-        home: OwnersResidentsModulePage(controller: controller),
+        home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
 
@@ -429,6 +426,10 @@ void main() {
       expect(find.descendant(of: roleSelector, matching: find.text('Kiracı Oturuyor')), findsOneWidget);
       expect(find.descendant(of: roleSelector, matching: find.text('Malik Oturuyor')), findsOneWidget);
       expect(find.descendant(of: roleSelector, matching: find.text('Boş Daire')), findsOneWidget);
+
+      // Identity is edited on the person card: the form has no person text inputs.
+      expect(find.byType(TextField), findsNothing);
+      expect(find.byKey(const Key('module_edit_owner_person_card')), findsOneWidget);
 
       // Switch to Malik Oturuyor (Owner Occupied)
       await tester.ensureVisible(find.descendant(of: roleSelector, matching: find.text('Malik Oturuyor')));
@@ -474,7 +475,7 @@ void main() {
       controller.homeOwners.insert(0, vacantUnit);
 
       await tester.pumpWidget(MaterialApp(
-        home: OwnersResidentsModulePage(controller: controller),
+        home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
 
@@ -491,8 +492,8 @@ void main() {
       // STORY-08-06: the tenant form has no role switch and no owner fields.
       expect(find.text('Kiracı Girişi (Move-In)'), findsOneWidget);
       expect(find.byKey(const Key('module_move_in_role_selector')), findsNothing);
-      expect(find.text('Kiracı Ad Soyad *'), findsOneWidget);
-      expect(find.text('Kat Maliki Ad Soyad *'), findsNothing);
+      expect(find.byKey(const Key('module_move_in_pick_existing_btn')), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
       await tester.tap(find.text(AppStrings.cancel));
       await tester.pumpAndSettle();
 
@@ -515,7 +516,7 @@ void main() {
 
     testWidgets('OwnersResidentsModulePage enforces resident owner exclusivity and saves dynamic co-residents on add form', (tester) async {
       await tester.pumpWidget(MaterialApp(
-        home: OwnersResidentsModulePage(controller: controller),
+        home: OwnersResidentsModulePage(controller: controller, personRepository: people),
       ));
       await tester.pumpAndSettle();
 
@@ -541,9 +542,7 @@ void main() {
 
       // Fill Kat Maliki fields: Blok A Daire 105
       await tester.enterText(find.byKey(const Key('module_new_resident_unit')), '105');
-      await tester.enterText(find.byKey(const Key('module_new_resident_name')), 'Burak Demir');
-      await tester.enterText(find.byKey(const Key('module_new_resident_phone')), '0533 123 45 67');
-      await tester.enterText(find.byKey(const Key('module_new_resident_email')), 'burak@example.com');
+      await pickPerson(tester, 'module_new_resident_name', 3);
       await tester.pumpAndSettle();
 
       // Tap "+ Hane Sakini Ekle" to add a co-resident
@@ -553,13 +552,10 @@ void main() {
 
       // Verify co-resident row appeared
       expect(find.text('Hane Sakini #1'), findsOneWidget);
-      expect(find.text('Ad Soyad *'), findsOneWidget);
+      expect(find.byKey(const Key('module_new_member_person_0')), findsOneWidget);
 
-      // Enter co-resident details (Spouse)
-      final coResidentNameField = find.widgetWithText(TextField, 'Ad Soyad *');
-      await tester.ensureVisible(coResidentNameField);
-      await tester.enterText(coResidentNameField, 'Selin Demir');
-      await tester.pumpAndSettle();
+      // Choose the co-resident (Spouse) from the shared person picker
+      await pickPerson(tester, 'module_new_member_person_0', 4);
 
       // Save new resident and household co-resident
       final saveBtn = find.byKey(const Key('module_save_new_resident_btn'));

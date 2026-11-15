@@ -11,14 +11,16 @@ class _ResponsibleChoice {
   final String phone;
   final String email;
   final String? memberId;
+  final int? personId;
 
   const _ResponsibleChoice(
     this.name,
     this.role,
     this.phone,
-    this.email, [
+    this.email, {
     this.memberId,
-  ]);
+    this.personId,
+  });
 
   String get label => switch (role) {
     'OWNER' => '$name • Kat Maliki',
@@ -33,14 +35,28 @@ Future<void> showResponsibleContactSelection(
   DashboardController controller,
   HomeOwnerItem unit,
 ) async {
+  // Person cards identify the contact; the active occupancy rows carry the owner and tenant ids.
+  final history = await controller.fetchOccupancyHistory(unit.unitId);
+  if (!context.mounted) return;
+  int? activePersonId(DebtorType role) => history
+      .where((h) => h.isActive && h.debtorRole == role && h.personId > 0)
+      .map((h) => h.personId)
+      .firstOrNull;
   final choices = [
-    _ResponsibleChoice(unit.ownerFullName, 'OWNER', unit.phone, unit.email),
+    _ResponsibleChoice(
+      unit.ownerFullName,
+      'OWNER',
+      unit.phone,
+      unit.email,
+      personId: activePersonId(DebtorType.owner),
+    ),
     if (unit.isTenantOccupied && unit.tenantFullName?.isNotEmpty == true)
       _ResponsibleChoice(
         unit.tenantFullName!,
         'TENANT',
         unit.tenantPhone ?? '',
         unit.tenantEmail ?? '',
+        personId: activePersonId(DebtorType.tenant),
       ),
     for (final member in unit.householdResidents)
       _ResponsibleChoice(
@@ -48,7 +64,8 @@ Future<void> showResponsibleContactSelection(
         'RESIDENT',
         member.phone,
         member.email,
-        member.id,
+        memberId: member.id,
+        personId: member.personId,
       ),
   ];
   final role =
@@ -86,6 +103,7 @@ Future<void> showResponsibleContactSelection(
     phone: choice.phone,
     email: choice.email,
     memberId: choice.memberId,
+    personId: choice.personId,
   );
   if (!context.mounted) return;
   if (saved) {

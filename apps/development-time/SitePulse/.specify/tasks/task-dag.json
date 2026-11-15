@@ -686,7 +686,8 @@
         "tenant-lint",
         "logging-standards-lint"
       ],
-      "attempts": 0
+      "attempts": 0,
+      "evidence": ".specify/evidence/task-33.json"
     },
     {
       "id": "task-34",
@@ -931,9 +932,9 @@
         "logging-standards-lint"
       ],
       "acceptance_tests": [
-        "scenario:SC-12-06-01",
-        "scenario:SC-12-06-02",
-        "scenario:SC-12-06-03"
+        "scenario:SC-12-07-01",
+        "scenario:SC-12-07-02",
+        "scenario:SC-12-07-03"
       ],
       "attempts": 0
     },

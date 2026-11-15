@@ -15,9 +15,9 @@ import 'package:sitepulse/ui/dashboard/dashboard_controller.dart';
 import 'package:sitepulse/ui/residents/owners_residents_module_page.dart';
 import 'test_fixtures.dart';
 
-// covers: SC-12-06-01
-// covers: SC-12-06-02
-// covers: SC-12-06-03
+// covers: SC-12-07-01
+// covers: SC-12-07-02
+// covers: SC-12-07-03
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -124,7 +124,7 @@ void main() {
 
     void popRoute(WidgetTester tester) => tester.state<NavigatorState>(find.byType(Navigator).first).pop();
 
-    // covers: SC-12-06-01
+    // covers: SC-12-07-01
     testWidgets('unit to person to unit keeps list state and returns focus to the unit row', (tester) async {
       await openWorkspace(tester);
       await openCard(tester);
@@ -151,7 +151,7 @@ void main() {
       expect(tester.widget<OutlinedButton>(actionsBtn).focusNode?.hasFocus, isTrue);
     });
 
-    // covers: SC-12-06-02
+    // covers: SC-12-07-02
     testWidgets('a card edit updates the owner role shown on the unit', (tester) async {
       await openWorkspace(tester);
       await openCard(tester);
@@ -172,7 +172,7 @@ void main() {
       expect(find.text('Kemal Yeni Soyad'), findsWidgets);
     });
 
-    // covers: SC-12-06-03
+    // covers: SC-12-07-03
     testWidgets('a person without a login can be given one from the card', (tester) async {
       await openWorkspace(tester);
       await openCard(tester);
@@ -184,7 +184,7 @@ void main() {
       expect(calls, contains('POST /api/v1/site-admin/persons/77/login'));
     });
 
-    // covers: SC-12-06-03
+    // covers: SC-12-07-03
     testWidgets('person-first role action selects the unit and opens its workspace', (tester) async {
       await openWorkspace(tester);
       await openCard(tester);

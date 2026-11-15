@@ -16,6 +16,7 @@ class SpPersonField extends StatefulWidget {
   final PersonSummary? initialPerson;
   final ValueChanged<PersonRef?> onChanged;
   final VoidCallback? onOpenPerson;
+  final ValueChanged<PersonSummary>? onResolved;
   final String id;
 
   const SpPersonField({
@@ -27,6 +28,7 @@ class SpPersonField extends StatefulWidget {
     this.value,
     this.initialPerson,
     this.onOpenPerson,
+    this.onResolved,
     this.id = 'sp_person_field',
   });
 
@@ -84,6 +86,7 @@ class _SpPersonFieldState extends State<SpPersonField> {
         _person = person;
         _loading = false;
       });
+      widget.onResolved?.call(person!);
       widget.onChanged(selected);
     } catch (_) {
       if (mounted) setState(() => _loading = false);

@@ -223,6 +223,8 @@ impl PersonService {
         query: &PersonSearchQuery,
     ) -> Result<PersonSearchResponse, PersonApiError> {
         let limit = query.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
+        let page = query.page.unwrap_or(1).max(1);
+        let offset = page.saturating_sub(1).saturating_mul(limit);
         let term = query.q.as_deref().unwrap_or_default().trim().to_lowercase();
         let digits: String = term.chars().filter(char::is_ascii_digit).collect();
         let client = self.pool()?.get().await.map_err(storage)?;
@@ -239,8 +241,10 @@ impl PersonService {
             .get(0);
         let rows = client
             .query(
-                &format!("{CARD_SELECT}{filter} ORDER BY lower(full_name), person_id LIMIT $4"),
-                &[&site, &term, &digits, &limit],
+                &format!(
+                    "{CARD_SELECT}{filter} ORDER BY lower(full_name), person_id LIMIT $4 OFFSET $5"
+                ),
+                &[&site, &term, &digits, &limit, &offset],
             )
             .await
             .map_err(storage)?;
@@ -259,7 +263,7 @@ impl PersonService {
         Ok(PersonSearchResponse {
             items,
             total,
-            page: 1,
+            page,
             page_size: limit,
         })
     }

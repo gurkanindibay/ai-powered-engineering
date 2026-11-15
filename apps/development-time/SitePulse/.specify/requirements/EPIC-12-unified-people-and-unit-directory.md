@@ -78,7 +78,19 @@ Executable scenarios: [STORY-12-04-people-directory.feature](../features/EPIC-12
 
 Executable scenarios: [STORY-12-05-person-card-api.feature](../features/EPIC-12/STORY-12-05-person-card-api.feature).
 
-### STORY-12-06: Person card and cross-navigation
+### STORY-12-06: Unit actions choose people through person cards
+- **Status:** IN PROGRESS
+- **Task Ref:** task-42 / GitHub issue #99
+- **Description:** Connect the shared person field to the person API and replace inline person inputs in registration, move-in, title transfer, household and primary-contact actions; unit edit shows owner and tenant identity read-only and opens the person card.
+- **Acceptance Criteria:**
+  - Action pages keep no person text inputs; people are chosen or created through the shared person field.
+  - Registration sends owner, tenant and household members as person references.
+  - The primary contact is selected by person id.
+- **Verification:** flutter analyze and tests, reuse, test-id and style lints.
+
+Executable scenarios: [STORY-12-06-unit-action-person-inputs.feature](../features/EPIC-12/STORY-12-06-unit-action-person-inputs.feature).
+
+### STORY-12-07: Person card and cross-navigation
 - **Status:** IN PROGRESS
 - **Task Ref:** task-43 / GitHub issue #100
 - **Description:** Expand the person card with edit, login, unit links and role actions that start from the person; unit tabs link to the person card.
@@ -88,4 +100,4 @@ Executable scenarios: [STORY-12-05-person-card-api.feature](../features/EPIC-12/
   - A person without a login can be given one from the card; role actions ask for the unit with the person fixed.
 - **Verification:** targeted Flutter tests, cargo build, Flutter analysis, shared-component reuse, UI style, test ID, and logging standards checks.
 
-Executable scenarios: [STORY-12-06-person-card-navigation.feature](../features/EPIC-12/STORY-12-06-person-card-navigation.feature).
+Executable scenarios: [STORY-12-07-person-card-navigation.feature](../features/EPIC-12/STORY-12-07-person-card-navigation.feature).

@@ -52,9 +52,12 @@ extension DashboardControllerResidents on DashboardController {
   Future<void> registerHomeOwner({
     required String block,
     required int unitNo,
-    required String ownerName,
-    required String email,
-    required String phone,
+    String ownerName = '',
+    String email = '',
+    String phone = '',
+    PersonRef? ownerRef,
+    PersonRef? tenantRef,
+    List<RegistrationMember> members = const [],
     String? tenantFullName,
     String? tenantEmail,
     String? tenantPhone,
@@ -89,12 +92,19 @@ extension DashboardControllerResidents on DashboardController {
             'block': block,
             'unit_no': unitNo,
             'floor': ((unitNo - 1) ~/ 4) + 1,
-            'owner_full_name': ownerName,
-            'email': email,
-            'phone': phone,
-            'tenant_full_name': tenantFullName,
-            'tenant_email': tenantEmail,
-            'tenant_phone': tenantPhone,
+            if (ownerRef != null) 'owner': ownerRef.toJson(),
+            if (tenantRef != null) 'tenant': tenantRef.toJson(),
+            if (members.isNotEmpty)
+              'members': [
+                for (final m in members)
+                  {'person': m.person.toJson(), 'relationship': m.relationship},
+              ],
+            if (ownerRef == null) 'owner_full_name': ownerName,
+            if (ownerRef == null) 'email': email,
+            if (ownerRef == null) 'phone': phone,
+            if (tenantRef == null) 'tenant_full_name': tenantFullName,
+            if (tenantRef == null) 'tenant_email': tenantEmail,
+            if (tenantRef == null) 'tenant_phone': tenantPhone,
             // F3: the entered share; without one the server uses the site's usual share and says so.
             if (landShare != null) 'land_share': '$landShare',
             // F4: only a known tariff is sent; otherwise the server applies and reports its default.
@@ -310,6 +320,17 @@ extension DashboardControllerResidents on DashboardController {
       }
     }
 
+    for (final member in members) {
+      await addHouseholdMember(
+        unitId: targetUnitId,
+        block: block,
+        unitNo: unitNo,
+        fullName: member.fullName,
+        phone: member.phone,
+        email: member.email,
+        relationship: member.relationship,
+      );
+    }
     notify();
   }
 
@@ -591,6 +612,7 @@ extension DashboardControllerResidents on DashboardController {
     String? email,
     String? siteId,
     String? memberId,
+    int? personId,
   }) async {
     final index = _homeOwners.indexWhere((unit) => unit.unitId == unitId);
     if (index == -1) return false;
@@ -607,6 +629,7 @@ extension DashboardControllerResidents on DashboardController {
           url,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
+            if (personId != null) 'person_id': personId,
             'role': role,
             'resident_name': residentName,
             if (memberId != null) 'member_id': memberId,
@@ -841,6 +864,7 @@ extension DashboardControllerResidents on DashboardController {
     required String phone,
     required String email,
     required String relationship,
+    PersonRef? person,
   }) async {
     final effectiveUnitId = unitId ?? (_activeUnit.id.isNotEmpty ? _activeUnit.id : (_activeUnit.unitNumber.isNotEmpty ? _activeUnit.unitNumber : '1'));
     final effectiveBlock = block ?? (_activeUnit.block.isNotEmpty ? _activeUnit.block : 'A');
@@ -854,9 +878,10 @@ extension DashboardControllerResidents on DashboardController {
           memberUrl,
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
-            'full_name': fullName,
-            'phone': phone,
-            'email': email,
+            if (person != null) 'person': person.toJson(),
+            if (person == null) 'full_name': fullName,
+            if (person == null) 'phone': phone,
+            if (person == null) 'email': email,
             'relationship': relationship,
           }),
         ).timeout(const Duration(seconds: 4));
@@ -917,6 +942,7 @@ extension DashboardControllerResidents on DashboardController {
     String? email,
     String? phone,
     int? ownerPersonId,
+    PersonRef? person,
     String? notes,
   }) async {
     final effectiveSiteId = _currentManagedSite?.id ?? (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : '1');
@@ -928,6 +954,7 @@ extension DashboardControllerResidents on DashboardController {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'command': command.code,
+            if (person != null) 'person': person.toJson(),
             'person_id': ?personId,
             'full_name': ?fullName,
             'email': ?email,
@@ -1443,11 +1470,13 @@ extension DashboardControllerResidents on DashboardController {
     String? notes,
     String? siteId,
     bool newOwnerMovesIn = false,
+    PersonRef? newOwner,
   }) async {
     final effectiveSiteId = siteId ?? _currentManagedSite?.id ?? '';
     final payload = {
       // STORY-08-09: an owner-occupied unit becomes vacant unless the new owner moves in.
       'new_owner_moves_in': newOwnerMovesIn,
+      if (newOwner?.personId != null) 'new_owner_person_id': newOwner!.personId,
       'site_id': effectiveSiteId,
       'unit_id': unitId,
       'new_owner_name': newOwnerName,
