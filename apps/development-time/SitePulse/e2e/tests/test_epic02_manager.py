@@ -104,7 +104,7 @@ def test_resident_without_history_can_be_deleted(login_as, page, stack):
 
     UnitWorkspace(page).close()
     before = set(ResidentsTab(page).open().unit_card_ids())
-    # The card outlives the deleted unit, so registering her again reuses it.
+    # Registering her again reuses her card when the duplicate check still offers it.
     ResidentsTab(page).start_add().fill(
         unit_no="26", full_name="Fatma Şahin", email="fatma.sahin@e2e.test", phone="05321234567",
         reuse_existing=True).save()

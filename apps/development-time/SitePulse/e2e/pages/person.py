@@ -27,8 +27,8 @@ class PersonPicker:
     def create(self, full_name: str, phone: str = "", email: str = "", reuse_existing: bool = False) -> None:
         """Create a new card from the picker and choose it.
 
-        With `reuse_existing`, the card the duplicate check offers for the typed data is chosen
-        instead (the form refuses to create a second card with the same e-mail).
+        With `reuse_existing`, a card the duplicate check offers for the typed data is chosen
+        instead when there is one (the form refuses a second card with the same e-mail).
         """
         self._open()
         by_id(self.page, "sp_person_create").click()
@@ -40,9 +40,8 @@ class PersonPicker:
             fill(self.page, "person_form_email", email)
         self.page.wait_for_timeout(400)  # the duplicate check starts after a 350 ms pause
         by_id(self.page, "person_form_checking").wait_for(state="detached", timeout=15_000)
-        if reuse_existing:
-            candidate = by_id_prefix(self.page, "person_form_use_").first
-            candidate.wait_for(timeout=10_000)
+        candidate = by_id_prefix(self.page, "person_form_use_").first
+        if reuse_existing and candidate.count() > 0:
             candidate.click()
         else:
             by_id(self.page, "person_form_save").click()
