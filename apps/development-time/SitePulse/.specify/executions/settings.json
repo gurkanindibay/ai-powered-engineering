@@ -1,0 +1,4 @@
+{
+  "require_recorded_run": false,
+  "_comment": "Gate test-run-recorded: true makes every task branch that changes behaviour commit a recorded run (gui_e2e.py run --record). False while CI runs the suite on every PR and uploads the report as artifact e2e-test-report. Env SITEPULSE_REQUIRE_RECORDED_RUN overrides."
+}

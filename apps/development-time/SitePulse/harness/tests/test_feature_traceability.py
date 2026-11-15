@@ -1,12 +1,14 @@
 """Self-tests for scripts/feature_traceability.py and the .specify/features catalogue."""
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "feature_traceability.py"
 spec = importlib.util.spec_from_file_location("feature_traceability", SCRIPT)
@@ -255,7 +257,7 @@ class StoreTests(unittest.TestCase):
             rules = repo / "impact-map.json"
             rules.write_text(IMPACT_MAP, encoding="utf-8")
             catalogue, store = ft.load_catalogue(repo), ft.DirStore(repo / "history")
-            check = lambda: ft.require_run(catalogue, store, repo, rules)  # noqa: E731
+            check = lambda: ft.require_run(catalogue, store, repo, rules, required=True)  # noqa: E731
             self.assertEqual(check()[0], [])  # main branch
             git(repo, "checkout", "-q", "-b", "task-1")
             (repo / "notes.md").write_text("docs only\n", encoding="utf-8")
@@ -297,6 +299,22 @@ class StoreTests(unittest.TestCase):
             selection = ft.affected(catalogue, repo, rules)
             self.assertEqual(selection["mode"], "full")
             self.assertTrue(any("maps to no epic" in reason for reason in selection["reasons"]))
+
+    def test_recorded_run_switch_reads_env_then_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = Path(tmp) / "settings.json"
+            with mock.patch.dict(os.environ, {ft.REQUIRE_RUN_ENV: ""}):
+                self.assertTrue(ft.recorded_run_required(settings))  # no file: on
+                settings.write_text('{"require_recorded_run": false}', encoding="utf-8")
+                self.assertFalse(ft.recorded_run_required(settings))
+            with mock.patch.dict(os.environ, {ft.REQUIRE_RUN_ENV: "1"}):
+                self.assertTrue(ft.recorded_run_required(settings))
+            with mock.patch.dict(os.environ, {ft.REQUIRE_RUN_ENV: "false"}):
+                settings.write_text('{"require_recorded_run": true}', encoding="utf-8")
+                self.assertFalse(ft.recorded_run_required(settings))
+                problems, note = ft.require_run(ft.load_catalogue(), ft.DirStore(Path(tmp) / "none"))
+                self.assertEqual(problems, [])
+                self.assertIn("switched off", note)
 
     def test_run_metadata_shape(self):
         meta = ft.run_metadata(now=datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc), trigger="ci")

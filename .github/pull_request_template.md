@@ -9,12 +9,12 @@
 ## Test report
 
 <!--
-Required for every PR that changes SitePulse behaviour (AGENTS.md rule 13). Replace this comment with the output of:
+CI runs the affected tests on every PR and publishes the report: the stats are on the
+`test-report` job's summary page, the full report and HTML dashboard are artifact `e2e-test-report`
+(AGENTS.md rule 13). Link the CI run here, or write "See CI". Docs-only PR: "Not required: no behaviour change".
 
-    python3 apps/development-time/SitePulse/scripts/gui_e2e.py run --affected --record --task "<task>"
-    python3 apps/development-time/SitePulse/scripts/feature_traceability.py task-report
-
-and commit the new files under apps/development-time/SitePulse/.specify/executions/.
-If the suite could not run in your environment, say so here with the reason. Never paste a report you did not produce.
-Docs-only PR: write "Not required: no behaviour change".
+Only when recorded runs are switched back on (`require_recorded_run` in
+apps/development-time/SitePulse/.specify/executions/settings.json, or SITEPULSE_REQUIRE_RECORDED_RUN=1):
+paste the output of `feature_traceability.py task-report` after `gui_e2e.py run --affected --record --task "<task>"`
+and commit the new files under .specify/executions/.
 -->
