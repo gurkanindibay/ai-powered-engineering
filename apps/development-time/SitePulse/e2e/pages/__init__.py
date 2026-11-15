@@ -9,8 +9,9 @@ from .shell import ProfileSheet, Shell
 from .resident import ResidentHome
 from .manager import (AddResidentForm, CapitalProjects, DuesManagement, ImportSummary, ManagerCockpit, Occupancy,
                       PaymentStream, ResidentsTab)
+from .person import PersonPicker, UnitWorkspace
 from .saas import AddSiteForm, SaasAdmin, SiteCredentials
 
 __all__ = ["LoginPage", "Shell", "ProfileSheet", "ResidentHome", "ManagerCockpit", "ResidentsTab", "DuesManagement",
            "AddResidentForm", "ImportSummary", "PaymentStream", "CapitalProjects", "Occupancy", "SaasAdmin",
-           "AddSiteForm", "SiteCredentials"]
+           "AddSiteForm", "SiteCredentials", "PersonPicker", "UnitWorkspace"]

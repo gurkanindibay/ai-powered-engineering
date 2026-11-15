@@ -92,78 +92,34 @@ void main() {
       ]);
     });
 
-    testWidgets('Manuel Sakin Ekle dialog validates required fields, email and phone', (tester) async {
+    // REQ-042: the manager registers a unit in the owners & residents module, which chooses the
+    // owner with the shared person picker; the page has no name, phone or email inputs.
+    testWidgets('Manuel Sakin Ekle opens the module registration with a person picker', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1024, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: DashboardScreen(controller: controller),
-          ),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: DashboardScreen(controller: controller))));
       await tester.pumpAndSettle();
 
-      // Tap 'Manuel Sakin Ekle' button
       final addResidentBtn = find.text('Manuel Sakin Ekle').first;
-      expect(addResidentBtn, findsOneWidget);
       await tester.ensureVisible(addResidentBtn);
       await tester.pumpAndSettle();
       await tester.tap(addResidentBtn);
       await tester.pumpAndSettle();
 
-      // Full screen page should be open
-      expect(find.text('Yeni Daire / Sakin Ekle'), findsOneWidget);
-      expect(find.text('Konut Tipi (Daire Tipi)'), findsOneWidget);
+      expect(find.text('Yeni Daire / Sakin Tanımla'), findsOneWidget);
+      expect(find.byKey(const Key('module_new_resident_name')), findsOneWidget);
+      for (final label in ['Ad Soyad', 'E-posta (Doğrulama zorunlu)', 'Telefon (Doğrulama zorunlu)']) {
+        expect(find.widgetWithText(TextField, label), findsNothing, reason: label);
+      }
 
-      // Verify that dues amount text field is NOT present, but House Type dropdown and info banner ARE present
-      expect(find.text('Aylık Aidat Tutarı (TL)'), findsNothing);
-      expect(find.text('₺1.000,00 / ay'), findsWidgets);
-
-      // Attempt to save empty form
-      final saveBtn = find.text('Kaydet & Şifre Üret');
+      // Saving without a chosen owner is refused on the page.
+      final saveBtn = find.byKey(const Key('module_save_new_resident_btn'));
       await tester.ensureVisible(saveBtn);
       await tester.pumpAndSettle();
       await tester.tap(saveBtn);
       await tester.pumpAndSettle();
-
-      // Expect general error regarding required name/unit
-      expect(find.text('Lütfen Sakin Ad Soyad ve Daire No alanlarını doldurunuz.'), findsOneWidget);
-
-      // Fill in Name and Unit
-      await tester.enterText(find.widgetWithText(TextField, 'Ad Soyad'), 'Ahmet Yılmaz');
-      await tester.enterText(find.widgetWithText(TextField, 'Daire No'), '15');
-      await tester.pumpAndSettle();
-
-      // Enter invalid email
-      await tester.enterText(find.widgetWithText(TextField, 'E-posta (Doğrulama zorunlu)'), 'invalid-email');
-      await tester.ensureVisible(saveBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(saveBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Geçerli bir e-posta adresi girin (ör. ad@ornek.com).'), findsOneWidget);
-
-      // Enter valid email and invalid phone
-      await tester.enterText(find.widgetWithText(TextField, 'E-posta (Doğrulama zorunlu)'), 'ahmet@example.com');
-      await tester.enterText(find.widgetWithText(TextField, 'Telefon (Doğrulama zorunlu)'), '1234');
-      await tester.ensureVisible(saveBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(saveBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Geçerli bir cep telefonu girin (ör. 0532 123 45 67).'), findsOneWidget);
-
-      // Enter valid phone (Turkish mobile format)
-      await tester.enterText(find.widgetWithText(TextField, 'Telefon (Doğrulama zorunlu)'), '0532 555 11 22');
-      await tester.ensureVisible(saveBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(saveBtn);
-      await tester.pumpAndSettle();
-
-      // Should submit successfully and close the dialog
-      expect(find.text('Yeni Daire / Sakin Ekle'), findsNothing);
+      expect(find.text('Lütfen geçerli bir Daire No giriniz ve Kat Maliki kişisini seçiniz.'), findsOneWidget);
     });
 
     testWidgets('Opening Konut Tipleri & Tarifeler dialog displays tariffs and allows management', (tester) async {
@@ -233,19 +189,13 @@ void main() {
       expect(find.text('Penthouse'), findsNothing);
     });
 
-    testWidgets('Manuel Sakin Ekle dialog presents blocks in dropdown and allows block selection', (tester) async {
+    testWidgets('Manuel Sakin Ekle registration presents blocks in a dropdown', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1024, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       controller.setBlocksForTesting(['A Blok', 'B Blok', 'C Blok']);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: DashboardScreen(controller: controller),
-          ),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: DashboardScreen(controller: controller))));
       await tester.pumpAndSettle();
 
       final addResidentBtn = find.text('Manuel Sakin Ekle').first;
@@ -254,14 +204,8 @@ void main() {
       await tester.tap(addResidentBtn);
       await tester.pumpAndSettle();
 
-      // Verify that block dropdown is present instead of free-text field
-      final blockDropdown = find.byKey(const Key('add_resident_block_dropdown'));
+      final blockDropdown = find.byKey(const Key('module_new_resident_block'));
       expect(blockDropdown, findsOneWidget);
-
-      // Verify default selection or options
-      expect(find.text('A Blok'), findsWidgets);
-
-      // Tap dropdown to open options
       await tester.ensureVisible(blockDropdown);
       await tester.pumpAndSettle();
       await tester.tap(blockDropdown);
@@ -269,27 +213,9 @@ void main() {
 
       expect(find.text('B Blok'), findsWidgets);
       expect(find.text('C Blok'), findsWidgets);
-
-      // Select B Blok
-      await tester.ensureVisible(find.text('B Blok').last);
-      await tester.pumpAndSettle();
       await tester.tap(find.text('B Blok').last);
       await tester.pumpAndSettle();
-
-      // Fill in remaining fields
-      await tester.enterText(find.widgetWithText(TextField, 'Ad Soyad'), 'Zeynep Kaya');
-      await tester.enterText(find.widgetWithText(TextField, 'Daire No'), '12');
-      await tester.enterText(find.widgetWithText(TextField, 'E-posta (Doğrulama zorunlu)'), 'zeynep@kaya.com');
-      await tester.enterText(find.widgetWithText(TextField, 'Telefon (Doğrulama zorunlu)'), '0544 111 22 33');
-
-      final saveBtn = find.text('Kaydet & Şifre Üret');
-      await tester.ensureVisible(saveBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(saveBtn);
-      await tester.pumpAndSettle();
-
-      // Dialog should close successfully
-      expect(find.text('Yeni Daire / Sakin Ekle'), findsNothing);
+      expect(find.text('B Blok'), findsWidgets);
     });
 
     testWidgets('SaaS Add Site Dialog allows defining blocks list for new site', (tester) async {

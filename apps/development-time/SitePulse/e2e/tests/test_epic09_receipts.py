@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from pages import ManagerCockpit, PaymentStream, ResidentHome, ResidentsTab
+from pages import ManagerCockpit, PaymentStream, ResidentHome, ResidentsTab, UnitWorkspace
 from support.flutter import by_id, by_id_prefix, text_of
 from support.money import last_amount
 
@@ -80,10 +80,7 @@ def test_tenant_statement_lists_operational_items_only(login_as, page, api, acto
     login_as("manager")
     ManagerCockpit(page).wait()
     ResidentsTab(page).open()
-    btn = by_id(page, f"unit_actions_{b3}")
-    if btn.count() > 0:
-        btn.click()
-    by_id(page, f"btn_statement_{b3}").click()
+    UnitWorkspace(page).open(b3).action(b3, "statement")
     tenant = by_id(page, "statement_debtor_tenant")
     tenant.wait_for(timeout=15_000)
     tenant_text = text_of(tenant)

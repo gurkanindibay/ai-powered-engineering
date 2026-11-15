@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from pages import ManagerCockpit, Occupancy, ResidentsTab
+from pages import ManagerCockpit, Occupancy, PersonPicker, ResidentsTab, UnitWorkspace
 
 
 def _unit_id(stack, block: str, number: int) -> str:
@@ -57,7 +57,7 @@ def test_tenant_move_out_keeps_history_and_debt(login_as, page, api, actors, bui
 # ---------------------------------------------------------------- P1 (core)
 
 from pages import CapitalProjects, DuesManagement, Shell  # noqa: E402
-from support.flutter import by_id, by_id_prefix, fill, text_of  # noqa: E402
+from support.flutter import by_id, by_id_prefix, text_of  # noqa: E402
 
 
 @pytest.mark.core
@@ -118,12 +118,7 @@ def test_history_lists_previous_tenant_with_exit_balance_and_the_new_one(login_a
     ManagerCockpit(page).wait()
     ResidentsTab(page).open()
 
-    btn = by_id(page, f"unit_actions_{b3}")
-    if btn.count() > 0:
-        btn.click()
-        by_id(page, f"history_ho_{b3}").click()
-    else:
-        by_id(page, f"module_history_ho_{b3}").click()
+    UnitWorkspace(page).open(b3).action(b3, "history")
     by_id_prefix(page, "history_item_").first.wait_for(timeout=10_000)
     items = [text_of(by_id_prefix(page, "history_item_").nth(i))
              for i in range(by_id_prefix(page, "history_item_").count())]
@@ -138,6 +133,7 @@ def test_history_lists_previous_tenant_with_exit_balance_and_the_new_one(login_a
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-06")
 @pytest.mark.covers("SC-08-05-01")
+@pytest.mark.covers("SC-12-06-04")
 def test_ownership_transfer_keeps_the_previous_owner_in_history(login_as, page, stack, actors):
     a14 = _unit_id(stack, "A Blok", 14)
     old_owner = stack.sql(f"SELECT owner_person_id FROM units WHERE id = {int(a14)};")
@@ -147,14 +143,12 @@ def test_ownership_transfer_keeps_the_previous_owner_in_history(login_as, page, 
     Shell(page).verify_sensitive(actors["manager"]["password"])
     ResidentsTab(page).open()
 
-    btn = by_id(page, f"unit_actions_{a14}")
-    if btn.count() > 0:
-        btn.click()
-    by_id(page, f"transfer_ownership_{a14}").click()
+    UnitWorkspace(page).open(a14).action(a14, "transfer_ownership")
     by_id(page, "module_transfer_new_owner_name_input").wait_for(timeout=10_000)
-    fill(page, "module_transfer_new_owner_name_input", "Selim Evsahibi")
-    fill(page, "module_transfer_new_owner_phone_input", "+90 532 555 66 77")
-    fill(page, "module_transfer_new_owner_email_input", "selim.evsahibi@e2e.test")
+    for legacy in ("module_transfer_new_owner_phone_input", "module_transfer_new_owner_email_input"):
+        assert by_id(page, legacy).count() == 0, legacy  # REQ-042: no person text inputs
+    PersonPicker(page, "module_transfer_new_owner_name_input").create(
+        "Selim Evsahibi", phone="+90 532 555 66 77", email="selim.evsahibi@e2e.test")
     by_id(page, "module_confirm_transfer_ownership_btn").click()
     by_id(page, "module_confirm_transfer_ownership_btn").wait_for(state="detached", timeout=15_000)
 
@@ -174,13 +168,9 @@ def test_ownership_transfer_records_the_previous_owners_period(login_as, page, s
     from pages.shell import Shell
     Shell(page).verify_sensitive(actors["manager"]["password"])
     ResidentsTab(page).open()
-    btn = by_id(page, f"unit_actions_{a14}")
-    if btn.count() > 0:
-        btn.click()
-    by_id(page, f"transfer_ownership_{a14}").click()
-    by_id(page, "module_transfer_new_owner_name_input").wait_for(timeout=10_000)
-    fill(page, "module_transfer_new_owner_name_input", "Selim Evsahibi")
-    fill(page, "module_transfer_new_owner_email_input", "selim.evsahibi@e2e.test")
+    UnitWorkspace(page).open(a14).action(a14, "transfer_ownership")
+    PersonPicker(page, "module_transfer_new_owner_name_input").create(
+        "Selim Evsahibi", email="selim.evsahibi@e2e.test")
     by_id(page, "module_confirm_transfer_ownership_btn").click()
     by_id(page, "module_confirm_transfer_ownership_btn").wait_for(state="detached", timeout=15_000)
 
@@ -196,17 +186,11 @@ def two_household_members(login_as, page, stack):
     ResidentsTab(page).open()
     for name, phone, email in (("Ali Kaya", "05320000001", "ali.kaya@e2e.test"),
                                ("Can Kaya", "05320000002", "can.kaya@e2e.test")):
-        btn = by_id(page, f"add_resident_to_{a14}")
-        if btn.count() > 0:
-            btn.click()
-        else:
-            by_id(page, f"add_resident_member_to_{a14}").click()
-        by_id(page, "household_name_field").wait_for(timeout=10_000)
-        fill(page, "household_name_field", name)
-        fill(page, "household_phone_field", phone)
-        fill(page, "household_email_field", email)
-        by_id(page, "household_save_button").click()
-        by_id(page, "household_save_button").wait_for(state="detached", timeout=10_000)
+        UnitWorkspace(page).open(a14).action(a14, "add_member")
+        PersonPicker(page, "module_member_name_input").create(name, phone=phone, email=email)
+        by_id(page, "module_save_household_btn").click()
+        by_id(page, "module_save_household_btn").wait_for(state="detached", timeout=10_000)
+        UnitWorkspace(page).close()
     return a14
 
 

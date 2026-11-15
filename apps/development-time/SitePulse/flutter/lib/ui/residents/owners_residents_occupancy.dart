@@ -282,15 +282,21 @@ extension _OccupancyActions on _OwnersResidentsModulePageState {
                         separatorBuilder: (_, __) => const Divider(height: 24),
                         itemBuilder: (c, idx) {
                           final item = historyList[idx];
-                          return ListTile(
+                          final lines = [
+                            '${item.role.toUpperCase() == 'TENANT' ? 'Kiracı' : 'Kat Maliki'} • Giriş: ${item.startDate}'
+                                '${item.endDate != null ? ' • Çıkış: ${item.endDate}' : ' • Devam Ediyor'}',
+                            if (item.exitBalance > Decimal.zero) 'Kapanış Bakiyesi: ${formatTry(item.exitBalance)} Borç',
+                            if (item.notes != null && item.notes!.isNotEmpty) 'Not: ${item.notes}',
+                          ];
+                          return testId('history_item_${item.id}', ListTile(
                             leading: CircleAvatar(
                               backgroundColor: item.isActive ? AppColors.accentGreen.withOpacity(0.15) : AppColors.border(context),
                               child: Icon(item.isActive ? Icons.person : Icons.person_outline, color: item.isActive ? AppColors.accentGreen : AppColors.textSecondary(context)),
                             ),
                             title: Text(item.personName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('${item.role} • ${item.startDate} / ${item.endDate ?? "Devam Ediyor"}\n${item.notes ?? ""}'),
-                            isThreeLine: item.notes != null && item.notes!.isNotEmpty,
-                          );
+                            subtitle: Text(lines.join('\n')),
+                            isThreeLine: lines.length > 1,
+                          ));
                         },
                       )),
           );

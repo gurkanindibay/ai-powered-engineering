@@ -160,6 +160,11 @@ Any new resident list, count or filter goes through these instead of re-implemen
   visible with their server reason.
 - `SpPersonForm` is the only shared component that edits a person's name, phone or email. It checks
   duplicates, blocks a same-email candidate and requires explicit confirmation for soft matches.
+  Action, unit and registration pages never add their own name/phone/email `TextField`: the
+  `person-inputs` rule (REQ-042) fails on a `labelText`/`hintText` such as 'Ad Soyad', 'Telefon',
+  'E-posta' or a `Key('..._name_field')`-style id outside the exempt files listed in the script.
+  E2E tests drive the picker through `PersonPicker` (`e2e/pages/person.py`): `sp_person_search`,
+  `sp_person_create`, `person_form_*`, `person_form_use_<id>`, `sp_person_result_<id>`.
 - `SpPersonCard` renders a read-only person summary in `row`, `compact` or `full` size. Keep
   navigation and actions in the caller.
 - Cover shared person widgets in `flutter/test/reusable_components_test.dart` for both themes and
@@ -265,7 +270,8 @@ Run these before concluding a Flutter change. All of them are gates in `run_test
 
 ```bash
 ./scripts/flutter_reuse_inventory.py --check   # gate flutter-reuse: clipboard, money-parse, json-decimal,
-                                               # bank-amount, filter-chip, selection-page, raw-snackbar
+                                               # bank-amount, filter-chip, selection-page, raw-snackbar,
+                                               # person-inputs
 ./scripts/ui_style_lint.py                     # gate ui-style-lint: font floor, MoneyFormatter, no-popup, ratchet
 ./scripts/testid_lint.py                       # gate testid-lint
 (cd apps/development-time/SitePulse/flutter && flutter analyze && flutter test)

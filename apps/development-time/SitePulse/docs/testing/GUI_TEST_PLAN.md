@@ -69,7 +69,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | GUI-02-01 | 02-01 | Manager | P0 | api:`dues_period(site-1, paid_ratio=...)` | Cockpit shows collected amount and "%NN Tahsilat" badge equal to API totals (exact Decimal) | NEW:`cockpit_collected_amount`, `cockpit_collection_rate` | ✅ |
 | GUI-02-02 | 02-02 | Manager | P1 | api:`overdue_dues(A14)` + `paid_dues(B3)` | Unified dues center → "🔴 Geciken (n)" filter → only overdue flats listed (A Blok D:14), count equals n | `btn_open_unified_dues_center`, `segment_tab_*`, `subtab_button_*` | ◐ label is "Geciken", not "Gecikmede" |
 | GUI-02-03 | 02-03 | Manager | P0 | seed | Residents module → add new resident (block B, unit 25, "Fatma Şahin", fatma@gmail.com) → save → unit appears in the list and the unit count goes up by 1. DB check: unit exists | `btn_cockpit_manage_residents`, `module_add_new_resident_btn`, `module_new_resident_*`, `module_save_new_resident_btn` | ✅ |
-| GUI-02-04 | 02-03 | Manager | P2 | seed | Add a resident to an already occupied unit → duplicate warning ("halihazırda kayıtlı sakin") and nothing is saved | as above | ✅ |
+| GUI-02-04 | 02-03 | Manager | P2 | seed | Add a resident to an already occupied unit → duplicate warning ("halihazırda kayıtlı sakin") and the unit is unchanged (the person card chosen in the picker stays without a role) | as above, `sp_person_create`, `person_form_*` | ✅ |
 | GUI-02-05 | 02-03 | Manager | P1 | ui:GUI-02-03 | Delete that resident → confirm dialog → removed. DB check: soft-delete/archive follows the zero-data-loss rule | `btn_delete_resident_*`, `btn_confirm_delete_resident` | ✅ |
 | GUI-02-06 | 02-04 | Manager | P1 | api:`overdue_dues(A14)` | Payment tracking → "Hatırlat" on A Blok D:14 → confirmation toast | NEW:`btn_remind_*` | ❌ **confirmed gap**: "Hatırlatma SMS" is only a caption on the aging tile; no reminder or message action exists |
 | GUI-02-07 | 02-05 | Manager → Homeowner | P1 | seed | Manager creates announcement "Planlı Su Kesintisi" → visible in the manager feed → log in as homeowner → visible there | NEW:`btn_create_announcement` | ❌ **confirmed gap**: announcements are display-only; no create UI and no backend route |
@@ -130,7 +130,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | GUI-08-05 | 08-04 | Manager | P1 | ui:GUI-08-04 | Move in a new tenant → history timeline lists the previous tenant ("Left with ₺1.500,00") and the new one ("Active") | `module_history_ho_*` | ✅ |
 | GUI-08-06 | 08-05/09-07 | Manager | P1 | seed (+ optional tenant) | Transfer ownership of A Blok D:14 to "Selim Evsahibi" → new owner shown, tenant unchanged, the old owner's history kept with closing balance | `module_transfer_ownership_*`, `module_transfer_new_owner_*_input`, `module_confirm_transfer_ownership_btn` | ✅ |
 | GUI-08-07 | 08-02, 12-02 | Manager | P2 | seed | Search the residents module by name and unit | `module_search_input` | ✅ |
-| GUI-08-08 | 08-03 | Manager | P2 | ui:GUI-08-01 | Remove the tenant only (owner kept) | `remove_tenant_only_button` | ✅ |
+| GUI-08-08 | 08-03 | Manager | P2 | ui:GUI-08-01 | Remove the tenant only (owner kept): the unit workspace's move-out | `workspace_action_move_out_*`, `module_confirm_move_out_btn` | ✅ |
 | GUI-08-09 | 08-06 | Manager | P0 | ui:GUI-08-04 (tenant moved out, unit vacant) | Vacant unit → owner move-in → the confirmation names the owner on record and has no person fields → confirm → unit owner-occupied, owner unchanged. DB check: active `OWNER` occupancy for the owner, no change in `unit_ownerships` | to be defined with the UI | ❌ not built (story pending) |
 | GUI-08-10 | 08-06 | Manager | P1 | seed (vacant unit) | Vacant unit shows two separate actions, tenant move-in (person form) and owner move-in (confirmation). The tenant form has no role switch | to be defined with the UI | ❌ not built (story pending) |
 | GUI-08-11 | 08-07 | Manager | P0 | seed | Each unit card shows only the actions legal for its state: no move-out on a vacant unit, no plain move-in on an occupied unit. API check: the illegal command is rejected and nothing changes | to be defined with the UI | ❌ not built (story pending) |
@@ -369,7 +369,7 @@ All 16 P2 scenarios are automated in `e2e/tests/test_p2_edge.py` (marker `edge`)
 | GUI-06-11 Google sign-in reaches the provider | **xfail: gap**, simulated login, no OAuth redirect |
 | GUI-01-05 offline banner, balance kept | **xfail: gap**, no offline banner; `isOffline` is unused |
 | GUI-01-06 penalty detail (days, amount) | **xfail: bug**, detail says "0 Gün Gecikme" for a 10-day-old debt |
-| GUI-02-04 resident added to an occupied unit → warning, cancel saves nothing | pass |
+| GUI-02-04 resident added to an occupied unit → warning, cancel leaves the unit unchanged | pass |
 | GUI-04-07 co-resident joins via a unit invite | **xfail: bug**, "unit 2 has no active occupancy session" |
 | GUI-04-08 empty approval queue | pass (trivially, given finding 5) |
 | GUI-07-06 payer-name alias auto-matches | **xfail: bug**, the stored alias is ignored by matching |
