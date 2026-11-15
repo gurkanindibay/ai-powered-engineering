@@ -33,7 +33,11 @@ Amounts in steps are plain decimals (`500000.00`) and are parsed as `Decimal`.
 
 ## Results and history
 
-Every task records the run that verifies it (AGENTS.md rule 13):
+GitHub CI runs the suite on every PR and publishes the result: the stats on the `test-report` job's
+summary, and artifact `e2e-test-report` (markdown report, HTML dashboard of the committed history plus
+that run, merged execution records). Committing a recorded run with every task is switched off
+(`"require_recorded_run": false` in `.specify/executions/settings.json`; `SITEPULSE_REQUIRE_RECORDED_RUN=1`
+overrides it). A run can still be recorded locally (AGENTS.md rule 13):
 
 ```bash
 python3 scripts/gui_e2e.py run --affected --record --task "issue-123 virman transfer"
@@ -43,7 +47,7 @@ python3 scripts/gui_e2e.py run --affected --record --task "issue-123 virman tran
 shared code changed. The mapping from changed files to epics is `impact-map.json` in this directory;
 `python3 scripts/feature_traceability.py affected` prints the selection and the reason per file.
 
-That writes, under `.specify/executions/` (committed with the task):
+That writes, under `.specify/executions/`:
 
 | Path | Content |
 |---|---|
@@ -54,7 +58,7 @@ A run id is `<UTC time>-<commit>`, so runs from different branches never collide
 The dashboard `e2e/.artifacts/feature-report.html` is regenerated after every recorded run.
 
 ```bash
-python3 scripts/feature_traceability.py check --require-run        # gate `test-run-recorded`: this branch has a passing recorded run
+python3 scripts/feature_traceability.py check --require-run        # gate `test-run-recorded`: this branch has a passing recorded run (when switched on)
 python3 scripts/feature_traceability.py affected                   # what this branch's changes call for
 python3 scripts/feature_traceability.py task-report                # the "Test report" section for the PR description
 python3 scripts/feature_traceability.py runs --detail --limit 5    # recent runs: executed, regressed, fixed
@@ -67,4 +71,4 @@ python3 scripts/feature_traceability.py html                       # dashboard: 
 
 A task in `.specify/tasks/task-dag.json` can name scenarios as acceptance tests
 (`"acceptance_tests": ["scenario:SC-10-01-01"]`): the task verifies only when the scenario's
-latest recorded execution is PASS. Every `harness_cli.py verify` also runs `test-run-recorded`.
+latest recorded execution is PASS. Every `harness_cli.py verify` also runs `test-run-recorded` (a pass while it is switched off).

@@ -21,6 +21,15 @@ Two parts:
   - `filter-chip`   a raw Material `FilterChip(` in `lib/ui`; use `SpFilterChip`.
   - `selection-page` building `SpSelectionPage(` by hand; use `showSpSelection<T>`.
   - `raw-snackbar`  constructing `SnackBar(` directly; use `SpToast` / `spSnackBar(kind:)`.
+  - `person-inputs` a text input for a person's name, phone or email (a `labelText`/`hintText`
+                    such as 'Ad Soyad', 'Telefon', 'E-posta', or a `Key('..._name_field')`-style
+                    id) outside the shared person form. REQ-042 / acceptance criterion 16 of
+                    docs/architecture/OWNERS_RESIDENTS_UNIFIED_DESIGN.md: action, unit and
+                    registration pages choose or create a person card with `SpPersonField`
+                    (`showSpPersonPicker` -> `SpPersonForm`). Exempt: the shared form, the
+                    card's own emergency contact, resident self-service (no directory access),
+                    the user's own login e-mail, payer-name matching text and the SaaS admin's
+                    site-manager account fields.
 
 The component catalogue and the rules for adding new shared components live in
 `.agents/skills/flutter-reusable-components/SKILL.md`.
@@ -71,8 +80,8 @@ INVENTORY: dict[str, str] = {
     "SpIbanCopyRow(": r"\bSpIbanCopyRow\s*\(",
 }
 
-RULES: dict[str, tuple[str, str, tuple[str, ...]]] = {
-    # rule: (regex, scope relative to lib, exempt files relative to lib)
+RULES: dict[str, tuple[str, str | tuple[str, ...], tuple[str, ...]]] = {
+    # rule: (regex, scope (prefix or prefixes) relative to lib, exempt files relative to lib)
     "clipboard": (r"\bClipboard\.setData\s*\(", "ui", ("ui/design_system/sp_clipboard.dart",)),
     "money-parse": (r"\bDecimal\.tryParse\s*\(", "ui", ()),
     "json-decimal": (
@@ -84,6 +93,24 @@ RULES: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "filter-chip": (r"(?<![A-Za-z0-9_])FilterChip\s*\(", "ui", ("ui/design_system/sp_filter_chip.dart",)),
     "selection-page": (r"(?<![A-Za-z0-9_])SpSelectionPage\s*\(", "ui", ("ui/components/sp_dialog_pages.dart",)),
     "raw-snackbar": (r"(?<![A-Za-z0-9_])SnackBar\s*\(", "ui", ("ui/design_system/sp_feedback.dart",)),
+    "person-inputs": (
+        r"(?:labelText|hintText)\s*:\s*'[^']*(?:Ad[ıi]? ?[Ss]oyad|Telefon|E-posta)"
+        r"|Key\('[a-z_]*_(?:name|phone|email)(?:_field|_input)?'\)",
+        ("ui/components", "ui/dashboard", "ui/navigation", "ui/payments", "ui/residents"),
+        (
+            "ui/residents/sp_person_form.dart",  # the shared person form itself
+            "ui/residents/person_preferences_page.dart",  # the card's own emergency contact
+            "ui/residents/resident_household_member_page.dart",  # resident self-service
+            "ui/components/profile_role_sheet.dart",  # the user's own login e-mail
+            "ui/components/unit_matching_criteria_card.dart",  # payer-name matching text
+        ),
+    ),
+}
+
+# Lines a rule ignores although its regex matches: rule -> regex.
+RULE_LINE_ALLOW: dict[str, str] = {
+    # SaaS admin provisioning a site manager's login account (no site person directory yet).
+    "person-inputs": r"Yönetici |_site_admin_|edit_site_name_field",
 }
 
 LINE_COMMENT_RE = re.compile(r"(?<!:)//.*$")
@@ -122,14 +149,16 @@ def scan(lib: Path) -> dict:
     findings: list[Finding] = []
     for rule, (pattern, scope, exempt) in RULES.items():
         regex = re.compile(pattern)
+        allow = re.compile(RULE_LINE_ALLOW[rule]) if rule in RULE_LINE_ALLOW else None
+        scopes = (scope,) if isinstance(scope, str) else scope
         for f in files:
             rel = f.relative_to(lib).as_posix()
-            if scope and not rel.startswith(scope + "/"):
+            if scopes != ("",) and not any(rel.startswith(s + "/") for s in scopes):
                 continue
             if rel in exempt:
                 continue
             for i, line in enumerate(stripped[f], start=1):
-                if regex.search(line):
+                if regex.search(line) and not (allow and allow.search(line)):
                     findings.append(Finding(rule, rel, i, line.strip()[:160]))
 
     return {

@@ -38,6 +38,7 @@ List<_WorkspaceAction> _workspaceActions(
   required void Function(HomeOwnerItem ho) transfer,
   required void Function(HomeOwnerItem ho) history,
   required void Function(HomeOwnerItem ho) iban,
+  required void Function(HomeOwnerItem ho) statement,
   required void Function(HomeOwnerItem ho) delete,
 }) {
   const people = 'Kişiler';
@@ -97,6 +98,8 @@ List<_WorkspaceAction> _workspaceActions(
         AppColors.accentCyan, () => history(ho)),
     row('iban', unit, 'Sanal IBAN', 'Aidat ödemeleri için hesap bilgisi', Icons.account_balance,
         AppColors.accentPurple, () => iban(ho)),
+    row('statement', unit, 'Hesap Ekstresi', 'Borç yaşlandırma, gecikme ve makbuzlar', Icons.receipt_long,
+        AppColors.accentCyan, () => statement(ho)),
     row('delete', other, AppStrings.delete, 'Daireyi sil', Icons.delete_outline, AppColors.accentRed,
         () => delete(ho)),
   ];
@@ -208,6 +211,13 @@ extension _UnitWorkspace on _OwnersResidentsModulePageState {
         transfer: _openTransferOwnership,
         history: _openUnitHistory,
         iban: _openIbanDetails,
+        statement: (unit) => AppFullscreenPage.push<void>(
+              context: context,
+              builder: (_) => ResidentStatementPage(
+                unitId: unit.unitId,
+                subtitle: '${unit.block} Blok D:${unit.unitNo}',
+              ),
+            ),
         delete: _openDeleteUnit,
       );
 }
@@ -634,6 +644,8 @@ class _UnitWorkspacePageState extends State<_UnitWorkspacePage> {
         return 'module_history_ho_$unitId';
       case 'iban':
         return 'module_iban_ho_$unitId';
+      case 'statement':
+        return 'btn_statement_$unitId';
       case 'delete':
         return 'module_delete_ho_$unitId';
       default:

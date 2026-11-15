@@ -161,6 +161,42 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Browser end-to-end suite
         run: python3 scripts/run_tests.py --group e2e
+      # junit.xml, executions.jsonl, Playwright traces and stack logs; merged by the test-report job.
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: e2e-shard-${{ matrix.shard }}
+          path: apps/development-time/SitePulse/e2e/.artifacts/
+          # .artifacts is a dot directory: upload-artifact skips hidden paths unless told otherwise.
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
+  # One report for the whole e2e run: the stats on the run page (job summary) and the report,
+  # HTML dashboard and merged records as artifact `e2e-test-report` (scripts/ci_test_report.py).
+  # This replaces committing a recorded run with every task (gate test-run-recorded is off).
+  test-report:
+    if: always()
+    needs: e2e
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          pattern: e2e-shard-*
+          path: ${{ runner.temp }}/shards
+      - name: Merge shard results into one report
+        env:
+          SITEPULSE_TASK: ${{ github.event_name == 'pull_request' && format('PR {0} ({1})', github.event.pull_request.number, github.head_ref) || github.ref_name }}
+        run: python3 scripts/ci_test_report.py --shards "${{ runner.temp }}/shards" --out "${{ runner.temp }}/e2e-test-report"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: e2e-test-report
+          path: ${{ runner.temp }}/e2e-test-report/
+          retention-days: 30
 
   # Keeps the check name `verify` that branch protection requires. It runs even when a group
   # fails (a skipped required check would count as passing) and fails unless every group passed.

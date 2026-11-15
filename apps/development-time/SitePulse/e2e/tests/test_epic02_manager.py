@@ -1,7 +1,7 @@
 """EPIC-02 Site manager operations & EPIC-10 capital segment entry point."""
 import pytest
 
-from pages import DuesManagement, ManagerCockpit, ResidentsTab
+from pages import DuesManagement, ManagerCockpit, ResidentsTab, UnitWorkspace
 from support.flutter import by_id
 from support.money import last_amount
 
@@ -21,7 +21,7 @@ def test_manager_adds_owner_resident(login_as, page, stack):
 
     # A new unit card appears and the person + unit exist in the database.
     page.wait_for_function(
-        "n => document.querySelectorAll('[flt-semantics-identifier^=\"unit_actions_\"], [flt-semantics-identifier^=\"delete_ho_\"]').length > n",
+        "n => document.querySelectorAll('[flt-semantics-identifier^=\"module_unit_actions_\"]').length > n",
         arg=len(before), timeout=15_000)
     assert stack.sql("SELECT count(*) FROM persons WHERE email = 'fatma.sahin@e2e.test';") == "1"
     assert stack.sql("SELECT count(*) FROM units WHERE unit_number = 25;") == "1"
@@ -91,29 +91,25 @@ def test_resident_without_history_can_be_deleted(login_as, page, stack):
     before = set(residents.unit_card_ids())
     residents.start_add().fill(unit_no="25", full_name="Fatma Şahin", email="fatma.sahin@e2e.test",
                                phone="05321234567").save()
-    page.wait_for_function("n => document.querySelectorAll('[flt-semantics-identifier^=\"unit_actions_\"], [flt-semantics-identifier^=\"delete_ho_\"]').length > n",
+    page.wait_for_function("n => document.querySelectorAll('[flt-semantics-identifier^=\"module_unit_actions_\"]').length > n",
                            arg=len(before), timeout=15_000)
     (card_id,) = set(residents.unit_card_ids()) - before
     unit_id = stack.sql("SELECT id FROM units WHERE unit_number = 25;")
 
-    btn = by_id(page, f"unit_actions_{card_id}")
-    if btn.count() > 0:
-        btn.click()
-        by_id(page, f"delete_ho_{card_id}").click()
-        by_id(page, "btn_confirmation_confirm").click()
-        by_id(page, f"unit_actions_{card_id}").wait_for(state="detached", timeout=15_000)
-    else:
-        by_id(page, f"delete_ho_{card_id}").click()
-        by_id(page, "btn_confirmation_confirm").click()
-        by_id(page, f"delete_ho_{card_id}").wait_for(state="detached", timeout=15_000)
+    UnitWorkspace(page).open(card_id).action(card_id, "delete")
+    by_id(page, "btn_confirmation_confirm").click()
+    by_id(page, "btn_confirmation_confirm").wait_for(state="detached", timeout=15_000)
     page.wait_for_timeout(1_000)  # the delete call must finish before the database check
     assert stack.sql(f"SELECT count(*) FROM units WHERE id = {int(unit_id)} AND deleted_at IS NULL;") == "0"
 
+    UnitWorkspace(page).close()
     before = set(ResidentsTab(page).open().unit_card_ids())
+    # Registering her again reuses her card when the duplicate check still offers it.
     ResidentsTab(page).start_add().fill(
-        unit_no="26", full_name="Fatma Şahin", email="fatma.sahin@e2e.test", phone="05321234567").save()
+        unit_no="26", full_name="Fatma Şahin", email="fatma.sahin@e2e.test", phone="05321234567",
+        reuse_existing=True).save()
     page.wait_for_function(
-        "n => document.querySelectorAll('[flt-semantics-identifier^=\"unit_actions_\"], [flt-semantics-identifier^=\"delete_ho_\"]').length > n",
+        "n => document.querySelectorAll('[flt-semantics-identifier^=\"module_unit_actions_\"]').length > n",
         arg=len(before), timeout=15_000)
     assert stack.sql(
         "SELECT count(*) FROM persons WHERE site_id = 1 AND lower(email) = 'fatma.sahin@e2e.test' AND deleted_at IS NULL;"
@@ -133,15 +129,13 @@ def test_refused_delete_keeps_the_resident_card(login_as, page, october_dues_b3_
     ManagerCockpit(page).wait()
     ResidentsTab(page).open()
 
-    btn = by_id(page, "unit_actions_1")
-    if btn.count() > 0:
-        btn.click()
-    by_id(page, "delete_ho_1").click()
+    UnitWorkspace(page).open("1").action("1", "delete")
     by_id(page, "btn_confirmation_confirm").click()
     page.wait_for_timeout(2_000)
 
     assert stack.sql("SELECT deleted_at IS NULL FROM units WHERE id = 1;") == "t"
-    assert by_id(page, "unit_actions_1").count() == 1 or by_id(page, "delete_ho_1").count() == 1
+    UnitWorkspace(page).back()
+    assert by_id(page, "module_unit_actions_1").count() >= 1
 
 
 @pytest.mark.core

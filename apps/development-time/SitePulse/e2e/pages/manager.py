@@ -11,6 +11,7 @@ from decimal import Decimal
 from support.flutter import by_id, by_id_prefix, fill, text_of
 from support.money import last_amount
 
+from .person import PersonPicker, UnitWorkspace
 from .shell import Shell
 
 
@@ -51,15 +52,11 @@ class ResidentsTab:
         return self
 
     def unit_card_ids(self) -> list[str]:
-        """Home-owner ids that have a card (from unit_actions_<id> or delete_ho_<id>)."""
-        ids = [i.removeprefix("unit_actions_") for i in self.page.eval_on_selector_all(
-            '[flt-semantics-identifier^="unit_actions_"]',
+        """Unit ids that have a row (from module_unit_actions_<id>)."""
+        prefix = "module_unit_actions_"
+        return [i.removeprefix(prefix) for i in self.page.eval_on_selector_all(
+            f'[flt-semantics-identifier^="{prefix}"]',
             "els => els.map(e => e.getAttribute('flt-semantics-identifier'))")]
-        if not ids:
-            ids = [i.removeprefix("delete_ho_") for i in self.page.eval_on_selector_all(
-                '[flt-semantics-identifier^="delete_ho_"]',
-                "els => els.map(e => e.getAttribute('flt-semantics-identifier'))")]
-        return ids
 
     def start_add(self) -> "AddResidentForm":
         by_id(self.page, "add_resident_btn").click()
@@ -67,29 +64,30 @@ class ResidentsTab:
 
 
 class AddResidentForm:
-    """Full-screen 'Yeni Daire / Sakin Ekle' form."""
+    """The module's 'Yeni Daire / Sakin Tanımla' page; the owner is a person card (REQ-042)."""
 
     def __init__(self, page: Page):
         self.page = page
 
     def wait(self) -> "AddResidentForm":
-        by_id(self.page, "add_resident_unit_field").wait_for(timeout=10_000)
+        by_id(self.page, "module_new_resident_unit").wait_for(timeout=10_000)
         return self
 
-    def fill(self, unit_no: str, full_name: str, email: str, phone: str) -> "AddResidentForm":
-        fill(self.page, "add_resident_unit_field", unit_no)
-        fill(self.page, "add_resident_name_field", full_name)
-        fill(self.page, "add_resident_email_field", email)
-        fill(self.page, "add_resident_phone_field", phone)
+    def fill(self, unit_no: str, full_name: str, email: str, phone: str,
+             reuse_existing: bool = False) -> "AddResidentForm":
+        fill(self.page, "module_new_resident_unit", unit_no)
+        PersonPicker(self.page, "module_new_resident_name").create(
+            full_name, phone=phone, email=email, reuse_existing=reuse_existing)
         return self
 
     def save(self) -> None:
-        """Save, then dismiss the 'Sakin Kaydedildi!' confirmation so the list is visible again."""
-        by_id(self.page, "btn_save_new_resident").click()
+        """Save, then dismiss the 'Sakin Kaydedildi!' confirmation and close the module."""
+        by_id(self.page, "module_save_new_resident_btn").click()
         close = by_id(self.page, "btn_close_resident_provisioned")
         close.wait_for(timeout=15_000)
         close.click()
         close.wait_for(state="detached", timeout=10_000)
+        UnitWorkspace(self.page).close()
 
 
 class DuesManagement:
@@ -235,31 +233,24 @@ class CapitalProjects:
 
 
 class Occupancy:
-    """Move-in / move-out actions on the 'Sakinler & Malikler' unit cards (EPIC-08)."""
+    """Move-in / move-out from a unit row on the 'Sakinler & Malikler' tab (EPIC-08).
+
+    The row opens the owners & residents module's unit workspace; the tenant is a person card.
+    """
 
     def __init__(self, page: Page):
         self.page = page
 
     def move_in(self, unit_id: str, full_name: str, email: str, phone: str) -> None:
-        btn = by_id(self.page, f"unit_actions_{unit_id}")
-        if btn.count() > 0:
-            btn.click()
-            by_id(self.page, f"move_in_ho_{unit_id}").click()
-        else:
-            by_id(self.page, f"move_in_resident_to_{unit_id}").click()
-        by_id(self.page, "move_in_name_field").wait_for(timeout=10_000)  # role defaults to TENANT
-        fill(self.page, "move_in_name_field", full_name)
-        fill(self.page, "move_in_email_field", email)
-        fill(self.page, "move_in_phone_field", phone)
-        by_id(self.page, "btn_confirm_move_in").click()
-        by_id(self.page, "btn_confirm_move_in").wait_for(state="detached", timeout=15_000)
+        UnitWorkspace(self.page).open(unit_id).action(unit_id, "tenant_move_in", "owner_rents_out", "replace_tenant")
+        by_id(self.page, "module_move_in_pick_existing_btn").wait_for(timeout=10_000)
+        PersonPicker(self.page, "module_move_in_pick_existing_btn").create(full_name, phone=phone, email=email)
+        by_id(self.page, "module_confirm_move_in_btn").click()
+        by_id(self.page, "module_confirm_move_in_btn").wait_for(state="detached", timeout=15_000)
+        UnitWorkspace(self.page).close()
 
     def move_out(self, unit_id: str) -> None:
-        btn = by_id(self.page, f"unit_actions_{unit_id}")
-        if btn.count() > 0:
-            btn.click()
-            by_id(self.page, f"move_out_ho_{unit_id}").click()
-        else:
-            by_id(self.page, f"move_out_resident_{unit_id}").click()
-        by_id(self.page, "btn_confirm_move_out").click()
-        by_id(self.page, "btn_confirm_move_out").wait_for(state="detached", timeout=15_000)
+        UnitWorkspace(self.page).open(unit_id).action(unit_id, "move_out")
+        by_id(self.page, "module_confirm_move_out_btn").click()
+        by_id(self.page, "module_confirm_move_out_btn").wait_for(state="detached", timeout=15_000)
+        UnitWorkspace(self.page).close()
