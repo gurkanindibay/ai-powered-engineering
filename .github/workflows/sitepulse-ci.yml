@@ -10,6 +10,10 @@ on:
     branches: [master]
   workflow_dispatch:
 
+# Least privilege: the jobs only read the repository (no job pushes or calls the API).
+permissions:
+  contents: read
+
 defaults:
   run:
     working-directory: apps/development-time/SitePulse

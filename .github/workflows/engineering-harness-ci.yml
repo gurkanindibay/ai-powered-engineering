@@ -17,6 +17,10 @@ on:
       - 'tests/engineering_harness/**'
       - 'config/engineering-harness/**'
       - '.github/workflows/engineering-harness-ci.yml'
+# Least privilege: the jobs only read the repository.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-24.04

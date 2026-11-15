@@ -1,0 +1,31 @@
+# Known-vulnerability audit of the pinned dependencies (Cargo.lock, pubspec.lock) against OSV.
+# Runs when a lock file changes, weekly (new advisories appear without any code change), or manually.
+# The static security gate (`security-lint`) runs with every PR in sitepulse-ci.yml (group `lint`).
+name: Security audit
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'apps/development-time/SitePulse/backend/Cargo.lock'
+      - 'apps/development-time/SitePulse/flutter/pubspec.lock'
+      - 'apps/development-time/SitePulse/scripts/dependency_audit_allowlist.json'
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    name: dependency audit (OSV)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Audit pinned crates and pub packages
+        working-directory: apps/development-time/SitePulse
+        run: python3 scripts/dependency_audit.py
