@@ -154,7 +154,7 @@ def test_wrong_statement_format_is_rejected_and_excel_accepted(login_as, page, t
 @pytest.mark.core
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-07-11")
-def test_excel_bank_samples_download_as_parser_compatible_workbooks(login_as, page, stack):
+def test_excel_bank_samples_download_as_parser_compatible_workbooks(login_as, page, stack, tmp_path):
     login_as("manager")
     ManagerCockpit(page).wait()
     DuesManagement(page).open()
@@ -173,9 +173,11 @@ def test_excel_bank_samples_download_as_parser_compatible_workbooks(login_as, pa
             by_id(page, f"btn_download_bank_sample_{bank_code}").click()
         download = download_info.value
         assert download.suggested_filename == f"{bank_code}_ornek_ekstre.xlsx"
+        saved_path = tmp_path / download.suggested_filename
+        download.save_as(saved_path)
         if bank_code == "kuveyt_turk":
-            sample_to_upload = Path(download.path())
-        with ZipFile(download.path()) as workbook:
+            sample_to_upload = saved_path
+        with ZipFile(saved_path) as workbook:
             shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
             worksheet = workbook.read("xl/worksheets/sheet1.xml").decode("utf-8")
         assert bank_name in shared_strings
