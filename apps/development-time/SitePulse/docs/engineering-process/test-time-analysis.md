@@ -120,6 +120,22 @@ With the current history the plan is 29/28/29/29 tests at ~236 s each, down from
 Each shard still builds the release backend and the web bundle itself. Building them once and sharing them
 as an artifact is a follow-up. Selection by `--affected` on PRs (I) is not done yet.
 
+Measured after the merge (run 129): lint 14 s, rust 3.4 min, flutter 2.8 min, e2e shards 6.3 / 8.1 / 7.9 /
+10.2 min in the browser step, 11.5 min for the whole run. Shard 4 was slowest because it held both
+Rust-linked wrappers (`test_epic07_rust_linked_scenarios`, `test_epic11_rust_linked_scenarios`). Each one
+runs `cargo test` inside the browser job, usually on a cold debug build: the four shards share one Rust cache
+key, and the shard that saves first does not compile tests.
+
+Step 3:
+- **E for CI:** the e2e job sets `PYTEST_ADDOPTS=--ignore=tests/test_linked_backend_suites.py`. Every suite
+  those wrappers run is already a CI gate (harness-selftest, rust-test, flutter-test, api-system), and CI
+  records nothing. Recorded local runs still execute the wrappers for scenario traceability.
+  `harness/tests/test_ci_linked_suites.py` fails if a wrapped suite stops being gated in CI.
+- **8 shards** instead of 4: ~160 s of tests per shard, down from ~319 s. The longest single test is the
+  111 s auditor journey.
+- **Web bundle cache:** `flutter/build/web-e2e` is cached by the hash of the Flutter sources. `stack.py`
+  rebuilds it anyway when its fingerprint differs.
+
 1. **A + C + D** (only `sitepulse-ci.yml`): parallel jobs, cache on failure, lints first. Measure.
 2. **B + I**: shard e2e, `--affected` on PRs, full suite on master and nightly. Needs a shard option in
    `gui_e2e.py` and a step that merges the run records, so `test-run-recorded` still sees one run per task.
