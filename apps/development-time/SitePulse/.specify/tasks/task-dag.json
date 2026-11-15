@@ -891,7 +891,7 @@
       "id": "task-42",
       "name": "Replace inline person inputs in unit actions",
       "module": "full-stack",
-      "status": "UNVERIFIED",
+      "status": "COMPLETED",
       "depends_on": [
         "task-33",
         "task-35",
