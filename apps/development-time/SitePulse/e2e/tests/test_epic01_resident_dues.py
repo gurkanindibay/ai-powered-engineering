@@ -88,3 +88,23 @@ def test_site_announcement_reaches_the_resident(api, actors, login_as, page):
     by_id(page, "resident_action_announcements").click()
     assert "Planlı Su Kesintisi" in text_of(by_id(page, "site_announcement_title"))
     assert "Salı 10:00-14:00" in text_of(by_id(page, "site_announcement_body"))
+
+
+@pytest.mark.core
+@pytest.mark.role_homeowner
+@pytest.mark.covers("SC-01-04-03")
+def test_resident_actions_meet_touch_target_and_hide_unapproved_features(login_as, page):
+    from support.flutter import by_id_prefix
+    login_as("homeowner")
+    ResidentHome(page).wait()
+    actions = by_id_prefix(page, "resident_action_")
+    assert actions.count() > 0
+    # Flutter web renders 1 dp as 1 CSS pixel, so the 48dp target is 48 CSS px.
+    for i in range(actions.count()):
+        box = actions.nth(i).bounding_box()
+        assert box is not None
+        assert box["width"] >= 48 and box["height"] >= 48, (actions.nth(i).get_attribute("flt-semantics-identifier"), box)
+    body = page.locator("body").inner_text() + " ".join(
+        page.locator("[aria-label]").evaluate_all("els => els.map(e => e.getAttribute('aria-label'))"))
+    for hidden in ("Sayaç Gir", "Rezervasyon"):
+        assert hidden not in body

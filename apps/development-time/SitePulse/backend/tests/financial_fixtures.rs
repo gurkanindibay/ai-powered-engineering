@@ -271,3 +271,42 @@ fn waterfall_properties_hold_for_random_inputs() {
         }
     }
 }
+
+// covers: SC-01-01-01
+#[test]
+fn penalty_keeps_kurus_precision_and_does_not_drift_across_recalculations() {
+    let svc = DuesCalculationService::new();
+    let d = |s: &str| Decimal::from_str_exact(s).unwrap();
+    let mut running = DuesLiability {
+        id: "1".to_string(),
+        unit_id: "14".to_string(),
+        period: "Eylül 2026".to_string(),
+        principal_amount: d("1450.00"),
+        delay_penalty: Decimal::ZERO,
+        total_amount: Decimal::ZERO,
+        due_date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
+        status: DebtStatus::Pending,
+        paid_principal: Decimal::ZERO,
+        paid_penalty: Decimal::ZERO,
+        debtor_type: DebtorType::Tenant,
+        expense_type: ExpenseType::OperationalDues,
+        penalty_accrued_through: None,
+    };
+    for day in 16..=28 {
+        let evaluation = NaiveDate::from_ymd_opt(2026, 9, day).unwrap();
+        running = svc.calculate_delay_penalty(running, evaluation);
+        // Recalculating the same day is a fixed point.
+        let again = svc.calculate_delay_penalty(running.clone(), evaluation);
+        assert_eq!(again.delay_penalty, running.delay_penalty);
+        assert_eq!(again.total_amount, running.total_amount);
+        // Kurus precision, and the total is exactly principal + penalty.
+        assert!(running.delay_penalty.normalize().scale() <= 2);
+        assert!(running.total_amount.normalize().scale() <= 2);
+        assert_eq!(
+            running.total_amount,
+            running.principal_amount + running.delay_penalty
+        );
+    }
+    // 1450.00 * 5% / 30 = 2.4166.. -> 2.42 per daily segment, summed exactly.
+    assert_eq!(running.delay_penalty, d("2.42") * Decimal::from(13));
+}
