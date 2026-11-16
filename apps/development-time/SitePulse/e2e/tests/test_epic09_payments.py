@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from pages import ManagerCockpit, PaymentStream
+from pages import DuesManagement, ManagerCockpit, PaymentStream
 from support.flutter import by_id
 
 
@@ -43,10 +43,8 @@ def test_payment_stream_role_filter_shows_only_tenant_payments(login_as, page, a
 def test_debt_aging_buckets_total_the_overdue_sum(login_as, page):
     login_as("manager")
     ManagerCockpit(page).wait()
-    PaymentStream(page).open()
-
-    by_id(page, "tab_debt_aging").click()
-    by_id(page, "aging_grand_total").wait_for(timeout=10_000)
+    DuesManagement(page).open().segment(2)
+    by_id(page, "aging_grand_total").wait_for(timeout=15_000)
 
     assert by_id(page, "aging_bucket_1_30").count() == 1
     assert by_id(page, "aging_bucket_31_60").count() == 1
