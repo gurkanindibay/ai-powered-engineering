@@ -14,7 +14,7 @@ Feature: Material 3 resident dashboard screens
     When the resident launches the app
     Then the Hero Balance Card displays 0.00 and no overdue badge is shown
 
-  @SC-01-04-03 @layer:gui @pending
+  @SC-01-04-03 @layer:gui @linked @core @role_homeowner
   Scenario: Action buttons meet touch target size and unapproved features are hidden
     When the resident launches the app
     Then all action buttons meet the 48dp touch target accessibility requirement
