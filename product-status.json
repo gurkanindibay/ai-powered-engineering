@@ -1,30 +1,30 @@
 {
  "schema": 1,
- "generated_at": "2026-11-15T21:51:44Z",
- "run_id": "20261115T215144Z-761e392",
- "commit": "761e3928c678d15ecda1819c35dbfeacdb2e58b5",
+ "generated_at": "2026-11-16T04:06:13Z",
+ "run_id": "20261116T040613Z-d208faf",
+ "commit": "d208faf92f528ca8c18fc35f9b68d06fe5b7aa32",
  "task": "master",
  "status": "PASS",
  "junit": {
-  "tests": 111,
+  "tests": 112,
   "failures": 0,
   "errors": 0,
   "skipped": 1,
-  "passed": 110,
-  "seconds": 1906.4,
+  "passed": 111,
+  "seconds": 1810.0,
   "files": 8,
   "unparseable": []
  },
  "totals": {
   "stories": 91,
   "stories_with_scenarios": 91,
-  "stories_passing": 22,
+  "stories_passing": 23,
   "scenarios": 227,
-  "automated": 153,
-  "passing": 93,
+  "automated": 155,
+  "passing": 94,
   "failing": 0,
-  "no_result": 60,
-  "planned": 74,
+  "no_result": 61,
+  "planned": 72,
   "epics": 12,
   "epics_verified": 0,
   "epics_failing": 0
@@ -35,13 +35,13 @@
    "title": "Resident Dues Management & Financial Transparency",
    "stories": 6,
    "stories_with_scenarios": 6,
-   "stories_passing": 4,
+   "stories_passing": 5,
    "scenarios": 9,
-   "automated": 7,
-   "passing": 7,
+   "automated": 9,
+   "passing": 8,
    "failing": 0,
-   "no_result": 0,
-   "planned": 2,
+   "no_result": 1,
+   "planned": 0,
    "health": "in_progress"
   },
   {
@@ -201,7 +201,7 @@
  ],
  "scenarios": {
   "SC-01-01-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Preserve kurus-level precision in dues calculation",
    "epic": "EPIC-01",
    "story": "STORY-01-01"
@@ -237,7 +237,7 @@
    "story": "STORY-01-04"
   },
   "SC-01-04-03": {
-   "state": "planned",
+   "state": "passing",
    "name": "Action buttons meet touch target size and unapproved features are hidden",
    "epic": "EPIC-01",
    "story": "STORY-01-04"
@@ -1698,7 +1698,7 @@
    "stories": 91,
    "stories_with_scenarios": 91,
    "scenarios": 227,
-   "automated": 153
+   "automated": 155
   }
  ],
  "recent_changes": [
@@ -1713,6 +1713,19 @@
    "samples": [
     "SC-07-06-03: Excel upload offers a sample for each catalogued Excel bank",
     "SC-07-06-04: Excel sample options exclude banks without an Excel format"
+   ]
+  },
+  {
+   "date": "2026-11-16",
+   "epic": "EPIC-01",
+   "title": "Resident Dues Management & Financial Transparency",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 2,
+   "items": 2,
+   "samples": [
+    "SC-01-01-01: Preserve kurus-level precision in dues calculation",
+    "SC-01-04-03: Action buttons meet touch target size and unapproved features are hidden"
    ]
   },
   {
@@ -2056,5 +2069,5 @@
    ]
   }
  ],
- "href": "reports/43764643120-1/"
+ "href": "reports/43801380111-1/"
 }
