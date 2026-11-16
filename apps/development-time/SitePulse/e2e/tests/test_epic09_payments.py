@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 
 from pages import ManagerCockpit, PaymentStream
+from support.flutter import by_id
 
 
 @pytest.mark.smoke
@@ -34,3 +35,20 @@ def test_payment_stream_role_filter_shows_only_tenant_payments(login_as, page, a
     ids = stream.entry_ids()
     assert all(i.endswith("_TENANT") for i in ids), ids
     assert sorted(i.split("_")[2] for i in ids) == expected_tenant
+
+
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-09-06")
+@pytest.mark.covers("SC-09-01-02")
+def test_debt_aging_buckets_total_the_overdue_sum(login_as, page):
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    PaymentStream(page).open()
+
+    by_id(page, "tab_debt_aging").click()
+    by_id(page, "aging_grand_total").wait_for(timeout=10_000)
+
+    assert by_id(page, "aging_bucket_1_30").count() == 1
+    assert by_id(page, "aging_bucket_31_60").count() == 1
+    assert by_id(page, "aging_bucket_60_plus").count() == 1
+

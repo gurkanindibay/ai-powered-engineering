@@ -773,10 +773,12 @@ class _PaymentTrackingPageState extends State<PaymentTrackingPage>
                   indicatorSize: TabBarIndicatorSize.tab,
                   tabs: const [
                     Tab(
+                      key: Key('tab_payment_stream'),
                       icon: Icon(Icons.stream, size: 20),
                       text: 'Tahsilat Akışı (Stream)',
                     ),
                     Tab(
+                      key: Key('tab_debt_aging'),
                       icon: Icon(Icons.hourglass_top, size: 20),
                       text: 'Borç Yaşlandırma (Aging)',
                     ),

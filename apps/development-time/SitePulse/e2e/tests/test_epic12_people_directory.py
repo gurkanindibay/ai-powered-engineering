@@ -26,6 +26,7 @@ def _person(person_id: int, login: str = "ACTIVE") -> dict:
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-12-01")
 @pytest.mark.covers("SC-12-04-01")
+@pytest.mark.covers("SC-12-04-02")
 def test_people_directory_pages_and_filters_server_results(login_as, page):
     login_as("manager")
     ManagerCockpit(page).wait()
