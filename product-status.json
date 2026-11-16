@@ -1,30 +1,30 @@
 {
  "schema": 1,
- "generated_at": "2026-11-16T04:06:13Z",
- "run_id": "20261116T040613Z-d208faf",
- "commit": "d208faf92f528ca8c18fc35f9b68d06fe5b7aa32",
+ "generated_at": "2026-11-16T07:25:48Z",
+ "run_id": "20261116T072547Z-3c738ff",
+ "commit": "3c738ff5a0a14ced58cb557171174d81d0f0216e",
  "task": "master",
  "status": "PASS",
  "junit": {
-  "tests": 112,
+  "tests": 115,
   "failures": 0,
   "errors": 0,
   "skipped": 1,
-  "passed": 111,
-  "seconds": 1810.0,
+  "passed": 114,
+  "seconds": 2199.6,
   "files": 8,
   "unparseable": []
  },
  "totals": {
   "stories": 91,
   "stories_with_scenarios": 91,
-  "stories_passing": 23,
+  "stories_passing": 27,
   "scenarios": 227,
-  "automated": 155,
-  "passing": 94,
+  "automated": 200,
+  "passing": 100,
   "failing": 0,
-  "no_result": 61,
-  "planned": 72,
+  "no_result": 100,
+  "planned": 27,
   "epics": 12,
   "epics_verified": 0,
   "epics_failing": 0
@@ -133,13 +133,13 @@
    "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
    "stories": 11,
    "stories_with_scenarios": 11,
-   "stories_passing": 2,
+   "stories_passing": 4,
    "scenarios": 38,
-   "automated": 7,
-   "passing": 5,
+   "automated": 38,
+   "passing": 8,
    "failing": 0,
-   "no_result": 2,
-   "planned": 31,
+   "no_result": 30,
+   "planned": 0,
    "health": "in_progress"
   },
   {
@@ -147,13 +147,13 @@
    "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
    "stories": 7,
    "stories_with_scenarios": 7,
-   "stories_passing": 2,
+   "stories_passing": 3,
    "scenarios": 14,
-   "automated": 8,
-   "passing": 8,
+   "automated": 14,
+   "passing": 9,
    "failing": 0,
-   "no_result": 0,
-   "planned": 6,
+   "no_result": 5,
+   "planned": 0,
    "health": "in_progress"
   },
   {
@@ -189,13 +189,13 @@
    "title": "Unified People and Unit Directory",
    "stories": 8,
    "stories_with_scenarios": 8,
-   "stories_passing": 0,
+   "stories_passing": 1,
    "scenarios": 31,
-   "automated": 23,
-   "passing": 6,
+   "automated": 31,
+   "passing": 8,
    "failing": 0,
-   "no_result": 17,
-   "planned": 8,
+   "no_result": 23,
+   "planned": 0,
    "health": "in_progress"
   }
  ],
@@ -801,7 +801,7 @@
    "story": "STORY-08-01"
   },
   "SC-08-02-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A possible household person duplicate requires manager confirmation",
    "epic": "EPIC-08",
    "story": "STORY-08-02"
@@ -813,7 +813,7 @@
    "story": "STORY-08-02"
   },
   "SC-08-02-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "Household members are archived when the resident moves out",
    "epic": "EPIC-08",
    "story": "STORY-08-02"
@@ -831,7 +831,7 @@
    "story": "STORY-08-04"
   },
   "SC-08-04-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "Tenant move-in opens an active tenant session",
    "epic": "EPIC-08",
    "story": "STORY-08-04"
@@ -843,73 +843,73 @@
    "story": "STORY-08-05"
   },
   "SC-08-05-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "Capital dues after the transfer are billed to the new owner",
    "epic": "EPIC-08",
    "story": "STORY-08-05"
   },
   "SC-08-06-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Owner moves into the unit after the tenant left",
    "epic": "EPIC-08",
    "story": "STORY-08-06"
   },
   "SC-08-06-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Owner move-in for a person who is not the owner is rejected",
    "epic": "EPIC-08",
    "story": "STORY-08-06"
   },
   "SC-08-06-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Tenant move-in still accepts a new person",
    "epic": "EPIC-08",
    "story": "STORY-08-06"
   },
   "SC-08-07-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "move-out is rejected on a VACANT unit",
    "epic": "EPIC-08",
    "story": "STORY-08-07"
   },
   "SC-08-07-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "tenant move-in is rejected on a OWNER_OCCUPIED unit",
    "epic": "EPIC-08",
    "story": "STORY-08-07"
   },
   "SC-08-07-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "owner move-in is rejected on a OWNER_OCCUPIED unit",
    "epic": "EPIC-08",
    "story": "STORY-08-07"
   },
   "SC-08-07-04": {
-   "state": "planned",
+   "state": "no_result",
    "name": "tenant move-in is rejected on a TENANT_OCCUPIED unit",
    "epic": "EPIC-08",
    "story": "STORY-08-07"
   },
   "SC-08-07-05": {
-   "state": "planned",
+   "state": "no_result",
    "name": "owner move-in is rejected on a TENANT_OCCUPIED unit",
    "epic": "EPIC-08",
    "story": "STORY-08-07"
   },
   "SC-08-07-06": {
-   "state": "planned",
+   "state": "no_result",
    "name": "tenant move-in is rejected on a UNOWNED, VACANT unit",
    "epic": "EPIC-08",
    "story": "STORY-08-07"
   },
   "SC-08-07-07": {
-   "state": "planned",
+   "state": "no_result",
    "name": "owner move-in is rejected on a UNOWNED, VACANT unit",
    "epic": "EPIC-08",
    "story": "STORY-08-07"
   },
   "SC-08-07-08": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Registration approval respects the unit state",
    "epic": "EPIC-08",
    "story": "STORY-08-07"
@@ -927,97 +927,97 @@
    "story": "STORY-08-07"
   },
   "SC-08-08-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Replacing a tenant settles the outgoing tenant",
    "epic": "EPIC-08",
    "story": "STORY-08-08"
   },
   "SC-08-08-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Owner takes the unit back from the tenant",
    "epic": "EPIC-08",
    "story": "STORY-08-08"
   },
   "SC-08-08-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A failed second step leaves nothing changed",
    "epic": "EPIC-08",
    "story": "STORY-08-08"
   },
   "SC-08-09-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Selling an owner-occupied unit vacates it",
    "epic": "EPIC-08",
    "story": "STORY-08-09"
   },
   "SC-08-09-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "The new owner moves in at transfer",
    "epic": "EPIC-08",
    "story": "STORY-08-09"
   },
   "SC-08-09-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "The tenant buys the unit",
    "epic": "EPIC-08",
    "story": "STORY-08-09"
   },
   "SC-08-09-04": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Selling a vacant unit leaves it vacant",
    "epic": "EPIC-08",
    "story": "STORY-08-09"
   },
   "SC-08-10-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Exit balance counts only the departing tenant's liabilities",
    "epic": "EPIC-08",
    "story": "STORY-08-10"
   },
   "SC-08-10-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Status cannot drift from the occupancy sessions",
    "epic": "EPIC-08",
    "story": "STORY-08-10"
   },
   "SC-08-10-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A transition is all or nothing",
    "epic": "EPIC-08",
    "story": "STORY-08-10"
   },
   "SC-08-10-04": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Effective date cannot be in the future",
    "epic": "EPIC-08",
    "story": "STORY-08-10"
   },
   "SC-08-10-05": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Effective date may precede the recorded session start",
    "epic": "EPIC-08",
    "story": "STORY-08-10"
   },
   "SC-08-10-06": {
-   "state": "planned",
+   "state": "no_result",
    "name": "The leave is recorded after the resident actually left",
    "epic": "EPIC-08",
    "story": "STORY-08-10"
   },
   "SC-08-11-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Workspace actions follow the unit's allowed commands",
    "epic": "EPIC-08",
    "story": "STORY-08-11"
   },
   "SC-08-11-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Workspace information keeps the operating and capital ledgers separate",
    "epic": "EPIC-08",
    "story": "STORY-08-11"
   },
   "SC-08-11-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Returning from unit workspace restores directory context and focus",
    "epic": "EPIC-08",
    "story": "STORY-08-11"
@@ -1029,7 +1029,7 @@
    "story": "STORY-09-01"
   },
   "SC-09-01-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "Debt aging buckets total the overdue sum",
    "epic": "EPIC-09",
    "story": "STORY-09-01"
@@ -1041,7 +1041,7 @@
    "story": "STORY-09-02"
   },
   "SC-09-02-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Owner payment settles capital dues after operational dues",
    "epic": "EPIC-09",
    "story": "STORY-09-02"
@@ -1083,25 +1083,25 @@
    "story": "STORY-09-04"
   },
   "SC-09-05-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Move-out freezes tenant balance and shifts recurring accrual to owner",
    "epic": "EPIC-09",
    "story": "STORY-09-05"
   },
   "SC-09-06-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Tenant pays elevator fixture fee on behalf of landlord",
    "epic": "EPIC-09",
    "story": "STORY-09-06"
   },
   "SC-09-06-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Advance balance is transferred to the owner's capital dues in one click",
    "epic": "EPIC-09",
    "story": "STORY-09-06"
   },
   "SC-09-07-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Property ownership transfer freezes old owner balance and binds new owner",
    "epic": "EPIC-09",
    "story": "STORY-09-07"
@@ -1377,31 +1377,31 @@
    "story": "STORY-11-14"
   },
   "SC-12-01-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Preserve person history while adding normalized identity references",
    "epic": "EPIC-12",
    "story": "STORY-12-01"
   },
   "SC-12-02-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Moving to the next page shows the next unit range",
    "epic": "EPIC-12",
    "story": "STORY-12-02"
   },
   "SC-12-02-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Increasing page density reduces the number of pages",
    "epic": "EPIC-12",
    "story": "STORY-12-02"
   },
   "SC-12-02-03": {
-   "state": "planned",
+   "state": "passing",
    "name": "The directory pager adapts to a narrow viewport",
    "epic": "EPIC-12",
    "story": "STORY-12-02"
   },
   "SC-12-02-04": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Large directories build only the visible unit rows",
    "epic": "EPIC-12",
    "story": "STORY-12-02"
@@ -1425,13 +1425,13 @@
    "story": "STORY-12-02"
   },
   "SC-12-02-08": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Directory page and density survive app restoration",
    "epic": "EPIC-12",
    "story": "STORY-12-02"
   },
   "SC-12-02-09": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Unit search survives app restoration",
    "epic": "EPIC-12",
    "story": "STORY-12-02"
@@ -1467,7 +1467,7 @@
    "story": "STORY-12-04"
   },
   "SC-12-04-02": {
-   "state": "planned",
+   "state": "passing",
    "name": "People search and directory position survive restoration",
    "epic": "EPIC-12",
    "story": "STORY-12-04"
@@ -1698,10 +1698,55 @@
    "stories": 91,
    "stories_with_scenarios": 91,
    "scenarios": 227,
-   "automated": 155
+   "automated": 200
   }
  ],
  "recent_changes": [
+  {
+   "date": "2026-11-16",
+   "epic": "EPIC-12",
+   "title": "Unified People and Unit Directory",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 8,
+   "items": 8,
+   "samples": [
+    "SC-12-01-01: Preserve person history while adding normalized identity references",
+    "SC-12-02-01: Moving to the next page shows the next unit range",
+    "SC-12-02-02: Increasing page density reduces the number of pages",
+    "SC-12-02-03: The directory pager adapts to a narrow viewport"
+   ]
+  },
+  {
+   "date": "2026-11-16",
+   "epic": "EPIC-09",
+   "title": "Payment Tracking, Dual-Ledger Treasury & Delinquency Management",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 6,
+   "items": 6,
+   "samples": [
+    "SC-09-01-02: Debt aging buckets total the overdue sum",
+    "SC-09-02-02: Owner payment settles capital dues after operational dues",
+    "SC-09-05-01: Move-out freezes tenant balance and shifts recurring accrual to owner",
+    "SC-09-06-01: Tenant pays elevator fixture fee on behalf of landlord"
+   ]
+  },
+  {
+   "date": "2026-11-16",
+   "epic": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 31,
+   "items": 31,
+   "samples": [
+    "SC-08-02-02: Household members are archived when the resident moves out",
+    "SC-08-02-03: A possible household person duplicate requires manager confirmation",
+    "SC-08-04-02: Tenant move-in opens an active tenant session",
+    "SC-08-05-02: Capital dues after the transfer are billed to the new owner"
+   ]
+  },
   {
    "date": "2026-11-16",
    "epic": "EPIC-07",
@@ -2069,5 +2114,5 @@
    ]
   }
  ],
- "href": "reports/43801380111-1/"
+ "href": "reports/43822952254-1/"
 }
