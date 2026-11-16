@@ -460,7 +460,10 @@ impl PaymentTrackingService {
         };
         let credit_debtor = settling_role.as_str().to_string();
         let allocate = |dues: &mut Vec<DuesLiability>| {
-            let candidates = dues_ledger::open_dues_for(dues, |_| true, settling_role.as_str());
+            let mut candidates = dues_ledger::open_dues_for(dues, |_| true, settling_role.as_str());
+            if on_behalf_of_owner {
+                candidates.retain(|&i| dues[i].expense_type == ExpenseType::CapitalDues);
+            }
             let designated = dues_ledger::designated_dues(
                 dues,
                 &candidates,

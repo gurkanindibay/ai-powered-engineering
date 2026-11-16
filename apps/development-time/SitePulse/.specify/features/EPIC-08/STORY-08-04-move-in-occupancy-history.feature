@@ -11,7 +11,7 @@ Feature: Move-in and historical occupancy audit trail
     When the Site Manager views the occupancy history timeline
     Then the timeline lists Zeynep Kaya "Left with 1500.00" followed by Mehmet Demir "Active"
 
-  @SC-08-04-02 @GUI-08-01 @pending @smoke @role_manager
+  @SC-08-04-02 @GUI-08-01 @layer:gui @linked @smoke @role_manager
   Scenario: Tenant move-in opens an active tenant session
     Given Unit "B Blok D:3" is VACANT of tenant
     When the Site Manager registers new Tenant "Selin Demir"

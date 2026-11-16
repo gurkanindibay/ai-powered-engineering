@@ -10,7 +10,7 @@ Feature: Title deed transfer and ownership sale handover
     And Selim Evsahibi becomes the active owner_person_id for Unit "A Blok D:14"
     And Canan Kaya remains the active tenant with zero interruption to her occupancy session
 
-  @SC-08-05-02 @pending @core @role_manager
+  @SC-08-05-02 @layer:gui @linked @core @role_manager
   Scenario: Capital dues after the transfer are billed to the new owner
     Given Unit "A Blok D:14" was transferred to "Selim Evsahibi" effective 2026-10-28
     When a capital assessment is accrued for the unit

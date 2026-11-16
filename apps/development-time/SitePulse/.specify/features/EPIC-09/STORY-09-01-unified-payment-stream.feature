@@ -11,7 +11,7 @@ Feature: Unified payment inflow stream and multi-channel ledger
     And the total collected amount, collection rate and channel distribution breakdown are displayed
     And clicking any payment opens the detailed allocation breakdown dialog
 
-  @SC-09-01-02 @GUI-09-06 @layer:gui @edge @role_manager @pending
+  @SC-09-01-02 @GUI-09-06 @layer:gui @edge @role_manager @linked
   Scenario: Debt aging buckets total the overdue sum
     Given the unit has overdue dues in several delay ranges
     When the site manager opens the debt aging report

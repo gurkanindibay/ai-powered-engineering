@@ -12,6 +12,7 @@ def _unit_id(stack, block: str, number: int) -> str:
 
 @pytest.mark.edge
 @pytest.mark.role_manager
+@pytest.mark.covers("SC-12-02-03")
 @pytest.mark.covers("SC-12-02-05")
 @pytest.mark.covers("SC-12-02-06")
 @pytest.mark.covers("SC-12-02-07")

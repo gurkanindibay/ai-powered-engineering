@@ -101,6 +101,27 @@ void main() {
     expect(api.calls.last['q'], 'Ayşe');
   });
 
+  // covers: SC-12-04-02
+  testWidgets('restores search query and directory page position across restoration', (tester) async {
+    final api = _FakeApi();
+    await tester.pumpWidget(MaterialApp(
+      restorationScopeId: 'people_test_scope',
+      theme: AppTheme.light(),
+      home: PeopleDirectoryPage(api: api),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('people_search_input')), 'Kişi');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    await tester.restartAndRestore();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('people_search_input')), findsOneWidget);
+    expect(find.text('Kişi'), findsOneWidget);
+  });
+
   testWidgets('export asks for the password when the server requires it', (tester) async {
     final api = _FakeApi()..stepUpNeeded = true;
     await tester.pumpWidget(_host(PeopleDirectoryPage(api: api)));

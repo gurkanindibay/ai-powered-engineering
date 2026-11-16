@@ -467,9 +467,13 @@ impl CapitalProjectService {
                                     INSERT INTO dues_liabilities (
                                         unit_id, period, debtor_type, expense_type,
                                         principal_amount, due_date, status, delay_penalty,
-                                        paid_amount, capital_project_id, installment_number, created_at
+                                        paid_amount, capital_project_id, installment_number, created_at,
+                                        liable_person_id
                                     )
-                                    VALUES ($1, $2, 'OWNER', 'CAPITAL_DUES', $3, $4, 'PENDING', 0.00, 0.00, $5, $6, $7)
+                                    VALUES (
+                                        $1, $2, 'OWNER', 'CAPITAL_DUES', $3, $4, 'PENDING', 0.00, 0.00, $5, $6, $7,
+                                        (SELECT owner_person_id FROM units WHERE id = $1)
+                                    )
                                     "#,
                                     &[
                                         &u_id,

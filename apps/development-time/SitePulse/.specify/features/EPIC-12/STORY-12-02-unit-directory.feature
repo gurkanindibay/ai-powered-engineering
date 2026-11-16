@@ -2,25 +2,25 @@
 Feature: Compact unit directory
   The unit directory supports a compact responsive list with local paging.
 
-  @SC-12-02-01 @layer:gui @linked @pending @core
+  @SC-12-02-01 @layer:gui @linked @core
   Scenario: Moving to the next page shows the next unit range
     Given a directory containing more units than fit on one page
     When the manager moves to the next page
     Then the directory shows the next page of units
 
-  @SC-12-02-02 @layer:gui @linked @pending @core
+  @SC-12-02-02 @layer:gui @linked @core
   Scenario: Increasing page density reduces the number of pages
     Given a directory with forty matching units
     When the manager selects fifty rows per page
     Then all matching units fit on one page
 
-  @SC-12-02-03 @layer:gui @linked @pending @core
+  @SC-12-02-03 @layer:gui @linked @core
   Scenario: The directory pager adapts to a narrow viewport
     Given the directory is shown in a narrow window
     When the page controls are displayed
     Then the pager wraps without horizontal overflow
 
-  @SC-12-02-04 @layer:gui @linked @pending @core
+  @SC-12-02-04 @layer:gui @linked @core
   Scenario: Large directories build only the visible unit rows
     Given a directory containing one thousand or ten thousand units
     When the first page is shown
@@ -44,13 +44,13 @@ Feature: Compact unit directory
     When a compact row is rendered
     Then the unit information and both targets remain visible without overflow
 
-  @SC-12-02-08 @layer:gui @linked @pending @core
+  @SC-12-02-08 @layer:gui @linked @core
   Scenario: Directory page and density survive app restoration
     Given the manager is viewing a later page at a chosen row density
     When the directory is restored
     Then the same page and row density are selected
 
-  @SC-12-02-09 @layer:gui @linked @pending @core
+  @SC-12-02-09 @layer:gui @linked @core
   Scenario: Unit search survives app restoration
     Given the manager has entered a unit search query
     When the directory is restored

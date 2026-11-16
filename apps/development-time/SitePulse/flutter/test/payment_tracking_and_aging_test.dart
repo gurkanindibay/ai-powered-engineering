@@ -71,6 +71,7 @@ void main() {
       });
     });
 
+    // covers: SC-09-01-02
     test('when fetching debt aging report then returns brackets with 0-30, 31-60, and 60+ days', () async {
       await controller.fetchDebtAgingReport();
       expect(controller.debtAgingReport, isNotNull);
@@ -83,6 +84,12 @@ void main() {
       expect(firstBracket.unitLabel.isNotEmpty, isTrue);
       expect(firstBracket.residentName.isNotEmpty, isTrue);
       expect(firstBracket.totalOutstanding.toDouble(), greaterThan(0));
+      final sumOfBuckets = firstBracket.currentDue +
+          firstBracket.overdue1to30Days +
+          firstBracket.overdue31to60Days +
+          firstBracket.overdue60PlusDays +
+          firstBracket.accruedDelayPenalty;
+      expect(firstBracket.totalOutstanding, equals(sumOfBuckets));
     });
 
     test('when recording manual cash payment then returns receipt and updates stream', () async {
@@ -101,6 +108,7 @@ void main() {
       expect(res.payerName, 'Gürkan İndibay');
     });
 
+    // covers: SC-09-06-02
     test('when executing inter-ledger transfer then returns success and receipt number', () async {
       final res = await controller.executeInterLedgerTransfer(
         unitId: 'unit-2',
@@ -114,6 +122,7 @@ void main() {
       expect(res['remaining_advance_balance'], '500.00');
     });
 
+    // covers: SC-09-07-01
     test('when transferring property ownership then records new owner and freezes old liabilities', () async {
       final res = await controller.transferUnitOwnership(
         unitId: 'unit-3',

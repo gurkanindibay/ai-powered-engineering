@@ -197,7 +197,7 @@ async fn ensure_occupancy(t: &TestDb, unit: i64) {
 
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
-// covers: SC-12-05-02, SC-12-05-03
+// covers: SC-08-02-03, SC-12-05-02, SC-12-05-03
 async fn person_cards_are_created_edited_and_stay_in_their_site() {
     let t = TestDb::create("person_card").await;
     let a = t.site_id("begonya-sitesi").await;

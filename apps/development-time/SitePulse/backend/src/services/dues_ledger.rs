@@ -107,7 +107,13 @@ pub fn allocate_waterfall(
     amount: Decimal,
 ) -> (Vec<AllocationLine>, Decimal) {
     let mut order: Vec<usize> = candidate_indices.to_vec();
-    order.sort_by_key(|&i| (dues[i].due_date, dues[i].id.clone()));
+    order.sort_by_key(|&i| {
+        (
+            dues[i].expense_type == ExpenseType::CapitalDues,
+            dues[i].due_date,
+            dues[i].id.clone(),
+        )
+    });
     let mut remaining = amount.max(Decimal::ZERO);
     let mut lines: Vec<AllocationLine> = Vec::new();
 
@@ -377,6 +383,31 @@ mod tests {
         ];
         assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_TENANT), vec![1]);
         assert_eq!(open_dues_for(&dues, |_| true, DEBTOR_OWNER), vec![0, 1]);
+    }
+
+    // covers: SC-09-02-02
+    #[test]
+    fn owner_payment_settles_operational_dues_before_capital_dues() {
+        let mut dues = vec![
+            due("cap", "500.00", "0.00", 1, DEBTOR_OWNER, EXPENSE_CAPITAL),
+            due("op", "300.00", "0.00", 1, DEBTOR_OWNER, EXPENSE_OPERATIONAL),
+        ];
+        let candidates = open_dues_for(&dues, |_| true, DEBTOR_OWNER);
+        let (lines, rest) = allocate_waterfall(&mut dues, &candidates, d("600.00"));
+        assert_eq!(rest, Decimal::ZERO);
+        assert_eq!(
+            dues[1].status,
+            DebtStatus::Paid,
+            "operational due is fully settled"
+        );
+        assert_eq!(dues[1].paid_principal, d("300.00"));
+        assert_eq!(
+            dues[0].paid_principal,
+            d("300.00"),
+            "remainder applied to capital due"
+        );
+        assert_eq!(dues[0].total_amount, d("200.00"));
+        assert_eq!(lines.len(), 2);
     }
 
     #[test]

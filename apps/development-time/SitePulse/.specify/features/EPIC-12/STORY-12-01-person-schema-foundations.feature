@@ -2,7 +2,7 @@
 Feature: Person schema foundations
   @SC-12-01-01
   @layer:db
-  @pending
+  @linked
   Scenario: Preserve person history while adding normalized identity references
     Given the database contains existing person, household, unit, and primary contact rows
     When the person schema migration is applied
