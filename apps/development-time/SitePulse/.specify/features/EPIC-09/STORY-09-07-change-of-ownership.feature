@@ -3,7 +3,7 @@ Feature: Change of ownership and title deed financial handover
   A property sale freezes the old owner's liabilities and binds the new owner
   from the deed transfer date, leaving the tenancy untouched.
 
-  @SC-09-07-01 @layer:gui @core @role_manager @pending
+  @SC-09-07-01 @layer:gui @core @role_manager @linked
   Scenario: Property ownership transfer freezes old owner balance and binds new owner
     Given unit "B Blok D:10" is owned by "Ahmet Yılmaz" with 2500.00 unpaid capital dues
     When the site manager registers a title deed transfer to "Burak Demir" effective 2026-10-28

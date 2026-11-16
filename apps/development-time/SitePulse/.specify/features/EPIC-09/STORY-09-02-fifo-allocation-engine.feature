@@ -12,7 +12,7 @@ Feature: Dual-ledger FIFO payment allocation and KMK interest settlement
     And the surplus of 576.67 is credited to the unit's advance balance
     And the payment allocation audit record reflects the exact 3-tier distribution
 
-  @SC-09-02-02 @layer:gui @core @edge @role_manager @pending
+  @SC-09-02-02 @layer:gui @core @edge @role_manager @linked
   Scenario: Owner payment settles capital dues after operational dues
     Given a property owner has an unpaid operational due and an unpaid capital due
     When the owner's payment covers the operational due and part of the capital due

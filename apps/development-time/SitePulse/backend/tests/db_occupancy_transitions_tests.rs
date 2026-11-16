@@ -225,6 +225,7 @@ async fn tenant_move_in(
     body
 }
 
+// covers: SC-08-06-01, SC-08-06-03, SC-08-10-01
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn when_tenant_leaves_and_owner_moves_in_then_owner_is_unchanged() {
@@ -322,6 +323,7 @@ async fn when_tenant_leaves_and_owner_moves_in_then_owner_is_unchanged() {
     t.drop_db().await;
 }
 
+// covers: SC-08-06-02
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn when_owner_move_in_names_someone_else_then_it_is_rejected() {
@@ -363,6 +365,7 @@ async fn when_owner_move_in_names_someone_else_then_it_is_rejected() {
     t.drop_db().await;
 }
 
+// covers: SC-08-07-01, SC-08-07-02, SC-08-07-03, SC-08-07-04, SC-08-07-05, SC-08-07-06, SC-08-07-07
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn when_command_is_illegal_for_the_state_then_nothing_changes() {
@@ -438,6 +441,7 @@ async fn when_command_is_illegal_for_the_state_then_nothing_changes() {
     t.drop_db().await;
 }
 
+// covers: SC-08-08-01, SC-08-08-02, SC-08-08-03, SC-08-10-04
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn when_tenant_is_replaced_then_outgoing_tenant_is_settled() {
@@ -516,6 +520,7 @@ async fn when_tenant_is_replaced_then_outgoing_tenant_is_settled() {
     t.drop_db().await;
 }
 
+// covers: SC-08-09-01, SC-08-09-02, SC-08-09-03, SC-08-09-04
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn when_title_is_transferred_then_occupancy_follows_the_state_table() {
@@ -631,6 +636,7 @@ async fn when_title_is_transferred_then_occupancy_follows_the_state_table() {
     t.drop_db().await;
 }
 
+// covers: SC-08-10-02, SC-08-10-03
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn when_status_or_sessions_are_written_by_hand_then_the_model_holds() {
@@ -685,6 +691,7 @@ async fn when_status_or_sessions_are_written_by_hand_then_the_model_holds() {
     t.drop_db().await;
 }
 
+// covers: SC-08-11-01
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn when_state_is_read_then_allowed_commands_follow_the_table() {
@@ -712,6 +719,7 @@ async fn when_state_is_read_then_allowed_commands_follow_the_table() {
     t.drop_db().await;
 }
 
+// covers: SC-08-07-08
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn when_registration_is_approved_on_an_occupied_unit_then_it_is_rejected() {
@@ -748,6 +756,7 @@ async fn when_registration_is_approved_on_an_occupied_unit_then_it_is_rejected()
     t.drop_db().await;
 }
 
+// covers: SC-08-04-02
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn when_an_owner_is_registered_then_t1_records_ownership_and_the_unit_can_be_archived() {

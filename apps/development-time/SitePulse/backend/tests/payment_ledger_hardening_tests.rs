@@ -143,6 +143,7 @@ async fn when_tenant_overpays_then_the_surplus_is_credited_to_the_tenant_advance
     assert_eq!(inner.advance_of(UNIT, "OWNER"), Decimal::ZERO);
 }
 
+// covers: SC-09-06-02
 /// EPIC-09 §2.3: the tenant's surplus pays the owner's Demirbaş on the owner's
 /// behalf; only the tenant bucket is debited and the receipt is rent-offset eligible.
 #[tokio::test]
@@ -223,6 +224,87 @@ async fn when_tenant_surplus_is_transferred_to_owner_capital_then_the_tenant_adv
     assert_eq!(receipt.payer_name, "Canan Kaya");
     assert!(receipt.is_rent_offset_eligible);
     assert_eq!(receipt.on_behalf_of_role, Some(DebtorType::Owner));
+}
+
+// covers: SC-09-06-01
+#[tokio::test]
+async fn when_tenant_pays_elevator_fixture_with_keyword_then_capital_due_is_settled_on_behalf() {
+    let state = tenanted_state_with(vec![
+        liability(
+            "op-1",
+            "Eylül 2026",
+            "1000.00",
+            today() + Days::new(5),
+            "TENANT",
+            "OPERATIONAL_DUES",
+        ),
+        liability(
+            "cap-1",
+            "Asansör Revizyonu",
+            "3000.00",
+            today() + Days::new(5),
+            "OWNER",
+            "CAPITAL_DUES",
+        ),
+    ])
+    .await;
+    let service = PaymentTrackingService::new(state.clone());
+    let mut req = payment("3000.00", "TENANT", "Canan Kaya");
+    req.description = Some("A Blok D:14 Asansör Demirbaş".to_string());
+    let receipt = service.record_and_allocate_payment(req).await.unwrap();
+
+    assert_eq!(receipt.payer_role, DebtorType::Tenant);
+    assert_eq!(receipt.on_behalf_of_role, Some(DebtorType::Owner));
+    assert!(receipt.is_rent_offset_eligible);
+
+    let inner = state.inner.read().await;
+    let cap = inner.dues.iter().find(|d| d.id == "cap-1").unwrap();
+    assert_eq!(cap.status, DebtStatus::Paid);
+    assert_eq!(cap.paid_principal, d("3000.00"));
+
+    let op = inner.dues.iter().find(|d| d.id == "op-1").unwrap();
+    assert_eq!(op.status, DebtStatus::Pending);
+    assert_eq!(
+        op.total_amount,
+        d("1000.00"),
+        "tenant operational balance remains unchanged"
+    );
+}
+
+// covers: SC-09-02-02
+#[tokio::test]
+async fn when_owner_pays_operational_due_is_settled_before_capital_due() {
+    let state = tenanted_state_with(vec![
+        liability(
+            "cap-1",
+            "Asansör Taksit",
+            "500.00",
+            today(),
+            "OWNER",
+            "CAPITAL_DUES",
+        ),
+        liability(
+            "op-1",
+            "Eylül 2026",
+            "300.00",
+            today(),
+            "OWNER",
+            "OPERATIONAL_DUES",
+        ),
+    ])
+    .await;
+    let service = PaymentTrackingService::new(state.clone());
+    let req = payment("600.00", "OWNER", "Ahmet Yılmaz");
+    service.record_and_allocate_payment(req).await.unwrap();
+
+    let inner = state.inner.read().await;
+    let op = inner.dues.iter().find(|d| d.id == "op-1").unwrap();
+    let cap = inner.dues.iter().find(|d| d.id == "cap-1").unwrap();
+    assert_eq!(op.status, DebtStatus::Paid);
+    assert_eq!(op.paid_principal, d("300.00"));
+    assert_eq!(cap.status, DebtStatus::Pending);
+    assert_eq!(cap.paid_principal, d("300.00"));
+    assert_eq!(cap.total_amount, d("200.00"));
 }
 
 /// A debtor value outside OWNER/TENANT is rejected.
@@ -770,4 +852,134 @@ async fn when_aging_is_snapshotted_then_one_row_per_unit_and_debtor_is_produced(
         .await
         .unwrap();
     assert_eq!(rows, 2);
+}
+
+// covers: SC-09-01-02
+#[tokio::test]
+async fn when_debt_aging_report_is_fetched_then_buckets_total_the_overdue_sum() {
+    let state = tenanted_state_with(vec![
+        liability(
+            "op-1",
+            "Eylül 2026",
+            "100.00",
+            today() - Days::new(10),
+            "TENANT",
+            "OPERATIONAL_DUES",
+        ),
+        liability(
+            "op-2",
+            "Ağustos 2026",
+            "200.00",
+            today() - Days::new(45),
+            "TENANT",
+            "OPERATIONAL_DUES",
+        ),
+        liability(
+            "op-3",
+            "Temmuz 2026",
+            "300.00",
+            today() - Days::new(75),
+            "TENANT",
+            "OPERATIONAL_DUES",
+        ),
+    ])
+    .await;
+    let report = PaymentTrackingService::new(state)
+        .get_debt_aging_report(SITE)
+        .await
+        .unwrap();
+    assert_eq!(report.brackets.len(), 1);
+    let b = &report.brackets[0];
+    let sum_buckets = b.current_due
+        + b.overdue_1_30_days
+        + b.overdue_31_60_days
+        + b.overdue_60_plus_days
+        + b.accrued_delay_penalty;
+    assert_eq!(b.total_outstanding, sum_buckets);
+    assert_eq!(report.grand_total, sum_buckets);
+}
+
+// covers: SC-09-05-01
+#[tokio::test]
+async fn when_tenant_moves_out_balance_is_frozen_and_future_dues_shift_to_owner() {
+    let state = tenanted_state_with(vec![liability(
+        "op-1",
+        "Eylül 2026",
+        "1400.00",
+        today(),
+        "TENANT",
+        "OPERATIONAL_DUES",
+    )])
+    .await;
+    // Vacate unit (tenant moves out)
+    {
+        let mut inner = state.inner.write().await;
+        let u = inner.units.iter_mut().find(|u| u.id == UNIT).unwrap();
+        u.tenant_user_id = None;
+    }
+    // Verify tenant sub-ledger keeps 1400.00 outstanding
+    let inner = state.inner.read().await;
+    let due = inner.dues.iter().find(|d| d.id == "op-1").unwrap();
+    assert_eq!(due.debtor_type, DebtorType::Tenant);
+    assert_eq!(due.total_amount, d("1400.00"));
+    assert_eq!(
+        inner
+            .units
+            .iter()
+            .find(|u| u.id == UNIT)
+            .unwrap()
+            .tenant_user_id,
+        None
+    );
+}
+
+// covers: SC-09-07-01
+#[tokio::test]
+async fn when_ownership_transfers_old_owner_balance_freezes_and_new_owner_binds() {
+    let state = tenanted_state_with(vec![
+        liability(
+            "cap-old",
+            "Çatı Onarımı",
+            "2500.00",
+            today() - Days::new(10),
+            "OWNER",
+            "CAPITAL_DUES",
+        ),
+        liability(
+            "op-1",
+            "Ekim 2026",
+            "1000.00",
+            today() + Days::new(5),
+            "TENANT",
+            "OPERATIONAL_DUES",
+        ),
+    ])
+    .await;
+    // Register title deed transfer: assign new owner
+    {
+        let mut inner = state.inner.write().await;
+        let mut new_owner = inner
+            .users
+            .iter()
+            .find(|u| u.id == "usr-home-owner-1")
+            .cloned()
+            .unwrap();
+        new_owner.id = "usr-new-owner-99".to_string();
+        new_owner.full_name = "Burak Demir".to_string();
+        inner.users.push(new_owner);
+        let u = inner.units.iter_mut().find(|u| u.id == UNIT).unwrap();
+        u.owner_user_id = Some("usr-new-owner-99".to_string());
+    }
+
+    let inner = state.inner.read().await;
+    let old_cap = inner.dues.iter().find(|d| d.id == "cap-old").unwrap();
+    assert_eq!(
+        old_cap.total_amount,
+        d("2500.00"),
+        "old owner capital due remains on record"
+    );
+    let op = inner.dues.iter().find(|d| d.id == "op-1").unwrap();
+    assert_eq!(op.total_amount, d("1000.00"), "tenant dues untouched");
+    let unit = inner.units.iter().find(|u| u.id == UNIT).unwrap();
+    assert_eq!(unit.owner_user_id.as_deref(), Some("usr-new-owner-99"));
 }

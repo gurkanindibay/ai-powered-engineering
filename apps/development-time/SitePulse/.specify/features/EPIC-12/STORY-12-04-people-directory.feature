@@ -9,7 +9,7 @@ Feature: People directory
     Then the requested page and filter are sent to the directory API
     And the matching people are shown through the shared directory scaffold
 
-  @SC-12-04-02 @layer:gui @pending @core
+  @SC-12-04-02 @layer:gui @linked @core
   Scenario: People search and directory position survive restoration
     Given the manager has searched and paged through the people directory
     When the app restores the people directory

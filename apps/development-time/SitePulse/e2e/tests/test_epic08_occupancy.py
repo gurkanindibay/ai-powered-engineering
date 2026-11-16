@@ -14,6 +14,7 @@ def _unit_id(stack, block: str, number: int) -> str:
 @pytest.mark.smoke
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-01")
+@pytest.mark.covers("SC-08-04-02")
 def test_tenant_move_in(login_as, page, stack):
     b3 = _unit_id(stack, "B Blok", 3)
     login_as("manager")
@@ -212,3 +213,57 @@ def test_household_members_survive_a_backend_restart(two_household_members, api,
     manager = api.login(**actors["manager"])
     members = api.call("GET", f"/api/v1/home-residents/members/{two_household_members}?site_id=1", manager.token)
     assert sorted(m["full_name"] for m in members) == ["Ali Kaya", "Can Kaya"]
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-08-03")
+@pytest.mark.covers("SC-08-02-02")
+def test_household_members_are_archived_on_move_out(two_household_members, api, actors, page, login_as, stack):
+    a14 = two_household_members
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    ResidentsTab(page).open()
+    Occupancy(page).move_out(a14)
+
+    manager = api.login(**actors["manager"])
+    members = api.call("GET", f"/api/v1/home-residents/members/{a14}?site_id=1", manager.token)
+    assert members == []
+    archived_count = stack.sql(
+        f"SELECT count(*) FROM occupancy_members om "
+        f"JOIN unit_occupancies uo ON uo.id = om.occupancy_id "
+        f"WHERE uo.unit_id = {int(a14)} AND uo.is_active = FALSE;"
+    )
+    assert int(archived_count) >= 2
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-08-06")
+@pytest.mark.covers("SC-08-05-02")
+def test_capital_dues_after_transfer_billed_to_new_owner(login_as, page, stack, actors):
+    a14 = _unit_id(stack, "A Blok", 14)
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    from pages.shell import Shell
+    Shell(page).verify_sensitive(actors["manager"]["password"])
+    ResidentsTab(page).open()
+    UnitWorkspace(page).open(a14).action(a14, "transfer_ownership")
+    PersonPicker(page, "module_transfer_new_owner_name_input").create(
+        "Selim Evsahibi", email="selim.evsahibi@e2e.test")
+    by_id(page, "module_confirm_transfer_ownership_btn").click()
+    by_id(page, "module_confirm_transfer_ownership_btn").wait_for(state="detached", timeout=15_000)
+
+    capital = CapitalProjects(page).open()
+    capital.create("Asansör Yenileme", "30000.00", by_land_share=True, installments=1)
+    capital.accrue_installment(1)
+    capital.installment_accrued(1).wait_for(timeout=15_000)
+
+    selim_id = stack.sql("SELECT id FROM persons WHERE email = 'selim.evsahibi@e2e.test';")
+    capital_due_owner = stack.sql(
+        f"SELECT liable_person_id FROM dues_liabilities "
+        f"WHERE unit_id = {int(a14)} AND expense_type = 'CAPITAL_DUES' "
+        f"ORDER BY id DESC LIMIT 1;"
+    )
+    assert capital_due_owner == selim_id
+

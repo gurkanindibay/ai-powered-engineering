@@ -157,6 +157,7 @@ impl TestDb {
     }
 }
 
+// covers: SC-12-01-01
 #[tokio::test]
 #[ignore = "needs PostgreSQL and DB_PASS"]
 async fn merge_repoints_relationships_and_leaves_a_tombstone() {

@@ -94,3 +94,60 @@ def test_epic11_flutter_linked_scenarios() -> None:
 @pytest.mark.covers("SC-11-07-03")
 def test_epic11_api_linked_scenarios() -> None:
     run_suite([sys.executable, "scripts/api_system_check.py", "--json"], SITEPULSE)
+
+
+@pytest.mark.epic_08
+@pytest.mark.covers("SC-08-06-01")
+@pytest.mark.covers("SC-08-06-02")
+@pytest.mark.covers("SC-08-06-03")
+@pytest.mark.covers("SC-08-07-01")
+@pytest.mark.covers("SC-08-07-02")
+@pytest.mark.covers("SC-08-07-03")
+@pytest.mark.covers("SC-08-07-04")
+@pytest.mark.covers("SC-08-07-05")
+@pytest.mark.covers("SC-08-07-06")
+@pytest.mark.covers("SC-08-07-07")
+@pytest.mark.covers("SC-08-07-08")
+@pytest.mark.covers("SC-08-08-01")
+@pytest.mark.covers("SC-08-08-02")
+@pytest.mark.covers("SC-08-08-03")
+@pytest.mark.covers("SC-08-09-01")
+@pytest.mark.covers("SC-08-09-02")
+@pytest.mark.covers("SC-08-09-03")
+@pytest.mark.covers("SC-08-09-04")
+@pytest.mark.covers("SC-08-10-01")
+@pytest.mark.covers("SC-08-10-02")
+@pytest.mark.covers("SC-08-10-03")
+@pytest.mark.covers("SC-08-10-04")
+@pytest.mark.covers("SC-08-10-05")
+@pytest.mark.covers("SC-08-10-06")
+def test_epic08_rust_linked_scenarios() -> None:
+    run_suite(["cargo", "test", "--locked", "--test", "occupancy_state_machine_tests"], BACKEND)
+
+
+@pytest.mark.epic_08
+@pytest.mark.covers("SC-08-11-01")
+@pytest.mark.covers("SC-08-11-02")
+@pytest.mark.covers("SC-08-11-03")
+def test_epic08_flutter_linked_scenarios() -> None:
+    run_suite(["flutter", "test", "test/unit_workspace_test.dart"], FLUTTER)
+
+
+@pytest.mark.epic_09
+@pytest.mark.covers("SC-09-01-02")
+@pytest.mark.covers("SC-09-02-02")
+@pytest.mark.covers("SC-09-05-01")
+@pytest.mark.covers("SC-09-06-01")
+@pytest.mark.covers("SC-09-06-02")
+@pytest.mark.covers("SC-09-07-01")
+def test_epic09_rust_linked_scenarios() -> None:
+    run_suite(["cargo", "test", "--locked", "--test", "payment_ledger_hardening_tests"], BACKEND)
+
+
+@pytest.mark.epic_09
+@pytest.mark.covers("SC-09-01-02")
+@pytest.mark.covers("SC-09-06-02")
+@pytest.mark.covers("SC-09-07-01")
+def test_epic09_flutter_linked_scenarios() -> None:
+    run_suite(["flutter", "test", "test/payment_tracking_and_aging_test.dart"], FLUTTER)
+
