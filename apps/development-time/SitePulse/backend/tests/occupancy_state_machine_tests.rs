@@ -220,6 +220,29 @@ fn selling_owner_occupied_unit_vacates_it() {
     );
 }
 
+// covers: SC-08-02-02
+#[test]
+fn resident_move_out_closes_session_and_vacates_unit() {
+    let outcome = plan(TENANT_OCCUPIED, Command::MoveOut).expect("legal move out");
+    assert_eq!(outcome.to, VACANT);
+    assert_eq!(outcome.closes, Some(SessionRole::Tenant));
+}
+
+// covers: SC-08-05-02
+#[test]
+fn title_deed_transfer_binds_new_owner_for_future_dues() {
+    let outcome = plan(
+        VACANT,
+        Command::TitleTransfer {
+            buyer_is_tenant: false,
+            new_owner_moves_in: false,
+        },
+    )
+    .expect("legal transfer");
+    assert!(outcome.changes_ownership);
+    assert_eq!(outcome.to.ownership, Ownership::Owned);
+}
+
 // covers: SC-08-09-02
 #[test]
 fn new_owner_moves_in_at_transfer() {

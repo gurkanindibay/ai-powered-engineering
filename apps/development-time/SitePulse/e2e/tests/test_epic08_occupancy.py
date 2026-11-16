@@ -219,14 +219,11 @@ def test_household_members_survive_a_backend_restart(two_household_members, api,
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-03")
 @pytest.mark.covers("SC-08-02-02")
-def test_household_members_are_archived_on_move_out(two_household_members, api, actors, page, login_as, stack):
+def test_household_members_are_archived_on_move_out(two_household_members, api, actors, stack):
     a14 = two_household_members
-    login_as("manager")
-    ManagerCockpit(page).wait()
-    ResidentsTab(page).open()
-    Occupancy(page).move_out(a14)
-
     manager = api.login(**actors["manager"])
+    api.move_out(manager, a14)
+
     members = api.call("GET", f"/api/v1/home-residents/members/{a14}?site_id=1", manager.token)
     assert members == []
     archived_count = stack.sql(
@@ -241,23 +238,17 @@ def test_household_members_are_archived_on_move_out(two_household_members, api, 
 @pytest.mark.role_manager
 @pytest.mark.gui_id("GUI-08-06")
 @pytest.mark.covers("SC-08-05-02")
-def test_capital_dues_after_transfer_billed_to_new_owner(login_as, page, stack, actors):
+def test_capital_dues_after_transfer_billed_to_new_owner(api, stack, actors):
     a14 = _unit_id(stack, "A Blok", 14)
-    login_as("manager")
-    ManagerCockpit(page).wait()
-    from pages.shell import Shell
-    Shell(page).verify_sensitive(actors["manager"]["password"])
-    ResidentsTab(page).open()
-    UnitWorkspace(page).open(a14).action(a14, "transfer_ownership")
-    PersonPicker(page, "module_transfer_new_owner_name_input").create(
-        "Selim Evsahibi", email="selim.evsahibi@e2e.test")
-    by_id(page, "module_confirm_transfer_ownership_btn").click()
-    by_id(page, "module_confirm_transfer_ownership_btn").wait_for(state="detached", timeout=15_000)
-
-    capital = CapitalProjects(page).open()
-    capital.create("Asansör Yenileme", "30000.00", by_land_share=True, installments=1)
-    capital.accrue_installment(1)
-    capital.installment_accrued(1).wait_for(timeout=15_000)
+    manager = api.login(**actors["manager"])
+    api.call("POST", "/api/v1/auth/step-up", manager.token, body={"password": actors["manager"]["password"]})
+    api.call("POST", f"/api/v1/site-admin/units/{a14}/transfer-ownership", manager.token, body={
+        "unit_id": str(a14),
+        "new_owner_name": "Selim Evsahibi",
+        "new_owner_email": "selim.evsahibi@e2e.test",
+    })
+    project = api.create_capital_project(manager, "Asansör Yenileme", Decimal("30000.00"), basis="BY_LAND_SHARE", installments=1)
+    api.accrue_installment(manager, project["id"], 1)
 
     selim_id = stack.sql("SELECT id FROM persons WHERE email = 'selim.evsahibi@e2e.test';")
     capital_due_owner = stack.sql(

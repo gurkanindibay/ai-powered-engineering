@@ -97,6 +97,8 @@ def test_epic11_api_linked_scenarios() -> None:
 
 
 @pytest.mark.epic_08
+@pytest.mark.covers("SC-08-02-02")
+@pytest.mark.covers("SC-08-05-02")
 @pytest.mark.covers("SC-08-06-01")
 @pytest.mark.covers("SC-08-06-02")
 @pytest.mark.covers("SC-08-06-03")
