@@ -1,5 +1,6 @@
 """EPIC-02 Site manager operations & EPIC-10 capital segment entry point."""
 import pytest
+from playwright.sync_api import expect
 
 from pages import DuesManagement, ManagerCockpit, ResidentsTab, UnitWorkspace
 from support.flutter import by_id
@@ -321,8 +322,12 @@ def test_cockpit_shows_collection_progress_and_unit_breakdown(login_as, page, st
     assert _cockpit_figures(login_as, page) == (
         Decimal("96000.00"), Decimal("120000.00"), "%80 Tahsil Edildi",
     )
-    labels = page.locator("flt-semantics[aria-label]").evaluate_all(
-        "nodes => nodes.map(node => node.getAttribute('aria-label'))"
-    )
-    cockpit_text = " ".join(" ".join(labels).split())
-    assert "Toplam Daire 24 Ödeyen 18 Geciken 6 Kalan Borç ₺24.000,00" in cockpit_text
+    for test_id, label, value in (
+        ("cockpit_total_units", "Toplam Daire", "24"),
+        ("cockpit_paid_units", "Ödeyen", "18"),
+        ("cockpit_overdue_units", "Geciken", "6"),
+        ("cockpit_remaining_debt", "Kalan Borç", "₺24.000,00"),
+    ):
+        metric = by_id(page, test_id)
+        expect(metric.get_by_text(label, exact=True)).to_be_visible()
+        expect(metric.get_by_text(value, exact=True)).to_be_visible()
