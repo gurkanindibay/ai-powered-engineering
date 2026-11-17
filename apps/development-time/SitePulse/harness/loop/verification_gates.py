@@ -134,10 +134,16 @@ GATES: Dict[str, List[CommandSpec]] = {
     # The PostgreSQL persistence path: RLS tenant isolation, read-only GETs,
     # transactional advance offsets, 503 on database failure (needs DB_PASS).
     # The unit state model (EPIC-08 §3): guarded transitions, derived status.
-    "rust-db-test": [CommandSpec(["cargo", "test", "--locked", "--test", "db_tenant_isolation_tests",
-                                  "--", "--ignored", "--test-threads=1"], "backend", 900),
-                     CommandSpec(["cargo", "test", "--locked", "--test", "db_occupancy_transitions_tests",
-                                  "--", "--ignored", "--test-threads=1"], "backend", 900)],
+    # The person API and merge, and unit and person actions repeated in cycles.
+    # Every test creates its own throwaway database (named by tag and process id), so the tests
+    # run 4 at a time: all five files in one cargo run took 74 s sequentially and 28 s this way.
+    "rust-db-test": [CommandSpec(["cargo", "test", "--locked",
+                                  "--test", "db_tenant_isolation_tests",
+                                  "--test", "db_occupancy_transitions_tests",
+                                  "--test", "db_person_api_tests",
+                                  "--test", "db_person_merge_tests",
+                                  "--test", "db_unit_person_action_cycles_tests",
+                                  "--", "--ignored", "--test-threads=4"], "backend", 900)],
     # Errors are fatal; warnings/infos are reported by `flutter analyze` itself.
     "flutter-analyze": [CommandSpec(["flutter", "analyze", "--no-fatal-infos", "--no-fatal-warnings"], "flutter", 600)],
     "flutter-test": [CommandSpec(["flutter", "test"], "flutter", 1200)],

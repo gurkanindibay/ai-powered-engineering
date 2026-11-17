@@ -181,3 +181,12 @@ Executable scenarios: [`STORY-08-10-atomic-transitions-exit-balance.feature`](..
 - **Description:** A unit opens in a full-screen workspace with two modes on the same unit: actions and information. The action list follows the unit's allowed commands and keeps the existing occupancy workflows; the information mode keeps residents, owners and the separate operating and capital ledgers. The workspace is opened from the unit card; wiring it to the directory rows is a later task.
 - **Acceptance Criteria (Gherkin):**
 Executable scenarios: [`STORY-08-11-unit-workspace.feature`](../features/EPIC-08/STORY-08-11-unit-workspace.feature) (run and reported by scenario id, see `scripts/feature_traceability.py`).
+
+---
+
+### STORY-08-12: Unit actions repeated in cycles
+- **Status:** DONE
+- **Description:** Every unit action (tenant move-in and move-out, owner rents out and takes back, replace tenant, owner move-in and move-out, title transfer, household member changes) is performed several times in a row. After each run the unit status, the allowed commands, the occupancy history and the transition audit are checked. A move-out also moves out the person's dependents: the household of the closed session leaves the live roster and the primary contact, and stays archived against that session.
+- **Acceptance Criteria (Gherkin):**
+Executable scenarios: [`STORY-08-12-unit-action-cycles.feature`](../features/EPIC-08/STORY-08-12-unit-action-cycles.feature).
+- **Verification:** `cargo test --test db_unit_person_action_cycles_tests -- --ignored --test-threads=1` (gate `rust-db-test`).
