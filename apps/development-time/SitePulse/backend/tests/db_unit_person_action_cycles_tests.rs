@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 //! PostgreSQL tests that perform every unit and person action several times in a row and read
 //! the status, the occupancy history, the audit trail and the person cards back after each run
-//! (STORY-08-12 and STORY-12-09). Moving a person out also moves their dependents out.
+//! (STORY-08-12 and STORY-12-10). Moving a person out also moves their dependents out.
 //!
 //! ```text
 //! cargo test --test db_unit_person_action_cycles_tests -- --ignored --test-threads=1
@@ -1241,7 +1241,7 @@ async fn a_dependent_with_a_person_card_keeps_the_card_when_moved_out() {
 
 // ==================================================================== person actions
 
-// covers: SC-12-09-01
+// covers: SC-12-10-01
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn creating_the_same_person_repeatedly_never_produces_a_second_card() {
@@ -1269,7 +1269,7 @@ async fn creating_the_same_person_repeatedly_never_produces_a_second_card() {
     e.done().await;
 }
 
-// covers: SC-12-09-02
+// covers: SC-12-10-02
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn editing_a_card_repeatedly_raises_the_version_once_per_edit() {
@@ -1316,7 +1316,7 @@ async fn editing_a_card_repeatedly_raises_the_version_once_per_edit() {
     e.done().await;
 }
 
-// covers: SC-12-09-03
+// covers: SC-12-10-03
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn opening_and_removing_a_login_repeatedly_keeps_the_login_status_correct() {
@@ -1378,7 +1378,7 @@ async fn card_login(e: &Env, person: i64) -> String {
         .to_string()
 }
 
-// covers: SC-12-09-04
+// covers: SC-12-10-04
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn opening_the_login_twice_in_a_row_reuses_the_same_account() {
@@ -1402,7 +1402,7 @@ async fn opening_the_login_twice_in_a_row_reuses_the_same_account() {
     e.done().await;
 }
 
-// covers: SC-12-09-05
+// covers: SC-12-10-05
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn a_persons_card_follows_the_unit_actions_and_keeps_the_relation_history() {
@@ -1460,7 +1460,7 @@ async fn a_persons_card_follows_the_unit_actions_and_keeps_the_relation_history(
     e.done().await;
 }
 
-// covers: SC-12-09-06
+// covers: SC-12-10-06
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn choosing_the_same_existing_person_repeatedly_creates_no_new_card() {
@@ -1506,7 +1506,7 @@ async fn choosing_the_same_existing_person_repeatedly_creates_no_new_card() {
     e.done().await;
 }
 
-// covers: SC-12-09-07
+// covers: SC-12-10-07
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn contact_preferences_saved_repeatedly_keep_the_last_values() {
@@ -1554,7 +1554,7 @@ async fn contact_preferences_saved_repeatedly_keep_the_last_values() {
     e.done().await;
 }
 
-// covers: SC-12-09-08
+// covers: SC-12-10-08
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn setting_the_national_id_repeatedly_keeps_it_masked_and_unique() {
@@ -1614,7 +1614,7 @@ async fn setting_the_national_id_repeatedly_keeps_it_masked_and_unique() {
     e.done().await;
 }
 
-// covers: SC-12-09-09
+// covers: SC-12-10-09
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn duplicate_cards_are_merged_and_the_survivor_keeps_the_history() {
@@ -1670,7 +1670,7 @@ async fn duplicate_cards_are_merged_and_the_survivor_keeps_the_history() {
     e.done().await;
 }
 
-// covers: SC-12-09-10
+// covers: SC-12-10-10
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn person_actions_of_another_site_are_refused_every_time() {
@@ -1736,7 +1736,7 @@ async fn person_actions_of_another_site_are_refused_every_time() {
     e.done().await;
 }
 
-// covers: SC-12-09-11
+// covers: SC-12-10-11
 #[tokio::test]
 #[ignore = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate"]
 async fn a_persons_move_out_also_moves_out_their_dependents_and_the_cards_show_it() {

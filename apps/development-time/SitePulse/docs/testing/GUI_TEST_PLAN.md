@@ -91,7 +91,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | — | 12-01 | — | — | — | **Excluded:** backend schema foundation; GUI coverage belongs to the API and client stories that follow. | | |
 | — | 12-03 | — | — | — | **Partial (confirmed gap):** shared person picker and form components are tested as Flutter widgets but are not wired into a manager screen yet; browser coverage follows when action flows integrate them in issue #99. | | |
 | — | 12-05 | — | — | — | **Excluded:** REST and persistence contract with no GUI surface yet; covered by `backend/tests/db_person_api_tests.rs` and `scripts/api_system_check.py`. | | |
-| — | 08-12, 12-09 | — | — | — | **Excluded:** repeated unit and person actions are checked against the API and the database; covered by `backend/tests/db_unit_person_action_cycles_tests.rs`. | | |
+| — | 08-12, 12-10 | — | — | — | **Excluded:** repeated unit and person actions are checked against the API and the database; covered by `backend/tests/db_unit_person_action_cycles_tests.rs`. | | |
 | — | 12-06 | — | — | — | **Partial (confirmed gap):** unit action pages choose people through the shared person field; covered by Flutter widget tests (`owners_residents_module_test.dart`, `responsible_contact_selection_test.dart`, `unit_registration_person_refs_test.dart`); browser coverage follows with the picker flow. | | |
 
 ### EPIC-04 Invitation & Approval Workflow
@@ -184,6 +184,7 @@ Each journey is one test that follows a single user from the first sign-in with 
 | GUI-12-02 | 12-06, 12-07 | Manager | P1 | seed unit with owner person | Open a unit workspace, open the owner's person card, edit the name, open the unit from the card and return → list search and focus are kept and the new name shows on the unit | `workspace_person_owner_<id>`, `person_edit_btn`, `person_unit_<unit>`, `person_open_login_btn`, `person_role_tenant_btn` | ✅ |
 | GUI-12-03 | 12-03 | Manager | P1 | seed unit A Blok D:14 and another unit's owner in the same site | Open the unit workspace, start a title transfer, search the person picker for the other owner and choose them → the live, paged search request succeeds and the chosen card becomes the owner with no new person created | `module_unit_actions_<id>`, `workspace_action_transfer_ownership_<id>`, `module_transfer_new_owner_name_input`, `sp_person_search`, `sp_person_result_<id>` | ✅ |
 | — | 12-08 | — | — | — | **Partial:** the person card merge has no browser scenario yet; its step-up flow is covered by Flutter widget tests in `person_merge_test.dart` (SC-12-08-01, SC-12-08-02) and the server side by `backend/tests/db_person_merge_tests.rs`. | | |
+| — | 12-09 | — | — | — | **Partial:** the person import from Excel has no browser scenario yet (the browser cannot pick a file); the template and the workbook reader are covered by Flutter unit tests in `person_import_xlsx_test.dart` (SC-12-09-01, SC-12-09-02) and the server rules by `backend/tests/person_records_tests.rs`. | | |
 
 ### Cross-cutting
 | ID | Role | Pri | Steps → Expected | UI |

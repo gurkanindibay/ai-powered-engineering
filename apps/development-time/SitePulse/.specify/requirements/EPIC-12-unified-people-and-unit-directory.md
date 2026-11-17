@@ -114,9 +114,21 @@ Executable scenarios: [STORY-12-07-person-card-navigation.feature](../features/E
 
 Executable scenarios: [STORY-12-08-person-merge-ui.feature](../features/EPIC-12/STORY-12-08-person-merge-ui.feature).
 
-### STORY-12-09: Person actions repeated in cycles
+### STORY-12-09: Person import from Excel
+- **Status:** DONE
+- **Task Ref:** user-import-excel-csv
+- **Description:** The site manager imports owners and tenants from an Excel (.xlsx) or CSV file. The Excel file is read in the app into the same CSV text the existing import API checks (dry run, then commit), so the server rules do not change. The page offers a CSV and an Excel template with the import columns and one example row.
+- **Acceptance Criteria:**
+  - The import page accepts `.xlsx`, `.csv` and `.txt` files.
+  - The Excel template holds the import columns in order and one example row.
+  - A file named `.xlsx` that is not a workbook is rejected with an error.
+- **Verification:** targeted Flutter tests, Flutter analysis, shared-component reuse checks.
+
+Executable scenarios: [STORY-12-09-person-import-excel.feature](../features/EPIC-12/STORY-12-09-person-import-excel.feature).
+
+### STORY-12-10: Person actions repeated in cycles
 - **Status:** DONE
 - **Description:** Every person action (create, edit, open and remove a login, preferences, national id, merge, use of an existing card in unit actions) is performed several times. After each run the card, its login status, its unit relations and the unit history are read back. Moving a person out also closes the household relation of their dependents.
 - **Acceptance Criteria:**
-Executable scenarios: [STORY-12-09-person-action-cycles.feature](../features/EPIC-12/STORY-12-09-person-action-cycles.feature).
+Executable scenarios: [STORY-12-10-person-action-cycles.feature](../features/EPIC-12/STORY-12-10-person-action-cycles.feature).
 - **Verification:** `cargo test --test db_unit_person_action_cycles_tests -- --ignored --test-threads=1` (gate `rust-db-test`).
