@@ -4439,7 +4439,7 @@ async fn when_payment_date_is_in_the_future_then_it_is_rejected() {
         .record_and_allocate_payment(payment_on(Utc::now() + chrono::Duration::days(2)))
         .await
         .unwrap_err();
-    assert!(err.contains("future"), "unexpected error: {err}");
+    assert!(err.contains("gelecekte"), "unexpected error: {err}");
 }
 
 #[tokio::test]
@@ -4449,7 +4449,7 @@ async fn when_payment_date_is_beyond_the_backdating_window_then_it_is_rejected()
         .record_and_allocate_payment(payment_on(Utc::now() - chrono::Duration::days(400)))
         .await
         .unwrap_err();
-    assert!(err.contains("in the past"), "unexpected error: {err}");
+    assert!(err.contains("geriye"), "unexpected error: {err}");
 }
 
 #[tokio::test]
@@ -4459,4 +4459,31 @@ async fn when_payment_date_is_within_the_backdating_window_then_it_is_accepted()
         .record_and_allocate_payment(payment_on(Utc::now() - chrono::Duration::days(10)))
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn when_bank_statement_line_is_older_than_the_window_then_it_is_accepted() {
+    let service = PaymentTrackingService::new(AppState::new());
+    let mut req = payment_on(Utc::now() - chrono::Duration::days(400));
+    req.payment_channel = PaymentChannel::BankStatement;
+    service.record_and_allocate_payment(req).await.unwrap();
+}
+
+#[tokio::test]
+async fn when_bank_line_is_dated_today_local_at_utc_midnight_then_it_is_not_treated_as_future() {
+    let service = PaymentTrackingService::new(AppState::new());
+    // 00:30 local (UTC+3) on day D: the bank line is stamped 00:00 UTC of D+1's
+    // local date, i.e. up to a day ahead of the UTC clock.
+    let mut req = payment_on(Utc::now() + chrono::Duration::hours(23));
+    req.payment_channel = PaymentChannel::BankStatement;
+    service.record_and_allocate_payment(req).await.unwrap();
+}
+
+#[test]
+fn payment_date_violation_is_deterministic_for_a_given_window() {
+    let now = Utc::now();
+    let v = PaymentTrackingService::payment_date_violation;
+    assert!(v(now - chrono::Duration::days(31), now, 30).is_some());
+    assert!(v(now - chrono::Duration::days(29), now, 30).is_none());
+    assert!(v(now + chrono::Duration::hours(1), now, 30).is_some());
 }

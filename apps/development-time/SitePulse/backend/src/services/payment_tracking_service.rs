@@ -395,24 +395,29 @@ impl PaymentTrackingService {
         })
     }
 
-    /// Rejects a payment date in the future (beyond a small clock-skew
-    /// allowance) or further back than the configured window
-    /// (`SITEPULSE_PAYMENT_BACKDATE_DAYS`, default 90 days).
-    fn payment_date_violation(
-        payment_date: chrono::DateTime<Utc>,
-        now: chrono::DateTime<Utc>,
-    ) -> Option<String> {
-        if payment_date > now + chrono::Duration::minutes(5) {
-            return Some("Payment date cannot be in the future".to_string());
-        }
-        let window_days = std::env::var("SITEPULSE_PAYMENT_BACKDATE_DAYS")
+    /// Backdating window for manual payments, in days
+    /// (`SITEPULSE_PAYMENT_BACKDATE_DAYS`, default 90).
+    pub fn backdate_window_days() -> i64 {
+        std::env::var("SITEPULSE_PAYMENT_BACKDATE_DAYS")
             .ok()
             .and_then(|v| v.trim().parse::<i64>().ok())
             .filter(|d| *d >= 0)
-            .unwrap_or(90);
+            .unwrap_or(90)
+    }
+
+    /// Reason a manually entered payment date is rejected: in the future
+    /// (beyond a small clock-skew allowance) or older than `window_days`.
+    pub fn payment_date_violation(
+        payment_date: chrono::DateTime<Utc>,
+        now: chrono::DateTime<Utc>,
+        window_days: i64,
+    ) -> Option<String> {
+        if payment_date > now + chrono::Duration::minutes(5) {
+            return Some("Ödeme tarihi gelecekte olamaz".to_string());
+        }
         if payment_date < now - chrono::Duration::days(window_days) {
             return Some(format!(
-                "Payment date cannot be more than {window_days} days in the past"
+                "Ödeme tarihi en fazla {window_days} gün geriye alınabilir"
             ));
         }
         None
@@ -445,8 +450,17 @@ impl PaymentTrackingService {
         let unit_id = req.unit_id.clone();
         let payment_amount = req.amount;
         let issued_at = req.payment_date.unwrap_or_else(Utc::now);
-        if let Some(reason) = Self::payment_date_violation(issued_at, Utc::now()) {
-            return Err(reason);
+        // Only manually keyed payments are date-checked: bank, card and provider
+        // payments carry the institution's value date for money already received.
+        if matches!(
+            req.payment_channel,
+            PaymentChannel::ManualCash | PaymentChannel::Cash | PaymentChannel::Other
+        ) {
+            if let Some(reason) =
+                Self::payment_date_violation(issued_at, Utc::now(), Self::backdate_window_days())
+            {
+                return Err(reason);
+            }
         }
         if payment_amount <= Decimal::ZERO {
             return Err("Ödeme tutarı 0.00'dan büyük olmalıdır".to_string());
