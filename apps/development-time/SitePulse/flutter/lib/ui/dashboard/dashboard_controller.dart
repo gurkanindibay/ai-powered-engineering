@@ -1311,7 +1311,8 @@ class DashboardController extends ChangeNotifier {
             ? _currentManagedSite!.id
             : (_activeUnit.siteId.isNotEmpty ? _activeUnit.siteId : (_saasSites.isNotEmpty ? _saasSites.first.id : '1')));
     final url = ApiClient.uri('/api/v1/dues/accrue-period');
-    final dueAmount = amount ?? Decimal.parse('1400.00');
+    // No amount: the server charges each unit its operating-budget share, else
+    // its house-type tariff. A typed amount is only sent when the caller has one.
     final dt = dueDate ?? DateTime.now();
     final formattedDueDate =
         "${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
@@ -1325,7 +1326,7 @@ class DashboardController extends ChangeNotifier {
         _monthlyFlats[period] = _flatsList.map<FlatPaymentStatus>((f) {
           final isSettled = f.id == _activeUnit.id && _activeUnit.hasAdvancePayment;
           return f.copyWith(
-            amountDue: dueAmount,
+            amountDue: amount ?? f.amountDue,
             isPaid: isSettled,
             daysOverdue: 0,
           );
@@ -1340,7 +1341,8 @@ class DashboardController extends ChangeNotifier {
         'total_units_accrued': _flatsList.length,
         'newly_accrued_units_count': _flatsList.length,
         'auto_settled_units_count': 0,
-        'total_amount_accrued': dueAmount * Decimal.fromInt(_flatsList.length),
+        'total_amount_accrued':
+            _flatsList.fold<Decimal>(Decimal.zero, (sum, f) => sum + f.amountDue),
         'total_amount_offset_from_advance': Decimal.zero,
         'already_accrued': false,
         'message': "'$period' dönemi için aidat tahakkuk ettirildi.",
@@ -1354,7 +1356,7 @@ class DashboardController extends ChangeNotifier {
         body: json.encode({
           'site_id': effectiveSiteId,
           'period': period,
-          'amount': dueAmount.toString(),
+          if (amount != null) 'amount': amount.toString(),
           'due_date': formattedDueDate,
         }),
       ).timeout(const Duration(seconds: 4));
@@ -1372,21 +1374,8 @@ class DashboardController extends ChangeNotifier {
           _availableDuesMonths.insert(0, period);
         }
         _selectedDuesMonth = period;
-
-        final isAlreadyAccrued = data['already_accrued'] == true;
-        if (!isAlreadyAccrued) {
-          final autoSettled = (data['auto_settled_units_count'] as num?)?.toInt() ?? 0;
-          _monthlyFlats[period] = _flatsList.map<FlatPaymentStatus>((f) {
-            final isSettled = f.id == _activeUnit.id && autoSettled > 0;
-            return f.copyWith(
-              amountDue: dueAmount,
-              isPaid: isSettled,
-              daysOverdue: 0,
-            );
-          }).toList();
-          _flatsList = List<FlatPaymentStatus>.from(_monthlyFlats[period]!);
-          _syncCollectionSummaryForMonth(period);
-        }
+        // The flats and the summary of the period come from the overview just
+        // fetched: each unit shows the amount the server actually charged it.
 
         notifyListeners();
         return data;
