@@ -1,6 +1,8 @@
 @EPIC-08 @STORY-08-03
 Feature: Zero-data-loss move-out and exit settlement
-  Move-out closes the occupancy session and preserves all history.
+  Move-out closes the occupancy session and preserves all history. The current
+  exit settlement freezes unpaid dues only; it leaves any advance balance in
+  the unit/debtor ledger and does not offer payout or transfer.
 
   @SC-08-03-01 @GUI-08-04 @layer:gui @linked @smoke @role_manager
   Scenario: Move-out preserves historical payment receipts and unsettled debt
