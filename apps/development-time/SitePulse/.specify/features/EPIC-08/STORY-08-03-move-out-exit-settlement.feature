@@ -1,8 +1,8 @@
 @EPIC-08 @STORY-08-03
 Feature: Zero-data-loss move-out and exit settlement
-  Move-out closes the occupancy session and preserves all history. The current
-  exit settlement freezes unpaid dues only; it leaves any advance balance in
-  the unit/debtor ledger and does not offer payout or transfer.
+  Move-out closes the occupancy session and preserves all history. The manager
+  can keep the advance or request an audited payout/transfer that requires a
+  different authorized approver.
 
   @SC-08-03-01 @GUI-08-04 @layer:gui @linked @smoke @role_manager
   Scenario: Move-out preserves historical payment receipts and unsettled debt
@@ -12,3 +12,12 @@ Feature: Zero-data-loss move-out and exit settlement
     And Unit "B Blok D:12" status becomes VACANT with tenant_person_id = NULL
     And the 1500.00 historical liability remains attributed to Zeynep Kaya
     And zero records are deleted from dues_liabilities, collection_transactions, or persons
+
+  @SC-08-03-02 @layer:gui @pending @role_manager
+  Scenario: Move-out keeps the advance unless the manager requests an approved disposition
+    Given departing Tenant "Zeynep Kaya" has 800.00 in the tenant advance ledger
+    When the Site Manager chooses to keep the advance during move-out
+    Then the tenant advance remains unchanged
+    When the Site Manager requests a 500.00 payout instead
+    Then an outgoing-payment request is created for a different authorized person to approve
+    And the advance is debited only after that approval

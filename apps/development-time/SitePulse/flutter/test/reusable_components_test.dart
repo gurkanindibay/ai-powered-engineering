@@ -27,6 +27,7 @@ import 'package:sitepulse/ui/design_system/sp_money_field.dart';
 import 'package:sitepulse/ui/design_system/sp_status_badge.dart';
 import 'package:sitepulse/ui/design_system/sp_tone.dart';
 import 'package:sitepulse/ui/residents/resident_directory.dart';
+import 'package:sitepulse/ui/residents/advance_exit_settlement_fields.dart';
 import 'package:sitepulse/ui/residents/sp_directory_scaffold.dart';
 import 'package:sitepulse/ui/residents/sp_person_card.dart';
 import 'package:sitepulse/ui/residents/sp_person_field.dart';
@@ -556,6 +557,44 @@ void main() {
       await tester.pumpAndSettle();
       expect(result, isNull);
     });
+  });
+
+  group('AdvanceExitSettlementFields', () {
+    for (final dark in [false, true]) {
+      testWidgets('offers keep, payout and transfer choices (${dark ? 'dark' : 'light'}, 2x text)', (tester) async {
+        final amountController = TextEditingController();
+        var choice = AdvanceExitSettlementChoice.keep;
+        Decimal? amount;
+        await tester.pumpWidget(MaterialApp(
+          theme: dark ? AppTheme.dark() : AppTheme.light(),
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: StatefulBuilder(builder: (context, setState) => Scaffold(
+              body: SingleChildScrollView(child: AdvanceExitSettlementFields(
+                advanceBalance: Decimal.parse('800.00'),
+                choice: choice,
+                onChoiceChanged: (value) => setState(() => choice = value),
+                sourceDebtor: 'TENANT',
+                amountController: amountController,
+                onAmountChanged: (value) => amount = value,
+              )),
+            )),
+          ),
+        ));
+        expect(find.text('Toplam avans bakiyesi: ₺800,00'), findsOneWidget);
+        expect(find.byKey(const Key('exit_advance_keep')), findsOneWidget);
+        expect(find.byKey(const Key('exit_advance_payout')), findsOneWidget);
+        expect(find.byKey(const Key('exit_advance_transfer')), findsOneWidget);
+        expect(find.byKey(const Key('exit_advance_amount')), findsNothing);
+        await tester.tap(find.byKey(const Key('exit_advance_payout')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('exit_advance_amount')), findsOneWidget);
+        await tester.enterText(find.byKey(const Key('exit_advance_amount')), '250,00');
+        expect(amount, Decimal.parse('250.00'));
+        expect(tester.takeException(), isNull);
+        amountController.dispose();
+      });
+    }
   });
 
   group('StepUpPromptPage', () {

@@ -342,6 +342,53 @@ pub struct DunningRunReport {
 // R5: resident requests
 // ---------------------------------------------------------------------------
 
+/// A four-eyes decision to pay out or transfer an exiting debtor's advance.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AdvanceExitSettlement {
+    pub id: i64,
+    pub site_id: String,
+    pub unit_id: String,
+    pub request_key: String,
+    pub kind: String,
+    pub source_debtor: String,
+    pub target_debtor: Option<String>,
+    pub amount: Decimal,
+    pub beneficiary_name: String,
+    pub beneficiary_person_id: Option<String>,
+    pub note: Option<String>,
+    pub requested_by: String,
+    pub status: String,
+    pub decided_by: Option<String>,
+    pub decided_at: Option<DateTime<Utc>>,
+    pub decision_note: Option<String>,
+    pub payment_reference: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateAdvanceExitSettlementRequest {
+    pub request_key: String,
+    pub kind: String,
+    pub source_debtor: String,
+    pub beneficiary_name: String,
+    #[serde(default)]
+    pub beneficiary_person_id: Option<String>,
+    #[serde(default)]
+    pub target_debtor: Option<String>,
+    pub amount: Decimal,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecideAdvanceExitSettlementRequest {
+    pub approve: bool,
+    #[serde(default)]
+    pub payment_reference: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VirmanRequest {
     pub id: i64,

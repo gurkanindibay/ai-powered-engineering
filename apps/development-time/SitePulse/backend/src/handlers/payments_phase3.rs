@@ -15,6 +15,7 @@ use serde::Deserialize;
 use crate::authorization::AuthzContext;
 use crate::models::*;
 use crate::services::accounting_service::AccountingService;
+use crate::services::advance_exit_settlement_service::AdvanceExitSettlementService;
 use crate::services::analytics_service::AnalyticsService;
 use crate::services::assembly_service::AssemblyService;
 use crate::services::autopay_service::AutopayService;
@@ -441,6 +442,39 @@ pub async fn rent_deduction_certificate(
 // ---------------------------------------------------------------------------
 // R5: resident requests
 // ---------------------------------------------------------------------------
+
+pub async fn create_advance_exit_settlement(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Path(unit_id): Path<String>,
+    Json(req): Json<CreateAdvanceExitSettlementRequest>,
+) -> Result<(StatusCode, Json<AdvanceExitSettlement>), ApiError> {
+    created(
+        AdvanceExitSettlementService::new(&state)
+            .create(&caller(&ctx), &unit_id, req)
+            .await,
+    )
+}
+
+pub async fn list_advance_exit_settlements(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+) -> ApiResult<Vec<AdvanceExitSettlement>> {
+    ok(AdvanceExitSettlementService::new(&state)
+        .list(&caller(&ctx))
+        .await)
+}
+
+pub async fn decide_advance_exit_settlement(
+    State(state): State<AppState>,
+    ctx: AuthzContext,
+    Path(id): Path<i64>,
+    Json(req): Json<DecideAdvanceExitSettlementRequest>,
+) -> ApiResult<AdvanceExitSettlement> {
+    ok(AdvanceExitSettlementService::new(&state)
+        .decide(&caller(&ctx), id, req)
+        .await)
+}
 
 pub async fn create_virman_request(
     State(state): State<AppState>,
