@@ -2,7 +2,7 @@
 
 > **Epic ID:** EPIC-07  
 > **Module:** `backend-rust`, `flutter-ui`, `flutter-domain`, `mvp_ux_prototype`  
-> **Status:** COMPLETED (7 / 7 Stories Completed & Verified)  
+> **Status:** IN PROGRESS (7 / 13 Stories Completed & Verified; STORY-07-08 to 07-13 planned)  
 > **Target Audience:** `SITE_MANAGER`, `HOME_RESIDENT`, `SAAS_ADMIN`  
 > **Governance:** Turkish Condominium Law (634 Sayılı KMK Madde 35-f), TCMB Açık Bankacılık & 6493 Sayılı Kanun  
 > **Business Value:** Automates dues collection and ledger reconciliation directly with Turkish banks (*Kuveyt Türk Sandbox, Garanti BBVA, İş Bankası, Yapı Kredi, Akbank*) and licensed FinTech payment facilitators. Eliminates manual bank statement tracking, removes human matching errors via flat-specific Virtual IBANs (Sanal IBAN), provides a zero-permission Excel/MT940 parser for individual developers, manages advance balances (avans bakiye), and autonomously runs periodic monthly dues accrual with strict duplicate prevention.
@@ -129,6 +129,172 @@ This epic solves the operational bottleneck of manually matching bank transfers 
   - `when_dues_period_already_accrued_then_duplicate_accrual_is_prevented`
   - `when_scheduler_batch_runs_then_accrues_and_prevents_duplicate_accrual`
   - `DuesManagementView opens Toplu Aidat Tahakkuku confirmation dialog with duplicate prevention note` (Flutter widget test)
+
+---
+
+### Accrual integrity stories (STORY-07-08 to STORY-07-13)
+
+An accrual and collection gap review (2026-11-17) compared SitePulse with the controls a dues
+billing system needs. Collection is largely complete. Accrual lacks a canonical period, atomic
+batches, proration, catch-up, corrections, period close, and one late-fee figure across reports.
+The stories below specify those controls. Their scenarios are `@pending` until implemented.
+
+Decisions still open for the product owner or counsel are marked **(decide)**.
+
+---
+
+### STORY-07-08: Canonical Billing Period & Atomic Accrual Batch
+- **Status:** `PLANNED`
+- **Target Role:** System & Site Manager
+- **Gap today:** The period is free text. The duplicate guard and the unique index
+  `uq_unit_period_expense` compare that text exactly, so "Ekim 2026", "ekim 2026" and "2026-10" are
+  three periods. The due date is not checked against the period. Manual accrual inserts one
+  liability at a time: a failure partway leaves some rows in PostgreSQL that the in-memory state never
+  receives, and the budget basis is a separate write.
+- **Requirements:**
+  1. A billing period is identified by a canonical key `YYYY-MM`. The Turkish label ("Ekim 2026") is
+     derived from the key for display only. The API accepts the key; a label or another spelling of
+     the same month resolves to the same key or is rejected with 400.
+  2. Duplicate prevention uses the key: one operational liability per unit, period key and expense
+     type, enforced by a unique index on the key.
+  3. The due date must fall inside the period's month, or within a configured number of days after
+     it **(decide)**. Otherwise the request is rejected with 400 and nothing is written.
+  4. Every liability is linked to its `dues_periods` row (`dues_period_id`).
+  5. A manual or scheduled accrual of one site is one database transaction: the period row, all
+     liabilities and their budget basis commit together or not at all. In-memory state is updated only
+     from the committed result.
+  6. The response lists every skipped unit with its reason (no tariff, zero share, no budget), and the
+     scheduler records the same list where the manager can see it, not only in the server log.
+  7. Existing liabilities are migrated to the key; rows whose label cannot be parsed are reported, not
+     guessed.
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-08-canonical-period-and-atomic-batch.feature`](../features/EPIC-07/STORY-07-08-canonical-period-and-atomic-batch.feature).
+
+---
+
+### STORY-07-09: Occupancy-Aware Accrual & Proration
+- **Status:** `PLANNED`
+- **Target Role:** System & Site Manager
+- **Gap today:** The debtor (tenant or owner) is decided once, when the liability is created. A unit
+  created, moved into or moved out of mid-month is charged the full month to one debtor. Nothing is
+  prorated.
+- **Requirements:**
+  1. Operational dues for a period are split between the occupants of that period by the days each
+     one was responsible: the tenant while a lease is active, the owner while the unit is vacant or
+     owner-occupied. The split uses the actual number of days in the month and is rounded to kuruş
+     half away from zero; the last share absorbs the remainder so the shares add up to the unit's
+     monthly amount exactly.
+  2. A unit created during a period is charged only from its creation date. Whether this applies or
+     the first period is charged in full is a site setting **(decide the default)**.
+  3. A move-in, move-out or title transfer recorded after the period was accrued re-splits that
+     period's open liability: the shares are re-issued through corrections (STORY-07-11), never by
+     editing a liability that has payments.
+  4. A share that has already been paid is not reduced below what was paid; any excess is credited to
+     that debtor's advance balance.
+  5. Whether proration is allowed at all depends on the management plan (yönetim planı) **(verify
+     with counsel)**; a site can switch it off, and then the current rule applies (the occupant on the
+     accrual date owes the whole month).
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-09-occupancy-aware-proration.feature`](../features/EPIC-07/STORY-07-09-occupancy-aware-proration.feature).
+
+---
+
+### STORY-07-10: Accrual Schedule, Catch-Up & Grace Period
+- **Status:** `PLANNED`
+- **Target Role:** Site Manager & System
+- **Gap today:** The scheduler only accrues the current month, so a month missed while it was off is
+  never charged. The due date is fixed to the 15th. Late fees start the day after the due date, with
+  no grace period.
+- **Requirements:**
+  1. Each site configures its accrual day and due day of month (default: accrue on the 1st, due on the
+     15th, the current behaviour). A due day beyond the month's last day falls on the last day.
+  2. On every run the scheduler accrues every period from the site's first billing period (or its
+     go-live date) up to the current one that has not been accrued yet, oldest first. Catch-up never
+     goes further back than a configured limit (default 12 months) **(decide)** and reports each period
+     it accrued.
+  3. A catch-up liability keeps its original period and due date; its late fee follows KMK 20 from that
+     due date unless the manager waives it (STORY-07-11).
+  4. A site may set a grace period of N days (default 0). No late fee accrues for a payment received
+     within the grace period; after it, the fee accrues from the due date as KMK 20 requires
+     **(verify with counsel that a grace period is a lawful waiver)**.
+  5. Changing the accrual day, due day or grace period affects only periods not yet accrued.
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-10-accrual-schedule-catch-up-and-grace.feature`](../features/EPIC-07/STORY-07-10-accrual-schedule-catch-up-and-grace.feature).
+
+---
+
+### STORY-07-11: Accrual Corrections (Cancel, Re-issue, Credit Note)
+- **Status:** `PLANNED`
+- **Target Role:** Site Manager, Second Approver, Auditor
+- **Gap today:** `DebtStatus` has only Pending, Overdue and Paid. The only adjustments are a principal
+  write-off and a penalty waiver. A liability with the wrong amount, period or debtor can only be
+  written off, which reports a loss instead of a correction.
+- **Requirements:**
+  1. A manager can request one of three corrections on a liability, with a mandatory reason:
+     - **Cancel**: the liability should not exist (wrong unit, wrong period, duplicate).
+     - **Re-issue**: replace it with a corrected amount, debtor or due date.
+     - **Credit note**: reduce the amount by a stated sum (for example a budget revision).
+  2. A correction takes effect only after a second user with ledger rights approves it (four eyes),
+     like the existing adjustments. The requester cannot approve their own request.
+  3. The original liability is never edited or deleted. A cancel sets it to `CANCELLED` and posts a
+     reversing entry; a re-issue cancels it and creates a new liability linked to the original; a
+     credit note posts a credit against it.
+  4. Amounts already paid on a cancelled or reduced liability move to the debtor's advance balance and
+     are then offset against their other open liabilities (STORY-07-05). A receipt is never altered.
+  5. A late fee accrued on the cancelled or reduced amount is reversed in proportion.
+  6. Every correction appears in the ledger, the resident statement, and an audit list with requester,
+     approver, reason and time.
+  7. A correction to a closed period is posted in the current open period (STORY-07-12).
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-11-accrual-corrections.feature`](../features/EPIC-07/STORY-07-11-accrual-corrections.feature).
+
+---
+
+### STORY-07-12: Billing Period Lifecycle & Close
+- **Status:** `PLANNED`
+- **Target Role:** Site Manager, Auditor
+- **Gap today:** `DuesPeriodStatus` defines `Closed`, but nothing sets or enforces it. The general
+  ledger is derived from current data on every read, so a later change rewrites months that were
+  already reported to the assembly.
+- **Requirements:**
+  1. A billing period moves `DRAFT → OPEN → CLOSED`. Accrual creates or opens it; only a manager closes
+     it, after a summary (accrued, collected, outstanding, corrections) is shown.
+  2. While a period is closed, nothing may change its accrued amounts, its ledger entries or the
+     figures reported for it. Payments are still accepted and allocated to its liabilities (debt does
+     not stop being collectable); the payment is booked in the period it was received.
+  3. Corrections to a closed period's liabilities are booked in the current open period with a
+     reference to the closed one (STORY-07-11).
+  4. Closing stores a snapshot of the period's figures (per unit and in total). The account report
+     and trial balance for a closed period read that snapshot, so they never change after closing.
+  5. Reopening a closed period requires a second approver and a reason, and is recorded in the audit
+     list.
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-12-billing-period-lifecycle-and-close.feature`](../features/EPIC-07/STORY-07-12-billing-period-lifecycle-and-close.feature).
+
+---
+
+### STORY-07-13: One Late-Fee Figure Across Dashboard, Statement & Ledger
+- **Status:** `PLANNED`
+- **Target Role:** Site Manager, Auditor, Resident
+- **Gap today:** The dashboard, debt aging and resident statement calculate the KMK 20 late fee up to
+  today. The general ledger and trial balance use the stored fee, which is updated only when a payment
+  or advance offset touches the liability. The reports therefore understate receivables and penalty
+  revenue against the dashboard.
+- **Requirements:**
+  1. A daily job (in the site's time zone) brings the late fee of every open overdue liability up to
+     that day and persists it. It is idempotent: a second run on the same day changes nothing.
+     Running daily must give the same fee as one evaluation over the whole interval: within a segment
+     of unchanged outstanding principal the fee is computed cumulatively from the segment start and
+     rounded once, and the day's entry is the difference from the previous total. Rounding each day's
+     fee separately would drift (₺2.33 × 16 days = ₺37.28, not ₺37.33).
+  2. The ledger books each day's accrued late fee as an entry dated that day, so penalty revenue falls
+     in the period it accrued in.
+  3. On any date, a unit's outstanding total on the dashboard, its resident statement, the debt aging
+     report and the dues receivable in the trial balance agree to the kuruş.
+  4. A reconciliation check reports any site where these figures differ, with the liabilities that
+     cause it.
+- **Acceptance Criteria:**
+  Executable scenarios: [`STORY-07-13-late-fee-consistency.feature`](../features/EPIC-07/STORY-07-13-late-fee-consistency.feature).
 
 ---
 

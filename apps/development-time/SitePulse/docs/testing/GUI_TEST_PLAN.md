@@ -92,6 +92,7 @@ Passwords are never written into test files. `e2e/fixtures/actors.example.json` 
 | — | 12-03 | — | — | — | **Partial (confirmed gap):** shared person picker and form components are tested as Flutter widgets but are not wired into a manager screen yet; browser coverage follows when action flows integrate them in issue #99. | | |
 | — | 12-05 | — | — | — | **Excluded:** REST and persistence contract with no GUI surface yet; covered by `backend/tests/db_person_api_tests.rs` and `scripts/api_system_check.py`. | | |
 | — | 08-12, 12-10 | — | — | — | **Excluded:** repeated unit and person actions are checked against the API and the database; covered by `backend/tests/db_unit_person_action_cycles_tests.rs`. | | |
+| — | 07-08, 07-09, 07-10, 07-11, 07-12, 07-13 | — | — | — | **Partial (confirmed gap):** accrual integrity stories (canonical period, atomic batch, proration, catch-up and grace, corrections, period close, late-fee consistency) are specified with `@pending` scenarios and not implemented yet; browser coverage follows with each implementation. | | |
 | — | 12-06 | — | — | — | **Partial (confirmed gap):** unit action pages choose people through the shared person field; covered by Flutter widget tests (`owners_residents_module_test.dart`, `responsible_contact_selection_test.dart`, `unit_registration_person_refs_test.dart`); browser coverage follows with the picker flow. | | |
 
 ### EPIC-04 Invitation & Approval Workflow
