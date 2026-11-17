@@ -214,7 +214,8 @@ def tenant_paid_capital(api, actors, stack):
     project = api.create_capital_project(manager, "Asansör Revizyonu", Decimal("42000.00"))
     api.accrue_installment(manager, str(project.get("id") or project.get("project_id")), 1)
     return api.record_manual_payment(manager, b3, Decimal("1000.00"), "Selin Demir", payer_role="TENANT",
-                                     description="Asansör Demirbaş 1. Taksit")
+                                     description="Asansör Demirbaş 1. Taksit",
+                                     settles_owner_capital_dues=True)
 
 
 @pytest.mark.edge

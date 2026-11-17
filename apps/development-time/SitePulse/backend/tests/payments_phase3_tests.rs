@@ -634,6 +634,7 @@ async fn when_a_tenant_pays_owner_capital_dues_then_the_receipt_cites_kmk22_and_
             payer_role: DebtorType::Tenant,
             payment_channel: PaymentChannel::BankTransfer,
             description: Some("DEMİRBAŞ çatı katılımı".into()),
+            settles_owner_capital_dues: true,
             ..Default::default()
         })
         .await
