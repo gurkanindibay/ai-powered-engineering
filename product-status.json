@@ -1,17 +1,17 @@
 {
  "schema": 1,
- "generated_at": "2026-11-17T19:57:29Z",
- "run_id": "20261117T195729Z-1db7707",
- "commit": "1db7707df672d17a29e3285d91fa992a631b4234",
+ "generated_at": "2026-11-17T20:27:38Z",
+ "run_id": "20261117T202737Z-0e245fd",
+ "commit": "0e245fde6126cc363961dfcbfe2d09eeca86be8d",
  "task": "master",
  "status": "PASS",
  "junit": {
-  "tests": 115,
+  "tests": 116,
   "failures": 0,
   "errors": 0,
   "skipped": 1,
-  "passed": 114,
-  "seconds": 2032.9,
+  "passed": 115,
+  "seconds": 2217.5,
   "files": 8,
   "unparseable": []
  },
@@ -19,9 +19,9 @@
   "stories": 94,
   "stories_with_scenarios": 94,
   "stories_passing": 27,
-  "scenarios": 253,
-  "automated": 226,
-  "passing": 100,
+  "scenarios": 254,
+  "automated": 227,
+  "passing": 101,
   "failing": 0,
   "no_result": 126,
   "planned": 27,
@@ -120,9 +120,9 @@
    "stories": 7,
    "stories_with_scenarios": 7,
    "stories_passing": 1,
-   "scenarios": 20,
-   "automated": 19,
-   "passing": 11,
+   "scenarios": 21,
+   "automated": 20,
+   "passing": 12,
    "failing": 0,
    "no_result": 8,
    "planned": 1,
@@ -791,6 +791,12 @@
   "SC-07-07-03": {
    "state": "no_result",
    "name": "Accrual confirmation dialog shows the duplicate prevention note",
+   "epic": "EPIC-07",
+   "story": "STORY-07-07"
+  },
+  "SC-07-07-04": {
+   "state": "passing",
+   "name": "Manual accrual charges each unit its tariff, not a fixed amount",
    "epic": "EPIC-07",
    "story": "STORY-07-07"
   },
@@ -1861,8 +1867,8 @@
    "epics": 12,
    "stories": 94,
    "stories_with_scenarios": 94,
-   "scenarios": 253,
-   "automated": 226
+   "scenarios": 254,
+   "automated": 227
   }
  ],
  "recent_changes": [
@@ -1889,6 +1895,18 @@
    "items": 1,
    "samples": [
     "STORY-08-12: Unit actions repeated in cycles"
+   ]
+  },
+  {
+   "date": "2026-11-17",
+   "epic": "EPIC-07",
+   "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
+   "new_stories": 0,
+   "new_scenarios": 1,
+   "newly_automated": 1,
+   "items": 1,
+   "samples": [
+    "SC-07-07-04: Manual accrual charges each unit its tariff, not a fixed amount"
    ]
   },
   {
@@ -2303,5 +2321,5 @@
    ]
   }
  ],
- "href": "reports/44162997873-1/"
+ "href": "reports/44167132145-1/"
 }
