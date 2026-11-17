@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-17T20:27:38Z",
- "run_id": "20261117T202737Z-0e245fd",
- "commit": "0e245fde6126cc363961dfcbfe2d09eeca86be8d",
+ "generated_at": "2026-11-17T20:41:44Z",
+ "run_id": "20261117T204144Z-46497d3",
+ "commit": "46497d32e979d7d91e069b6cd2702570860e49ab",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,20 +11,20 @@
   "errors": 0,
   "skipped": 1,
   "passed": 115,
-  "seconds": 2217.5,
+  "seconds": 1872.5,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 94,
-  "stories_with_scenarios": 94,
+  "stories": 100,
+  "stories_with_scenarios": 100,
   "stories_passing": 27,
-  "scenarios": 254,
+  "scenarios": 282,
   "automated": 227,
   "passing": 101,
   "failing": 0,
   "no_result": 126,
-  "planned": 27,
+  "planned": 55,
   "epics": 12,
   "epics_verified": 0,
   "epics_failing": 0
@@ -117,15 +117,15 @@
   {
    "id": "EPIC-07",
    "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
-   "stories": 7,
-   "stories_with_scenarios": 7,
+   "stories": 13,
+   "stories_with_scenarios": 13,
    "stories_passing": 1,
-   "scenarios": 21,
+   "scenarios": 49,
    "automated": 20,
    "passing": 12,
    "failing": 0,
    "no_result": 8,
-   "planned": 1,
+   "planned": 29,
    "health": "in_progress"
   },
   {
@@ -799,6 +799,174 @@
    "name": "Manual accrual charges each unit its tariff, not a fixed amount",
    "epic": "EPIC-07",
    "story": "STORY-07-07"
+  },
+  "SC-07-08-01": {
+   "state": "planned",
+   "name": "Another spelling of an accrued month is a duplicate",
+   "epic": "EPIC-07",
+   "story": "STORY-07-08"
+  },
+  "SC-07-08-02": {
+   "state": "planned",
+   "name": "A due date outside the period is rejected",
+   "epic": "EPIC-07",
+   "story": "STORY-07-08"
+  },
+  "SC-07-08-03": {
+   "state": "planned",
+   "name": "A failure partway through a batch writes nothing",
+   "epic": "EPIC-07",
+   "story": "STORY-07-08"
+  },
+  "SC-07-08-04": {
+   "state": "planned",
+   "name": "Skipped units are reported with their reason",
+   "epic": "EPIC-07",
+   "story": "STORY-07-08"
+  },
+  "SC-07-09-01": {
+   "state": "planned",
+   "name": "A mid-month move-in splits the month between owner and tenant",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-02": {
+   "state": "planned",
+   "name": "A unit created mid-month is charged from its creation date",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-03": {
+   "state": "planned",
+   "name": "A move-out recorded after accrual re-splits the open liability",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-09-04": {
+   "state": "planned",
+   "name": "With proration switched off the occupant on the accrual date owes the whole month",
+   "epic": "EPIC-07",
+   "story": "STORY-07-09"
+  },
+  "SC-07-10-01": {
+   "state": "planned",
+   "name": "The site's due day is used for every accrued liability",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-10-02": {
+   "state": "planned",
+   "name": "A due day beyond the end of the month falls on its last day",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-10-03": {
+   "state": "planned",
+   "name": "The scheduler catches up months it missed",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-10-04": {
+   "state": "planned",
+   "name": "Catch-up stops at the configured limit",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-10-05": {
+   "state": "planned",
+   "name": "A payment inside the grace period carries no late fee",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-10-06": {
+   "state": "planned",
+   "name": "After the grace period the late fee runs from the due date",
+   "epic": "EPIC-07",
+   "story": "STORY-07-10"
+  },
+  "SC-07-11-01": {
+   "state": "planned",
+   "name": "A cancelled liability moves its payment to the advance balance",
+   "epic": "EPIC-07",
+   "story": "STORY-07-11"
+  },
+  "SC-07-11-02": {
+   "state": "planned",
+   "name": "A re-issue replaces the amount and links to the original",
+   "epic": "EPIC-07",
+   "story": "STORY-07-11"
+  },
+  "SC-07-11-03": {
+   "state": "planned",
+   "name": "A credit note reduces the amount and its late fee in proportion",
+   "epic": "EPIC-07",
+   "story": "STORY-07-11"
+  },
+  "SC-07-11-04": {
+   "state": "planned",
+   "name": "The requester cannot approve their own correction",
+   "epic": "EPIC-07",
+   "story": "STORY-07-11"
+  },
+  "SC-07-11-05": {
+   "state": "planned",
+   "name": "The resident statement shows the correction",
+   "epic": "EPIC-07",
+   "story": "STORY-07-11"
+  },
+  "SC-07-12-01": {
+   "state": "planned",
+   "name": "Closing a period shows its summary and stores a snapshot",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-12-02": {
+   "state": "planned",
+   "name": "A closed period still accepts payments",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-12-03": {
+   "state": "planned",
+   "name": "A correction to a closed period is booked in the open period",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-12-04": {
+   "state": "planned",
+   "name": "Accrual into a closed period is refused",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-12-05": {
+   "state": "planned",
+   "name": "Reopening a period needs a second approver",
+   "epic": "EPIC-07",
+   "story": "STORY-07-12"
+  },
+  "SC-07-13-01": {
+   "state": "planned",
+   "name": "Dashboard, statement, aging and trial balance agree on an overdue unit",
+   "epic": "EPIC-07",
+   "story": "STORY-07-13"
+  },
+  "SC-07-13-02": {
+   "state": "planned",
+   "name": "The daily late-fee job is idempotent",
+   "epic": "EPIC-07",
+   "story": "STORY-07-13"
+  },
+  "SC-07-13-03": {
+   "state": "planned",
+   "name": "Penalty revenue is booked in the month it accrued",
+   "epic": "EPIC-07",
+   "story": "STORY-07-13"
+  },
+  "SC-07-13-04": {
+   "state": "planned",
+   "name": "The reconciliation check reports a mismatch",
+   "epic": "EPIC-07",
+   "story": "STORY-07-13"
   },
   "SC-08-01-01": {
    "state": "passing",
@@ -1865,9 +2033,9 @@
   {
    "date": "2026-11-17",
    "epics": 12,
-   "stories": 94,
-   "stories_with_scenarios": 94,
-   "scenarios": 254,
+   "stories": 100,
+   "stories_with_scenarios": 100,
+   "scenarios": 282,
    "automated": 227
   }
  ],
@@ -1901,12 +2069,15 @@
    "date": "2026-11-17",
    "epic": "EPIC-07",
    "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
-   "new_stories": 0,
-   "new_scenarios": 1,
+   "new_stories": 6,
+   "new_scenarios": 29,
    "newly_automated": 1,
-   "items": 1,
+   "items": 6,
    "samples": [
-    "SC-07-07-04: Manual accrual charges each unit its tariff, not a fixed amount"
+    "STORY-07-08: Canonical Billing Period & Atomic Accrual Batch",
+    "STORY-07-09: Occupancy-Aware Accrual & Proration",
+    "STORY-07-10: Accrual Schedule, Catch-Up & Grace Period",
+    "STORY-07-11: Accrual Corrections (Cancel, Re-issue, Credit Note)"
    ]
   },
   {
@@ -2321,5 +2492,5 @@
    ]
   }
  ],
- "href": "reports/44167132145-1/"
+ "href": "reports/44168674191-1/"
 }
