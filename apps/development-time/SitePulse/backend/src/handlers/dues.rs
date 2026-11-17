@@ -158,14 +158,9 @@ pub async fn accrue_monthly_dues(
                     operating_budget_id: None,
                 })
             } else {
-                match budgets::operational_dues_basis(&inner, unit, payload.due_date) {
-                    // Legacy sites without a tariff keep the historical default amount.
-                    Err(_) if in_force.is_none() && !required => Ok(budgets::DuesBasis {
-                        amount: Decimal::new(1400, 0),
-                        operating_budget_id: None,
-                    }),
-                    other => other,
-                }
+                // Budget share, else house-type tariff. A unit with neither is
+                // skipped and reported, never charged an invented amount.
+                budgets::operational_dues_basis(&inner, unit, payload.due_date)
             };
             match basis {
                 Ok(b) if b.amount > Decimal::ZERO => {
@@ -371,10 +366,20 @@ pub async fn accrue_monthly_dues(
             total_amount_accrued,
             total_amount_offset_from_advance: total_offset,
             already_accrued: false,
-            message: format!(
-                "'{}' dönemi için {} daireye başarıyla aidat tahakkuk ettirildi. {} daire avanstan otomatik kapatıldı.",
-                payload.period, newly_accrued_units_count, auto_settled_count
-            ),
+            message: {
+                let mut message = format!(
+                    "'{}' dönemi için {} daireye başarıyla aidat tahakkuk ettirildi. {} daire avanstan otomatik kapatıldı.",
+                    payload.period, newly_accrued_units_count, auto_settled_count
+                );
+                if !skipped.is_empty() {
+                    message.push_str(&format!(
+                        " {} daire atlandı: {}",
+                        skipped.len(),
+                        skipped.join("; ")
+                    ));
+                }
+                message
+            },
             operating_budget_id: budget_id,
             legal_basis_warning,
             skipped_units: skipped,

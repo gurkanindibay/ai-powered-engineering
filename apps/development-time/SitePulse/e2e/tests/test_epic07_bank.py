@@ -85,6 +85,27 @@ def test_period_accrual_charges_every_unit_once(login_as, page, api, manager_ses
     assert stack.sql(f"SELECT count(*) FROM dues_liabilities WHERE period = '{PERIOD}';") == str(units)
 
 
+@pytest.mark.covers("SC-07-07-04")
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-07-10")
+def test_period_accrual_charges_each_unit_its_house_type_tariff(login_as, page, api, manager_session, stack):
+    # SQL arrange: B Blok 3 becomes a 3+1 (tariff 1800.00); A Blok 14 stays a 2+1 (1400.00).
+    stack.sql("UPDATE units u SET house_type = '3+1', house_type_id = ht.id FROM house_types ht "
+              "WHERE ht.site_id = u.site_id AND ht.type_name = '3+1' AND u.site_id = 1 AND u.unit_number = 3;")
+    stack.restart_backend()
+    api.create_period(manager_session, PERIOD, "2026-10-15")
+    login_as("manager")
+    ManagerCockpit(page).wait()
+    dues = DuesManagement(page).open()
+
+    _, message = dues.accrue_selected_period()
+    assert "daireye" in message, message
+    charged = stack.sql(
+        "SELECT u.unit_number, dl.principal_amount FROM dues_liabilities dl JOIN units u ON u.id = dl.unit_id "
+        f"WHERE dl.period = '{PERIOD}' AND u.site_id = 1 ORDER BY u.unit_number;")
+    assert charged.splitlines() == ["3|1800.00", "14|1400.00"], charged
+
+
 # ---------------------------------------------------------------- P1 (core)
 
 from pages import ResidentHome  # noqa: E402

@@ -88,7 +88,7 @@ SET site_id = EXCLUDED.site_id,
     must_change_password = EXCLUDED.must_change_password;
 
 -- 4. Test Units (Auto-Increment Identity id, relations resolved dynamically)
-INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, virtual_iban)
+INSERT INTO units (block_id, site_id, unit_number, floor, land_share, owner_person_id, tenant_person_id, virtual_iban, house_type, house_type_id)
 SELECT 
     b.id,
     s.id,
@@ -97,21 +97,27 @@ SELECT
     u.land_share,
     p_owner.id,
     NULL,
-    u.virtual_iban
+    u.virtual_iban,
+    u.house_type,
+    ht.id
 FROM (
     VALUES
-        ('begonya-sitesi', 'A Blok', 14, 4, 24, 'ahmet.yilmaz@begonya.com', 'TR620020500009863791600001'),
-        ('begonya-sitesi', 'B Blok', 3, 1, 18, 'mehmet.oz@begonya.com', 'TR620020500009863791600002')
-) AS u(site_slug, block_name, unit_number, floor, land_share, owner_email, virtual_iban)
+        ('begonya-sitesi', 'A Blok', 14, 4, 24, 'ahmet.yilmaz@begonya.com', 'TR620020500009863791600001', '2+1'),
+        ('begonya-sitesi', 'B Blok', 3, 1, 18, 'mehmet.oz@begonya.com', 'TR620020500009863791600002', '2+1')
+) AS u(site_slug, block_name, unit_number, floor, land_share, owner_email, virtual_iban, house_type)
 JOIN sites s ON s.slug = u.site_slug AND s.deleted_at IS NULL
 JOIN blocks b ON b.site_id = s.id AND b.block_name = u.block_name
+-- Monthly dues come from the unit's house-type tariff (2+1 = ₺1,400.00).
+LEFT JOIN house_types ht ON ht.site_id = s.id AND ht.type_name = u.house_type
 LEFT JOIN persons p_owner ON LOWER(p_owner.email) = LOWER(u.owner_email) AND p_owner.site_id = s.id AND p_owner.deleted_at IS NULL
 ON CONFLICT (block_id, unit_number) DO UPDATE
 SET floor = EXCLUDED.floor,
     land_share = EXCLUDED.land_share,
     owner_person_id = EXCLUDED.owner_person_id,
     tenant_person_id = EXCLUDED.tenant_person_id,
-    virtual_iban = EXCLUDED.virtual_iban;
+    virtual_iban = EXCLUDED.virtual_iban,
+    house_type = EXCLUDED.house_type,
+    house_type_id = EXCLUDED.house_type_id;
 
 -- 4b. EPIC-08 §3: the seeded owners are owners of record and live in their
 --     units (OWNER_OCCUPIED is derived from the active owner session, V31).

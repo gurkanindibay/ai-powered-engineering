@@ -328,6 +328,61 @@ async fn when_no_budget_exists_then_legacy_tariff_accrual_carries_a_kmk37_warnin
 }
 
 #[tokio::test]
+async fn when_a_unit_has_no_tariff_then_manual_accrual_skips_it_instead_of_charging_a_fixed_amount()
+{
+    let state = site_with_two_units().await;
+    {
+        let mut inner = state.inner.write().await;
+        let mut untariffed = inner
+            .units
+            .iter()
+            .find(|u| u.id == "d-15")
+            .cloned()
+            .unwrap();
+        untariffed.id = "d-16".to_string();
+        untariffed.unit_number = 16;
+        untariffed.house_type = None;
+        inner.units.push(untariffed);
+    }
+    // The manager's dialog sends no amount: the request body omits it.
+    let request: AccrueDuesPeriodRequest = serde_json::from_value(serde_json::json!({
+        "site_id": SITE,
+        "period": "Tarife Dönemi",
+        "due_date": (today() + Days::new(5)).to_string(),
+    }))
+    .unwrap();
+    assert_eq!(request.amount, Decimal::ZERO);
+    let (_, Json(resp)) = sitepulse_backend::handlers::accrue_monthly_dues(
+        State(state.clone()),
+        sitepulse_backend::tenancy::TenantScope::platform(),
+        Json(request),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(resp.newly_accrued_units_count, 2);
+    assert_eq!(resp.total_amount_accrued, d("3200.00")); // 1.800 + 1.400 tariffs
+    assert_eq!(resp.skipped_units.len(), 1, "{:?}", resp.skipped_units);
+    assert!(resp.skipped_units[0].contains("no house-type tariff"));
+    assert!(resp.message.contains("1 daire atlandı"), "{}", resp.message);
+    let inner = state.inner.read().await;
+    let charged = |unit: &str| {
+        inner
+            .dues
+            .iter()
+            .find(|d| d.unit_id == unit && d.period == "Tarife Dönemi")
+            .map(|d| d.principal_amount)
+    };
+    assert_eq!(charged("d-14"), Some(d("1800.00")));
+    assert_eq!(charged("d-15"), Some(d("1400.00")));
+    assert_eq!(
+        charged("d-16"),
+        None,
+        "no invented amount for a unit without a tariff"
+    );
+}
+
+#[tokio::test]
 async fn when_an_approved_budget_is_served_and_the_window_closes_then_it_becomes_final_unless_an_objection_is_upheld(
 ) {
     let state = site_with_two_units().await;
