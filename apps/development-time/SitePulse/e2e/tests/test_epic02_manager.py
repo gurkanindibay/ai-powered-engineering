@@ -275,3 +275,54 @@ def test_cockpit_amounts_keep_kurus(login_as, page, api, actors):
     _accrue_october(api, actors, Decimal("1400.55"))
     _, shown_expected, _ = _cockpit_figures(login_as, page)
     assert shown_expected == Decimal("2801.10")
+
+
+@pytest.mark.core
+@pytest.mark.role_manager
+@pytest.mark.gui_id("GUI-02-01")
+@pytest.mark.covers("SC-02-01-06")
+def test_cockpit_shows_collection_progress_and_unit_breakdown(login_as, page, stack):
+    # Add 22 units to the two seeded units at the manager's site.
+    stack.sql("""
+        INSERT INTO units (block_id, site_id, unit_number, floor, occupancy_status)
+        SELECT b.id, s.id, unit_number, 1, 'VACANT'
+        FROM sites s JOIN blocks b ON b.site_id = s.id
+        CROSS JOIN generate_series(101, 122) AS new_units(unit_number)
+        WHERE s.slug = 'begonya-sitesi' AND b.block_name = 'A Blok';
+    """)
+    # Twelve units paid 5,000 each and six paid 6,000 each. The other six owe
+    # 4,000 each; the penalty snapshot keeps the overdue balance fixed today.
+    stack.sql("""
+        WITH ranked_units AS (
+            SELECT u.id, row_number() OVER (ORDER BY u.id) AS unit_rank
+            FROM units u JOIN sites s ON s.id = u.site_id
+            WHERE s.slug = 'begonya-sitesi'
+        ), charges AS (
+            SELECT id, unit_rank <= 18 AS paid,
+                   CASE WHEN unit_rank <= 12 THEN 5000.00
+                        WHEN unit_rank <= 18 THEN 6000.00
+                        ELSE 4000.00 END AS principal,
+                   (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date AS today
+            FROM ranked_units
+        )
+        INSERT INTO dues_liabilities (
+            unit_id, period, principal_amount, due_date, status,
+            paid_amount, paid_principal, penalty_accrued_through
+        )
+        SELECT id, 'Ekim 2026', principal, today - 1,
+               CASE WHEN paid THEN 'PAID' ELSE 'OVERDUE' END,
+               CASE WHEN paid THEN principal ELSE 0 END,
+               CASE WHEN paid THEN principal ELSE 0 END,
+               CASE WHEN NOT paid THEN today END
+        FROM charges;
+    """)
+    stack.restart_backend()
+
+    assert _cockpit_figures(login_as, page) == (
+        Decimal("96000.00"), Decimal("120000.00"), "%80 Tahsil Edildi",
+    )
+    labels = page.locator("flt-semantics[aria-label]").evaluate_all(
+        "nodes => nodes.map(node => node.getAttribute('aria-label'))"
+    )
+    cockpit_text = " ".join(" ".join(labels).split())
+    assert "Toplam Daire 24 Ödeyen 18 Geciken 6 Kalan Borç ₺24.000,00" in cockpit_text
