@@ -17,7 +17,16 @@ use serde_json::{json, Value};
 use sitepulse_backend::{app::build_router, auth, db, state::AppState};
 use tower::ServiceExt;
 
-const MANAGER_PASSWORD: &str = "Cycle-Manager-123";
+/// A password generated per test run, so no credential is committed.
+fn manager_password() -> &'static str {
+    static PASSWORD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    PASSWORD.get_or_init(|| {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        format!("Cy{}-{nanos}-aA1", std::process::id())
+    })
+}
 const IGNORE: &str = "needs PostgreSQL (DB_PASS); run by the rust-db-test gate";
 
 struct TestDb {
@@ -42,7 +51,7 @@ impl TestDb {
         let pool = db::create_pool_for(&name).expect("pool");
         db::init_db(&pool).await.expect("migrations");
         db::seed_test_data(&pool).await.expect("test seed");
-        let hash = auth::hash_password(MANAGER_PASSWORD).expect("hash");
+        let hash = auth::hash_password(manager_password()).expect("hash");
         pool.get()
             .await
             .expect("connection")
@@ -192,7 +201,7 @@ impl Env {
             .call(
                 "POST",
                 "/api/v1/auth/step-up",
-                Some(json!({ "password": MANAGER_PASSWORD })),
+                Some(json!({ "password": manager_password() })),
             )
             .await;
         assert_eq!(status, StatusCode::OK, "step-up: {body}");
@@ -533,7 +542,7 @@ async fn login(app: &Router, email: &str) -> String {
                 .uri("/api/v1/auth/login")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({ "email": email, "password": MANAGER_PASSWORD }).to_string(),
+                    json!({ "email": email, "password": manager_password() }).to_string(),
                 ))
                 .expect("request"),
         )
