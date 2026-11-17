@@ -2,6 +2,7 @@ use chrono::{Datelike, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use std::time::Duration;
 
+use crate::domain::billing_period::BillingPeriod;
 use crate::models::{DebtStatus, DebtorType, DuesLiability, ExpenseType};
 use crate::services::advance_offset_service::{settle_advances, OffsetScope};
 use crate::state::AppState;
@@ -24,6 +25,16 @@ pub fn format_turkish_month_year(date: NaiveDate) -> String {
         _ => "Bilinmeyen",
     };
     format!("{} {}", month_name, date.year())
+}
+
+/// One site's planned accrual for the current period.
+struct SiteBatch {
+    site_id: String,
+    period_key: String,
+    period: String,
+    due_date: NaiveDate,
+    dues: Vec<(DuesLiability, Option<String>)>,
+    skipped: Vec<String>,
 }
 
 /// Today's date in a site's time zone (falls back to Europe/Istanbul).
@@ -79,19 +90,22 @@ pub async fn run_periodic_accrual_for_all_sites(
         },
         None => None,
     };
-    // 1. Inspect state with a READ lock to collect units needing accrual without blocking readers
-    let candidates: Vec<(String, DuesLiability, Option<String>)> = {
+    // 1. Inspect state with a READ lock and plan one batch per site.
+    let batches: Vec<SiteBatch> = {
         let inner = state.inner.read().await;
         let sites: Vec<(String, String)> = inner
             .sites
             .iter()
             .map(|s| (s.id.clone(), s.timezone.clone()))
             .collect();
-        let mut to_accrue = Vec::new();
+        let mut planned = Vec::new();
 
         for (site_id, timezone) in sites {
             let local = site_local_date(&timezone, now);
-            let period = format_turkish_month_year(local);
+            // The same canonical key as a manual accrual, so the two can never both charge
+            // the month.
+            let billing_period = BillingPeriod::of_date(local);
+            let period = billing_period.label();
             let due_date =
                 NaiveDate::from_ymd_opt(local.year(), local.month(), 15).unwrap_or(local);
             let units_in_site: Vec<_> = inner
@@ -99,11 +113,19 @@ pub async fn run_periodic_accrual_for_all_sites(
                 .iter()
                 .filter(|u| u.site_id == site_id)
                 .collect();
+            let mut batch = SiteBatch {
+                site_id: site_id.clone(),
+                period_key: billing_period.key(),
+                period: period.clone(),
+                due_date,
+                dues: Vec::new(),
+                skipped: Vec::new(),
+            };
 
             for unit in units_in_site {
                 let already = inner.dues.iter().any(|d| {
                     d.unit_id == unit.id
-                        && d.period == period
+                        && BillingPeriod::parse(&d.period).ok() == Some(billing_period)
                         && d.expense_type == ExpenseType::OperationalDues
                 });
                 if already {
@@ -120,6 +142,11 @@ pub async fn run_periodic_accrual_for_all_sites(
                             site_id,
                             reason
                         );
+                        batch.skipped.push(format!(
+                            "{}: {}",
+                            inner.unit_label(&unit.block_id, unit.unit_number),
+                            reason
+                        ));
                         continue;
                     }
                 };
@@ -133,8 +160,7 @@ pub async fn run_periodic_accrual_for_all_sites(
                 } else {
                     DebtorType::Owner
                 };
-                to_accrue.push((
-                    site_id.clone(),
+                batch.dues.push((
                     DuesLiability {
                         id: String::new(),
                         unit_id: unit.id.clone(),
@@ -153,79 +179,121 @@ pub async fn run_periodic_accrual_for_all_sites(
                     basis.operating_budget_id,
                 ));
             }
+            if !batch.dues.is_empty() || !batch.skipped.is_empty() {
+                planned.push(batch);
+            }
         }
-        to_accrue
+        planned
     };
 
-    if candidates.is_empty() {
+    if batches.is_empty() {
         return (0, 0);
     }
 
-    // 2. Perform DB operations without holding the global memory lock
-    let mut persisted_dues: Vec<(String, DuesLiability, Option<String>)> = Vec::new();
-    let mut sites_accrued_set = std::collections::HashSet::new();
-
-    for (site_id, mut due, basis) in candidates {
+    // 2. One transaction per site batch, without holding the global memory lock: a failure
+    //    leaves that site with no liability at all, in the database or in memory.
+    let mut committed_batches: Vec<(SiteBatch, Option<String>)> = Vec::new();
+    for mut batch in batches {
+        let mut period_db_id = None;
         if let Some(ref pool) = state.pool {
-            match crate::db::insert_accrued_due(pool, &due).await {
-                Ok(Some(id)) => {
-                    due.id = id.to_string();
-                    if let Some(ref b) = basis {
-                        if let Err(e) = crate::db::set_due_budget_basis(pool, &due.id, b).await {
-                            tracing::error!(
-                                "[Scheduler] Legal basis of liability {} not saved: {}",
-                                due.id,
-                                e
-                            );
-                        }
+            let outcome = crate::db::commit_accrual_batch(
+                pool,
+                &crate::db::AccrualBatch {
+                    site_id: &batch.site_id,
+                    period_key: &batch.period_key,
+                    period_label: &batch.period,
+                    due_date: batch.due_date,
+                    source: "SCHEDULER",
+                    dues: &batch.dues,
+                    skipped: &batch.skipped,
+                },
+            )
+            .await;
+            match outcome {
+                Ok(committed) => {
+                    period_db_id = committed.period_id.map(|id| id.to_string());
+                    let mut kept = Vec::new();
+                    for ((mut due, basis), id) in batch.dues.drain(..).zip(committed.due_ids) {
+                        if let Some(id) = id {
+                            due.id = id.to_string();
+                            kept.push((due, basis));
+                        } // else: already accrued in DB
                     }
-                    sites_accrued_set.insert(site_id.clone());
-                    persisted_dues.push((site_id, due, basis));
+                    batch.dues = kept;
                 }
-                Ok(None) => continue, // already accrued in DB
                 Err(e) => {
-                    tracing::error!("[Scheduler] Accrual for unit {} failed: {}", due.unit_id, e);
+                    tracing::error!(
+                        "[Scheduler] Accrual of period {} for site {} failed and was rolled back: {}",
+                        batch.period_key,
+                        batch.site_id,
+                        e
+                    );
                     continue;
                 }
             }
-        } else {
-            sites_accrued_set.insert(site_id.clone());
-            persisted_dues.push((site_id, due, basis));
+        }
+        if !batch.dues.is_empty() {
+            committed_batches.push((batch, period_db_id));
         }
     }
 
-    if persisted_dues.is_empty() {
+    if committed_batches.is_empty() {
         return (0, 0);
     }
 
-    // 3. Briefly acquire WRITE lock to record new liabilities (no I/O under it)
-    let total_sites_accrued = sites_accrued_set.len();
-    let total_newly_accrued = persisted_dues.len();
+    // 3. Briefly acquire WRITE lock to record the committed liabilities (no I/O under it)
+    let total_sites_accrued = committed_batches.len();
+    let total_newly_accrued: usize = committed_batches.iter().map(|(b, _)| b.dues.len()).sum();
 
     {
         let mut inner = state.inner.write().await;
-        for (site_id, mut due, basis) in persisted_dues {
-            if due.id.is_empty() {
-                let max_d = inner
-                    .dues
-                    .iter()
-                    .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
-                    .max()
-                    .unwrap_or(0);
-                due.id = (max_d + 1).to_string();
+        for (batch, period_db_id) in committed_batches {
+            let known = inner.dues_periods.iter().any(|p| {
+                crate::auth::same_id(&p.site_id, &batch.site_id)
+                    && BillingPeriod::parse(&p.period_name).ok()
+                        == BillingPeriod::parse(&batch.period_key).ok()
+            });
+            if !known {
+                let id = period_db_id.unwrap_or_else(|| {
+                    (inner
+                        .dues_periods
+                        .iter()
+                        .filter_map(|p| crate::db::parse_id_to_i64(&p.id))
+                        .max()
+                        .unwrap_or(0)
+                        + 1)
+                    .to_string()
+                });
+                inner.dues_periods.push(crate::models::DuesPeriod {
+                    id,
+                    site_id: batch.site_id.clone(),
+                    period_name: batch.period.clone(),
+                    due_date: batch.due_date,
+                    status: crate::models::DuesPeriodStatus::Active,
+                    created_at: Some(Utc::now()),
+                });
             }
-            if let Some(b) = basis {
-                inner.dues_budget_basis.insert(due.id.clone(), b);
+            for (mut due, basis) in batch.dues {
+                if due.id.is_empty() {
+                    let max_d = inner
+                        .dues
+                        .iter()
+                        .filter_map(|d| crate::db::parse_id_to_i64(&d.id))
+                        .max()
+                        .unwrap_or(0);
+                    due.id = (max_d + 1).to_string();
+                }
+                if let Some(b) = basis {
+                    inner.dues_budget_basis.insert(due.id.clone(), b);
+                }
+                tracing::info!(
+                    "[Scheduler] Accrued unit {} for site '{}' for period '{}'",
+                    due.unit_id,
+                    batch.site_id,
+                    batch.period_key
+                );
+                inner.dues.push(due);
             }
-            let p = due.period.clone();
-            let u_id = due.unit_id.clone();
-            inner.dues.push(due);
-            tracing::info!(
-                "[Scheduler] Accrued unit {} for site '{}' for period '{}'",
-                u_id,
-                site_id,
-                p
-            );
         }
     }
 
