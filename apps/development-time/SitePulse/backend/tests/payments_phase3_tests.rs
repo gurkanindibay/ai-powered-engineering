@@ -2564,3 +2564,33 @@ async fn when_the_daily_collections_job_runs_then_every_step_completes_without_e
     let (_, _, again, _) = sitepulse_backend::scheduler::run_daily_collections(&state).await;
     assert_eq!(again, 0);
 }
+
+#[test]
+fn when_a_run_is_just_after_local_midnight_then_the_site_day_is_the_new_local_day() {
+    use chrono::{NaiveDate, TimeZone, Utc};
+    use std::collections::HashMap;
+    // 21:30 UTC on 16 Nov is 00:30 on 17 Nov in Istanbul (UTC+3) but still 16 Nov in UTC.
+    let now = Utc.with_ymd_and_hms(2026, 11, 16, 21, 30, 0).unwrap();
+    let sites = vec![
+        ("istanbul".to_string(), "Europe/Istanbul".to_string()),
+        ("utc".to_string(), "UTC".to_string()),
+    ];
+    let mut last_run: HashMap<String, NaiveDate> = HashMap::new();
+    let due = sitepulse_backend::scheduler::sites_due_today(&sites, now, &last_run);
+    let day = |id: &str| due.iter().find(|(s, _)| s == id).map(|(_, d)| *d);
+    assert_eq!(day("istanbul"), NaiveDate::from_ymd_opt(2026, 11, 17));
+    assert_eq!(day("utc"), NaiveDate::from_ymd_opt(2026, 11, 16));
+
+    // Once each site ran for its day, none is due again at the same instant.
+    last_run.insert(
+        "istanbul".into(),
+        NaiveDate::from_ymd_opt(2026, 11, 17).unwrap(),
+    );
+    last_run.insert("utc".into(), NaiveDate::from_ymd_opt(2026, 11, 16).unwrap());
+    assert!(sitepulse_backend::scheduler::sites_due_today(&sites, now, &last_run).is_empty());
+    // Three hours later UTC rolls over, Istanbul does not.
+    let later = now + chrono::Duration::hours(3);
+    let due = sitepulse_backend::scheduler::sites_due_today(&sites, later, &last_run);
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].0, "utc");
+}
