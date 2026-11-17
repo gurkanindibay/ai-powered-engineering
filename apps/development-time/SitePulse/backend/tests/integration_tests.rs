@@ -4418,3 +4418,45 @@ fn when_utc_is_late_evening_then_accrual_uses_the_site_local_date() {
         "Aralık 2026"
     );
 }
+
+fn payment_on(date: chrono::DateTime<Utc>) -> RecordManualPaymentRequest {
+    RecordManualPaymentRequest {
+        site_id: Some("site-1".to_string()),
+        unit_id: "d-14".to_string(),
+        amount: Decimal::from_str_exact("100.00").unwrap(),
+        payer_name: "Ayşe Yılmaz".to_string(),
+        payer_role: DebtorType::Owner,
+        payment_channel: PaymentChannel::ManualCash,
+        payment_date: Some(date),
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn when_payment_date_is_in_the_future_then_it_is_rejected() {
+    let service = PaymentTrackingService::new(AppState::new());
+    let err = service
+        .record_and_allocate_payment(payment_on(Utc::now() + chrono::Duration::days(2)))
+        .await
+        .unwrap_err();
+    assert!(err.contains("future"), "unexpected error: {err}");
+}
+
+#[tokio::test]
+async fn when_payment_date_is_beyond_the_backdating_window_then_it_is_rejected() {
+    let service = PaymentTrackingService::new(AppState::new());
+    let err = service
+        .record_and_allocate_payment(payment_on(Utc::now() - chrono::Duration::days(400)))
+        .await
+        .unwrap_err();
+    assert!(err.contains("in the past"), "unexpected error: {err}");
+}
+
+#[tokio::test]
+async fn when_payment_date_is_within_the_backdating_window_then_it_is_accepted() {
+    let service = PaymentTrackingService::new(AppState::new());
+    service
+        .record_and_allocate_payment(payment_on(Utc::now() - chrono::Duration::days(10)))
+        .await
+        .unwrap();
+}

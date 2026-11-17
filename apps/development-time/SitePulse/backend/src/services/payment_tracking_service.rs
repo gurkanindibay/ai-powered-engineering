@@ -395,6 +395,29 @@ impl PaymentTrackingService {
         })
     }
 
+    /// Rejects a payment date in the future (beyond a small clock-skew
+    /// allowance) or further back than the configured window
+    /// (`SITEPULSE_PAYMENT_BACKDATE_DAYS`, default 90 days).
+    fn payment_date_violation(
+        payment_date: chrono::DateTime<Utc>,
+        now: chrono::DateTime<Utc>,
+    ) -> Option<String> {
+        if payment_date > now + chrono::Duration::minutes(5) {
+            return Some("Payment date cannot be in the future".to_string());
+        }
+        let window_days = std::env::var("SITEPULSE_PAYMENT_BACKDATE_DAYS")
+            .ok()
+            .and_then(|v| v.trim().parse::<i64>().ok())
+            .filter(|d| *d >= 0)
+            .unwrap_or(90);
+        if payment_date < now - chrono::Duration::days(window_days) {
+            return Some(format!(
+                "Payment date cannot be more than {window_days} days in the past"
+            ));
+        }
+        None
+    }
+
     /// The single ingestion path for every payment channel (SPEC-005 R1).
     ///
     /// Allocation: the payer's designated liabilities first (TBK 101), each with
@@ -422,6 +445,9 @@ impl PaymentTrackingService {
         let unit_id = req.unit_id.clone();
         let payment_amount = req.amount;
         let issued_at = req.payment_date.unwrap_or_else(Utc::now);
+        if let Some(reason) = Self::payment_date_violation(issued_at, Utc::now()) {
+            return Err(reason);
+        }
         if payment_amount <= Decimal::ZERO {
             return Err("Ödeme tutarı 0.00'dan büyük olmalıdır".to_string());
         }
