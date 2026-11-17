@@ -59,7 +59,7 @@ ALTER TABLE advance_ledger_entries DROP CONSTRAINT IF EXISTS chk_advance_ledger_
 ALTER TABLE advance_ledger_entries ADD CONSTRAINT chk_advance_ledger_entry_type
     CHECK (entry_type IN (
         'PAYMENT_SURPLUS', 'OFFSET_APPLIED', 'VIRMAN_DEBIT', 'REFUND', 'ADJUSTMENT',
-        'ADJUSTMENT_CREDIT', 'ADJUSTMENT_DEBIT', 'EXIT_PAYOUT_DEBIT',
+        'ADJUSTMENT_CREDIT', 'ADJUSTMENT_DEBIT', 'VIRMAN_REVERSAL', 'EXIT_PAYOUT_DEBIT',
         'EXIT_TRANSFER_DEBIT', 'EXIT_TRANSFER_CREDIT'
     ));
 
@@ -71,7 +71,7 @@ SELECT 'advance_balance_vs_ledger' AS check_name, ab.unit_id::text || '/' || ab.
 FROM advance_balances ab
 LEFT JOIN (
     SELECT unit_id, debtor_type,
-           SUM(CASE WHEN entry_type IN ('PAYMENT_SURPLUS', 'ADJUSTMENT_CREDIT', 'EXIT_TRANSFER_CREDIT') THEN amount
+           SUM(CASE WHEN entry_type IN ('PAYMENT_SURPLUS', 'ADJUSTMENT_CREDIT', 'VIRMAN_REVERSAL', 'EXIT_TRANSFER_CREDIT') THEN amount
                     WHEN entry_type = 'ADJUSTMENT' THEN 0
                     ELSE -amount END) AS net
     FROM advance_ledger_entries GROUP BY unit_id, debtor_type
@@ -85,6 +85,10 @@ SELECT 'allocations_vs_dues_paid', d.id::text,
        (d.paid_principal + d.paid_penalty) - COALESCE(SUM(pa.principal_amount + pa.penalty_amount), 0)
 FROM dues_liabilities d
 LEFT JOIN payment_allocations pa ON pa.dues_liability_id = d.id
+    AND NOT EXISTS (
+        SELECT 1 FROM payment_entries re
+        WHERE re.id = pa.payment_entry_id AND re.settlement_status = 'REVERSED'
+    )
 GROUP BY d.id
 HAVING EXISTS (SELECT 1 FROM payment_allocations x WHERE x.dues_liability_id = d.id)
    AND (d.paid_principal + d.paid_penalty) <> COALESCE(SUM(pa.principal_amount + pa.penalty_amount), 0)
@@ -99,7 +103,36 @@ UNION ALL
 SELECT 'entry_vs_receipt_amount', e.id::text, e.amount - r.total_amount
 FROM payment_entries e
 JOIN payment_receipts r ON r.id = e.receipt_id
-WHERE e.amount <> r.total_amount AND e.payment_channel <> 'INTER_LEDGER';
+WHERE e.amount <> r.total_amount AND e.payment_channel <> 'INTER_LEDGER'
+UNION ALL
+SELECT 'reversal_vs_original', re.id::text, re.amount - o.amount
+FROM payment_entries re
+JOIN payment_entries o ON o.id = re.reverses_entry_id
+WHERE re.amount <> o.amount OR o.settlement_status <> 'REVERSED' OR re.unit_id <> o.unit_id
+UNION ALL
+SELECT 'reversal_receipt_vs_original', rr.id::text, rr.total_amount - original.total_amount
+FROM payment_receipts rr
+JOIN payment_receipts original ON original.id = rr.reverses_receipt_id
+WHERE rr.total_amount <> original.total_amount
+   OR rr.allocated_principal <> original.allocated_principal
+   OR rr.allocated_penalty <> original.allocated_penalty
+   OR rr.allocated_advance <> original.allocated_advance
+UNION ALL
+SELECT 'budget_shares_vs_lines', b.id::text,
+       COALESCE((SELECT SUM(s.annual_amount) FROM operating_budget_unit_shares s WHERE s.budget_id = b.id), 0)
+       - COALESCE((SELECT SUM(l.annual_amount) FROM operating_budget_lines l WHERE l.budget_id = b.id), 0)
+FROM operating_budgets b
+WHERE b.status <> 'DRAFT'
+  AND COALESCE((SELECT SUM(s.annual_amount) FROM operating_budget_unit_shares s WHERE s.budget_id = b.id), 0)
+      <> COALESCE((SELECT SUM(l.annual_amount) FROM operating_budget_lines l WHERE l.budget_id = b.id), 0)
+UNION ALL
+SELECT 'captured_intent_without_receipt', pi.id::text, pi.amount
+FROM payment_intents pi
+WHERE pi.status IN ('CAPTURED', 'REFUNDED')
+  AND NOT EXISTS (
+      SELECT 1 FROM payment_receipts r
+      WHERE r.site_id = pi.site_id AND r.receipt_number = pi.receipt_number
+  );
 
 -- Request/disbursement records carry a direct tenant key for row-level isolation.
 SELECT sp_enable_tenant_rls('advance_exit_settlements', 'site_id = sp_tenant_site()');
