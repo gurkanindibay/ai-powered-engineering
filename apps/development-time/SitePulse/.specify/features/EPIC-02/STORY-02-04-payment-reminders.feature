@@ -8,8 +8,8 @@ Feature: Targeted payment reminder and resident direct messaging
     When the manager opens the aging segment
     Then a reminder button is shown
 
-  @SC-02-04-02 @pending @core @role_manager
+  @SC-02-04-02 @layer:backend @linked @core @role_manager
   Scenario: Send reminder to overdue resident
     Given an overdue flat A Blok D:14 in the manager ledger
-    When the manager taps "Hatırlat" and confirms the notice
-    Then an in-app confirmation tells the manager the notice was dispatched
+    When the reminder is delivered through the configured notification gateway
+    Then the gateway receives the message once and a gateway failure is logged as FAILED
