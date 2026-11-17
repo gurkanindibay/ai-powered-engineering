@@ -113,3 +113,10 @@ Executable scenarios: [STORY-12-07-person-card-navigation.feature](../features/E
 - **Verification:** targeted Flutter tests, Flutter analysis, shared-component reuse, test ID, and logging standards checks.
 
 Executable scenarios: [STORY-12-08-person-merge-ui.feature](../features/EPIC-12/STORY-12-08-person-merge-ui.feature).
+
+### STORY-12-09: Person actions repeated in cycles
+- **Status:** DONE
+- **Description:** Every person action (create, edit, open and remove a login, preferences, national id, merge, use of an existing card in unit actions) is performed several times. After each run the card, its login status, its unit relations and the unit history are read back. Moving a person out also closes the household relation of their dependents.
+- **Acceptance Criteria:**
+Executable scenarios: [STORY-12-09-person-action-cycles.feature](../features/EPIC-12/STORY-12-09-person-action-cycles.feature).
+- **Verification:** `cargo test --test db_unit_person_action_cycles_tests -- --ignored --test-threads=1` (gate `rust-db-test`).
