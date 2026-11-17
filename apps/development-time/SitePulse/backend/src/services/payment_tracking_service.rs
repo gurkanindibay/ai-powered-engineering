@@ -395,6 +395,34 @@ impl PaymentTrackingService {
         })
     }
 
+    /// Backdating window for manual payments, in days
+    /// (`SITEPULSE_PAYMENT_BACKDATE_DAYS`, default 90).
+    pub fn backdate_window_days() -> i64 {
+        std::env::var("SITEPULSE_PAYMENT_BACKDATE_DAYS")
+            .ok()
+            .and_then(|v| v.trim().parse::<i64>().ok())
+            .filter(|d| *d >= 0)
+            .unwrap_or(90)
+    }
+
+    /// Reason a manually entered payment date is rejected: in the future
+    /// (beyond a small clock-skew allowance) or older than `window_days`.
+    pub fn payment_date_violation(
+        payment_date: chrono::DateTime<Utc>,
+        now: chrono::DateTime<Utc>,
+        window_days: i64,
+    ) -> Option<String> {
+        if payment_date > now + chrono::Duration::minutes(5) {
+            return Some("Ödeme tarihi gelecekte olamaz".to_string());
+        }
+        if payment_date < now - chrono::Duration::days(window_days) {
+            return Some(format!(
+                "Ödeme tarihi en fazla {window_days} gün geriye alınabilir"
+            ));
+        }
+        None
+    }
+
     /// The single ingestion path for every payment channel (SPEC-005 R1).
     ///
     /// Allocation: the payer's designated liabilities first (TBK 101), each with
@@ -422,6 +450,18 @@ impl PaymentTrackingService {
         let unit_id = req.unit_id.clone();
         let payment_amount = req.amount;
         let issued_at = req.payment_date.unwrap_or_else(Utc::now);
+        // Only manually keyed payments are date-checked: bank, card and provider
+        // payments carry the institution's value date for money already received.
+        if matches!(
+            req.payment_channel,
+            PaymentChannel::ManualCash | PaymentChannel::Cash | PaymentChannel::Other
+        ) {
+            if let Some(reason) =
+                Self::payment_date_violation(issued_at, Utc::now(), Self::backdate_window_days())
+            {
+                return Err(reason);
+            }
+        }
         if payment_amount <= Decimal::ZERO {
             return Err("Ödeme tutarı 0.00'dan büyük olmalıdır".to_string());
         }
