@@ -137,6 +137,9 @@ GATES: Dict[str, List[CommandSpec]] = {
     "rust-db-test": [CommandSpec(["cargo", "test", "--locked", "--test", "db_tenant_isolation_tests",
                                   "--", "--ignored", "--test-threads=1"], "backend", 900),
                      CommandSpec(["cargo", "test", "--locked", "--test", "db_occupancy_transitions_tests",
+                                  "--", "--ignored", "--test-threads=1"], "backend", 900),
+                     # Unit and person actions repeated in cycles (STORY-08-12, STORY-12-10).
+                     CommandSpec(["cargo", "test", "--locked", "--test", "db_unit_person_action_cycles_tests",
                                   "--", "--ignored", "--test-threads=1"], "backend", 900)],
     # Errors are fatal; warnings/infos are reported by `flutter analyze` itself.
     "flutter-analyze": [CommandSpec(["flutter", "analyze", "--no-fatal-infos", "--no-fatal-warnings"], "flutter", 600)],
