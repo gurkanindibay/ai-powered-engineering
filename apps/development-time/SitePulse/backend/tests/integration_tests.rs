@@ -3496,7 +3496,7 @@ async fn when_calculating_debt_aging_then_categorizes_into_current_30_60_and_90_
     let state = AppState::new();
     let service = PaymentTrackingService::new(state.clone());
 
-    let today = Utc::now().date_naive();
+    let today = sitepulse_backend::scheduler::site_local_date("Europe/Istanbul", Utc::now());
     {
         let mut inner = state.inner.write().await;
         inner.dues.clear();
