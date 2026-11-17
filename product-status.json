@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-17T19:15:51Z",
- "run_id": "20261117T191551Z-fb81ef2",
- "commit": "fb81ef2fa5ce85e635df017cb49c7a3f97ba7034",
+ "generated_at": "2026-11-17T19:57:29Z",
+ "run_id": "20261117T195729Z-1db7707",
+ "commit": "1db7707df672d17a29e3285d91fa992a631b4234",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,19 +11,19 @@
   "errors": 0,
   "skipped": 1,
   "passed": 114,
-  "seconds": 2144.1,
+  "seconds": 2032.9,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 92,
-  "stories_with_scenarios": 92,
+  "stories": 94,
+  "stories_with_scenarios": 94,
   "stories_passing": 27,
-  "scenarios": 229,
-  "automated": 202,
+  "scenarios": 253,
+  "automated": 226,
   "passing": 100,
   "failing": 0,
-  "no_result": 102,
+  "no_result": 126,
   "planned": 27,
   "epics": 12,
   "epics_verified": 0,
@@ -131,14 +131,14 @@
   {
    "id": "EPIC-08",
    "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
-   "stories": 11,
-   "stories_with_scenarios": 11,
+   "stories": 12,
+   "stories_with_scenarios": 12,
    "stories_passing": 4,
-   "scenarios": 38,
-   "automated": 38,
+   "scenarios": 51,
+   "automated": 51,
    "passing": 8,
    "failing": 0,
-   "no_result": 30,
+   "no_result": 43,
    "planned": 0,
    "health": "in_progress"
   },
@@ -187,14 +187,14 @@
   {
    "id": "EPIC-12",
    "title": "Unified People and Unit Directory",
-   "stories": 9,
-   "stories_with_scenarios": 9,
+   "stories": 10,
+   "stories_with_scenarios": 10,
    "stories_passing": 1,
-   "scenarios": 33,
-   "automated": 33,
+   "scenarios": 44,
+   "automated": 44,
    "passing": 8,
    "failing": 0,
-   "no_result": 25,
+   "no_result": 36,
    "planned": 0,
    "health": "in_progress"
   }
@@ -1022,6 +1022,84 @@
    "epic": "EPIC-08",
    "story": "STORY-08-11"
   },
+  "SC-08-12-01": {
+   "state": "no_result",
+   "name": "Tenant move-in and move-out repeated three times keep one history row per tenant",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-02": {
+   "state": "no_result",
+   "name": "Owner rents out and takes back repeatedly",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-03": {
+   "state": "no_result",
+   "name": "Replacing the tenant repeatedly settles each outgoing tenant once",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-04": {
+   "state": "no_result",
+   "name": "Owner move-in and move-out repeated keep the owner and the deed unchanged",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-05": {
+   "state": "no_result",
+   "name": "Title transfer repeated keeps every previous owner in the ownership history",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-06": {
+   "state": "no_result",
+   "name": "Every executed command is audited in order",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-07": {
+   "state": "no_result",
+   "name": "A repeated command that is no longer legal is rejected and changes nothing",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-08": {
+   "state": "no_result",
+   "name": "Household members added, updated and removed repeatedly keep the roster and the primary contact correct",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-09": {
+   "state": "no_result",
+   "name": "Move-out archives the household of the closed session each time",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-10": {
+   "state": "no_result",
+   "name": "When a tenant moves out, all of the tenant's dependents move out with them",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-11": {
+   "state": "no_result",
+   "name": "When an owner who lives in the unit moves out, the owner's dependents move out with them",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-12": {
+   "state": "no_result",
+   "name": "Dependents follow every action that closes a session, repeated",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
+  "SC-08-12-13": {
+   "state": "no_result",
+   "name": "A dependent who is also a person card keeps the card when moved out",
+   "epic": "EPIC-08",
+   "story": "STORY-08-12"
+  },
   "SC-09-01-01": {
    "state": "passing",
    "name": "Filter payment stream by tenant payments for current month",
@@ -1573,6 +1651,72 @@
    "name": "A file that is not an Excel workbook is rejected",
    "epic": "EPIC-12",
    "story": "STORY-12-09"
+  },
+  "SC-12-10-01": {
+   "state": "no_result",
+   "name": "Creating the same person repeatedly never produces a second card",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-02": {
+   "state": "no_result",
+   "name": "Editing a card repeatedly raises the version once per edit and rejects stale versions",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-03": {
+   "state": "no_result",
+   "name": "Opening and removing a login repeatedly keeps the login status correct",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-04": {
+   "state": "no_result",
+   "name": "Opening the login twice in a row reuses the same account",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-05": {
+   "state": "no_result",
+   "name": "A person's card follows the unit actions and keeps the whole relation history",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-06": {
+   "state": "no_result",
+   "name": "Choosing the same existing person for an action repeatedly creates no new card",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-07": {
+   "state": "no_result",
+   "name": "Contact preferences saved repeatedly keep the last values",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-08": {
+   "state": "no_result",
+   "name": "Setting the national id repeatedly keeps it masked and unique",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-09": {
+   "state": "no_result",
+   "name": "Duplicate cards are merged and the surviving card keeps the history",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-10": {
+   "state": "no_result",
+   "name": "Person actions of another site are refused every time",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
+  },
+  "SC-12-10-11": {
+   "state": "no_result",
+   "name": "A person's move-out also moves out their dependents and the cards show it",
+   "epic": "EPIC-12",
+   "story": "STORY-12-10"
   }
  },
  "catalogue_history": [
@@ -1715,10 +1859,10 @@
   {
    "date": "2026-11-17",
    "epics": 12,
-   "stories": 92,
-   "stories_with_scenarios": 92,
-   "scenarios": 229,
-   "automated": 202
+   "stories": 94,
+   "stories_with_scenarios": 94,
+   "scenarios": 253,
+   "automated": 226
   }
  ],
  "recent_changes": [
@@ -1726,12 +1870,25 @@
    "date": "2026-11-17",
    "epic": "EPIC-12",
    "title": "Unified People and Unit Directory",
+   "new_stories": 2,
+   "new_scenarios": 13,
+   "newly_automated": 13,
+   "items": 2,
+   "samples": [
+    "STORY-12-09: Person import from Excel",
+    "STORY-12-10: Person actions repeated in cycles"
+   ]
+  },
+  {
+   "date": "2026-11-17",
+   "epic": "EPIC-08",
+   "title": "Unit Occupancy Lifecycle & Dual-Ledger Financial Responsibility",
    "new_stories": 1,
-   "new_scenarios": 2,
-   "newly_automated": 2,
+   "new_scenarios": 13,
+   "newly_automated": 13,
    "items": 1,
    "samples": [
-    "STORY-12-09: Person import from Excel"
+    "STORY-08-12: Unit actions repeated in cycles"
    ]
   },
   {
@@ -2146,5 +2303,5 @@
    ]
   }
  ],
- "href": "reports/44155451499-1/"
+ "href": "reports/44162997873-1/"
 }
