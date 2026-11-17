@@ -9,6 +9,7 @@ Validates forward and backward traceability across:
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -140,6 +141,9 @@ class RtmValidator:
         dag_tasks = self.load_task_dag()
 
         issues: List[str] = []
+        # `harness_cli verify --record` completes tasks one by one in CI while the committed RTM
+        # still says UNVERIFIED; that lag is expected during a recording run, not a defect.
+        recording = os.environ.get("SITEPULSE_RECORDING") == "1"
         verified_count = 0
         pending_count = 0
 
@@ -158,7 +162,8 @@ class RtmValidator:
                     issues.append(
                         f"[{req_id}] Status mismatch: RTM is 'VERIFIED' but task-dag.json is '{dag_status}'"
                     )
-                elif status in ("PENDING", "UNVERIFIED") and dag_status == "COMPLETED":
+                elif (status in ("PENDING", "UNVERIFIED") and dag_status == "COMPLETED"
+                      and not recording):
                     issues.append(
                         f"[{req_id}] Status mismatch: RTM is '{status}' but task-dag.json is 'COMPLETED'"
                     )

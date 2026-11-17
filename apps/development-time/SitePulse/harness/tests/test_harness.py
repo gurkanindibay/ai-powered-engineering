@@ -220,6 +220,14 @@ class TestRtmValidator(unittest.TestCase):
     def test_unverified_requirements_need_no_evidence(self):
         self.assertTrue(self.validator(self.make_workspace("UNVERIFIED")).validate()["passed"])
 
+    def test_unverified_rtm_with_completed_task_fails_unless_recording(self):
+        root = self.make_workspace("UNVERIFIED")
+        dag = root / "apps" / "development-time" / "SitePulse" / ".specify" / "tasks" / "task-dag.json"
+        dag.write_text(json.dumps({"tasks": [task("task-01", gates=[], acceptance_tests=[], status="COMPLETED")]}))
+        self.assertFalse(self.validator(root).validate()["passed"])
+        with mock.patch.dict(os.environ, {"SITEPULSE_RECORDING": "1"}):
+            self.assertTrue(self.validator(root).validate()["passed"])
+
     def test_verified_without_evidence_fails(self):
         report = self.validator(self.make_workspace("VERIFIED")).validate()
         self.assertFalse(report["passed"])

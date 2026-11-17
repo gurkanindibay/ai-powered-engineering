@@ -99,6 +99,8 @@ def main(argv=None) -> int:
             print(f"Error: {task_id} is BLOCKED (retry budget exhausted); a human must reset it.", file=sys.stderr)
             return 2
         dag.update_task(task_id, status="IN_PROGRESS")
+        # Gates run below see a DAG that recording is changing: tell them (see RtmValidator).
+        os.environ["SITEPULSE_RECORDING"] = "1"
 
     runner = LoopRunner(max_budget=int(task.get("max_attempts", 3)), include_global=not args.no_global)
     if not args.json:
