@@ -162,6 +162,7 @@ pub async fn save_due_liability(
         DebtStatus::Paid => "PAID",
         DebtStatus::Overdue => "OVERDUE",
         DebtStatus::Pending => "PENDING",
+        DebtStatus::Cancelled => "CANCELLED",
     };
     let due_id_num = require_id("entity", &due.id)?;
     let unit_id_num = require_id("entity", &due.unit_id)?;
@@ -267,12 +268,24 @@ pub async fn record_due_allocation(
 pub async fn insert_accrued_due(pool: &Pool, due: &DuesLiability) -> DbResult<Option<i64>> {
     let unit = require_id("unit", &due.unit_id)?;
     let client = pool.get().await?;
+    // The unique index ignores cancelled rows (a re-issue replaces one), but
+    // accrual never charges a period again once any liability of it exists.
+    let existing = client
+        .query_opt(
+            "SELECT 1 FROM dues_liabilities
+             WHERE unit_id = $1 AND period = $2 AND expense_type = $3 AND capital_project_id IS NULL",
+            &[&unit, &due.period, &due.expense_type],
+        )
+        .await?;
+    if existing.is_some() {
+        return Ok(None);
+    }
     let row = client
         .query_opt(
             r#"
             INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type)
             VALUES ($1, $2, $3, $4, 'PENDING', 0, $5, $6)
-            ON CONFLICT (unit_id, period, expense_type) WHERE capital_project_id IS NULL DO NOTHING
+            ON CONFLICT (unit_id, period, expense_type) WHERE capital_project_id IS NULL AND status <> 'CANCELLED' DO NOTHING
             RETURNING id
             "#,
             &[&unit, &due.period, &due.principal_amount, &due.due_date, &due.debtor_type, &due.expense_type],
@@ -410,6 +423,7 @@ pub async fn fetch_debt_aging_report_from_db(
         let status = match status_str.as_str() {
             "PAID" => DebtStatus::Paid,
             "OVERDUE" => DebtStatus::Overdue,
+            "CANCELLED" => DebtStatus::Cancelled,
             _ => DebtStatus::Pending,
         };
         let debtor_type = match debtor_type_str.as_str() {

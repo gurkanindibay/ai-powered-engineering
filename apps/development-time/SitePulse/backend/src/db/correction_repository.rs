@@ -1,0 +1,130 @@
+//! Writes of an approved accrual correction (STORY-07-11).
+//!
+//! The liability change, the replacement liability and the advance credit are
+//! one transaction: either the whole correction is stored or none of it.
+
+use deadpool_postgres::Pool;
+use rust_decimal::Decimal;
+
+use super::payment_repository::tx_credit_advance;
+use super::{require_id, DbResult};
+use crate::models::DuesLiability;
+
+/// What an approved correction does to the database.
+pub struct CorrectionWrite<'a> {
+    pub site_id: &'a str,
+    pub due_id: &'a str,
+    pub unit_id: &'a str,
+    /// `OWNER` or `TENANT`: whose advance balance receives `advance_credit`.
+    pub debtor_type: &'a str,
+    /// `true`: the liability is set to CANCELLED and its amounts stay as they were.
+    pub cancel: bool,
+    /// The owed and paid amounts after a credit note (ignored when `cancel`).
+    pub principal: Decimal,
+    pub penalty: Decimal,
+    pub paid_principal: Decimal,
+    pub paid_penalty: Decimal,
+    pub advance_credit: Decimal,
+    /// Reference stored on the advance ledger entry (`KOR-<id>`).
+    pub reference: &'a str,
+    pub description: &'a str,
+    /// The corrected liability of a re-issue.
+    pub replacement: Option<&'a DuesLiability>,
+}
+
+/// Applies the correction and returns the id of the replacement liability, if any.
+pub async fn apply_accrual_correction(
+    pool: &Pool,
+    write: &CorrectionWrite<'_>,
+) -> DbResult<Option<i64>> {
+    let site = require_id("site", write.site_id)?;
+    let due = require_id("dues liability", write.due_id)?;
+    let unit = require_id("unit", write.unit_id)?;
+    let mut client = pool.get().await?;
+    let tx = client.transaction().await?;
+    super::tx_bind_tenant(&tx, site).await?;
+
+    let changed = if write.cancel {
+        tx.execute(
+            "UPDATE dues_liabilities SET status = 'CANCELLED', version = version + 1
+             WHERE id = $1 AND status <> 'CANCELLED'",
+            &[&due],
+        )
+        .await?
+    } else {
+        let paid = write.paid_principal + write.paid_penalty;
+        tx.execute(
+            r#"
+            UPDATE dues_liabilities
+            SET principal_amount = $2::numeric,
+                delay_penalty = $3::numeric,
+                paid_principal = $4::numeric,
+                paid_penalty = $5::numeric,
+                paid_amount = $6::numeric,
+                status = CASE
+                    WHEN $4::numeric >= $2::numeric AND $5::numeric >= $3::numeric THEN 'PAID'
+                    WHEN $6::numeric > 0 THEN 'PARTIALLY_PAID'
+                    WHEN status = 'PAID' THEN 'PENDING'
+                    ELSE status END,
+                version = version + 1
+            WHERE id = $1 AND status <> 'CANCELLED'
+            "#,
+            &[
+                &due,
+                &write.principal,
+                &write.penalty,
+                &write.paid_principal,
+                &write.paid_penalty,
+                &paid,
+            ],
+        )
+        .await?
+    };
+    if changed != 1 {
+        return Err(format!(
+            "Liability {} was not corrected: it does not exist or is already cancelled",
+            write.due_id
+        )
+        .into());
+    }
+
+    if write.advance_credit > Decimal::ZERO {
+        tx_credit_advance(
+            &tx,
+            unit,
+            write.debtor_type,
+            "ADJUSTMENT_CREDIT",
+            write.advance_credit,
+            Some(write.reference),
+            Some(write.description),
+        )
+        .await?;
+    }
+
+    let replacement_id = match write.replacement {
+        Some(r) => {
+            let row = tx
+                .query_one(
+                    r#"
+                    INSERT INTO dues_liabilities
+                        (unit_id, period, principal_amount, due_date, status, delay_penalty, debtor_type, expense_type)
+                    VALUES ($1, $2, $3, $4, 'PENDING', 0, $5, $6)
+                    RETURNING id
+                    "#,
+                    &[
+                        &unit,
+                        &r.period,
+                        &r.principal_amount,
+                        &r.due_date,
+                        &r.debtor_type,
+                        &r.expense_type,
+                    ],
+                )
+                .await?;
+            Some(row.get::<_, i64>(0))
+        }
+        None => None,
+    };
+    tx.commit().await?;
+    Ok(replacement_id)
+}

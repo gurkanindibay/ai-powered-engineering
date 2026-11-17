@@ -41,7 +41,7 @@ impl DuesCalculationService {
         mut dues: DuesLiability,
         evaluation_date: NaiveDate,
     ) -> DuesLiability {
-        if dues.status == DebtStatus::Paid {
+        if matches!(dues.status, DebtStatus::Paid | DebtStatus::Cancelled) {
             dues_ledger::refresh(&mut dues);
             return dues;
         }

@@ -4,7 +4,7 @@
 use chrono::{NaiveDate, Utc};
 use rust_decimal::Decimal;
 
-use crate::models::{DebtStatus, DuesLiability, IndependentUnit, Role, User};
+use crate::models::{DuesLiability, IndependentUnit, Role, User};
 use crate::services::dues_ledger::{self, DEBTOR_OWNER, DEBTOR_TENANT};
 use crate::state::AppStateInner;
 
@@ -256,7 +256,7 @@ pub fn site_dues<'a>(
 }
 
 pub fn is_open(d: &DuesLiability) -> bool {
-    d.status != DebtStatus::Paid && dues_ledger::outstanding(d) > Decimal::ZERO
+    d.status.is_collectable() && dues_ledger::outstanding(d) > Decimal::ZERO
 }
 
 pub fn find_due<'a>(

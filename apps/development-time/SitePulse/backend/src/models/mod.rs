@@ -234,6 +234,16 @@ pub enum DebtStatus {
     Pending,
     Overdue,
     Paid,
+    /// Cancelled by an approved accrual correction (STORY-07-11). The row is kept
+    /// as it was; it owes nothing and is never collected.
+    Cancelled,
+}
+
+impl DebtStatus {
+    /// Still to be collected: neither settled nor cancelled.
+    pub fn is_collectable(self) -> bool {
+        matches!(self, DebtStatus::Pending | DebtStatus::Overdue)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]

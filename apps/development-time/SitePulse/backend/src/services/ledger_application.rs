@@ -154,7 +154,7 @@ fn offset_units(
             .dues
             .iter()
             .enumerate()
-            .filter(|(_, d)| d.unit_id == u_id && d.status != DebtStatus::Paid)
+            .filter(|(_, d)| d.unit_id == u_id && d.status.is_collectable())
             .map(|(i, _)| i)
             .collect();
         // FIFO: oldest liability first.

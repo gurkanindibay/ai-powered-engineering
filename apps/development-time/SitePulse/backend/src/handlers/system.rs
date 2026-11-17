@@ -915,7 +915,7 @@ pub async fn provision_site_units(
         let current_debt: Decimal = inner
             .dues
             .iter()
-            .filter(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid)
+            .filter(|d| d.unit_id == unit_id && d.status.is_collectable())
             .map(|d| d.total_amount)
             .sum();
         let advance = inner.advance_total(&unit_id);
@@ -967,7 +967,7 @@ pub async fn provision_site_units(
             dto.current_debt = inner
                 .dues
                 .iter()
-                .filter(|d| d.unit_id == dto.unit_id && d.status != DebtStatus::Paid)
+                .filter(|d| d.unit_id == dto.unit_id && d.status.is_collectable())
                 .map(|d| d.total_amount)
                 .sum();
             dto.advance_balance = inner.advance_total(&dto.unit_id);
@@ -1038,7 +1038,7 @@ pub async fn get_units_summary(State(state): State<AppState>) -> impl IntoRespon
         let current_debt: Decimal = inner
             .dues
             .iter()
-            .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+            .filter(|d| d.unit_id == unit.id && d.status.is_collectable())
             .map(|d| d.total_amount)
             .sum();
         let advance = inner.advance_total(&unit.id);

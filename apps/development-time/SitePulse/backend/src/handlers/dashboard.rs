@@ -230,7 +230,7 @@ pub async fn get_resident_dashboard(
     let evaluated_dues: Vec<DuesLiability> = inner
         .dues
         .iter()
-        .filter(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid)
+        .filter(|d| d.unit_id == unit_id && d.status.is_collectable())
         .map(|d| calc_service.calculate_delay_penalty(d.clone(), today))
         .collect();
 
@@ -378,7 +378,7 @@ pub async fn get_resident_dashboard(
                     .iter()
                     .filter(|due| {
                         crate::auth::same_id(&due.unit_id, &unit_id)
-                            && due.status != DebtStatus::Paid
+                            && due.status.is_collectable()
                             && due.expense_type == ExpenseType::CapitalDues
                             && due.period.starts_with(&period_prefix)
                     })

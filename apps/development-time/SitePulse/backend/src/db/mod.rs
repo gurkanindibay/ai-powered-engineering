@@ -2,6 +2,7 @@ pub mod advance_offset_repository;
 pub mod bank_account_repository;
 pub mod base;
 pub mod budget_repository;
+pub mod correction_repository;
 pub mod dues_repository;
 pub mod finance_records;
 pub mod finance_store;

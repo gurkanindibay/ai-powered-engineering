@@ -1425,7 +1425,7 @@ pub(crate) async fn process_bank_incoming_webhook_scoped(
     let remaining_debt: Decimal = inner
         .dues
         .iter()
-        .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+        .filter(|d| d.unit_id == unit.id && d.status.is_collectable())
         .map(|d| d.total_amount)
         .sum();
 
