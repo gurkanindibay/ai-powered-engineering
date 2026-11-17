@@ -286,7 +286,7 @@ jobs:
 
   record-evidence:
     if: github.event_name == 'push'
-    needs: verify
+    needs: [verify, test-report]
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -318,6 +318,17 @@ jobs:
       - name: Flutter dependencies
         working-directory: apps/development-time/SitePulse/flutter
         run: flutter pub get
+      # Scenario gates (scenario:SC-xx-yy-nn) accept the latest recorded execution. This run's e2e
+      # records live in the test-report artifact (committed history + this run): make them the
+      # execution history of this workspace only; nothing here is committed.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: e2e-test-report
+          path: ${{ runner.temp }}/e2e-test-report
+      - name: Use this run's e2e results as the execution history
+        run: |
+          rm -rf .specify/executions/runs
+          cp -a "${{ runner.temp }}/e2e-test-report/history/runs" .specify/executions/runs
       - name: Record evidence for every task (dependency order)
         env:
           CI: "true"
