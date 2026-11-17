@@ -262,10 +262,37 @@ class ManagerCockpitView extends StatelessWidget {
                 runSpacing: 8,
                 alignment: WrapAlignment.spaceBetween,
                 children: [
-                  SpMetricValue(label: AppStrings.totalUnits, value: '${summary.totalUnitsCount}'),
-                  SpMetricValue(label: 'Ödeyen', value: '${summary.paidUnitsCount}', tone: SpTone.success),
-                  SpMetricValue(label: 'Geciken', value: '${summary.overdueUnitsCount}', tone: SpTone.danger),
-                  SpMetricValue(label: AppStrings.remainingDebt, value: formatTry(summary.totalOverdueAmount), tone: SpTone.warning),
+                  testId(
+                    'cockpit_total_units',
+                    SpMetricValue(
+                      label: AppStrings.totalUnits,
+                      value: '${summary.totalUnitsCount}',
+                    ),
+                  ),
+                  testId(
+                    'cockpit_paid_units',
+                    SpMetricValue(
+                      label: 'Ödeyen',
+                      value: '${summary.paidUnitsCount}',
+                      tone: SpTone.success,
+                    ),
+                  ),
+                  testId(
+                    'cockpit_overdue_units',
+                    SpMetricValue(
+                      label: 'Geciken',
+                      value: '${summary.overdueUnitsCount}',
+                      tone: SpTone.danger,
+                    ),
+                  ),
+                  testId(
+                    'cockpit_remaining_debt',
+                    SpMetricValue(
+                      label: AppStrings.remainingDebt,
+                      value: formatTry(summary.totalOverdueAmount),
+                      tone: SpTone.warning,
+                    ),
+                  ),
                   if (summary.totalAdvanceBalance > Decimal.zero)
                     SpMetricValue(label: 'Toplam Avans', value: formatTry(summary.totalAdvanceBalance), tone: SpTone.info),
                 ]),
