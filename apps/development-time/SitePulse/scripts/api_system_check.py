@@ -593,12 +593,14 @@ def check_issuer_snapshot(ctx: Context) -> Tuple[bool, str]:
 def check_aging_snapshot(ctx: Context) -> Tuple[bool, str]:
     """SPEC-006 O-8: debt_aging_snapshots is written (once per unit/debtor/day)."""
     db, url = ctx.backend.db_name, ctx.backend.base + "/api/v1/payments/debt-aging/snapshot"
+    # The report day is the site's local day (Europe/Istanbul), not the database UTC day.
+    local_today = "(now() AT TIME ZONE 'Europe/Istanbul')::date"
     site = ctx.psql.run(db, f"SELECT site_id FROM units WHERE id = {ctx.unit_id};")
     # An open liability so the unit appears in today's report.
     ctx.psql.run(db, f"INSERT INTO dues_liabilities (unit_id, period, principal_amount, due_date, status, debtor_type)"
-                     f" VALUES ({ctx.unit_id}, 'SYS-AGING-{time.time_ns()}', 12.00, CURRENT_DATE - 45, 'PENDING', 'OWNER');")
+                     f" VALUES ({ctx.unit_id}, 'SYS-AGING-{time.time_ns()}', 12.00, {local_today} - 45, 'PENDING', 'OWNER');")
     relogin(ctx)
-    count_sql = f"SELECT count(*) FROM debt_aging_snapshots WHERE as_of_date = CURRENT_DATE AND site_id = {site};"
+    count_sql = f"SELECT count(*) FROM debt_aging_snapshots WHERE as_of_date = {local_today} AND site_id = {site};"
     first = http("POST", url, token=ctx.manager)
     count1 = ctx.psql.run(db, count_sql)
     second = http("POST", url, token=ctx.manager)
