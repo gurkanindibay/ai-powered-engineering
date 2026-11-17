@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-16T07:25:48Z",
- "run_id": "20261116T072547Z-3c738ff",
- "commit": "3c738ff5a0a14ced58cb557171174d81d0f0216e",
+ "generated_at": "2026-11-17T19:15:51Z",
+ "run_id": "20261117T191551Z-fb81ef2",
+ "commit": "fb81ef2fa5ce85e635df017cb49c7a3f97ba7034",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,19 +11,19 @@
   "errors": 0,
   "skipped": 1,
   "passed": 114,
-  "seconds": 2199.6,
+  "seconds": 2144.1,
   "files": 8,
   "unparseable": []
  },
  "totals": {
-  "stories": 91,
-  "stories_with_scenarios": 91,
+  "stories": 92,
+  "stories_with_scenarios": 92,
   "stories_passing": 27,
-  "scenarios": 227,
-  "automated": 200,
+  "scenarios": 229,
+  "automated": 202,
   "passing": 100,
   "failing": 0,
-  "no_result": 100,
+  "no_result": 102,
   "planned": 27,
   "epics": 12,
   "epics_verified": 0,
@@ -187,14 +187,14 @@
   {
    "id": "EPIC-12",
    "title": "Unified People and Unit Directory",
-   "stories": 8,
-   "stories_with_scenarios": 8,
+   "stories": 9,
+   "stories_with_scenarios": 9,
    "stories_passing": 1,
-   "scenarios": 31,
-   "automated": 31,
+   "scenarios": 33,
+   "automated": 33,
    "passing": 8,
    "failing": 0,
-   "no_result": 23,
+   "no_result": 25,
    "planned": 0,
    "health": "in_progress"
   }
@@ -1561,6 +1561,18 @@
    "name": "A card cannot be merged into itself",
    "epic": "EPIC-12",
    "story": "STORY-12-08"
+  },
+  "SC-12-09-01": {
+   "state": "no_result",
+   "name": "The Excel template matches the import columns",
+   "epic": "EPIC-12",
+   "story": "STORY-12-09"
+  },
+  "SC-12-09-02": {
+   "state": "no_result",
+   "name": "A file that is not an Excel workbook is rejected",
+   "epic": "EPIC-12",
+   "story": "STORY-12-09"
   }
  },
  "catalogue_history": [
@@ -1699,9 +1711,29 @@
    "stories_with_scenarios": 91,
    "scenarios": 227,
    "automated": 200
+  },
+  {
+   "date": "2026-11-17",
+   "epics": 12,
+   "stories": 92,
+   "stories_with_scenarios": 92,
+   "scenarios": 229,
+   "automated": 202
   }
  ],
  "recent_changes": [
+  {
+   "date": "2026-11-17",
+   "epic": "EPIC-12",
+   "title": "Unified People and Unit Directory",
+   "new_stories": 1,
+   "new_scenarios": 2,
+   "newly_automated": 2,
+   "items": 1,
+   "samples": [
+    "STORY-12-09: Person import from Excel"
+   ]
+  },
   {
    "date": "2026-11-16",
    "epic": "EPIC-12",
@@ -2114,5 +2146,5 @@
    ]
   }
  ],
- "href": "reports/43822952254-1/"
+ "href": "reports/44155451499-1/"
 }
