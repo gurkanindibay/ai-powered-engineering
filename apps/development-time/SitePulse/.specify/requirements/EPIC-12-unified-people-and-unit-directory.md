@@ -113,3 +113,15 @@ Executable scenarios: [STORY-12-07-person-card-navigation.feature](../features/E
 - **Verification:** targeted Flutter tests, Flutter analysis, shared-component reuse, test ID, and logging standards checks.
 
 Executable scenarios: [STORY-12-08-person-merge-ui.feature](../features/EPIC-12/STORY-12-08-person-merge-ui.feature).
+
+### STORY-12-09: Person import from Excel
+- **Status:** DONE
+- **Task Ref:** user-import-excel-csv
+- **Description:** The site manager imports owners and tenants from an Excel (.xlsx) or CSV file. The Excel file is read in the app into the same CSV text the existing import API checks (dry run, then commit), so the server rules do not change. The page offers a CSV and an Excel template with the import columns and one example row.
+- **Acceptance Criteria:**
+  - The import page accepts `.xlsx`, `.csv` and `.txt` files.
+  - The Excel template holds the import columns in order and one example row.
+  - A file named `.xlsx` that is not a workbook is rejected with an error.
+- **Verification:** targeted Flutter tests, Flutter analysis, shared-component reuse checks.
+
+Executable scenarios: [STORY-12-09-person-import-excel.feature](../features/EPIC-12/STORY-12-09-person-import-excel.feature).

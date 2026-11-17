@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../domain/services/api_client.dart';
 import '../../domain/services/bank_file_picker.dart';
 import '../../domain/services/person_directory_api.dart';
+import '../../domain/services/person_import_xlsx.dart';
 import '../../domain/services/platform_env.dart';
 import '../../testing/test_id.dart';
 import '../components/app_fullscreen_page.dart';
@@ -56,12 +57,31 @@ class _PersonImportPageState extends State<PersonImportPage> {
     ));
   }
 
+  void _downloadXlsxTemplate() {
+    final saved = downloadBytes(PersonImportXlsx.templateFileName, PersonImportXlsx.buildTemplate(), PersonImportXlsx.templateMime);
+    ScaffoldMessenger.of(context).showSnackBar(spSnackBar(
+      kind: saved ? ToastKind.success : ToastKind.warning,
+      content: Text(saved ? 'Excel şablonu indirildi.' : 'Bu cihazda dosya indirme desteklenmiyor.'),
+    ));
+  }
+
   Future<void> _pickFile() async {
-    final file = await pickBankFile(accept: '.csv,.txt');
+    final file = await pickBankFile(accept: '.xlsx,.csv,.txt');
     if (file == null || !mounted) return;
+    String text;
+    if (PersonImportXlsx.isXlsx(file.name)) {
+      try {
+        text = PersonImportXlsx.toCsv(file.bytes);
+      } on FormatException catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(spSnackBar(kind: ToastKind.error, content: Text(e.message)));
+        return;
+      }
+    } else {
+      text = utf8.decode(file.bytes, allowMalformed: true);
+    }
     setState(() {
       _fileName = file.name;
-      _text.text = utf8.decode(file.bytes, allowMalformed: true);
+      _text.text = text;
       _report = null;
     });
   }
@@ -99,7 +119,7 @@ class _PersonImportPageState extends State<PersonImportPage> {
     final report = _report;
     return AppFullscreenPage(
       title: 'Kişileri içe aktar',
-      subtitle: 'CSV dosyasından malik ve kiracı kaydı',
+      subtitle: 'Excel veya CSV dosyasından malik ve kiracı kaydı',
       icon: const Icon(Icons.upload_file_outlined),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -108,7 +128,7 @@ class _PersonImportPageState extends State<PersonImportPage> {
             icon: Icons.checklist_rounded,
             title: 'Nasıl çalışır?',
             message: '1. Şablonu indirip doldurun (sütun adlarını değiştirmeyin).\n'
-                '2. Dosyayı seçin veya içeriği yapıştırın.\n'
+                '2. Excel (.xlsx) veya CSV dosyasını seçin ya da içeriği yapıştırın.\n'
                 '3. "Kontrol et" hiçbir şeyi kaydetmez, her satırın hatasını gösterir.\n'
                 '4. Hata kalmadığında "İçe aktar" tüm satırları kaydeder ve etkinleştirme bağlantılarını gönderir.',
           ),
@@ -121,7 +141,13 @@ class _PersonImportPageState extends State<PersonImportPage> {
                 key: const Key('person_import_template_btn'),
                 onPressed: _downloadTemplate,
                 icon: const Icon(Icons.download_outlined, size: 16),
-                label: const Text('Şablonu indir'),
+                label: const Text('CSV şablonu'),
+              )),
+              testId('person_import_template_xlsx_btn', OutlinedButton.icon(
+                key: const Key('person_import_template_xlsx_btn'),
+                onPressed: _downloadXlsxTemplate,
+                icon: const Icon(Icons.table_chart_outlined, size: 16),
+                label: const Text('Excel şablonu'),
               )),
               testId('person_import_pick_btn', OutlinedButton.icon(
                 key: const Key('person_import_pick_btn'),
