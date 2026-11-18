@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "generated_at": "2026-11-18T20:37:15Z",
- "run_id": "20261118T203715Z-c9f574b",
- "commit": "c9f574b88430cb05e5b3825e78caef860d96677c",
+ "generated_at": "2026-11-18T21:24:51Z",
+ "run_id": "20261118T212450Z-83e542d",
+ "commit": "83e542d45a46c0c094aef601fb39dd3bfff8c98a",
  "task": "master",
  "status": "PASS",
  "junit": {
@@ -11,7 +11,7 @@
   "errors": 0,
   "skipped": 1,
   "passed": 116,
-  "seconds": 1957.1,
+  "seconds": 1961.4,
   "files": 8,
   "unparseable": []
  },
@@ -20,11 +20,11 @@
   "stories_with_scenarios": 100,
   "stories_passing": 25,
   "scenarios": 296,
-  "automated": 246,
+  "automated": 252,
   "passing": 102,
   "failing": 0,
-  "no_result": 144,
-  "planned": 50,
+  "no_result": 150,
+  "planned": 44,
   "epics": 12,
   "epics_verified": 0,
   "epics_failing": 0
@@ -121,11 +121,11 @@
    "stories_with_scenarios": 13,
    "stories_passing": 1,
    "scenarios": 49,
-   "automated": 33,
+   "automated": 39,
    "passing": 12,
    "failing": 0,
-   "no_result": 21,
-   "planned": 16,
+   "no_result": 27,
+   "planned": 10,
    "health": "in_progress"
   },
   {
@@ -849,37 +849,37 @@
    "story": "STORY-07-09"
   },
   "SC-07-10-01": {
-   "state": "planned",
+   "state": "no_result",
    "name": "The site's due day is used for every accrued liability",
    "epic": "EPIC-07",
    "story": "STORY-07-10"
   },
   "SC-07-10-02": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A due day beyond the end of the month falls on its last day",
    "epic": "EPIC-07",
    "story": "STORY-07-10"
   },
   "SC-07-10-03": {
-   "state": "planned",
+   "state": "no_result",
    "name": "The scheduler catches up months it missed",
    "epic": "EPIC-07",
    "story": "STORY-07-10"
   },
   "SC-07-10-04": {
-   "state": "planned",
+   "state": "no_result",
    "name": "Catch-up stops at the configured limit",
    "epic": "EPIC-07",
    "story": "STORY-07-10"
   },
   "SC-07-10-05": {
-   "state": "planned",
+   "state": "no_result",
    "name": "A payment inside the grace period carries no late fee",
    "epic": "EPIC-07",
    "story": "STORY-07-10"
   },
   "SC-07-10-06": {
-   "state": "planned",
+   "state": "no_result",
    "name": "After the grace period the late fee runs from the due date",
    "epic": "EPIC-07",
    "story": "STORY-07-10"
@@ -2129,9 +2129,32 @@
    "stories_with_scenarios": 100,
    "scenarios": 296,
    "automated": 246
+  },
+  {
+   "date": "2026-11-19",
+   "epics": 12,
+   "stories": 100,
+   "stories_with_scenarios": 100,
+   "scenarios": 296,
+   "automated": 252
   }
  ],
  "recent_changes": [
+  {
+   "date": "2026-11-19",
+   "epic": "EPIC-07",
+   "title": "Bank Account Integration, Virtual IBAN, Automated Reconciliation & Periodic Dues Accrual",
+   "new_stories": 0,
+   "new_scenarios": 0,
+   "newly_automated": 6,
+   "items": 6,
+   "samples": [
+    "SC-07-10-01: The site's due day is used for every accrued liability",
+    "SC-07-10-02: A due day beyond the end of the month falls on its last day",
+    "SC-07-10-03: The scheduler catches up months it missed",
+    "SC-07-10-04: Catch-up stops at the configured limit"
+   ]
+  },
   {
    "date": "2026-11-18",
    "epic": "EPIC-09",
@@ -2665,5 +2688,5 @@
    ]
   }
  ],
- "href": "reports/44391367416-1/"
+ "href": "reports/44400021645-1/"
 }
