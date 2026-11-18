@@ -192,6 +192,14 @@ finance_record!(LedgerAdjustment, "ledger_adjustments", {
     decided_by: plain, decided_at: plain, decision_note: plain, principal_before: plain,
     penalty_before: plain,
 });
+finance_record!(AccrualCorrection, "accrual_corrections", {
+    site_id: id, unit_id: id, due_id: id, period: plain, debtor_type: plain, kind: plain,
+    amount: plain, new_due_date: plain, new_debtor_type: plain, reason: plain,
+    requested_by: plain, requested_at: plain, status: plain, decided_by: plain,
+    decided_at: plain, decision_note: plain, principal_before: plain, penalty_before: plain,
+    paid_before: plain, penalty_reversed: plain, advance_credited: plain,
+    replacement_due_id: opt_id,
+});
 finance_record!(HeatCostPeriod, "heat_cost_periods", {
     site_id: id, label: plain, period_start: plain, period_end: plain, total_cost: plain,
     consumption_share_percent: plain, due_date: plain, status: plain, approved_by: plain,

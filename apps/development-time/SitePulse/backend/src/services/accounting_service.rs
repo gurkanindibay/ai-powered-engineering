@@ -49,6 +49,22 @@ fn adjusted_total(inner: &AppStateInner, due_id: &str, kind: &str) -> Decimal {
         .sum()
 }
 
+/// Principal and late fee taken off a liability by approved credit notes.
+fn credited_total(inner: &AppStateInner, due_id: &str) -> (Decimal, Decimal) {
+    inner
+        .finance
+        .corrections
+        .iter()
+        .filter(|c| {
+            c.status == REQUEST_APPROVED
+                && c.kind == CORRECTION_CREDIT_NOTE
+                && crate::auth::same_id(&c.due_id, due_id)
+        })
+        .fold((Decimal::ZERO, Decimal::ZERO), |(p, f), c| {
+            (p + c.amount, f + c.penalty_reversed.unwrap_or_default())
+        })
+}
+
 /// Every journal entry of the site, in date order.
 fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
     let mut out = Vec::new();
@@ -56,9 +72,15 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
     let dues: Vec<&DuesLiability> = site_dues(inner, site_id).collect();
     let mut paid_on_dues = Decimal::ZERO;
     for d in &dues {
+        // A cancelled liability is posted from its correction record below: the
+        // original accrual and the reversing entry, so the ledger shows both.
+        if d.status == DebtStatus::Cancelled {
+            continue;
+        }
         let written_off = adjusted_total(inner, &d.id, ADJUSTMENT_WRITE_OFF);
         let waived = adjusted_total(inner, &d.id, ADJUSTMENT_PENALTY_WAIVER);
-        let principal = d.principal_amount + written_off;
+        let (credited, fee_reversed) = credited_total(inner, &d.id);
+        let principal = d.principal_amount + written_off + credited;
         let revenue = if d.expense_type == ExpenseType::CapitalDues {
             de::CAPITAL_DUES_REVENUE
         } else {
@@ -77,7 +99,7 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
             });
         }
         let reevaluated = adjusted_total(inner, &d.id, ADJUSTMENT_PENALTY_REEVALUATION);
-        let penalty = d.delay_penalty + waived + reevaluated;
+        let penalty = d.delay_penalty + waived + fee_reversed + reevaluated;
         if penalty > Decimal::ZERO {
             out.push(Entry {
                 date: d.penalty_accrued_through.unwrap_or(today).max(d.due_date),
@@ -121,6 +143,7 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
             ],
         });
     }
+    push_correction_entries(inner, site_id, &mut out);
     let mut receipt_allocations = Decimal::ZERO;
     for r in inner
         .payment_receipts
@@ -282,6 +305,94 @@ fn derive_entries(inner: &AppStateInner, site_id: &str) -> Vec<Entry> {
     }
     out.sort_by(|a, b| a.date.cmp(&b.date).then(a.reference.cmp(&b.reference)));
     out
+}
+
+/// The original accrual and the reversing entry of every approved cancel and
+/// re-issue, and the reversing entry of every approved credit note. The paid
+/// amount that moved to the advance balance is posted by the advance-use entry,
+/// because the receipts keep their allocation while the liability's paid amount
+/// no longer counts them.
+fn push_correction_entries(inner: &AppStateInner, site_id: &str, out: &mut Vec<Entry>) {
+    for c in inner
+        .finance
+        .corrections
+        .iter()
+        .filter(|c| c.status == REQUEST_APPROVED && crate::auth::same_id(&c.site_id, site_id))
+    {
+        let original = inner
+            .dues
+            .iter()
+            .find(|d| crate::auth::same_id(&d.id, &c.due_id));
+        let revenue = match original {
+            Some(d) if d.expense_type == ExpenseType::CapitalDues => de::CAPITAL_DUES_REVENUE,
+            _ => de::OPERATING_DUES_REVENUE,
+        };
+        let date = c
+            .decided_at
+            .map(|t| local_date(inner, site_id, t))
+            .unwrap_or_else(|| site_today(inner, site_id));
+        let cancels = c.kind != CORRECTION_CREDIT_NOTE;
+        let principal = if cancels {
+            c.principal_before.unwrap_or_default()
+        } else {
+            c.amount
+        };
+        let fee = if cancels {
+            c.penalty_before.unwrap_or_default()
+        } else {
+            c.penalty_reversed.unwrap_or_default()
+        };
+        let label = label_of(inner, &c.unit_id);
+        if cancels {
+            // The liability itself is skipped above, so post what it accrued.
+            if principal > Decimal::ZERO {
+                out.push(Entry {
+                    date: original.map_or(date, |d| d.due_date),
+                    source: "ACCRUAL",
+                    reference: c.due_id.clone(),
+                    description: format!("{} · {}", c.period, label),
+                    lines: vec![
+                        Posting::debit(de::DUES_RECEIVABLE, principal),
+                        Posting::credit(revenue, principal),
+                    ],
+                });
+            }
+            if fee > Decimal::ZERO {
+                out.push(Entry {
+                    date,
+                    source: "PENALTY",
+                    reference: c.due_id.clone(),
+                    description: format!("KMK 20 gecikme tazminatı · {}", c.period),
+                    lines: vec![
+                        Posting::debit(de::DUES_RECEIVABLE, fee),
+                        Posting::credit(de::PENALTY_REVENUE, fee),
+                    ],
+                });
+            }
+        }
+        let mut lines = Vec::new();
+        if principal > Decimal::ZERO {
+            lines.push(Posting::debit(revenue, principal));
+        }
+        if fee > Decimal::ZERO {
+            lines.push(Posting::debit(de::PENALTY_REVENUE, fee));
+        }
+        if lines.is_empty() {
+            continue;
+        }
+        lines.push(Posting::credit(de::DUES_RECEIVABLE, principal + fee));
+        out.push(Entry {
+            date,
+            source: if cancels {
+                "CANCELLATION"
+            } else {
+                "CREDIT_NOTE"
+            },
+            reference: format!("KOR-{}", c.id),
+            description: format!("{} · {} · {}", c.period, label, c.reason),
+            lines,
+        });
+    }
 }
 
 fn in_range(date: NaiveDate, from: Option<NaiveDate>, to: Option<NaiveDate>) -> bool {

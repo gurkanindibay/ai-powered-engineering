@@ -13,6 +13,7 @@ import 'package:sitepulse/domain/models/auth_models.dart';
 import 'package:sitepulse/domain/models/payments_phase2_models.dart';
 import 'package:sitepulse/domain/models/payments_phase3_models.dart';
 import 'package:sitepulse/domain/services/api_client.dart';
+import 'package:sitepulse/domain/services/payments_phase3_api.dart';
 import 'package:sitepulse/ui/components/sp_dialog_pages.dart';
 import 'package:sitepulse/ui/payments/finance_hub_page.dart';
 import 'package:sitepulse/ui/payments/resident_self_service.dart';
@@ -72,6 +73,25 @@ void main() {
       expect(s.consents.firstWhere((c) => c.channel == 'SMS').granted, isFalse);
     });
 
+    test('exit settlement response keeps beneficiary and decimal amount', () {
+      final settlement = AdvanceExitSettlement.fromJson({
+        'id': 8,
+        'site_id': 'site-1',
+        'unit_id': 'd-14',
+        'kind': 'PAYOUT',
+        'source_debtor': 'TENANT',
+        'amount': '250.75',
+        'beneficiary_name': 'Zeynep Kaya',
+        'beneficiary_person_id': '42',
+        'requested_by': 'user:manager-1',
+        'status': 'PENDING',
+        'created_at': '2026-11-18T10:00:00Z',
+      });
+      expect(settlement.amount, d('250.75'));
+      expect(settlement.beneficiaryName, 'Zeynep Kaya');
+      expect(settlement.beneficiaryPersonId, '42');
+    });
+
     test('the designated amount is the sum of the selected items only', () {
       // covers: SC-11-05-04
       StatementOpenItem item(String id, String amount) => StatementOpenItem.fromJson({
@@ -82,6 +102,49 @@ void main() {
       expect(designatedTotal(items, {'a', 'c'}), d('107.10'));
       expect(designatedTotal(items, {}), Decimal.zero);
     });
+  });
+
+  test('advance exit settlement request sends the named beneficiary and debtor disposition', () async {
+    Map<String, dynamic>? sent;
+    String? path;
+    ApiClient.transport = MockClient((request) async {
+      path = request.url.path;
+      sent = json.decode(request.body) as Map<String, dynamic>;
+      return _json({
+        'id': 8,
+        'site_id': 'site-1',
+        'unit_id': 'd-14',
+        'kind': 'TRANSFER',
+        'source_debtor': 'TENANT',
+        'target_debtor': 'OWNER',
+        'amount': '250.75',
+        'beneficiary_name': 'Zeynep Kaya',
+        'beneficiary_person_id': '42',
+        'requested_by': 'user:manager-1',
+        'status': 'PENDING',
+        'created_at': '2026-11-18T10:00:00Z',
+      }, 201);
+    });
+
+    final created = await PaymentsPhase3Api.createAdvanceExitSettlement(
+      'd-14',
+      kind: 'TRANSFER',
+      sourceDebtor: 'TENANT',
+      requestKey: 'exit-try-1',
+      targetDebtor: 'OWNER',
+      amount: d('250.75'),
+      beneficiaryName: 'Zeynep Kaya',
+      beneficiaryPersonId: '42',
+    );
+
+    expect(path, '/api/v1/site-admin/units/d-14/advance-exit-settlements');
+    expect(sent, containsPair('beneficiary_name', 'Zeynep Kaya'));
+    expect(sent, containsPair('beneficiary_person_id', '42'));
+    expect(sent, containsPair('source_debtor', 'TENANT'));
+    expect(sent, containsPair('request_key', 'exit-try-1'));
+    expect(sent, containsPair('target_debtor', 'OWNER'));
+    expect(sent, containsPair('amount', '250.75'));
+    expect(created.amount, d('250.75'));
   });
 
   testWidgets('the text prompt returns the trimmed text and needs the minimum length', (tester) async {

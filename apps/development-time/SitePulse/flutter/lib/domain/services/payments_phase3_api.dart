@@ -89,6 +89,47 @@ class PaymentsPhase3Api {
   static Future<void> decideVirman(int id, bool approve, {String? note}) =>
       _post('/api/v1/resident-requests/virman/$id/decide', {'approve': approve, 'note': ?note});
 
+  static Future<AdvanceExitSettlement> createAdvanceExitSettlement(
+    String unitId, {
+    required String kind,
+    required String beneficiaryName,
+    required String sourceDebtor,
+    required String requestKey,
+    required Decimal amount,
+    String? beneficiaryPersonId,
+    String? targetDebtor,
+    String? note,
+  }) async => AdvanceExitSettlement.fromJson(
+    await _post('/api/v1/site-admin/units/$unitId/advance-exit-settlements', {
+      'kind': kind,
+      'beneficiary_name': beneficiaryName,
+      'source_debtor': sourceDebtor,
+      'request_key': requestKey,
+      'amount': _money(amount),
+      'beneficiary_person_id': ?beneficiaryPersonId,
+      'target_debtor': ?targetDebtor,
+      if (note != null && note.isNotEmpty) 'note': note,
+    }),
+  );
+
+  static Future<List<AdvanceExitSettlement>> advanceExitSettlements() async =>
+      _rows(await _get('/api/v1/site-admin/advance-exit-settlements'))
+          .map(AdvanceExitSettlement.fromJson)
+          .toList();
+
+  static Future<void> decideAdvanceExitSettlement(
+    int id, {
+    required bool approve,
+    String? paymentReference,
+    String? note,
+  }) => _post('/api/v1/site-admin/advance-exit-settlements/$id/decide', {
+    'approve': approve,
+    if (paymentReference != null && paymentReference.isNotEmpty)
+      'payment_reference': paymentReference,
+    if (note != null && note.isNotEmpty) 'note': note,
+  });
+
+
   static Future<DisputeItem> dispute(String unitId, String dueId, String reason) async =>
       DisputeItem.fromJson(await _post('/api/v1/residents/$unitId/disputes', {'due_id': dueId, 'reason': reason}));
   static Future<List<DisputeItem>> unitDisputes(String unitId) async =>

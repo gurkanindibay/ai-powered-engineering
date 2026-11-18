@@ -3,8 +3,8 @@ use regex::Regex;
 use rust_decimal::Decimal;
 
 use crate::models::{
-    BankTransactionItem, DebtStatus, DuesLiability, IndependentUnit, ReconciliationMatch,
-    ReconciliationStatus, User,
+    BankTransactionItem, DuesLiability, IndependentUnit, ReconciliationMatch, ReconciliationStatus,
+    User,
 };
 use crate::services::dues_calculation_service::DuesCalculationService;
 use std::sync::LazyLock;
@@ -193,7 +193,7 @@ impl ReconciliationService {
             // Find pending or overdue dues for this unit
             let unit_dues: Vec<&DuesLiability> = dues
                 .iter()
-                .filter(|d| d.unit_id == unit.id && d.status != DebtStatus::Paid)
+                .filter(|d| d.unit_id == unit.id && d.status.is_collectable())
                 .collect();
 
             if let Some(first_due) = unit_dues.first() {

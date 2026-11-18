@@ -775,9 +775,7 @@ impl PaymentTrackingService {
             let mut dues: Vec<DuesLiability> = inner
                 .dues
                 .iter()
-                .filter(|d| {
-                    d.status != DebtStatus::Paid && crate::auth::same_id(&d.unit_id, &unit.id)
-                })
+                .filter(|d| d.status.is_collectable() && crate::auth::same_id(&d.unit_id, &unit.id))
                 .cloned()
                 .map(|d| calc.calculate_delay_penalty(d, today))
                 .collect();
@@ -1067,8 +1065,20 @@ impl PaymentTrackingService {
             let credit = crate::db::tx_lock_advance(&tx, unit_num, source)
                 .await
                 .map_err(db_err)?;
-            if credit < transfer_amount {
-                return Err(insufficient(credit));
+            let reserved: Decimal = tx
+                .query_one(
+                    "SELECT COALESCE(SUM(amount), 0)::NUMERIC(15,2)
+                       FROM advance_exit_settlements
+                      WHERE site_id = $1 AND unit_id = $2 AND source_debtor = $3
+                        AND status = 'PENDING'",
+                    &[&site_num, &unit_num, &source],
+                )
+                .await
+                .map_err(|error| db_err(Box::new(error)))?
+                .get(0);
+            let spendable = credit - reserved;
+            if spendable < transfer_amount {
+                return Err(insufficient(spendable));
             }
             let mut dues: Vec<DuesLiability> = crate::db::tx_load_open_dues(&tx, unit_num)
                 .await
@@ -1128,16 +1138,14 @@ impl PaymentTrackingService {
             (receipt, touched, entry)
         } else {
             let inner = self.state.inner.read().await;
-            let have = inner.advance_of(&unit.id, source);
+            let have = inner.available_advance_of(&unit.id, source);
             if have < transfer_amount {
                 return Err(insufficient(have));
             }
             let mut dues: Vec<DuesLiability> = inner
                 .dues
                 .iter()
-                .filter(|d| {
-                    d.status != DebtStatus::Paid && crate::auth::same_id(&d.unit_id, &unit.id)
-                })
+                .filter(|d| d.status.is_collectable() && crate::auth::same_id(&d.unit_id, &unit.id))
                 .cloned()
                 .map(|d| calc.calculate_delay_penalty(d, now.date_naive()))
                 .collect();
@@ -1328,10 +1336,22 @@ impl PaymentTrackingService {
                 let have = crate::db::tx_lock_advance(&tx, target.unit_id, &debtor)
                     .await
                     .map_err(db_err)?;
-                if have < original.allocated_advance {
+                let reserved: Decimal = tx
+                    .query_one(
+                        "SELECT COALESCE(SUM(amount), 0)::NUMERIC(15,2)
+                           FROM advance_exit_settlements
+                          WHERE site_id = $1 AND unit_id = $2 AND source_debtor = $3
+                            AND status = 'PENDING'",
+                        &[&site_num, &target.unit_id, &debtor],
+                    )
+                    .await
+                    .map_err(|error| db_err(Box::new(error)))?
+                    .get(0);
+                let spendable = have - reserved;
+                if spendable < original.allocated_advance {
                     return Err(format!(
                         "The ₺{:.2} advance credited by {} has already been used (₺{:.2} left); reverse the later offsets first",
-                        original.allocated_advance, original.receipt_number, have
+                        original.allocated_advance, original.receipt_number, spendable
                     ));
                 }
                 crate::db::tx_debit_advance(
@@ -1411,7 +1431,8 @@ impl PaymentTrackingService {
             }
             check_reversible(&original, entry.settlement_status)?;
             if original.allocated_advance > Decimal::ZERO {
-                let have = inner.advance_of(&original.unit_id, &advance_debtor_of(&original));
+                let have =
+                    inner.available_advance_of(&original.unit_id, &advance_debtor_of(&original));
                 if have < original.allocated_advance {
                     return Err(format!(
                         "The ₺{:.2} advance credited by {} has already been used (₺{:.2} left); reverse the later offsets first",
@@ -1614,7 +1635,7 @@ impl PaymentTrackingService {
         let old_owner_exit_balance: Decimal = inner
             .dues
             .iter()
-            .filter(|d| d.unit_id == unit_id && d.status != DebtStatus::Paid)
+            .filter(|d| d.unit_id == unit_id && d.status.is_collectable())
             .map(|d| d.total_amount)
             .sum();
 

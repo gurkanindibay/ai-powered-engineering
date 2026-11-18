@@ -79,6 +79,9 @@ routes! {
     post "/api/v1/site-admin/units/{id}/move-out" => handlers::move_out_resident, Require(OccupancyManage);
     post "/api/v1/site-admin/units/{id}/move-in" => handlers::move_in_resident, Require(OccupancyManage);
     post "/api/v1/site-admin/units/{id}/occupancy-transitions" => handlers::apply_occupancy_transition, Require(OccupancyManage);
+    post "/api/v1/site-admin/units/{unit_id}/advance-exit-settlements" => handlers::create_advance_exit_settlement, RequireAny(&[OccupancyManage, FinanceManage]);
+    get "/api/v1/site-admin/advance-exit-settlements" => handlers::list_advance_exit_settlements, Require(FinanceManage);
+    post "/api/v1/site-admin/advance-exit-settlements/{id}/decide" => handlers::decide_advance_exit_settlement, Require(FinanceManage);
     get "/api/v1/site-admin/units/{id}/occupancy-state" => handlers::get_unit_occupancy_state, Require(PersonRead);
     get "/api/v1/site-admin/units/{id}/occupancy-history" => handlers::get_unit_occupancy_history, Require(PersonRead);
     get "/api/v1/site-admin/house-types" => handlers::get_house_types, Require(SiteManage);
@@ -270,6 +273,10 @@ routes! {
     get "/api/v1/adjustments" => handlers::list_adjustments, Require(FinanceRead);
     post "/api/v1/adjustments" => handlers::request_adjustment, Require(FinanceManage);
     post "/api/v1/adjustments/{id}/decide" => handlers::decide_adjustment, Require(AdjustmentApprove);
+    // STORY-07-11: accrual corrections (cancel, re-issue, credit note)
+    get "/api/v1/accrual-corrections" => handlers::list_corrections, Require(FinanceRead);
+    post "/api/v1/accrual-corrections" => handlers::request_correction, Require(FinanceManage);
+    post "/api/v1/accrual-corrections/{id}/decide" => handlers::decide_correction, Require(AdjustmentApprove);
     // SPEC-009 R11: heat-share billing
     get "/api/v1/heat-share/periods" => handlers::list_heat_periods, Require(FinanceRead);
     post "/api/v1/heat-share/periods" => handlers::create_heat_period, Require(FinanceManage);

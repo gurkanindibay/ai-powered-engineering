@@ -1,4 +1,5 @@
 pub mod account_activation_service;
+pub mod advance_exit_settlement_service;
 pub mod advance_offset_service;
 pub mod auth_service;
 pub mod bank_statement_parser;
@@ -30,6 +31,7 @@ pub mod autopay_service;
 pub mod bank_matching_service;
 pub mod budget_compliance_service;
 pub mod collections_service;
+pub mod correction_service;
 pub mod dunning_service;
 pub mod finance_common;
 pub mod heat_share_service;

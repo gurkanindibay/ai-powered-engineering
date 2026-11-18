@@ -26,6 +26,7 @@ local port (the backend applies the migrations), seeds it, and checks over HTTP:
   card_payment_via_provider        a sandbox card payment is captured through the signed webhook exactly once (R4)
   budget_accrual_legal_basis       accrual from an approved işletme projesi records the budget on each liability (R5)
   finance_desk_over_http           SPEC-009: balanced ledger, dunning, analytics, four-eyes invoices, isolation, lawyer token
+  exit_settlement_self_approval_audited requester self-approval is denied, preserves advance, and writes an AUTHZ_DENIED event
   person_records_and_import        person F7-F10: hashed national ID (step-up, audited), preferences, duplicates, CSV import
   ledger_integrity_clean           v_integrity_violations is empty after all checks
 
@@ -92,7 +93,7 @@ CHECKS = [
     "debt_aging_snapshot_persisted", "virman_reversal_restores_advance", "resident_statement_scoped",
     "receipt_pdf_and_verification", "card_payment_via_provider", "budget_accrual_legal_basis", "ledger_integrity_clean",
     "security_session_lifecycle", "transactional_audit", "audit_scope_and_privileges", "registration_repository_scope", "support_grant_lifecycle", "household_members_persisted", "invitation_atomic_registration",
-    "finance_desk_over_http",
+    "finance_desk_over_http", "exit_settlement_self_approval_audited",
     "person_tenant_isolation", "person_activation_lifecycle", "person_directory_and_export",
     "person_records_and_import",
 ]
@@ -719,6 +720,67 @@ def check_finance_desk(ctx: Context) -> Tuple[bool, str]:
                 f"self-approval {self_approve}, foreign isolated {isolated}, forged lawyer token {lawyer}, violations {violations}")
 
 
+def check_exit_settlement_self_approval_audited(ctx: Context) -> Tuple[bool, str]:
+    """A requester cannot approve their own exit settlement; middleware audits the denial."""
+    db, b = ctx.backend.db_name, ctx.backend.base
+    payment_status, payment_body = pay(ctx, "100.00")
+    if payment_status != 201:
+        return False, f"advance seed payment failed: {payment_status} {payment_body[:160]}"
+    identity = ctx.psql.run(
+        db,
+        "SELECT owner_person_id || '|' || site_id FROM units WHERE unit_number = 14 LIMIT 1;",
+    ).strip()
+    if not identity or "|" not in identity:
+        return False, "seed owner identity is unavailable"
+    person_id, _ = identity.split("|", 1)
+    unit = ctx.unit_id
+    request_status, request_body = http(
+        "POST",
+        f"{b}/api/v1/site-admin/units/{unit}/advance-exit-settlements",
+        token=ctx.manager,
+        body={
+            "request_key": f"self-approval-{time.time_ns()}",
+            "kind": "PAYOUT",
+            "source_debtor": "OWNER",
+            "target_debtor": None,
+            "amount": "25.00",
+            "beneficiary_name": "Seed Owner",
+            "beneficiary_person_id": person_id,
+            "note": "API system check",
+        },
+    )
+    if request_status != 201:
+        return False, f"settlement request failed: {request_status} {request_body[:160]}"
+    settlement_id = json.loads(request_body)["id"]
+    before = ctx.psql.run(
+        db,
+        f"SELECT balance FROM advance_balances WHERE unit_id={unit} AND debtor_type='OWNER';",
+    ).strip()
+    decision_status, _ = http(
+        "POST",
+        f"{b}/api/v1/site-admin/advance-exit-settlements/{settlement_id}/decide",
+        token=ctx.manager,
+        body={"approve": True, "payment_reference": "self-approval-check", "note": None},
+    )
+    after = ctx.psql.run(
+        db,
+        f"SELECT balance FROM advance_balances WHERE unit_id={unit} AND debtor_type='OWNER';",
+    ).strip()
+    user_id = ctx.psql.run(
+        db, "SELECT id FROM users WHERE lower(email)=lower('mehmet.demir@begonya.com') LIMIT 1;"
+    ).strip()
+    audited = ctx.psql.run(
+        db,
+        "SELECT count(*) > 0 FROM audit_events "
+        "WHERE action='AUTHZ_DENIED' AND outcome='DENIED' "
+        "AND resource_type='http_request' "
+        "AND resource_id='/api/v1/site-admin/advance-exit-settlements/{id}/decide' "
+        f"AND actor_id='{user_id}' AND request_id <> 'database';",
+    ).strip() == "t"
+    ok = decision_status == 403 and before == after and audited
+    return ok, f"self-approval {decision_status}, balance unchanged {before == after}, denied audit event {audited}"
+
+
 def check_receipt_pdf(ctx: Context) -> Tuple[bool, str]:
     """SPEC-007 R3: PDF download and public verification without payer data."""
     db, b = ctx.backend.db_name, ctx.backend.base
@@ -1227,6 +1289,7 @@ CHECK_FUNCS: Dict[str, Callable[[Context], Tuple[bool, str]]] = {
     "budget_accrual_legal_basis": check_budget_accrual,
     "ledger_integrity_clean": check_ledger_integrity,
     "finance_desk_over_http": check_finance_desk,
+    "exit_settlement_self_approval_audited": check_exit_settlement_self_approval_audited,
 }
 
 
